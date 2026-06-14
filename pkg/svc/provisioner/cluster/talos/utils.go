@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 )
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
@@ -129,16 +130,25 @@ func (p *Provisioner) resolveInstallerImage(toVersion string) string {
 
 // getRunningTalosVersion queries a Talos node for its running version tag.
 func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string) (string, error) {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	var tag string
+
+	err := p.withTalosClient(
+		ctx,
+		nodeIP,
+		"version check",
+		func(talosClient *talosclient.Client) error {
+			version, verErr := versionTagFromClient(ctx, talosClient)
+			if verErr != nil {
+				return fmt.Errorf("node %s: %w", nodeIP, verErr)
+			}
+
+			tag = version
+
+			return nil
+		},
+	)
 	if err != nil {
 		return "", fmt.Errorf("version check for node %s: %w", nodeIP, err)
-	}
-
-	defer talosClient.Close() //nolint:errcheck
-
-	tag, err := versionTagFromClient(ctx, talosClient)
-	if err != nil {
-		return "", fmt.Errorf("node %s: %w", nodeIP, err)
 	}
 
 	return tag, nil

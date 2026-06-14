@@ -12,6 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
@@ -530,21 +531,34 @@ func (p *Provisioner) fetchNodeConfig(
 	ctx context.Context,
 	nodeIP string,
 ) (talosconfig.Provider, error) {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Talos client for %s: %w", nodeIP, err)
-	}
+	var provider talosconfig.Provider
 
-	defer talosClient.Close() //nolint:errcheck
-
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
+	err := p.withTalosClient(
 		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
+		nodeIP,
+		"fetch machine config",
+		func(talosClient *talosclient.Client) error {
+			machineConfig, getErr := safe.StateGet[*talosresconfig.MachineConfig](
+				ctx,
+				talosClient.COSI,
+				talosresconfig.NewMachineConfig(nil).Metadata(),
+			)
+			if getErr != nil {
+				return fmt.Errorf(
+					"failed to fetch running machine config from %s: %w",
+					nodeIP,
+					getErr,
+				)
+			}
+
+			provider = machineConfig.Provider()
+
+			return nil
+		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch running machine config from %s: %w", nodeIP, err)
+		return nil, err
 	}
 
-	return machineConfig.Provider(), nil
+	return provider, nil
 }

@@ -20,7 +20,10 @@ func (p *Provisioner) etcdCleanupBeforeRemoval(
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Cleaning up etcd membership for %s...\n", nodeIP)
 
-	client, err := p.createTalosClient(ctx, nodeIP)
+	// EtcdForfeitLeadership/EtcdLeaveCluster are not idempotent, so the transient
+	// apid handshake race is absorbed by the Version probe inside
+	// dialTalosClientWithRetry and each membership RPC is issued exactly once.
+	client, err := p.dialTalosClientWithRetry(ctx, nodeIP, "etcd cleanup connect")
 	if err != nil {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  ⚠ Could not connect to %s for etcd cleanup: %v\n",

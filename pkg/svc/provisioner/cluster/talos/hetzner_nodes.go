@@ -65,10 +65,6 @@ const (
 	talosApplyConfigMaxAttempts   = 3
 	talosApplyConfigRetryBaseWait = 5 * time.Second
 	talosApplyConfigRetryMaxWait  = 20 * time.Second
-
-	// grpcUnavailable is the numeric gRPC status code for Unavailable (14).
-	// Using the raw constant avoids importing google.golang.org/grpc directly.
-	grpcUnavailable = 14
 )
 
 // errRetriesExhausted is returned when all retry attempts for config apply have been used.
@@ -794,17 +790,11 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// isRetryableTalosApplyConfigError reports whether a maintenance-mode
+// apply-config failure is a transient apid handshake race worth retrying. It
+// delegates to the shared transient predicate so the insecure apply path and the
+// authenticated per-node calls (see api_retry.go) classify transient errors
+// identically.
 func isRetryableTalosApplyConfigError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if talosclient.StatusCode(err) == grpcUnavailable {
-		return true
-	}
-
-	errMsg := strings.ToLower(err.Error())
-
-	return strings.Contains(errMsg, "rpc error: code = unavailable") ||
-		strings.Contains(errMsg, "authentication handshake failed")
+	return isRetryableTransientTalosError(err)
 }

@@ -610,22 +610,27 @@ func (p *Provisioner) applyConfigWithMode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
-	if err != nil {
-		return err
-	}
+	// Apply is declarative (NO_REBOOT/STAGED only here), so re-running it after a
+	// transient apid failure is harmless — a fresh client per attempt re-dials.
+	return p.withTalosClient(
+		ctx,
+		nodeIP,
+		"apply config",
+		func(talosClient *talosclient.Client) error {
+			_, applyErr := talosClient.ApplyConfiguration(
+				ctx,
+				&machineapi.ApplyConfigurationRequest{
+					Data: cfgBytes,
+					Mode: mode,
+				},
+			)
+			if applyErr != nil {
+				return fmt.Errorf("failed to apply configuration: %w", applyErr)
+			}
 
-	defer talosClient.Close() //nolint:errcheck
-
-	_, err = talosClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
-		Data: cfgBytes,
-		Mode: mode,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to apply configuration: %w", err)
-	}
-
-	return nil
+			return nil
+		},
+	)
 }
 
 // errSavedTalosconfigUnavailable signals that the on-disk talosconfig
@@ -898,39 +903,52 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	talosClient, err := p.createTalosClient(ctx, cpIP)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create Talos client for secret sync: %w", err)
-	}
+	var (
+		existingSecrets *secrets.Bundle
+		endpointIP      string
+	)
 
-	defer talosClient.Close() //nolint:errcheck
-
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
+	err := p.withTalosClient(
 		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
+		cpIP,
+		"fetch cluster secrets",
+		func(talosClient *talosclient.Client) error {
+			machineConfig, getErr := safe.StateGet[*talosresconfig.MachineConfig](
+				ctx,
+				talosClient.COSI,
+				talosresconfig.NewMachineConfig(nil).Metadata(),
+			)
+			if getErr != nil {
+				return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, getErr)
+			}
+
+			runningConfig := machineConfig.Config()
+
+			bundle, bundleErr := secrets.NewBundleFromConfig(
+				secrets.NewFixedClock(time.Now()),
+				runningConfig,
+			)
+			if bundleErr != nil {
+				return fmt.Errorf("extracting secrets bundle from running config: %w", bundleErr)
+			}
+
+			// Read the endpoint from the running cluster's config rather than deriving
+			// it from node IPs. This avoids non-deterministic ordering in HA clusters
+			// where getNodesByRole may return a different first CP node between updates.
+			// Falls back to cpIP if the running config has no endpoint set.
+			endpoint := runningConfig.Cluster().Endpoint().Hostname()
+			if endpoint == "" {
+				endpoint = cpIP
+			}
+
+			existingSecrets = bundle
+			endpointIP = endpoint
+
+			return nil
+		},
 	)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
-	}
-
-	runningConfig := machineConfig.Config()
-
-	existingSecrets, err := secrets.NewBundleFromConfig(
-		secrets.NewFixedClock(time.Now()),
-		runningConfig,
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("extracting secrets bundle from running config: %w", err)
-	}
-
-	// Read the endpoint from the running cluster's config rather than deriving
-	// it from node IPs. This avoids non-deterministic ordering in HA clusters
-	// where getNodesByRole may return a different first CP node between updates.
-	// Falls back to cpIP if the running config has no endpoint set.
-	endpointIP := runningConfig.Cluster().Endpoint().Hostname()
-	if endpointIP == "" {
-		endpointIP = cpIP
+		return nil, "", err
 	}
 
 	return existingSecrets, endpointIP, nil

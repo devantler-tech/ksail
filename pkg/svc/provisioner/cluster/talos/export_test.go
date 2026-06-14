@@ -710,3 +710,25 @@ func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bo
 func NodeIsReadyForTest(node *corev1.Node) bool {
 	return nodeIsReady(node)
 }
+
+// RetryTransientTalosAPICallForTest exposes retryTransientTalosAPICall so unit
+// tests can exercise the bounded transient-retry loop without real Talos
+// connectivity. Pair it with WithTalosAPIRetryConfig for near-zero delays.
+func (p *Provisioner) RetryTransientTalosAPICallForTest(
+	ctx context.Context,
+	target, description string,
+	operation func() error,
+) error {
+	return p.retryTransientTalosAPICall(ctx, target, description, operation)
+}
+
+// IsRetryableTransientTalosError exposes isRetryableTransientTalosError for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var IsRetryableTransientTalosError = isRetryableTransientTalosError
+
+// ErrRetriesExhausted exposes errRetriesExhausted so tests can assert (errors.Is)
+// that the retry loop wrapped the final error after exhausting all attempts.
+//
+
+var ErrRetriesExhausted = errRetriesExhausted
