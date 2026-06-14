@@ -1,4 +1,4 @@
-name: Update Copilot Skills
+name: Update Agent Skills
 on:
   workflow_dispatch:
   schedule:
@@ -11,10 +11,17 @@ concurrency:
 permissions: {}
 
 jobs:
-  update-copilot-skills:
+  update-agent-skills:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@26f77bf515895dc8b750130ea4625a9fd8648c9c # v1.39.0+ (post skills-lock refactor)
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-agent-skills.yaml@7d3a08e3cc284c6fa14a056d5df7702ec0978d59 # v5.5.10
     with:
       dir: .agents/skills
+      # Open the PR with a GitHub App token so the caller's `on: pull_request`
+      # CI runs (a PR opened with GITHUB_TOKEN does not trigger workflows, so
+      # the required `CI - Required Checks` never reports and the PR stays
+      # blocked — see #5223). Matches platform + plugins, the other consumers.
+      use-app-token: true
+    secrets:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

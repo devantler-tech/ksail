@@ -202,6 +202,54 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// KubernetesVersionFieldSelector returns a field selector for the Kubernetes
+// version (spec.cluster.kubernetesVersion).
+//
+// DefaultValue is intentionally omitted so an unset version stays at its zero
+// value: `cluster create`/`cluster update` then follow the latest supported
+// Kubernetes version, while a set value pins it. Writing a default here would
+// make "unset" indistinguishable from an explicit pin.
+func KubernetesVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.KubernetesVersion },
+		Description: "Kubernetes version to deploy and reconcile toward. When unset KSail follows " +
+			"the latest supported version; set it to pin a specific version. Honored by the Talos " +
+			"distribution; Kind/K3d/EKS carry the version in their distribution config instead.",
+	}
+}
+
+// DistributionVersionFieldSelector returns a field selector for the distribution
+// version (spec.cluster.talos.version, the Talos OS version).
+//
+// DefaultValue is intentionally omitted so an unset version stays at its zero
+// value: `cluster create`/`cluster update` then follow the latest supported
+// version, while a set value pins it.
+func DistributionVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.Version },
+		Description: "Distribution version to deploy and reconcile toward (Talos OS version). When " +
+			"unset KSail follows the latest supported version; set it to pin a specific version. " +
+			"Other distributions carry their version in the distribution config.",
+	}
+}
+
+// DrainTimeoutFieldSelector returns a field selector for the per-node drain
+// timeout (spec.cluster.talos.drainTimeout) used during `cluster update`.
+//
+// DefaultValue is intentionally omitted so an unset value stays at its zero
+// duration: the Talos provisioner then applies its built-in 10m default. Writing
+// a default here would eagerly populate the spec field, which is unnecessary since
+// the fallback lives at the provisioner layer.
+func DrainTimeoutFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.DrainTimeout },
+		Description: "Per-node pod-eviction budget for rolling node drains during cluster update " +
+			"(default 10m when unset). Increase it for stateful workloads that need longer to evict " +
+			"gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; " +
+			"re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.",
+	}
+}
+
 // DefaultImportImagesFieldSelector creates a standard field selector for import-images.
 func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

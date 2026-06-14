@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -12,7 +13,12 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -51,6 +57,42 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.removeDockerNodes(ctx, clusterName, role, count, result)
+}
+
+// WithNodeReachabilityCheckForTest overrides the per-node Talos API reachability
+// check. Full scale-up flow tests use it to avoid real TCP dials against the
+// (unroutable) static container IPs assigned to mock-created containers.
+func (p *Provisioner) WithNodeReachabilityCheckForTest(
+	fn func(ctx context.Context, ip string) error,
+) *Provisioner {
+	p.nodeReachabilityCheck = fn
+
+	return p
+}
+
+// WaitForNewDockerNodesReachableForTest exposes waitForNewDockerNodesReachable
+// for unit testing. Each IP in nodeIPs is turned into a node spec (the IP doubles
+// as the node name in log/error output).
+func (p *Provisioner) WaitForNewDockerNodesReachableForTest(
+	ctx context.Context,
+	nodeIPs []string,
+) error {
+	specs := make([]nodeSpec, len(nodeIPs))
+	for i, ip := range nodeIPs {
+		specs[i] = nodeSpec{name: ip, ip: netip.MustParseAddr(ip)}
+	}
+
+	return p.waitForNewDockerNodesReachable(ctx, specs)
+}
+
+// WaitForNewHetznerNodesReachableForTest exposes waitForNewHetznerNodesReachable
+// for unit testing.
+func (p *Provisioner) WaitForNewHetznerNodesReachableForTest(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
 }
 
 // CreateOmniProviderForTest exposes createOmniProvider for unit testing.
@@ -264,6 +306,26 @@ func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
 
+// SupportsLifecycleUpgradeAPIForTest exposes supportsLifecycleUpgradeAPI for unit testing.
+func SupportsLifecycleUpgradeAPIForTest(versionTag string) bool {
+	return supportsLifecycleUpgradeAPI(versionTag)
+}
+
+// ResolveInstallerImageForTest exposes resolveInstallerImage for unit testing.
+func (p *Provisioner) ResolveInstallerImageForTest(toVersion string) string {
+	return p.resolveInstallerImage(toVersion)
+}
+
+// ResolveSchematicIDForTest exposes resolveSchematicID for unit testing.
+func (p *Provisioner) ResolveSchematicIDForTest() string {
+	return p.resolveSchematicID()
+}
+
+// HasSchematicConfiguredForTest exposes hasSchematicConfigured for unit testing.
+func (p *Provisioner) HasSchematicConfiguredForTest() bool {
+	return p.hasSchematicConfigured()
+}
+
 // RenameKubeconfigContextForTest exposes k8s.RenameKubeconfigContext for unit testing.
 func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
 	result, err := k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
@@ -316,11 +378,125 @@ func (p *Provisioner) PreBootChecksCountForTest() int {
 }
 
 // EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
+// diff and result default to a nil diff and a fresh result when callers exercise the
+// guard/no-op paths; pass explicit values to cover the recycle-vs-in-place branch.
 func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	ctx context.Context,
 	clusterName string,
 ) error {
-	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+	return p.ensureAutoscalerSecretIfNeeded(
+		ctx, clusterName, nil, clusterupdate.NewEmptyUpdateResult(),
+	)
+}
+
+// AutoscalerRecycleRequiredForTest exposes autoscalerRecycleRequired for unit testing.
+func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
+	return autoscalerRecycleRequired(diff, imageChanged)
+}
+
+// SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
+func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
+	return snapshotImageIDFromSecret(secret)
+}
+
+// CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
+// for unit testing.
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+	return p.currentAutoscalerSnapshotImageID(ctx)
+}
+
+// AutoscalerTemplateDriftForTest exposes autoscalerTemplateDrift for unit testing.
+func AutoscalerTemplateDriftForTest(
+	existing *corev1.Secret,
+	pools []AutoscalerPoolConfig,
+) ([]clusterupdate.Change, error) {
+	return autoscalerTemplateDrift(existing, pools)
+}
+
+// DetectAutoscalerTemplateDriftForTest exposes detectAutoscalerTemplateDrift for
+// unit testing.
+func (p *Provisioner) DetectAutoscalerTemplateDriftForTest(
+	ctx context.Context,
+) ([]clusterupdate.Change, error) {
+	return p.detectAutoscalerTemplateDrift(ctx)
+}
+
+// ApplyInPlaceToAutoscalerNodesForTest exposes applyInPlaceToAutoscalerNodes for unit testing.
+func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
+}
+
+// RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
+// for unit testing.
+func (p *Provisioner) RestartAutoscalerAfterConfigChangeForTest(
+	ctx context.Context,
+	kubeclient kubernetes.Interface,
+) error {
+	return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+}
+
+// SortServersByNameForTest exposes sortServersByName for unit testing.
+func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
+	return sortServersByName(servers)
+}
+
+// RecycleAutoscalerNodesForTest exposes recycleAutoscalerNodes for unit testing.
+func (p *Provisioner) RecycleAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.recycleAutoscalerNodes(ctx, clusterName)
+}
+
+// WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
+func (p *Provisioner) WaitForAutoscalerRolloutForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) error {
+	return p.waitForAutoscalerRollout(ctx, clientset)
+}
+
+// DrainResolvedNodeForTest exposes drainResolvedNode for unit testing.
+func (p *Provisioner) DrainResolvedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	return p.drainResolvedNode(ctx, clientset, nodeIP)
+}
+
+// CordonAndDrainForTest exposes cordonAndDrain for unit testing.
+func (p *Provisioner) CordonAndDrainForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.cordonAndDrain(ctx, clientset, nodeName)
+}
+
+// DrainTimeoutForTest exposes drainTimeout for unit testing.
+func (p *Provisioner) DrainTimeoutForTest() time.Duration {
+	return p.drainTimeout()
+}
+
+// SetDrainForceForTest sets the request-scoped drainForce flag for unit testing.
+func (p *Provisioner) SetDrainForceForTest(force bool) {
+	p.drainForce = force
+}
+
+// NewDrainHelperForTest exposes newDrainHelper for unit testing.
+func NewDrainHelperForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	timeout time.Duration,
+	disableEviction bool,
+	logWriter io.Writer,
+) *kubedrain.Helper {
+	return newDrainHelper(ctx, clientset, timeout, disableEviction, logWriter)
 }
 
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
@@ -346,10 +522,15 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
 
-// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+// RepresentativeServerTypeForTest exports representativeServerType for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var DetectHetznerServerTypesForTest = detectHetznerServerTypes
+var RepresentativeServerTypeForTest = representativeServerType
+
+// CountServerNodesByRoleForTest exports countServerNodesByRole for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CountServerNodesByRoleForTest = countServerNodesByRole
 
 // MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
 type MachineClusterConfigForTest = machineClusterConfig
@@ -388,6 +569,64 @@ var CNINameForTest = cniName
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DiskQuotaEnabledForTest = diskQuotaEnabled
+
+// MachineConfigDiffForTest exposes machineConfigDiff for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var MachineConfigDiffForTest = machineConfigDiff
+
+// ConfigFingerprintForTest exposes configFingerprint for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ConfigFingerprintForTest = configFingerprint
+
+// GraftNodeManagedSectionsForTest exposes graftNodeManagedSections for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var GraftNodeManagedSectionsForTest = graftNodeManagedSections
+
+// BuildDesiredNodeConfigForTest exposes buildDesiredNodeConfig for unit testing.
+func (p *Provisioner) BuildDesiredNodeConfigForTest(
+	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
+	role string,
+) (talosconfig.Provider, error) {
+	return p.buildDesiredNodeConfig(running, secretsSource, role)
+}
+
+// DetectRoleMachineConfigDriftForTest exposes detectRoleMachineConfigDrift for
+// unit testing per-role (control-plane vs worker) patch drift detection.
+func (p *Provisioner) DetectRoleMachineConfigDriftForTest(
+	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
+	role string,
+) ([]clusterupdate.Change, error) {
+	return p.detectRoleMachineConfigDrift(running, secretsSource, role)
+}
+
+// WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests
+// can drive the rolling-reboot staged-config rebuild (buildStagedNodeConfig)
+// without real Talos API connectivity.
+func (p *Provisioner) WithNodeConfigFetcherForTest(
+	fn func(ctx context.Context, nodeIP string) (talosconfig.Provider, error),
+) *Provisioner {
+	p.nodeConfigFetcher = fn
+
+	return p
+}
+
+// BuildStagedNodeConfigForTest exposes buildStagedNodeConfig — the rolling-reboot
+// staged-config rebuild — for unit testing.
+func (p *Provisioner) BuildStagedNodeConfigForTest(
+	ctx context.Context,
+	node NodeWithRoleForTest,
+	secretsSource talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	return p.buildStagedNodeConfig(ctx, node, secretsSource)
+}
+
+// MachineConfigFieldForTest exposes the machine.config change field for unit testing.
+const MachineConfigFieldForTest = MachineConfigField
 
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //
@@ -429,4 +668,45 @@ func (p *Provisioner) WithKernelModuleLoaderForTest(
 	p.kernelModuleLoader = f
 
 	return p
+}
+
+// RolesFromRollingChangesForTest exposes rolesFromRollingChanges for unit testing.
+func RolesFromRollingChangesForTest(changes []clusterupdate.Change) (bool, bool) {
+	return rolesFromRollingChanges(changes)
+}
+
+// ApplyRollingRecreateChangesForTest exposes applyRollingRecreateChanges for unit testing.
+func (p *Provisioner) ApplyRollingRecreateChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyRollingRecreateChanges(ctx, clusterName, result)
+}
+
+// ServersNeedingReplacementForTest exposes serversNeedingReplacement for unit testing.
+func ServersNeedingReplacementForTest(
+	servers []*hcloud.Server,
+	desiredType string,
+) []*hcloud.Server {
+	return serversNeedingReplacement(servers, desiredType)
+}
+
+// AppendServerTypeChangeForTest exposes appendServerTypeChange for unit testing.
+func AppendServerTypeChangeForTest(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	appendServerTypeChange(diff, role, current, desired, category)
+}
+
+// NodeMatchesServerForTest exposes nodeMatchesServer for unit testing.
+func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bool {
+	return nodeMatchesServer(node, serverName, serverIP)
+}
+
+// NodeIsReadyForTest exposes nodeIsReady for unit testing.
+func NodeIsReadyForTest(node *corev1.Node) bool {
+	return nodeIsReady(node)
 }

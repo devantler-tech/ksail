@@ -15,6 +15,19 @@ type CreateServerOpts struct {
 	PlacementGroupID int64
 	SSHKeyID         int64
 	FirewallIDs      []int64
+	// EnableIPv4 controls whether the server is assigned a public IPv4 address.
+	// nil means use the Hetzner default (a public IPv4 is assigned). Set to false
+	// for IPv4-less nodes reached over the private network.
+	EnableIPv4 *bool
+	// EnableIPv6 controls whether the server is assigned a public IPv6 address.
+	// nil means use the Hetzner default (a public IPv6 is assigned).
+	EnableIPv6 *bool
+}
+
+// publicNetEnabled returns the pointed-to bool, defaulting to true when ptr is nil
+// so an unset toggle preserves Hetzner's default of assigning a public IP.
+func publicNetEnabled(ptr *bool) bool {
+	return ptr == nil || *ptr
 }
 
 // buildServerCreateOpts builds the hcloud.ServerCreateOpts from CreateServerOpts.
@@ -38,6 +51,12 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCr
 			Name: opts.Location,
 		},
 		StartAfterCreate: new(true),
+		// Always set PublicNet explicitly so IPv4-less / IPv6-less nodes are honored.
+		// A nil toggle defaults to true, matching Hetzner's default of assigning both.
+		PublicNet: &hcloud.ServerCreatePublicNet{
+			EnableIPv4: publicNetEnabled(opts.EnableIPv4),
+			EnableIPv6: publicNetEnabled(opts.EnableIPv6),
+		},
 	}
 
 	// Use either Image or ISO - ISOs are used for Talos public ISOs

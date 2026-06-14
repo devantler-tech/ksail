@@ -31,59 +31,47 @@ const KWOKPodFailureFile = "pod-failure.yaml"
 func (s *Scaffolder) generateKWOKConfig(output string, force bool) error {
 	kwokDir := filepath.Join(output, KWOKConfigDir)
 
-	skip, existed, previousModTime := s.checkFileExistsAndSkip(
-		kwokDir,
-		KWOKConfigDir,
-		force,
-	)
-	if skip {
-		return nil
+	// Scaffold each file individually (like the Kind/Talos scaffolders) so the
+	// output lists every file and a missing single file is regenerated on a
+	// plain re-run, instead of treating the whole kwok/ directory as one unit.
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"kustomization.yaml", KWOKKustomizationConfig},
+		{KWOKSimulationFile, KWOKDefaultSimulationConfig},
+		{KWOKNodeNotReadyFile, KWOKNodeNotReadyStage},
+		{KWOKPodFailureFile, KWOKPodFailureStage},
 	}
 
-	err := os.MkdirAll(kwokDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
-	}
+	for _, file := range files {
+		filePath := filepath.Join(kwokDir, file.name)
+		displayName := filepath.Join(KWOKConfigDir, file.name)
 
-	// Write kustomization.yaml
-	kustomizationPath := filepath.Join(kwokDir, "kustomization.yaml")
-
-	err = os.WriteFile(kustomizationPath, []byte(KWOKKustomizationConfig), filePerm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
-	}
-
-	// Write simulation.yaml (the 4 Cluster-level CRDs)
-	simulationPath := filepath.Join(kwokDir, KWOKSimulationFile)
-
-	err = os.WriteFile(simulationPath, []byte(KWOKDefaultSimulationConfig), filePerm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
-	}
-
-	// Write CEL chaos stage examples
-	nodeNotReadyPath := filepath.Join(kwokDir, KWOKNodeNotReadyFile)
-
-	err = os.WriteFile(nodeNotReadyPath, []byte(KWOKNodeNotReadyStage), filePerm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
-	}
-
-	podFailurePath := filepath.Join(kwokDir, KWOKPodFailureFile)
-
-	err = os.WriteFile(podFailurePath, []byte(KWOKPodFailureStage), filePerm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
-	}
-
-	if force && existed {
-		err = ensureOverwriteModTime(kwokDir, previousModTime)
-		if err != nil {
-			return fmt.Errorf("failed to update mod time for %s: %w", KWOKConfigDir, err)
+		skip, existed, previousModTime := s.checkFileExistsAndSkip(filePath, displayName, force)
+		if skip {
+			continue
 		}
-	}
 
-	s.notifyFileAction(KWOKConfigDir, existed)
+		err := os.MkdirAll(kwokDir, dirPerm)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
+		}
+
+		err = os.WriteFile(filePath, []byte(file.content), filePerm)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrKWOKConfigGeneration, err)
+		}
+
+		if force && existed {
+			err = ensureOverwriteModTime(filePath, previousModTime)
+			if err != nil {
+				return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+			}
+		}
+
+		s.notifyFileAction(displayName, existed)
+	}
 
 	return nil
 }

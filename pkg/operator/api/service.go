@@ -1,0 +1,127 @@
+package api
+
+import (
+	"context"
+	"errors"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+)
+
+// Sentinel errors a ClusterService implementation may return. clientErrorStatus maps them to HTTP
+// status codes so backends that do not surface Kubernetes apierrors (e.g. the local CLI backend)
+// can still drive the correct responses.
+var (
+	// ErrNotFound indicates the requested cluster does not exist (HTTP 404).
+	ErrNotFound = errors.New("cluster not found")
+	// ErrAlreadyExists indicates a cluster with the requested name already exists (HTTP 409).
+	ErrAlreadyExists = errors.New("cluster already exists")
+	// ErrInvalid indicates the client supplied an invalid cluster definition (HTTP 422).
+	ErrInvalid = errors.New("invalid cluster")
+	// ErrNotSupported indicates the backend does not support the requested operation (HTTP 501).
+	ErrNotSupported = errors.New("operation not supported")
+	// ErrHostClusterProtected indicates the request targets the operator's self-registered host
+	// cluster — the cluster the operator runs on — whose registration cannot be created, modified,
+	// or deleted through the API (HTTP 403). Disable it via the operator's host-cluster option
+	// instead.
+	ErrHostClusterProtected = errors.New(
+		"the host cluster registration cannot be modified through the API",
+	)
+)
+
+// ClusterService is the backend the REST handlers delegate to. It is expressed in the
+// Kubernetes-shaped wire types the web UI already consumes (v1alpha1.Cluster / v1alpha1.ClusterList)
+// so a single HTTP layer can be served by two implementations: the operator's controller-runtime
+// backend (crClusterService) which CRUDs Cluster custom resources, and the CLI's local backend
+// which drives the provider/provisioner lifecycle for `ksail ui`.
+//
+// Implementations may return the sentinel errors below; clientErrorStatus maps them (and Kubernetes
+// apierrors) to HTTP status codes. Returning any other error yields HTTP 500.
+type ClusterService interface {
+	// List returns all clusters. Items must be non-nil (empty slice, not nil) so the JSON encodes
+	// as [] rather than null, matching Kubernetes list semantics.
+	List(ctx context.Context) (*v1alpha1.ClusterList, error)
+	// Get returns a single cluster, or a not-found error.
+	Get(ctx context.Context, namespace, name string) (*v1alpha1.Cluster, error)
+	// Create provisions a new cluster from client-supplied input and returns the created object.
+	Create(ctx context.Context, cluster *v1alpha1.Cluster) (*v1alpha1.Cluster, error)
+	// Update applies the client-supplied spec to an existing cluster and returns the updated object.
+	Update(
+		ctx context.Context,
+		namespace, name string,
+		cluster *v1alpha1.Cluster,
+	) (*v1alpha1.Cluster, error)
+	// Delete removes a cluster.
+	Delete(ctx context.Context, namespace, name string) error
+}
+
+// Capabilities reports which optional operations a backend supports, so the SPA can hide affordances
+// a backend cannot fulfill instead of offering an action that fails. It is served on
+// /api/v1/config under "capabilities". New capability flags are added here as the UI surface grows
+// (e.g. workload reads, log streaming, exec), and each backend reports the subset it implements.
+type Capabilities struct {
+	// ClusterUpdate reports whether the backend can apply spec changes to an existing cluster
+	// (PUT /api/v1/clusters/{namespace}/{name}). The operator patches the Cluster custom resource and
+	// supports it; the local CLI backend manages cluster configuration via files and does not, so the
+	// SPA hides the edit affordance there rather than offering an action that returns 501.
+	ClusterUpdate bool `json:"clusterUpdate"`
+	// WorkloadRead reports whether the backend can read live Kubernetes resources from a target
+	// cluster (the read-only workload browser). It is true exactly when the serving ClusterService
+	// implements ResourceService; the SPA shows the Resources view only then. Derived from the
+	// interface in handleConfig rather than reported via CapabilityReporter, so it cannot drift from
+	// whether the endpoints are actually registered.
+	WorkloadRead bool `json:"workloadRead"`
+	// WorkloadWrite reports whether the backend exposes the safe write actions (scale, rollout
+	// restart, delete) on browsable resources — true exactly when the serving ClusterService
+	// implements ResourceWriter. The SPA still combines it with !readOnly before showing the actions.
+	WorkloadWrite bool `json:"workloadWrite"`
+	// KubeconfigDownload reports whether the backend can export a portable kubeconfig for a cluster —
+	// true exactly when the serving ClusterService implements KubeconfigProvider. The local backend
+	// extracts the cluster's context from the user's kubeconfig; the operator does not implement it.
+	KubeconfigDownload bool `json:"kubeconfigDownload"`
+	// ApplyManifests reports whether the backend can server-side-apply raw manifests to a cluster —
+	// true exactly when the serving ClusterService implements ApplyService. Combined with !readOnly
+	// before the SPA shows the apply affordance.
+	ApplyManifests bool `json:"applyManifests"`
+	// SecretsCipher reports whether the backend can encrypt/decrypt secrets with SOPS using the local
+	// age keys — true exactly when the serving ClusterService implements CipherService. The SPA shows
+	// the Secrets view only then (local backend only; the operator has no local keys).
+	SecretsCipher bool `json:"secretsCipher"`
+	// WorkloadLogs reports whether the backend can stream a pod container's logs (the in-browser log
+	// viewer) — true exactly when the serving ClusterService implements LogService. Logs are
+	// read-only, so the SPA shows the action regardless of readOnly (unlike the write actions).
+	WorkloadLogs bool `json:"workloadLogs"`
+	// WorkloadExec reports whether the backend can exec into a pod container (the in-browser
+	// terminal) — true exactly when the serving ClusterService implements ExecService. The SPA
+	// combines it with !readOnly before showing the terminal (exec can run arbitrary commands).
+	WorkloadExec bool `json:"workloadExec"`
+}
+
+// KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,
+// single-context kubeconfig for a cluster (so the SPA can offer a "Download kubeconfig" action). The
+// returned bytes are a complete kubeconfig YAML scoped to just the named cluster's context.
+type KubeconfigProvider interface {
+	Kubeconfig(ctx context.Context, namespace, name string) ([]byte, error)
+}
+
+// CapabilityReporter is an optional interface a ClusterService may implement to advertise which
+// operations it supports. A ClusterService that does not implement it is assumed to support the full
+// surface (see fullCapabilities) — the operator's controller-runtime backend relies on this default.
+type CapabilityReporter interface {
+	Capabilities() Capabilities
+}
+
+// fullCapabilities is the capability set assumed for a ClusterService that does not implement
+// CapabilityReporter: every operation is supported.
+func fullCapabilities() Capabilities {
+	return Capabilities{ClusterUpdate: true}
+}
+
+// serviceCapabilities returns the capabilities a ClusterService advertises, defaulting to the full
+// surface when it does not implement CapabilityReporter.
+func serviceCapabilities(service ClusterService) Capabilities {
+	if reporter, ok := service.(CapabilityReporter); ok {
+		return reporter.Capabilities()
+	}
+
+	return fullCapabilities()
+}

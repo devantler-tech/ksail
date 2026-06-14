@@ -25,25 +25,14 @@ func (m *Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateDimensions()
 
 		return m, nil
-	case "up", "k":
-		if m.reasoningPickerIndex > 0 {
-			m.reasoningPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.reasoningPickerIndex < totalItems-1 {
-			m.reasoningPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.reasoningPickerIndex, totalItems)
 
 		return m, nil
 	case keyEnter:
 		return m.selectReasoningEffort()
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil

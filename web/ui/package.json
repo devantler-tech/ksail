@@ -1,0 +1,34 @@
+{
+  "name": "ksail-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Web UI for the KSail Kubernetes operator.",
+  "scripts": {
+    "dev": "vite",
+    "gen:types": "json2ts -i ../../schemas/ksail-config.schema.json -o src/generated/ksail-config.ts",
+    "build": "npm run gen:types && tsc && vite build",
+    "preview": "vite preview",
+    "lint": "npm run gen:types && tsc --noEmit"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.10",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "js-yaml": "^4.2.0",
+    "lucide-react": "^1.16.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/js-yaml": "^4.0.9",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.2",
+    "json-schema-to-typescript": "^15.0.4",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2",
+    "vite": "^8.0.16"
+  }
+}

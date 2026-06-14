@@ -67,6 +67,50 @@ func TestParseImageFromDockerfile_EmptyDockerfile(t *testing.T) {
 	parser.ParseImageFromDockerfile(dockerfile, kindNodePattern, kindNodeImageName)
 }
 
+const chartYAMLFixture = `apiVersion: v2
+name: ksail-metricsserver-pin
+version: 0.0.0
+dependencies:
+  - name: metrics-server
+    version: 3.13.0
+    repository: https://kubernetes-sigs.github.io/metrics-server/
+`
+
+func TestParseChartVersionFromChartYaml_Success(t *testing.T) {
+	t.Parallel()
+
+	result := parser.ParseChartVersionFromChartYaml(chartYAMLFixture, "metrics-server")
+	expected := "3.13.0"
+
+	if result != expected {
+		t.Errorf("Expected %s, got %s", expected, result)
+	}
+}
+
+func TestParseChartVersionFromChartYaml_DependencyNotFound(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expected panic but got none")
+		}
+	}()
+
+	parser.ParseChartVersionFromChartYaml(chartYAMLFixture, "nonexistent-chart")
+}
+
+func TestParseChartVersionFromChartYaml_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expected panic but got none")
+		}
+	}()
+
+	parser.ParseChartVersionFromChartYaml("\tnot: [valid", "metrics-server")
+}
+
 func TestParseAllImagesFromDockerfile_MultipleImages(t *testing.T) {
 	t.Parallel()
 

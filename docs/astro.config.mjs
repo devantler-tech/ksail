@@ -5,6 +5,11 @@ import starlightGithubAlerts from "starlight-github-alerts";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
+  // GFM (tables, strikethrough, autolinks) is on by default, but on Astro 6.4.x
+  // the implicit default is lost when integrations use the deprecated
+  // markdown.remarkPlugins hook — leaving every table rendered as literal pipe
+  // text. Pin it explicitly so the site never silently loses table rendering.
+  markdown: { gfm: true },
   redirects: {
     "/getting-started/vanilla/": "/distributions/vanilla/",
     "/getting-started/k3s/": "/distributions/k3s/",
@@ -20,14 +25,48 @@ export default defineConfig({
   integrations: [
     mermaid(),
     starlight({
-      title: "🛥️🐳 KSail",
+      title: "KSail",
       description: "Documentation for KSail - CLI tool for creating, maintaining and operating Kubernetes clusters. ☸️",
+      head: [
+        // PNG favicon fallback for browsers that don't support SVG favicons.
+        {
+          tag: "link",
+          attrs: { rel: "icon", type: "image/png", href: "/favicon.png", sizes: "512x512" },
+        },
+        {
+          tag: "link",
+          attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        },
+        {
+          tag: "link",
+          attrs: { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: true },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "stylesheet",
+            href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesque:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap",
+          },
+        },
+        // Umami privacy-first web analytics (self-hosted on the platform).
+        {
+          tag: "script",
+          attrs: {
+            src: "https://analytics.platform.devantler.tech/script.js",
+            "data-website-id": "27f83d6b-8ce4-4239-9387-eabc7f57cd68",
+            // Client-side host allowlist: the tracker only sends events when
+            // the page is served from this host, keeping forks, previews and
+            // local builds out of analytics (not a server-side spoof guard).
+            "data-domains": "ksail.devantler.tech",
+            defer: true,
+          },
+        },
+      ],
       logo: {
-        dark: "./src/assets/logo-dark.png",
-        light: "./src/assets/logo-light.png",
+        src: "./src/assets/logo.svg",
         replacesTitle: false,
       },
-      favicon: "./src/assets/favicon.png",
+      favicon: "/favicon.svg",
       social: [
         {
           icon: "github",
@@ -51,6 +90,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/features/" },
             { label: "Cluster Provisioning", link: "/features/cluster-provisioning/" },
+            { label: "Day-2 Operations", link: "/features/day-2-operations/" },
             { label: "Ephemeral Clusters (--ttl)", link: "/features/ephemeral-clusters/" },
             { label: "Workload Management", link: "/features/workload-management/" },
             { label: "GitOps Workflows", link: "/features/gitops-workflows/" },
@@ -59,6 +99,8 @@ export default defineConfig({
             { label: "Secret Management", link: "/features/secret-management/" },
             { label: "Backup & Restore", link: "/features/backup-restore/" },
             { label: "CI/CD Integration", link: "/features/cicd-integration/" },
+            { label: "Web UI & Desktop App", link: "/features/web-ui/", badge: { text: "New", variant: "tip" } },
+            { label: "Kubernetes Operator", link: "/features/operator/", badge: { text: "New", variant: "tip" } },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
@@ -105,6 +147,7 @@ export default defineConfig({
           label: "Providers",
           items: [
             { label: "Docker", link: "/providers/docker/" },
+            { label: "Kubernetes (Nested)", link: "/providers/kubernetes/" },
             { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
             { label: "AWS", link: "/providers/aws/" },

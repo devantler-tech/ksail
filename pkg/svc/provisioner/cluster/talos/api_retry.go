@@ -7,10 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Retry defaults for transient per-node Talos API failures. A single TLS
@@ -107,49 +105,6 @@ func (p *Provisioner) retryTransientTalosAPICall(
 	}
 
 	return fmt.Errorf("%w: %w", errRetriesExhausted, lastErr)
-}
-
-// fetchRunningMachineConfig connects to the node at nodeIP and returns its
-// running Talos MachineConfig resource. A fresh client is dialed per attempt
-// and the fetch is retried for transient gRPC failures. description labels the
-// operation in retry log lines (e.g. "Machine config fetch").
-func (p *Provisioner) fetchRunningMachineConfig(
-	ctx context.Context,
-	nodeIP, description string,
-) (*talosresconfig.MachineConfig, error) {
-	var machineConfig *talosresconfig.MachineConfig
-
-	err := p.retryTransientTalosAPICall(ctx, nodeIP, description,
-		func(ctx context.Context) error {
-			talosClient, clientErr := p.createTalosClient(ctx, nodeIP)
-			if clientErr != nil {
-				return fmt.Errorf("failed to create Talos client for %s: %w", nodeIP, clientErr)
-			}
-
-			defer talosClient.Close() //nolint:errcheck
-
-			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
-				ctx,
-				talosClient.COSI,
-				talosresconfig.NewMachineConfig(nil).Metadata(),
-			)
-			if fetchErr != nil {
-				return fmt.Errorf(
-					"failed to fetch running machine config from %s: %w",
-					nodeIP,
-					fetchErr,
-				)
-			}
-
-			machineConfig = fetched
-
-			return nil
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	return machineConfig, nil
 }
 
 // sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.

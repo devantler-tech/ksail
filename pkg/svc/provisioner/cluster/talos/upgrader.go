@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"strings"
 
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/siderolabs/go-kubernetes/kubernetes/upgrade"
 	"github.com/siderolabs/talos/pkg/cluster"
 	k8s "github.com/siderolabs/talos/pkg/cluster/kubernetes"
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
+	talosmachineryversion "github.com/siderolabs/talos/pkg/machinery/version"
 )
 
 // Compile-time interface compliance check.
@@ -25,6 +28,8 @@ const (
 // UpgradeDistribution performs a rolling Talos OS upgrade from fromVersion to
 // toVersion using the LifecycleService API.
 // Omni-managed clusters are skipped since Omni handles upgrades externally.
+// Docker-provider (container-mode) clusters route to cluster recreation instead,
+// because Talos cannot upgrade its OS in place inside a container — see below.
 func (p *Provisioner) UpgradeDistribution(
 	ctx context.Context,
 	clusterName string,
@@ -37,8 +42,42 @@ func (p *Provisioner) UpgradeDistribution(
 		)
 	}
 
+	// Container-mode (Docker provider) Talos nodes cannot perform an in-place OS
+	// upgrade. Talos masks out the Upgrade capability for container mode in its
+	// capability matrix, so BOTH the legacy MachineService.Upgrade and the newer
+	// LifecycleService.Upgrade (Talos >= 1.13) reject with
+	// "FailedPrecondition: method is not supported in container mode". The OS
+	// version of a Docker cluster is fixed by its node image at create time, so
+	// the version is changed by recreating the cluster (like Kind/K3d/VCluster) —
+	// signalled with ErrRecreationRequired. Recreation is gated on KSail being
+	// able to provision the target: KSail generates machine configs with the
+	// vendored pkg/machinery, so it cannot provision a Talos release newer than
+	// that machinery; in that case skip with an actionable "update KSail" message
+	// rather than recreating into a config KSail cannot generate.
+	// (Routing mirrors Create/Delete/Exists: hetznerOpts==nil && omniOpts==nil =>
+	// Docker; omniOpts is already excluded above.)
+	if p.hetznerOpts == nil {
+		if distributionVersionExceedsMachinerySupport(toVersion) {
+			return fmt.Errorf(
+				"this KSail build cannot provision Talos %s yet (it vendors Talos machinery %s); "+
+					"update KSail or pin spec.cluster.talos.version to a supported version: %w",
+				toVersion, talosmachineryversion.Tag, clustererr.ErrUpgradeSkipped,
+			)
+		}
+
+		return fmt.Errorf(
+			"in-place Talos OS upgrade is not supported for the Docker provider; "+
+				"recreating the cluster to reach %s (from %s): %w",
+			toVersion, fromVersion, clustererr.ErrRecreationRequired,
+		)
+	}
+
 	clusterName = p.resolveClusterName(clusterName)
-	installerImage := installerImageFromTag(toVersion)
+	// Use the schematic-aware installer image so the rolling OS upgrade preserves
+	// configured system extensions (Image Factory installer), matching the
+	// create/snapshot/autoscaler paths. Falls back to the bare upstream installer
+	// only when no schematic is configured. See issue #5077.
+	installerImage := p.resolveInstallerImage(toVersion)
 
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,
@@ -227,13 +266,77 @@ func (p *Provisioner) DistributionImageRef() string {
 	return talosImageRepository
 }
 
+// PinnedDistributionVersion returns the Talos OS version the cluster should
+// reconcile toward.
+//
+// An explicit spec.cluster.talos.version pin applies to every provider. When no
+// pin is set, the result depends on the provider:
+//
+//   - Docker (container mode): nodes cannot upgrade their OS in place, so there
+//     is no "follow the latest OCI version" rolling path. Instead the cluster
+//     reconciles toward the Talos version this KSail build ships
+//     (DefaultTalosImage) and recreates to reach it — keeping create and update
+//     consistent and never provisioning a version KSail does not ship/test. To
+//     move beyond the shipped version, pin spec.cluster.talos.version (honored up
+//     to the vendored machinery version) or update KSail.
+//   - Hetzner/Omni: real machines that upgrade in place, so they return "" here
+//     and follow the latest discovered version (see DistributionImageRef).
+//
+// (Routing mirrors Create/Delete/Exists: hetznerOpts==nil && omniOpts==nil =>
+// Docker.)
+func (p *Provisioner) PinnedDistributionVersion() string {
+	if p.talosOpts != nil {
+		if pin := strings.TrimSpace(p.talosOpts.Version); pin != "" {
+			return pin
+		}
+	}
+
+	if p.hetznerOpts == nil && p.omniOpts == nil {
+		return clusterupdate.ExtractTag(talosconfigmanager.DefaultTalosImage)
+	}
+
+	return ""
+}
+
+// PinnedKubernetesVersion returns "" because Talos follows the OCI-discovered
+// Kubernetes version (or spec.cluster.kubernetesVersion when set), not an
+// SDK-embedded pin.
+func (p *Provisioner) PinnedKubernetesVersion() string {
+	return ""
+}
+
 // VersionSuffix returns an empty string since Talos uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""
 }
 
-// PrepareConfigForVersion is a no-op for Talos because it performs rolling
-// upgrades via the SDK rather than cluster recreation.
+// PrepareConfigForVersion is a no-op for Talos. Hetzner/Omni upgrade in place
+// (rolling upgrade via the SDK), so there is nothing to stage. The Docker
+// recreate path rebuilds the cluster from ctx.ClusterCfg, where the target
+// version already lives (spec.cluster.talos.version when pinned, or the shipped
+// DefaultTalosImage when unset), so create reaches the right version without a
+// separate config mutation here.
 func (p *Provisioner) PrepareConfigForVersion(_ string, _ string) error {
 	return nil
+}
+
+// distributionVersionExceedsMachinerySupport reports whether the requested Talos
+// version is newer than the Talos machinery this KSail build vendors. KSail
+// generates machine configs with the vendored pkg/machinery, so it cannot
+// provision a Talos release newer than that machinery. talosmachineryversion.Tag
+// is embedded from the machinery module at compile time. Unparseable versions are
+// treated as within support so the create/validation path surfaces a real error
+// rather than silently skipping.
+func distributionVersionExceedsMachinerySupport(toVersion string) bool {
+	target, err := versionresolver.ParseVersion(toVersion)
+	if err != nil {
+		return false
+	}
+
+	machinery, err := versionresolver.ParseVersion(talosmachineryversion.Tag)
+	if err != nil {
+		return false
+	}
+
+	return machinery.Less(target)
 }

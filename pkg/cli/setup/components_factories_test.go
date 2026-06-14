@@ -314,7 +314,7 @@ func TestFluxFactory(t *testing.T) {
 	t.Parallel()
 
 	factories := setup.DefaultInstallerFactories()
-	inst := factories.Flux(nil, 5*time.Minute)
+	inst := factories.Flux(nil, 5*time.Minute, "")
 
 	assert.NotNil(t, inst)
 }

@@ -93,15 +93,22 @@ runs:
           *)     echo "❌ Unsupported runner architecture: $RUNNER_ARCH"; exit 1 ;;
         esac
         tmpdir="$(mktemp -d)"
+        # A pinned version that resolves to a draft, deleted, or never-cut release makes
+        # `gh release download` fail with an opaque "release not found"; the same happens when a
+        # published release is missing the linux_<arch> asset. Wrap it so CI gets an actionable
+        # message naming the version and the exact failure modes instead (see #5060).
         if [ "$KSAIL_VERSION" = "latest" ]; then
-          gh release download --repo devantler-tech/ksail \
-            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
-            --dir "$tmpdir"
+          download_args=(--repo devantler-tech/ksail)
         else
-          gh release download "v${KSAIL_VERSION}" \
-            --repo devantler-tech/ksail \
-            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
-            --dir "$tmpdir"
+          download_args=("v${KSAIL_VERSION}" --repo devantler-tech/ksail)
+        fi
+        if ! gh release download "${download_args[@]}" \
+          --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
+          --dir "$tmpdir"; then
+          echo "::error::Could not download KSail '${KSAIL_VERSION}' (linux_${GOARCH})." >&2
+          echo "::error::The release may not exist, may be an unpublished draft, or may be missing the linux_${GOARCH} asset." >&2
+          echo "::error::Pin a published version from https://github.com/devantler-tech/ksail/releases." >&2
+          exit 1
         fi
         tar -xzf "$tmpdir"/ksail_*_linux_${GOARCH}.tar.gz -C "$tmpdir"
         sudo install "$tmpdir/ksail" /usr/local/bin/ksail
@@ -181,13 +188,19 @@ runs:
       shell: bash
       run: |
         echo "📦 Importing mirror registry volumes..."
+        # Pull the tar-utility busybox via mirror.gcr.io (anonymous pull-through
+        # cache), not Docker Hub: the runner's Docker Hub login makes a direct
+        # pull count against the authenticated rate limit and leak the dckr_jti
+        # token into error logs on throttle. mirror.gcr.io is anonymous and not
+        # rate-limited. It re-serializes manifests, so the upstream digest can't
+        # be pinned through it — tag-pinned, like registry:3 in pull-registry-image.sh.
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
             if docker run --rm \
               -v "${registry}":/volume \
               -v /tmp/ksail-mirror-cache:/backup:ro \
-              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
               echo "  ✅ Restored $registry mirror cache"
             else
@@ -199,21 +212,15 @@ runs:
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
       shell: bash
-      run: |
-        pulled=false
-        for attempt in 1 2 3; do
-          if docker pull registry:3; then
-            echo "✅ registry:3 image pulled successfully"
-            pulled=true
-            break
-          fi
-          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
-          sleep 5
-        done
-        if [ "$pulled" = false ]; then
-          echo "❌ Failed to pull registry:3 after 3 attempts"
-          exit 1
-        fi
+      # Runs the sibling pull-registry-image action's script directly. We can't
+      # use `uses: ./.github/actions/pull-registry-image` here: a `./` path in a
+      # composite action resolves against the *consumer's* workspace, not this
+      # repo, so it breaks every external caller of ksail-cluster
+      # (actions/runner#1348). $GITHUB_ACTION_PATH points at this action's own
+      # directory inside the fully-checked-out action repo, so
+      # `../pull-registry-image` reaches the sibling at the SAME ref — no
+      # checkout, no pinned ref, and one shared copy of the pull logic.
+      run: bash "$GITHUB_ACTION_PATH/../pull-registry-image/pull-registry-image.sh"
 
     - name: 📥 Pre-pull distribution images
       if: inputs.provider == 'Docker'
@@ -466,13 +473,15 @@ runs:
       shell: bash
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
+        # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the
+        # authenticated rate limit and dckr_jti leak. See the import step above.
         mkdir -p /tmp/ksail-mirror-cache
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
             if docker run --rm \
               -v "${registry}":/volume:ro \
               -v /tmp/ksail-mirror-cache:/backup \
-              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -cf /backup/${registry}.tar ."; then
               echo "  ✅ Exported $registry"
             else

@@ -29,4 +29,4 @@ CLI flag reference pages are auto-generated. See `docs/doc.go` and `docs/gen_doc
 ## Conventions
 
 - Prefer Markdown (`.md`) over MDX (`.mdx`) unless interactive components are needed
-- Use the write-docs agent (`/write-docs`) for documentation updates that sync across README.md, index.mdx, and CONTRIBUTING.md
+- Keep documentation updates in sync across README.md, index.mdx, and CONTRIBUTING.md

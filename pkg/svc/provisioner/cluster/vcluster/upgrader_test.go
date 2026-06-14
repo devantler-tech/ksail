@@ -87,6 +87,40 @@ func TestDistributionImageRef(t *testing.T) {
 	}
 }
 
+func TestPinnedDistributionVersion_ChartVersion(t *testing.T) {
+	t.Parallel()
+
+	provisioner := vclusterprovisioner.NewProvisioner("test", "", false, nil)
+
+	// VCluster's distribution version is SDK/Dockerfile-pinned to ChartVersion();
+	// the update flow caps the target at this pin to avoid phantom OCI upgrades.
+	want := vclusterconfigmanager.ChartVersion()
+	if want == "" {
+		t.Fatal("ChartVersion() unexpectedly empty")
+	}
+
+	if got := provisioner.PinnedDistributionVersion(); got != want {
+		t.Errorf("PinnedDistributionVersion() = %q, want %q", got, want)
+	}
+}
+
+func TestPinnedKubernetesVersion_DefaultKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	provisioner := vclusterprovisioner.NewProvisioner("test", "", false, nil)
+
+	// VCluster's Kubernetes version is likewise SDK-pinned, matching what
+	// GetCurrentVersions reports so the pinned path short-circuits to "already at it".
+	want := vclusterconfigmanager.DefaultKubernetesVersion
+	if want == "" {
+		t.Fatal("DefaultKubernetesVersion unexpectedly empty")
+	}
+
+	if got := provisioner.PinnedKubernetesVersion(); got != want {
+		t.Errorf("PinnedKubernetesVersion() = %q, want %q", got, want)
+	}
+}
+
 func TestVersionSuffix_Empty(t *testing.T) {
 	t.Parallel()
 

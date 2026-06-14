@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v7/pkg/client/klogutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
@@ -60,6 +61,10 @@ func exitCodeFromError(err error) (int, bool) {
 }
 
 func runWithArgs(args []string) int {
+	// Silence client-go's klog output so internal retry/connection errors
+	// (e.g. discovery "Unhandled Error" lines) never leak into command output.
+	klogutil.Silence()
+
 	rootCmd := cmd.NewRootCmd(buildmeta.Version, buildmeta.Commit, buildmeta.Date)
 	rootCmd.SetArgs(args)
 

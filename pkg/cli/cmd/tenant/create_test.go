@@ -41,10 +41,10 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, ns)
 
-	// --cluster-role default "edit"
-	cr, err := cmd.Flags().GetString("cluster-role")
+	// --cluster-role default ["edit"]
+	cr, err := cmd.Flags().GetStringSlice("cluster-role")
 	require.NoError(t, err)
-	require.Equal(t, "edit", cr)
+	require.Equal(t, []string{"edit"}, cr)
 
 	// --output default "."
 	out, err := cmd.Flags().GetString("output")
@@ -90,6 +90,136 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 	sd, err := cmd.Flags().GetString("source-directory")
 	require.NoError(t, err)
 	require.Equal(t, "k8s", sd)
+}
+
+func TestCreateCmd_ProductionFlagDefaults(t *testing.T) {
+	t.Parallel()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	prod, err := cmd.Flags().GetBool("production")
+	require.NoError(t, err)
+	require.False(t, prod)
+
+	ps, err := cmd.Flags().GetString("pod-security")
+	require.NoError(t, err)
+	require.Empty(t, ps)
+
+	qc, err := cmd.Flags().GetString("quota-cpu")
+	require.NoError(t, err)
+	require.Equal(t, "4", qc)
+
+	qm, err := cmd.Flags().GetString("quota-memory")
+	require.NoError(t, err)
+	require.Equal(t, "8Gi", qm)
+
+	ft, err := cmd.Flags().GetString("flux-timeout")
+	require.NoError(t, err)
+	require.Empty(t, ft)
+
+	for _, name := range []string{
+		"with-network-policy", "with-quota", "with-limit-range",
+		"disable-token-automount", "flux-wait", "flux-decryption",
+	} {
+		val, err := cmd.Flags().GetBool(name)
+		require.NoError(t, err)
+		require.False(t, val, "%s should default to false", name)
+	}
+}
+
+func TestCreateCmd_Production(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"prod-tenant", "--type", "kubectl", "--production", "--output", outDir})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	tenantDir := filepath.Join(outDir, "prod-tenant")
+	for _, filename := range []string{"networkpolicy.yaml", "resourcequota.yaml", "limitrange.yaml"} {
+		_, statErr := os.Stat(filepath.Join(tenantDir, filename))
+		require.NoError(t, statErr, "expected %s to exist", filename)
+	}
+
+	nsContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(tenantDir, "namespace.yaml"),
+	)
+	require.NoError(t, err)
+	require.Contains(t, string(nsContent), "pod-security.kubernetes.io/enforce: baseline")
+
+	saContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(tenantDir, "serviceaccount.yaml"),
+	)
+	require.NoError(t, err)
+	require.Contains(t, string(saContent), "automountServiceAccountToken: false")
+}
+
+func TestCreateCmd_FluxTimeoutImpliesWait(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"timeout-tenant", "--type", "flux",
+		"--registry", "oci://ghcr.io", "--tenant-repo", "owner/repo",
+		"--flux-timeout", "10m", "--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	syncContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(outDir, "timeout-tenant", "sync.yaml"),
+	)
+	require.NoError(t, err)
+	require.Contains(t, string(syncContent), "wait: true")
+	require.Contains(t, string(syncContent), "timeout: 10m")
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestCreateCmd_CiliumNetworkPolicyFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	require.NoError(t, os.WriteFile("kind.yaml",
+		[]byte("apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\n"+
+			"networking:\n  disableDefaultCNI: true\n"), 0o600))
+
+	ksailYAML := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n  cluster:\n    distribution: Vanilla\n" +
+		"    distributionConfig: kind.yaml\n    cni: Cilium\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailYAML), 0o600))
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs(
+		[]string{"cil-tenant", "--type", "kubectl", "--with-network-policy", "--output", dir},
+	)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	npContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(dir, "cil-tenant", "networkpolicy.yaml"),
+	)
+	require.NoError(t, err)
+	require.Contains(t, string(npContent), "kind: CiliumNetworkPolicy")
 }
 
 func TestCreateCmd_KubectlType(t *testing.T) {

@@ -888,6 +888,112 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentFluxInstance(t *testing.T) {
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			obj client.Object,
+			_ ...client.GetOption,
+		) error {
+			instance, ok := obj.(*fluxinstaller.FluxInstance)
+			require.True(t, ok, "expected FluxInstance type")
+
+			instance.Spec.Distribution.Version = "2.8.x"
+
+			return nil
+		},
+	}
+
+	restoreClient := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restoreClient()
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string, string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreConfig()
+
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "")
+
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+	assert.Equal(t, "2.8.x", instance.Spec.Distribution.Version)
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentFluxInstance_NotFound(t *testing.T) {
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			_ client.Object,
+			_ ...client.GetOption,
+		) error {
+			return apierrors.NewNotFound(schema.GroupResource{}, "flux")
+		},
+	}
+
+	restoreClient := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restoreClient()
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string, string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreConfig()
+
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "")
+
+	require.NoError(t, err)
+	assert.Nil(t, instance)
+}
+
+// TestGetCurrentFluxInstance_ForwardsContext verifies that the kube context is
+// forwarded to the REST config builder, so drift detection queries the cluster
+// pinned in spec.cluster.connection.context rather than the ambient
+// current-context.
+//
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentFluxInstance_ForwardsContext(t *testing.T) {
+	var gotContext string
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(_, context string) (*rest.Config, error) {
+		gotContext = context
+
+		return nil, errors.New("stub: stop before building client")
+	})
+	defer restoreConfig()
+
+	_, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "admin@prod")
+
+	require.Error(t, err)
+	assert.Equal(t, "admin@prod", gotContext)
+}
+
+// TestGetCurrentSyncRef_ForwardsContext verifies that GetCurrentSyncRef threads
+// the kube context through to the REST config builder.
+//
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentSyncRef_ForwardsContext(t *testing.T) {
+	var gotContext string
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(_, context string) (*rest.Config, error) {
+		gotContext = context
+
+		return nil, errors.New("stub: stop before building client")
+	})
+	defer restoreConfig()
+
+	_, err := fluxinstaller.GetCurrentSyncRef(context.Background(), "kubeconfig", "admin@prod")
+
+	require.Error(t, err)
+	assert.Equal(t, "admin@prod", gotContext)
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0
@@ -1007,7 +1113,7 @@ func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	defer restoreFlux()
 
 	// Mock loadRESTConfig to return a dummy config without hitting the filesystem.
-	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreLoad()
@@ -1068,7 +1174,7 @@ func TestEnsureDefaultResources_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	defer restoreFlux()
 
 	// Mock loadRESTConfig to avoid hitting the filesystem.
-	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreLoad()

@@ -1,0 +1,17 @@
+{{- if and .Values.operator.enabled .Values.api.bindPort -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ksail-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ksail-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  selector:
+    {{- include "ksail-operator.operatorSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: api
+      port: {{ .Values.api.bindPort }}
+      targetPort: api
+{{- end }}

@@ -1,6 +1,9 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package kwokprovisioner
 
+// KwokControllerImageVersionForTest exposes kwokControllerImageVersion for unit testing.
+const KwokControllerImageVersionForTest = kwokControllerImageVersion
+
 // IsTransientCreateErrorForTest exposes isTransientCreateError for unit testing.
 var IsTransientCreateErrorForTest = isTransientCreateError
 
@@ -27,4 +30,19 @@ func (p *Provisioner) ResolveNameForTest(name string) string {
 // ResolveConfigPathForTest exposes resolveConfigPath for unit testing.
 func (p *Provisioner) ResolveConfigPathForTest() (string, func(), error) {
 	return p.resolveConfigPath()
+}
+
+// DiscoverAPIServerPortForTest exposes discoverAPIServerPort for unit testing.
+func (p *KubernetesProvisioner) DiscoverAPIServerPortForTest(name string) (int, error) {
+	return p.discoverAPIServerPort(name)
+}
+
+// ApplyKwokCertSANsForTest exposes applyKwokCertSANs for unit testing.
+func (p *KubernetesProvisioner) ApplyKwokCertSANsForTest(address string) (func(), error) {
+	return p.applyKwokCertSANs(address)
+}
+
+// ConfigPathForTest returns the inner provisioner's configPath for assertions.
+func (p *KubernetesProvisioner) ConfigPathForTest() string {
+	return p.configPath
 }

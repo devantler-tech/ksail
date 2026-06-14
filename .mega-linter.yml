@@ -5,11 +5,22 @@ IGNORE_GITIGNORED_FILES: true
 REPORTERS_MARKDOWN_SUMMARY_TYPE: sections
 LINTER_RULES_PATH: .
 DISABLE_LINTERS:
+  # zizmor runs as a dedicated, standalone CI check (the `zizmor` job) with the
+  # repo's own configuration; MegaLinter's copy is redundant and, newly
+  # activated in v9.5.0, otherwise fails (it lacks GitHub API auth and reports
+  # pre-existing workflow-audit findings the dedicated check already governs).
+  - ACTION_ZIZMOR
   - GO_GOLANGCI_LINT # Disabled: MegaLinter container has Go 1.24.7, but project requires Go 1.26.0. CI runs golangci-lint separately with correct Go version.
   - GO_REVIVE
   - REPOSITORY_CHECKOV
   - REPOSITORY_GITLEAKS
   - REPOSITORY_GRYPE
+  # Disabled: consistent with the other dependency vulnerability scanners above
+  # (trivy/grype) — this repo relies on Dependabot for dependency CVE triage, not
+  # a blocking MegaLinter gate. osv-scanner was newly activated by MegaLinter
+  # v9.5.0 and otherwise fails on pre-existing transitive advisories and on
+  # building the desktop webview cgo module (gtk/webkit2gtk not in the image).
+  - REPOSITORY_OSV_SCANNER
   - REPOSITORY_SECRETLINT
   - REPOSITORY_TRIVY
   - SPELL_CSPELL
@@ -18,15 +29,16 @@ DISABLE_LINTERS:
 EXCLUDED_DIRECTORIES:
   - megalinter-reports
   - report
-  - .github/agents
-  - .github/prompts
   - .jscpd
   - schemas
   - .agents
-ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: (.github/workflows/.*\.lock\.yml|.github/workflows/agentics-maintenance\.yml)
-FILTER_REGEX_EXCLUDE: (megalinter-reports/.*)
-JSON_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml)
-MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
-MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: (.github/(agents|prompts)|\.github/workflows/.*\.lock\.yml)
-SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md|\.github/workflows/.*\.md)
-YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
+# web/ui is a self-contained Vite/React app with its own toolchain (tsc + vite build, run in CI),
+# so it is excluded from the repo-wide linters here.
+FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*)
+SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md)
+# Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
+# YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from
+# the YAML linters.
+YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|charts/.*/crds/.*)
+YAML_PRETTIER_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|charts/.*/crds/.*)
+YAML_V8R_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|charts/.*/crds/.*)

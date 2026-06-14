@@ -48,8 +48,11 @@ func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
 	assert.Contains(t, err.Error(), "privileged namespaces")
 }
 
-// TestInstaller_Install_APIDiscoveryErrorRetry verifies that when the first Helm install
-// returns an API discovery error, the installer waits for CRDs and retries.
+// TestInstaller_Install_APIDiscoveryErrorRetry verifies that an API-discovery
+// error on the operator install (the operator.tigera.io CRDs installed by the
+// CRD chart are not yet visible to Helm's cached discovery) is retried, and the
+// install succeeds once discovery is refreshed. This must hold for non-K3s
+// distributions too, so Vanilla is used here.
 func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	t.Parallel()
 
@@ -62,28 +65,73 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		false,
 	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
-	// First call: repo add succeeds
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// First install call returns API discovery error
+	// Two refreshes expected: one after the CRD chart install, and one more
+	// before the operator-install retry (triggered by the API-discovery error).
+	expectCalicoCRDPhaseWithRefreshes(client, 2)
+
+	// The operator install hits the CRD-establishment race once; the retry
+	// (after a discovery refresh) succeeds.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryNoMatchesInstallation).
 		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
+		Return(nil, nil).
+		Once()
 
-	// The retry path calls waitForCalicoCRDs which uses k8s.BuildRESTConfig.
-	// With invalid kubeconfig, this fails.
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+// TestInstaller_Install_APIDiscoveryErrorRetryExhausted verifies that a
+// persistent API-discovery error eventually fails after exhausting the retry
+// budget rather than retrying forever.
+func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		false,
+	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	// 8 operator attempts all fail with the discovery error. One refresh follows
+	// the CRD install; the 7 retries between the 8 attempts each refresh again
+	// (the final attempt breaks without refreshing) — 8 refreshes total.
+	expectCalicoCRDPhaseWithRefreshes(client, 8)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
+		Return(nil, errCalicoRetryNoMatchesInstallation).
+		Times(8)
+
 	err := installer.Install(context.Background())
 	require.Error(t, err)
-	// The error should come from waitForCalicoCRDs (REST config build failure)
-	assert.Contains(t, err.Error(), "wait for calico CRDs")
+	assert.Contains(t, err.Error(), "install or upgrade calico")
 }
 
 // TestInstaller_Install_ContextCanceled_Vanilla verifies install fails on canceled context.
@@ -111,8 +159,9 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	// The CRD install (phase 1) is reached first and fails on the canceled context.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
 		Return(nil, context.Canceled)
 
 	err := installer.Install(ctx)
@@ -142,12 +191,14 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Once()
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, nil).
 		Once()
 
@@ -178,8 +229,10 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Times(8)
 
@@ -212,9 +265,11 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// Vanilla must NOT retry — InstallOrUpgradeChart is called exactly once.
+	expectCalicoCRDPhase(client)
+
+	// Vanilla must NOT retry — the operator install is called exactly once.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Once()
 

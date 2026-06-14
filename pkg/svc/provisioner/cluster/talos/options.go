@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -37,6 +38,14 @@ type Options struct {
 	// NetworkCIDR is the CIDR for the cluster network.
 	NetworkCIDR string
 
+	// KubernetesVersion holds the user's explicit Kubernetes version pin
+	// (spec.cluster.kubernetesVersion), empty when unset. It is the raw
+	// value (possibly with a "v" prefix); only its presence is significant.
+	// When empty, the provisioner renders the desired machine config at the
+	// Kubernetes version already running on the cluster so an unrelated update
+	// never proposes an unrequested upgrade.
+	KubernetesVersion string
+
 	// KubeconfigPath is the path to write the kubeconfig.
 	KubeconfigPath string
 
@@ -58,6 +67,11 @@ type Options struct {
 	// Only used with the Docker provider. Each entry is in the Talos SDK format:
 	// "[hostIP:]hostPort:containerPort/protocol".
 	ExtraPortMappings []string
+
+	// DrainTimeout is the per-node pod-eviction budget for rolling drains during
+	// cluster update. Zero means use defaultDrainTimeout. Sourced from
+	// spec.cluster.talos.drainTimeout (or --drain-timeout).
+	DrainTimeout time.Duration
 }
 
 // NewOptions creates new Options with default values.
@@ -106,6 +120,15 @@ func (o *Options) WithNetworkCIDR(cidr string) *Options {
 	return o
 }
 
+// WithKubernetesVersion records the user's explicit Kubernetes version pin.
+// The value is stored verbatim (its presence, not its exact form, drives the
+// running-version-preservation logic during update).
+func (o *Options) WithKubernetesVersion(version string) *Options {
+	o.KubernetesVersion = version
+
+	return o
+}
+
 // WithKubeconfigPath sets the kubeconfig output path.
 func (o *Options) WithKubeconfigPath(path string) *Options {
 	if path != "" {
@@ -143,6 +166,16 @@ func (o *Options) WithSkipCNIChecks(skip bool) *Options {
 // WithExtraPortMappings sets the extra port mappings for Docker containers.
 func (o *Options) WithExtraPortMappings(ports []string) *Options {
 	o.ExtraPortMappings = ports
+
+	return o
+}
+
+// WithDrainTimeout sets the per-node drain timeout used during rolling updates.
+// Non-positive values are ignored, so drainNode falls back to defaultDrainTimeout.
+func (o *Options) WithDrainTimeout(timeout time.Duration) *Options {
+	if timeout > 0 {
+		o.DrainTimeout = timeout
+	}
 
 	return o
 }

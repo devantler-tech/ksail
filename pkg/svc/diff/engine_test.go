@@ -17,6 +17,10 @@ const (
 	testFieldControlPlanes = "cluster.controlPlanes"
 	testFieldWorkers       = "cluster.workers"
 	testTalosVersionOld    = "v1.11.2"
+	testServerTypeNew      = "cpx41"
+
+	testFieldKubernetesVersion = "cluster.kubernetesVersion"
+	testK8sVersionOld          = "1.32.0"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -411,6 +415,61 @@ func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
 	}
 }
 
+func TestEngine_LocalRegistryChange_RedactsPassword(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.LocalRegistry.Registry = "GITHUB_ACTOR:ghp_oldsecret@ghcr.io/org"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "GITHUB_ACTOR:ghp_newsecret@ghcr.io/neworg"
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// Vanilla registry changes are recreate-required; the PAT must be masked while
+	// the username, host, and path stay visible.
+	assertSingleChange(t, result.RecreateRequired, "cluster.localRegistry.registry",
+		"GITHUB_ACTOR:****@ghcr.io/org", "GITHUB_ACTOR:****@ghcr.io/neworg",
+		clusterupdate.ChangeCategoryRecreateRequired)
+
+	// Defense-in-depth: the resolved PAT must not appear in any emitted change value.
+	for _, change := range result.AllChanges() {
+		if strings.Contains(change.OldValue, "ghp_oldsecret") ||
+			strings.Contains(change.NewValue, "ghp_newsecret") {
+			t.Errorf("registry diff leaked PAT: old=%q new=%q", change.OldValue, change.NewValue)
+		}
+	}
+}
+
+// TestEngine_LocalRegistryChange_PasswordOnly_NotSurfaced verifies that a
+// password-only rotation is NOT reported as a diff. Because the persisted
+// baseline no longer stores the password (state.SaveClusterSpec masks it so a
+// GHCR PAT is never written to disk), checkLocalRegistryChange compares the
+// redacted forms — so a change confined to the password yields two identical
+// redacted values and is intentionally not surfaced. This supersedes the
+// earlier raw-comparison behaviour, which could only detect such a rotation by
+// keeping the cleartext secret in the baseline.
+func TestEngine_LocalRegistryChange_PasswordOnly_NotSurfaced(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.LocalRegistry.Registry = "user:OLDPAT@ghcr.io/org"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "user:NEWPAT@ghcr.io/org"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.localRegistry.registry" {
+			t.Fatalf("password-only change must not be surfaced; got %+v", change)
+		}
+	}
+}
+
 func TestEngine_VanillaOptionsChange(t *testing.T) {
 	t.Parallel()
 
@@ -446,47 +505,58 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
+// talosOptionsChangeCases drives TestEngine_TalosOptionsChange. Kept at package
+// scope so the test function stays within the funlen limit.
+//
+//nolint:gochecknoglobals // table-driven test cases.
+var talosOptionsChangeCases = []struct {
+	name     string
+	mutate   func(spec *v1alpha1.ClusterSpec)
+	field    string
+	oldValue string
+	newValue string
+}{
+	{
+		name:     "version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
+		field:    "cluster.talos.version",
+		oldValue: "",
+		newValue: "v1.12.0",
+	},
+	{
+		name:     "kubernetes version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.KubernetesVersion = "1.34.0" },
+		field:    testFieldKubernetesVersion,
+		oldValue: "",
+		newValue: "1.34.0",
+	},
+	{
+		name:     "control plane count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
+		field:    testFieldControlPlanes,
+		oldValue: "1",
+		newValue: "3",
+	},
+	{
+		name:     "worker count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
+		field:    testFieldWorkers,
+		oldValue: "0",
+		newValue: "2",
+	},
+	{
+		name:     "ISO change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
+		field:    "cluster.talos.iso",
+		oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
+	},
+}
+
 func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		mutate   func(spec *v1alpha1.ClusterSpec)
-		field    string
-		oldValue string
-		newValue string
-	}{
-		{
-			name:     "version pin change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
-			field:    "cluster.talos.version",
-			oldValue: "",
-			newValue: "v1.12.0",
-		},
-		{
-			name:     "control plane count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
-			field:    testFieldControlPlanes,
-			oldValue: "1",
-			newValue: "3",
-		},
-		{
-			name:     "worker count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
-			field:    testFieldWorkers,
-			oldValue: "0",
-			newValue: "2",
-		},
-		{
-			name:     "ISO change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
-			field:    "cluster.talos.iso",
-			oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
-			newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range talosOptionsChangeCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -640,6 +710,96 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 	}
 }
 
+func TestEngine_HetznerServerType_RollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		controlPlanes int32
+		workers       int32
+		mutate        func(spec *v1alpha1.ProviderSpec)
+		field         string
+	}{
+		{
+			name:          "control plane server type change with quorum redundancy",
+			controlPlanes: 3,
+			workers:       0,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = testServerTypeNew },
+			field:         "provider.hetzner.controlPlaneServerType",
+		},
+		{
+			name:          "worker server type change with existing workers",
+			controlPlanes: 1,
+			workers:       2,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = testServerTypeNew },
+			field:         "provider.hetzner.workerServerType",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = testCase.controlPlanes
+			old.Workers = testCase.workers
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if !result.HasRollingRecreate() {
+				t.Fatal("server type change should require rolling recreate")
+			}
+
+			if result.HasRecreateRequired() {
+				t.Fatal("rolling-capable server type change should not require full recreate")
+			}
+
+			assertSingleChange(t, result.RollingRecreate, testCase.field,
+				"cx23", testServerTypeNew, clusterupdate.ChangeCategoryRollingRecreate)
+		})
+	}
+}
+
+func TestEngine_HetznerControlPlaneServerType_RecreateBelowQuorum(t *testing.T) {
+	t.Parallel()
+
+	// With fewer than MinControlPlanesForRollingReplace control planes, a CP
+	// server-type change cannot roll without losing etcd quorum.
+	for _, controlPlanes := range []int32{1, 2} {
+		t.Run(strconv.Itoa(int(controlPlanes))+" control planes", func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = controlPlanes
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			newProvider.Hetzner.ControlPlaneServerType = testServerTypeNew
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if result.HasRollingRecreate() {
+				t.Fatal("control-plane change below quorum should not roll")
+			}
+
+			assertSingleChange(
+				t,
+				result.RecreateRequired,
+				"provider.hetzner.controlPlaneServerType",
+				"cx23",
+				testServerTypeNew,
+				clusterupdate.ChangeCategoryRecreateRequired,
+			)
+		})
+	}
+}
+
 func TestEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 	t.Parallel()
 
@@ -776,6 +936,38 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 				"  change: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,
 			)
+		}
+	}
+}
+
+// TestEngine_ComponentDefaults_NoFalsePositive reproduces the scenario where a
+// freshly initialised ksail.yaml leaves cni/certManager/policyEngine/gitOpsEngine
+// unset (empty). The detected baseline carries the applied defaults
+// (CNIDefault/Disabled/None/None), so without default normalisation these unset
+// fields would produce phantom in-place drift on an otherwise-unchanged cluster.
+func TestEngine_ComponentDefaults_NoFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+
+	// Simulate an unpinned config: the user never set these component fields.
+	newer := clone(old)
+	newer.CNI = ""
+	newer.CertManager = ""
+	newer.PolicyEngine = ""
+	newer.GitOpsEngine = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if result.TotalChanges() != 0 {
+		t.Errorf(
+			"unset component fields should normalise to their defaults (0 changes), got %d",
+			result.TotalChanges(),
+		)
+
+		for _, change := range result.AllChanges() {
+			t.Logf("  change: %s %q -> %q", change.Field, change.OldValue, change.NewValue)
 		}
 	}
 }
@@ -975,6 +1167,77 @@ func assertWorkloadTagChange(
 	}
 }
 
+const (
+	distVerOld = "2.x"
+	distVerNew = "2.8.x"
+)
+
+func TestEngine_CheckFluxDistributionVersion(t *testing.T) {
+	t.Parallel()
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	tests := []struct {
+		name         string
+		oldVersion   string
+		newVersion   string
+		gitOpsEngine v1alpha1.GitOpsEngine
+		wantChanges  int
+	}{
+		{"no gitops engine", distVerOld, distVerNew, v1alpha1.GitOpsEngineNone, 0},
+		{"argocd not applicable", distVerOld, distVerNew, v1alpha1.GitOpsEngineArgoCD, 0},
+		{"same version no change", distVerNew, distVerNew, v1alpha1.GitOpsEngineFlux, 0},
+		{"flux version drift", distVerOld, distVerNew, v1alpha1.GitOpsEngineFlux, 1},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &clusterupdate.UpdateResult{}
+			engine.CheckFluxDistributionVersion(
+				testCase.oldVersion, testCase.newVersion, testCase.gitOpsEngine, result,
+			)
+
+			if got := result.TotalChanges(); got != testCase.wantChanges {
+				t.Errorf("want %d changes, got %d", testCase.wantChanges, got)
+			}
+
+			if testCase.wantChanges > 0 {
+				assertFluxDistributionVersionChange(
+					t, result, testCase.oldVersion, testCase.newVersion,
+				)
+			}
+		})
+	}
+}
+
+func assertFluxDistributionVersionChange(
+	t *testing.T,
+	result *clusterupdate.UpdateResult,
+	oldVersion, newVersion string,
+) {
+	t.Helper()
+
+	changes := result.InPlaceChanges
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 in-place change, got %d", len(changes))
+	}
+
+	change := changes[0]
+	if change.Field != "cluster.workload.flux.distributionVersion" {
+		t.Errorf("expected field cluster.workload.flux.distributionVersion, got %s", change.Field)
+	}
+
+	if change.OldValue != oldVersion {
+		t.Errorf("expected old value %q, got %q", oldVersion, change.OldValue)
+	}
+
+	if change.NewValue != newVersion {
+		t.Errorf("expected new value %q, got %q", newVersion, change.NewValue)
+	}
+}
+
 func TestEngine_TalosBaselineNodeCountDetected_WhenAutoscalingEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -1134,6 +1397,49 @@ func TestEngine_AutoscalerPoolModified(t *testing.T) {
 		"1", "2", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1].max",
 		"5", "10", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPoolLabelsAndTaintsModified(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+	newer := clone(old)
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{
+			Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5,
+			Labels: map[string]string{"workload": "gpu"},
+			Taints: []v1alpha1.NodePoolTaint{
+				{Key: "dedicated", Value: "gpu", Effect: v1alpha1.TaintEffectNoSchedule},
+			},
+		},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("pool labels/taints modification should produce in-place changes")
+	}
+
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		"cluster.autoscaler.node.pools[workers-fsn1].labels",
+		"",
+		"workload=gpu",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		"cluster.autoscaler.node.pools[workers-fsn1].taints",
+		"",
+		"dedicated=gpu:NoSchedule",
+		clusterupdate.ChangeCategoryInPlace,
+	)
 }
 
 func TestEngine_AutoscalerPodHorizontalChange(t *testing.T) {
@@ -1370,19 +1676,23 @@ func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
 	t.Parallel()
 
 	// Simulate GetCurrentConfig returning 0 (unset) for ISO — the live cluster
-	// can't report what ISO it booted from.
+	// can't report what ISO it booted from, and no persisted state is available
+	// (e.g. a stateless CI runner).
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
 	old.Talos.ISO = 0
 
+	// Pin a non-default ISO, as a real cluster does. This is the case that
+	// previously produced a perpetual false-positive diff: the unknown baseline
+	// was filled with DefaultTalosISO and compared against the pinned value.
 	newer := clone(old)
-	newer.Talos.ISO = v1alpha1.DefaultTalosISO
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	// ISO should NOT appear as a change because both sides normalise to the
-	// default ISO via the defaultVal mechanism.
+	// ISO must NOT appear as a change: with no baseline to compare against, the
+	// rule skips the field entirely rather than diffing against the default.
 	for _, c := range result.AllChanges() {
 		if c.Field == "cluster.talos.iso" {
 			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
@@ -1407,6 +1717,34 @@ func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
 		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
 		clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosISO_NoChangeWhenDesiredUnsetMatchesDefaultBaseline(t *testing.T) {
+	t.Parallel()
+
+	// Persisted state supplies a known baseline equal to the default ISO while the
+	// config leaves talos.iso unset (0). defaultVal must normalise the desired side
+	// to the default so an unpinned config does not produce a false-positive diff
+	// against the baseline. skipWhenOldEmpty does not apply here — the baseline is
+	// known and non-zero.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = v1alpha1.DefaultTalosISO
+
+	newer := clone(old)
+	newer.Talos.ISO = 0
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.iso" {
+			t.Fatalf(
+				"expected no ISO diff when desired is unset and baseline equals default, got %+v",
+				c,
+			)
+		}
+	}
 }
 
 func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
@@ -1473,6 +1811,70 @@ func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
 	)
 }
 
+func TestEngine_TalosKubernetesVersion_NoChangeWhenNewEmpty(t *testing.T) {
+	t.Parallel()
+
+	// The cluster reports a running Kubernetes version (introspected baseline) but
+	// the user has not pinned one — the provisioner tracks the running version, so
+	// no spec-level change should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == testFieldKubernetesVersion {
+			t.Fatalf("expected no kubernetesVersion diff when new version is empty, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosKubernetesVersion_NoChangeWhenMatches(t *testing.T) {
+	t.Parallel()
+
+	// User pins the same version the cluster runs; the "v" prefix must not matter.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = "v" + testK8sVersionOld
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == testFieldKubernetesVersion {
+			t.Fatalf("expected no kubernetesVersion diff when values match, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosKubernetesVersion_ChangeWhenNewDiffers(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = "v1.34.0"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		testFieldKubernetesVersion, testK8sVersionOld, "1.34.0",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
 func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
 	t.Parallel()
 
@@ -1493,4 +1895,98 @@ func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
 		"cluster.talos.version", "", testTalosVersionOld,
 		clusterupdate.ChangeCategoryInPlace,
 	)
+}
+
+// findChange returns the first change with the given field, or nil.
+func findChange(changes []clusterupdate.Change, field string) *clusterupdate.Change {
+	for i := range changes {
+		if changes[i].Field == field {
+			return &changes[i]
+		}
+	}
+
+	return nil
+}
+
+func TestEngine_UnknownBaseline_SurfacesUnknownInsteadOfInPlace(t *testing.T) {
+	t.Parallel()
+
+	// Baseline could not be read from the cluster: every detector-derived
+	// component field is the Unknown sentinel.
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	// Desired config requests several active components, and leaves the load
+	// balancer and CSI at their defaults.
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	newer.CNI = v1alpha1.CNICilium
+	newer.MetricsServer = v1alpha1.MetricsServerEnabled
+	newer.CertManager = v1alpha1.CertManagerEnabled
+	newer.PolicyEngine = v1alpha1.PolicyEngineKyverno
+	newer.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// No fabricated in-place / reboot / recreate changes from the unknown baseline.
+	require.Zero(t, result.TotalChanges(),
+		"unknown baseline must not produce applicable changes")
+	require.True(t, result.HasUnknownBaseline())
+
+	wantFields := []string{
+		"cluster.cni",
+		"cluster.metricsServer",
+		"cluster.certManager",
+		"cluster.policyEngine",
+		"cluster.gitOpsEngine",
+	}
+	require.Len(t, result.UnknownBaseline, len(wantFields))
+
+	for _, field := range wantFields {
+		change := findChange(result.UnknownBaseline, field)
+		require.NotNilf(t, change, "expected unknown-baseline entry for %s", field)
+		require.Equal(t, clusterupdate.UnknownBaselineValue, change.OldValue)
+		require.Equal(t, clusterupdate.ChangeCategoryUnknown, change.Category)
+		require.NotEqual(t, clusterupdate.UnknownBaselineValue, change.NewValue)
+	}
+
+	// Components left at their defaults must not be reported, even as Unknown.
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.loadBalancer"))
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.csi"))
+}
+
+func TestEngine_UnknownBaseline_NoNoiseWhenDesiredMatchesDefaults(t *testing.T) {
+	t.Parallel()
+
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	// Desired config leaves every component at its default.
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	require.Zero(t, result.TotalChanges())
+	require.False(t, result.HasUnknownBaseline(),
+		"defaults on both sides must not produce Unknown rows")
+}
+
+func TestEngine_UnknownBaseline_SkipsNodeAutoscalerDiff(t *testing.T) {
+	t.Parallel()
+
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.MaxNodesTotal = 5
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// The node autoscaler is detector-derived; an unknown baseline must not
+	// fabricate an in-place "enable autoscaler" change.
+	require.Nil(t, findChange(result.InPlaceChanges, "cluster.autoscaler.node.enabled"))
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.autoscaler.node.enabled"))
 }

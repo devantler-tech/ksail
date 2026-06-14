@@ -6,9 +6,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
 	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/desktop"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/oidc"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/ui"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
@@ -62,8 +65,11 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
 	cmd.AddCommand(chat.NewChatCmd(runtimeContainer))
 	cmd.AddCommand(mcp.NewMCPCmd(runtimeContainer))
+	cmd.AddCommand(operator.NewOperatorCmd(runtimeContainer))
 	cmd.AddCommand(tenant.NewTenantCmd(runtimeContainer))
 	cmd.AddCommand(oidc.NewOIDCCmd())
+	cmd.AddCommand(ui.NewUICmd(runtimeContainer))
+	cmd.AddCommand(desktop.NewDesktopCmd(runtimeContainer))
 
 	return cmd
 }

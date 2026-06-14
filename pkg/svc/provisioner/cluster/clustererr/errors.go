@@ -70,3 +70,7 @@ var ErrVersionUndetermined = errors.New("cannot determine running version")
 
 // ErrOperationNotSupported is returned when an operation is not supported on a provisioner.
 var ErrOperationNotSupported = errors.New("operation not supported")
+
+// ErrKubeconfigNotReady is returned by a Connector when the provisioned cluster's kubeconfig has
+// not been published yet, signalling the caller to retry later.
+var ErrKubeconfigNotReady = errors.New("provisioned cluster kubeconfig not ready")

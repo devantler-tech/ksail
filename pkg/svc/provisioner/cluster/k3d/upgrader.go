@@ -50,9 +50,22 @@ func (p *Provisioner) KubernetesImageRef() string {
 
 // DistributionImageRef returns an empty string because K3d's distribution
 // version is the same as the Kubernetes version — the rancher/k3s image
-// bundles both. The `--update-distribution` flag is intentionally a no-op
-// for K3d; use `--update-kubernetes` to upgrade both.
+// bundles both. Distribution-version reconciliation is therefore a no-op for
+// K3d; the Kubernetes-version reconciliation upgrades both together.
 func (p *Provisioner) DistributionImageRef() string {
+	return ""
+}
+
+// PinnedDistributionVersion always returns "" because K3d's distribution version
+// is the Kubernetes version; pin it via spec.cluster.kubernetesVersion.
+func (p *Provisioner) PinnedDistributionVersion() string {
+	return ""
+}
+
+// PinnedKubernetesVersion returns "" because K3d follows the OCI-discovered
+// Kubernetes version (or spec.cluster.kubernetesVersion when set); recreation can
+// legitimately reach the discovered K3s image version.
+func (p *Provisioner) PinnedKubernetesVersion() string {
 	return ""
 }
 

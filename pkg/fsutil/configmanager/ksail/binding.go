@@ -196,6 +196,11 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.ControlPlanes:           "control-planes",
 		&m.Config.Spec.Cluster.Workers:                 "workers",
 		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
+		&m.Config.Spec.Cluster.Talos.DrainTimeout:      "drain-timeout",
+
+		// Declarative version fields (unset = follow latest, set = pin).
+		&m.Config.Spec.Cluster.KubernetesVersion: "kubernetes-version",
+		&m.Config.Spec.Cluster.Talos.Version:     "distribution-version",
 
 		// Cross-distribution options
 		&m.Config.Spec.Cluster.NodeAutoscaling:         "node-autoscaling",

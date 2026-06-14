@@ -194,6 +194,60 @@ func TestFormatDiffTable_MultipleRows(t *testing.T) {
 	assert.Contains(t, got, "c")
 }
 
+func TestFormatDiffTable_UnknownBaselineOnly(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.cni",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Cilium",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 0)
+
+	assert.Contains(t, got, "cluster.cni")
+	assert.Contains(t, got, "Unknown")
+	assert.Contains(t, got, "Cilium")
+	assert.Contains(t, got, "⚪")
+	// The summary line must not claim confident configuration changes.
+	assert.Contains(t, got, "could not be read")
+	assert.NotContains(t, got, "Detected 0 configuration changes")
+}
+
+func TestFormatDiffTable_RealAndUnknownTogether(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		InPlaceChanges: []clusterupdate.Change{
+			{
+				Field:    "cluster.workers",
+				OldValue: "1",
+				NewValue: "3",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
+		},
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.gitOpsEngine",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Flux",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 1)
+
+	assert.Contains(t, got, "cluster.workers")
+	assert.Contains(t, got, "cluster.gitOpsEngine")
+	assert.Contains(t, got, "🟢")
+	assert.Contains(t, got, "⚪")
+	assert.Contains(t, got, "unknown baseline")
+}
+
 // ===========================================================================
 // stripDistributionPrefix — context name prefix stripping
 // ===========================================================================
@@ -206,6 +260,35 @@ func TestStripDistributionPrefix_UnknownReturnsEmpty(t *testing.T) {
 func TestStripDistributionPrefix_EmptyReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, cluster.ExportStripDistributionPrefix(""))
+}
+
+func TestStripDistributionPrefix_K3kReturnsClusterName(t *testing.T) {
+	t.Parallel()
+	// Nested K3s clusters (k3k operator on the Kubernetes provider) use a "k3k-"
+	// context prefix rather than the standalone "k3d-"; they must still be stripped
+	// to the bare cluster name so they appear in completion and the picker.
+	assert.Equal(t, "nested", cluster.ExportStripDistributionPrefix("k3k-nested"))
+}
+
+// ===========================================================================
+// resolveContextName — cluster name → kubeconfig context resolution
+// ===========================================================================
+
+func TestResolveContextName_K3kNestedK3sResolvesDeterministically(t *testing.T) {
+	t.Parallel()
+
+	// Nested K3s clusters (k3k operator on the Kubernetes provider) use a "k3k-"
+	// context prefix rather than the standalone "k3d-". The explicit k3k- candidate
+	// must win so resolution stays deterministic instead of falling back to substring
+	// matching — which would also match the unrelated context below and report the
+	// name as ambiguous.
+	got, err := cluster.ExportResolveContextName(
+		[]string{"k3k-nested", "external-nested-ctx"},
+		"nested",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "k3k-nested", got)
 }
 
 // ===========================================================================
@@ -1000,6 +1083,38 @@ func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
 	assert.Contains(t, out, `"findings": []`)
 }
 
+// TestRunDiagnoseJSONReport_DoesNotEscapeHTML verifies the fix for the JSON
+// HTML-escaping issue: '<', '>', '&' (e.g. in remediation hints like "<name>")
+// appear literally instead of being </>/&-escaped.
+func TestRunDiagnoseJSONReport_DoesNotEscapeHTML(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/stuck (default)",
+				Reason:      "PVC is stuck in Pending phase",
+				Remediation: "Run 'ksail workload describe pvc/<name> -n <namespace>'.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	require.NoError(t, err)
+
+	out := buf.String()
+	// With HTML-escaping disabled, '<', '>' and '&' appear literally. If
+	// escaping were enabled they would be emitted as their unicode escape
+	// sequences instead, so the literal substring assertions below would fail.
+	assert.Contains(t, out, "<name>")
+	assert.Contains(t, out, "<namespace>")
+}
+
 func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	t.Parallel()
 
@@ -1029,4 +1144,183 @@ func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
 	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
 	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
+}
+
+func TestResolveCreatedContextName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		clusterName  string
+		expected     string
+	}{
+		{
+			name:         "k3s on kubernetes provider uses k3k prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-k3s",
+			expected:     "k3k-nested-k3s",
+		},
+		{
+			name:         "k3s on docker provider uses standalone k3d prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			clusterName:  "my-cluster",
+			expected:     "k3d-my-cluster",
+		},
+		{
+			name:         "vanilla on kubernetes provider uses standalone kind prefix",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-vanilla",
+			expected:     "kind-nested-vanilla",
+		},
+		{
+			name:         "empty cluster name returns empty",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "",
+			expected:     "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := cluster.ExportResolveCreatedContextName(
+				testCase.distribution,
+				testCase.provider,
+				testCase.clusterName,
+			)
+			assert.Equal(t, testCase.expected, got)
+		})
+	}
+}
+
+// ===========================================================================
+// normalizePinnedVersion — pinned-version normalization & downgrade guard
+// ===========================================================================
+
+const (
+	// testPinCurrent is the running version used as the baseline in the
+	// normalizePinnedVersion cases; testPinNewer is a pin strictly newer than it.
+	testPinCurrent = "v1.8.0"
+	testPinNewer   = "v1.9.0"
+	// testPinSDKRaw is the unprefixed SDK pin (VCluster's ChartVersion()) used in
+	// the phantom-upgrade regression cases; testPinSDKNorm is its normalized form.
+	testPinSDKRaw  = "0.34.1"
+	testPinSDKNorm = "v0.34.1"
+)
+
+// normalizePinnedVersionCase is one ExportNormalizePinnedVersion table case.
+type normalizePinnedVersionCase struct {
+	name        string
+	rawPinned   string
+	current     string
+	wantVersion string
+	wantReason  cluster.ExportPinnedVersionSkipReason
+}
+
+// normalizePinnedVersionCases returns the happy-path normalization/downgrade
+// cases. Kept separate from the test body so the table doesn't trip funlen.
+func normalizePinnedVersionCases() []normalizePinnedVersionCase {
+	return []normalizePinnedVersionCase{
+		{
+			name:        "newer pin proceeds with upgrade",
+			rawPinned:   testPinNewer,
+			current:     testPinCurrent,
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+		{
+			name:        "missing v prefix is normalized",
+			rawPinned:   "1.9.0",
+			current:     testPinCurrent,
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+		{
+			name:        "pin equal to current is a no-op",
+			rawPinned:   testPinCurrent,
+			current:     testPinCurrent,
+			wantVersion: testPinCurrent,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			// Regression for the VCluster phantom-upgrade bug: an unprefixed SDK pin
+			// ("0.34.1", VCluster's ChartVersion()) must still match an unprefixed
+			// current of the same version via parsed-semver equality, not raw strings.
+			name:        "unprefixed pin equal to unprefixed current is a no-op",
+			rawPinned:   testPinSDKRaw,
+			current:     testPinSDKRaw,
+			wantVersion: testPinSDKNorm,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			// Cross-prefix equality: pin normalizes to "v..." while current is raw.
+			name:        "unprefixed pin equal to v-prefixed current is a no-op",
+			rawPinned:   testPinSDKRaw,
+			current:     testPinSDKNorm,
+			wantVersion: testPinSDKNorm,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			name:        "older pin than current skips the downgrade",
+			rawPinned:   "v1.7.0",
+			current:     testPinCurrent,
+			wantVersion: "v1.7.0",
+			wantReason:  cluster.ExportPinnedVersionNewer,
+		},
+		{
+			name:        "unparseable current version falls through to proceed",
+			rawPinned:   testPinNewer,
+			current:     "",
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+	}
+}
+
+func TestNormalizePinnedVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range normalizePinnedVersionCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(
+				testCase.rawPinned, testCase.current,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.wantVersion, gotVersion)
+			assert.Equal(t, testCase.wantReason, gotReason)
+		})
+	}
+}
+
+func TestNormalizePinnedVersion_EmptyPinReturnsError(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "   "} {
+		gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(raw, testPinCurrent)
+		require.ErrorIs(t, err, cluster.ErrEmptyPinnedVersion)
+		assert.Empty(t, gotVersion)
+		assert.Equal(t, cluster.ExportPinnedVersionProceed, gotReason)
+	}
+}
+
+func TestNormalizePinnedVersion_InvalidPinReturnsError(t *testing.T) {
+	t.Parallel()
+
+	gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(
+		"not-a-version", testPinCurrent,
+	)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, cluster.ErrEmptyPinnedVersion)
+	assert.Contains(t, err.Error(), "invalid pinned Talos version")
+	assert.Empty(t, gotVersion)
+	assert.Equal(t, cluster.ExportPinnedVersionProceed, gotReason)
 }

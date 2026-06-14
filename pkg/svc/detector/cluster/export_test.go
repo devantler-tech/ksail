@@ -18,3 +18,6 @@ var DetectProviderFromEndpoint = detectProviderFromEndpoint
 
 // DetectFromServerURL exports detectFromServerURL for testing.
 var DetectFromServerURL = detectFromServerURL
+
+// ServerHasIP exports serverHasIP for testing.
+var ServerHasIP = serverHasIP

@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -12,18 +13,38 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
-// drainTimeout is the maximum duration to wait for pod eviction during node drain.
-const drainTimeout = 120 * time.Second
+// defaultDrainTimeout is the maximum duration to wait for pod eviction during a
+// node drain when spec.cluster.talos.drainTimeout is not set. The previous value
+// of two minutes was too aggressive for production clusters: graceful eviction of
+// PodDisruptionBudget-protected workloads (e.g. Longhorn instance-managers whose
+// replicas must rebuild elsewhere, or databases that must fail over) routinely
+// takes several minutes, and overrunning it aborted the whole update. It is
+// aligned with nodeReadinessTimeout.
+const defaultDrainTimeout = 10 * time.Minute
+
+// drainSkipWaitForDeleteSeconds tells the drain helper to stop waiting on a pod
+// once its DeletionTimestamp is older than this many seconds. The node is about to
+// be rebooted or destroyed, so a pod that has accepted eviction but is slow to
+// terminate (e.g. a Job pod stuck in Terminating) must not consume the entire
+// drain budget while the rest of the node waits behind it.
+const drainSkipWaitForDeleteSeconds = 60
 
 // nodeReadinessTimeout is the timeout for waiting for a single node to become ready
 // after reboot.
 const nodeReadinessTimeout = 10 * time.Minute
+
+// uncordonCleanupTimeout bounds the best-effort uncordon performed after a drain
+// failure (see cordonAndDrain). It runs on a context detached from the (possibly
+// already-cancelled or unreachable-API) parent, so it needs its own deadline to
+// avoid hanging an already-failing update.
+const uncordonCleanupTimeout = 30 * time.Second
 
 // setNodeSchedulable marks a Kubernetes node as schedulable or unschedulable.
 func (p *Provisioner) setNodeSchedulable(
@@ -82,23 +103,59 @@ func (p *Provisioner) uncordonNode(
 	return p.setNodeSchedulable(ctx, clientset, nodeName, true)
 }
 
-// drainNode evicts all pods from a Kubernetes node.
+// drainTimeout returns the configured per-node drain timeout, falling back to
+// defaultDrainTimeout when unset or non-positive.
+func (p *Provisioner) drainTimeout() time.Duration {
+	if p.options != nil && p.options.DrainTimeout > 0 {
+		return p.options.DrainTimeout
+	}
+
+	return defaultDrainTimeout
+}
+
+// newDrainHelper builds the kubectl drain helper used by drainNode. It is split
+// out so the timeout / skip-wait / eviction-bypass wiring can be unit-tested
+// without a live cluster. When disableEviction is true the helper deletes pods
+// directly instead of going through the Eviction API, bypassing
+// PodDisruptionBudgets (see drainNode for when that is enabled).
+func newDrainHelper(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	timeout time.Duration,
+	disableEviction bool,
+	logWriter io.Writer,
+) *kubedrain.Helper {
+	return &kubedrain.Helper{
+		Ctx:    ctx,
+		Client: clientset,
+		// Force is kubectl-drain's flag to also remove standalone pods not backed by
+		// a controller; it is unrelated to KSail's --force (which sets disableEviction).
+		Force:                           true,
+		IgnoreAllDaemonSets:             true,
+		DeleteEmptyDirData:              true,
+		Timeout:                         timeout,
+		GracePeriodSeconds:              -1, // use pod's terminationGracePeriodSeconds
+		SkipWaitForDeleteTimeoutSeconds: drainSkipWaitForDeleteSeconds,
+		DisableEviction:                 disableEviction,
+		Out:                             logWriter,
+		ErrOut:                          logWriter,
+	}
+}
+
+// drainNode evicts all pods from a Kubernetes node. The wait budget is
+// p.drainTimeout(); pods already terminating past drainSkipWaitForDeleteSeconds
+// no longer block it. When p.drainForce is set (an explicit --force/--yes on the
+// update) the drain deletes pods directly, bypassing PodDisruptionBudgets so the
+// roll can complete even when a budget would never allow graceful eviction (e.g.
+// a single-replica StatefulSet) — at the cost of the disruption the budget
+// guards against.
 func (p *Provisioner) drainNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	drainer := &kubedrain.Helper{
-		Ctx:                 ctx,
-		Client:              clientset,
-		Force:               true,
-		IgnoreAllDaemonSets: true,
-		DeleteEmptyDirData:  true,
-		Timeout:             drainTimeout,
-		GracePeriodSeconds:  -1, // use pod's terminationGracePeriodSeconds
-		Out:                 p.logWriter,
-		ErrOut:              p.logWriter,
-	}
+	timeout := p.drainTimeout()
+	drainer := newDrainHelper(ctx, clientset, timeout, p.drainForce, p.logWriter)
 
 	pods, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
@@ -107,7 +164,15 @@ func (p *Provisioner) drainNode(
 
 	deleteErr := drainer.DeleteOrEvictPods(pods.Pods())
 	if deleteErr != nil {
-		return fmt.Errorf("drain node %s: %w", nodeName, deleteErr)
+		// Don't suggest --force when it is already in effect (drainForce set).
+		hint := ""
+		if !p.drainForce {
+			hint = "; raise spec.cluster.talos.drainTimeout (or --drain-timeout) to give " +
+				"workloads more time, or re-run with --force to delete pods bypassing " +
+				"PodDisruptionBudgets"
+		}
+
+		return fmt.Errorf("drain node %s (timeout %s): %w%s", nodeName, timeout, deleteErr, hint)
 	}
 
 	return nil
@@ -257,13 +322,20 @@ func (p *Provisioner) rollingApplyRebootChanges(
 
 	ordered := sortNodesWorkersFirst(nodes)
 
+	// The staged-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node — seeding the rebuild from a worker's own config
+	// fails with "failed to parse PEM block" (#4963). All control-planes share the
+	// same PKI, so any one is a valid source (mirrors applyInPlaceConfigChanges).
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Rolling reboot for %s (%s)...\n",
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node)
+		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node, secretsSource)
 		if rebootErr != nil {
 			recordFailedChange(result, node.Role, node.IP, rebootErr)
 
@@ -284,51 +356,28 @@ func (p *Provisioner) rollingApplyRebootChanges(
 }
 
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
-// wait → uncordon sequence for a single node.
-//
-//nolint:cyclop,funlen // sequential cordon/drain/stage/reboot/wait/uncordon steps
+// wait → uncordon sequence for a single node. secretsSource is a control-plane
+// config supplying the cluster PKI for the staged-config rebuild (see
+// stageNodeConfigForReboot).
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	node nodeWithRole,
+	secretsSource talosconfig.Provider,
 ) error {
 	nodeName, err := p.resolveNodeName(ctx, clientset, node.IP)
 	if err != nil {
 		return fmt.Errorf("resolve node name: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
-
-	cordonErr := p.cordonNode(ctx, clientset, nodeName)
-	if cordonErr != nil {
-		return fmt.Errorf("cordon: %w", cordonErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
-
-	drainErr := p.drainNode(ctx, clientset, nodeName)
+	drainErr := p.cordonAndDrain(ctx, clientset, nodeName)
 	if drainErr != nil {
-		return fmt.Errorf("drain: %w", drainErr)
+		return drainErr
 	}
 
-	// Apply config with STAGED mode — config takes effect on next reboot.
-	if p.talosConfigs != nil {
-		config := p.talosConfigs.ControlPlane()
-		if node.Role == RoleWorker {
-			config = p.talosConfigs.Worker()
-		}
-
-		if config != nil {
-			_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
-
-			stageErr := p.applyConfigWithMode(
-				ctx, node.IP, config,
-				machineapi.ApplyConfigurationRequest_STAGED,
-			)
-			if stageErr != nil {
-				return fmt.Errorf("stage config: %w", stageErr)
-			}
-		}
+	stageErr := p.stageNodeConfigForReboot(ctx, node, secretsSource)
+	if stageErr != nil {
+		return stageErr
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Rebooting %s...\n", node.IP)
@@ -353,4 +402,65 @@ func (p *Provisioner) rollingRebootSingleNode(
 	}
 
 	return nil
+}
+
+// stageNodeConfigForReboot stages the node's desired machine config with STAGED
+// mode, so it takes effect on the next reboot. The config is rebuilt from the
+// node's running config through buildDesiredNodeConfig — the same machinery the
+// in-place reconcile uses — so the per-node sections ksail injects post-generation
+// at create/scale (static hostname, registry mirrors, cert SANs) survive the
+// reboot. Staging the raw regenerated talosConfigs.ControlPlane()/Worker() instead
+// would silently revert them: e.g. dropping machine.network.hostname so a Hetzner
+// node re-registers under a generated talos-xxxxx name once it reboots — the same
+// class of bug fixed for the in-place path in detect_inplace.go (graftNodeHostname).
+// It is a no-op when no Talos config is loaded (nothing to stage).
+func (p *Provisioner) stageNodeConfigForReboot(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+) error {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	config, err := p.buildStagedNodeConfig(ctx, node, secretsSource)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
+
+	stageErr := p.applyConfigWithMode(
+		ctx, node.IP, config,
+		machineapi.ApplyConfigurationRequest_STAGED,
+	)
+	if stageErr != nil {
+		return fmt.Errorf("stage config: %w", stageErr)
+	}
+
+	return nil
+}
+
+// buildStagedNodeConfig builds the machine config to STAGE on a node ahead of a
+// rolling reboot: the node's running config regenerated through
+// buildDesiredNodeConfig, which preserves the per-node post-generation transforms
+// (static hostname, registry mirrors, cert SANs) instead of reverting to the
+// freshly regenerated base config. secretsSource supplies the cluster PKI and must
+// be a control-plane config (see buildDesiredNodeConfig and #4963).
+func (p *Provisioner) buildStagedNodeConfig(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	running, err := p.nodeConfigFetcher(ctx, node.IP)
+	if err != nil {
+		return nil, fmt.Errorf("fetch running config: %w", err)
+	}
+
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
+	if err != nil {
+		return nil, fmt.Errorf("build desired config: %w", err)
+	}
+
+	return desired, nil
 }

@@ -32,6 +32,44 @@ func extractCredentials(credPart string) (string, string) {
 	return credPart, ""
 }
 
+// registryCredentialMask is the placeholder substituted for a registry password
+// (such as a GHCR Personal Access Token) when a registry spec is rendered in
+// diffs or other CLI output, so the secret is never printed in cleartext.
+const registryCredentialMask = "****"
+
+// RedactRegistryCredentials returns the registry spec with its password component
+// replaced by a fixed mask, so secrets such as a GHCR Personal Access Token are
+// never printed in cleartext. The username, host, port, and path are preserved so
+// diff output still shows what structurally changed. Specs without a "user:pass@"
+// credential prefix, or with an empty password, are returned unchanged.
+//
+// The credential boundaries mirror [LocalRegistry.Parse]: the credentials are the
+// segment before the first "@", and the password is everything after the first
+// ":" within that segment. Mirroring Parse guarantees that whatever
+// [LocalRegistry.ResolveCredentials] would surface as the password is exactly
+// what gets masked here.
+func RedactRegistryCredentials(registry string) string {
+	atIdx := strings.Index(registry, "@")
+	if atIdx <= 0 {
+		return registry
+	}
+
+	// Password exists only when there is a ":" within the credential segment
+	// (matching extractCredentials' colonIdx > 0 requirement).
+	colonIdx := strings.Index(registry[:atIdx], ":")
+	if colonIdx <= 0 {
+		return registry
+	}
+
+	// Empty password (e.g. "user:@host" or an unset "${TOKEN}" expanded away):
+	// nothing secret to mask, and masking would misleadingly imply a password.
+	if registry[colonIdx+1:atIdx] == "" {
+		return registry
+	}
+
+	return registry[:colonIdx+1] + registryCredentialMask + registry[atIdx:]
+}
+
 // parseHostAndPort parses the host:port portion of a registry spec.
 // Returns host, port, and whether an explicit port was provided.
 func parseHostAndPort(spec string) (string, int32, bool) {
@@ -51,7 +89,10 @@ func parseHostAndPort(spec string) (string, int32, bool) {
 	return spec, 0, false
 }
 
-const localhostHost = "localhost"
+const (
+	localhostHost = "localhost"
+	loopbackIP    = "127.0.0.1"
+)
 
 // resolveDefaultPort returns the appropriate default port based on host.
 func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
@@ -59,7 +100,7 @@ func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
 		return 0 // Will be set by caller
 	}
 
-	if host == localhostHost || host == "127.0.0.1" {
+	if host == localhostHost || host == loopbackIP {
 		return DefaultLocalRegistryPort
 	}
 
@@ -153,7 +194,7 @@ func (r LocalRegistry) HasCredentials() bool {
 func (r LocalRegistry) IsExternal() bool {
 	parsed := r.Parse()
 
-	return parsed.Host != "" && parsed.Host != "localhost" && parsed.Host != "127.0.0.1"
+	return parsed.Host != "" && parsed.Host != localhostHost && parsed.Host != loopbackIP
 }
 
 // ResolvedHost returns the registry host from the parsed spec, defaulting to "localhost".

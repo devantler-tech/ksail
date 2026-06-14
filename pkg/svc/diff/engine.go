@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -55,7 +56,7 @@ func (e *Engine) ComputeDiff(
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
-	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
+	e.checkHetznerOptionsChange(oldSpec, oldProvider, newProvider, result)
 	e.checkAutoscalerOptionsChange(oldSpec, newSpec, result)
 
 	return result
@@ -81,6 +82,35 @@ func (e *Engine) CheckWorkloadTag(
 		clusterupdate.ChangeCategoryInPlace)
 }
 
+// CheckFluxDistributionVersion compares the running FluxInstance's
+// spec.distribution.version against the desired version (resolved from a
+// repo-declared FluxInstance, spec.workload.flux.distributionVersion, or the
+// default) and appends an in-place change when they differ. Only relevant for
+// the Flux engine. The caller passes oldVersion=="" when the FluxInstance cannot
+// be introspected (e.g. it does not exist yet), which suppresses the diff so a
+// non-introspectable seed never produces a false-positive change.
+func (e *Engine) CheckFluxDistributionVersion(
+	oldVersion, newVersion string,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// An empty baseline means the running version could not be introspected
+	// (e.g. the FluxInstance does not exist yet); suppress the diff so a
+	// non-introspectable seed never produces a false-positive change.
+	if oldVersion == "" {
+		return
+	}
+
+	appendChange(result, "cluster.workload.flux.distributionVersion",
+		oldVersion, newVersion, "",
+		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
 // fieldRule describes how to diff a single scalar field.
 type fieldRule struct {
 	field    string
@@ -100,6 +130,14 @@ type fieldRule struct {
 	// empty. Use this for fields that are optional in the user config — when the user
 	// hasn't set the field, any detected current value should not produce a diff.
 	skipWhenNewEmpty bool
+	// skipWhenOldEmpty, when true, skips the diff when the baseline (old) value is
+	// empty — i.e. the current value could not be introspected from the cluster and
+	// no persisted state supplied it. Use this for boot-time settings (e.g. the
+	// Talos ISO ID) that a running cluster cannot report: with no baseline, falling
+	// back to defaultVal would fabricate a perpetual false-positive diff whenever the
+	// user pins a non-default value. Mirrors checkLocalRegistryChange's handling,
+	// where an empty old value means "unknown", not a concrete value to diff against.
+	skipWhenOldEmpty bool
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -123,10 +161,11 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Provider.String() },
 		},
 		{
-			field:    "cluster.cni",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "CNI can be switched via Helm upgrade/uninstall",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CNI.String() },
+			field:      "cluster.cni",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "CNI can be switched via Helm upgrade/uninstall",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.CNI.String() },
+			defaultVal: string(v1alpha1.CNIDefault),
 		},
 		{
 			field:    "cluster.csi",
@@ -200,22 +239,25 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			},
 		},
 		{
-			field:    "cluster.certManager",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "cert-manager can be installed/uninstalled via Helm",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CertManager.String() },
+			field:      "cluster.certManager",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "cert-manager can be installed/uninstalled via Helm",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.CertManager.String() },
+			defaultVal: string(v1alpha1.CertManagerDisabled),
 		},
 		{
-			field:    "cluster.policyEngine",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "policy engine can be switched via Helm install/uninstall",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.PolicyEngine.String() },
+			field:      "cluster.policyEngine",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "policy engine can be switched via Helm install/uninstall",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.PolicyEngine.String() },
+			defaultVal: string(v1alpha1.PolicyEngineNone),
 		},
 		{
-			field:    "cluster.gitOpsEngine",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "GitOps engine can be switched via Helm install/uninstall",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.GitOpsEngine.String() },
+			field:      "cluster.gitOpsEngine",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "GitOps engine can be switched via Helm install/uninstall",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.GitOpsEngine.String() },
+			defaultVal: string(v1alpha1.GitOpsEngineNone),
 		},
 	}
 }
@@ -223,6 +265,8 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // appendChange appends a single diff change to the appropriate category slice in result.
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
+//
+
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
@@ -242,15 +286,22 @@ func appendChange(
 		return
 	}
 
-	change := clusterupdate.Change{
+	routeChange(result, clusterupdate.Change{
 		Field:    field,
 		OldValue: oldVal,
 		NewValue: newVal,
 		Category: category,
 		Reason:   reason,
-	}
+	})
+}
 
-	switch category {
+// routeChange appends a fully-formed change to the result slice matching its
+// category. Unlike appendChange it performs no equality check or default
+// substitution, so callers that have already decided a change occurred (and may
+// have transformed the displayed values, e.g. redacting secrets) can route it
+// without the value-based short-circuit dropping the entry.
+func routeChange(result *clusterupdate.UpdateResult, change clusterupdate.Change) {
+	switch change.Category {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		result.RecreateRequired = append(result.RecreateRequired, change)
 	case clusterupdate.ChangeCategoryInPlace:
@@ -259,6 +310,12 @@ func appendChange(
 		result.RebootRequired = append(result.RebootRequired, change)
 	case clusterupdate.ChangeCategoryWipeRequired:
 		result.WipeRequired = append(result.WipeRequired, change)
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		result.RollingRecreate = append(result.RollingRecreate, change)
+	case clusterupdate.ChangeCategoryUnknown:
+		// Unknown-baseline entries are produced by appendUnknownIfChanged, not
+		// here; route defensively so the category is never silently dropped.
+		result.UnknownBaseline = append(result.UnknownBaseline, change)
 	}
 }
 
@@ -274,16 +331,85 @@ func (e *Engine) applyFieldRules(
 			continue
 		}
 
+		oldVal := rule.getVal(oldSpec)
+
+		// The baseline could not be determined (not introspectable, no persisted
+		// state). Skip rather than diff against defaultVal, which would fabricate a
+		// false-positive change whenever the user pins a non-default value (e.g. the
+		// Talos ISO in stateless CI). See skipWhenOldEmpty.
+		if rule.skipWhenOldEmpty && oldVal == "" {
+			continue
+		}
+
+		// The baseline value could not be read from the cluster. Surface the
+		// field as Unknown instead of computing a confident diff against the
+		// default value (which would mislead the user into reinstalling
+		// components that may already be healthy).
+		if oldVal == clusterupdate.UnknownBaselineValue {
+			e.appendUnknownIfChanged(result, rule, newVal)
+
+			continue
+		}
+
 		cat := rule.category
 		if rule.categoryFn != nil {
 			cat = rule.categoryFn()
 		}
 
 		appendChange(result, rule.field,
-			rule.getVal(oldSpec), newVal,
+			oldVal, newVal,
 			rule.defaultVal, rule.reason, cat)
 	}
 }
+
+// appendUnknownIfChanged appends an Unknown-baseline entry for a field whose
+// current value could not be read. To avoid noise, it only emits an entry when
+// the field's *default* baseline differs from the desired value — i.e. exactly
+// when a normal diff would have reported a change. Fields the user left at their
+// defaults produce no entry, since they would not have shown a change either.
+func (e *Engine) appendUnknownIfChanged(
+	result *clusterupdate.UpdateResult,
+	rule fieldRule,
+	newVal string,
+) {
+	defaultOld := rule.getVal(clusterupdate.DefaultCurrentSpec(e.distribution, e.provider))
+
+	// Mirror appendChange's default-value substitution so the comparison matches
+	// what a normal diff would have evaluated.
+	if rule.defaultVal != "" {
+		if defaultOld == "" {
+			defaultOld = rule.defaultVal
+		}
+
+		if newVal == "" {
+			newVal = rule.defaultVal
+		}
+	}
+
+	if defaultOld == newVal {
+		return
+	}
+
+	result.UnknownBaseline = append(result.UnknownBaseline, clusterupdate.Change{
+		Field:    rule.field,
+		OldValue: clusterupdate.UnknownBaselineValue,
+		NewValue: newVal,
+		Category: clusterupdate.ChangeCategoryUnknown,
+		Reason:   "current cluster state could not be read; baseline is unknown",
+	})
+}
+
+// componentBaselineUnknown reports whether the spec's detector-derived component
+// fields were marked unknown (see clusterupdate.MarkComponentsUnknown). Checking
+// CNI is sufficient because the marker sets all component fields together.
+func (e *Engine) componentBaselineUnknown(spec *v1alpha1.ClusterSpec) bool {
+	return string(spec.CNI) == clusterupdate.UnknownBaselineValue
+}
+
+// reasonRegistryIndependentOfOS explains why VCluster, KWOK, and EKS can change their registry
+// configuration in place: none of them manages the registry through the node OS, so no node-level
+// reconfiguration or cluster recreate is required.
+const reasonRegistryIndependentOfOS = "VCluster/KWOK/EKS manage registry independently of the node OS"
 
 // localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
 // For Kind, registry changes require recreate (containerd config is baked in).
@@ -308,15 +434,15 @@ var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionVCluster: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionKWOK: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionEKS: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 }
@@ -339,11 +465,34 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	if rc, ok := localRegistryReasonMap[e.distribution]; ok {
-		appendChange(result, "cluster.localRegistry.registry",
-			oldSpec.LocalRegistry.Registry, newSpec.LocalRegistry.Registry,
-			"", rc.reason, rc.category)
+	reasonCategory, ok := localRegistryReasonMap[e.distribution]
+	if !ok {
+		return
 	}
+
+	// Compare on the credential-redacted specs. The persisted baseline stores the
+	// registry with its password masked (see state.SaveClusterSpec) while the
+	// desired spec is env-expanded to the live secret, so comparing raw values
+	// would report a spurious change on every update. Redacting both first keeps
+	// the comparison stable and keeps the password out of the diff table, JSON
+	// output, and recreate/reboot warnings. This Change is display-only — apply
+	// logic resolves credentials from the spec, never from the diff. A
+	// credentials-only rotation is consequently not surfaced: the baseline no
+	// longer carries the password to compare against.
+	oldRegistry := v1alpha1.RedactRegistryCredentials(oldSpec.LocalRegistry.Registry)
+	newRegistry := v1alpha1.RedactRegistryCredentials(newSpec.LocalRegistry.Registry)
+
+	if oldRegistry == newRegistry {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    "cluster.localRegistry.registry",
+		OldValue: oldRegistry,
+		NewValue: newRegistry,
+		Category: reasonCategory.category,
+		Reason:   reasonCategory.reason,
+	})
 }
 
 // checkVanillaOptionsChange checks Vanilla (Kind) specific option changes.
@@ -390,6 +539,23 @@ var talosFieldRules = []fieldRule{
 		skipWhenNewEmpty: true,
 	},
 	{
+		// Top-level field (spec.cluster.kubernetesVersion); only the Talos
+		// distribution honors it, so the rule lives here rather than in the
+		// distribution-agnostic rules to avoid false diffs for Kind/K3d/EKS.
+		field:    "cluster.kubernetesVersion",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "Kubernetes version change re-renders the machine config and is applied to nodes",
+		// Normalise both sides to drop any "v" prefix so "v1.32.0" and "1.32.0"
+		// (the introspected baseline form) compare equal.
+		getVal: func(s *v1alpha1.ClusterSpec) string {
+			return strings.TrimPrefix(strings.TrimSpace(s.KubernetesVersion), "v")
+		},
+		// skipWhenNewEmpty: when the user has not pinned a Kubernetes version, the
+		// provisioner tracks the running version (no upgrade), so there is no
+		// spec-level change to report regardless of the detected baseline.
+		skipWhenNewEmpty: true,
+	},
+	{
 		field:    "cluster.controlPlanes",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing control-plane nodes via provider",
@@ -405,17 +571,26 @@ var talosFieldRules = []fieldRule{
 }
 
 // talosISORule is the ISO field rule used by the Talos field rules.
-// ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be detected from
-// the running cluster. When the old spec has 0 (unknown/unset), getVal returns ""
-// so that the defaultVal substitution normalises both sides to the config default,
-// suppressing false-positive diffs.
+// ISO is a boot-time setting (Hetzner Cloud ISO ID) that a running cluster cannot
+// report, so the baseline is known only from persisted state. getVal returns ""
+// when ISO is 0 (unset). The two normalisation mechanisms are complementary:
+//   - skipWhenOldEmpty handles an unknown *baseline* (old == ""): the diff is
+//     skipped entirely (before appendChange), so we never fabricate a change
+//     against defaultVal when the user pins a non-default ISO in stateless CI.
+//   - defaultVal handles an unset *desired* value (new == "") against a known
+//     baseline: it normalises the desired side to DefaultTalosISO so an unpinned
+//     config does not diff against a non-zero persisted baseline.
+//
+// A genuine ISO change is still reported when both sides are known and differ,
+// and the desired ISO is always applied to newly provisioned nodes regardless.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
-	field:      "cluster.talos.iso",
-	category:   clusterupdate.ChangeCategoryInPlace,
-	reason:     "ISO change only affects newly provisioned nodes",
-	defaultVal: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+	field:            "cluster.talos.iso",
+	category:         clusterupdate.ChangeCategoryInPlace,
+	reason:           "ISO change only affects newly provisioned nodes",
+	skipWhenOldEmpty: true,
+	defaultVal:       strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 	getVal: func(s *v1alpha1.ClusterSpec) string {
 		if s.Talos.ISO == 0 {
 			return ""
@@ -427,6 +602,7 @@ var talosISORule = fieldRule{
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
 func (e *Engine) checkHetznerOptionsChange(
+	oldSpec *v1alpha1.ClusterSpec,
 	oldProvider, newProvider *v1alpha1.ProviderSpec,
 	result *clusterupdate.UpdateResult,
 ) {
@@ -439,6 +615,59 @@ func (e *Engine) checkHetznerOptionsChange(
 	}
 
 	e.applyProviderFieldRules(oldProvider, newProvider, result, hetznerFieldRules)
+	e.checkHetznerServerTypeChanges(oldSpec, oldProvider, newProvider, result)
+}
+
+// checkHetznerServerTypeChanges classifies control-plane and worker server-type
+// changes. Unlike the static hetznerFieldRules, their impact depends on the
+// running node counts: control planes can be rolled one at a time only when the
+// cluster has enough etcd-quorum redundancy, and workers are only rolled when
+// they exist. See clusterupdate.ControlPlaneServerTypeChangeCategory and
+// WorkerServerTypeChangeCategory.
+func (e *Engine) checkHetznerServerTypeChanges(
+	oldSpec *v1alpha1.ClusterSpec,
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
+	result *clusterupdate.UpdateResult,
+) {
+	cpCategory := clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes))
+	appendChange(result, "provider.hetzner.controlPlaneServerType",
+		oldProvider.Hetzner.ControlPlaneServerType, newProvider.Hetzner.ControlPlaneServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleControlPlane, cpCategory), cpCategory)
+
+	workerCategory := clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers))
+	appendChange(result, "provider.hetzner.workerServerType",
+		oldProvider.Hetzner.WorkerServerType, newProvider.Hetzner.WorkerServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleWorker, workerCategory), workerCategory)
+}
+
+// Role identifiers used when describing server-type changes.
+const (
+	// RoleControlPlane identifies control-plane nodes.
+	RoleControlPlane = "control-plane"
+	// RoleWorker identifies worker nodes.
+	RoleWorker = "worker"
+)
+
+// serverTypeChangeReason returns a human-readable explanation for a server-type
+// change classified into the given category.
+func serverTypeChangeReason(role string, category clusterupdate.ChangeCategory) string {
+	switch category {
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		return "existing " + role + " servers are replaced one at a time to apply the new VM type"
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		return "control plane lacks etcd-quorum redundancy to roll (need at least " +
+			strconv.Itoa(clusterupdate.MinControlPlanesForRollingReplace) +
+			" control planes); recreation is required to change VM type"
+	case clusterupdate.ChangeCategoryInPlace,
+		clusterupdate.ChangeCategoryRebootRequired,
+		clusterupdate.ChangeCategoryWipeRequired,
+		clusterupdate.ChangeCategoryUnknown:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	default:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	}
 }
 
 // providerFieldRule describes how to diff a single scalar field from ProviderSpec.
@@ -455,20 +684,6 @@ type providerFieldRule struct {
 //
 //nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
 var hetznerFieldRules = []providerFieldRule{
-	{
-		field:      "provider.hetzner.controlPlaneServerType",
-		category:   clusterupdate.ChangeCategoryRecreateRequired,
-		reason:     "existing control-plane servers cannot change VM type",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.ControlPlaneServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
-	{
-		field:      "provider.hetzner.workerServerType",
-		category:   clusterupdate.ChangeCategoryInPlace,
-		reason:     "new worker servers will use the new type; existing workers unchanged",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.WorkerServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
 	{
 		field:      "provider.hetzner.location",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,
@@ -524,6 +739,16 @@ func (e *Engine) checkAutoscalerOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,
 ) {
+	// The node autoscaler is detector-derived. When the component baseline could
+	// not be read, skip its diff entirely (an unknown baseline is not "disabled")
+	// rather than fabricating an in-place install change. The pod autoscaler is
+	// config-only and unaffected.
+	if e.componentBaselineUnknown(oldSpec) {
+		e.checkAutoscalerPodScalarsChange(oldSpec.Autoscaler.Pod, newSpec.Autoscaler.Pod, result)
+
+		return
+	}
+
 	oldNode := oldSpec.Autoscaler.Node
 	newNode := newSpec.Autoscaler.Node
 
@@ -692,5 +917,57 @@ func (e *Engine) checkAutoscalerPoolsModified(
 			strconv.Itoa(int(oldPool.Max)), strconv.Itoa(int(newPool.Max)), "",
 			"pool max can be updated in-place via Helm chart upgrade",
 			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".labels",
+			formatPoolLabels(oldPool.Labels), formatPoolLabels(newPool.Labels), "",
+			"pool labels updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".taints",
+			formatPoolTaints(oldPool.Taints), formatPoolTaints(newPool.Taints), "",
+			"pool taints updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
 	}
+}
+
+// formatPoolLabels renders a pool's labels as a stable, sorted "k=v,k=v" string
+// for diffing. The empty string represents no labels.
+func formatPoolLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+
+	slices.Sort(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+labels[key])
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// formatPoolTaints renders a pool's taints as a stable, sorted "k=v:Effect,..."
+// string for diffing. Taints form a set on the node, so the output is sorted to
+// avoid spurious diffs on reorder. The empty string represents no taints.
+func formatPoolTaints(taints []v1alpha1.NodePoolTaint) string {
+	if len(taints) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(taints))
+	for _, taint := range taints {
+		parts = append(parts, taint.Key+"="+taint.Value+":"+string(taint.Effect))
+	}
+
+	slices.Sort(parts)
+
+	return strings.Join(parts, ",")
 }

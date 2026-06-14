@@ -27,6 +27,7 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 			expected: "Custom Tool",
 		},
 		{name: "memory", kind: copilot.PermissionRequestKindMemory, expected: "Memory"},
+		{name: "hook", kind: copilot.PermissionRequestKindHook, expected: "Hook"},
 		{name: "empty kind", kind: "", expected: "Unknown Operation"},
 		{name: "custom kind", kind: "custom_action", expected: "Custom Action"},
 	}

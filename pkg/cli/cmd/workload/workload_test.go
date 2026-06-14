@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -931,6 +932,167 @@ sops:
 	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("expected validation with skip-secrets to succeed, got error: %v", err)
+	}
+}
+
+// invalidConfigMapManifest has a string `data` where a map is required, so it
+// fails kubeconform validation (a type violation, even in non-strict mode)
+// unless the ConfigMap kind is skipped.
+const invalidConfigMapManifest = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data: "invalid structure"
+`
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWithSkipKindsFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := os.WriteFile(
+		filepath.Join(tmpDir, "configmap.yaml"),
+		[]byte(invalidConfigMapManifest),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// Chdir so config discovery starts from an empty (config-less) directory.
+	t.Chdir(tmpDir)
+
+	// Without skipping the kind, validation fails.
+	failCmd := workload.NewValidateCmd()
+	failCmd.SetArgs([]string{"."})
+
+	var failOut bytes.Buffer
+
+	failCmd.SetOut(&failOut)
+	failCmd.SetErr(&failOut)
+
+	err = failCmd.Execute()
+	if err == nil {
+		t.Fatal("expected validation to fail without --skip-kinds")
+	}
+
+	// With --skip-kinds=ConfigMap the resource is skipped and validation passes.
+	passCmd := workload.NewValidateCmd()
+	passCmd.SetArgs([]string{"--skip-kinds=ConfigMap", "."})
+
+	var passOut bytes.Buffer
+
+	passCmd.SetOut(&passOut)
+	passCmd.SetErr(&passOut)
+
+	err = passCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation with --skip-kinds=ConfigMap to succeed, got: %v", err)
+	}
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWithSkipKindsFromConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manifestDir := filepath.Join(tmpDir, "k8s")
+
+	err := os.MkdirAll(manifestDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create manifest dir: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(manifestDir, "configmap.yaml"),
+		[]byte(invalidConfigMapManifest),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// ksail.yaml in the working directory declares the kind to skip.
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: test
+spec:
+  workload:
+    validation:
+      skipKinds:
+        - ConfigMap
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "ksail.yaml"),
+		[]byte(ksailYAML),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{"k8s"})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf(
+			"expected validation with spec.workload.validation.skipKinds to succeed, got: %v",
+			err,
+		)
+	}
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWarnsOnUnreadableConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manifestDir := filepath.Join(tmpDir, "k8s")
+
+	err := os.MkdirAll(manifestDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create manifest dir: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(manifestDir, "namespace.yaml"),
+		[]byte(validNamespaceManifest),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// A ksail.yaml that exists but does not parse.
+	err = os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte("foo: [bar"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{"k8s"})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed despite unreadable config, got: %v", err)
+	}
+
+	if !strings.Contains(output.String(), "skipKinds") {
+		t.Errorf("expected a warning mentioning skipKinds, got: %q", output.String())
 	}
 }
 
@@ -2709,7 +2871,9 @@ func normalizeHomePaths(content string) string {
 }
 
 func TestMain(m *testing.M) {
-	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
+	os.Exit(homeenv.RunFunc(func() int {
+		return snapshottest.Run(m, snaps.CleanOpts{Sort: true})
+	}))
 }
 
 func writeValidKsailConfig(t *testing.T, dir string) {
@@ -3080,7 +3244,11 @@ func TestFailedKustomizationsCheckDependenciesDirectFailure(t *testing.T) {
 	err := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, errUpstreamValidation)
+	// The cascade error names the direct dependency and wraps the shared
+	// sentinel, but deliberately does NOT embed the upstream error — repeating it
+	// at every level is what made the output unreadable.
+	require.ErrorIs(t, err, workload.ExportErrDependencyBlocked())
+	require.NotErrorIs(t, err, errUpstreamValidation)
 	assert.Contains(t, err.Error(), "infra")
 }
 
@@ -3100,12 +3268,14 @@ func TestFailedKustomizationsCheckDependenciesTransitivePropagation(t *testing.T
 	// …and records itself as failed (cascade).
 	workload.ExportRecordKustomizationFailure(&tracker, "infra", infraDepErr)
 
-	// apps depends on infra: it should also fail promptly.
+	// apps depends on infra: it should also fail promptly, naming its direct
+	// dependency ("infra") without dragging along the whole upstream chain.
 	appDepErr := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
 
 	require.Error(t, appDepErr)
-	require.ErrorIs(t, appDepErr, infraDepErr)
+	require.ErrorIs(t, appDepErr, workload.ExportErrDependencyBlocked())
 	assert.Contains(t, appDepErr.Error(), "infra")
+	assert.NotContains(t, appDepErr.Error(), "flux-system")
 }
 
 func TestFailedKustomizationsCheckDependenciesNoDeps(t *testing.T) {
@@ -3165,4 +3335,20 @@ func TestPollUntilKustomizationReadyRecordsCascadeFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "apps")
+}
+
+func TestIsAggregatedReconcileError(t *testing.T) {
+	t.Parallel()
+
+	// The aggregated kustomization/application errors are collapsed to the
+	// diagnostics summary; other errors keep their original message.
+	kustErr := fmt.Errorf(
+		"%w: infra: permanent failure",
+		workload.ExportErrKustomizationReconcile(),
+	)
+	retried := fmt.Errorf("failed after 3 attempts: %w", kustErr)
+
+	assert.True(t, workload.ExportIsAggregatedReconcileError(kustErr))
+	assert.True(t, workload.ExportIsAggregatedReconcileError(retried))
+	assert.False(t, workload.ExportIsAggregatedReconcileError(errGenericFailed))
 }

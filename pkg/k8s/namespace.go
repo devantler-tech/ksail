@@ -10,16 +10,27 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// PSSLabels returns the Pod Security Standards admission labels
+// (pod-security.kubernetes.io/{enforce,audit,warn}) for the given level.
+// Returns nil when level is empty.
+func PSSLabels(level string) map[string]string {
+	if level == "" {
+		return nil
+	}
+
+	return map[string]string{
+		"pod-security.kubernetes.io/enforce": level,
+		"pod-security.kubernetes.io/audit":   level,
+		"pod-security.kubernetes.io/warn":    level,
+	}
+}
+
 // pssLabels returns the PodSecurity Standard labels that grant "privileged" access.
 // Talos (and other distributions) enforces PSS by default, so namespaces that
 // run pods requiring elevated privileges (host networking, NET_ADMIN, etc.)
 // must carry these labels.
 func pssLabels() map[string]string {
-	return map[string]string{
-		"pod-security.kubernetes.io/enforce": "privileged",
-		"pod-security.kubernetes.io/audit":   "privileged",
-		"pod-security.kubernetes.io/warn":    "privileged",
-	}
+	return PSSLabels("privileged")
 }
 
 // EnsurePrivilegedNamespace creates the given namespace with PodSecurity

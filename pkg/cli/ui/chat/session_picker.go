@@ -161,8 +161,6 @@ func (m *Model) refreshSessionList() error {
 }
 
 // handleSessionPickerNavKey handles navigation keys in the session picker.
-//
-//nolint:cyclop // keyboard dispatcher for session picker navigation
 func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEscape:
@@ -176,16 +174,8 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 		m.sessionFilterActive = true
 
 		return m, nil
-	case "up", "k":
-		if m.sessionPickerIndex > 0 {
-			m.sessionPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.sessionPickerIndex < totalItems-1 {
-			m.sessionPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.sessionPickerIndex, totalItems)
 
 		return m, nil
 	case "d", "delete", keyBackspace:
@@ -199,10 +189,7 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 	case keyEnter:
 		return m.selectSession()
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil
@@ -246,10 +233,7 @@ func (m *Model) handleSessionFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.sessionFilterText += string(msg.Runes)

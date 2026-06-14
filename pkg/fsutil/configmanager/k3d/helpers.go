@@ -207,6 +207,30 @@ func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) erro
 	return nil
 }
 
+// APIServerFeatureGatesArgs returns the K3s kube-apiserver args that enable the
+// MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
+// API. Calico v3.30+'s CRD chart ships MutatingAdmissionPolicy / MutatingAdmissionPolicyBinding
+// resources that require this API to be served. The args use the K3s
+// "--kube-apiserver-arg=..." form, suitable for the k3k Cluster spec's serverArgs.
+func APIServerFeatureGatesArgs() []string {
+	return []string{
+		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+		"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+	}
+}
+
+// APIServerFeatureGatesArgsForCNI returns the K3s kube-apiserver args required by the
+// given CNI, or nil when the CNI needs none. Only Calico (v3.30+, whose CRD chart ships
+// MutatingAdmissionPolicy resources) requires the MutatingAdmissionPolicy feature gate /
+// v1beta1 admissionregistration API.
+func APIServerFeatureGatesArgsForCNI(cni v1alpha1.CNI) []string {
+	if cni == v1alpha1.CNICalico {
+		return APIServerFeatureGatesArgs()
+	}
+
+	return nil
+}
+
 // ResolveNetworkName returns the Docker network name for a K3d cluster.
 // K3d uses "k3d-<clustername>" as the network naming convention.
 func ResolveNetworkName(clusterName string) string {
@@ -216,4 +240,41 @@ func ResolveNetworkName(clusterName string) string {
 	}
 
 	return "k3d-" + trimmed
+}
+
+// ApplyAPIServerFeatureGatesArgs appends K3s kube-apiserver args enabling the
+// MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration API to the
+// server nodes, required by Calico v3.30+'s CRD chart (which ships
+// MutatingAdmissionPolicy resources). It is idempotent — args already present are
+// not re-added.
+func ApplyAPIServerFeatureGatesArgs(k3dConfig *v1alpha5.SimpleConfig) {
+	args := []string{
+		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+		"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+	}
+
+	for _, arg := range args {
+		if k3sArgPresent(k3dConfig.Options.K3sOptions.ExtraArgs, arg) {
+			continue
+		}
+
+		k3dConfig.Options.K3sOptions.ExtraArgs = append(
+			k3dConfig.Options.K3sOptions.ExtraArgs,
+			v1alpha5.K3sArgWithNodeFilters{
+				Arg:         arg,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+}
+
+// k3sArgPresent reports whether the K3s extra args already include the given arg.
+func k3sArgPresent(existing []v1alpha5.K3sArgWithNodeFilters, arg string) bool {
+	for _, entry := range existing {
+		if entry.Arg == arg {
+			return true
+		}
+	}
+
+	return false
 }

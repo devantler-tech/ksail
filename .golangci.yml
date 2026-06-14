@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.26.2"
+  go: "1.26.4"
 formatters:
   enable:
     - gci
@@ -36,6 +36,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/k8s/rest_config_test.go
+      # Tests that mutate the global go-keyring mock provider cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/svc/credentials/store_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx
@@ -60,6 +64,14 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
+    recvcheck:
+      # controller-gen emits pointer-receiver DeepCopy methods; exclude them so types with
+      # value-receiver domain methods (e.g. ClusterSpec, LocalRegistry) are not flagged as mixing
+      # receiver styles.
+      exclusions:
+        - "*.DeepCopyInto"
+        - "*.DeepCopy"
+        - "*.DeepCopyObject"
     tagalign:
       align: false
       sort: true
@@ -71,6 +83,8 @@ linters:
         - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
         - github.com/anchore/grype
+        - github.com/kubescape/kubescape/v3
+        - github.com/moby/go-archive
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
@@ -110,6 +124,7 @@ linters:
             - github.com/fsnotify/fsnotify
             - github.com/fluxcd
             - github.com/gkampitakis/go-snaps
+            - github.com/gorilla/websocket
             - github.com/jinzhu/copier
             - github.com/k3d-io
             - github.com/kubescape
@@ -125,6 +140,7 @@ linters:
             - github.com/loft-sh/log
             - github.com/loft-sh/vcluster
             - github.com/yannh
+            - github.com/zalando/go-keyring
             - filippo.io/age
             - golang.design/x
             - golang.org/x/oauth2

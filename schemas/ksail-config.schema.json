@@ -238,6 +238,38 @@
                           "max": {
                             "type": "integer",
                             "minimum": 0
+                          },
+                          "labels": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object",
+                            "description": "Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."
+                          },
+                          "taints": {
+                            "items": {
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "effect": {
+                                  "type": "string",
+                                  "enum": [
+                                    "NoSchedule",
+                                    "PreferNoSchedule",
+                                    "NoExecute"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "type": "object"
+                            },
+                            "type": "array",
+                            "description": "Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."
                           }
                         },
                         "additionalProperties": false,
@@ -248,7 +280,7 @@
                     "maxNodesTotal": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values"
+                      "description": "Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be \u003c= serverLimit"
                     },
                     "expander": {
                       "type": "string",
@@ -285,6 +317,10 @@
               "type": "integer",
               "minimum": 0,
               "description": "Number of worker nodes to create for the cluster (provider/distribution-agnostic)"
+            },
+            "kubernetesVersion": {
+              "type": "string",
+              "description": "Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version."
             },
             "oidc": {
               "properties": {
@@ -396,6 +432,10 @@
                     "Enabled",
                     "Disabled"
                   ]
+                },
+                "drainTimeout": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
                 }
               },
               "additionalProperties": false,
@@ -444,7 +484,8 @@
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."
                 },
                 "placementGroupFallbackToNone": {
                   "type": "boolean"
@@ -459,7 +500,7 @@
                 "serverLimit": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10"
+                  "description": "Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10"
                 },
                 "allowedCidrs": {
                   "items": {
@@ -467,6 +508,22 @@
                   },
                   "type": "array",
                   "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."
+                },
+                "workerPublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress)."
+                },
+                "workerPublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to worker nodes. Defaults to true."
+                },
+                "controlPlanePublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network)."
+                },
+                "controlPlanePublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to control-plane nodes. Defaults to true."
                 },
                 "autoscalerNodePoolNames": {
                   "items": {
@@ -593,6 +650,65 @@
               "type": "string",
               "description": "Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."
             },
+            "flux": {
+              "properties": {
+                "operatorVersion": {
+                  "type": "string",
+                  "description": "Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release."
+                },
+                "distributionVersion": {
+                  "type": "string",
+                  "description": "FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."
+                },
+                "verify": {
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "cosign",
+                        "notation"
+                      ],
+                      "description": "Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux."
+                    },
+                    "secretRef": {
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Name of the Kubernetes Secret in the flux-system namespace containing the trusted public keys or certificates."
+                        }
+                      },
+                      "additionalProperties": false,
+                      "type": "object",
+                      "description": "Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless."
+                    },
+                    "matchOIDCIdentity": {
+                      "items": {
+                        "properties": {
+                          "issuer": {
+                            "type": "string",
+                            "description": "Go regular expression matched against the OIDC issuer in the Fulcio certificate (e.g. ^https://token\\.actions\\.githubusercontent\\.com$)."
+                          },
+                          "subject": {
+                            "type": "string",
+                            "description": "Go regular expression matched against the identity subject in the Fulcio certificate (e.g. ^https://github\\.com/org/repo/\\.github/workflows/cd\\.yaml@refs/.*$)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "description": "Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "description": "Signature verification (cosign/notation) rendered onto the flux-system OCIRepository KSail generates, so Flux rejects artifacts whose signature fails verification. Empty disables it."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."
+            },
             "watch": {
               "properties": {
                 "hooks": {
@@ -606,6 +722,20 @@
               "additionalProperties": false,
               "type": "object",
               "description": "Configuration for the workload watch command (pre-apply hooks, etc.)"
+            },
+            "validation": {
+              "properties": {
+                "skipKinds": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Configuration for the workload validate command (additional kinds to skip, etc.)."
             }
           },
           "additionalProperties": false,

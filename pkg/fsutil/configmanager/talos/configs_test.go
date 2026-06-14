@@ -202,17 +202,18 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
-	cp := configs.ControlPlane()
-	require.NotNil(t, cp)
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
 
-	features := cp.Machine().Features()
-	require.NotNil(t, features, "Machine features should not be nil")
-
-	hostDNS := features.HostDNS()
+	// Talos v1.14 moved host DNS out of machine.features into a dedicated
+	// network resolver document; the provider exposes it via the unified
+	// NetworkHostDNSConfig accessor (which falls back to the v1alpha1 features
+	// config), so KSail's generated config keeps host DNS enabled.
+	hostDNS := controlPlane.NetworkHostDNSConfig()
 	require.NotNil(t, hostDNS, "HostDNS config should not be nil")
 
 	// These are required for container mode to work properly
-	assert.True(t, hostDNS.Enabled(), "HostDNS should be enabled for container mode")
+	assert.True(t, hostDNS.HostDNSEnabled(), "HostDNS should be enabled for container mode")
 	assert.True(
 		t,
 		hostDNS.ForwardKubeDNSToHost(),
@@ -445,7 +446,8 @@ func TestConfigs_WithSecrets(t *testing.T) {
 		require.NoError(t, err)
 
 		// Extract secrets from config1
-		secrets1 := configs1.ExtractSecrets()
+		secrets1, err := configs1.ExtractSecrets()
+		require.NoError(t, err)
 		require.NotNil(t, secrets1)
 
 		// Rebuild config2 with config1's secrets
@@ -486,6 +488,61 @@ func TestConfigs_WithSecrets(t *testing.T) {
 		same, err := configs.WithSecrets(nil)
 		require.NoError(t, err)
 		assert.Same(t, configs, same, "should return same config when secrets is nil")
+	})
+}
+
+func TestConfigs_WithKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("regenerates at the new version preserving PKI", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-cluster", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		rebuilt, err := configs.WithKubernetesVersion("1.33.0")
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.33.0", rebuilt.KubernetesVersion())
+		assert.Contains(t, rebuilt.ControlPlane().Cluster().APIServer().Image(), ":v1.33.0")
+
+		// PKI is preserved so the regenerated config still matches the cluster.
+		assert.Equal(t,
+			configs.ControlPlane().Cluster().IssuingCA().Crt,
+			rebuilt.ControlPlane().Cluster().IssuingCA().Crt,
+			"cluster CA should be preserved across version change",
+		)
+		assert.Equal(t, "k8s-version-cluster", rebuilt.GetClusterName())
+	})
+
+	t.Run("normalises a v prefix", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-vprefix", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		rebuilt, err := configs.WithKubernetesVersion("v1.34.1")
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.34.1", rebuilt.KubernetesVersion())
+	})
+
+	t.Run("returns same config for empty or matching version", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-noop", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		same, err := configs.WithKubernetesVersion("")
+		require.NoError(t, err)
+		assert.Same(t, configs, same, "empty version should be a no-op")
+
+		same, err = configs.WithKubernetesVersion("v1.32.0")
+		require.NoError(t, err)
+		assert.Same(t, configs, same, "matching version should be a no-op")
 	})
 }
 
@@ -537,7 +594,8 @@ func TestConfigs_ExtractSecrets(t *testing.T) {
 		configs, err := manager.Load(configmanager.LoadOptions{})
 		require.NoError(t, err)
 
-		secretsBundle := configs.ExtractSecrets()
+		secretsBundle, err := configs.ExtractSecrets()
+		require.NoError(t, err)
 		require.NotNil(t, secretsBundle)
 		assert.NotNil(t, secretsBundle.Certs)
 		assert.NotNil(t, secretsBundle.Certs.K8s)
@@ -550,6 +608,8 @@ func TestConfigs_ExtractSecrets(t *testing.T) {
 		t.Parallel()
 
 		configs := &talos.Configs{}
-		assert.Nil(t, configs.ExtractSecrets())
+		bundle, err := configs.ExtractSecrets()
+		require.NoError(t, err)
+		assert.Nil(t, bundle)
 	})
 }

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ksail-operator
+description: The KSail Kubernetes operator and optional web UI for declarative cluster management.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://ksail.devantler.tech
+sources:
+  - https://github.com/devantler-tech/ksail
+keywords:
+  - ksail
+  - kubernetes
+  - operator
+  - gitops
+maintainers:
+  - name: devantler-tech
+    url: https://github.com/devantler-tech

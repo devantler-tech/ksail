@@ -16,28 +16,46 @@ hero:
     - text: View on GitHub
       link: https://github.com/devantler-tech/ksail
       icon: external
+      variant: secondary
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
+import Features from "../../components/Features.astro";
 
 ## Why KSail?
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
 
+## See It in Action
+
+From nothing to a running Kubernetes cluster, a deployed workload, and a clean teardown — all with `ksail`:
+
+<video class="demo-recording" autoplay loop muted playsinline controls aria-label="KSail full cluster lifecycle demo">
+  <source src="/demos/cluster-lifecycle.mp4" type="video/mp4" />
+  <img class="demo-recording" src="/demos/cluster-lifecycle.gif" alt="KSail creates a real Kind cluster, shows cluster info, deploys an nginx workload that reaches Running, then deletes the cluster" />
+</video>
+
 ## Key Features
 
-- 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, VCluster, KWOK, or EKS clusters with one command. Same workflow across distributions.
-- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok/`). Run clusters with or without KSail.
-- 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
-- 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
-- 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
-- 🏢 **Multi-Tenancy** — Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with `ksail tenant create` and `ksail tenant delete`.
-- ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
-- 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
-- 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
-- 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
-- 💻 **VS Code Extension** — Manage clusters from VS Code via VS Code Kubernetes extension integration (Cloud Explorer and Cluster Explorer), wizards, and command palette.
+export const features = [
+  { icon: "📦", title: "One Binary", body: "Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl." },
+  { icon: "☸️", title: "Simple Clusters", body: "Spin up Vanilla, K3s, Talos, VCluster, or KWOK clusters with one command — EKS scaffolding included. Same workflow across distributions." },
+  { icon: "🔓", title: "No Lock-In", body: "Uses native configs (<code>kind.yaml</code>, <code>k3d.yaml</code>, Talos patches, <code>vcluster.yaml</code>, <code>kwok/</code>). Run clusters with or without KSail." },
+  { icon: "📥", title: "Mirror Registries", body: "Avoid rate limits, and store images once. Same mirrors used by different clusters." },
+  { icon: "📄", title: "Everything as Code", body: "Cluster settings, distribution configs, and workloads in version-controlled files." },
+  { icon: "🔄", title: "GitOps Native", body: "Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands." },
+  { icon: "🏢", title: "Multi-Tenancy", body: "Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with <code>ksail tenant create</code> and <code>ksail tenant delete</code>." },
+  { icon: "⚙️", title: "Customizable Stack", body: "Select your CNI, CSI, policy engine, cert-manager, and mirror registries." },
+  { icon: "🔐", title: "SOPS Built In", body: "Encrypt, decrypt, and edit secrets with integrated cipher commands." },
+  { icon: "💾", title: "Backup & Restore", body: "Export cluster resources to a compressed archive and restore to any cluster with provenance labels." },
+  { icon: "🩺", title: "Built-In Diagnostics", body: "Health-scored cluster diagnostics with remediation hints via <code>ksail cluster diagnose</code>." },
+  { icon: "🖥️", title: "Web UI & Desktop", body: "Manage clusters visually with <code>ksail ui</code> in the browser or the native desktop app." },
+  { icon: "⚓", title: "Kubernetes Operator", body: "Reconcile <code>Cluster</code> custom resources in-cluster, with an optional OIDC-protected dashboard." },
+  { icon: "🤖", title: "AI Assistant", body: "Interactive chat powered by GitHub Copilot for configuration and troubleshooting." },
+  { icon: "💻", title: "VS Code Extension", body: "Manage clusters from VS Code via the Kubernetes extension (Cloud Explorer and Cluster Explorer), wizards, and command palette." },
+];
+
+<Features items={features} />
 
 ## Prerequisites
 
@@ -49,18 +67,23 @@ KSail works on all major operating systems and CPU architectures:
 | macOS | arm64 |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-**Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
+**Docker is required** for local clusters using the default Docker provider. Install Docker Desktop/Engine and ensure `docker ps` works. The [Kubernetes (Nested) provider](/providers/kubernetes/) is the exception — it runs clusters inside an existing host cluster and needs no Docker on the host.
 
 Supported distributions run on different infrastructure providers:
 
 | Provider | Vanilla | K3s | Talos | VCluster | KWOK | EKS |
 |----------|---------|-----|-------|----------|------|-----|
 | Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) | ❌ |
+| Kubernetes | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Hetzner | — | — | ✅ | — | — | — |
 | Omni | — | — | ✅ | — | — | — |
 | AWS | — | — | — | — | — | 🚧 |
 
 ## Quick Start
+
+Scaffold a project and explore the declarative config — distribution and all:
+
+<img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail cluster init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
 
 ```bash
 # 1. Initialize a new project
@@ -203,6 +226,9 @@ flowchart TD
   <Card title="Docker" icon="laptop">
     Run Kubernetes nodes as Docker containers locally. Default provider for all distributions. [Learn more →](/providers/docker/)
   </Card>
+  <Card title="Kubernetes (Nested)" icon="puzzle">
+    Run nested clusters as pods inside an existing Kubernetes cluster — no Docker required on the host. Supports Vanilla, K3s, Talos, VCluster, and KWOK. [Learn more →](/providers/kubernetes/)
+  </Card>
   <Card title="Hetzner" icon="external">
     Deploy Talos clusters on affordable Hetzner Cloud servers with real load balancers and persistent volumes. [Learn more →](/providers/hetzner/)
   </Card>
@@ -236,6 +262,9 @@ flowchart TD
   </Card>
   <Card title="MCP Server" icon="puzzle">
     Expose KSail as an MCP server for AI assistants and automation tools. [Learn more →](/mcp/)
+  </Card>
+  <Card title="AI Assistant Plugins" icon="add-document">
+    Install the KSail plugin for GitHub Copilot CLI or Claude Code — MCP server and skill included. [Learn more →](/ai-plugins/)
   </Card>
 </CardGrid>
 

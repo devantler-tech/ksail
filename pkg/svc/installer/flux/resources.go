@@ -57,12 +57,14 @@ var (
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
-// loadRESTConfig creates a REST config from a kubeconfig path.
+// loadRESTConfig builds a REST config from a kubeconfig path and optional
+// context. An empty context falls back to the kubeconfig's current-context;
+// drift-detection callers pass the configured spec.cluster.connection.context
+// so they query the intended cluster rather than the ambient current-context.
+// It is a package var so tests can stub it via SetLoadRESTConfig.
 //
 //nolint:gochecknoglobals // Allows mocking REST config for tests
-var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
-	return k8s.BuildRESTConfig(kubeconfig, "")
-}
+var loadRESTConfig = k8s.BuildRESTConfig
 
 // setupParams holds the components needed for Flux setup operations.
 // Context is passed separately to setupFluxCore to avoid embedding it in a struct.
@@ -118,7 +120,14 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 	}
 
 	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
-	return ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
+	err = ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	// When spec.workload.verify is configured, patch OCIRepository.spec.verify so
+	// Flux verifies artifact signatures (cosign/notation) at pull time.
+	return ensureVerifyIfConfigured(ctx, ociPatcher, params.clusterCfg)
 }
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
@@ -145,7 +154,7 @@ func EnsureDefaultResources(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -202,7 +211,7 @@ func SetupInstance(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -227,7 +236,7 @@ func WaitForFluxReady(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -248,24 +257,28 @@ func WaitForFluxReady(
 	return nil
 }
 
-// GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
-// its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
-// or has no sync configuration.
+// GetCurrentFluxInstance loads the running FluxInstance (flux/flux-system) from
+// the cluster. Returns (nil, nil) when it does not exist. Callers read whichever
+// spec fields they need (e.g. sync.ref via GetCurrentSyncRef, or
+// distribution.version for drift detection on cluster update).
 //
 //nolint:contextcheck // nil-guard consistent with SetupInstance/WaitForFluxReady
-func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+func GetCurrentFluxInstance(
+	ctx context.Context,
+	kubeconfig, kubeContext string,
+) (*FluxInstance, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
-		return "", fmt.Errorf("build REST config: %w", err)
+		return nil, fmt.Errorf("build REST config: %w", err)
 	}
 
 	fluxClient, err := newFluxResourcesClient(restConfig)
 	if err != nil {
-		return "", fmt.Errorf("create flux client: %w", err)
+		return nil, fmt.Errorf("create flux client: %w", err)
 	}
 
 	instance := &FluxInstance{}
@@ -277,17 +290,55 @@ func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
 	err = fluxClient.Get(ctx, key, instance)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return "", nil
+			return nil, nil //nolint:nilnil // (nil, nil) signals "FluxInstance absent"
 		}
 
-		return "", fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+		return nil, fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
 	}
 
-	if instance.Spec.Sync != nil {
+	return instance, nil
+}
+
+// GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
+// its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
+// or has no sync configuration.
+func GetCurrentSyncRef(ctx context.Context, kubeconfig, kubeContext string) (string, error) {
+	instance, err := GetCurrentFluxInstance(ctx, kubeconfig, kubeContext)
+	if err != nil {
+		return "", err
+	}
+
+	if instance != nil && instance.Spec.Sync != nil {
 		return instance.Spec.Sync.Ref, nil
 	}
 
 	return "", nil
+}
+
+// ResolveDesiredDistributionVersion computes the FluxInstance distribution
+// version KSail would seed, following the precedence: repo-declared FluxInstance
+// > spec.workload.flux.distributionVersion > the built-in default ("2.x"). This
+// mirrors the override applied by applyDistributionOverride and is used for
+// distribution-version drift detection on cluster update.
+func ResolveDesiredDistributionVersion(clusterCfg *v1alpha1.Cluster) string {
+	version := fluxDistributionVersion
+
+	if clusterCfg == nil {
+		return version
+	}
+
+	if configVersion := strings.TrimSpace(
+		clusterCfg.Spec.Workload.Flux.DistributionVersion,
+	); configVersion != "" {
+		version = configVersion
+	}
+
+	repoDist, err := repoFluxDistribution(clusterCfg)
+	if err == nil && repoDist.Version != "" {
+		version = repoDist.Version
+	}
+
+	return version
 }
 
 // ResolveDesiredTag computes the desired OCI artifact tag using the standard
@@ -349,6 +400,24 @@ func ensureLocalRegistryInsecureIfNeeded(
 	}
 
 	return patcher.ensureInsecure(ctx)
+}
+
+// ensureVerifyIfConfigured patches OCIRepository.spec.verify when the user has
+// configured spec.workload.flux.verify. Verification applies to any registry (it
+// is the established pattern for signed artifacts published to GHCR), so unlike
+// the insecure patch it is not gated on the registry being local. A no-op when
+// verification is not configured.
+func ensureVerifyIfConfigured(
+	ctx context.Context,
+	patcher *ociRepositoryPatcher,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	verify := clusterCfg.Spec.Workload.Flux.Verify
+	if !verify.Enabled() {
+		return nil
+	}
+
+	return patcher.ensureVerify(ctx, verify)
 }
 
 // newDynamicClient creates a controller-runtime client with a dynamic REST mapper.

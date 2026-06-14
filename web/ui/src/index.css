@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: `dark:` utilities apply under a `.dark` ancestor (toggled on <html> by the
+   theme hook and the no-flash init script in index.html). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* Remove the 300ms double-tap-zoom delay and the grey tap flash on touch devices; the UI provides
+     its own hover/active feedback. */
+  button,
+  a,
+  label,
+  select,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* toast-in slides a new toast up into place; disabled (with all other motion) under
+   prefers-reduced-motion below. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Honor prefers-reduced-motion globally: collapse animations and transitions (Tailwind utilities,
+   Headless UI dialog/menu transitions, spinners, skeleton pulses) to effectively instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

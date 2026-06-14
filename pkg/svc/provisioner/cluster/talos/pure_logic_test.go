@@ -525,6 +525,31 @@ func TestApplyHetznerDefaults(t *testing.T) {
 	}
 }
 
+// TestApplyHetznerDefaults_FallbackLocations covers FallbackLocations separately
+// from TestApplyHetznerDefaults to avoid widening that test's case struct (which
+// would reformat every aligned field). It asserts the empty-slice default is
+// applied and that an explicit value is preserved.
+func TestApplyHetznerDefaults_FallbackLocations(t *testing.T) {
+	t.Parallel()
+
+	t.Run("defaults when empty", func(t *testing.T) {
+		t.Parallel()
+
+		result := talosprovisioner.ApplyHetznerDefaultsForTest(v1alpha1.OptionsHetzner{})
+		assert.Equal(t, v1alpha1.DefaultHetznerFallbackLocations(), result.FallbackLocations)
+	})
+
+	t.Run("preserves explicit values", func(t *testing.T) {
+		t.Parallel()
+
+		custom := []string{"loc-a", "loc-b"}
+		result := talosprovisioner.ApplyHetznerDefaultsForTest(
+			v1alpha1.OptionsHetzner{FallbackLocations: custom},
+		)
+		assert.Equal(t, custom, result.FallbackLocations)
+	})
+}
+
 // --- recordAppliedChange / recordFailedChange ---
 
 func TestRecordAppliedChange(t *testing.T) {

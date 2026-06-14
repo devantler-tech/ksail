@@ -22,6 +22,9 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+      # devantler-tech Go modules are our own code — bump now, no cooldown.
+      exclude:
+        - "github.com/devantler-tech/*"
     groups:
       kubernetes:
         patterns:
@@ -34,6 +37,9 @@ updates:
       interval: daily
     cooldown:
       default-days: 7
+      # devantler-tech actions/workflows are our own code — bump now, no cooldown.
+      exclude:
+        - "devantler-tech/*"
 
   - package-ecosystem: npm
     directory: /docs
@@ -66,7 +72,6 @@ updates:
     schedule:
       interval: daily
 
-  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
   - package-ecosystem: docker
     registries: [ghcr]
     directory: /pkg/fsutil/configmanager/talos # Talos image (embedded in Go via go:embed)
@@ -91,7 +96,6 @@ updates:
     schedule:
       interval: daily
 
-  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
   - package-ecosystem: docker
     registries: [ghcr]
     directory: /pkg/fsutil/configmanager/vcluster # vCluster images (embedded in Go via go:embed)
@@ -165,6 +169,45 @@ updates:
   - package-ecosystem: docker
     registries: [ghcr]
     directory: /pkg/svc/installer/kubeletcsrapprover # kubelet-csr-approver chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [dockerhub]
+    directory: /pkg/svc/installer/localpathstorage # local-path-provisioner image tag == release tag (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  # Helm chart version pins whose chart version diverges from the app/image tag, so they
+  # cannot be tracked via a Dockerfile FROM directive. Tracked via the native helm
+  # ecosystem reading a Chart.yaml dependency (embedded in Go via go:embed).
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/clusterautoscaler # cluster-autoscaler chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/hcloudccm # hcloud-cloud-controller-manager chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/hetznercsi # hcloud-csi chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/metricsserver # metrics-server chart version
     cooldown:
       default-days: 7
     schedule:

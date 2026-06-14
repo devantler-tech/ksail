@@ -18,7 +18,46 @@ inputs:
   timeout:
     description: Timeout per nested cluster create (seconds)
     required: false
-    default: "600"
+    # 1200s (20m): the shell wrapper must stay ABOVE the provisioner's internal Go
+    # readiness deadline (ready-timeout, default 15m) so a slow-but-healthy nested
+    # cluster surfaces a clean Go "context deadline exceeded" rather than a shell
+    # "exit 124", and so nested Talos (Talos-in-pod inside a vCluster/Docker host —
+    # the heaviest combination, which intermittently exceeded the old 600s under CI
+    # load) keeps headroom. Headroom over trimming coverage — see #4891, the matrix
+    # in ci.yaml, and the docs note on not reducing nested-distro coverage for flakes.
+    default: "1200"
+  ready-timeout:
+    description: |
+      Go duration budget for a nested cluster to report ready (k3k "poll cluster
+      ready" / vCluster "wait for kubeconfig secret"). Exported as
+      KSAIL_NESTED_READY_TIMEOUT so a slow-but-healthy nested cluster under runner
+      contention is not failed prematurely at the 10m default (#4891). Keep the
+      `timeout` input above this value so the Go deadline wins over the shell kill.
+    required: false
+    default: "15m"
+  cni:
+    description: |
+      Optional CNI to install in each nested cluster (e.g. "Calico"). When empty,
+      the distribution default is used. Calico exercises the k3k serverArgs path
+      that enables the MutatingAdmissionPolicy / v1beta1 admissionregistration API.
+    required: false
+    default: ""
+  dockerhub-user:
+    description: Docker Hub username for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  dockerhub-token:
+    description: Docker Hub token/password for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  ghcr-user:
+    description: GHCR username for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  ghcr-token:
+    description: GHCR token for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -28,6 +67,22 @@ runs:
       env:
         DISTRIBUTIONS: ${{ inputs.distributions }}
         TIMEOUT: ${{ inputs.timeout }}
+        # Override the provisioner's internal readiness deadline (k3k poll-cluster-ready
+        # / vCluster kubeconfig-secret wait) so a slow-but-healthy nested cluster under
+        # runner contention is not failed prematurely at the 10m default. See #4891.
+        KSAIL_NESTED_READY_TIMEOUT: ${{ inputs.ready-timeout }}
+        CNI: ${{ inputs.cni }}
+        # Mirror proxy credentials. Exported here so ksail expands the ${...}
+        # placeholders in the --mirror-registry specs from its own process env,
+        # keeping the secret values out of argv and the command log.
+        DOCKERHUB_USERNAME: ${{ inputs.dockerhub-user }}
+        DOCKERHUB_TOKEN: ${{ inputs.dockerhub-token }}
+        GHCR_USERNAME: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
+        # Opt into nested-cluster diagnostics: on a nested bootstrap failure, ksail
+        # dumps the cluster's DinD node + mirror container logs to help diagnose
+        # stalled image pulls. Off by default; enabled here for CI triage.
+        KSAIL_NESTED_DEBUG: "1"
       run: |
         set -euo pipefail
         LOG_DIR="/tmp/ksail-system-test-logs/kubernetes-provider"
@@ -37,6 +92,30 @@ runs:
         HOST_CONTEXT="$(kubectl config current-context)"
         echo "Host cluster context: $HOST_CONTEXT"
         echo "Distributions to test: $DISTRIBUTIONS"
+        echo ""
+
+        # Build authenticated pull-through mirror specs for the nested clusters.
+        # The host-level mirror cache is invisible to the DinD daemon, so nested
+        # clusters set up their own mirrors inside DinD. Authentication (vs. the
+        # anonymous defaults) is what lifts the upstream rate limits that stall
+        # the nested kubelet under CI concurrency. Credentials are passed as
+        # ${ENV} placeholders that ksail expands internally; we only attach them
+        # when BOTH halves are present, so the partial-credentials guard never
+        # trips (e.g. forks without secrets fall back to anonymous mirrors).
+        MIRRORS=()
+        if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+          MIRRORS+=('${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}@docker.io=https://registry-1.docker.io')
+        else
+          MIRRORS+=('docker.io=https://registry-1.docker.io')
+        fi
+        if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+          MIRRORS+=('${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io=https://ghcr.io')
+        else
+          MIRRORS+=('ghcr.io=https://ghcr.io')
+        fi
+        MIRRORS+=('quay.io=https://quay.io' 'registry.k8s.io=https://registry.k8s.io')
+        MIRROR_ARG="$(IFS=,; printf '%s' "${MIRRORS[*]}")"
+        echo "Nested mirror registries: ${#MIRRORS[@]} (docker.io/ghcr.io authenticated when secrets present)"
         echo ""
 
         FAILED=0
@@ -56,11 +135,15 @@ runs:
 
           # Create nested cluster
           echo "  ⏳ Creating $DIST cluster..."
+          CREATE_ARGS=(--distribution "$DIST" --provider Kubernetes --name "$NESTED_NAME")
+          if [ -n "$CNI" ]; then
+            CREATE_ARGS+=(--cni "$CNI")
+            echo "  ↳ using CNI: $CNI"
+          fi
           create_ok=false
           if timeout "$TIMEOUT" ksail cluster create \
-            --distribution "$DIST" \
-            --provider Kubernetes \
-            --name "$NESTED_NAME" \
+            "${CREATE_ARGS[@]}" \
+            --mirror-registry "$MIRROR_ARG" \
             2>&1 | tee "$CREATE_LOG"; then
             create_ok=true
             echo "  ✅ $DIST create succeeded"
@@ -95,6 +178,22 @@ runs:
 
           # Restore host context in case nested cluster creation changed it.
           kubectl config use-context "$HOST_CONTEXT" 2>/dev/null || true
+
+          # Settle (bounded, best-effort, non-fatal): wait for the deleted cluster's
+          # namespaces to finish terminating before the next create. `ksail cluster
+          # delete` issues an async namespace delete (k3k-/vcluster-/ksail-<name>,
+          # each a suffix of $NESTED_NAME) and returns before finalizers complete;
+          # without this the prior cluster's still-terminating pods bleed load into the
+          # next nested create and can push k3k/vCluster readiness past its deadline (#4891).
+          echo "  ⏳ Waiting for $DIST resources to drain..."
+          SETTLE_DEADLINE=$((SECONDS + 120))
+          while [ "$SECONDS" -lt "$SETTLE_DEADLINE" ]; do
+            if [ -z "$(kubectl get ns -o name 2>/dev/null | grep -iF "$NESTED_NAME" || true)" ]; then
+              echo "  ✅ $DIST resources drained"
+              break
+            fi
+            sleep 5
+          done
 
           echo ""
         done

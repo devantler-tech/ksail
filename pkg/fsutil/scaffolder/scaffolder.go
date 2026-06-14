@@ -151,7 +151,7 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 
 	// Set metadata.name if a cluster name override was provided
 	if s.ClusterName != "" {
-		config.Metadata.Name = s.ClusterName
+		config.Name = s.ClusterName
 	}
 
 	// Set the expected context if it's empty, based on the distribution and cluster name

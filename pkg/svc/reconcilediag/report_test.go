@@ -2,21 +2,37 @@ package reconcilediag_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/reconcilediag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestFailingResource_String(t *testing.T) {
+// failingResourceStringCase is one FailingResource.String scenario.
+type failingResourceStringCase struct {
+	name     string
+	resource reconcilediag.FailingResource
+	want     string
+}
+
+func runFailingResourceStringCases(t *testing.T, cases []failingResourceStringCase) {
+	t.Helper()
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.resource.String())
+		})
+	}
+}
+
+func TestFailingResource_String_WithDetail(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		resource reconcilediag.FailingResource
-		want     string
-	}{
+	runFailingResourceStringCases(t, []failingResourceStringCase{
 		{
 			name: "reason and message",
 			resource: reconcilediag.FailingResource{
@@ -24,7 +40,7 @@ func TestFailingResource_String(t *testing.T) {
 				Reason:  "ReconciliationFailed",
 				Message: "validation error",
 			},
-			want: "flux-system: ReconciliationFailed — validation error",
+			want: "flux-system: ReconciliationFailed · validation error",
 		},
 		{
 			name: "with namespace",
@@ -34,39 +50,40 @@ func TestFailingResource_String(t *testing.T) {
 				Reason:    "InstallFailed",
 				Message:   "timeout",
 			},
-			want: "cert-manager/cert-manager: InstallFailed — timeout",
+			want: "cert-manager/cert-manager: InstallFailed · timeout",
 		},
 		{
-			name: "reason only",
+			name: "blocked by dependency",
 			resource: reconcilediag.FailingResource{
-				Name:   "apps",
-				Reason: "HealthCheckFailed",
+				Name:    appsName,
+				Reason:  dependencyNotReady,
+				Message: infraDepNotReadyMsg,
 			},
-			want: "apps: HealthCheckFailed",
+			want: "apps: blocked by infrastructure",
 		},
-		{
-			name: "message only",
-			resource: reconcilediag.FailingResource{
-				Name:    "infra",
-				Message: "dependency not ready",
-			},
-			want: "infra: dependency not ready",
-		},
-		{
-			name: "no reason or message",
-			resource: reconcilediag.FailingResource{
-				Name: "unknown",
-			},
-			want: "unknown: not ready",
-		},
-	}
+	})
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, tt.resource.String())
-		})
-	}
+func TestFailingResource_String_Fallbacks(t *testing.T) {
+	t.Parallel()
+
+	runFailingResourceStringCases(t, []failingResourceStringCase{
+		{
+			name:     "reason only",
+			resource: reconcilediag.FailingResource{Name: appsName, Reason: healthCheckFailed},
+			want:     "apps: HealthCheckFailed",
+		},
+		{
+			name:     "message only",
+			resource: reconcilediag.FailingResource{Name: "infra", Message: "dependency not ready"},
+			want:     "infra: dependency not ready",
+		},
+		{
+			name:     "no reason or message",
+			resource: reconcilediag.FailingResource{Name: "unknown"},
+			want:     "unknown: not ready",
+		},
+	})
 }
 
 func TestWarningEvent_String(t *testing.T) {
@@ -79,12 +96,14 @@ func TestWarningEvent_String(t *testing.T) {
 		Message: "Back-off restarting (BackOff)",
 	}
 
-	assert.Equal(t, "3m ago: Pod/controller-abc — Back-off restarting (BackOff)", evt.String())
+	assert.Equal(t, "3m ago  Pod/controller-abc  Back-off restarting (BackOff)", evt.String())
 }
 
-func TestWarningEvent_String_WithNamespace(t *testing.T) {
+func TestWarningEvent_String_OmitsNamespace(t *testing.T) {
 	t.Parallel()
 
+	// Events are grouped under a per-namespace heading, so the involved object's
+	// namespace is intentionally omitted from each line.
 	evt := reconcilediag.WarningEvent{
 		Age:       3 * time.Minute,
 		Kind:      podKind,
@@ -95,7 +114,7 @@ func TestWarningEvent_String_WithNamespace(t *testing.T) {
 
 	assert.Equal(
 		t,
-		"3m ago: Pod/flux-system/controller-abc — Back-off restarting (BackOff)",
+		"3m ago  Pod/controller-abc  Back-off restarting (BackOff)",
 		evt.String(),
 	)
 }
@@ -110,7 +129,7 @@ func TestWarningEvent_String_Seconds(t *testing.T) {
 		Message: "install retries exhausted (Failed)",
 	}
 
-	assert.Equal(t, "45s ago: HelmRelease/nginx — install retries exhausted (Failed)", evt.String())
+	assert.Equal(t, "45s ago  HelmRelease/nginx  install retries exhausted (Failed)", evt.String())
 }
 
 func TestWarningEvent_String_Hours(t *testing.T) {
@@ -123,7 +142,29 @@ func TestWarningEvent_String_Hours(t *testing.T) {
 		Message: "OOMKilled (OOMKilled)",
 	}
 
-	assert.Equal(t, "1h30m ago: Pod/source-controller-xyz — OOMKilled (OOMKilled)", evt.String())
+	assert.Equal(t, "1h30m ago  Pod/source-controller-xyz  OOMKilled (OOMKilled)", evt.String())
+}
+
+func TestWarningEvent_String_ShortensVerboseMessage(t *testing.T) {
+	t.Parallel()
+
+	// A real Flux health-check timeout message: sub-second precision is trimmed
+	// and the bracketed resource list collapses to a count.
+	evt := reconcilediag.WarningEvent{
+		Age:  0,
+		Kind: "Kustomization",
+		Name: infraControllersName,
+		Message: "health check failed after 25m0.04814184s: timeout waiting for: " +
+			"[HelmRelease/opencost/opencost status: 'InProgress', " +
+			"HelmRelease/monitoring/loki status: 'InProgress'] (HealthCheckFailed)",
+	}
+
+	got := evt.String()
+	assert.Contains(t, got, "0s ago  Kustomization/infrastructure-controllers")
+	assert.Contains(t, got, "health check failed after 25m")
+	assert.Contains(t, got, "2 resources")
+	assert.NotContains(t, got, "0.04814184")
+	assert.NotContains(t, got, "InProgress")
 }
 
 func TestReport_IsEmpty_WhenTrue(t *testing.T) {
@@ -224,17 +265,17 @@ func TestReport_Write_FullReport(t *testing.T) {
 	report := &reconcilediag.Report{
 		Sections: []reconcilediag.ResourceSection{
 			{
-				Heading: "Failing Kustomizations",
+				Heading: kustomizationsHeading,
 				Resources: []reconcilediag.FailingResource{
 					{
-						Name:    "apps",
-						Reason:  "HealthCheckFailed",
+						Name:    appsName,
+						Reason:  healthCheckFailed,
 						Message: "Deployment/myapp not ready",
 					},
 				},
 			},
 			{
-				Heading:   "Failing HelmReleases",
+				Heading:   helmReleasesHeading,
 				Resources: nil,
 			},
 		},
@@ -249,12 +290,224 @@ func TestReport_Write_FullReport(t *testing.T) {
 	report.Write(&buf)
 
 	output := buf.String()
-	assert.Contains(t, output, "Reconciliation Diagnostics")
-	assert.Contains(t, output, "Failing Kustomizations")
-	assert.Contains(t, output, "apps: HealthCheckFailed")
-	assert.NotContains(t, output, "Failing HelmReleases")
+	assert.Contains(t, output, "Reconciliation failed")
+	assert.Contains(t, output, kustomizationsHeading)
+	assert.Contains(t, output, "✗ apps")
+	assert.Contains(t, output, "HealthCheckFailed · Deployment/myapp not ready")
+	// HelmReleases section is empty, so its heading must not be printed.
+	assert.NotContains(t, output, helmReleasesHeading)
 	assert.Contains(t, output, "failing pods")
 	assert.Contains(t, output, "CrashLoopBackOff")
-	assert.Contains(t, output, "warning events")
+	assert.Contains(t, output, "recent warnings")
 	assert.Contains(t, output, "Back-off")
+}
+
+func TestReport_Write_OrdersRootsBeforeCascades(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// apps → infrastructure → infrastructure-controllers (the active root).
+	// Despite the input being shuffled, the output must list the root first and
+	// each blocked resource below whatever it is blocked by.
+	report := &reconcilediag.Report{
+		Sections: []reconcilediag.ResourceSection{{
+			Heading: kustomizationsHeading,
+			Resources: []reconcilediag.FailingResource{
+				{
+					Name:    appsName,
+					Reason:  dependencyNotReady,
+					Message: infraDepNotReadyMsg,
+				},
+				{
+					Name:    "infrastructure",
+					Reason:  dependencyNotReady,
+					Message: "dependency 'flux-system/infrastructure-controllers' is not ready",
+				},
+				{Name: infraControllersName, Reason: progressingReason, Message: inProgressMsg},
+			},
+		}},
+	}
+
+	report.Write(&buf)
+	output := buf.String()
+
+	rootIdx := strings.Index(output, "► infrastructure-controllers")
+	infraIdx := strings.Index(output, "· infrastructure ")
+	appsIdx := strings.Index(output, "· apps")
+
+	require.NotEqual(t, -1, rootIdx)
+	require.NotEqual(t, -1, infraIdx)
+	require.NotEqual(t, -1, appsIdx)
+	assert.Less(t, rootIdx, infraIdx, "active root must come before its dependents")
+	assert.Less(t, infraIdx, appsIdx, "a resource must appear below what it is blocked by")
+}
+
+func TestReport_Write_OrdersSameNameAcrossNamespaces(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Two HelmReleases share the name "app" in different namespaces. Depth must be
+	// keyed by displayName (namespace-qualified), not the bare Name — otherwise the
+	// two collide and "a/app" (deeper) would sort above "z/app" (shallower) on the
+	// alphabetical tiebreak. Chain: shared/base (root) → z/app → a/app.
+	report := &reconcilediag.Report{
+		Sections: []reconcilediag.ResourceSection{{
+			Heading: helmReleasesHeading,
+			Resources: []reconcilediag.FailingResource{
+				{
+					Name:      "app",
+					Namespace: "a",
+					Reason:    dependencyNotReady,
+					Message:   "dependency 'z/app' is not ready",
+				},
+				{
+					Name:      "app",
+					Namespace: "z",
+					Reason:    dependencyNotReady,
+					Message:   "dependency 'shared/base' is not ready",
+				},
+				{
+					Name:      "base",
+					Namespace: "shared",
+					Reason:    progressingReason,
+					Message:   inProgressMsg,
+				},
+			},
+		}},
+	}
+
+	report.Write(&buf)
+	output := buf.String()
+
+	rootIdx := strings.Index(output, "► shared/base")
+	zIdx := strings.Index(output, "· z/app")
+	aIdx := strings.Index(output, "· a/app")
+
+	require.NotEqual(t, -1, rootIdx)
+	require.NotEqual(t, -1, zIdx)
+	require.NotEqual(t, -1, aIdx)
+	assert.Less(t, rootIdx, zIdx, "active root must come first")
+	assert.Less(
+		t,
+		zIdx,
+		aIdx,
+		"z/app (depth 0) must precede a/app (depth 1) despite the alphabetical tiebreak",
+	)
+}
+
+// reportSummaryCase is one Report.Summary scenario.
+type reportSummaryCase struct {
+	name   string
+	report reconcilediag.Report
+	want   string
+}
+
+// kustSection builds a single-section report holding the given Kustomizations.
+func kustSection(resources ...reconcilediag.FailingResource) reconcilediag.Report {
+	return reconcilediag.Report{
+		Sections: []reconcilediag.ResourceSection{
+			{Heading: kustomizationsHeading, Resources: resources},
+		},
+	}
+}
+
+func runReportSummaryCases(t *testing.T, cases []reportSummaryCase) {
+	t.Helper()
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.report.Summary())
+		})
+	}
+}
+
+func TestReport_Summary_NamesRoots(t *testing.T) {
+	t.Parallel()
+
+	runReportSummaryCases(t, []reportSummaryCase{
+		{
+			name:   "empty report",
+			report: reconcilediag.Report{},
+			want:   "",
+		},
+		{
+			name: "single root with reason",
+			report: kustSection(
+				reconcilediag.FailingResource{
+					Name:    appsName,
+					Reason:  healthCheckFailed,
+					Message: "timed out",
+				},
+			),
+			want: "reconciliation failed: apps (HealthCheckFailed)",
+		},
+		{
+			name: "multiple roots",
+			report: reconcilediag.Report{
+				Sections: []reconcilediag.ResourceSection{{
+					Heading: helmReleasesHeading,
+					Resources: []reconcilediag.FailingResource{
+						{Name: "loki", Namespace: "monitoring", Reason: "UpgradeFailed"},
+						{Name: "alloy", Namespace: "monitoring", Reason: "InstallFailed"},
+					},
+				}},
+			},
+			want: "reconciliation failed: 2 resources not ready (monitoring/alloy, monitoring/loki)",
+		},
+	})
+}
+
+func TestReport_Summary_CountsBlockedAndFallbacks(t *testing.T) {
+	t.Parallel()
+
+	runReportSummaryCases(t, []reportSummaryCase{
+		{
+			name: "root with blocked dependents",
+			report: kustSection(
+				reconcilediag.FailingResource{
+					Name:    infraControllersName,
+					Reason:  progressingReason,
+					Message: inProgressMsg,
+				},
+				reconcilediag.FailingResource{
+					Name:    "infrastructure",
+					Reason:  dependencyNotReady,
+					Message: "dependency 'flux-system/infrastructure-controllers' is not ready",
+				},
+				reconcilediag.FailingResource{
+					Name:    appsName,
+					Reason:  dependencyNotReady,
+					Message: infraDepNotReadyMsg,
+				},
+			),
+			want: "reconciliation failed: infrastructure-controllers (Progressing); 2 dependents blocked",
+		},
+		{
+			name: "only blocked",
+			report: kustSection(
+				reconcilediag.FailingResource{
+					Name:    appsName,
+					Reason:  dependencyNotReady,
+					Message: "dependency 'x' is not ready",
+				},
+			),
+			want: "reconciliation failed: 1 resource not ready",
+		},
+		{
+			name:   "pods only, no resources",
+			report: reconcilediag.Report{FailingPods: "controller-abc: CrashLoopBackOff"},
+			want:   "reconciliation failed — see diagnostics above",
+		},
+	})
+}
+
+func TestReport_Summary_NilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var report *reconcilediag.Report
+
+	assert.Empty(t, report.Summary())
 }

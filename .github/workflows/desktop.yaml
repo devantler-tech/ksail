@@ -1,0 +1,114 @@
+name: 🧩 Desktop App
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "pkg/cli/uiserver/**"
+      - "pkg/webui/**"
+      - "web/ui/**"
+      # The desktop module vendors the main module via `replace => ../`, so a root
+      # dependency bump (which touches only go.mod/go.sum) can break the desktop
+      # build. Trigger on those too so drift is caught here, not at release time.
+      - "go.mod"
+      - "go.sum"
+      - ".goreleaser.desktop.yaml"
+      - ".github/workflows/desktop.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "pkg/cli/uiserver/**"
+      - "pkg/webui/**"
+      - "web/ui/**"
+      - "go.mod"
+      - "go.sum"
+      - ".goreleaser.desktop.yaml"
+      - ".github/workflows/desktop.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: 🏗️ Build (Linux)
+    # Wails v3's default Linux build targets GTK4 + WebKitGTK 6.0 (libgtk-4-dev + libwebkitgtk-6.0-dev),
+    # which are available on ubuntu-24.04 (22.04 only ships the legacy webkit2gtk-4.0/4.1).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🐧 Install Linux webview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: 🏗️ Build and stage web UI
+        shell: bash
+        run: |
+          npm --prefix web/ui ci
+          npm --prefix web/ui run build
+          rm -rf pkg/webui/dist
+          mkdir -p pkg/webui/dist
+          touch pkg/webui/dist/.gitkeep
+          cp -R web/ui/dist/. pkg/webui/dist/
+
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
+      # Tidy check does not cover it, so a dependency bump in the root module (e.g. hcloud-go) can
+      # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
+      # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
+      # `go -C desktop mod tidy` and commit the result.
+      - name: 🧹 Verify desktop module is tidy
+        working-directory: desktop
+        run: go mod tidy -diff
+
+      - name: 🏗️ Build desktop app
+        working-directory: desktop
+        run: go build -o ksail-desktop .
+
+  # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
+  # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
+  build-macos:
+    name: 🏗️ Build + cask (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🏗️ Run GoReleaser (snapshot)
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --config .goreleaser.desktop.yaml

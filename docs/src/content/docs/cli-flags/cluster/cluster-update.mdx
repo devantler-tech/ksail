@@ -16,9 +16,13 @@ cluster recreation (e.g., network settings, kubelet config, registry mirrors).
 For Kind/K3d clusters, in-place updates are more limited. Worker node scaling
 is supported for K3d, but most other changes require cluster recreation.
 
-Changes are classified into three categories:
+Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
+  - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
+    migration); requires --force
+  - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
+    server-type change); requires confirmation (or --force to skip the prompt)
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.
@@ -37,11 +41,14 @@ Flags:
       --csi CSI                            Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
   -d, --distribution Distribution          Kubernetes distribution to use
       --distribution-config string         Configuration file for the distribution
+      --distribution-version string        Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version. Other distributions carry their version in the distribution config.
+      --drain-timeout duration             Per-node pod-eviction budget for rolling node drains during cluster update (default 10m when unset). Increase it for stateful workloads that need longer to evict gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.
       --dry-run                            Preview changes without applying them
-      --force                              Skip confirmation prompt and proceed with cluster recreation
+      --force                              Skip confirmation prompts and proceed with cluster recreation. Also makes node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction (may cause workload disruption or data loss)
   -g, --gitops-engine GitOpsEngine         GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
       --import-images string               Path to tar archive with container images to import after cluster creation but before component installation
   -k, --kubeconfig string                  Path to kubeconfig file (default "~/.kube/config")
+      --kubernetes-version string          Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version. Honored by the Talos distribution; Kind/K3d/EKS carry the version in their distribution config instead.
       --load-balancer LoadBalancer         LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
       --local-registry string              Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer       Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
@@ -60,8 +67,6 @@ Flags:
       --output string                      Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
       --policy-engine PolicyEngine         Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                  Infrastructure provider backend (e.g., Docker)
-      --update-distribution                Upgrade the distribution to the latest stable version available in the OCI registry
-      --update-kubernetes                  Upgrade Kubernetes to the latest stable version available in the OCI registry
       --workers int32                      Number of worker nodes
   -y, --yes                                Skip confirmation prompt (alias for --force)
 

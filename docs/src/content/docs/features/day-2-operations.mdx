@@ -1,0 +1,62 @@
+---
+title: Day-2 Operations
+description: Inspect, diagnose, and repair running clusters — health scoring with cluster diagnose, fast context switching, and self-healing state files.
+---
+
+A cluster that exists is only half the story — day-2 is where you live. KSail bundles the commands you reach for after `cluster create`:
+
+| You want to… | Run |
+|--------------|-----|
+| See cluster status and endpoints | [`ksail cluster info`](/cli-flags/cluster/cluster-info/) |
+| List all clusters across providers | [`ksail cluster list`](/cli-flags/cluster/cluster-list/) |
+| Jump to another cluster's context | [`ksail cluster switch`](/cli-flags/cluster/cluster-switch/) |
+| Browse the cluster interactively | [`ksail cluster connect`](/cli-flags/cluster/cluster-connect/) (K9s) |
+| Find out *why* something is failing | [`ksail cluster diagnose`](/cli-flags/cluster/cluster-diagnose/) |
+| Check config drift before it bites | [`ksail cluster diff`](/cli-flags/cluster/cluster-diff/) — see [Drift Detection](/features/cluster-provisioning/#drift-detection) |
+| Fix corrupted local state files | [`ksail cluster repair`](/cli-flags/cluster/cluster-repair/) |
+
+## Diagnosing a Failing Cluster
+
+`ksail cluster diagnose` inspects the live cluster via the Kubernetes API and reports pods that are not running successfully, nodes that are not `Ready`, and PersistentVolumeClaims stuck in `Pending`. Each finding carries a severity, and known failure patterns come with a proactive remediation suggestion.
+
+A **health score (0–100)** summarizes the whole picture: each critical finding deducts 25 points, each warning deducts 10.
+
+```bash
+ksail cluster diagnose                 # human-readable findings + health score
+ksail cluster diagnose --output json  # structured output for scripts and CI
+```
+
+The output is intentionally compact so it can be consumed by people *and* machines — the [AI chat assistant](/ai-chat/) and [MCP server](/mcp/) expose `diagnose` through the `cluster_read` tool and feed the findings back to the model as context for root-cause analysis.
+
+> [!TIP]
+> Exit code 0 is returned even when failures are reported — a non-zero exit means the Kubernetes API itself could not be queried (cluster unreachable or insufficient permissions). Gate CI on the JSON output, not the exit code.
+
+## Switching Between Clusters
+
+Running several clusters side by side is the norm with KSail — `cluster switch` makes hopping between them painless. Give it a cluster name and it resolves the right kubeconfig context automatically, checking all distribution prefixes (`kind-`, `k3d-`, `k3k-`, `admin@`, `vcluster-docker_`, `kwok-`) so you never type a prefixed context name by hand:
+
+```bash
+ksail cluster switch dev       # resolves to kind-dev, k3d-dev, … automatically
+ksail cluster switch           # interactive picker
+```
+
+Called without arguments, an interactive picker opens with your **five most recently used clusters at the top**, followed by the rest alphabetically (history persists to `~/.ksail/switch-history.json`). Press <kbd>/</kbd> to filter the list by keyword, <kbd>Esc</kbd> to clear the filter.
+
+If two distributions both have a cluster with the same name, the command errors with the matching contexts rather than guessing.
+
+## Repairing Local State
+
+`ksail cluster repair` detects and fixes known corruption patterns in local state files. Every repair is idempotent and writes a timestamped backup of any file it modifies before touching it.
+
+```bash
+ksail cluster repair
+```
+
+Currently supported: `talosconfig-ca` — fixes a single-byte BasicConstraints corruption in the Talos `talosconfig` CA that prevents `cluster update` from establishing a Talos client.
+
+## Related
+
+- [Cluster Provisioning](/features/cluster-provisioning/) — create, update, drift detection, and version upgrades
+- [Backup & Restore](/features/backup-restore/) — snapshot resources before risky changes
+- [Troubleshooting](/troubleshooting/) — common issues and solutions
+- [AI Chat Assistant](/ai-chat/) — let Copilot interpret `diagnose` findings for you

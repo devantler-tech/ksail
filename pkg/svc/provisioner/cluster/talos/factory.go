@@ -91,6 +91,8 @@ func newProvisionerFromOptions(
 		WithKubeconfigPath(kubeconfigPath).
 		WithKubeconfigContext(kubeconfigContext).
 		WithTalosconfigPath(talosconfigPath).
+		WithKubernetesVersion(opts.KubernetesVersion).
+		WithDrainTimeout(opts.DrainTimeout.Duration).
 		WithSkipCNIChecks(skipCNIChecks)
 
 	// Override the default Talos container image when a version pin is set.
@@ -247,6 +249,10 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 
 	if opts.TokenEnvVar == "" {
 		opts.TokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
+	}
+
+	if len(opts.FallbackLocations) == 0 {
+		opts.FallbackLocations = v1alpha1.DefaultHetznerFallbackLocations()
 	}
 
 	return opts

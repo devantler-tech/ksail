@@ -23,6 +23,11 @@ func BuildDockerConfigJSON(registry, username, password string) ([]byte, error) 
 	return buildDockerConfigJSON(registry, username, password)
 }
 
+// ApplyDistributionOverride exports applyDistributionOverride for testing.
+func ApplyDistributionOverride(instance *FluxInstance, clusterCfg *v1alpha1.Cluster) error {
+	return applyDistributionOverride(instance, clusterCfg)
+}
+
 // BuildExternalRegistryURL exports buildExternalRegistryURL for testing.
 func BuildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string, string) {
 	return buildExternalRegistryURL(localRegistry)
@@ -55,6 +60,23 @@ func BuildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 // IsTransientAPIError exports isTransientAPIError for testing.
 func IsTransientAPIError(err error) bool {
 	return isTransientAPIError(err)
+}
+
+// BuildVerifyPatch exports buildVerifyPatch for testing.
+func BuildVerifyPatch(cfg v1alpha1.FluxVerifySpec) map[string]any {
+	return buildVerifyPatch(cfg)
+}
+
+// ApplyVerify exports applyVerify for testing.
+func ApplyVerify(obj map[string]any, desired map[string]any) (bool, error) {
+	return applyVerify(obj, desired)
+}
+
+// EnsureVerifyIfConfiguredNoop exercises the no-op path of
+// ensureVerifyIfConfigured (verification disabled) with a nil patcher, to
+// confirm the guard returns before dereferencing the patcher.
+func EnsureVerifyIfConfiguredNoop(ctx context.Context, clusterCfg *v1alpha1.Cluster) error {
+	return ensureVerifyIfConfigured(ctx, nil, clusterCfg)
 }
 
 // NormalizeFluxPath exports normalizeFluxPath(kustomizationFile) for testing.
@@ -110,7 +132,7 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 }
 
 // SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.
-func SetLoadRESTConfig(fn func(string) (*rest.Config, error)) func() {
+func SetLoadRESTConfig(fn func(string, string) (*rest.Config, error)) func() {
 	original := loadRESTConfig
 	loadRESTConfig = fn
 

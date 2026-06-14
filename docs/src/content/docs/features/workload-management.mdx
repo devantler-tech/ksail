@@ -1,21 +1,9 @@
 ---
 title: Workload Management
-description: Deploy, inspect, and manage Kubernetes workloads using familiar kubectl and Helm patterns.
+description: Deploy, inspect, debug, and operate Kubernetes workloads with one command family — kubectl and Helm patterns, plus validation, scanning, and GitOps built in.
 ---
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns:
-
-- **Apply** [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML
-- **Manage** resources: create, edit, and delete
-- **Inspect** resources with get, describe, logs, exec, and explain
-- **Debug** pods and nodes interactively — see [`ksail workload debug`](/cli-flags/workload/workload-debug/) for ephemeral containers, pod copies, and host-level debugging
-- **Forward** local ports to in-cluster pods or services — see [`ksail workload forward`](/cli-flags/workload/workload-forward/) for supported resource types and port mapping syntax
-- **Expose** services
-- **Export and import** container images
-- **Validate** manifests against schemas — see [Substitution Expansion in `workload validate`](/configuration/workload-validate/) for Flux `${VAR}` expansion behavior
-- **Generate** resources — see [`ksail workload gen` reference](/cli-flags/workload/workload-gen-root/) for supported types
-- **Watch** directories for automatic live reconciliation — see the [`ksail workload watch` reference](/cli-flags/workload/workload-watch/) for the canonical behavior and supported options
-- **Scan** manifests for security issues using [Kubescape](https://kubescape.io) — see [`ksail workload scan`](/cli-flags/workload/workload-scan/) for supported frameworks and output formats
+Everything you do to workloads lives under one command family: `ksail workload`. The subcommands follow familiar kubectl and Helm patterns, so existing muscle memory transfers — and because the tooling is embedded, there is nothing else to install.
 
 ```bash
 ksail workload apply -k k8s/
@@ -24,6 +12,79 @@ ksail workload logs deployment/my-app
 ksail workload gen deployment my-app --image=nginx --port=80
 ```
 
+## Command Map
+
+**Deploy & generate**
+
+| Command | What it does |
+|---------|--------------|
+| [`apply`](/cli-flags/workload/workload-apply-root/) | Apply [Kustomize](/concepts/#kustomize) directories, raw YAML, or stdin |
+| [`install`](/cli-flags/workload/workload-install/) | Install [Helm](/concepts/#helm) charts |
+| [`create`](/cli-flags/workload/workload-create-root/) | Create resources imperatively (kubectl-style) |
+| [`gen`](/cli-flags/workload/workload-gen-root/) | Generate manifest YAML for 30+ resource types |
+
+**Inspect & debug**
+
+| Command | What it does |
+|---------|--------------|
+| [`get`](/cli-flags/workload/workload-get/) / [`describe`](/cli-flags/workload/workload-describe/) / [`explain`](/cli-flags/workload/workload-explain/) | Query resources and API documentation |
+| [`logs`](/cli-flags/workload/workload-logs/) / [`exec`](/cli-flags/workload/workload-exec/) | Stream container logs, run commands in containers |
+| [`debug`](/cli-flags/workload/workload-debug/) | Ephemeral containers, pod copies, and host-level debugging |
+| [`forward`](/cli-flags/workload/workload-forward/) | Forward local ports to in-cluster pods or services |
+| [`expose`](/cli-flags/workload/workload-expose/) | Expose a resource as a service |
+
+**Operate**
+
+| Command | What it does |
+|---------|--------------|
+| [`scale`](/cli-flags/workload/workload-scale/) | Scale deployments and other scalable resources |
+| [`rollout`](/cli-flags/workload/workload-rollout-root/) | Manage rollouts — status, history, pause, resume, restart, undo |
+| [`wait`](/cli-flags/workload/workload-wait/) | Block until a condition is met (great for scripts and CI) |
+| [`edit`](/cli-flags/workload/workload-edit/) / [`delete`](/cli-flags/workload/workload-delete/) | Modify or remove resources |
+
+**Validate & secure**
+
+| Command | What it does |
+|---------|--------------|
+| [`validate`](/cli-flags/workload/workload-validate/) | Validate manifests against schemas, with [Flux `${VAR}` substitution expansion](/configuration/workload-validate/) |
+| [`scan`](/cli-flags/workload/workload-scan/) | Scan manifests for security issues with [Kubescape](https://kubescape.io) — NSA, MITRE, and other frameworks |
+
+**Images**
+
+| Command | What it does |
+|---------|--------------|
+| [`images`](/cli-flags/workload/workload-images/) | List the container images your workloads require |
+| [`export`](/cli-flags/workload/workload-export/) / [`import`](/cli-flags/workload/workload-import/) | Move images as tar archives — air-gapped environments, CI caching |
+
+**GitOps**
+
+| Command | What it does |
+|---------|--------------|
+| [`push`](/cli-flags/workload/workload-push/) | Package manifests as an OCI artifact and push to the [registry](/features/registry-management/) |
+| [`reconcile`](/cli-flags/workload/workload-reconcile/) | Trigger the GitOps engine to sync, and wait for the result |
+| [`watch`](/cli-flags/workload/workload-watch/) | Watch a directory and auto-apply (or auto-push) on every change |
+
+## Inner Loop, Two Ways
+
+Imperative — apply directly and iterate:
+
+```bash
+ksail workload watch          # auto-apply k8s/ on every file save
+```
+
+Declarative — let [Flux or ArgoCD](/features/gitops-workflows/) do the deploying:
+
+```bash
+ksail workload push           # publish manifests as an OCI artifact
+ksail workload reconcile      # sync now and wait for healthy
+```
+
 ## CLI Reference
 
 [`ksail workload`](/cli-flags/workload/workload-root/)
+
+## Related
+
+- [GitOps Workflows](/features/gitops-workflows/) — Flux and ArgoCD setup, push and reconcile in depth
+- [Registry Management](/features/registry-management/) — where `push` artifacts and your images live
+- [Secret Management](/features/secret-management/) — SOPS-encrypted secrets in your manifests

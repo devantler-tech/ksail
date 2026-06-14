@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 )
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
@@ -89,6 +91,42 @@ func installerImageFromTag(tag string) string {
 	return installerImageRepository + ":" + tag
 }
 
+// resolveSchematicID returns the configured Talos Image Factory schematic ID,
+// preferring an explicit talosOpts.SchematicID and falling back to the schematic
+// auto-computed from spec.cluster.talos.extensions (talosConfigs.SchematicID()).
+// Returns "" when no schematic is configured. This is the single source of truth
+// for schematic resolution shared by the upgrade and snapshot/create lifecycle.
+func (p *Provisioner) resolveSchematicID() string {
+	if p.talosOpts != nil {
+		if id := strings.TrimSpace(p.talosOpts.SchematicID); id != "" {
+			return id
+		}
+	}
+
+	if p.talosConfigs != nil {
+		if id := strings.TrimSpace(p.talosConfigs.SchematicID()); id != "" {
+			return id
+		}
+	}
+
+	return ""
+}
+
+// resolveInstallerImage returns the Talos installer image reference for an OS
+// upgrade to the given version tag. When a schematic is configured (explicit
+// schematicId or auto-computed from extensions) it returns the Image Factory
+// installer factory.talos.dev/installer/<schematicID>:<tag> so the upgrade
+// preserves system extensions — matching the create/snapshot/autoscaler paths.
+// It falls back to the bare ghcr.io/siderolabs/installer:<tag> only when no
+// schematic is configured.
+func (p *Provisioner) resolveInstallerImage(toVersion string) string {
+	if schematicID := p.resolveSchematicID(); schematicID != "" {
+		return talosconfigmanager.SchematicInstallerImage(schematicID, toVersion)
+	}
+
+	return installerImageFromTag(toVersion)
+}
+
 // getRunningTalosVersion queries a Talos node for its running version tag.
 func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string) (string, error) {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
@@ -98,14 +136,10 @@ func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string)
 
 	defer talosClient.Close() //nolint:errcheck
 
-	resp, err := talosClient.Version(ctx)
+	tag, err := versionTagFromClient(ctx, talosClient)
 	if err != nil {
-		return "", fmt.Errorf("querying Talos version on %s: %w", nodeIP, err)
+		return "", fmt.Errorf("node %s: %w", nodeIP, err)
 	}
 
-	if len(resp.GetMessages()) == 0 || resp.GetMessages()[0].GetVersion() == nil {
-		return "", fmt.Errorf("node %s: %w", nodeIP, ErrEmptyVersionResponse)
-	}
-
-	return resp.GetMessages()[0].GetVersion().GetTag(), nil
+	return tag, nil
 }

@@ -344,6 +344,121 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: v1alpha1.ErrPoolLocationEmpty,
 		},
 		{
+			name: "pool with valid labels and taints",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "gpu",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        0,
+								Max:        3,
+								Labels: map[string]string{
+									"workload":               "gpu",
+									"team.example.com/owner": "ml",
+								},
+								Taints: []v1alpha1.NodePoolTaint{
+									{
+										Key:    "dedicated",
+										Value:  "gpu",
+										Effect: v1alpha1.TaintEffectNoSchedule,
+									},
+									{Key: "spot", Effect: v1alpha1.TaintEffectNoExecute},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "pool with invalid label key is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Labels:     map[string]string{"Invalid Key!": "value"},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolLabel,
+		},
+		{
+			name: "pool with invalid label value is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Labels:     map[string]string{"workload": "not a valid value!"},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolLabel,
+		},
+		{
+			name: "pool with invalid taint key is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Taints: []v1alpha1.NodePoolTaint{
+									{Key: "bad key", Effect: v1alpha1.TaintEffectNoSchedule},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolTaint,
+		},
+		{
+			name: "pool with invalid taint effect is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Taints: []v1alpha1.NodePoolTaint{
+									{Key: "dedicated", Value: "gpu", Effect: "Nonsense"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolTaint,
+		},
+		{
 			name: "node autoscaler enabled with no pools is invalid",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider: v1alpha1.ProviderHetzner,
@@ -546,7 +661,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "capacity guard: maxNodesTotal caps pool capacity",
+			name: "capacity guard: maxNodesTotal caps the cluster total",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,
 				ControlPlanes: 1,
@@ -554,10 +669,10 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
 						Enabled:       true,
-						MaxNodesTotal: 3,
+						MaxNodesTotal: 8,
 						Pools: []v1alpha1.NodePool{
-							// pool.Max=10 but MaxNodesTotal=3 → effectivePoolCapacity=3
-							// total = 1 + 1 + 3 = 5 ≤ serverLimit(10) → valid
+							// baseline 2 + poolCapacity 10 = 12, clamped by
+							// MaxNodesTotal(8) → reachableTotal 8 ≤ serverLimit(10) → valid
 							{
 								Name:       "workers",
 								ServerType: "cx23",
@@ -573,6 +688,100 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
 			},
 			wantErr: nil,
+		},
+		{
+			// Regression for #5017: MaxNodesTotal is the TOTAL ceiling (== the
+			// --max-nodes-total flag), not an autoscaler-only budget added on top of
+			// the baseline. With baseline 6 + poolCapacity 10, the old logic computed
+			// 6 + min(10,10) = 16 and wrongly rejected, even though MaxNodesTotal(10)
+			// equals serverLimit(10). reachableTotal = min(16, 10) = 10 → valid.
+			name: "capacity guard: maxNodesTotal equal to serverLimit is valid despite large pools",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       3,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       true,
+						MaxNodesTotal: 10,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        10,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
+			// Uncapped (MaxNodesTotal=0) pools may still blow the server limit:
+			// baseline 6 + poolCapacity 10 = 16 > serverLimit(10) → rejected.
+			name: "capacity guard: uncapped pools exceeding serverLimit are rejected",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       3,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        10,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr:     v1alpha1.ErrAutoscalerExceedsServerLimit,
+			errContains: "exceeds serverLimit",
+		},
+		{
+			// A MaxNodesTotal below the static baseline must not hide a baseline that
+			// already exceeds serverLimit: control-planes + workers are provisioned
+			// unconditionally, regardless of the autoscaler ceiling. baseline 8 alone
+			// exceeds serverLimit(6); clamping reachableTotal down to MaxNodesTotal(5)
+			// must not drop below the baseline → 8 > 6 → rejected.
+			name: "capacity guard: maxNodesTotal below baseline cannot hide baseline over serverLimit",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 4,
+				Workers:       4,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       true,
+						MaxNodesTotal: 5,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        2,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 6},
+			},
+			wantErr:     v1alpha1.ErrAutoscalerExceedsServerLimit,
+			errContains: "exceeds serverLimit",
 		},
 		{
 			name: "capacity guard: negative maxNodesTotal is invalid",

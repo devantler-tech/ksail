@@ -92,6 +92,23 @@ machine:
           - http://${REGISTRY:-localhost:5000}
 ` + cbt + `
 
+Because patch files are expanded too, you can inject **registry credentials** into the Talos
+machine config as config-as-code — keeping the secret in the environment, never committed. This is
+the supported way to give nodes registry auth (for example, so containerd can fetch cosign
+signatures for **private** packages during image verification) without passing credentials via CLI
+flags:
+
+` + cbt + `yaml
+# talos/cluster/registry-auth.yaml - Credentials are injected from the environment at load time
+machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          username: my-user
+          password: ${GHCR_TOKEN} # expanded at load; commit the placeholder, not the token
+` + cbt + `
+
 ### Example: Credentials
 
 ` + cbt + `yaml
@@ -308,7 +325,12 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `controlPlanes` + bt + ` – Number of control-plane nodes (default: ` + bt + `1` + bt + `)
 - ` + bt + `workers` + bt + ` – Number of worker nodes (default: ` + bt + `0` + bt + `)
 - ` + bt + `config` + bt + ` – Path to talosconfig file (default: ` + bt + `~/.talos/config` + bt + `)
-- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (default: ` + bt + `122630` + bt + ` for x86; use ` + bt + `122629` + bt + ` for ARM)
+- ` + bt + `version` + bt + ` – Pin the Talos OS version (e.g. ` + bt + `v1.12.4` + bt + `); caps upgrades and selects the node image (default: built-in)
+- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (default: ` + bt + `125127` + bt + ` for Talos 1.12.4 x86; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
+
+The Kubernetes version is set at the top level (` + bt + `spec.cluster.kubernetesVersion` + bt + `), not under ` + bt + `talos` + bt + `:
+
+- ` + bt + `kubernetesVersion` + bt + ` – Pin the Kubernetes version (e.g. ` + bt + `v1.32.0` + bt + `). When unset, ` + bt + `cluster update` + bt + ` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned ` + bt + `talos.version` + bt + `
 
 **Hetzner options (` + bt + `spec.provider.hetzner` + bt + `):**
 
@@ -319,6 +341,7 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `networkCidr` + bt + ` – Network CIDR block (default: ` + bt + `10.0.0.0/16` + bt + `)
 - ` + bt + `sshKeyName` + bt + ` – SSH key name for server access (optional)
 - ` + bt + `tokenEnvVar` + bt + ` – Environment variable for API token (default: ` + bt + `HCLOUD_TOKEN` + bt + `)
+- ` + bt + `fallbackLocations` + bt + ` – Alternative locations to try when the primary is at capacity (default: ` + bt + `nbg1` + bt + `, ` + bt + `hel1` + bt + `)
 
 **Vanilla options (` + bt + `spec.cluster.vanilla` + bt + `):**
 

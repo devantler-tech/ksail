@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/providers"
 )
@@ -154,9 +155,21 @@ type Provisioner struct {
 	// talosClientFactory creates a Talos client for the given node IP.
 	// Tests can override this via export_test.go to inject a mock.
 	talosClientFactory func(ctx context.Context, ip string) (kubeconfigFetcher, error)
-	logWriter          io.Writer
-	logMu              sync.Mutex
-	componentDetector  *detector.ComponentDetector
+	// nodeReachabilityCheck reports when a node's Talos API (apid) is accepting
+	// connections at ip:talosAPIPort, retrying until it succeeds or the context is
+	// done. It gates Docker scale-up: a freshly started container returns from
+	// ContainerStart before apid is listening, so the update's in-place config
+	// reconciliation must wait for it. Defaults to a TCP dial loop; tests override
+	// it via export_test.go to avoid real network I/O.
+	nodeReachabilityCheck func(ctx context.Context, ip string) error
+	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
+	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
+	// known running config without real Talos API connectivity (used by the rolling
+	// reboot's staged-config rebuild — see buildStagedNodeConfig).
+	nodeConfigFetcher func(ctx context.Context, nodeIP string) (talosconfig.Provider, error)
+	logWriter         io.Writer
+	logMu             sync.Mutex
+	componentDetector *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
@@ -169,6 +182,12 @@ type Provisioner struct {
 	// deleteStorage controls whether Talos snapshot images are deleted alongside the cluster.
 	// When true, DeleteTalosSnapshots is called during cluster deletion on Hetzner.
 	deleteStorage bool
+	// drainForce, when true, makes node drains delete pods directly instead of via
+	// the Eviction API, bypassing PodDisruptionBudgets. It is request-scoped: set
+	// from UpdateOptions.Force at the start of an update (see applyUpdateChanges)
+	// and read by drainNode. The provisioner is created per command invocation and
+	// used sequentially, so a field is safe here.
+	drainForce bool
 }
 
 // NewProvisioner creates a new Provisioner.
@@ -198,6 +217,12 @@ func NewProvisioner(
 	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
 		return prov.createTalosClient(ctx, ip)
 	}
+
+	prov.nodeReachabilityCheck = func(ctx context.Context, ip string) error {
+		return dialTCPUntilReachable(ctx, ip, talosAPIWaitTimeout, retryInterval)
+	}
+
+	prov.nodeConfigFetcher = prov.fetchNodeConfig
 
 	return prov
 }

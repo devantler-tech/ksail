@@ -1,0 +1,37 @@
+KSail operator installed as {{ include "ksail-operator.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+Create a cluster:
+
+  kubectl apply -f - <<'EOF'
+  apiVersion: ksail.io/v1alpha1
+  kind: Cluster
+  metadata:
+    name: my-cluster
+    namespace: {{ .Release.Namespace }}
+  spec:
+    cluster:
+      distribution: VCluster
+  EOF
+
+  kubectl get clusters -n {{ .Release.Namespace }} -w
+
+{{- if .Values.api.bindPort }}
+
+Web UI ({{ if .Values.ui.readOnly }}read-only{{ else }}ClickOps{{ end }} mode) is served by the operator on port {{ .Values.api.bindPort }} (same origin as the REST API).
+{{- if .Values.auth.oidc.enabled }}
+OIDC authentication is enabled: API calls require sign-in via your provider.
+Register {{ include "ksail-operator.oidc.redirectURL" . }} as a redirect URI with your issuer.
+{{- end }}
+{{- if .Values.ui.ingress.enabled }}
+Reach it via the configured ingress host(s):{{ range .Values.ui.ingress.hosts }} {{ .host }}{{ end }}
+{{- else }}
+Port-forward to reach it:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "ksail-operator.fullname" . }} {{ .Values.api.bindPort }}:{{ .Values.api.bindPort }}
+
+Then open http://localhost:{{ .Values.api.bindPort }}/
+{{- end }}
+{{- else }}
+
+The REST API and Web UI are disabled (api.bindPort=0). The operator still reconciles Cluster resources.
+{{- end }}

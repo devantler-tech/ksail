@@ -2,13 +2,16 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -17,8 +20,14 @@ import (
 	"github.com/siderolabs/omni/client/api/omni/specs"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+// errClusterUnreachable simulates a kube-API connection failure for component
+// detection in GetCurrentConfig tests.
+var errClusterUnreachable = errors.New("dial tcp 10.0.0.1:6443: connect: connection refused")
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
 func TestCountNodeRoles(t *testing.T) {
@@ -164,9 +173,9 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 }
 
 // TestUpdateDoesNotAttemptVersionUpgrade verifies that Update() does not
-// implicitly attempt Talos OS version upgrades. Version upgrades are only
-// triggered via the explicit --update-distribution flag which goes through
-// the UpgradeDistribution() path (not Update()).
+// implicitly attempt Talos OS version upgrades. Version upgrades are handled
+// separately by cluster update's version reconciliation, which goes through the
+// UpgradeDistribution() path (not Update()).
 // The provisioner is instantiated WITHOUT Omni options so any accidental
 // reintroduction of an upgrade step would surface as a failure (no Omni
 // guard to silently skip it).
@@ -559,6 +568,66 @@ func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestDetectAutoscalerTemplateDrift_NoopWhenNotHetzner verifies detection is a
+// no-op (no change, no error) when the provider is not Hetzner (acceptance d).
+func TestDetectAutoscalerTemplateDrift_NoopWhenNotHetzner(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NoopWhenAutoscalerDisabled verifies detection
+// is a no-op when the autoscaler is disabled on Hetzner (acceptance d).
+func TestDetectAutoscalerTemplateDrift_NoopWhenAutoscalerDisabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: false}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NoopWhenNilTalosConfigs verifies detection is a
+// no-op when talosConfigs is nil, even with the autoscaler enabled on Hetzner.
+func TestDetectAutoscalerTemplateDrift_NoopWhenNilTalosConfigs(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NonFatalWhenNoKubeClient verifies that an
+// unreachable cluster / absent kube client is non-fatal: detection warns and
+// reports no drift rather than turning DiffConfig into an error (which would drop
+// the spec-level diff). Here the provisioner has the autoscaler enabled and real
+// configs but no kubeconfig path, so the secret read fails.
+func TestDetectAutoscalerTemplateDrift_NonFatalWhenNoKubeClient(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err, "an absent kube client must be non-fatal")
+	assert.Empty(t, changes)
+}
+
 // TestNeedsSecretSync_AutoscalerEnabled verifies that needsSecretSync returns
 // true when the node autoscaler is enabled on Hetzner, even without node count
 // changes. The autoscaler config secret embeds a worker config that must use
@@ -663,66 +732,105 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
 }
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
-func TestDetectHetznerServerTypes(t *testing.T) {
+func TestRepresentativeServerType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		nodes          []provider.NodeInfo
-		wantCPType     string
-		wantWorkerType string
+		name    string
+		nodes   []provider.NodeInfo
+		role    string
+		desired string
+		want    string
 	}{
 		{
-			name:           "empty node list returns empty strings",
-			nodes:          nil,
-			wantCPType:     "",
-			wantWorkerType: "",
+			name:    "empty node list returns empty string",
+			nodes:   nil,
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    "",
 		},
 		{
-			name: "single control-plane node",
+			name: "all nodes match desired returns the common type",
 			nodes: []provider.NodeInfo{
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+				{
+					Name:       testRollingNodeCP0,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX33,
+				},
+				{
+					Name:       testRollingNodeCP1,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX33,
+				},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    testTypeCX33,
 		},
 		{
-			name: "single worker node",
+			name: "all nodes on the old type returns the old type",
 			nodes: []provider.NodeInfo{
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
+				{
+					Name:       testRollingNodeCP0,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX22,
+				},
+				{
+					Name:       testRollingNodeCP1,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX22,
+				},
 			},
-			wantCPType:     "",
-			wantWorkerType: "cx33",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    testTypeCX22,
 		},
 		{
-			name: "mixed nodes returns first of each role",
+			name: "mixed types after a partial run returns the differing type",
 			nodes: []provider.NodeInfo{
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
-				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx44"},
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
-				{Name: "worker-1", Role: talosprovisioner.RoleWorker, ServerType: "cx55"},
+				{
+					Name:       testRollingNodeCP0,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX33,
+				},
+				{
+					Name:       testRollingNodeCP1,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX33,
+				},
+				{Name: "cp-2", Role: talosprovisioner.RoleControlPlane, ServerType: testTypeCX22},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "cx33",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    testTypeCX22,
 		},
 		{
-			name: "skips nodes with empty ServerType",
+			name: "case-insensitive match treats nodes as already on desired",
 			nodes: []provider.NodeInfo{
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: ""},
-				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: ""},
+				{
+					Name:       testRollingNodeCP0,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: "CX33",
+				},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    "CX33",
 		},
 		{
-			name: "unknown roles are ignored",
+			name: "filters by role and skips empty server types",
 			nodes: []provider.NodeInfo{
-				{Name: "unknown-0", Role: "unknown", ServerType: "cx11"},
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+				{Name: testRollingNodeCP0, Role: talosprovisioner.RoleControlPlane, ServerType: ""},
+				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx55"},
+				{
+					Name:       testRollingNodeCP1,
+					Role:       talosprovisioner.RoleControlPlane,
+					ServerType: testTypeCX22,
+				},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: testTypeCX33,
+			want:    testTypeCX22,
 		},
 	}
 
@@ -730,10 +838,11 @@ func TestDetectHetznerServerTypes(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cpType, workerType := talosprovisioner.DetectHetznerServerTypesForTest(testCase.nodes)
+			got := talosprovisioner.RepresentativeServerTypeForTest(
+				testCase.nodes, testCase.role, testCase.desired,
+			)
 
-			assert.Equal(t, testCase.wantCPType, cpType)
-			assert.Equal(t, testCase.wantWorkerType, workerType)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -883,4 +992,34 @@ func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
 	err = provisioner.MergePersistedStateForTest(spec, clusterName)
 	require.Error(t, err, "corrupt state should return an error")
 	assert.Contains(t, err.Error(), "load persisted cluster state")
+}
+
+// TestGetCurrentConfig_PropagatesDetectionError verifies that an unreachable
+// cluster (component detection fails) produces a hard error instead of silently
+// degrading to a default baseline, which would make `cluster update` propose a
+// full reinstall of healthy components and only fail later mid-apply.
+func TestGetCurrentConfig_PropagatesDetectionError(t *testing.T) {
+	t.Parallel()
+
+	helmClient := helm.NewMockInterface(t)
+	helmClient.On("ListReleases", mock.Anything).
+		Return(nil, errClusterUnreachable)
+	helmClient.On("ReleaseExists", mock.Anything, detector.ReleaseCilium, detector.NamespaceCilium).
+		Return(false, errClusterUnreachable)
+
+	componentDetector := detector.NewComponentDetector(helmClient, fake.NewClientset(), nil)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithComponentDetector(componentDetector).
+		WithLogWriter(io.Discard)
+
+	spec, providerSpec, err := provisioner.GetCurrentConfig(
+		context.Background(),
+		"unreachable-cluster-"+t.Name(),
+	)
+
+	require.Error(t, err, "detection failure must be fatal, not silently swallowed")
+	require.ErrorIs(t, err, errClusterUnreachable)
+	assert.Nil(t, spec, "no baseline spec should be returned when the cluster is unreachable")
+	assert.Nil(t, providerSpec)
 }

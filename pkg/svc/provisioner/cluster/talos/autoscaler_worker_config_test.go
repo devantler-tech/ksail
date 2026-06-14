@@ -1,10 +1,19 @@
 package talosprovisioner_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
@@ -19,6 +28,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
+
+// clusterConfigSecretKey is the Secret key under which the HCLOUD_CLUSTER_CONFIG
+// JSON is stored.
+const clusterConfigSecretKey = clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey
 
 // newTestWorkerProvider builds a minimal v1alpha1 Config wrapped in a Provider
 // for use across autoscaler worker config tests.
@@ -47,12 +60,92 @@ func newTestWorkerProvider() *taloscontainer.Container {
 	})
 }
 
+// clusterConfigJSON mirrors the HCLOUD_CLUSTER_CONFIG document the autoscaler
+// reads, for decoding in assertions.
+type clusterConfigJSON struct {
+	ImagesForArch struct {
+		Arm64 string `json:"arm64"`
+		Amd64 string `json:"amd64"`
+	} `json:"imagesForArch"`
+	NodeConfigs map[string]struct {
+		CloudInit string            `json:"cloudInit"`
+		Labels    map[string]string `json:"labels"`
+		Taints    []corev1.Taint    `json:"taints"`
+	} `json:"nodeConfigs"`
+}
+
+// decodeClusterConfig base64-decodes and JSON-parses the hcloud_cluster_config
+// Secret value, the way the cluster-autoscaler does when reading the env var.
+func decodeClusterConfig(t *testing.T, secretValue []byte) clusterConfigJSON {
+	t.Helper()
+
+	jsonBytes, err := base64.StdEncoding.DecodeString(string(secretValue))
+	require.NoError(t, err, "outer base64 layer")
+
+	var cfg clusterConfigJSON
+
+	require.NoError(t, json.Unmarshal(jsonBytes, &cfg))
+
+	return cfg
+}
+
+// decodePoolCloudInit reverses the per-pool cloud-init encoding the way the live
+// chain does: the autoscaler uses nodeConfigs[pool].cloudInit verbatim as
+// user_data, the Talos hcloud platform base64-decodes it (maybeBase64Decode) and
+// un-gzips the result. The recovered bytes must equal the original worker config.
+func decodePoolCloudInit(t *testing.T, cloudInit string) []byte {
+	t.Helper()
+
+	compressed, err := base64.StdEncoding.DecodeString(cloudInit)
+	require.NoError(t, err, "Talos maybeBase64Decode layer")
+
+	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
+	require.NoError(t, err, "gzip header")
+
+	defer func() { require.NoError(t, gzipReader.Close()) }()
+
+	decompressed, err := io.ReadAll(gzipReader)
+	require.NoError(t, err)
+
+	return decompressed
+}
+
+// singlePoolConfig builds a one-pool AutoscalerPoolConfig slice (pool "pool1")
+// for tests that only exercise the encode/secret machinery and not per-pool
+// labels/taints.
+func singlePoolConfig(workerConfig []byte) []talosprovisioner.AutoscalerPoolConfig {
+	return []talosprovisioner.AutoscalerPoolConfig{
+		{Name: "pool1", WorkerConfigYAML: workerConfig},
+	}
+}
+
+// isASCII reports whether every byte is in the 7-bit ASCII range. cloud-init must
+// be ASCII so JSON marshaling does not corrupt it with U+FFFD.
+func isASCII(b []byte) bool {
+	for _, c := range b {
+		if c > 0x7F {
+			return false
+		}
+	}
+
+	return true
+}
+
 // --- GenerateAutoscalerWorkerConfig ---
 
-func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
-	t.Parallel()
+// generateAndParseAutoscalerConfig runs GenerateAutoscalerWorkerConfig on the
+// given provider and returns the parsed v1alpha1 machine config, asserting the
+// generate + parse round-trip succeeds. Shared by the stripping-logic, marker,
+// and per-pool labels/taints tests so each stays focused on its own assertions.
+func generateAndParseAutoscalerConfig(
+	t *testing.T,
+	provider *taloscontainer.Container,
+	labels map[string]string,
+	taints []corev1.Taint,
+) *v1alpha1.Config {
+	t.Helper()
 
-	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(newTestWorkerProvider())
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider, labels, taints)
 	require.NoError(t, err)
 	require.NotEmpty(t, result)
 
@@ -62,6 +155,14 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	rawCfg := parsed.RawV1Alpha1()
 	require.NotNil(t, rawCfg)
 	require.NotNil(t, rawCfg.MachineConfig)
+
+	return rawCfg
+}
+
+func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
+	t.Parallel()
+
+	rawCfg := generateAndParseAutoscalerConfig(t, newTestWorkerProvider(), nil, nil)
 
 	t.Run("sets install.wipe to true", func(t *testing.T) {
 		t.Parallel()
@@ -106,10 +207,48 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	})
 }
 
+func TestGenerateAutoscalerWorkerConfig_StampsAutoscaledMarker(t *testing.T) {
+	t.Parallel()
+
+	rawCfg := generateAndParseAutoscalerConfig(t, newTestWorkerProvider(), nil, nil)
+
+	// The marker discriminates autoscaler nodes from static baseline workers,
+	// which never run through this generator and so never carry it.
+	assert.Equal(
+		t,
+		"true",
+		rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+	)
+}
+
+func TestGenerateAutoscalerWorkerConfig_AppliesPoolLabelsAndTaints(t *testing.T) {
+	t.Parallel()
+
+	labels := map[string]string{"workload": "gpu"}
+	taints := []corev1.Taint{
+		{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule},
+		{Key: "spot", Effect: corev1.TaintEffectNoExecute}, // empty value
+	}
+
+	rawCfg := generateAndParseAutoscalerConfig(t, newTestWorkerProvider(), labels, taints)
+
+	// Pool labels are baked into machine.nodeLabels alongside the marker, so they
+	// land on the real Node object.
+	assert.Equal(t, "gpu", rawCfg.MachineConfig.MachineNodeLabels["workload"])
+	assert.Equal(
+		t, "true", rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+	)
+
+	// Taints are encoded into machine.nodeTaints as "value:Effect" (or ":Effect"
+	// when the value is empty).
+	assert.Equal(t, "gpu:NoSchedule", rawCfg.MachineConfig.MachineNodeTaints["dedicated"])
+	assert.Equal(t, ":NoExecute", rawCfg.MachineConfig.MachineNodeTaints["spot"])
+}
+
 func TestGenerateAutoscalerWorkerConfig_NilInput(t *testing.T) {
 	t.Parallel()
 
-	_, err := talosprovisioner.GenerateAutoscalerWorkerConfig(nil)
+	_, err := talosprovisioner.GenerateAutoscalerWorkerConfig(nil, nil, nil)
 	require.ErrorIs(t, err, talosprovisioner.ErrNilWorkerConfig)
 }
 
@@ -122,7 +261,7 @@ func TestGenerateAutoscalerWorkerConfig_InstallNilBeforePatch(t *testing.T) {
 		MachineConfig: &v1alpha1.MachineConfig{},
 	})
 
-	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider)
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider, nil, nil)
 	require.NoError(t, err)
 
 	parsed, err := configloader.NewFromBytes(result)
@@ -143,7 +282,7 @@ func TestGenerateAutoscalerWorkerConfig_NilMachineConfig(t *testing.T) {
 		ConfigVersion: "v1alpha1",
 	})
 
-	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider)
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider, nil, nil)
 	require.NoError(t, err)
 
 	parsed, err := configloader.NewFromBytes(result)
@@ -155,7 +294,17 @@ func TestGenerateAutoscalerWorkerConfig_NilMachineConfig(t *testing.T) {
 	require.NotNil(t, rawCfg.MachineConfig.MachineInstall)
 	require.NotNil(t, rawCfg.MachineConfig.MachineInstall.InstallWipe)
 	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
+
+	// The marker label must be stamped even when the source bundle carried no
+	// node labels at all (nil MachineNodeLabels), exercising the nil-map guard.
+	assert.Equal(
+		t,
+		"true",
+		rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+	)
 }
+
+// --- ApplyAutoscalerConfigSecret ---
 
 func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	t.Parallel()
@@ -164,11 +313,11 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	snapshotID := "123456789"
 	workerConfig := []byte("machine:\n  type: worker\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
-		workerConfig,
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -179,15 +328,88 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
+	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+	assert.Equal(t, snapshotID, cfg.ImagesForArch.Amd64)
+	require.Contains(t, cfg.NodeConfigs, "pool1")
+	assert.Equal(t, workerConfig, decodePoolCloudInit(t, cfg.NodeConfigs["pool1"].CloudInit))
+}
 
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+func TestApplyAutoscalerConfigSecret_PerPoolLabelsTaints(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	poolA := []byte("machine:\n  type: worker\n  # pool a\n")
+	poolB := []byte("machine:\n  type: worker\n  # pool b\n")
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		{
+			Name:             "a",
+			WorkerConfigYAML: poolA,
+			Labels: map[string]string{
+				"workload":                       "a",
+				talosprovisioner.LabelAutoscaled: "true",
+			},
+		},
+		{
+			Name:             "b",
+			WorkerConfigYAML: poolB,
+			Labels:           map[string]string{talosprovisioner.LabelAutoscaled: "true"},
+			Taints: []corev1.Taint{
+				{Key: "dedicated", Value: "b", Effect: corev1.TaintEffectNoSchedule},
+			},
+		},
+	}
+
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "55", pools,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+
+	// Each pool gets its own cloud-init (its own worker config round-trips).
+	assert.Equal(t, poolA, decodePoolCloudInit(t, cfg.NodeConfigs["a"].CloudInit))
+	assert.Equal(t, poolB, decodePoolCloudInit(t, cfg.NodeConfigs["b"].CloudInit))
+
+	// Per-pool labels/taints seed the scale-from-zero template.
+	assert.Equal(t, "a", cfg.NodeConfigs["a"].Labels["workload"])
+	assert.Empty(t, cfg.NodeConfigs["a"].Taints)
+	require.Len(t, cfg.NodeConfigs["b"].Taints, 1)
+	assert.Equal(t, "dedicated", cfg.NodeConfigs["b"].Taints[0].Key)
+	assert.Equal(t, corev1.TaintEffectNoSchedule, cfg.NodeConfigs["b"].Taints[0].Effect)
+}
+
+func TestApplyAutoscalerConfigSecret_ReturnsChangedFlag(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	pools := singlePoolConfig([]byte("machine:\n  type: worker\n"))
+
+	// First apply creates the secret => changed.
+	changed, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", pools,
+	)
+	require.NoError(t, err)
+	assert.True(t, changed, "creating the secret must report a change")
+
+	// Re-applying identical inputs is a no-op => not changed. This is what gates
+	// the autoscaler Deployment restart, so an unrelated `cluster update` does not
+	// needlessly bounce the autoscaler.
+	changed, err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", pools,
+	)
+	require.NoError(t, err)
+	assert.False(t, changed, "re-applying identical config must report no change")
 }
 
 func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 	t.Parallel()
 
+	// A pre-migration secret carries the legacy keys plus an unrelated extra key.
 	existing := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-autoscaler-config",
@@ -204,11 +426,11 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 	snapshotID := "111111111"
 	workerConfig := []byte("machine:\n  type: worker\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
-		workerConfig,
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -219,13 +441,13 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Desired keys must be updated.
-	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
+	// The new cluster-config key is written.
+	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+	assert.Equal(t, snapshotID, cfg.ImagesForArch.Amd64)
+	assert.Equal(t, workerConfig, decodePoolCloudInit(t, cfg.NodeConfigs["pool1"].CloudInit))
 
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
-
-	// Extra key must be preserved (merge, not replace).
+	// Extra key must be preserved (merge, not replace) — keeping the legacy keys
+	// around is what avoids a missing-key crash during the migration window.
 	assert.Equal(t, []byte("extra-value"), secret.Data["extra_key"])
 }
 
@@ -238,8 +460,7 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 			Namespace: "kube-system",
 		},
 		Data: map[string][]byte{
-			"hcloud_image":      []byte("old-image-id"),
-			"hcloud_cloud_init": []byte("old-config"),
+			clusterConfigSecretKey: []byte("old-cluster-config"),
 		},
 	}
 	clientset := fake.NewClientset(existing)
@@ -247,11 +468,11 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 	snapshotID := "987654321"
 	workerConfig := []byte("machine:\n  type: worker\n  install:\n    wipe: true\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
-		workerConfig,
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -262,10 +483,9 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
-
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+	assert.Equal(t, snapshotID, cfg.ImagesForArch.Amd64)
+	assert.Equal(t, workerConfig, decodePoolCloudInit(t, cfg.NodeConfigs["pool1"].CloudInit))
 }
 
 // newConflictClientset returns a fake clientset pre-seeded with an existing
@@ -317,14 +537,15 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 			ResourceVersion: "1",
 		},
 		Data: map[string][]byte{
-			"hcloud_image":      []byte("old-image"),
-			"hcloud_cloud_init": []byte("old-config"),
+			clusterConfigSecretKey: []byte("old-cluster-config"),
 		},
 	}
 	clientset := newConflictClientset(preExisting)
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(), clientset, "new-image", []byte("new-config"),
+	newConfig := []byte("machine:\n  type: worker\n  # new\n")
+
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "new-image", singlePoolConfig(newConfig),
 	)
 	require.NoError(t, err)
 
@@ -334,8 +555,306 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, []byte("new-image"), updated.Data["hcloud_image"])
+	cfg := decodeClusterConfig(t, updated.Data[clusterConfigSecretKey])
+	assert.Equal(t, "new-image", cfg.ImagesForArch.Amd64)
+	assert.Equal(t, newConfig, decodePoolCloudInit(t, cfg.NodeConfigs["pool1"].CloudInit))
+}
 
-	wantEncoded := base64.StdEncoding.EncodeToString([]byte("new-config"))
-	assert.Equal(t, []byte(wantEncoded), updated.Data["hcloud_cloud_init"])
+// largeWorkerConfigYAML builds a worker-config-shaped YAML blob larger than
+// Hetzner's 32 KiB user_data limit — the situation from issue #5015 where the
+// raw config overflowed. It mixes a high-entropy PKI chunk (incompressible) with
+// repetitive structure (compressible), mirroring a real Talos worker config.
+func largeWorkerConfigYAML(t *testing.T) []byte {
+	t.Helper()
+
+	pki := make([]byte, 3072)
+	_, err := rand.Read(pki)
+	require.NoError(t, err)
+
+	var builder strings.Builder
+
+	builder.WriteString("version: v1alpha1\nmachine:\n  type: worker\n  ca:\n    crt: ")
+	builder.WriteString(base64.StdEncoding.EncodeToString(pki))
+	builder.WriteString("\n  registries:\n    mirrors:\n")
+
+	for i := range 400 {
+		fmt.Fprintf(
+			&builder,
+			"      registry-%d.example.com:\n        endpoints:\n          - https://mirror.example.com/v2\n",
+			i,
+		)
+	}
+
+	return []byte(builder.String())
+}
+
+// A realistic ~40 KiB worker config (the size that overflowed Hetzner's raw
+// user_data limit in issue #5015) must compress to a cloud-init payload that is
+// both under 32 KiB and ASCII, and must round-trip back to the original config.
+func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	largeConfig := largeWorkerConfigYAML(t)
+
+	require.Greater(t, len(largeConfig), 32768,
+		"test fixture must exceed Hetzner's raw user_data limit to be representative")
+
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", singlePoolConfig(largeConfig),
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+	cloudInit := cfg.NodeConfigs["pool1"].CloudInit
+
+	assert.LessOrEqual(t, len(cloudInit), 32768,
+		"gzip must bring cloud-init under Hetzner's 32 KiB user_data limit")
+	assert.True(t, isASCII([]byte(cloudInit)),
+		"cloud-init must be ASCII so JSON marshaling does not corrupt it")
+	assert.Equal(t, largeConfig, decodePoolCloudInit(t, cloudInit),
+		"config must round-trip through the autoscaler + Talos decode chain")
+}
+
+// When even the gzip-compressed config exceeds Hetzner's 32 KiB user_data limit,
+// ApplyAutoscalerConfigSecret must fail fast (at cluster create/update) rather
+// than write a secret that would silently break the next scale-up.
+func TestApplyAutoscalerConfigSecret_RejectsOversizedConfig(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	// Incompressible random bytes large enough that base64(gzip(data)) still
+	// exceeds 32 KiB, exercising the fail-fast guard.
+	incompressible := make([]byte, 40000)
+	_, err := rand.Read(incompressible)
+	require.NoError(t, err)
+
+	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", singlePoolConfig(incompressible),
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
+
+	// The guard must fire before any Secret is written.
+	_, getErr := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	assert.True(t, apierrors.IsNotFound(getErr))
+}
+
+// --- autoscalerTemplateDrift (worker bootstrap template drift detection, #5194) ---
+
+// autoscalerPoolFor builds a single-pool AutoscalerPoolConfig whose
+// WorkerConfigYAML is a real, loadable autoscaler worker config (the shape
+// buildAutoscalerPoolConfigs produces), so drift detection can fingerprint it.
+func autoscalerPoolFor(
+	t *testing.T,
+	name string,
+	provider *taloscontainer.Container,
+	labels map[string]string,
+) talosprovisioner.AutoscalerPoolConfig {
+	t.Helper()
+
+	workerYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider, labels, nil)
+	require.NoError(t, err)
+
+	return talosprovisioner.AutoscalerPoolConfig{
+		Name:             name,
+		WorkerConfigYAML: workerYAML,
+		Labels:           labels,
+	}
+}
+
+// autoscalerSecretFor renders pools into a real cluster-autoscaler-config Secret
+// via the production apply path, so drift checks run against the exact bytes the
+// apply path stores.
+func autoscalerSecretFor(
+	t *testing.T,
+	snapshotID string,
+	pools []talosprovisioner.AutoscalerPoolConfig,
+) *corev1.Secret {
+	t.Helper()
+
+	clientset := fake.NewClientset()
+
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, snapshotID, pools,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets(autoscalerNamespace).Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	return secret
+}
+
+// workerProviderWithToken builds a minimal worker provider carrying a (secret)
+// machine token, so two providers can differ ONLY in redacted PKI.
+func workerProviderWithToken(token string) *taloscontainer.Container {
+	falseVal := false
+
+	return taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineToken:      token,
+			MachineInstall:    &v1alpha1.InstallConfig{InstallWipe: &falseVal},
+			MachineNodeLabels: map[string]string{"keep-this-label": "value"},
+		},
+	})
+}
+
+// Acceptance (b): an idempotent re-run — the rendered template already matches the
+// Secret — must report no drift, so `cluster update` stays "No changes detected".
+func TestAutoscalerTemplateDrift_NoneWhenSecretMatches(t *testing.T) {
+	t.Parallel()
+
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "a"}),
+	}
+	secret := autoscalerSecretFor(t, "123456789", pools)
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, pools)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "an identical worker template must not report drift")
+}
+
+// Acceptance (a): a worker-config change (here a node label, baked into the worker
+// config) must surface as drift even though the pool set is unchanged.
+func TestAutoscalerTemplateDrift_DetectsWorkerConfigChange(t *testing.T) {
+	t.Parallel()
+
+	oldPools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "a"}),
+	}
+	secret := autoscalerSecretFor(t, "123456789", oldPools)
+
+	// Same pool name, different node label => a different worker machine config.
+	newPools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "b"}),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, newPools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "a changed worker template must report drift")
+	assert.Equal(t, talosprovisioner.AutoscalerWorkerTemplateField, changes[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace, changes[0].Category)
+}
+
+// Acceptance (c): an absent Secret while the autoscaler is enabled must report
+// drift so the apply path creates it (adjacent #4606 facet).
+func TestAutoscalerTemplateDrift_ReportsDriftWhenSecretAbsent(t *testing.T) {
+	t.Parallel()
+
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(nil, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "an absent secret must report drift")
+	assert.Equal(t, talosprovisioner.AutoscalerWorkerTemplateField, changes[0].Field)
+	assert.Equal(t, "<absent>", changes[0].OldValue)
+}
+
+// A Secret that exists but predates the HCLOUD_CLUSTER_CONFIG key (legacy
+// migration) must report drift so the apply path adds the key.
+func TestAutoscalerTemplateDrift_ReportsDriftWhenKeyMissing(t *testing.T) {
+	t.Parallel()
+
+	legacy := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: autoscalerNamespace,
+		},
+		Data: map[string][]byte{"hcloud_cloud_init": []byte("legacy")},
+	}
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(legacy, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "a secret missing the cluster-config key must report drift")
+	assert.Equal(t, "<absent>", changes[0].OldValue, "no existing template to fingerprint")
+}
+
+// A Secret whose stored cluster-config value is unreadable (corrupt base64) must
+// be treated as drift so the apply path regenerates it, rather than the update
+// crashing on or trusting a malformed template.
+func TestAutoscalerTemplateDrift_ReportsDriftWhenStoredValueCorrupt(t *testing.T) {
+	t.Parallel()
+
+	corrupt := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: autoscalerNamespace,
+		},
+		Data: map[string][]byte{clusterConfigSecretKey: []byte("!!!not-valid-base64!!!")},
+	}
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(corrupt, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "an unreadable stored template must report drift")
+	assert.Equal(t, "<absent>", changes[0].OldValue)
+}
+
+// The comparison redacts secrets (PKI), so a template that differs ONLY in PKI —
+// which syncSecretsFromCluster legitimately realigns during apply (#4963) — must
+// NOT report drift, or every run would falsely show "changes detected".
+func TestAutoscalerTemplateDrift_IgnoresPKIOnlyDifference(t *testing.T) {
+	t.Parallel()
+
+	secret := autoscalerSecretFor(t, "1", []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", workerProviderWithToken("aaaaaaaa.aaaaaaaaaaaaaaaa"), nil),
+	})
+	desired := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", workerProviderWithToken("bbbbbbbb.bbbbbbbbbbbbbbbb"), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "a PKI-only difference must be redacted away, not reported as drift")
+}
+
+// Adding a pool must surface as drift (the new pool has no template in the Secret).
+func TestAutoscalerTemplateDrift_DetectsAddedPool(t *testing.T) {
+	t.Parallel()
+
+	base := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+	secret := autoscalerSecretFor(t, "1", base)
+
+	expanded := []talosprovisioner.AutoscalerPoolConfig{
+		base[0],
+		autoscalerPoolFor(t, "pool2", newTestWorkerProvider(), map[string]string{"x": "y"}),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, expanded)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "adding a pool must report drift")
+}
+
+// A worker config whose compressed cloud-init overflows Hetzner's 32 KiB user_data
+// limit (#5015) must surface ErrAutoscalerUserDataTooLarge from change detection
+// rather than being silently dropped.
+func TestAutoscalerTemplateDrift_SurfacesOversizedConfig(t *testing.T) {
+	t.Parallel()
+
+	incompressible := make([]byte, 40000)
+	_, err := rand.Read(incompressible)
+	require.NoError(t, err)
+
+	_, err = talosprovisioner.AutoscalerTemplateDriftForTest(nil, singlePoolConfig(incompressible))
+	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
 }

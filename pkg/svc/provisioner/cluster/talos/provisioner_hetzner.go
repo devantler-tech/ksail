@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/util/retry"
 )
@@ -96,10 +98,10 @@ func (p *Provisioner) createHetznerNodeGroups(
 	clusterName string,
 	imageID int64,
 ) ([]*hcloud.Server, []*hcloud.Server, error) {
-	isoID := p.talosOpts.ISO
-	if imageID > 0 {
-		isoID = 0 // snapshot takes precedence; ISO is not used
-	}
+	// A snapshot image takes precedence over the maintenance-mode ISO; the same
+	// boot-source rule is shared with scale-up and rolling-recreate so all node
+	// creation paths boot the cluster's Talos version (see hetznerBootSource).
+	isoID, imageID := hetznerBootSource(p.talosOpts.ISO, imageID)
 
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
@@ -138,12 +140,16 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		return clustererr.ErrNoControlPlaneNodes
 	}
 
-	// Regenerate configs with the first control-plane node's public IP as the endpoint.
-	// This is necessary because:
+	// Regenerate configs with the first control-plane node's reachable IP as the
+	// endpoint. This is necessary because:
 	// 1. The original configs were generated with internal network IPs
-	// 2. Hetzner nodes are accessed via their public IPs
+	// 2. KSail reaches Hetzner nodes via their public IPv4, or their private-network
+	//    IP when the node is IPv4-less
 	// 3. The endpoint IP is embedded in certificates and must match
-	firstCPIP := controlPlaneServers[0].PublicNet.IPv4.IP.String()
+	firstCPIP, addrErr := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if addrErr != nil {
+		return addrErr
+	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", firstCPIP)
 
@@ -246,8 +252,10 @@ func (p *Provisioner) bootstrapAndFinalize(
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 	}
 
-	// Create the cluster-autoscaler-config Secret when applicable.
-	err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	// Create the cluster-autoscaler-config Secret when applicable. No restart on
+	// create: the autoscaler Deployment is installed afterwards and starts with
+	// this config, so the changed result is irrelevant here.
+	_, err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, false)
 	if err != nil {
 		return err
 	}
@@ -259,6 +267,36 @@ const (
 	hcloudSecretName      = "hcloud"
 	hcloudSecretNamespace = "kube-system"
 )
+
+// newSecretKubeclient builds a Kubernetes clientset from the provisioner's
+// configured kubeconfig for managing Hetzner-related secrets. purpose is woven
+// into the error messages to identify the calling context.
+func (p *Provisioner) newSecretKubeclient(purpose string) (kubernetes.Interface, error) {
+	if p.options.KubeconfigPath == "" {
+		return nil, fmt.Errorf(
+			"creating kubeclient for %s: %w",
+			purpose,
+			k8s.ErrKubeconfigPathEmpty,
+		)
+	}
+
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("expanding kubeconfig path for %s: %w", purpose, err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing kubeconfig path for %s: %w", purpose, err)
+	}
+
+	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
+	if err != nil {
+		return nil, fmt.Errorf("creating kubeclient for %s: %w", purpose, err)
+	}
+
+	return kubeclient, nil
+}
 
 // ensureHcloudSecret creates or updates the "hcloud" Secret in kube-system with
 // the API token and network name. The cluster autoscaler Helm chart reads both
@@ -281,23 +319,9 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 		networkName = clusterName + hetzner.NetworkSuffix
 	}
 
-	if p.options.KubeconfigPath == "" {
-		return fmt.Errorf("creating kubeclient for hcloud secret: %w", k8s.ErrKubeconfigPathEmpty)
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	kubeclient, err := p.newSecretKubeclient("hcloud secret")
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for hcloud secret: %w", err)
-	}
-
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
-	if err != nil {
-		return fmt.Errorf("canonicalizing kubeconfig path for hcloud secret: %w", err)
-	}
-
-	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("creating kubeclient for hcloud secret: %w", err)
+		return err
 	}
 
 	desiredData := map[string][]byte{
@@ -393,56 +417,159 @@ func (p *Provisioner) updateHcloudSecret(
 }
 
 // ensureAutoscalerSecret creates the cluster-autoscaler-config Secret when the
-// node autoscaler is enabled and bootstrap used a snapshot image.
+// node autoscaler is enabled and bootstrap used a snapshot image. It reports
+// whether the Secret's data changed.
+//
+// When restartIfChanged is true (cluster update) and the data actually changed,
+// it rolls the running cluster-autoscaler Deployment so it reloads the new config
+// — the autoscaler reads the Secret as environment variables, which Kubernetes
+// does not live-reload, so without the restart new nodes would keep booting from
+// the stale Kubernetes version / snapshot. On cluster create restartIfChanged is
+// false: the Deployment does not exist yet (the installer runs afterwards and
+// starts with the correct config). The changed result lets callers trigger
+// follow-up work (e.g. recycling existing autoscaler nodes) only on a real change.
 func (p *Provisioner) ensureAutoscalerSecret(
 	ctx context.Context,
 	configBundle *bundle.Bundle,
 	snapshotImageID int64,
-) error {
+	restartIfChanged bool,
+) (bool, error) {
 	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || snapshotImageID <= 0 {
-		return nil
+		return false, nil
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
 
-	if p.options.KubeconfigPath == "" {
-		return fmt.Errorf(
-			"creating kubeclient for autoscaler secret: %w",
-			k8s.ErrKubeconfigPathEmpty,
-		)
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	kubeclient, err := p.newSecretKubeclient("autoscaler secret")
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for autoscaler secret: %w", err)
+		return false, err
 	}
 
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	poolConfigs, err := p.buildAutoscalerPoolConfigs(configBundle)
 	if err != nil {
-		return fmt.Errorf("canonicalizing kubeconfig path for autoscaler secret: %w", err)
+		return false, err
 	}
 
-	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
-	}
-
-	workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
-	if err != nil {
-		return fmt.Errorf("generating autoscaler worker config: %w", err)
-	}
-
-	err = ApplyAutoscalerConfigSecret(
+	changed, err := ApplyAutoscalerConfigSecret(
 		ctx,
 		kubeclient,
 		strconv.FormatInt(snapshotImageID, 10),
-		workerConfigYAML,
+		poolConfigs,
 	)
 	if err != nil {
-		return fmt.Errorf("applying autoscaler config secret: %w", err)
+		return false, fmt.Errorf("applying autoscaler config secret: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
+	if changed {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret applied\n")
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret already up to date\n")
+	}
+
+	if !restartIfChanged || !changed {
+		return changed, nil
+	}
+
+	return changed, p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+}
+
+// buildAutoscalerPoolConfigs builds the per-pool autoscaler configs from the
+// configured node pools and the cluster's base worker config. Each pool gets its
+// own cloud-init worker config with the pool's labels/taints baked into
+// machine.nodeLabels/nodeTaints (so they land on the real Node), plus the same
+// labels/taints attributed to its scale-from-zero template node. PatchV1Alpha1
+// deep-copies the base config, so per-pool patches do not leak across pools.
+func (p *Provisioner) buildAutoscalerPoolConfigs(
+	configBundle *bundle.Bundle,
+) ([]AutoscalerPoolConfig, error) {
+	pools := p.hetznerOpts.AutoscalerNodePools
+	poolConfigs := make([]AutoscalerPoolConfig, 0, len(pools))
+
+	for _, pool := range pools {
+		taints := poolTaintsToCoreV1(pool.Taints)
+
+		workerConfigYAML, err := GenerateAutoscalerWorkerConfig(
+			configBundle.Worker(),
+			pool.Labels,
+			taints,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"generating autoscaler worker config for pool %q: %w", pool.Name, err,
+			)
+		}
+
+		poolConfigs = append(poolConfigs, AutoscalerPoolConfig{
+			Name:             pool.Name,
+			WorkerConfigYAML: workerConfigYAML,
+			Labels:           autoscalerTemplateLabels(pool.Labels),
+			Taints:           taints,
+		})
+	}
+
+	return poolConfigs, nil
+}
+
+// poolTaintsToCoreV1 converts ksail node-pool taints to corev1 taints for the
+// autoscaler scale-from-zero template and the Talos nodeTaints encoding.
+func poolTaintsToCoreV1(taints []v1alpha1.NodePoolTaint) []corev1.Taint {
+	if len(taints) == 0 {
+		return nil
+	}
+
+	out := make([]corev1.Taint, 0, len(taints))
+	for _, taint := range taints {
+		out = append(out, corev1.Taint{
+			Key:    taint.Key,
+			Value:  taint.Value,
+			Effect: corev1.TaintEffect(taint.Effect),
+		})
+	}
+
+	return out
+}
+
+// autoscalerTemplateLabels returns the labels the autoscaler should attribute to
+// a pool's scale-from-zero template node: the pool's labels plus the
+// LabelAutoscaled marker every autoscaler node carries on the real Node. Keeping
+// the template in sync with the real node labels lets the autoscaler correctly
+// decide whether scaling the pool would satisfy a pending pod's node selector.
+func autoscalerTemplateLabels(poolLabels map[string]string) map[string]string {
+	labels := make(map[string]string, len(poolLabels)+1)
+	maps.Copy(labels, poolLabels)
+	labels[LabelAutoscaled] = "true"
+
+	return labels
+}
+
+// restartAutoscalerAfterConfigChange rolls the cluster-autoscaler Deployment so it
+// reloads the cluster-autoscaler-config Secret. A missing Deployment is not an
+// error — the autoscaler may not be installed yet, in which case its next install
+// starts with the current config.
+func (p *Provisioner) restartAutoscalerAfterConfigChange(
+	ctx context.Context,
+	kubeclient kubernetes.Interface,
+) error {
+	restarted, err := k8s.RolloutRestartDeploymentsByLabel(
+		ctx,
+		kubeclient,
+		autoscalerConfigSecretNamespace,
+		autoscalerDeploymentSelector,
+	)
+	if err != nil {
+		return fmt.Errorf("restarting cluster-autoscaler after config change: %w", err)
+	}
+
+	if restarted == 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⓘ cluster-autoscaler not running; it will use the updated config when installed\n",
+		)
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Restarted cluster-autoscaler to load the updated config\n")
 
 	return nil
 }
@@ -603,11 +730,13 @@ func (p *Provisioner) checkHetznerAvailability(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability...\n")
 
-	err := hzProvider.CheckServerAvailability(
+	err := hzProvider.CheckServerAvailabilityWithRetry(
 		ctx,
 		serverTypes,
 		p.hetznerOpts.Location,
 		p.hetznerOpts.FallbackLocations,
+		hetzner.DefaultMaxAvailabilityCheckRetries,
+		p.logWriter,
 	)
 	if err != nil {
 		return fmt.Errorf("server availability check failed: %w", err)

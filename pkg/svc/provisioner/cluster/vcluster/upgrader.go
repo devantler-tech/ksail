@@ -58,6 +58,24 @@ func (p *Provisioner) DistributionImageRef() string {
 	return distributionImageRepository
 }
 
+// PinnedDistributionVersion returns the embedded VCluster chart version
+// (ChartVersion). VCluster's deployable version is baked into the SDK/Dockerfile
+// and cannot be changed by cluster recreation, so the update flow must cap the
+// distribution target at this pin rather than OCI-discovering the latest tag —
+// otherwise it phantom-upgrades to a newer upstream release it cannot deliver and
+// triggers a destructive no-op recreation that breaks update idempotency.
+func (p *Provisioner) PinnedDistributionVersion() string {
+	return vclusterconfigmanager.ChartVersion()
+}
+
+// PinnedKubernetesVersion returns the embedded VCluster Kubernetes version
+// (DefaultKubernetesVersion). Like the chart version it is baked into the SDK
+// image and unreachable by recreation, so it is capped here to keep
+// `ksail cluster update` idempotent across upstream Kubernetes releases.
+func (p *Provisioner) PinnedKubernetesVersion() string {
+	return vclusterconfigmanager.DefaultKubernetesVersion
+}
+
 // VersionSuffix returns an empty string since VCluster uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""

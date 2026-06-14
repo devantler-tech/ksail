@@ -22,3 +22,7 @@ var ErrClusterEntryNotFound = errors.New("cluster entry not found in kubeconfig"
 
 // ErrAPIServerTimeout is returned when the API server does not become ready within the timeout.
 var ErrAPIServerTimeout = errors.New("API server not ready within timeout")
+
+// ErrClusterNotReady is returned when the cluster does not become ready
+// (API reachable and a basic authorized read succeeds) within the timeout.
+var ErrClusterNotReady = errors.New("cluster not ready within timeout")

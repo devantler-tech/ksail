@@ -2,7 +2,6 @@ package talosprovisioner
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -46,40 +45,21 @@ func (p *Provisioner) detectDisruptiveConfigChanges(
 		return nil, nil
 	}
 
-	nodes, err := p.getNodesByRole(ctx, clusterName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover nodes for config change detection: %w", err)
-	}
-
 	// Compare against a single control-plane node. Encryption config patches
 	// are cluster-wide (applied to all nodes from the same patch files), so
 	// checking one CP node is sufficient for detecting pending migrations.
 	// Per-node comparison would be needed for partial migration recovery
 	// (future enhancement).
-	var cpIP string
-
-	for _, node := range nodes {
-		if node.Role == RoleControlPlane {
-			cpIP = node.IP
-
-			break
-		}
-	}
-
-	if cpIP == "" {
-		return nil, nil
-	}
-
-	// Retried: a transient gRPC failure (e.g. a stalled TLS handshake to apid)
-	// must not abort disruptive-change detection for the whole update.
-	machineConfig, err := p.fetchRunningMachineConfig(ctx, cpIP, "Running config fetch")
+	runningConfig, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
 
-	runningConfig := machineConfig.Config()
-	desiredConfig := p.talosConfigs.ControlPlane()
+	if !found {
+		return nil, nil
+	}
 
+	desiredConfig := p.talosConfigs.ControlPlane()
 	if desiredConfig == nil {
 		return nil, nil
 	}

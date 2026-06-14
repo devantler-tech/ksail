@@ -44,32 +44,9 @@ func (p *Provisioner) addHetznerNodes(
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 
-	// Verify server type availability before creating infrastructure
-	err = p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
-	if err != nil {
-		return err
-	}
-
-	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
-	}
-
-	creationResults, err := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count,
+	servers, err := p.provisionHetznerScaleServers(
+		ctx, hzProvider, clusterName, role, nextIndex, count, result,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Record all creation failures before processing so recordFailedChange is sequential.
-	for _, res := range creationResults {
-		if res.err != nil {
-			recordFailedChange(result, role, res.name, res.err)
-		}
-	}
-
-	servers, err := p.collectCreatedHetznerServers(creationResults, role)
 	if err != nil {
 		return err
 	}
@@ -86,9 +63,60 @@ func (p *Provisioner) addHetznerNodes(
 	return nil
 }
 
+// provisionHetznerScaleServers runs the pre-flight checks (server-type
+// availability, shared infrastructure, Talos snapshot image), creates count new
+// servers for role starting at nextIndex, and returns the ones that came up.
+// Per-node creation failures are recorded on result; the successfully created
+// servers are returned for config apply by the caller.
+func (p *Provisioner) provisionHetznerScaleServers(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+	nextIndex, count int,
+	result *clusterupdate.UpdateResult,
+) ([]*hcloud.Server, error) {
+	// Verify server type availability before creating infrastructure.
+	err := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	if err != nil {
+		return nil, err
+	}
+
+	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
+	}
+
+	// Boot new nodes from the cluster's Talos snapshot image (built at the
+	// configured talos.version) when one is configured, exactly like initial
+	// create. Falling back to the maintenance-mode ISO here would boot an older
+	// Talos that cannot parse newer config documents (see hetznerBootSource).
+	imageID, err := p.ensureSnapshotImage(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	creationResults, err := p.launchHetznerScaleCreation(
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count, imageID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Record all creation failures before processing so recordFailedChange is sequential.
+	for _, res := range creationResults {
+		if res.err != nil {
+			recordFailedChange(result, role, res.name, res.err)
+		}
+	}
+
+	return p.collectCreatedHetznerServers(creationResults, role)
+}
+
 // launchHetznerScaleCreation creates count Hetzner servers starting at nextIndex, in parallel.
-// Results are returned indexed — goroutines always return nil so group.Wait() only fails on
-// unexpected errgroup-level errors.
+// imageID is the cluster's Talos snapshot image (0 when none is configured); it takes precedence
+// over the maintenance-mode ISO so scaled and recreated nodes boot the same Talos version as the
+// rest of the cluster (see hetznerBootSource). Results are returned indexed — goroutines always
+// return nil so group.Wait() only fails on unexpected errgroup-level errors.
 func (p *Provisioner) launchHetznerScaleCreation(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
@@ -96,6 +124,7 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	infra HetznerInfra,
 	retryOpts hetzner.ServerRetryOpts,
 	nextIndex, count int,
+	imageID int64,
 ) ([]hetznerNodeCreationResult, error) {
 	results := make([]hetznerNodeCreationResult, count)
 
@@ -105,24 +134,23 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	for nodeIdx := range count {
 		group.Go(func() error {
 			nodeNumber := nextIndex + nodeIdx
-			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber)
 
-			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       p.hetznerServerType(role),
-				ISOID:            p.talosOpts.ISO,
-				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
-				NetworkID:        infra.NetworkID,
-				PlacementGroupID: infra.PlacementGroupID,
-				SSHKeyID:         infra.SSHKeyID,
-				FirewallIDs:      []int64{infra.FirewallID},
-			}, retryOpts)
+			nodeName, nameErr := hetznerNodeName(clusterName, role, nodeNumber)
+			if nameErr != nil {
+				// Validation failure: record it and skip provisioning (no billable
+				// server created). The goroutine still returns nil; the error is
+				// surfaced when addHetznerNodes reads results.
+				results[nodeIdx] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+			} else {
+				server, createErr := hzProvider.CreateServerWithRetry(ctx, p.hetznerScaleServerOpts(
+					clusterName, role, nodeName, nodeNumber, infra, imageID,
+				), retryOpts)
 
-			results[nodeIdx] = hetznerNodeCreationResult{
-				name:   nodeName,
-				server: server,
-				err:    createErr,
+				results[nodeIdx] = hetznerNodeCreationResult{
+					name:   nodeName,
+					server: server,
+					err:    createErr,
+				}
 			}
 
 			return nil // errors collected in results
@@ -137,7 +165,62 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	return results, nil
 }
 
-// configureNewHetznerNodes waits for Talos API on new servers and applies config.
+// hetznerBootSource selects the boot source for a new Hetzner node, returning the
+// (isoID, imageID) pair to set on hetzner.CreateServerOpts. A Talos snapshot image
+// takes precedence over the maintenance-mode ISO: when imageID > 0 the ISO is
+// suppressed so the node boots directly into the cluster's Talos version. The
+// default ISO (v1alpha1.DefaultTalosISO) is an older bootstrap image (Talos 1.12.4)
+// whose machined cannot parse config documents introduced in later Talos releases
+// (e.g. ImageVerificationConfig, Talos 1.13+); booting a scaled or recreated node
+// from it makes config apply fail with `"<kind>" "v1alpha1": not registered`.
+// Initial create, scale-up, and rolling-recreate all route their boot-source
+// decision through this helper so they never diverge on the Talos version a new
+// node boots.
+func hetznerBootSource(isoID, imageID int64) (int64, int64) {
+	if imageID > 0 {
+		return 0, imageID
+	}
+
+	return isoID, 0
+}
+
+// hetznerScaleServerOpts assembles the CreateServerOpts for a single scaled-up or
+// recreated Hetzner node. It is the construction point shared by the scale-up and
+// rolling-recreate paths, so both honour the snapshot-over-ISO boot precedence
+// (hetznerBootSource) and apply identical server type, labels, networking, and
+// placement. nodeName is pre-validated by the caller (hetznerNodeName).
+func (p *Provisioner) hetznerScaleServerOpts(
+	clusterName, role, nodeName string,
+	nodeNumber int,
+	infra HetznerInfra,
+	imageID int64,
+) hetzner.CreateServerOpts {
+	isoID, image := hetznerBootSource(p.talosOpts.ISO, imageID)
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(role)
+
+	return hetzner.CreateServerOpts{
+		Name:             nodeName,
+		ServerType:       p.hetznerServerType(role),
+		ISOID:            isoID,
+		ImageID:          image,
+		Location:         p.hetznerOpts.Location,
+		Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
+		NetworkID:        infra.NetworkID,
+		PlacementGroupID: infra.PlacementGroupID,
+		SSHKeyID:         infra.SSHKeyID,
+		FirewallIDs:      []int64{infra.FirewallID},
+		EnableIPv4:       enableIPv4,
+		EnableIPv6:       enableIPv6,
+	}
+}
+
+// configureNewHetznerNodes waits for the Talos API on new servers, applies their
+// role config, then blocks until the nodes finish installing and reboot. Applying
+// config triggers a Talos install-to-disk and automatic reboot during which the
+// Talos API is unreachable; waiting before returning keeps scale-up consistent with
+// initial create and rolling replace, and prevents the in-place config
+// reconciliation that runs next in Update from racing the reboot (the cause of the
+// spurious "connection refused" failure when fetching a just-created node's config).
 func (p *Provisioner) configureNewHetznerNodes(
 	ctx context.Context,
 	servers []*hcloud.Server,
@@ -195,6 +278,35 @@ func (p *Provisioner) configureNewHetznerNodes(
 		}
 	}
 
+	// The config just applied triggers a Talos install-to-disk and an automatic
+	// reboot on each new node; block until they come back so the in-place config
+	// reconciliation that runs next in Update does not race the reboot.
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
+}
+
+// waitForNewHetznerNodesReachable blocks until newly created nodes finish
+// installing Talos to disk and reboot, so their Talos API is reachable again.
+//
+// Applying machine config to a freshly created node triggers an install and an
+// automatic reboot; during that window the node's Talos API refuses connections.
+// Returning before the nodes recover lets the in-place config reconciliation that
+// runs next in Update (applyInPlaceConfigChanges) race the reboot and record a
+// spurious "connection refused" failure when it fetches the new node's running
+// config. Mirrors configureAndWaitReplacement (rolling replace) and
+// detachOrWaitForReboot (initial create), which already wait for this reboot.
+func (p *Provisioner) waitForNewHetznerNodesReachable(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Waiting for %d new %s node(s) to install and reboot...\n", len(servers), role)
+
+	err := p.waitForServersToBeReachable(ctx, servers)
+	if err != nil {
+		return fmt.Errorf("waiting for new %s node(s) to become reachable: %w", role, err)
+	}
+
 	return nil
 }
 
@@ -220,8 +332,10 @@ func (p *Provisioner) removeHetznerNodes(
 
 		// Best-effort etcd cleanup for control-plane nodes
 		if role == RoleControlPlane {
-			serverIP := server.PublicNet.IPv4.IP.String()
-			p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			serverIP, addrErr := hetznerNodeTalosAddress(server)
+			if addrErr == nil {
+				p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			}
 		}
 
 		err = p.deleteHetznerServer(ctx, hzProvider, server)
@@ -327,6 +441,25 @@ func (p *Provisioner) hetznerServerType(role string) string {
 	return p.hetznerOpts.WorkerServerType
 }
 
+// hetznerPublicNetForRole returns the public IPv4/IPv6 toggles for the given role as
+// *bool values suitable for hetzner.CreateServerOpts. Nil toggles (the result when no
+// Hetzner options are configured) default to a public IP, matching Hetzner's behavior.
+func (p *Provisioner) hetznerPublicNetForRole(role string) (*bool, *bool) {
+	if p.hetznerOpts == nil {
+		return nil, nil
+	}
+
+	ipv4 := p.hetznerOpts.WorkerIPv4Enabled()
+	ipv6 := p.hetznerOpts.WorkerIPv6Enabled()
+
+	if role == RoleControlPlane {
+		ipv4 = p.hetznerOpts.ControlPlaneIPv4Enabled()
+		ipv6 = p.hetznerOpts.ControlPlaneIPv6Enabled()
+	}
+
+	return &ipv4, &ipv6
+}
+
 // hetznerRetryOpts builds retry options from Hetzner configuration.
 func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	opts := hetzner.ServerRetryOpts{
@@ -360,11 +493,13 @@ func (p *Provisioner) checkHetznerAvailabilityForRole(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability for %s...\n", role)
 
-	err := hzProvider.CheckServerAvailability(
+	err := hzProvider.CheckServerAvailabilityWithRetry(
 		ctx,
 		[]string{serverType},
 		p.hetznerOpts.Location,
 		p.hetznerOpts.FallbackLocations,
+		hetzner.DefaultMaxAvailabilityCheckRetries,
+		p.logWriter,
 	)
 	if err != nil {
 		return fmt.Errorf("server availability check failed for %s: %w", role, err)

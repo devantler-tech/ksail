@@ -44,25 +44,14 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modelFilterActive = true
 
 		return m, nil
-	case "up", "k":
-		if m.modelPickerIndex > 0 {
-			m.modelPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.modelPickerIndex < totalItems-1 {
-			m.modelPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.modelPickerIndex, totalItems)
 
 		return m, nil
 	case keyEnter:
 		return m.selectModel(totalItems)
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil
@@ -90,10 +79,7 @@ func (m *Model) handleModelFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.modelFilterText += string(msg.Runes)

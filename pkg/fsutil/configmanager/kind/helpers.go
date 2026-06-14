@@ -149,6 +149,35 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 	)
 }
 
+// APIServerMutatingAdmissionPolicyFeatureGate is the feature gate enabling the
+// MutatingAdmissionPolicy admission feature.
+const APIServerMutatingAdmissionPolicyFeatureGate = "MutatingAdmissionPolicy"
+
+// APIServerAdmissionregistrationV1beta1RuntimeConfig is the runtime-config key that
+// serves the admissionregistration.k8s.io/v1beta1 API (which carries
+// MutatingAdmissionPolicy / MutatingAdmissionPolicyBinding).
+const APIServerAdmissionregistrationV1beta1RuntimeConfig = "admissionregistration.k8s.io/v1beta1"
+
+// ApplyAPIServerFeatureGates enables the MutatingAdmissionPolicy feature gate and the
+// admissionregistration.k8s.io/v1beta1 API on the kube-apiserver using Kind's native
+// featureGates / runtimeConfig fields. Kind translates these into the kube-apiserver
+// --feature-gates / --runtime-config flags (KubeadmConfigPatches for apiServer.extraArgs
+// did not reliably reach the apiserver). Calico v3.30+ ships MutatingAdmissionPolicy
+// resources in its CRD chart that require this API. Idempotent.
+func ApplyAPIServerFeatureGates(kindConfig *kindv1alpha4.Cluster) {
+	if kindConfig.FeatureGates == nil {
+		kindConfig.FeatureGates = map[string]bool{}
+	}
+
+	kindConfig.FeatureGates[APIServerMutatingAdmissionPolicyFeatureGate] = true
+
+	if kindConfig.RuntimeConfig == nil {
+		kindConfig.RuntimeConfig = map[string]string{}
+	}
+
+	kindConfig.RuntimeConfig[APIServerAdmissionregistrationV1beta1RuntimeConfig] = "true"
+}
+
 // ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
 // The patch is applied to all control-plane nodes via KubeadmConfigPatches.
 // When a CA file is configured, an extraMount is added to make the host CA file
@@ -199,35 +228,49 @@ func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec)
 }
 
 // buildOIDCKubeadmPatch generates a kubeadm ClusterConfiguration patch with API server OIDC flags.
-// kubeadm v1beta4 apiServer.extraArgs is map[string]string, so values are plain strings.
+// kubeadm v1beta4 apiServer.extraArgs is a list of {name, value} entries (not a map); the map form
+// is silently ignored, so the flags must be emitted as list items for kubeadm to apply them.
 func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
+	type arg struct {
+		name  string
+		value string
+	}
+
+	args := []arg{
+		{name: "oidc-issuer-url", value: oidc.IssuerURL},
+		{name: "oidc-client-id", value: oidc.ClientID},
+	}
+
+	if oidc.UsernameClaim != "" {
+		args = append(args, arg{name: "oidc-username-claim", value: oidc.UsernameClaim})
+	}
+
+	if oidc.UsernamePrefix != "" {
+		args = append(args, arg{name: "oidc-username-prefix", value: oidc.UsernamePrefix})
+	}
+
+	if oidc.GroupsClaim != "" {
+		args = append(args, arg{name: "oidc-groups-claim", value: oidc.GroupsClaim})
+	}
+
+	if oidc.GroupsPrefix != "" {
+		args = append(args, arg{name: "oidc-groups-prefix", value: oidc.GroupsPrefix})
+	}
+
+	if oidc.CAFile != "" {
+		args = append(args, arg{name: "oidc-ca-file", value: v1alpha1.OIDCCAContainerPath})
+	}
+
 	var builder strings.Builder
 
 	_, _ = fmt.Fprintf(&builder, "apiVersion: kubeadm.k8s.io/v1beta4\n")
 	_, _ = fmt.Fprintf(&builder, "kind: ClusterConfiguration\n")
 	_, _ = fmt.Fprintf(&builder, "apiServer:\n")
 	_, _ = fmt.Fprintf(&builder, "  extraArgs:\n")
-	_, _ = fmt.Fprintf(&builder, "    oidc-issuer-url: %q\n", oidc.IssuerURL)
-	_, _ = fmt.Fprintf(&builder, "    oidc-client-id: %q\n", oidc.ClientID)
 
-	if oidc.UsernameClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-username-claim: %q\n", oidc.UsernameClaim)
-	}
-
-	if oidc.UsernamePrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-username-prefix: %q\n", oidc.UsernamePrefix)
-	}
-
-	if oidc.GroupsClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-groups-claim: %q\n", oidc.GroupsClaim)
-	}
-
-	if oidc.GroupsPrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-groups-prefix: %q\n", oidc.GroupsPrefix)
-	}
-
-	if oidc.CAFile != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
+	for _, a := range args {
+		_, _ = fmt.Fprintf(&builder, "    - name: %s\n", a.name)
+		_, _ = fmt.Fprintf(&builder, "      value: %q\n", a.value)
 	}
 
 	return builder.String()

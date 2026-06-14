@@ -20,7 +20,7 @@ type PodAutoscalerConfig struct {
 type NodeAutoscalerConfig struct {
 	Enabled               bool               `json:"enabled,omitzero"`
 	Pools                 []NodePool         `json:"pools,omitzero"`
-	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
+	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
 	Expander              AutoscalerExpander `json:"expander,omitzero"`
 	ScaleDownUnneededTime string             `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 }
@@ -37,4 +37,28 @@ type NodePool struct {
 	Min int32 `json:"min" jsonschema:"minimum=0"`
 	// Max is the maximum number of nodes in this pool.
 	Max int32 `json:"max" jsonschema:"minimum=0"`
+	// Labels are Kubernetes node labels applied to every node provisioned in this
+	// pool. They are baked into the pool's Talos worker config (machine.nodeLabels)
+	// so they land on the real Node object, and are also attributed to the pool's
+	// scale-from-zero template so the autoscaler scales the pool for pods that
+	// select these labels. Keys must be valid Kubernetes label keys.
+	Labels map[string]string `json:"labels,omitzero" jsonschema:"description=Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."` //nolint:lll
+	// Taints are Kubernetes node taints applied to every node provisioned in this
+	// pool. They are baked into the pool's Talos worker config (machine.nodeTaints)
+	// so they land on the real Node object, and are also attributed to the pool's
+	// scale-from-zero template so the autoscaler only scales the pool for pods that
+	// tolerate the taints.
+	Taints []NodePoolTaint `json:"taints,omitzero" jsonschema:"description=Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."` //nolint:lll
+}
+
+// NodePoolTaint defines a Kubernetes node taint applied to every node in an
+// autoscaler node pool.
+type NodePoolTaint struct {
+	// Key is the taint key. Must be a valid Kubernetes label key (an optional
+	// DNS-subdomain prefix followed by a name segment).
+	Key string `json:"key" jsonschema:"minLength=1"`
+	// Value is the optional taint value.
+	Value string `json:"value,omitzero"`
+	// Effect is the scheduling effect: NoSchedule, PreferNoSchedule, or NoExecute.
+	Effect TaintEffect `json:"effect"`
 }
