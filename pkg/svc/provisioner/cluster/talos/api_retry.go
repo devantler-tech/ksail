@@ -172,7 +172,7 @@ func (p *Provisioner) dialTalosClientWithRetry(
 
 		_, probeErr := candidate.Version(ctx)
 		if probeErr != nil {
-			_ = candidate.Close() //nolint:errcheck
+			_ = candidate.Close()
 
 			return fmt.Errorf("talos api warm-up probe failed: %w", probeErr)
 		}
