@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -200,6 +201,43 @@ func TestUpdateDoesNotAttemptVersionUpgrade(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Empty(t, result.FailedChanges)
+}
+
+// TestUpdateApplyStepOrder_AutoscalerBeforeScaling pins the ordering invariant
+// behind the #5219 prod wedge: the autoscaler config-secret refresh must run
+// BEFORE static-node scaling. Otherwise a scaling failure (e.g. hitting the
+// Hetzner project server limit — a limit the stale autoscaler nodes themselves
+// pin the project to) aborts the update before the autoscaler template is
+// regenerated, so autoscaler nodes keep booting from a stale machine config and
+// every subsequent update re-wedges at the same failing step.
+func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	names := provisioner.UpdateApplyStepNamesForTest()
+
+	// Full ordered sequence — a snapshot guarding against accidental reordering.
+	assert.Equal(t, []string{
+		"sync Hetzner firewall rules",
+		"refresh Omni configs",
+		"sync cluster secrets",
+		"apply wipe-required changes",
+		"ensure autoscaler config secret",
+		"apply node scaling changes",
+		"apply rolling recreate changes",
+		"apply in-place config changes",
+		"apply reboot-required changes",
+	}, names)
+
+	// The load-bearing invariant (#5219): autoscaler refresh precedes scaling.
+	autoscalerIdx := slices.Index(names, "ensure autoscaler config secret")
+	scalingIdx := slices.Index(names, "apply node scaling changes")
+
+	require.NotEqual(t, -1, autoscalerIdx, "autoscaler step must be present")
+	require.NotEqual(t, -1, scalingIdx, "node scaling step must be present")
+	assert.Less(t, autoscalerIdx, scalingIdx,
+		"autoscaler config secret must be refreshed before static-node scaling (#5219)")
 }
 
 // TestApplyNodeScalingChanges_NilSpecs verifies that nil specs short-circuit scaling without error.

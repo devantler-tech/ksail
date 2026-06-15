@@ -181,9 +181,9 @@ func appendServerTypeChange(
 	}
 }
 
-// applyUpdateChanges applies all update changes after PrepareUpdate succeeds.
-//
-//nolint:cyclop // sequential update workflow with multiple change categories
+// applyUpdateChanges applies all update changes after PrepareUpdate succeeds by
+// running the ordered apply steps (see updateApplySteps) and stopping at the
+// first failure.
 func (p *Provisioner) applyUpdateChanges(
 	ctx context.Context,
 	clusterName string,
@@ -198,59 +198,101 @@ func (p *Provisioner) applyUpdateChanges(
 	// this update by setting it on the (per-invocation) provisioner here.
 	p.drainForce = opts.Force
 
-	// Sync Hetzner Cloud Firewall rules to the hardened set.
-	syncErr := p.syncHetznerFirewallRules(ctx, clusterName)
-	if syncErr != nil {
-		return result, syncErr
-	}
-
-	configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
-	if configErr != nil {
-		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
-	}
-
-	secretErr := p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result)
-	if secretErr != nil {
-		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
-	}
-
-	// Execute wipe migration if --force was set (PrepareUpdate already blocks without --force)
-	if result.HasWipeRequired() {
-		wipeErr := p.applyWipeRequiredChanges(ctx, clusterName, result)
-		if wipeErr != nil {
-			return result, fmt.Errorf("failed to apply wipe-required changes: %w", wipeErr)
+	for _, step := range p.updateApplySteps(clusterName, oldSpec, newSpec, diff, result, opts) {
+		err := step.run(ctx)
+		if err != nil {
+			return result, err
 		}
-	}
-
-	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
-	if scaleErr != nil {
-		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
-	}
-
-	rollErr := p.applyRollingRecreateChanges(ctx, clusterName, result)
-	if rollErr != nil {
-		return result, fmt.Errorf("failed to apply rolling recreate changes: %w", rollErr)
-	}
-
-	// Handle in-place config changes (NO_REBOOT mode).
-	if p.shouldApplyInPlaceChanges(diff) {
-		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
-		if cfgErr != nil {
-			return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
-		}
-	}
-
-	rebootErr := p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts)
-	if rebootErr != nil {
-		return result, fmt.Errorf("failed to apply reboot-required changes: %w", rebootErr)
-	}
-
-	secretErr = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result)
-	if secretErr != nil {
-		return result, fmt.Errorf("failed to ensure autoscaler config secret: %w", secretErr)
 	}
 
 	return result, nil
+}
+
+// updateStep is one named step in the post-PrepareUpdate apply sequence. The name
+// carries error context and lets tests assert the step ordering.
+type updateStep struct {
+	name string
+	run  func(ctx context.Context) error
+}
+
+// updateApplySteps returns the ordered apply steps run after PrepareUpdate
+// succeeds. The order is significant and asserted by tests.
+//
+// The autoscaler tier baseline (ensureAutoscalerSecretIfNeeded) is refreshed
+// BEFORE static-node scaling. Autoscaler nodes are a separate, independent tier,
+// and on a capacity-constrained cluster a static scale-up can hard-fail at the
+// Hetzner project server limit — the very limit the stale autoscaler nodes pin
+// the project to. Running the autoscaler refresh first guarantees that a scaling
+// (or any later reboot/in-place) failure can never strand the autoscaler on a
+// stale machine-config template; otherwise it keeps minting broken nodes that
+// hold the project at its server limit and re-wedge every subsequent update at
+// the same failing step (#5219).
+func (p *Provisioner) updateApplySteps(
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+	opts clusterupdate.UpdateOptions,
+) []updateStep {
+	return []updateStep{
+		{"sync Hetzner firewall rules", func(ctx context.Context) error {
+			// syncHetznerFirewallRules already wraps its own errors.
+			return p.syncHetznerFirewallRules(ctx, clusterName)
+		}},
+		{"refresh Omni configs", func(ctx context.Context) error {
+			return wrapStepErr(p.refreshOmniConfigsIfNeeded(ctx, clusterName),
+				"failed to refresh Omni configs before update")
+		}},
+		{"sync cluster secrets", func(ctx context.Context) error {
+			return wrapStepErr(p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result),
+				"failed to sync cluster secrets")
+		}},
+		{"apply wipe-required changes", func(ctx context.Context) error {
+			// PrepareUpdate already blocks wipe-required changes without --force.
+			if !result.HasWipeRequired() {
+				return nil
+			}
+
+			return wrapStepErr(p.applyWipeRequiredChanges(ctx, clusterName, result),
+				"failed to apply wipe-required changes")
+		}},
+		{"ensure autoscaler config secret", func(ctx context.Context) error {
+			return wrapStepErr(p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result),
+				"failed to ensure autoscaler config secret")
+		}},
+		{"apply node scaling changes", func(ctx context.Context) error {
+			return wrapStepErr(
+				p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result),
+				"failed to apply node scaling changes",
+			)
+		}},
+		{"apply rolling recreate changes", func(ctx context.Context) error {
+			return wrapStepErr(p.applyRollingRecreateChanges(ctx, clusterName, result),
+				"failed to apply rolling recreate changes")
+		}},
+		{"apply in-place config changes", func(ctx context.Context) error {
+			if !p.shouldApplyInPlaceChanges(diff) {
+				return nil
+			}
+
+			return wrapStepErr(p.applyInPlaceConfigChanges(ctx, clusterName, result),
+				"failed to apply in-place config changes")
+		}},
+		{"apply reboot-required changes", func(ctx context.Context) error {
+			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),
+				"failed to apply reboot-required changes")
+		}},
+	}
+}
+
+// wrapStepErr annotates a failed update step's error with the step's intent,
+// returning nil when err is nil so step closures wrap-and-return in a single
+// expression instead of repeating the err-check boilerplate.
+func wrapStepErr(err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("%s: %w", msg, err)
 }
 
 // DiffConfig computes the differences between current and desired configurations.
