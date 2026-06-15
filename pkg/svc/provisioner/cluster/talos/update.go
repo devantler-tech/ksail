@@ -227,8 +227,6 @@ type updateStep struct {
 // stale machine-config template; otherwise it keeps minting broken nodes that
 // hold the project at its server limit and re-wedge every subsequent update at
 // the same failing step (#5219).
-//
-//nolint:funlen,cyclop // flat declarative step list; splitting obscures the ordering it makes explicit.
 func (p *Provisioner) updateApplySteps(
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -241,20 +239,12 @@ func (p *Provisioner) updateApplySteps(
 			return p.syncHetznerFirewallRules(ctx, clusterName)
 		}},
 		{"refresh Omni configs", func(ctx context.Context) error {
-			err := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
-			if err != nil {
-				return fmt.Errorf("failed to refresh Omni configs before update: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.refreshOmniConfigsIfNeeded(ctx, clusterName),
+				"failed to refresh Omni configs before update")
 		}},
 		{"sync cluster secrets", func(ctx context.Context) error {
-			err := p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result)
-			if err != nil {
-				return fmt.Errorf("failed to sync cluster secrets: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result),
+				"failed to sync cluster secrets")
 		}},
 		{"apply wipe-required changes", func(ctx context.Context) error {
 			// PrepareUpdate already blocks wipe-required changes without --force.
@@ -262,58 +252,47 @@ func (p *Provisioner) updateApplySteps(
 				return nil
 			}
 
-			err := p.applyWipeRequiredChanges(ctx, clusterName, result)
-			if err != nil {
-				return fmt.Errorf("failed to apply wipe-required changes: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.applyWipeRequiredChanges(ctx, clusterName, result),
+				"failed to apply wipe-required changes")
 		}},
 		{"ensure autoscaler config secret", func(ctx context.Context) error {
-			err := p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result)
-			if err != nil {
-				return fmt.Errorf("failed to ensure autoscaler config secret: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result),
+				"failed to ensure autoscaler config secret")
 		}},
 		{"apply node scaling changes", func(ctx context.Context) error {
-			err := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
-			if err != nil {
-				return fmt.Errorf("failed to apply node scaling changes: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(
+				p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result),
+				"failed to apply node scaling changes",
+			)
 		}},
 		{"apply rolling recreate changes", func(ctx context.Context) error {
-			err := p.applyRollingRecreateChanges(ctx, clusterName, result)
-			if err != nil {
-				return fmt.Errorf("failed to apply rolling recreate changes: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.applyRollingRecreateChanges(ctx, clusterName, result),
+				"failed to apply rolling recreate changes")
 		}},
 		{"apply in-place config changes", func(ctx context.Context) error {
 			if !p.shouldApplyInPlaceChanges(diff) {
 				return nil
 			}
 
-			err := p.applyInPlaceConfigChanges(ctx, clusterName, result)
-			if err != nil {
-				return fmt.Errorf("failed to apply in-place config changes: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.applyInPlaceConfigChanges(ctx, clusterName, result),
+				"failed to apply in-place config changes")
 		}},
 		{"apply reboot-required changes", func(ctx context.Context) error {
-			err := p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts)
-			if err != nil {
-				return fmt.Errorf("failed to apply reboot-required changes: %w", err)
-			}
-
-			return nil
+			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),
+				"failed to apply reboot-required changes")
 		}},
 	}
+}
+
+// wrapStepErr annotates a failed update step's error with the step's intent,
+// returning nil when err is nil so step closures wrap-and-return in a single
+// expression instead of repeating the err-check boilerplate.
+func wrapStepErr(err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("%s: %w", msg, err)
 }
 
 // DiffConfig computes the differences between current and desired configurations.
