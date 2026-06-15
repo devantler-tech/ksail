@@ -407,7 +407,7 @@ NodeAutoscalerConfig defines configuration for node-level autoscaling. When Enab
 | `enabled` | boolean | – | Enabled controls whether the Cluster Autoscaler is installed to manage worker node counts dynamically. |
 | `pools` | []NodePool | – | Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only). |
 | `maxNodesTotal` | int32 | – | Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be &lt;= serverLimit |
-| `expander` | enum | – | Expander selects the Cluster Autoscaler expander strategy used to pick which pool to grow: Price, LeastWaste, LeastNodes, or Random. |
+| `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes |
 | `scaleDownUnneededTime` | string | – | How long a node should be unneeded before it is eligible for scale down (e.g. 10m) |
 
 ### spec.cluster.autoscaler.node.pools[] (NodePool)

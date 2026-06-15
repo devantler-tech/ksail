@@ -93,9 +93,14 @@ spec:
                             type: boolean
                           expander:
                             description: |-
-                              Expander selects the Cluster Autoscaler expander strategy used to pick
-                              which pool to grow: Price, LeastWaste, LeastNodes, or Random.
-                            type: string
+                              Expander selects the Cluster Autoscaler expander strategy. It accepts a
+                              single value (e.g. LeastWaste) or an ordered priority list
+                              (e.g. [LeastNodes, LeastWaste]) applied as a chain.
+                            items:
+                              description: AutoscalerExpander defines the node expander
+                                strategy for the cluster autoscaler.
+                              type: string
+                            type: array
                           maxNodesTotal:
                             description: |-
                               MaxNodesTotal caps the total number of nodes in the cluster

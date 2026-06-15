@@ -253,10 +253,11 @@ export interface KSailClusterConfiguration {
            */
           maxNodesTotal?: number;
           /**
-           * Expander selects the Cluster Autoscaler expander strategy used to pick
-           * which pool to grow: Price, LeastWaste, LeastNodes, or Random.
+           * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes
            */
-          expander?: "Price" | "LeastWaste" | "LeastNodes" | "Random";
+          expander?:
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
           /**
            * How long a node should be unneeded before it is eligible for scale down (e.g. 10m)
            */
