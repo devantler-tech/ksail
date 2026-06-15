@@ -167,17 +167,6 @@ func VerifyStageInfo() setup.StageInfo {
 	}
 }
 
-// CleanupStageInfo returns the stage info for cleanup.
-func CleanupStageInfo() setup.StageInfo {
-	return setup.StageInfo{
-		Title:         "Delete local registry...",
-		Emoji:         "🧹",
-		Activity:      "deleting local registry",
-		Success:       "local registry deleted",
-		FailurePrefix: "failed to delete local registry",
-	}
-}
-
 // ExecuteStage executes the specified local registry stage.
 func ExecuteStage(
 	cmd *cobra.Command,

@@ -3,11 +3,11 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { clusterKey } from "../lib/k8s.ts";
-import { phaseMeta } from "./StatusBadge.tsx";
+import { phaseMeta, StatusDot } from "./StatusBadge.tsx";
 
 // Dot is a small status-coloured dot derived from a cluster's phase (reuses the StatusBadge palette).
 function Dot({ phase }: { phase?: string }) {
-  return <span className={cx("size-2 shrink-0 rounded-full", phaseMeta(phase).dot)} aria-hidden />;
+  return <StatusDot tone={phaseMeta(phase).dot} size="md" className="shrink-0" />;
 }
 
 // ClusterSwitcher is the single control for choosing the active cluster: a card showing the current

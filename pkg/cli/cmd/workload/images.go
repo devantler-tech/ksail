@@ -8,13 +8,11 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
-	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -97,11 +95,6 @@ func runImagesCommand(
 	cfgManager *configmanager.ConfigManager,
 	outputFormat string,
 ) error {
-	tmr := timer.New()
-	tmr.Start()
-
-	outputTimer := flags.MaybeTimer(cmd, tmr)
-
 	clusterCfg, err := cfgManager.Load(configmanagerinterface.LoadOptions{
 		Silent:         true,
 		SkipValidation: true,
@@ -139,21 +132,20 @@ func runImagesCommand(
 	// Output based on format
 	switch strings.ToLower(outputFormat) {
 	case "json":
-		return outputJSON(cmd, images, outputTimer)
+		return outputJSON(cmd, images)
 	case "plain", "":
-		return outputPlain(cmd, images, outputTimer)
+		return outputPlain(cmd, images)
 	default:
 		return fmt.Errorf("%w: %s (valid: plain, json)", ErrUnknownOutputFormat, outputFormat)
 	}
 }
 
-func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
+func outputPlain(cmd *cobra.Command, images []string) error {
 	if len(images) == 0 {
 		// Write warning to stderr to keep stdout clean for scripting (e.g., xargs docker pull)
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: "no images required for current configuration",
-			Timer:   tmr,
 			Writer:  cmd.ErrOrStderr(),
 		})
 
@@ -170,7 +162,7 @@ func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
 	return nil
 }
 
-func outputJSON(cmd *cobra.Command, images []string, _ timer.Timer) error {
+func outputJSON(cmd *cobra.Command, images []string) error {
 	data, err := json.Marshal(images)
 	if err != nil {
 		return fmt.Errorf("marshal images to JSON: %w", err)

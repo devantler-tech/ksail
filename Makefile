@@ -1,7 +1,5 @@
 SHELL := /bin/bash
 
-WEBUI_DIR := web/ui
-WEBUI_EMBED_DIR := pkg/webui/dist
 DESKTOP_DIR := desktop
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//' || echo dev)
 
@@ -12,12 +10,7 @@ help: ## Show available targets.
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 ui: ## Build the web UI and stage it for embedding into the Go binary (pkg/webui/dist).
-	npm --prefix $(WEBUI_DIR) ci
-	npm --prefix $(WEBUI_DIR) run build
-	rm -rf $(WEBUI_EMBED_DIR)
-	mkdir -p $(WEBUI_EMBED_DIR)
-	touch $(WEBUI_EMBED_DIR)/.gitkeep
-	cp -R $(WEBUI_DIR)/dist/. $(WEBUI_EMBED_DIR)/
+	bash scripts/stage-webui.sh
 
 build: ui ## Build the ksail binary with the web UI embedded.
 	go build -o ksail .

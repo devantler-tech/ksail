@@ -1,8 +1,6 @@
 package oci
 
 import (
-	"context"
-
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
@@ -11,21 +9,6 @@ const (
 	defaultRepositoryName = "ksail-workloads"
 	defaultArtifactName   = "ksail-workload"
 )
-
-// WorkloadArtifactBuilder packages Kubernetes manifests into OCI artifacts and pushes them to a registry.
-//
-// Implementations validate build options, collect manifest files from the source directory,
-// package them into an OCI-compliant image layer, and push the resulting artifact to the
-// specified registry endpoint.
-type WorkloadArtifactBuilder interface {
-	// Build validates the supplied options, constructs an OCI artifact from manifests,
-	// and pushes it to the registry. Returns BuildResult with artifact metadata on success.
-	Build(ctx context.Context, opts BuildOptions) (BuildResult, error)
-
-	// BuildEmpty pushes an empty OCI artifact to the registry.
-	// This is useful when no source directory exists but an artifact reference is still needed.
-	BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (BuildResult, error)
-}
 
 // BuildOptions capture user-supplied inputs for building an OCI artifact from manifest directories.
 //

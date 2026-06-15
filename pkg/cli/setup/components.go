@@ -53,15 +53,6 @@ type InstallerFactories struct {
 	EnsureArgoCDResources func(
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
 	) error
-	// EnsureFluxResources enforces default Flux resources post-install.
-	// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
-	// because the artifact doesn't exist yet (will be pushed later via workload push).
-	// registryHostOverride replaces the default Docker container name in the OCI URL
-	// when non-empty.
-	EnsureFluxResources func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster,
-		clusterName string, registryHostOverride string, artifactPushed bool,
-	) error
 	// SetupFluxInstance creates the FluxInstance CR without waiting for readiness.
 	// registryHostOverride replaces the default Docker container name in the OCI URL
 	// when non-empty.
@@ -293,7 +284,6 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
-	factories.EnsureFluxResources = fluxinstaller.EnsureDefaultResources
 	factories.SetupFluxInstance = fluxinstaller.SetupInstance
 	factories.WaitForFluxReady = fluxinstaller.WaitForFluxReady
 

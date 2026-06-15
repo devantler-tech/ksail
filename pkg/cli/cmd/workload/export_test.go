@@ -218,12 +218,12 @@ func ExportDistributionToLabelScheme(
 
 // ExportOutputPlain exposes outputPlain for testing.
 func ExportOutputPlain(cmd *cobra.Command, images []string) error {
-	return outputPlain(cmd, images, nil)
+	return outputPlain(cmd, images)
 }
 
 // ExportOutputJSON exposes outputJSON for testing.
 func ExportOutputJSON(cmd *cobra.Command, images []string) error {
-	return outputJSON(cmd, images, nil)
+	return outputJSON(cmd, images)
 }
 
 // ExportFailedKustomizations is an exported type alias for the unexported

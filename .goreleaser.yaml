@@ -6,9 +6,7 @@ before:
     # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
     # (see pkg/webui/embed.go) and served by both the operator and `ksail ui`/`desktop` — same origin
     # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
-    - npm --prefix web/ui ci
-    - npm --prefix web/ui run build
-    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R web/ui/dist/. pkg/webui/dist/'
+    - bash scripts/stage-webui.sh
 
 builds:
   - binary: ksail

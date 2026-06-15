@@ -675,21 +675,7 @@ func TestHandleUsage_MergesQuotaSnapshots(t *testing.T) {
 
 // --- handleCompaction tests ---
 
-func TestHandleCompactionStart_SetsCompactingState(t *testing.T) {
-	t.Parallel()
-
-	model := chat.NewModel(newTestParams())
-	chat.ExportSetStreaming(model, true)
-
-	var updated tea.Model = model
-
-	updated, _ = updated.Update(chat.ExportNewCompactionStartMsg())
-	m := requireModel(t, updated)
-
-	assert.True(t, chat.ExportGetIsCompacting(m))
-}
-
-func TestHandleCompactionComplete_ClearsCompactingState(t *testing.T) {
+func TestHandleCompactionEvents_KeepStreaming(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
@@ -701,7 +687,7 @@ func TestHandleCompactionComplete_ClearsCompactingState(t *testing.T) {
 	updated, _ = updated.Update(chat.ExportNewCompactionCompleteMsg(true))
 	m := requireModel(t, updated)
 
-	assert.False(t, chat.ExportGetIsCompacting(m))
+	assert.True(t, chat.ExportGetStreaming(m))
 }
 
 // --- handleIntent tests ---

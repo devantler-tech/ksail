@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const workloadCommandName = "workload"
+
 //nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
 var workloadConfigDiscoveryMu sync.Mutex
 
@@ -2933,43 +2935,21 @@ func writeFluxReconcileKsailConfig(t *testing.T, dir string) {
 func TestWorkloadHelpSnapshots(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-		args []string
-	}{
-		{name: "namespace", args: []string{"workload", "--help"}},
-		{name: "reconcile", args: []string{"workload", "reconcile", "--help"}},
-		{name: "push", args: []string{"workload", "push", "--help"}},
-		{name: "apply", args: []string{"workload", "apply", "--help"}},
-		{name: "create", args: []string{"workload", "create", "--help"}},
-		{name: "create_source", args: []string{"workload", "create", "source", "--help"}},
-		{
-			name: "create_kustomization",
-			args: []string{"workload", "create", "kustomization", "--help"},
-		},
-		// NOTE: create_helmrelease snapshot test temporarily disabled due to snapshot system issue
-		// {name: "create_helmrelease", args: []string{"workload", "create", "helmrelease", "--help"}},
-		{name: "delete", args: []string{"workload", "delete", "--help"}},
-		{name: "describe", args: []string{"workload", "describe", "--help"}},
-		{name: "edit", args: []string{"workload", "edit", "--help"}},
-		{name: "exec", args: []string{"workload", "exec", "--help"}},
-		{name: "explain", args: []string{"workload", "explain", "--help"}},
-		{name: "export", args: []string{"workload", "export", "--help"}},
-		{name: "expose", args: []string{"workload", "expose", "--help"}},
-		{name: "forward", args: []string{"workload", "forward", "--help"}},
-		{name: "get", args: []string{"workload", "get", "--help"}},
-		{name: "images", args: []string{"workload", "images", "--help"}},
-		{name: "import", args: []string{"workload", "import", "--help"}},
-		{name: "install", args: []string{"workload", "install", "--help"}},
-		{name: "logs", args: []string{"workload", "logs", "--help"}},
-		{name: "rollout", args: []string{"workload", "rollout", "--help"}},
-		{name: "scale", args: []string{"workload", "scale", "--help"}},
-		{name: "wait", args: []string{"workload", "wait", "--help"}},
-		{name: "watch", args: []string{"workload", "watch", "--help"}},
-	}
+	// Walk the registered Cobra command tree instead of hand-maintaining a case list, so the
+	// help snapshots automatically cover every (nested) workload subcommand as commands are
+	// added, removed, or renamed.
+	enumRoot := cmd.NewRootCmd("test", "test", "test")
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+	workloadCmd, _, err := enumRoot.Find([]string{workloadCommandName})
+	require.NoError(t, err, "expected to find the workload command")
+
+	for _, args := range collectHelpSnapshotArgs(workloadCmd, []string{workloadCommandName}) {
+		name := strings.Join(args[1:], "_")
+		if name == "" {
+			name = workloadCommandName
+		}
+
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			var out bytes.Buffer
@@ -2977,19 +2957,40 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 			root := cmd.NewRootCmd("test", "test", "test")
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs(testCase.args)
+			root.SetArgs(append(append([]string{}, args...), "--help"))
 
 			err := root.Execute()
 			require.NoErrorf(
 				t,
 				err,
 				"expected no error executing %s help",
-				strings.Join(testCase.args, " "),
+				strings.Join(args, " "),
 			)
 
 			snaps.MatchSnapshot(t, normalizeHomePaths(out.String()))
 		})
 	}
+}
+
+// collectHelpSnapshotArgs walks the available (visible, non-deprecated) command tree rooted at
+// current and returns the CLI args reaching each command, depth-first. path holds the args that
+// reach current from the root command.
+func collectHelpSnapshotArgs(current *cobra.Command, path []string) [][]string {
+	argSets := [][]string{path}
+
+	for _, sub := range current.Commands() {
+		if !sub.IsAvailableCommand() {
+			continue
+		}
+
+		subPath := make([]string, 0, len(path)+1)
+		subPath = append(subPath, path...)
+		subPath = append(subPath, sub.Name())
+
+		argSets = append(argSets, collectHelpSnapshotArgs(sub, subPath)...)
+	}
+
+	return argSets
 }
 
 //nolint:paralleltest // Uses t.Chdir which is incompatible with parallel tests.
@@ -3003,13 +3004,13 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	}{
 		{
 			name:          "reconcile",
-			args:          []string{"workload", "reconcile", "--timeout=1ms"},
+			args:          []string{workloadCommandName, "reconcile", "--timeout=1ms"},
 			expectedError: "create flux reconciler",
 			writeConfig:   writeFluxReconcileKsailConfig,
 		},
 		{
 			name:          "push",
-			args:          []string{"workload", "push", "oci://example.com:5000/test:dev"},
+			args:          []string{workloadCommandName, "push", "oci://example.com:5000/test:dev"},
 			expectedError: "no manifest files found in source directory",
 			writeConfig:   writeValidKsailConfig,
 		},

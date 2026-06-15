@@ -2,9 +2,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import type { Cluster, ClusterMeta, ClusterSpec, ProviderInfo } from "../api.ts";
 import { clusterToYaml, yamlToCluster } from "../lib/clusterYaml.ts";
-import { cx } from "../lib/cx.ts";
 import { availableProviders, COMPONENT_LABELS, preferredProvider, unavailableProviders, useMeta } from "../lib/meta.ts";
-import { Button, Modal, SelectField, TextField } from "./ui.tsx";
+import { Button, Modal, SegmentedControl, SelectField, TextField } from "./ui.tsx";
 
 // creatableDistributions narrows the offered distributions to those that still have at least one
 // available provider once provider gating (providerStatus) is applied. With no gating it is the
@@ -354,28 +353,14 @@ export function ClusterFormDialog({
         ) : null}
         {yamlEnabled ? (
           <div className="flex justify-end">
-            <div className="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-slate-300 dark:ring-slate-700">
-              {(["form", "yaml"] as const).map((target) => (
-                <button
-                  key={target}
-                  type="button"
-                  aria-pressed={view === target}
-                  onClick={() => {
-                    if (view !== target) {
-                      (target === "form" ? showForm : showYaml)();
-                    }
-                  }}
-                  className={cx(
-                    "px-3 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
-                    view === target
-                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                      : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
-                  )}
-                >
-                  {target === "form" ? "Form" : "YAML"}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={[
+                { value: "form", label: "Form" },
+                { value: "yaml", label: "YAML" },
+              ]}
+              value={view}
+              onChange={(target) => (target === "form" ? showForm : showYaml)()}
+            />
           </div>
         ) : null}
         {view === "yaml" ? (

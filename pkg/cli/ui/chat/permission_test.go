@@ -79,18 +79,6 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after approval")
 	}
-
-	// Permission history should record the approval
-	if chat.ExportGetPermissionHistoryLen(chatModel) != 1 {
-		t.Errorf(
-			"expected 1 permission history entry, got %d",
-			chat.ExportGetPermissionHistoryLen(chatModel),
-		)
-	}
-
-	if !chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
-		t.Error("expected last permission to be allowed")
-	}
 }
 
 // TestPermissionKey_AllowWithUpperY tests that pressing 'Y' also approves.
@@ -142,14 +130,14 @@ func TestPermissionKey_DenyWithN(t *testing.T) {
 		t.Fatal("timed out waiting for permission response after pressing 'n'")
 	}
 
-	// Permission history should record the denial
+	// Permission should be cleared
 	chatModel, ok := updatedModel.(*chat.Model)
 	if !ok {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 
-	if chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
-		t.Error("expected last permission to be denied")
+	if chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected pending permission to be cleared after denial")
 	}
 }
 

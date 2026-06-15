@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listResources, type K8sObject } from "../api.ts";
+import { errorMessage, listResources, type K8sObject } from "../api.ts";
 import { splitClusterKey } from "../lib/k8s.ts";
 
 // useResourceList fetches a resource kind from a cluster (clusterId = "namespace/name") and exposes the
@@ -33,7 +33,7 @@ export function useResourceList(clusterId: string, kind: string) {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
+          setError(errorMessage(err));
           setItems([]);
         }
       })

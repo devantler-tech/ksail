@@ -8,10 +8,10 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
-	"github.com/docker/docker/client"
 )
 
 // dockerPingTimeout bounds the Docker daemon reachability probe so a hung daemon does not stall the
@@ -86,9 +86,9 @@ func (d *Discoverer) pingDocker(ctx context.Context) error {
 		return d.DockerPing(ctx)
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := dockerclient.GetDockerClient()
 	if err != nil {
-		return fmt.Errorf("create docker client: %w", err)
+		return fmt.Errorf("get docker client: %w", err)
 	}
 
 	defer func() { _ = cli.Close() }()

@@ -11,7 +11,6 @@
 //
 // Example usage:
 //
-//	// Create an executor with default normalizer
 //	executor := errorhandler.NewExecutor()
 //	err := executor.Execute(rootCmd)
 //	if err != nil {
@@ -19,10 +18,4 @@
 //	    fmt.Fprintln(os.Stderr, err)
 //	    os.Exit(1)
 //	}
-//
-//	// Create an executor with custom normalizer
-//	customNormalizer := &MyNormalizer{}
-//	executor := errorhandler.NewExecutor(
-//	    // default normalizer
-//	)
 package errorhandler

@@ -269,6 +269,7 @@ jobs:
               - 'pkg/apis/**'
               - 'Dockerfile'
               - '.github/actions/operator-chart-e2e/**'
+              - 'scripts/stage-webui.sh'
               - '.github/workflows/ci.yaml'
             desktop:
               # The desktop app is a SEPARATE Go module that vendors the main
@@ -869,9 +870,27 @@ jobs:
             jq -e '.name == "ksail" and .version' "$f" >/dev/null
           done
 
-          # Each marketplace must reference the plugin directory
+          # Cross-file consistency: cd.yaml's version-bump script rewrites all four manifests
+          # together, and the license once drifted between the two plugin.json copies
+          # (GPL-3.0-only vs PolyForm-Shield-1.0.0). Assert version + license stay equal.
+          for field in version license; do
+            a="$(jq -r --arg k "$field" '.[$k]' copilot-plugin/plugin.json)"
+            b="$(jq -r --arg k "$field" '.[$k]' copilot-plugin/.claude-plugin/plugin.json)"
+            if [ "$a" != "$b" ]; then
+              echo "::error::plugin.json '$field' drifted: copilot-plugin/plugin.json has '$a' but copilot-plugin/.claude-plugin/plugin.json has '$b'"
+              exit 1
+            fi
+          done
+
+          # Each marketplace must reference the plugin directory and carry the same version
+          # (twice each: .metadata.version and .plugins[0].version) as the plugin manifests.
+          version="$(jq -r '.version' copilot-plugin/plugin.json)"
           for f in .github/plugin/marketplace.json .claude-plugin/marketplace.json; do
             jq -e '.plugins[0].source == "./copilot-plugin" and .plugins[0].name == "ksail"' "$f" >/dev/null
+            if ! jq -e --arg v "$version" '.metadata.version == $v and .plugins[0].version == $v' "$f" >/dev/null; then
+              echo "::error::$f version drifted from copilot-plugin/plugin.json ('$version')"
+              exit 1
+            fi
           done
 
           # Skill manifest must exist

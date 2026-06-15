@@ -11,17 +11,17 @@ import (
 	"github.com/getsops/sops/v3/stores/json"
 )
 
-// DecryptTree loads and decrypts a SOPS tree from the input file.
+// decryptTree loads and decrypts a SOPS tree from the input file.
 // It handles loading the encrypted file and decrypting its contents.
-func DecryptTree(opts DecryptOpts) (*sops.Tree, error) {
-	tree, _, err := DecryptTreeWithKey(opts)
+func decryptTree(opts DecryptOpts) (*sops.Tree, error) {
+	tree, _, err := decryptTreeWithKey(opts)
 
 	return tree, err
 }
 
-// DecryptTreeWithKey loads and decrypts a SOPS tree, returning both tree and data key.
+// decryptTreeWithKey loads and decrypts a SOPS tree, returning both tree and data key.
 // This is useful when the caller needs the data key for re-encryption.
-func DecryptTreeWithKey(opts DecryptOpts) (*sops.Tree, []byte, error) {
+func decryptTreeWithKey(opts DecryptOpts) (*sops.Tree, []byte, error) {
 	tree, err := common.LoadEncryptedFileWithBugFixes(common.GenericDecryptOpts{
 		Cipher:        opts.Cipher,
 		InputStore:    opts.InputStore,
@@ -51,22 +51,22 @@ func DecryptTreeWithKey(opts DecryptOpts) (*sops.Tree, []byte, error) {
 // Decrypt performs the core decryption logic for a file.
 // It loads the encrypted file, decrypts it, and handles extraction if specified.
 func Decrypt(opts DecryptOpts) ([]byte, error) {
-	tree, err := DecryptTree(opts)
+	tree, err := decryptTree(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(opts.Extract) > 0 {
-		return Extract(tree, opts.Extract, opts.OutputStore)
+		return extract(tree, opts.Extract, opts.OutputStore)
 	}
 
 	decryptedFile, err := opts.OutputStore.EmitPlainFile(tree.Branches)
 
-	return HandleEmitError(err, decryptedFile)
+	return handleEmitError(err, decryptedFile)
 }
 
-// HandleEmitError processes errors from EmitPlainFile operations.
-func HandleEmitError(err error, data []byte) ([]byte, error) {
+// handleEmitError processes errors from EmitPlainFile operations.
+func handleEmitError(err error, data []byte) ([]byte, error) {
 	if errors.Is(err, json.BinaryStoreEmitPlainError) {
 		return nil, fmt.Errorf("%w: %s", err, NotBinaryHint)
 	}
@@ -81,9 +81,9 @@ func HandleEmitError(err error, data []byte) ([]byte, error) {
 	return data, nil
 }
 
-// Extract retrieves a specific value or subtree from the decrypted tree.
+// extract retrieves a specific value or subtree from the decrypted tree.
 // It supports extracting nested keys using a path array.
-func Extract(tree *sops.Tree, path []any, outputStore sops.Store) ([]byte, error) {
+func extract(tree *sops.Tree, path []any, outputStore sops.Store) ([]byte, error) {
 	value, err := tree.Branches[0].Truncate(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to truncate tree: %w", err)
@@ -94,7 +94,7 @@ func Extract(tree *sops.Tree, path []any, outputStore sops.Store) ([]byte, error
 
 		decrypted, err := outputStore.EmitPlainFile(tree.Branches)
 
-		return HandleEmitError(err, decrypted)
+		return handleEmitError(err, decrypted)
 	}
 
 	if str, ok := value.(string); ok {

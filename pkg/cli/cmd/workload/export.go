@@ -113,7 +113,6 @@ func executeExport(
 		Type:    notify.ActivityType,
 		Content: "exporting images from cluster %s",
 		Args:    []any{ctx.ClusterInfo.ClusterName},
-		Timer:   ctx.OutputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 

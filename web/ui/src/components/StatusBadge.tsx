@@ -1,12 +1,47 @@
 import { Circle, CircleAlert, CircleCheck, Clock, House, LoaderCircle, type LucideIcon } from "lucide-react";
 import { cx } from "../lib/cx.ts";
 
+// StatusTone is the shared palette for status dots: ok (green), warn (amber), error (red),
+// info (blue), muted (grey).
+export type StatusTone = "ok" | "warn" | "error" | "info" | "muted";
+
+const DOT_TONES: Record<StatusTone, string> = {
+  ok: "bg-emerald-500",
+  warn: "bg-amber-500",
+  error: "bg-red-500",
+  info: "bg-blue-500",
+  muted: "bg-slate-400",
+};
+
+// StatusDot is the small coloured status dot used in tables, legends, and the cluster switcher.
+// It is decorative (aria-hidden) unless a title is given, in which case the tooltip carries the
+// meaning.
+export function StatusDot({
+  tone,
+  size = "sm",
+  className,
+  title,
+}: {
+  tone: StatusTone;
+  size?: "sm" | "md";
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <span
+      className={cx("rounded-full", size === "md" ? "size-2" : "size-1.5", DOT_TONES[tone], className)}
+      title={title}
+      aria-hidden={title ? undefined : true}
+    />
+  );
+}
+
 type PhaseMeta = {
   label: string;
   icon: LucideIcon;
   spin: boolean;
   badge: string;
-  dot: string;
+  dot: StatusTone;
 };
 
 const FALLBACK: PhaseMeta = {
@@ -14,7 +49,7 @@ const FALLBACK: PhaseMeta = {
   icon: Circle,
   spin: false,
   badge: "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",
-  dot: "bg-slate-400",
+  dot: "muted",
 };
 
 const PHASES: Record<string, PhaseMeta> = {
@@ -24,7 +59,7 @@ const PHASES: Record<string, PhaseMeta> = {
     spin: false,
     badge:
       "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30",
-    dot: "bg-emerald-500",
+    dot: "ok",
   },
   Provisioning: {
     label: "Provisioning",
@@ -32,7 +67,7 @@ const PHASES: Record<string, PhaseMeta> = {
     spin: true,
     badge:
       "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/30",
-    dot: "bg-blue-500",
+    dot: "info",
   },
   Updating: {
     label: "Updating",
@@ -40,7 +75,7 @@ const PHASES: Record<string, PhaseMeta> = {
     spin: true,
     badge:
       "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30",
-    dot: "bg-amber-500",
+    dot: "warn",
   },
   Deleting: {
     label: "Deleting",
@@ -48,14 +83,14 @@ const PHASES: Record<string, PhaseMeta> = {
     spin: true,
     badge:
       "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",
-    dot: "bg-slate-400",
+    dot: "muted",
   },
   Failed: {
     label: "Failed",
     icon: CircleAlert,
     spin: false,
     badge: "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/30",
-    dot: "bg-red-500",
+    dot: "error",
   },
   Pending: {
     label: "Pending",
@@ -63,7 +98,7 @@ const PHASES: Record<string, PhaseMeta> = {
     spin: false,
     badge:
       "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",
-    dot: "bg-slate-400",
+    dot: "muted",
   },
 };
 

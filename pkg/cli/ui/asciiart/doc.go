@@ -1,5 +1,5 @@
-// Package asciiart provides ASCII art printing functionality for KSail.
+// Package asciiart provides the KSail ASCII art logo for terminal display.
 //
-// This package contains functions for rendering the KSail logo and other
-// ASCII art with color formatting for terminal display.
+// The package exposes a single Logo function returning the block-letter
+// KSail mark used by the CLI root command and the chat TUI header.
 package asciiart

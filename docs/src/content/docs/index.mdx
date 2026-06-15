@@ -69,15 +69,7 @@ KSail works on all major operating systems and CPU architectures:
 
 **Docker is required** for local clusters using the default Docker provider. Install Docker Desktop/Engine and ensure `docker ps` works. The [Kubernetes (Nested) provider](/providers/kubernetes/) is the exception — it runs clusters inside an existing host cluster and needs no Docker on the host.
 
-Supported distributions run on different infrastructure providers:
-
-| Provider | Vanilla | K3s | Talos | VCluster | KWOK | EKS |
-|----------|---------|-----|-------|----------|------|-----|
-| Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) | ❌ |
-| Kubernetes | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Hetzner | — | — | ✅ | — | — | — |
-| Omni | — | — | ✅ | — | — | — |
-| AWS | — | — | — | — | — | 🚧 |
+Supported distributions (Vanilla, K3s, Talos, VCluster, KWOK, EKS) run on different infrastructure providers (Docker, Kubernetes, Hetzner, Omni, AWS) — see the [Support Matrix](/support-matrix/) for the full compatibility table.
 
 ## Quick Start
 

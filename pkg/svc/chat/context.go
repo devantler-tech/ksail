@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,17 +12,6 @@ import (
 	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
 )
-
-// BuildSystemContext builds the system prompt context for the chat assistant.
-// It delegates to the generic chatui.BuildSystemContext with KSail-specific defaults.
-func BuildSystemContext() (string, error) {
-	result, err := chatui.BuildSystemContext(DefaultSystemContextConfig())
-	if err != nil {
-		return "", fmt.Errorf("building system context: %w", err)
-	}
-
-	return result, nil
-}
 
 // BuildSystemSections builds system prompt section overrides for the "customize" mode.
 // It delegates to the generic chatui.BuildSystemSections with KSail-specific defaults.

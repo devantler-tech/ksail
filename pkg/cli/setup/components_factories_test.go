@@ -332,7 +332,6 @@ func TestInstallerFactories_AllFieldsPopulated(t *testing.T) {
 	assert.NotNil(t, factories.ArgoCD, "ArgoCD")
 	assert.NotNil(t, factories.KubeletCSRApprover, "KubeletCSRApprover")
 	assert.NotNil(t, factories.EnsureArgoCDResources, "EnsureArgoCDResources")
-	assert.NotNil(t, factories.EnsureFluxResources, "EnsureFluxResources")
 	assert.NotNil(t, factories.SetupFluxInstance, "SetupFluxInstance")
 	assert.NotNil(t, factories.WaitForFluxReady, "WaitForFluxReady")
 	assert.NotNil(t, factories.HelmClientFactory, "HelmClientFactory")

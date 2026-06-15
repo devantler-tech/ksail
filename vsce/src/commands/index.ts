@@ -395,11 +395,9 @@ export function registerCommands(
             if (!resolvedProvider) {
               const clusters = await listClusters();
               const matchedCluster = clusters.find((c) => c.name === clusterName);
-              resolvedProvider = matchedCluster?.provider ?? "docker";
+              resolvedProvider = matchedCluster?.provider;
             }
-            const distribution = await detectDistribution(clusterName, resolvedProvider);
-            const contextName = getContextName(clusterName, distribution);
-            const info = await clusterInfo(contextName, outputChannel);
+            const info = await clusterInfo(clusterName, resolvedProvider, outputChannel);
             clusterInfoChannel.clear();
             clusterInfoChannel.appendLine(`── Cluster: ${clusterName} ──`);
             clusterInfoChannel.appendLine(info);

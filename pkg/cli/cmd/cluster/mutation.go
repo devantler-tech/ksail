@@ -122,6 +122,25 @@ func applyClusterMutationFlags(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster)
 	applyAllowedCIDRsFlag(cmd, clusterCfg)
 }
 
+// validatePostMutationFlags re-validates the configuration fields that
+// applyClusterMutationFlags can change: OIDC extra scopes and Hetzner allowed
+// CIDRs. Shared by create and update so the two commands cannot drift.
+func validatePostMutationFlags(ctx *localregistry.Context) error {
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err := v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
+	// Validate allowed CIDRs after merging CLI flags
+	err = v1alpha1.ValidateAllowedCIDRs(ctx.ClusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
+	if err != nil {
+		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+	}
+
+	return nil
+}
+
 // setupMutationCmdFlags creates the shared config manager and registers the
 // common flags (--mirror-registry and --name) used by cluster mutation commands.
 // Returns the config manager for further flag bindings.

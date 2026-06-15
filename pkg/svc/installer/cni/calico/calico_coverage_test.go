@@ -17,7 +17,7 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/nonexistent/kubeconfig",
 		"test-context",
@@ -62,7 +62,7 @@ func TestInstaller_Install_APIServerCheckerError(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -85,7 +85,7 @@ func TestInstaller_Images_Success(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -120,7 +120,7 @@ spec:
 func TestInstaller_Images_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		nil,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -140,7 +140,7 @@ func TestInstaller_Uninstall_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -170,7 +170,7 @@ func newCovInstallerWithDistribution(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

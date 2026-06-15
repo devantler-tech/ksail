@@ -58,14 +58,10 @@ runs:
     - name: 🏗️ Build web UI bundle
       shell: bash
       # Build the SPA and stage it into pkg/webui/dist so the operator build embeds it (go:embed).
-      run: |
-        set -euo pipefail
-        npm --prefix web/ui ci
-        npm --prefix web/ui run build
-        rm -rf pkg/webui/dist
-        mkdir -p pkg/webui/dist
-        touch pkg/webui/dist/.gitkeep
-        cp -R web/ui/dist/. pkg/webui/dist/
+      # $GITHUB_ACTION_PATH (not a workspace-relative path) so the script also resolves if this
+      # action is ever consumed via a remote `@ref` — the full repo tarball is checked out at the
+      # same ref alongside the action.
+      run: bash "$GITHUB_ACTION_PATH/../../../scripts/stage-webui.sh"
 
     - name: 🏗️ Build operator image
       shell: bash

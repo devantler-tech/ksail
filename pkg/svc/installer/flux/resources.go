@@ -76,7 +76,7 @@ type setupParams struct {
 }
 
 // setupFluxCoreImpl is the injectable implementation of setupFluxCore, used by
-// EnsureDefaultResources and SetupInstance. Override in tests via SetSetupFluxCoreToNoop.
+// SetupInstance. Override in tests via SetSetupFluxCoreToNoop.
 //
 //nolint:gochecknoglobals // Allows mocking for tests
 var setupFluxCoreImpl = setupFluxCore
@@ -128,65 +128,6 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 	// When spec.workload.verify is configured, patch OCIRepository.spec.verify so
 	// Flux verifies artifact signatures (cosign/notation) at pull time.
 	return ensureVerifyIfConfigured(ctx, ociPatcher, params.clusterCfg)
-}
-
-// EnsureDefaultResources configures a default FluxInstance so the operator can
-// bootstrap controllers and sync from the local OCI registry.
-// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
-// because the artifact doesn't exist yet (will be pushed later via workload push).
-// registryHostOverride replaces the default Docker container name in the OCI URL
-// when non-empty. Pass empty string to use the default container name.
-//
-//nolint:contextcheck // context passed from caller and used in nested functions
-func EnsureDefaultResources(
-	ctx context.Context,
-	kubeconfig string,
-	clusterCfg *v1alpha1.Cluster,
-	clusterName string,
-	registryHostOverride string,
-	artifactPushed bool,
-) error {
-	if clusterCfg == nil {
-		return errInvalidClusterConfig
-	}
-
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	restConfig, err := loadRESTConfig(kubeconfig, "")
-	if err != nil {
-		return err
-	}
-
-	err = setupFluxCoreImpl(ctx, setupParams{
-		restConfig:           restConfig,
-		clusterCfg:           clusterCfg,
-		clusterName:          clusterName,
-		registryHostOverride: registryHostOverride,
-	})
-	if err != nil {
-		return err
-	}
-
-	// If no artifact was pushed (e.g., source directory missing during cluster create),
-	// the FluxInstance will remain in "Reconciliation in progress" until workload push is run.
-	if artifactPushed {
-		fluxMgr := newFluxInstanceManager(
-			restConfig,
-			fluxAPIAvailabilityTimeout,
-			fluxAPIAvailabilityPollInterval,
-		)
-
-		err = fluxMgr.waitForReady(ctx)
-		if err != nil {
-			diag := diagnoseFluxPodFailures(ctx, restConfig)
-
-			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w%s", err, diag)
-		}
-	}
-
-	return nil
 }
 
 // SetupInstance creates the FluxInstance CR and configures OCIRepository settings.

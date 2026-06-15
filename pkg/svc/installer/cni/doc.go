@@ -46,6 +46,7 @@
 //	import (
 //	    "context"
 //	    "time"
+//	    v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 //	    "github.com/devantler-tech/ksail/v7/pkg/client/helm"
 //	    ciliuminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/cilium"
 //	)
@@ -56,6 +57,10 @@
 //	    "/path/to/kubeconfig",
 //	    "my-context",
 //	    10*time.Minute,
+//	    v1alpha1.DistributionVanilla,
+//	    v1alpha1.ProviderDocker,
+//	    v1alpha1.LoadBalancerDefault,
+//	    false,
 //	)
 //
 //	err := installer.Install(context.Background())

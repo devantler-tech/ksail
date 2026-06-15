@@ -162,10 +162,8 @@ func TestCommandErrorUnwrap(t *testing.T) {
 	}
 }
 
-func TestDefaultNormalizerNormalize(t *testing.T) {
+func TestNormalize(t *testing.T) {
 	t.Parallel()
-
-	normalizer := errorhandler.DefaultNormalizer{}
 
 	tests := []struct {
 		name     string
@@ -188,7 +186,7 @@ func TestDefaultNormalizerNormalize(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			actual := normalizer.Normalize(testCase.input)
+			actual := errorhandler.NormalizeForTest(testCase.input)
 			if actual != testCase.expected {
 				t.Fatalf("expected %q, got %q", testCase.expected, actual)
 			}

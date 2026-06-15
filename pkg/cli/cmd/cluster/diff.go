@@ -161,16 +161,7 @@ func mergeProvisionerDiff(
 	ctx *localregistry.Context,
 	mainDiff *clusterupdate.UpdateResult,
 ) {
-	factory := clusterprovisioner.DefaultFactory{
-		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:     ctx.KindConfig,
-			K3d:      ctx.K3dConfig,
-			Talos:    ctx.TalosConfig,
-			VCluster: ctx.VClusterConfig,
-			KWOK:     ctx.KWOKConfig,
-			EKS:      ctx.EKSConfig,
-		},
-	}
+	factory := newProvisionerFactory(ctx)
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {

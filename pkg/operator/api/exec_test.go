@@ -96,4 +96,10 @@ func TestExecBlockedWhenReadOnly(t *testing.T) {
 	defer func() { _ = response.Body.Close() }()
 
 	assert.Equal(t, http.StatusForbidden, response.StatusCode)
+
+	// The body must match the readOnlyGuard's byte-for-byte: the SPA parses one shape.
+	body, readErr := io.ReadAll(response.Body)
+	require.NoError(t, readErr)
+	//nolint:testifylint // assert the exact bytes: the body is a wire contract, JSON-equivalence is too weak
+	assert.Equal(t, readOnlyBody, string(body))
 }

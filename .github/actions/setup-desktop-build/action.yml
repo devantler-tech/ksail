@@ -1,0 +1,39 @@
+name: Setup Desktop Build
+description: |
+  Shared setup for building the KSail desktop app: set up Go and Node.js,
+  install the Linux webview build dependencies (Wails v3's default Linux build
+  targets GTK4 + WebKitGTK 6.0, available on ubuntu-24.04 — 22.04 only ships
+  the legacy webkit2gtk-4.0/4.1), and build + stage the web UI for embedding
+  (go:embed via pkg/webui/embed.go).
+
+  Used by the desktop CI build (.github/workflows/desktop.yaml) and the
+  desktop release legs (.github/workflows/cd.yaml). Assumes the repository is
+  already checked out.
+
+runs:
+  using: composite
+  steps:
+    - name: ⚙️ Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: ⚙️ Setup Node.js
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+      with:
+        node-version: "24"
+
+    - name: 🐧 Install Linux webview dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+    - name: 🏗️ Build and stage web UI
+      shell: bash
+      # $GITHUB_ACTION_PATH (not a workspace-relative path) so the script also
+      # resolves if this action is ever consumed via a remote `@ref` — the full
+      # repo tarball is checked out at the same ref alongside the action.
+      run: bash "$GITHUB_ACTION_PATH/../../../scripts/stage-webui.sh"

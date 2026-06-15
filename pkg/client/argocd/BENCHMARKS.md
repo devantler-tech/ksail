@@ -295,19 +295,9 @@ Based on the current baseline and KSail's use case:
 
 ## CI Integration
 
-To track performance over time in CI:
-
-````yaml
-- name: Run ArgoCD benchmarks
-  run: |
-    go test -bench=. -benchmem ./pkg/client/argocd/ | tee bench-new.txt
-
-- name: Compare with baseline
-  run: |
-    if [ -f pkg/client/argocd/baseline.txt ]; then
-      benchstat pkg/client/argocd/baseline.txt bench-new.txt
-    fi
-````
+Regression gating happens in CI via `github-action-benchmark` against its own
+stored history (see `docs/BENCHMARK-REGRESSION.md`); no baseline files are
+kept in-tree.
 
 ## Profiling
 

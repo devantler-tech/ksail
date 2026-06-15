@@ -489,9 +489,6 @@ func (m *Model) cleanup() {
 // handleUsage handles token usage events from the assistant.
 func (m *Model) handleUsage(msg usageMsg) (tea.Model, tea.Cmd) {
 	m.lastUsageModel = msg.model
-	m.lastInputTokens = msg.inputTokens
-	m.lastOutputTokens = msg.outputTokens
-	m.lastCost = msg.cost
 
 	// Merge quota snapshots into the existing map so categories from different
 	// usage events accumulate rather than overwrite each other. This prevents
@@ -509,7 +506,6 @@ func (m *Model) handleUsage(msg usageMsg) (tea.Model, tea.Cmd) {
 
 // handleCompactionStart handles context compaction start events.
 func (m *Model) handleCompactionStart() (tea.Model, tea.Cmd) {
-	m.isCompacting = true
 	m.updateViewportContent()
 
 	return m, m.waitForEvent()
@@ -517,8 +513,6 @@ func (m *Model) handleCompactionStart() (tea.Model, tea.Cmd) {
 
 // handleCompactionComplete handles context compaction completion events.
 func (m *Model) handleCompactionComplete(msg compactionCompleteMsg) (tea.Model, tea.Cmd) {
-	m.isCompacting = false
-
 	_ = msg // Compaction stats (success, tokens removed) available for future display
 
 	m.updateViewportContent()

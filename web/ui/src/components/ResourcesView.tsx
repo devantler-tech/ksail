@@ -32,8 +32,9 @@ const ExecTerminal = lazy(() =>
 import { useResourceList } from "../hooks/useResourceList.ts";
 import { EmptyState } from "./states.tsx";
 import { DataStates, SortHeader, TableCard, td, useSort } from "./table.tsx";
+import { StatusDot } from "./StatusBadge.tsx";
 import { useToast } from "./Toast.tsx";
-import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
+import { Button, SegmentedControl, SelectField, SlideOver, TextField } from "./ui.tsx";
 
 function objectKey(obj: K8sObject, index: number): string {
   const meta = obj.metadata;
@@ -113,8 +114,9 @@ function resourceStatus(obj: K8sObject): { label: string; ok: boolean } | null {
   return null;
 }
 
-// StatusBadge renders a resource's derived status with a colour dot (green = ok, amber = not).
-function StatusBadge({ obj }: { obj: K8sObject }) {
+// ResourceStatusBadge renders a resource's derived status with a colour dot (green = ok, amber =
+// not). Distinct from StatusBadge.tsx's cluster-phase pill, hence the longer name.
+function ResourceStatusBadge({ obj }: { obj: K8sObject }) {
   const status = resourceStatus(obj);
   if (!status) {
     return <span className="text-slate-400">—</span>;
@@ -122,7 +124,7 @@ function StatusBadge({ obj }: { obj: K8sObject }) {
 
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cx("size-1.5 rounded-full", status.ok ? "bg-emerald-500" : "bg-amber-500")} aria-hidden />
+      <StatusDot tone={status.ok ? "ok" : "warn"} />
       <span className={status.ok ? "text-slate-600 dark:text-slate-300" : "text-amber-700 dark:text-amber-400"}>
         {status.label}
       </span>
@@ -207,13 +209,7 @@ function ConditionsTable({ obj }: { obj: K8sObject }) {
                           : "text-slate-500 dark:text-slate-400",
                     )}
                   >
-                    <span
-                      className={cx(
-                        "size-1.5 rounded-full",
-                        cond.status === "True" ? "bg-emerald-500" : cond.status === "False" ? "bg-amber-500" : "bg-slate-400",
-                      )}
-                      aria-hidden
-                    />
+                    <StatusDot tone={cond.status === "True" ? "ok" : cond.status === "False" ? "warn" : "muted"} />
                     {cond.status || "—"}
                   </span>
                 </td>
@@ -505,7 +501,7 @@ export function ResourcesView({
                       {item.metadata?.namespace ?? "—"}
                     </td>
                     <td className={cx(td, "text-sm")}>
-                      <StatusBadge obj={item} />
+                      <ResourceStatusBadge obj={item} />
                     </td>
                     <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
                       {relativeAge(item.metadata?.creationTimestamp)}
@@ -651,24 +647,14 @@ export function ResourcesView({
             <RelatedEvents events={relatedEvents} />
             <section>
               <div className="mb-2 flex items-center justify-between">
-                <div className="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-slate-300 dark:ring-slate-700">
-                  {(["yaml", "json"] as const).map((format) => (
-                    <button
-                      key={format}
-                      type="button"
-                      onClick={() => setDetailFormat(format)}
-                      aria-pressed={detailFormat === format}
-                      className={cx(
-                        "px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
-                        detailFormat === format
-                          ? "bg-blue-600 text-white"
-                          : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
-                      )}
-                    >
-                      {format.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
+                <SegmentedControl
+                  options={[
+                    { value: "yaml", label: "YAML" },
+                    { value: "json", label: "JSON" },
+                  ]}
+                  value={detailFormat}
+                  onChange={setDetailFormat}
+                />
                 <Button variant="ghost" size="sm" onClick={copyManifest}>
                   <Copy className="size-3.5" aria-hidden />
                   Copy

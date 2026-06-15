@@ -36,13 +36,14 @@ import { buildClusterUsage, buildPodConsumption, type ClusterUsage, type PodCons
 import { Card, Field } from "./Card.tsx";
 import { EventList } from "./EventList.tsx";
 import { ResourceUsagePanel } from "./ResourceUsage.tsx";
-import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
+import { HostBadge, StatusBadge, StatusDot, type StatusTone } from "./StatusBadge.tsx";
 import { EmptyState } from "./states.tsx";
 import { Button } from "./ui.tsx";
 import { useToast } from "./Toast.tsx";
 
-// PodSegment is one slice of the pod-health bar: a label, a count, and its bar/dot colour classes.
-type PodSegment = { key: string; label: string; count: number; bar: string; dot: string };
+// PodSegment is one slice of the pod-health bar: a label, a count, its bar colour class, and the
+// legend dot's tone.
+type PodSegment = { key: string; label: string; count: number; bar: string; dot: StatusTone };
 
 // LiveHealth is the at-a-glance cluster state derived from the read-only resource endpoints: node and
 // pod health, workload counts, live facts (version, OS, creation time) the cluster object itself does
@@ -93,12 +94,12 @@ function categorizePods(pods: K8sObject[]): PodSegment[] {
   }
 
   return [
-    { key: "running", label: "Running", count: counts.running, bar: "bg-emerald-500", dot: "bg-emerald-500" },
-    { key: "notReady", label: "Not ready", count: counts.notReady, bar: "bg-amber-500", dot: "bg-amber-500" },
-    { key: "pending", label: "Pending", count: counts.pending, bar: "bg-blue-500", dot: "bg-blue-500" },
-    { key: "succeeded", label: "Succeeded", count: counts.succeeded, bar: "bg-slate-400", dot: "bg-slate-400" },
-    { key: "failed", label: "Failed", count: counts.failed, bar: "bg-red-500", dot: "bg-red-500" },
-    { key: "other", label: "Other", count: counts.other, bar: "bg-slate-300", dot: "bg-slate-300" },
+    { key: "running", label: "Running", count: counts.running, bar: "bg-emerald-500", dot: "ok" },
+    { key: "notReady", label: "Not ready", count: counts.notReady, bar: "bg-amber-500", dot: "warn" },
+    { key: "pending", label: "Pending", count: counts.pending, bar: "bg-blue-500", dot: "info" },
+    { key: "succeeded", label: "Succeeded", count: counts.succeeded, bar: "bg-slate-400", dot: "muted" },
+    { key: "failed", label: "Failed", count: counts.failed, bar: "bg-red-500", dot: "error" },
+    { key: "other", label: "Other", count: counts.other, bar: "bg-slate-300", dot: "muted" },
   ];
 }
 
@@ -606,7 +607,7 @@ function PodHealth({ segments, total }: { segments: PodSegment[]; total: number 
       <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         {visible.map((segment) => (
           <li key={segment.key} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-            <span className={cx("size-1.5 rounded-full", segment.dot)} aria-hidden />
+            <StatusDot tone={segment.dot} />
             <span className="flex-1">{segment.label}</span>
             <span className="tabular-nums text-slate-500 dark:text-slate-400">{segment.count}</span>
           </li>

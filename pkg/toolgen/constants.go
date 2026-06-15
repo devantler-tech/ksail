@@ -2,20 +2,6 @@ package toolgen
 
 import (
 	"errors"
-
-	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-)
-
-// Re-export annotation constants from pkg/cli/annotations for backward compatibility.
-// These constants are now defined in the annotations package to allow CLI commands
-// to use them without depending on the toolgen package.
-//
-// IMPORTANT: The annotations package must never import toolgen to avoid circular dependencies.
-const (
-	AnnotationExclude     = annotations.AnnotationExclude
-	AnnotationDescription = annotations.AnnotationDescription
-	AnnotationPermission  = annotations.AnnotationPermission
-	AnnotationConsolidate = annotations.AnnotationConsolidate
 )
 
 // JSON Schema type constants.

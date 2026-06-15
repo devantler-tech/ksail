@@ -130,7 +130,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific `BENCHMARKS.md` files (located throughout `pkg/` — search with `find pkg -name BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+Baseline results are stored in the CI benchmark store (the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data), fed by pushes to `main`) — that store is what PR comparisons run against. See package-specific `BENCHMARKS.md` files (located throughout `pkg/` — search with `find pkg -name BENCHMARKS.md`) for what each package benchmarks and how to run it.
 
 ### Documentation
 
@@ -231,25 +231,32 @@ See [vsce/README.md](vsce/README.md) for end-user feature documentation, or [ksa
 
 ## Project Structure
 
-The repository is organized around the top-level CLI entry point (`main.go`) and the public packages in `pkg/`.
+The repository is organized around the top-level CLI entry point (`main.go`) and the public packages in `pkg/`. See [AGENTS.md](AGENTS.md) for the full annotated structure tree.
 
 - **main.go** - CLI entry point
 - **pkg/cli/cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
+- **internal/** - Private packages (build metadata, operator reconcilers, test utilities)
+- **charts/** - Helm charts (`charts/ksail-operator/` — operator + embedded web UI)
+- **web/** - Web UI source (`web/ui/` — Vite/React SPA, embedded via `pkg/webui`)
+- **desktop/** - Native desktop app (separate Go module wrapping the web UI)
+- **copilot-plugin/** - KSail plugin for GitHub Copilot CLI / Claude Code (MCP server + skill)
 - **docs/** - Astro documentation site
 - **vsce/** - VSCode extension
 
 ### Key Packages in pkg/
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
-- **client/** - Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
+- **client/** - Tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kubescape, kustomize, oci, netretry, sops, klogutil; eksctl shells out to an external binary); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
 - **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **operator/** - Kubernetes operator manager and REST API server (reconcilers live in `internal/controller/`)
+- **webui/** - Embedded web UI assets (built from `web/ui/`, served by `ksail ui` and the operator)
 - **svc/detector/** - Detects installed Kubernetes components (Helm releases and Kubernetes API); used by the update command to build accurate baseline cluster state
 - **svc/diff/** - Computes configuration differences between ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
 - **svc/image/** - Container image export/import services for Vanilla and K3s distributions
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
-- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster)
+- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster, KWOK, EKS)
 - **svc/registryresolver/** - OCI registry detection, resolution, and artifact push utilities
 - **svc/state/** - Cluster state persistence for distributions that cannot introspect their running configuration (Kind, K3d)
 - **di/** - Dependency injection for wiring components
@@ -261,14 +268,16 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool  | Provider              | Description                                    |
-|--------------|------------------------|-------|-----------------------|------------------------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind  | Docker                | Standard upstream Kubernetes                   |
-| `K3s`        | K3dClusterProvisioner  | K3d   | Docker                | Lightweight K3s in Docker                      |
-| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
-| `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
+| Distribution | Provisioner            | Tool    | Provider              | Description                                      |
+|--------------|------------------------|---------|-----------------------|--------------------------------------------------|
+| `Vanilla`    | KindClusterProvisioner | Kind    | Docker                | Standard upstream Kubernetes                     |
+| `K3s`        | K3dClusterProvisioner  | K3d     | Docker                | Lightweight K3s in Docker                        |
+| `Talos`      | TalosProvisioner       | Talos   | Docker, Hetzner, Omni | Immutable Talos Linux                            |
+| `VCluster`   | VClusterProvisioner    | Vind    | Docker                | Virtual clusters via vCluster (Vind) in Docker   |
+| `KWOK`       | KWOKProvisioner        | kwokctl | Docker                | Simulated Kubernetes cluster (no real workloads) |
+| `EKS`        | EKSProvisioner         | eksctl  | AWS                   | Managed Kubernetes on Amazon Web Services        |
 
-KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
+KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory holds packages not useful to external consumers: `internal/buildmeta` (build-time version metadata injected via ldflags), `internal/controller` (the controller-runtime reconcilers behind the KSail operator), and `internal/testutil` (shared test utilities).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7).
 
@@ -285,13 +294,13 @@ go test ./...
 
 #### System Tests
 
-System tests exercise full cluster lifecycle scenarios across all supported distributions (Vanilla, K3s, Talos, VCluster) and providers (Docker, Hetzner, Omni). They are configured in `.github/workflows/ci.yaml` and the composite action at `.github/actions/ksail-system-test/action.yaml`.
+System tests exercise full cluster lifecycle scenarios across the system-testable distributions (Vanilla, K3s, Talos, VCluster, KWOK) and providers (Docker, Hetzner, Omni); EKS is excluded because `ksail cluster create` is not yet functional for it. They are configured in `.github/workflows/ci.yaml` and the composite action at `.github/actions/ksail-system-test/action.yaml`.
 
 **When they run:**
 
 System tests run in GitHub’s **merge queue** (`merge_group` event) and do **not** run on regular `pull_request` checks. This is intentional:
 
-- **Cost**: The test matrix spans 44+ jobs (4 distributions × 2 init modes × 5 config variants + cloud providers), consuming 6–11 CPU-hours per run. Running this on every PR push would be prohibitively expensive.
+- **Cost**: The test matrix spans 44+ jobs (5 distributions × 2 init modes × 5 config variants + cloud providers), consuming 6–11 CPU-hours per run. Running this on every PR push would be prohibitively expensive.
 - **Feedback time**: A full system test run takes 20–30 minutes. Deferring to the merge queue keeps PR feedback loops fast (unit tests, linting, and build run on every PR push instead).
 - **Flakiness**: Cloud provider tests (Hetzner, Omni) are inherently flaky due to network and infrastructure variability. Running them on PRs would produce noisy failures unrelated to code changes.
 

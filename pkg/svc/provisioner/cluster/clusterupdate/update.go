@@ -126,6 +126,29 @@ func MarkComponentsUnknown(spec *v1alpha1.ClusterSpec) {
 	spec.GitOpsEngine = v1alpha1.GitOpsEngine(UnknownBaselineValue)
 }
 
+// ApplyDetectedComponents copies the detector-derived component fields (CNI,
+// CSI, MetricsServer, LoadBalancer, CertManager, PolicyEngine, GitOpsEngine,
+// and the node autoscaler toggle) from a detected spec onto a baseline spec.
+// The detector (detector.ComponentDetector.DetectComponents) returns its
+// findings as a *v1alpha1.ClusterSpec; this helper centralizes the field list
+// so every baseline-building call site copies the same set — adding a newly
+// detected component means updating this function (and MarkComponentsUnknown)
+// rather than each caller.
+func ApplyDetectedComponents(dst, detected *v1alpha1.ClusterSpec) {
+	if dst == nil || detected == nil {
+		return
+	}
+
+	dst.CNI = detected.CNI
+	dst.CSI = detected.CSI
+	dst.MetricsServer = detected.MetricsServer
+	dst.LoadBalancer = detected.LoadBalancer
+	dst.CertManager = detected.CertManager
+	dst.PolicyEngine = detected.PolicyEngine
+	dst.GitOpsEngine = detected.GitOpsEngine
+	dst.Autoscaler.Node = detected.Autoscaler.Node
+}
+
 // ChangeCategory classifies the impact of a configuration change.
 type ChangeCategory int
 

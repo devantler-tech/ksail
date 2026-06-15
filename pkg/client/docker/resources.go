@@ -16,12 +16,9 @@ type Resources struct {
 // NewResources creates a Docker client and registry manager.
 // The caller is responsible for calling Close() on the returned Resources.
 func NewResources() (*Resources, error) {
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	dockerClient, err := GetDockerClient()
 	if err != nil {
-		return nil, fmt.Errorf("create docker client: %w", err)
+		return nil, err
 	}
 
 	registryManager, err := NewRegistryManager(dockerClient)

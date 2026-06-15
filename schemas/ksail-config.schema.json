@@ -784,9 +784,6 @@
   },
   "additionalProperties": false,
   "type": "object",
-  "required": [
-    "spec"
-  ],
   "title": "KSail Cluster Configuration",
   "description": "JSON schema for KSail cluster configuration (ksail.yaml)"
 }

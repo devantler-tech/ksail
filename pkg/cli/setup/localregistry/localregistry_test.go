@@ -97,18 +97,6 @@ func TestVerifyStageInfo(t *testing.T) {
 	assert.Equal(t, "registry access check failed", info.FailurePrefix)
 }
 
-func TestCleanupStageInfo(t *testing.T) {
-	t.Parallel()
-
-	info := localregistry.CleanupStageInfo()
-
-	assert.Equal(t, "Delete local registry...", info.Title)
-	assert.Equal(t, "🧹", info.Emoji)
-	assert.Equal(t, "deleting local registry", info.Activity)
-	assert.Equal(t, "local registry deleted", info.Success)
-	assert.Equal(t, "failed to delete local registry", info.FailurePrefix)
-}
-
 func TestNewContextFromConfigManager_PopulatesContext(t *testing.T) {
 	t.Parallel()
 

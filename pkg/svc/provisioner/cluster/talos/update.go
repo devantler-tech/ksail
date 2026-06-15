@@ -1140,14 +1140,7 @@ func (p *Provisioner) GetCurrentConfig(
 			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		spec.CNI = detected.CNI
-		spec.CSI = detected.CSI
-		spec.MetricsServer = detected.MetricsServer
-		spec.LoadBalancer = detected.LoadBalancer
-		spec.CertManager = detected.CertManager
-		spec.PolicyEngine = detected.PolicyEngine
-		spec.GitOpsEngine = detected.GitOpsEngine
-		spec.Autoscaler.Node = detected.Autoscaler.Node
+		clusterupdate.ApplyDetectedComponents(spec, detected)
 	}
 
 	// Introspect actual node counts from the running cluster
