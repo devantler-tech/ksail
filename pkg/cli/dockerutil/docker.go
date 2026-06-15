@@ -18,9 +18,7 @@ import (
 func WithDockerClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
 	dockerClient, err := dockerclient.GetDockerClient()
 	if err != nil {
-		// GetDockerClient already wraps with "failed to create Docker client";
-		// return it as-is (matching docker.NewResources) instead of double-wrapping.
-		return err
+		return fmt.Errorf("get docker client: %w", err)
 	}
 
 	return WithDockerClientInstance(cmd, dockerClient, operation)
