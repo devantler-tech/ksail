@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -85,4 +87,77 @@ func (l AutoscalerExpanderList) String() string {
 	}
 
 	return strings.Join(parts, ",")
+}
+
+// SplitAutoscalerExpanders splits a scalar expander value into its individual
+// entries, trimming surrounding whitespace from each. A comma-separated scalar
+// ("LeastNodes,LeastWaste") yields one entry per element, mirroring the upstream
+// cluster-autoscaler --expander priority-list syntax; an empty or whitespace-only
+// value yields an empty (non-nil) slice. It is the shared normaliser for the JSON
+// unmarshaler (legacy persisted scalar form) and the YAML configuration decode
+// hook, so both accept identical scalar inputs.
+func SplitAutoscalerExpanders(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{}
+	}
+
+	parts := strings.Split(raw, ",")
+	expanders := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		expanders = append(expanders, strings.TrimSpace(part))
+	}
+
+	return expanders
+}
+
+// UnmarshalJSON decodes an AutoscalerExpanderList from JSON, accepting both the
+// current priority-list form (["LeastNodes","LeastWaste"]) and the legacy scalar
+// form ("LeastWaste") that older ksail versions persisted to cluster state
+// (~/.ksail/clusters/<name>/spec.json) before this field became a list. A
+// comma-separated scalar ("LeastNodes,LeastWaste") is split into its entries,
+// matching the YAML configuration decode hook and the upstream cluster-autoscaler
+// --expander syntax. This keeps state files written before the migration readable
+// after an upgrade.
+func (l *AutoscalerExpanderList) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+
+	// JSON null leaves the list unchanged (idiomatic no-op).
+	if string(trimmed) == "null" {
+		return nil
+	}
+
+	// Current form: a JSON array of expander values. Decode into the underlying
+	// slice type to avoid recursing back into this method.
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var list []AutoscalerExpander
+
+		err := json.Unmarshal(data, &list)
+		if err != nil {
+			return fmt.Errorf("unmarshal autoscaler expander list: %w", err)
+		}
+
+		*l = list
+
+		return nil
+	}
+
+	// Legacy form: a single (optionally comma-separated) scalar string.
+	var raw string
+
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return fmt.Errorf("unmarshal autoscaler expander scalar: %w", err)
+	}
+
+	parts := SplitAutoscalerExpanders(raw)
+	expanders := make(AutoscalerExpanderList, len(parts))
+
+	for index, part := range parts {
+		expanders[index] = AutoscalerExpander(part)
+	}
+
+	*l = expanders
+
+	return nil
 }

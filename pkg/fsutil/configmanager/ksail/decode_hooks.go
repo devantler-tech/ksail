@@ -3,7 +3,6 @@ package configmanager
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -38,18 +37,11 @@ func autoscalerExpanderListDecodeHook() mapstructure.DecodeHookFuncType {
 		}
 
 		raw, ok := data.(string)
-		if !ok || strings.TrimSpace(raw) == "" {
+		if !ok {
 			return []string{}, nil
 		}
 
-		parts := strings.Split(raw, ",")
-		expanders := make([]string, 0, len(parts))
-
-		for _, part := range parts {
-			expanders = append(expanders, strings.TrimSpace(part))
-		}
-
-		return expanders, nil
+		return v1alpha1.SplitAutoscalerExpanders(raw), nil
 	}
 }
 

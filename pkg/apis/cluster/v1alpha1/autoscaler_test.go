@@ -1,6 +1,7 @@
 package v1alpha1_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -112,6 +113,100 @@ func TestAutoscalerExpanderList_String(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, testCase.want, testCase.list.String())
+		})
+	}
+}
+
+func TestSplitAutoscalerExpanders(t *testing.T) {
+	t.Parallel()
+
+	leastNodes := string(v1alpha1.AutoscalerExpanderLeastNodes)
+	leastWaste := string(v1alpha1.AutoscalerExpanderLeastWaste)
+
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{"empty_input", "", []string{}},
+		{"whitespace", " ", []string{}},
+		{"single", leastWaste, []string{leastWaste}},
+		{"comma_separated", leastNodes + "," + leastWaste, []string{leastNodes, leastWaste}},
+		{
+			"comma_separated_spaces",
+			leastNodes + ", " + leastWaste,
+			[]string{leastNodes, leastWaste},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testCase.want, v1alpha1.SplitAutoscalerExpanders(testCase.raw))
+		})
+	}
+}
+
+// TestAutoscalerExpanderList_UnmarshalJSON verifies the list decodes from both
+// the current array form and the legacy scalar form that older ksail versions
+// persisted to cluster state, so spec.json files written before the field became
+// a list remain readable after an upgrade (regression for the
+// "cannot unmarshal string into ... AutoscalerExpanderList" load failure).
+func TestAutoscalerExpanderList_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    v1alpha1.AutoscalerExpanderList
+		wantErr bool
+	}{
+		{
+			"legacy_scalar",
+			`"LeastWaste"`,
+			v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+			false,
+		},
+		{
+			"legacy_comma_separated_scalar",
+			`"LeastNodes,LeastWaste"`,
+			v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+			false,
+		},
+		{
+			"array",
+			`["LeastNodes","LeastWaste"]`,
+			v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+			false,
+		},
+		{"empty_scalar", `""`, v1alpha1.AutoscalerExpanderList{}, false},
+		{"empty_array", `[]`, v1alpha1.AutoscalerExpanderList{}, false},
+		{"null", `null`, nil, false},
+		{"invalid_json", `{`, nil, true},
+		{"number", `123`, nil, true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var list v1alpha1.AutoscalerExpanderList
+
+			err := json.Unmarshal([]byte(testCase.input), &list)
+			if testCase.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, list)
 		})
 	}
 }

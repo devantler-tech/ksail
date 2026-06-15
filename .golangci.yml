@@ -65,13 +65,15 @@ linters:
         path: pkg/utils/doc.go
   settings:
     recvcheck:
-      # controller-gen emits pointer-receiver DeepCopy methods; exclude them so types with
-      # value-receiver domain methods (e.g. ClusterSpec, LocalRegistry) are not flagged as mixing
-      # receiver styles.
+      # Some methods have their receiver style dictated by an external contract, not by choice:
+      # controller-gen emits DeepCopy* methods and json.Unmarshaler requires a pointer receiver for
+      # UnmarshalJSON. Exclude them so types with value-receiver domain methods (e.g. ClusterSpec,
+      # LocalRegistry, AutoscalerExpanderList) are not flagged as mixing receiver styles.
       exclusions:
         - "*.DeepCopyInto"
         - "*.DeepCopy"
         - "*.DeepCopyObject"
+        - "*.UnmarshalJSON"
     tagalign:
       align: false
       sort: true
