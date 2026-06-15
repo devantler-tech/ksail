@@ -1318,9 +1318,13 @@ func TestEngine_AutoscalerExpanderChange(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
-	old.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderLeastWaste
+	old.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderList{
+		v1alpha1.AutoscalerExpanderLeastWaste,
+	}
 	newer := clone(old)
-	newer.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderPrice
+	newer.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderList{
+		v1alpha1.AutoscalerExpanderPrice,
+	}
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1331,6 +1335,30 @@ func TestEngine_AutoscalerExpanderChange(t *testing.T) {
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.expander",
 		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerExpanderListChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderList{
+		v1alpha1.AutoscalerExpanderLeastWaste,
+	}
+	newer := clone(old)
+	newer.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderList{
+		v1alpha1.AutoscalerExpanderLeastNodes,
+		v1alpha1.AutoscalerExpanderLeastWaste,
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler expander list change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.expander",
+		"LeastWaste", "LeastNodes,LeastWaste", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerPoolAdded(t *testing.T) {
@@ -1486,7 +1514,7 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 		Node: v1alpha1.NodeAutoscalerConfig{
 			Enabled:               true,
 			MaxNodesTotal:         20,
-			Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
+			Expander:              v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
 			ScaleDownUnneededTime: "10m",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
@@ -1567,7 +1595,7 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 		Node: v1alpha1.NodeAutoscalerConfig{
 			Enabled:               true,
 			MaxNodesTotal:         20,
-			Expander:              v1alpha1.AutoscalerExpanderPrice,
+			Expander:              v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice},
 			ScaleDownUnneededTime: "10m",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},

@@ -132,9 +132,35 @@ func walkSchema(schema *jsonschema.Schema, fn func(*jsonschema.Schema)) {
 	}
 }
 
+// enumValues returns an EnumValuer's valid values as a []any suitable for a
+// jsonschema Schema.Enum field.
+func enumValues(valuer v1alpha1.EnumValuer) []any {
+	values := valuer.ValidValues()
+
+	enumVals := make([]any, len(values))
+	for i, v := range values {
+		enumVals[i] = v
+	}
+
+	return enumVals
+}
+
 // customTypeMapper provides custom schema mappings for v1alpha1 types.
 // It automatically detects enum types that implement the EnumValuer interface.
 func customTypeMapper(t reflect.Type) *jsonschema.Schema {
+	// AutoscalerExpanderList accepts either a single expander (scalar) or an
+	// ordered priority list, so expose both shapes via oneOf in the schema.
+	if t == reflect.TypeFor[v1alpha1.AutoscalerExpanderList]() {
+		enumVals := enumValues(new(v1alpha1.AutoscalerExpander))
+
+		return &jsonschema.Schema{
+			OneOf: []*jsonschema.Schema{
+				{Type: "string", Enum: enumVals},
+				{Type: "array", Items: &jsonschema.Schema{Type: "string", Enum: enumVals}},
+			},
+		}
+	}
+
 	// Check if this type implements EnumValuer (try pointer receiver first).
 	enumValuerType := reflect.TypeFor[v1alpha1.EnumValuer]()
 	ptrType := reflect.PointerTo(t)
@@ -142,14 +168,11 @@ func customTypeMapper(t reflect.Type) *jsonschema.Schema {
 	if ptrType.Implements(enumValuerType) {
 		// Create a pointer to zero value and call ValidValues().
 		zero := reflect.New(t)
-		values := zero.Interface().(v1alpha1.EnumValuer).ValidValues()
 
-		enumVals := make([]any, len(values))
-		for i, v := range values {
-			enumVals[i] = v
+		return &jsonschema.Schema{
+			Type: "string",
+			Enum: enumValues(zero.Interface().(v1alpha1.EnumValuer)),
 		}
-
-		return &jsonschema.Schema{Type: "string", Enum: enumVals}
 	}
 
 	// Special case for metav1.Duration.

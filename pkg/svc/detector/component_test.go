@@ -1069,7 +1069,7 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, cfg.Enabled)
-	assert.Equal(t, v1alpha1.AutoscalerExpanderPrice, cfg.Expander)
+	assert.Equal(t, v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice}, cfg.Expander)
 	assert.Equal(t, int32(10), cfg.MaxNodesTotal)
 	assert.Equal(t, "10m", cfg.ScaleDownUnneededTime)
 	require.Len(t, cfg.Pools, 1)
@@ -1186,6 +1186,46 @@ func TestHelmExpanderToEnum(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.expected, detector.ExportHelmExpanderToEnum(tc.input))
+		})
+	}
+}
+
+func TestHelmExpandersToEnum(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected v1alpha1.AutoscalerExpanderList
+	}{
+		{"empty", "", nil},
+		{
+			"single",
+			"least-waste",
+			v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+		},
+		{
+			"priority_list",
+			"least-nodes,least-waste",
+			v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+		},
+		{
+			"priority_list_with_spaces",
+			"least-nodes, price",
+			v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderPrice,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, detector.ExportHelmExpandersToEnum(tc.input))
 		})
 	}
 }

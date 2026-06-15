@@ -64,3 +64,25 @@ func (a *AutoscalerExpander) ValidValues() []string {
 		string(AutoscalerExpanderRandom),
 	}
 }
+
+// AutoscalerExpanderList is an ordered priority list of expander strategies for
+// the cluster autoscaler. The autoscaler applies them as a chain: the first
+// expander filters candidate node groups and each subsequent expander breaks the
+// ties left by the previous one. This mirrors the upstream cluster-autoscaler
+// priority-list form (e.g. --expander=least-nodes,least-waste).
+//
+// In ksail.yaml the field accepts either a single scalar value
+// (expander: LeastWaste) or a YAML sequence (expander: [LeastNodes, LeastWaste]);
+// the configuration loader normalises a scalar into a single-element list.
+type AutoscalerExpanderList []AutoscalerExpander
+
+// String returns the comma-separated representation of the list, matching the
+// upstream cluster-autoscaler --expander priority-list format.
+func (l AutoscalerExpanderList) String() string {
+	parts := make([]string, len(l))
+	for i, expander := range l {
+		parts[i] = string(expander)
+	}
+
+	return strings.Join(parts, ",")
+}

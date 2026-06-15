@@ -88,7 +88,7 @@ func assertHAValuesYaml(
 		Pools: []v1alpha1.NodePool{
 			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 		},
-		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+		Expander: v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
 	}
 
 	client := helm.NewMockInterface(t)
@@ -166,7 +166,7 @@ func assertPublicNetValuesYaml(
 		Pools: []v1alpha1.NodePool{
 			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 		},
-		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+		Expander: v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
 	}
 
 	client := helm.NewMockInterface(t)
@@ -279,7 +279,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_NodePools(t *testing.T) {
 			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 			{Name: "highmem", ServerType: "cax41", Location: "nbg1", Min: 0, Max: 3},
 		},
-		Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
+		Expander: v1alpha1.AutoscalerExpanderList{
+			v1alpha1.AutoscalerExpanderLeastWaste,
+		},
 		ScaleDownUnneededTime: "10m",
 	}
 
@@ -328,32 +330,40 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Expanders(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		expander      v1alpha1.AutoscalerExpander
+		expander      v1alpha1.AutoscalerExpanderList
 		wantHelmValue string
 	}{
 		{
 			name:          "least_waste_expander",
-			expander:      v1alpha1.AutoscalerExpanderLeastWaste,
+			expander:      v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
 			wantHelmValue: "least-waste",
 		},
 		{
 			name:          "price_expander",
-			expander:      v1alpha1.AutoscalerExpanderPrice,
+			expander:      v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice},
 			wantHelmValue: "price",
 		},
 		{
 			name:          "least_nodes_expander",
-			expander:      v1alpha1.AutoscalerExpanderLeastNodes,
+			expander:      v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastNodes},
 			wantHelmValue: "least-nodes",
 		},
 		{
 			name:          "random_expander",
-			expander:      v1alpha1.AutoscalerExpanderRandom,
+			expander:      v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderRandom},
 			wantHelmValue: "random",
 		},
 		{
+			name: "priority_list_joined_with_commas",
+			expander: v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+			wantHelmValue: "least-nodes,least-waste",
+		},
+		{
 			name:          "empty_expander_defaults_to_least_waste",
-			expander:      v1alpha1.AutoscalerExpander(""),
+			expander:      v1alpha1.AutoscalerExpanderList{},
 			wantHelmValue: "least-waste",
 		},
 	}
@@ -370,7 +380,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Expanders(t *testing.T) {
 // the rendered ValuesYaml contains wantHelmValue.
 func runExpanderTest(
 	t *testing.T,
-	expander v1alpha1.AutoscalerExpander,
+	expander v1alpha1.AutoscalerExpanderList,
 	wantHelmValue string,
 ) {
 	t.Helper()
@@ -455,7 +465,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 		Pools: []v1alpha1.NodePool{
 			{Name: "pool1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 3},
 		},
-		Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
+		Expander: v1alpha1.AutoscalerExpanderList{
+			v1alpha1.AutoscalerExpanderLeastWaste,
+		},
 		MaxNodesTotal:         10,
 		ScaleDownUnneededTime: "15m",
 	}
@@ -594,7 +606,9 @@ func newInstallerWithDefaults(t *testing.T) (
 		Pools: []v1alpha1.NodePool{
 			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 		},
-		Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
+		Expander: v1alpha1.AutoscalerExpanderList{
+			v1alpha1.AutoscalerExpanderLeastWaste,
+		},
 		ScaleDownUnneededTime: "10m",
 	}
 	installer, err := clusterautoscalerinstaller.NewInstaller(

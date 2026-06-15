@@ -3,8 +3,10 @@ package configmanager
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -15,7 +17,41 @@ import (
 // a new function value on every Load() call.
 //
 //nolint:gochecknoglobals // Stateless decode hook shared by all ConfigManager instances.
-var clusterDecodeHook = mapstructure.ComposeDecodeHookFunc(metav1DurationDecodeHook())
+var clusterDecodeHook = mapstructure.ComposeDecodeHookFunc(
+	metav1DurationDecodeHook(),
+	autoscalerExpanderListDecodeHook(),
+)
+
+// autoscalerExpanderListDecodeHook normalises a scalar autoscaler expander value
+// into an AutoscalerExpanderList so that both the legacy scalar form
+// (expander: LeastWaste) and the priority-list form (expander: [A, B]) are
+// accepted. A comma-separated scalar (expander: "LeastNodes,LeastWaste") is split
+// into its entries, matching the upstream cluster-autoscaler --expander syntax.
+func autoscalerExpanderListDecodeHook() mapstructure.DecodeHookFuncType {
+	return func(fromType reflect.Type, toType reflect.Type, data any) (any, error) {
+		if toType != reflect.TypeFor[v1alpha1.AutoscalerExpanderList]() {
+			return data, nil
+		}
+
+		if fromType.Kind() != reflect.String {
+			return data, nil
+		}
+
+		raw, ok := data.(string)
+		if !ok || strings.TrimSpace(raw) == "" {
+			return []string{}, nil
+		}
+
+		parts := strings.Split(raw, ",")
+		expanders := make([]string, 0, len(parts))
+
+		for _, part := range parts {
+			expanders = append(expanders, strings.TrimSpace(part))
+		}
+
+		return expanders, nil
+	}
+}
 
 // metav1DurationDecodeHook converts duration strings (e.g. "1m", "30s") into metav1.Duration values
 // so that string values in ksail.yaml or environment variables are accepted.

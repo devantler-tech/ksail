@@ -124,3 +124,8 @@ func (d *ComponentDetector) ExportDetectNodeAutoscaler(
 func ExportHelmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
 	return helmExpanderToEnum(value)
 }
+
+// ExportHelmExpandersToEnum exposes helmExpandersToEnum for testing.
+func ExportHelmExpandersToEnum(value string) v1alpha1.AutoscalerExpanderList {
+	return helmExpandersToEnum(value)
+}

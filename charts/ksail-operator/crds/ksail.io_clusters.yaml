@@ -91,9 +91,21 @@ spec:
                           enabled:
                             type: boolean
                           expander:
-                            description: AutoscalerExpander defines the node expander
-                              strategy for the cluster autoscaler.
-                            type: string
+                            description: |-
+                              AutoscalerExpanderList is an ordered priority list of expander strategies for
+                              the cluster autoscaler. The autoscaler applies them as a chain: the first
+                              expander filters candidate node groups and each subsequent expander breaks the
+                              ties left by the previous one. This mirrors the upstream cluster-autoscaler
+                              priority-list form (e.g. --expander=least-nodes,least-waste).
+
+                              In ksail.yaml the field accepts either a single scalar value
+                              (expander: LeastWaste) or a YAML sequence (expander: [LeastNodes, LeastWaste]);
+                              the configuration loader normalises a scalar into a single-element list.
+                            items:
+                              description: AutoscalerExpander defines the node expander
+                                strategy for the cluster autoscaler.
+                              type: string
+                            type: array
                           maxNodesTotal:
                             format: int32
                             type: integer

@@ -180,7 +180,7 @@ spec:
     autoscaler:
       node:
         enabled: true
-        expander: LeastWaste       # LeastWaste | LeastNodes | Random (Price is not supported for Hetzner)
+        expander: LeastWaste       # single value, or a priority list e.g. [LeastNodes, LeastWaste] (Price is not supported for Hetzner)
         maxNodesTotal: 20          # whole-cluster node ceiling (--max-nodes-total); 0 = no cap
         scaleDownUnneededTime: 10m
         pools:
@@ -211,7 +211,7 @@ spec:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `autoscaler.node.enabled` | bool | `false` | `true` — defer node scaling to an external autoscaler; `false` — KSail manages node counts directly |
-| `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. (`Price` is rejected by KSail with a validation error for the Hetzner provider, because the Hetzner cloud provider does not implement the pricing API.) |
+| `autoscaler.node.expander` | string \| list | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. Accepts either a single value or an ordered priority list (e.g. `[LeastNodes, LeastWaste]`) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream `--expander=least-nodes,least-waste`). (`Price` is rejected by KSail with a validation error for the Hetzner provider, because the Hetzner cloud provider does not implement the pricing API.) |
 | `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes in the **whole cluster** (control-planes + workers + autoscaler nodes), passed to the cluster-autoscaler `--max-nodes-total` flag — not an autoscaler-only budget. `0` disables the global cap. Should be ≤ `serverLimit`. |
 | `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
 | `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |

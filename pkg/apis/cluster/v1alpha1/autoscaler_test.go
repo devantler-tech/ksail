@@ -84,6 +84,38 @@ func TestValidAutoscalerExpanders(t *testing.T) {
 	assert.Len(t, expanders, 4)
 }
 
+func TestAutoscalerExpanderList_String(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		list v1alpha1.AutoscalerExpanderList
+		want string
+	}{
+		{"empty_list", v1alpha1.AutoscalerExpanderList{}, ""},
+		{
+			"single",
+			v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+			"LeastWaste",
+		},
+		{
+			"multiple",
+			v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+			"LeastNodes,LeastWaste",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testCase.want, testCase.list.String())
+		})
+	}
+}
+
 // --- ValidateAutoscalerConfig ---
 
 func TestPodAutoscalerHorizontal_Default(t *testing.T) {
@@ -833,7 +865,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
 						Enabled:  true,
-						Expander: v1alpha1.AutoscalerExpanderPrice,
+						Expander: v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice},
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 						},
@@ -855,7 +887,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
 						Enabled:  true,
-						Expander: v1alpha1.AutoscalerExpanderPrice,
+						Expander: v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice},
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 						},
@@ -873,8 +905,10 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       1,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled:  true,
-						Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+						Enabled: true,
+						Expander: v1alpha1.AutoscalerExpanderList{
+							v1alpha1.AutoscalerExpanderLeastWaste,
+						},
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 						},
@@ -885,6 +919,96 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
 			},
 			wantErr: nil,
+		},
+		{
+			name: "expander priority list accepted for hetzner provider",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Expander: v1alpha1.AutoscalerExpanderList{
+							v1alpha1.AutoscalerExpanderLeastNodes,
+							v1alpha1.AutoscalerExpanderLeastWaste,
+						},
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "price in expander priority list rejected for hetzner provider",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Expander: v1alpha1.AutoscalerExpanderList{
+							v1alpha1.AutoscalerExpanderLeastNodes,
+							v1alpha1.AutoscalerExpanderPrice,
+						},
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr:     v1alpha1.ErrExpanderNotSupportedForProvider,
+			errContains: "pricing API",
+		},
+		{
+			name: "invalid expander value rejected",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderDocker,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:  true,
+						Expander: v1alpha1.AutoscalerExpanderList{"Bogus"},
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{},
+			wantErr:  v1alpha1.ErrInvalidAutoscalerExpander,
+		},
+		{
+			name: "duplicate expander value rejected",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderDocker,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Expander: v1alpha1.AutoscalerExpanderList{
+							v1alpha1.AutoscalerExpanderLeastWaste,
+							v1alpha1.AutoscalerExpanderLeastWaste,
+						},
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{},
+			wantErr:  v1alpha1.ErrDuplicateAutoscalerExpander,
 		},
 	}
 

@@ -263,9 +263,9 @@ func validateAutoscalerEnumFields(
 	autoscaler *NodeAutoscalerConfig,
 	pod *PodAutoscalerConfig,
 ) error {
-	if autoscaler.Expander != "" &&
-		!slices.Contains(ValidAutoscalerExpanders(), autoscaler.Expander) {
-		return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, autoscaler.Expander)
+	expandersErr := validateAutoscalerExpanders(autoscaler.Expander)
+	if expandersErr != nil {
+		return expandersErr
 	}
 
 	if pod.Horizontal != "" && !slices.Contains(ValidPodAutoscalerHorizontals(), pod.Horizontal) {
@@ -279,24 +279,47 @@ func validateAutoscalerEnumFields(
 	return nil
 }
 
-// validateExpanderForProvider checks that the chosen autoscaler expander
+// validateAutoscalerExpanders validates an autoscaler expander priority list.
+// Each entry must be a known strategy, and no strategy may appear more than once.
+// An empty list is valid (the installer falls back to the default expander).
+func validateAutoscalerExpanders(expanders AutoscalerExpanderList) error {
+	seen := make(map[AutoscalerExpander]struct{}, len(expanders))
+
+	for _, expander := range expanders {
+		if !slices.Contains(ValidAutoscalerExpanders(), expander) {
+			return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, expander)
+		}
+
+		if _, exists := seen[expander]; exists {
+			return fmt.Errorf("%w: %q", ErrDuplicateAutoscalerExpander, expander)
+		}
+
+		seen[expander] = struct{}{}
+	}
+
+	return nil
+}
+
+// validateExpanderForProvider checks that every chosen autoscaler expander
 // strategy is supported by the cluster's infrastructure provider. The Hetzner
 // cloud provider in the upstream cluster-autoscaler does not implement the
-// pricing API, so the Price expander causes a fatal crash on startup.
+// pricing API, so the Price expander causes a fatal crash on startup — whether it
+// is the sole expander or one entry in a priority list.
 func validateExpanderForProvider(
 	provider Provider,
 	autoscaler *NodeAutoscalerConfig,
 ) error {
-	if !autoscaler.Enabled || autoscaler.Expander == "" {
+	if !autoscaler.Enabled {
 		return nil
 	}
 
-	if provider == ProviderHetzner && autoscaler.Expander == AutoscalerExpanderPrice {
+	if provider == ProviderHetzner &&
+		slices.Contains(autoscaler.Expander, AutoscalerExpanderPrice) {
 		return fmt.Errorf(
 			"%w: %q is not supported on %s (Hetzner does not implement the pricing API); "+
 				"use %s or %s instead",
 			ErrExpanderNotSupportedForProvider,
-			autoscaler.Expander,
+			AutoscalerExpanderPrice,
 			ProviderHetzner,
 			AutoscalerExpanderLeastWaste,
 			AutoscalerExpanderRandom,

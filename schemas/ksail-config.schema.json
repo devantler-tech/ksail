@@ -283,13 +283,30 @@
                       "description": "Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be \u003c= serverLimit"
                     },
                     "expander": {
-                      "type": "string",
-                      "enum": [
-                        "Price",
-                        "LeastWaste",
-                        "LeastNodes",
-                        "Random"
-                      ]
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Price",
+                            "LeastWaste",
+                            "LeastNodes",
+                            "Random"
+                          ]
+                        },
+                        {
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "Price",
+                              "LeastWaste",
+                              "LeastNodes",
+                              "Random"
+                            ]
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes"
                     },
                     "scaleDownUnneededTime": {
                       "type": "string",

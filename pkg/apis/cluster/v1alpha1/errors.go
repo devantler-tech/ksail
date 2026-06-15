@@ -88,6 +88,10 @@ var ErrInvalidPodAutoscalerVertical = errors.New("invalid pod vertical autoscale
 // ErrInvalidAutoscalerExpander is returned when an invalid autoscaler expander strategy is specified.
 var ErrInvalidAutoscalerExpander = errors.New("invalid autoscaler expander")
 
+// ErrDuplicateAutoscalerExpander is returned when the autoscaler expander
+// priority list contains the same strategy more than once.
+var ErrDuplicateAutoscalerExpander = errors.New("duplicate autoscaler expander")
+
 // ErrInvalidPoolName is returned when a node pool name is not a valid DNS-1123 label.
 var ErrInvalidPoolName = errors.New("invalid pool name")
 

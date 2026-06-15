@@ -18,11 +18,11 @@ type PodAutoscalerConfig struct {
 // workers based on workload demand. Node-count changes via ksail cluster update
 // are still applied to the Talos machine config and will take effect normally.
 type NodeAutoscalerConfig struct {
-	Enabled               bool               `json:"enabled,omitzero"`
-	Pools                 []NodePool         `json:"pools,omitzero"`
-	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
-	Expander              AutoscalerExpander `json:"expander,omitzero"`
-	ScaleDownUnneededTime string             `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	Enabled               bool                   `json:"enabled,omitzero"`
+	Pools                 []NodePool             `json:"pools,omitzero"`
+	MaxNodesTotal         int32                  `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
+	Expander              AutoscalerExpanderList `json:"expander,omitzero"              jsonschema:"description=Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."`                                                                                                                             //nolint:lll
+	ScaleDownUnneededTime string                 `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"`                                                                                                                                                                                                                                                                                                                                                               //nolint:lll
 }
 
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.

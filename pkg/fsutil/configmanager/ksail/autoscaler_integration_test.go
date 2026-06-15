@@ -62,7 +62,11 @@ spec:
 	node := cluster.Spec.Cluster.Autoscaler.Node
 	assert.True(t, node.Enabled)
 	assert.Equal(t, int32(20), node.MaxNodesTotal)
-	assert.Equal(t, v1alpha1.AutoscalerExpanderLeastWaste, node.Expander)
+	assert.Equal(
+		t,
+		v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+		node.Expander,
+	)
 	assert.Equal(t, "10m", node.ScaleDownUnneededTime)
 	require.Len(t, node.Pools, 1)
 	assert.Equal(t, "workers-fsn1", node.Pools[0].Name)
@@ -169,4 +173,84 @@ spec:
 	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
 		"deprecated nodeAutoscaling field should remain empty when not set in config")
+}
+
+// TestConfigManager_ExpanderAcceptsScalarAndList verifies that the autoscaler
+// expander field accepts both the legacy scalar form (expander: LeastWaste), an
+// inline comma-separated scalar (expander: "LeastNodes,LeastWaste"), and the
+// YAML sequence form (expander: [LeastNodes, LeastWaste]) — all normalising into
+// an ordered AutoscalerExpanderList.
+func TestConfigManager_ExpanderAcceptsScalarAndList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		expander string
+		want     v1alpha1.AutoscalerExpanderList
+	}{
+		{
+			name:     "scalar",
+			expander: "        expander: LeastWaste",
+			want:     v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+		},
+		{
+			name:     "comma_separated_scalar",
+			expander: `        expander: "LeastNodes,LeastWaste"`,
+			want: v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+		},
+		{
+			name:     "sequence",
+			expander: "        expander: [LeastNodes, LeastWaste]",
+			want: v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastNodes,
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertExpanderLoadsAs(t, testCase.expander, testCase.want)
+		})
+	}
+}
+
+// assertExpanderLoadsAs writes a minimal ksail.yaml whose autoscaler node
+// section ends with expanderLine, loads it through the config manager, and
+// asserts the resulting expander list equals want.
+func assertExpanderLoadsAs(
+	t *testing.T,
+	expanderLine string,
+	want v1alpha1.AutoscalerExpanderList,
+) {
+	t.Helper()
+
+	yaml := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Vanilla\n" +
+		"    autoscaler:\n" +
+		"      node:\n" +
+		"        enabled: true\n" +
+		expanderLine + "\n"
+
+	configPath := filepath.Join(t.TempDir(), "ksail.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(yaml), 0o600))
+
+	manager := configmanager.NewConfigManager(
+		io.Discard, "",
+		configmanager.DefaultClusterFieldSelectors()...,
+	)
+	manager.Viper.SetConfigFile(configPath)
+
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{SkipValidation: true})
+	require.NoError(t, err)
+	require.NotNil(t, cluster)
+
+	assert.Equal(t, want, cluster.Spec.Cluster.Autoscaler.Node.Expander)
 }
