@@ -920,7 +920,7 @@ func runNonTUIChat(
 	sessionLog := toolgen.NewSessionLogRef()
 
 	// Set up tools without streaming
-	tools, toolMetadata := chatsvc.GetKSailToolMetadata( //nolint:contextcheck
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata(
 		cmd.Root(), nil, sessionLog,
 	)
 	tools = WrapToolsWithForceInjection(tools, toolMetadata)
@@ -1640,7 +1640,7 @@ func runTUIChat(
 	// Register OnEvent handler to catch session-level events during creation and between turns
 	sessionConfig.OnEvent = buildTUIOnEventHandler(eventChan)
 
-	chatModeRef, err := setupChatTools( //nolint:contextcheck
+	chatModeRef, err := setupChatTools(
 		sessionConfig, rootCmd, eventChan, outputChan, sessionLog,
 	)
 	if err != nil {
