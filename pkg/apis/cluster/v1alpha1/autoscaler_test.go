@@ -194,6 +194,7 @@ func TestAutoscalerExpanderList_UnmarshalJSON(t *testing.T) {
 		{"null", `null`, nil, false},
 		{"invalid_json", `{`, nil, true},
 		{"number", `123`, nil, true},
+		{"array_with_non_string_element", `[123]`, nil, true},
 	}
 
 	for _, testCase := range tests {
