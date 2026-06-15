@@ -34,7 +34,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	github.com/yannh/kubeconform v0.7.0
+	github.com/yannh/kubeconform v0.8.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/term v0.43.0
 	helm.sh/helm/v4 v4.2.0
@@ -955,7 +955,7 @@ require (
 	k8s.io/cri-api v0.36.1 // indirect
 	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
+	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kube-scheduler v0.36.1 // indirect
 	k8s.io/kubelet v0.36.1 // indirect
