@@ -58,67 +58,71 @@ type distributionMeta struct {
 	loadBalancerByDefault providerCapability
 }
 
-// distributionMetas returns the per-distribution metadata table. A fresh map
-// is built on each call so callers can never mutate shared state.
-func distributionMetas() map[Distribution]distributionMeta {
-	return map[Distribution]distributionMeta{
-		DistributionVanilla: {
-			configFile:         DefaultVanillaDistributionConfig,
-			defaultClusterName: "kind",
-			contextPrefix:      "kind-",
-			supportedProviders: []Provider{ProviderDocker, ProviderKubernetes},
+// distributionMetaTable is the per-distribution metadata table, built once at
+// package initialization. It is an immutable lookup table: distributionMetaFor
+// returns rows by value and callers never mutate them, so a single shared
+// instance is safe and avoids rebuilding the map (and its slices/structs) on
+// every lookup — distributionMetaFor is on hot paths such as ComputeDiff and
+// (un)marshalling.
+//
+//nolint:gochecknoglobals // immutable per-distribution lookup table, cached for performance
+var distributionMetaTable = map[Distribution]distributionMeta{
+	DistributionVanilla: {
+		configFile:         DefaultVanillaDistributionConfig,
+		defaultClusterName: "kind",
+		contextPrefix:      "kind-",
+		supportedProviders: []Provider{ProviderDocker, ProviderKubernetes},
+	},
+	DistributionK3s: {
+		configFile:            DefaultK3sDistributionConfig,
+		defaultClusterName:    "k3d-default",
+		contextPrefix:         "k3d-",
+		supportedProviders:    []Provider{ProviderDocker, ProviderKubernetes},
+		providesMetricsServer: true,
+		providesStorage:       true,
+		csiByDefault:          allProviders(),
+		loadBalancerByDefault: allProviders(),
+	},
+	DistributionTalos: {
+		configFile:         DefaultTalosDistributionConfig,
+		defaultClusterName: "talos-default",
+		contextPrefix:      "admin@",
+		supportedProviders: []Provider{
+			ProviderDocker, ProviderHetzner, ProviderOmni, ProviderKubernetes,
 		},
-		DistributionK3s: {
-			configFile:            DefaultK3sDistributionConfig,
-			defaultClusterName:    "k3d-default",
-			contextPrefix:         "k3d-",
-			supportedProviders:    []Provider{ProviderDocker, ProviderKubernetes},
-			providesMetricsServer: true,
-			providesStorage:       true,
-			csiByDefault:          allProviders(),
-			loadBalancerByDefault: allProviders(),
-		},
-		DistributionTalos: {
-			configFile:         DefaultTalosDistributionConfig,
-			defaultClusterName: "talos-default",
-			contextPrefix:      "admin@",
-			supportedProviders: []Provider{
-				ProviderDocker, ProviderHetzner, ProviderOmni, ProviderKubernetes,
-			},
-			providesCDI:           true,
-			csiByDefault:          onlyProviders(ProviderHetzner),
-			loadBalancerByDefault: onlyProviders(ProviderHetzner),
-		},
-		DistributionVCluster: {
-			configFile:            DefaultVClusterDistributionConfig,
-			defaultClusterName:    "vcluster-default",
-			contextPrefix:         "vcluster-docker_",
-			supportedProviders:    []Provider{ProviderDocker, ProviderKubernetes},
-			loadBalancerByDefault: allProviders(),
-		},
-		DistributionKWOK: {
-			configFile:         DefaultKWOKDistributionConfig,
-			defaultClusterName: "kwok-default",
-			contextPrefix:      "kwok-",
-			supportedProviders: []Provider{ProviderDocker, ProviderKubernetes},
-		},
-		DistributionEKS: {
-			configFile:            DefaultEKSDistributionConfig,
-			defaultClusterName:    "eks-default",
-			contextSuffix:         ".eksctl.io",
-			supportedProviders:    []Provider{ProviderAWS},
-			providesStorage:       true,
-			csiByDefault:          onlyProviders(ProviderAWS),
-			loadBalancerByDefault: onlyProviders(ProviderAWS),
-		},
-	}
+		providesCDI:           true,
+		csiByDefault:          onlyProviders(ProviderHetzner),
+		loadBalancerByDefault: onlyProviders(ProviderHetzner),
+	},
+	DistributionVCluster: {
+		configFile:            DefaultVClusterDistributionConfig,
+		defaultClusterName:    "vcluster-default",
+		contextPrefix:         "vcluster-docker_",
+		supportedProviders:    []Provider{ProviderDocker, ProviderKubernetes},
+		loadBalancerByDefault: allProviders(),
+	},
+	DistributionKWOK: {
+		configFile:         DefaultKWOKDistributionConfig,
+		defaultClusterName: "kwok-default",
+		contextPrefix:      "kwok-",
+		supportedProviders: []Provider{ProviderDocker, ProviderKubernetes},
+	},
+	DistributionEKS: {
+		configFile:            DefaultEKSDistributionConfig,
+		defaultClusterName:    "eks-default",
+		contextSuffix:         ".eksctl.io",
+		supportedProviders:    []Provider{ProviderAWS},
+		providesStorage:       true,
+		csiByDefault:          onlyProviders(ProviderAWS),
+		loadBalancerByDefault: onlyProviders(ProviderAWS),
+	},
 }
 
 // distributionMetaFor looks up the metadata row for a distribution. The
 // second return value is false for unknown distributions; callers fall back
 // to their documented defaults in that case.
 func distributionMetaFor(distribution Distribution) (distributionMeta, bool) {
-	meta, found := distributionMetas()[distribution]
+	meta, found := distributionMetaTable[distribution]
 
 	return meta, found
 }
