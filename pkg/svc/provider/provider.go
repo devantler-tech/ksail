@@ -122,6 +122,16 @@ func CheckNodesExist(ctx context.Context, lister NodeLister, clusterName string)
 	return len(nodes) > 0, nil
 }
 
+// Cluster lifecycle phase strings shared across providers. These are the
+// free-form ClusterStatus.Phase values derived from node readiness; keep them
+// in one place so independent providers don't drift on the spelling.
+const (
+	// PhaseStopped means no nodes are ready (or the cluster has no nodes yet).
+	PhaseStopped = "stopped"
+	// PhaseDegraded means some, but not all, nodes are ready.
+	PhaseDegraded = "degraded"
+)
+
 // BuildClusterStatus derives a ClusterStatus from a list of nodes by counting
 // how many are in the given readyState. Returns nil if nodes is empty.
 func BuildClusterStatus(nodes []NodeInfo, readyState string) *ClusterStatus {
@@ -139,9 +149,9 @@ func BuildClusterStatus(nodes []NodeInfo, readyState string) *ClusterStatus {
 
 	phase := readyState
 	if nodesReady == 0 {
-		phase = "stopped"
+		phase = PhaseStopped
 	} else if nodesReady < len(nodes) {
-		phase = "degraded"
+		phase = PhaseDegraded
 	}
 
 	return &ClusterStatus{

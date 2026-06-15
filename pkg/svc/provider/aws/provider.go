@@ -192,7 +192,7 @@ func (p *Provider) GetClusterStatus(
 		// cluster exists (GetCluster succeeded above) — only its nodegroups
 		// are absent. Return a zero-node status so callers can rely on the
 		// (status, err) contract: status is non-nil whenever err is nil.
-		status = &provider.ClusterStatus{Phase: "stopped", Nodes: nodes}
+		status = &provider.ClusterStatus{Phase: provider.PhaseStopped, Nodes: nodes}
 	}
 
 	return status, nil

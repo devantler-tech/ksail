@@ -2,6 +2,7 @@ package ksail
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -540,18 +541,22 @@ func (v *Validator) validateGitOpsEngine(
 		return
 	}
 
-	switch config.Spec.Cluster.GitOpsEngine {
-	case v1alpha1.GitOpsEngineNone, v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
+	engine := config.Spec.Cluster.GitOpsEngine
+
+	validValueList := engine.ValidValues()
+	if slices.Contains(validValueList, string(engine)) {
 		return
-	default:
-		result.AddError(validator.ValidationError{
-			Field:         "spec.cluster.gitOpsEngine",
-			Message:       "invalid GitOps engine value",
-			CurrentValue:  config.Spec.Cluster.GitOpsEngine,
-			ExpectedValue: "one of: None, Flux, ArgoCD",
-			FixSuggestion: "Set spec.cluster.gitOpsEngine to a supported value (None, Flux, or ArgoCD)",
-		})
 	}
+
+	validValues := strings.Join(validValueList, ", ")
+
+	result.AddError(validator.ValidationError{
+		Field:         "spec.cluster.gitOpsEngine",
+		Message:       "invalid GitOps engine value",
+		CurrentValue:  config.Spec.Cluster.GitOpsEngine,
+		ExpectedValue: "one of: " + validValues,
+		FixSuggestion: "Use a supported GitOps engine: " + validValues,
+	})
 }
 
 // validateRegistry ensures registry settings are coherent.
