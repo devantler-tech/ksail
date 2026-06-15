@@ -117,6 +117,10 @@ type chartValues struct {
 	NodeSelector      map[string]string    `json:"nodeSelector"`
 	RBAC              chartRBAC            `json:"rbac"`
 	Resources         chartResources       `json:"resources"`
+	// ExtraObjects maps to the chart's extraObjects value: raw Kubernetes manifests
+	// rendered as part of the Helm release. Used to deliver the CapacityBuffer CRD
+	// when capacity buffers are enabled (see capacitybuffers.go).
+	ExtraObjects []map[string]any `json:"extraObjects,omitempty"`
 }
 
 type autoscalingGroup struct {
@@ -136,6 +140,14 @@ type chartExtraArgs struct {
 	ScaleDownAfterDelete  string `json:"scale-down-delay-after-delete"`
 	OkTotalUnreadyCount   int    `json:"ok-total-unready-count"`
 	V                     string `json:"v"`
+	// CapacityBufferControllerEnabled and CapacityBufferPodInjectionEnabled toggle
+	// the upstream capacity-buffers feature (Cluster Autoscaler 1.34+, off by
+	// default): the CapacityBuffer controller and the pod-list processor that
+	// injects virtual pods for ready buffers. omitempty keeps both flags out of
+	// the rendered values unless capacityBuffers is enabled, so existing releases
+	// see no values drift.
+	CapacityBufferControllerEnabled   bool `json:"capacity-buffer-controller-enabled,omitempty"`
+	CapacityBufferPodInjectionEnabled bool `json:"capacity-buffer-pod-injection-enabled,omitempty"`
 }
 
 type chartSecretRef struct {
@@ -164,6 +176,18 @@ type chartRBACServiceAccount struct {
 type chartRBAC struct {
 	Create         bool                    `json:"create"`
 	ServiceAccount chartRBACServiceAccount `json:"serviceAccount"`
+	// AdditionalRules maps to the chart's rbac.additionalRules value: extra
+	// ClusterRole rules appended to the chart-managed ClusterRole. Used to grant
+	// CapacityBuffer access, which the chart's own ClusterRole does not cover.
+	AdditionalRules []chartRBACRule `json:"additionalRules,omitempty"`
+}
+
+// chartRBACRule mirrors a single rbac.authorization.k8s.io PolicyRule entry in
+// the chart's rbac.additionalRules value.
+type chartRBACRule struct {
+	APIGroups []string `json:"apiGroups"`
+	Resources []string `json:"resources"`
+	Verbs     []string `json:"verbs"`
 }
 
 type chartResourceRequests struct {
@@ -190,6 +214,13 @@ func buildValuesYaml(
 	extraEnv map[string]string,
 ) (string, error) {
 	vals := buildChartValues(cfg, haEnabled, extraEnv)
+
+	if cfg.CapacityBuffers {
+		err := enableCapacityBuffers(&vals)
+		if err != nil {
+			return "", fmt.Errorf("failed to enable capacity buffers: %w", err)
+		}
+	}
 
 	out, err := yaml.Marshal(vals)
 	if err != nil {

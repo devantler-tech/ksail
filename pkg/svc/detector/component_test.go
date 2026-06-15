@@ -1080,6 +1080,33 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 	assert.Equal(t, int32(1), cfg.Pools[0].Max)
 }
 
+func TestDetectNodeAutoscaler_CapacityBuffers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(map[string]any{
+		"extraArgs": map[string]any{
+			"capacity-buffer-controller-enabled": true,
+		},
+	}, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.CapacityBuffers,
+		"capacity-buffer-controller-enabled extraArg should round-trip to CapacityBuffers")
+}
+
 func TestDetectNodeAutoscaler_NotInstalled(t *testing.T) {
 	t.Parallel()
 

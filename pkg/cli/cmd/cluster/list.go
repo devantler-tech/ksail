@@ -427,7 +427,8 @@ func (r *componentReconciler) handlerForField(
 
 	// Prefix-based matching for fields with dynamic suffixes.
 	// All cluster.autoscaler.node.* fields (enabled, maxNodesTotal, expander,
-	// scaleDownUnneededTime, pools[...]) map to a single Helm install/upgrade.
+	// scaleDownUnneededTime, capacityBuffers, pools[...]) map to a single Helm
+	// install/upgrade.
 	if strings.HasPrefix(field, "cluster.autoscaler.node.") {
 		return r.reconcileClusterAutoscaler, true
 	}

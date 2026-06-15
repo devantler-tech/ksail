@@ -595,6 +595,96 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 	require.NoError(t, err)
 }
 
+// TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers verifies that
+// enabling capacityBuffers renders the two feature flags, the CapacityBuffer
+// RBAC rule, and the embedded CapacityBuffer CRD via extraObjects — and that all
+// three are omitted from the values when the feature is disabled.
+func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		enabled     bool
+		wantContain []string
+		wantOmit    []string
+	}{
+		{
+			name:    "EnabledRendersFlagsRBACAndCRD",
+			enabled: true,
+			wantContain: []string{
+				"capacity-buffer-controller-enabled: true",
+				"capacity-buffer-pod-injection-enabled: true",
+				"additionalRules:",
+				"capacitybuffers",
+				"kind: CustomResourceDefinition",
+				"name: capacitybuffers.autoscaling.x-k8s.io",
+			},
+		},
+		{
+			name:    "DisabledOmitsFlagsAndCRD",
+			enabled: false,
+			wantOmit: []string{
+				"capacity-buffer-controller-enabled",
+				"capacity-buffer-pod-injection-enabled",
+				"capacitybuffers",
+				"kind: CustomResourceDefinition",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertCapacityBuffersValuesYaml(t, test.enabled, test.wantContain, test.wantOmit)
+		})
+	}
+}
+
+func assertCapacityBuffersValuesYaml(
+	t *testing.T,
+	enabled bool,
+	wantContain, wantOmit []string,
+) {
+	t.Helper()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		Pools: []v1alpha1.NodePool{
+			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+		},
+		Expander:        v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+		CapacityBuffers: enabled,
+	}
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				for _, want := range wantContain {
+					assert.Contains(t, spec.ValuesYaml, want)
+				}
+
+				for _, omit := range wantOmit {
+					assert.NotContains(t, spec.ValuesYaml, omit)
+				}
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Second, cfg, false, true, true,
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, installer.Install(context.Background()))
+}
+
 func newInstallerWithDefaults(t *testing.T) (
 	*clusterautoscalerinstaller.Installer,
 	*helm.MockInterface,

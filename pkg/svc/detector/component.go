@@ -608,6 +608,13 @@ func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[strin
 	if scaleDown, ok := args["scale-down-unneeded-time"].(string); ok {
 		cfg.ScaleDownUnneededTime = scaleDown
 	}
+
+	// The installer renders both capacity-buffer flags together; the controller
+	// flag is the canonical marker for the capacityBuffers option. An absent key
+	// means the feature is off (the installer omits the flags when disabled).
+	if capacityBuffers, ok := args["capacity-buffer-controller-enabled"].(bool); ok {
+		cfg.CapacityBuffers = capacityBuffers
+	}
 }
 
 // helmExpandersToEnum reverses the Helm chart's expander value — a single
