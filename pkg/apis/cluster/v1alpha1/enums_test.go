@@ -463,15 +463,38 @@ func TestDistribution_ProvidesCDIByDefault(t *testing.T) {
 	}
 }
 
+// providesByDefaultCase is a shared table row for the per-provider
+// "provides X by default" distribution tests (CSI, LoadBalancer).
+type providesByDefaultCase struct {
+	name         string
+	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
+	expected     bool
+}
+
+// runProvidesByDefault runs fn for each case and asserts the expected result.
+// It is shared by the CSI and LoadBalancer by-default tests, whose tables differ
+// but whose execution is identical.
+func runProvidesByDefault(
+	t *testing.T,
+	cases []providesByDefaultCase,
+	provides func(v1alpha1.Distribution, v1alpha1.Provider) bool,
+) {
+	t.Helper()
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.expected, provides(testCase.distribution, testCase.provider))
+		})
+	}
+}
+
 func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		expected     bool
-	}{
+	runProvidesByDefault(t, []providesByDefaultCase{
 		{"k3s_docker_provides_csi", v1alpha1.DistributionK3s, v1alpha1.ProviderDocker, true},
 		{"vanilla_docker_no_csi", v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker, false},
 		{"talos_docker_no_csi", v1alpha1.DistributionTalos, v1alpha1.ProviderDocker, false},
@@ -479,27 +502,15 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 		{"vcluster_docker_no_csi", v1alpha1.DistributionVCluster, v1alpha1.ProviderDocker, false},
 		{"eks_aws_provides_csi", v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true},
 		{"unknown_no_csi", v1alpha1.Distribution("unknown"), v1alpha1.ProviderDocker, false},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := testCase.distribution.ProvidesCSIByDefault(testCase.provider)
-			assert.Equal(t, testCase.expected, result)
-		})
-	}
+	}, func(distribution v1alpha1.Distribution, provider v1alpha1.Provider) bool {
+		return distribution.ProvidesCSIByDefault(provider)
+	})
 }
 
 func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		expected     bool
-	}{
+	runProvidesByDefault(t, []providesByDefaultCase{
 		{"k3s_docker_provides_lb", v1alpha1.DistributionK3s, v1alpha1.ProviderDocker, true},
 		{"vanilla_docker_no_lb", v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker, false},
 		{"talos_docker_no_lb", v1alpha1.DistributionTalos, v1alpha1.ProviderDocker, false},
@@ -512,16 +523,9 @@ func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 		},
 		{"eks_aws_provides_lb", v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true},
 		{"unknown_no_lb", v1alpha1.Distribution("Unknown"), v1alpha1.ProviderDocker, false},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := testCase.distribution.ProvidesLoadBalancerByDefault(testCase.provider)
-			assert.Equal(t, testCase.expected, result)
-		})
-	}
+	}, func(distribution v1alpha1.Distribution, provider v1alpha1.Provider) bool {
+		return distribution.ProvidesLoadBalancerByDefault(provider)
+	})
 }
 
 // ---------------------------------------------------------------------------
