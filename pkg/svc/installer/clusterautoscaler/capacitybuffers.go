@@ -1,14 +1,9 @@
 package clusterautoscalerinstaller
 
 import (
-	"bufio"
-	"bytes"
 	_ "embed"
-	"errors"
 	"fmt"
-	"io"
 
-	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
 
@@ -56,51 +51,17 @@ func enableCapacityBuffers(vals *chartValues) error {
 		Verbs:     []string{"get", "list", "watch", "update", "patch"},
 	})
 
-	objects, err := yamlDocumentsToObjects(capacityBufferCRDYAML)
+	// The embedded CRD is a single YAML document; unmarshal it into a generic
+	// object for the chart's extraObjects values list (sigs.k8s.io/yaml routes
+	// through JSON, so the result is a plain map suitable for re-marshaling).
+	var crd map[string]any
+
+	err := yaml.Unmarshal(capacityBufferCRDYAML, &crd)
 	if err != nil {
 		return fmt.Errorf("parse embedded CapacityBuffer CRD: %w", err)
 	}
 
-	vals.ExtraObjects = append(vals.ExtraObjects, objects...)
+	vals.ExtraObjects = append(vals.ExtraObjects, crd)
 
 	return nil
-}
-
-// yamlDocumentsToObjects parses a (potentially multi-document) YAML stream into
-// generic objects suitable for the chart's extraObjects values list.
-func yamlDocumentsToObjects(data []byte) ([]map[string]any, error) {
-	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
-
-	var objects []map[string]any
-
-	for {
-		doc, err := reader.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("read YAML document: %w", err)
-		}
-
-		doc = bytes.TrimSpace(doc)
-		if len(doc) == 0 {
-			continue
-		}
-
-		var obj map[string]any
-
-		err = yaml.Unmarshal(doc, &obj)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal YAML document: %w", err)
-		}
-
-		if len(obj) == 0 {
-			continue
-		}
-
-		objects = append(objects, obj)
-	}
-
-	return objects, nil
 }
