@@ -2,6 +2,7 @@ package clusterautoscalerinstaller
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -240,7 +241,7 @@ func buildChartValues(
 		CloudProvider:     "hetzner",
 		AutoscalingGroups: groups,
 		ExtraArgs: chartExtraArgs{
-			Expander:              expanderToHelmValue(cfg.Expander),
+			Expander:              expandersToHelmValue(cfg.Expander),
 			ScaleDownUnneededTime: scaleDownTime,
 			MaxNodesTotal:         cfg.MaxNodesTotal,
 			ScaleDownAfterAdd:     "5m",
@@ -303,6 +304,23 @@ func buildAutoscalingGroups(pools []v1alpha1.NodePool) []autoscalingGroup {
 	}
 
 	return groups
+}
+
+// expandersToHelmValue converts an [v1alpha1.AutoscalerExpanderList] to the
+// comma-separated, lowercase kebab-case priority list expected by the
+// cluster-autoscaler Helm chart's --expander flag (e.g. "least-nodes,least-waste").
+// An empty list falls back to the default expander ("least-waste").
+func expandersToHelmValue(expanders v1alpha1.AutoscalerExpanderList) string {
+	if len(expanders) == 0 {
+		return expanderToHelmValue("")
+	}
+
+	parts := make([]string, len(expanders))
+	for i, expander := range expanders {
+		parts[i] = expanderToHelmValue(expander)
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // expanderToHelmValue converts an [v1alpha1.AutoscalerExpander] enum value to

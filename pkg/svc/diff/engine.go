@@ -774,7 +774,7 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 		clusterupdate.ChangeCategoryInPlace)
 
 	appendChange(result, "cluster.autoscaler.node.expander",
-		string(oldNode.Expander), string(newNode.Expander),
+		oldNode.Expander.String(), newNode.Expander.String(),
 		string(v1alpha1.AutoscalerExpanderLeastWaste),
 		"expander strategy can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)

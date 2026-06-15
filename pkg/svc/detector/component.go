@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -597,7 +598,7 @@ func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string
 // parseAutoscalerExtraArgs extracts scalar config from the chart's extraArgs.
 func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[string]any) {
 	if expander, ok := args["expander"].(string); ok {
-		cfg.Expander = helmExpanderToEnum(expander)
+		cfg.Expander = helmExpandersToEnum(expander)
 	}
 
 	if maxNodes, ok := toInt32(args["max-nodes-total"]); ok {
@@ -607,6 +608,25 @@ func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[strin
 	if scaleDown, ok := args["scale-down-unneeded-time"].(string); ok {
 		cfg.ScaleDownUnneededTime = scaleDown
 	}
+}
+
+// helmExpandersToEnum reverses the Helm chart's expander value — a single
+// strategy or a comma-separated priority list (e.g. "least-nodes,least-waste") —
+// back into a [v1alpha1.AutoscalerExpanderList]. An empty value yields a nil list.
+// Must stay in sync with expandersToHelmValue in the installer.
+func helmExpandersToEnum(value string) v1alpha1.AutoscalerExpanderList {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	expanders := make(v1alpha1.AutoscalerExpanderList, 0, len(parts))
+
+	for _, part := range parts {
+		expanders = append(expanders, helmExpanderToEnum(strings.TrimSpace(part)))
+	}
+
+	return expanders
 }
 
 // helmExpanderToEnum reverses the Helm chart's lowercase expander value to the
