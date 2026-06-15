@@ -1512,9 +1512,11 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	spec := newBaseSpec()
 	spec.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:               true,
-			MaxNodesTotal:         20,
-			Expander:              v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
+			Enabled:       true,
+			MaxNodesTotal: 20,
+			Expander: v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderLeastWaste,
+			},
 			ScaleDownUnneededTime: "10m",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
@@ -1593,9 +1595,11 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	newer := clone(old)
 	newer.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:               true,
-			MaxNodesTotal:         20,
-			Expander:              v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice},
+			Enabled:       true,
+			MaxNodesTotal: 20,
+			Expander: v1alpha1.AutoscalerExpanderList{
+				v1alpha1.AutoscalerExpanderPrice,
+			},
 			ScaleDownUnneededTime: "10m",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
