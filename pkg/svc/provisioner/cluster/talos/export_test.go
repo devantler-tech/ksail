@@ -394,6 +394,28 @@ func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageCha
 	return autoscalerRecycleRequired(diff, imageChanged)
 }
 
+// UpdateApplyStepNamesForTest returns the ordered names of the post-PrepareUpdate
+// apply steps, so tests can assert the step ordering (notably that the autoscaler
+// baseline refresh runs before static-node scaling — #5219) without driving a
+// live cluster. The names do not depend on the spec/diff arguments.
+func (p *Provisioner) UpdateApplyStepNamesForTest() []string {
+	steps := p.updateApplySteps(
+		"test-cluster",
+		&v1alpha1.ClusterSpec{},
+		&v1alpha1.ClusterSpec{},
+		clusterupdate.NewEmptyUpdateResult(),
+		clusterupdate.NewEmptyUpdateResult(),
+		clusterupdate.UpdateOptions{},
+	)
+
+	names := make([]string, len(steps))
+	for index, step := range steps {
+		names[index] = step.name
+	}
+
+	return names
+}
+
 // SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
 func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
 	return snapshotImageIDFromSecret(secret)
