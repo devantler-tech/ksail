@@ -122,21 +122,25 @@ func TestSplitAutoscalerExpanders(t *testing.T) {
 
 	leastNodes := string(v1alpha1.AutoscalerExpanderLeastNodes)
 	leastWaste := string(v1alpha1.AutoscalerExpanderLeastWaste)
+	bothInOrder := v1alpha1.AutoscalerExpanderList{
+		v1alpha1.AutoscalerExpanderLeastNodes,
+		v1alpha1.AutoscalerExpanderLeastWaste,
+	}
 
 	tests := []struct {
 		name string
 		raw  string
-		want []string
+		want v1alpha1.AutoscalerExpanderList
 	}{
-		{"empty_input", "", []string{}},
-		{"whitespace", " ", []string{}},
-		{"single", leastWaste, []string{leastWaste}},
-		{"comma_separated", leastNodes + "," + leastWaste, []string{leastNodes, leastWaste}},
+		{"empty_input", "", v1alpha1.AutoscalerExpanderList{}},
+		{"whitespace", " ", v1alpha1.AutoscalerExpanderList{}},
 		{
-			"comma_separated_spaces",
-			leastNodes + ", " + leastWaste,
-			[]string{leastNodes, leastWaste},
+			"single",
+			leastWaste,
+			v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderLeastWaste},
 		},
+		{"comma_separated", leastNodes + "," + leastWaste, bothInOrder},
+		{"comma_separated_spaces", leastNodes + ", " + leastWaste, bothInOrder},
 	}
 
 	for _, testCase := range tests {
@@ -168,7 +172,7 @@ func TestAutoscalerExpanderList_UnmarshalJSON(t *testing.T) {
 			false,
 		},
 		{
-			"legacy_comma_separated_scalar",
+			"comma_separated_scalar",
 			`"LeastNodes,LeastWaste"`,
 			v1alpha1.AutoscalerExpanderList{
 				v1alpha1.AutoscalerExpanderLeastNodes,

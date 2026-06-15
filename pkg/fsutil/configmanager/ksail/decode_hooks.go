@@ -38,7 +38,7 @@ func autoscalerExpanderListDecodeHook() mapstructure.DecodeHookFuncType {
 
 		raw, ok := data.(string)
 		if !ok {
-			return []string{}, nil
+			return v1alpha1.AutoscalerExpanderList{}, nil
 		}
 
 		return v1alpha1.SplitAutoscalerExpanders(raw), nil

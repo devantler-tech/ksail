@@ -93,19 +93,19 @@ func (l AutoscalerExpanderList) String() string {
 // entries, trimming surrounding whitespace from each. A comma-separated scalar
 // ("LeastNodes,LeastWaste") yields one entry per element, mirroring the upstream
 // cluster-autoscaler --expander priority-list syntax; an empty or whitespace-only
-// value yields an empty (non-nil) slice. It is the shared normaliser for the JSON
+// value yields an empty (non-nil) list. It is the shared normaliser for the JSON
 // unmarshaler (legacy persisted scalar form) and the YAML configuration decode
 // hook, so both accept identical scalar inputs.
-func SplitAutoscalerExpanders(raw string) []string {
+func SplitAutoscalerExpanders(raw string) AutoscalerExpanderList {
 	if strings.TrimSpace(raw) == "" {
-		return []string{}
+		return AutoscalerExpanderList{}
 	}
 
 	parts := strings.Split(raw, ",")
-	expanders := make([]string, 0, len(parts))
+	expanders := make(AutoscalerExpanderList, 0, len(parts))
 
 	for _, part := range parts {
-		expanders = append(expanders, strings.TrimSpace(part))
+		expanders = append(expanders, AutoscalerExpander(strings.TrimSpace(part)))
 	}
 
 	return expanders
@@ -150,14 +150,7 @@ func (l *AutoscalerExpanderList) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal autoscaler expander scalar: %w", err)
 	}
 
-	parts := SplitAutoscalerExpanders(raw)
-	expanders := make(AutoscalerExpanderList, len(parts))
-
-	for index, part := range parts {
-		expanders[index] = AutoscalerExpander(part)
-	}
-
-	*l = expanders
+	*l = SplitAutoscalerExpanders(raw)
 
 	return nil
 }
