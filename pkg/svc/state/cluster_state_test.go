@@ -92,6 +92,59 @@ func TestLoadClusterSpec_NotFound(t *testing.T) {
 	}
 }
 
+// TestLoadClusterSpec_LegacyScalarExpander verifies that a spec.json written by
+// an older ksail version — which persisted autoscaler.node.expander as a scalar
+// string before the field became an ordered list — still loads after upgrade.
+// Regression for "cannot unmarshal string into Go struct field
+// NodeAutoscalerConfig.autoscaler.node.expander of type v1alpha1.AutoscalerExpanderList".
+func TestLoadClusterSpec_LegacyScalarExpander(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "test-legacy-expander-" + t.Name()
+
+	t.Cleanup(func() {
+		_ = state.DeleteClusterState(clusterName)
+	})
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir failed: %v", err)
+	}
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+
+	err = os.MkdirAll(dir, 0o700)
+	if err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+
+	legacy := `{
+  "distribution": "Talos",
+  "provider": "Docker",
+  "autoscaler": {
+    "node": {
+      "enabled": true,
+      "expander": "LeastWaste"
+    }
+  }
+}`
+
+	err = os.WriteFile(filepath.Join(dir, "spec.json"), []byte(legacy), 0o600)
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	loaded, err := state.LoadClusterSpec(clusterName)
+	if err != nil {
+		t.Fatalf("LoadClusterSpec failed on legacy scalar expander: %v", err)
+	}
+
+	expander := loaded.Autoscaler.Node.Expander
+	if len(expander) != 1 || expander[0] != v1alpha1.AutoscalerExpanderLeastWaste {
+		t.Errorf("Expander: got %v, want [LeastWaste]", expander)
+	}
+}
+
 func TestDeleteClusterState(t *testing.T) {
 	t.Parallel()
 
