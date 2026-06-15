@@ -258,10 +258,15 @@ func assertEnumSetRoundTrips(t *testing.T, spec enumSpec) {
 func assertEnumSetRejectsInvalid(t *testing.T, spec enumSpec) {
 	t.Helper()
 
+	// Use a distinctive token that does not appear in any sentinel ("invalid …")
+	// or valid option, so the echo assertion below actually verifies the rejected
+	// input is named — asserting "invalid" would pass via the sentinel text alone.
+	const rejected = "bogus-not-a-value"
+
 	value := spec.newValue()
-	err := value.Set("invalid")
-	require.ErrorIs(t, err, spec.invalidErr, "Set(invalid) should wrap the sentinel")
-	require.ErrorContains(t, err, "invalid", "error should name the rejected input")
+	err := value.Set(rejected)
+	require.ErrorIs(t, err, spec.invalidErr, "Set(%q) should wrap the sentinel", rejected)
+	require.ErrorContains(t, err, rejected, "error should name the rejected input")
 
 	for _, valid := range spec.values {
 		require.ErrorContains(t, err, valid, "error should list valid option %q", valid)

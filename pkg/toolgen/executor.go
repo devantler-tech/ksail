@@ -35,9 +35,9 @@ func executeTool(
 }
 
 // resolveCommand returns the executable to run for a tool invocation:
-// opts.ExecutablePath when set (DefaultOptions resolves it to the running
-// binary via os.Executable, removing any PATH dependence), otherwise the
-// tool's recorded root command name as a PATH-lookup fallback.
+// opts.ExecutablePath when set (the MCP server sets it to the running binary
+// via DefaultExecutablePath/os.Executable, removing any PATH dependence),
+// otherwise the tool's recorded root command name as a PATH-lookup fallback.
 func resolveCommand(opts ToolOptions, tool ToolDefinition) string {
 	if opts.ExecutablePath != "" {
 		return opts.ExecutablePath

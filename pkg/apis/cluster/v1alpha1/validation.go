@@ -10,10 +10,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// ClusterNamePattern is the DNS-1123-subdomain regex for cluster names:
+// lowercase alphanumeric with optional hyphens, starting with a letter and
+// ending with alphanumeric. It is the single source shared by the runtime
+// validator (clusterNameRegex) and the JSON-schema generator (schemas/), so the
+// editor schema and runtime validation cannot drift.
+const ClusterNamePattern = `^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`
+
 // clusterNameRegex matches DNS-1123 subdomain names: lowercase alphanumeric with optional hyphens.
 // Must start with a letter, end with alphanumeric, and be at most 63 characters.
 // See: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
-var clusterNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+var clusterNameRegex = regexp.MustCompile(ClusterNamePattern)
 
 // ClusterNameMaxLength is the maximum length for a cluster name.
 const ClusterNameMaxLength = 63

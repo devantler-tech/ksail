@@ -42,11 +42,6 @@ const (
 	// path, so "<module>/schemas" + "../pkg/apis/cluster/v1alpha1" cleans to the
 	// v1alpha1 package's real import path.
 	commentImportBase = "github.com/devantler-tech/ksail/v7/schemas"
-
-	// clusterNamePattern mirrors clusterNameRegex in
-	// pkg/apis/cluster/v1alpha1/validation.go (DNS-1123: lowercase alphanumerics
-	// and hyphens, starting with a letter, not ending with a hyphen).
-	clusterNamePattern = `^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`
 )
 
 // errSchemaPathMissing reports that a schema customization targeted a property
@@ -332,7 +327,7 @@ func objectMetaSchema() *jsonschema.Schema {
 		Type: "string",
 		Description: "Cluster name (DNS-1123 compliant: lowercase letters, numbers, and hyphens; " +
 			"must start with a letter and must not end with a hyphen).",
-		Pattern:   clusterNamePattern,
+		Pattern:   v1alpha1.ClusterNamePattern,
 		MaxLength: &maxLength,
 	})
 
