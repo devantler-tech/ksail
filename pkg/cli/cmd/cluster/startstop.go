@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +24,7 @@ The provider is resolved in the following priority order:
 Supported distributions are automatically detected from existing clusters.`
 
 // NewStartCmd creates and returns the start command.
-func NewStartCmd(_ *di.Runtime) *cobra.Command {
+func NewStartCmd() *cobra.Command {
 	cmd := lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:          "start",
 		Short:        "Start a stopped cluster",
@@ -65,7 +64,7 @@ The provider is resolved in the following priority order:
 Supported distributions are automatically detected from existing clusters.`
 
 // NewStopCmd creates and returns the stop command.
-func NewStopCmd(_ *di.Runtime) *cobra.Command {
+func NewStopCmd() *cobra.Command {
 	cmd := lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:          "stop",
 		Short:        "Stop a running cluster",

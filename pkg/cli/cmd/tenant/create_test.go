@@ -14,14 +14,14 @@ import (
 func TestCreateCmd_HasWritePermission(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 	require.Equal(t, "write", cmd.Annotations[annotations.AnnotationPermission])
 }
 
 func TestCreateCmd_RequiresExactlyOneArg(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -34,7 +34,7 @@ func TestCreateCmd_RequiresExactlyOneArg(t *testing.T) {
 func TestCreateCmd_FlagDefaults(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	// --namespace default empty
 	ns, err := cmd.Flags().GetStringSlice("namespace")
@@ -95,7 +95,7 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 func TestCreateCmd_ProductionFlagDefaults(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	prod, err := cmd.Flags().GetBool("production")
 	require.NoError(t, err)
@@ -132,7 +132,7 @@ func TestCreateCmd_Production(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -166,7 +166,7 @@ func TestCreateCmd_FluxTimeoutImpliesWait(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -203,7 +203,7 @@ func TestCreateCmd_CiliumNetworkPolicyFromConfig(t *testing.T) {
 		"    distributionConfig: kind.yaml\n    cni: Cilium\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailYAML), 0o600))
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -227,7 +227,7 @@ func TestCreateCmd_KubectlType(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -256,7 +256,7 @@ func TestCreateCmd_FluxType(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -287,7 +287,7 @@ func TestCreateCmd_FluxTypeWithOCIPath(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -321,7 +321,7 @@ func TestCreateCmd_ArgoCDType(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -350,7 +350,7 @@ func TestCreateCmd_InvalidType(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -367,7 +367,7 @@ func TestCreateCmd_DeliveryPRAccepted(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -390,7 +390,7 @@ func TestCreateCmd_DeliveryPRRequiresGitProvider(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -407,7 +407,7 @@ func TestCreateCmd_InvalidDelivery(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -433,7 +433,7 @@ kind: Kustomization
 resources: []
 `), 0o600))
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -456,7 +456,7 @@ func TestCreateCmd_MultiNamespace(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -486,7 +486,7 @@ func TestCreateCmd_CustomClusterRole(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -514,7 +514,7 @@ func TestCreateCmd_NoTypeNoConfig(t *testing.T) {
 	// chdir to a dir without ksail.yaml
 	t.Chdir(outDir)
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -532,7 +532,7 @@ func TestCreateCmd_CustomSourceDirectory(t *testing.T) {
 
 	outDir := t.TempDir()
 
-	cmd := tenantpkg.NewCreateCmd(nil)
+	cmd := tenantpkg.NewCreateCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)

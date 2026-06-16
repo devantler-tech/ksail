@@ -8,10 +8,11 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/dockerutil"
 	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/docker/docker/client"
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +36,7 @@ func TestWithDockerClientInstance_Success(t *testing.T) {
 	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
-		func(_ client.APIClient) error { return nil },
+		func(_ dockerpkg.Client) error { return nil },
 	)
 
 	require.NoError(t, err)
@@ -55,7 +56,7 @@ func TestWithDockerClientInstance_OperationError(t *testing.T) {
 	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
-		func(_ client.APIClient) error {
+		func(_ dockerpkg.Client) error {
 			return fmt.Errorf("test: %w", errOperationFailed)
 		},
 	)
@@ -77,7 +78,7 @@ func TestWithDockerClientInstance_CloseError(t *testing.T) {
 	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
-		func(_ client.APIClient) error { return nil },
+		func(_ dockerpkg.Client) error { return nil },
 	)
 
 	require.NoError(t, err)
@@ -99,7 +100,7 @@ func TestWithDockerClientInstance_BothErrors(t *testing.T) {
 	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
-		func(_ client.APIClient) error {
+		func(_ dockerpkg.Client) error {
 			return fmt.Errorf("first: %w", errOperationFailed)
 		},
 	)
@@ -113,7 +114,7 @@ func TestWithDockerClientInstance_ClientPassedToOperation(t *testing.T) {
 
 	mockClient := dockerpkg.NewMockAPIClient(t)
 	mockClient.EXPECT().Close().Return(nil)
-	mockClient.EXPECT().ClientVersion().Return("1.42")
+	mockClient.EXPECT().Ping(mock.Anything).Return(dockertypes.Ping{APIVersion: "1.42"}, nil)
 
 	var buf bytes.Buffer
 
@@ -122,8 +123,13 @@ func TestWithDockerClientInstance_ClientPassedToOperation(t *testing.T) {
 
 	var receivedVersion string
 
-	err := dockerutil.WithDockerClientInstance(cmd, mockClient, func(c client.APIClient) error {
-		receivedVersion = c.ClientVersion()
+	err := dockerutil.WithDockerClientInstance(cmd, mockClient, func(c dockerpkg.Client) error {
+		ping, pingErr := c.Ping(t.Context())
+		receivedVersion = ping.APIVersion
+
+		if pingErr != nil {
+			return fmt.Errorf("ping: %w", pingErr)
+		}
 
 		return nil
 	})

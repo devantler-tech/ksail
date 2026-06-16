@@ -31,7 +31,7 @@ func TestRepairCmd_RunsRegisteredRepairs(t *testing.T) {
 		result: repairer.Result{Name: "fake-ok", Status: repairer.StatusOK, Detail: "all good"},
 	}}
 
-	cmd := clustercmd.NewRepairCmd(nil, repairs)
+	cmd := clustercmd.NewRepairCmd(repairs)
 	cmd.SetContext(context.Background())
 
 	var out bytes.Buffer
@@ -62,7 +62,7 @@ func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 		Err:    errStubFailure,
 	}}}
 
-	cmd := clustercmd.NewRepairCmd(nil, repairs)
+	cmd := clustercmd.NewRepairCmd(repairs)
 	cmd.SetContext(context.Background())
 
 	var out bytes.Buffer
@@ -79,7 +79,7 @@ func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 func TestRepairCmd_NoRepairsRegistered(t *testing.T) {
 	t.Parallel()
 
-	cmd := clustercmd.NewRepairCmd(nil, []repairer.Repair{})
+	cmd := clustercmd.NewRepairCmd([]repairer.Repair{})
 	cmd.SetContext(context.Background())
 
 	var out bytes.Buffer

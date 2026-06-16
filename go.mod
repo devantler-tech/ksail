@@ -26,7 +26,6 @@ require (
 	github.com/k3d-io/k3d/v5 v5.9.0-rc.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.14.0-alpha.1
 	github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.1
 	github.com/sirupsen/logrus v1.9.4
@@ -748,7 +747,6 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
-	github.com/samber/go-type-to-string v1.8.0 // indirect
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.1.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.9 // indirect

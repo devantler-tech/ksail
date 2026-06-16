@@ -5,18 +5,18 @@ import (
 	"context"
 	"fmt"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
 // ContainerExecutor provides methods for executing commands in containers.
 type ContainerExecutor struct {
-	dockerClient client.APIClient
+	dockerClient dockerclient.Client
 }
 
 // NewContainerExecutor creates a new container executor.
-func NewContainerExecutor(dockerClient client.APIClient) *ContainerExecutor {
+func NewContainerExecutor(dockerClient dockerclient.Client) *ContainerExecutor {
 	return &ContainerExecutor{
 		dockerClient: dockerClient,
 	}

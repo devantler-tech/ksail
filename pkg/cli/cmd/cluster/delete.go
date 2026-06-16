@@ -16,7 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
@@ -25,7 +25,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -58,7 +57,7 @@ type deleteFlags struct {
 
 // NewDeleteCmd creates and returns the delete command.
 // Delete uses --name and --provider flags to determine the cluster to delete.
-func NewDeleteCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewDeleteCmd() *cobra.Command {
 	flags := &deleteFlags{}
 
 	cmd := &cobra.Command{
@@ -71,7 +70,7 @@ func NewDeleteCmd(runtimeContainer *di.Runtime) *cobra.Command {
 			annotations.AnnotationPermission: permissionWrite,
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDeleteAction(cmd, runtimeContainer, flags)
+			return runDeleteAction(cmd, flags)
 		},
 	}
 
@@ -100,14 +99,14 @@ func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
 // runDeleteAction executes the cluster deletion with registry cleanup.
 func runDeleteAction(
 	cmd *cobra.Command,
-	runtimeContainer *di.Runtime,
 	flags *deleteFlags,
 ) error {
 	// Wrap output with StageSeparatingWriter for automatic stage separation
 	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 	cmd.SetOut(stageWriter)
 
-	tmr := initTimer(runtimeContainer)
+	tmr := timer.New()
+	tmr.Start()
 
 	// Resolve cluster info from flags, config, or kubeconfig
 	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.name, flags.provider, flags.kubeconfig)
@@ -173,14 +172,10 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 	name := strings.TrimSpace(resolved.ClusterName)
 
 	// Each distribution uses a different kubeconfig context naming convention.
-	prefixes := []string{
-		"kind-",
-		"k3d-",
-		"vcluster-docker_",
-		"kwok-",
-	}
-
-	for _, prefix := range prefixes {
+	// ContextPrefixes is the single source of these conventions and also covers
+	// Talos ("admin@") and the nested-on-Kubernetes K3s ("k3k-") alias, so
+	// delete now detects clusters those prefixes name (release-note tagged).
+	for _, prefix := range clusterdetector.ContextPrefixes() {
 		contextName := ""
 
 		if name != "" {
@@ -289,28 +284,6 @@ func performPostDeletionCleanup(
 	if isKindCluster {
 		cleanupCloudProviderKindIfLastCluster(cmd, tmr)
 	}
-}
-
-// initTimer initializes and starts the timer from the runtime container.
-func initTimer(runtimeContainer *di.Runtime) timer.Timer {
-	var tmr timer.Timer
-
-	if runtimeContainer != nil {
-		//nolint:wrapcheck // Error is captured to outer scope, not returned
-		_ = runtimeContainer.Invoke(func(injector di.Injector) error {
-			var err error
-
-			tmr, err = di.ResolveTimer(injector)
-
-			return err
-		})
-	}
-
-	if tmr != nil {
-		tmr.Start()
-	}
-
-	return tmr
 }
 
 // promptForDeletion shows the deletion preview and prompts for confirmation.
@@ -794,7 +767,7 @@ func cleanupCloudProviderKindIfLastCluster(
 func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
 	return forEachContainer(
 		cmd,
-		func(dockerClient client.APIClient, ctr container.Summary, name string) error {
+		func(dockerClient dockerclient.Client, ctr container.Summary, name string) error {
 			if !isCloudProviderKindContainer(name) {
 				return nil
 			}
@@ -891,7 +864,7 @@ func getCleanupDeps() mirrorregistry.CleanupDependencies {
 
 // withDockerClient executes an operation with the Docker client, handling locking and invoker retrieval.
 // This is the canonical way to access Docker in this package, ensuring thread-safe access to the invoker.
-func withDockerClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
+func withDockerClient(cmd *cobra.Command, operation func(dockerclient.Client) error) error {
 	dockerClientInvokerMu.RLock()
 
 	invoker := dockerClientInvoker
@@ -910,7 +883,7 @@ func forEachContainerName(
 ) error {
 	return forEachContainer(
 		cmd,
-		func(_ client.APIClient, _ container.Summary, name string) error {
+		func(_ dockerclient.Client, _ container.Summary, name string) error {
 			if callback(name) {
 				return errStopIteration
 			}
@@ -925,9 +898,9 @@ func forEachContainerName(
 // Return an error to stop iteration (use errStopIteration for normal early exit).
 func forEachContainer(
 	cmd *cobra.Command,
-	callback func(dockerClient client.APIClient, ctr container.Summary, name string) error,
+	callback func(dockerClient dockerclient.Client, ctr container.Summary, name string) error,
 ) error {
-	return withDockerClient(cmd, func(dockerClient client.APIClient) error {
+	return withDockerClient(cmd, func(dockerClient dockerclient.Client) error {
 		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
 			All: true,
 		})

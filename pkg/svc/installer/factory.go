@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	argocdinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/certmanager"
@@ -22,14 +23,13 @@ import (
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/localpathstorage"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
-	"github.com/docker/docker/client"
 )
 
 // Factory creates installers based on cluster configuration.
 // It holds the shared dependencies required by installers.
 type Factory struct {
 	helmClient   helm.Interface
-	dockerClient client.APIClient
+	dockerClient dockerclient.Client
 	kubeconfig   string
 	kubecontext  string
 	timeout      time.Duration
@@ -39,7 +39,7 @@ type Factory struct {
 // NewFactory creates a new installer factory with the required dependencies.
 func NewFactory(
 	helmClient helm.Interface,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	kubeconfig, kubecontext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,

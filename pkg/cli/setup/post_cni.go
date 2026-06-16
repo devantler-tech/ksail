@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -148,93 +147,53 @@ func inClusterConnectivityDeadline(dist v1alpha1.Distribution) time.Duration {
 	return inClusterConnectivityTimeout
 }
 
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	clusterStabilityCheckMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	clusterStabilityCheckOverride func(context.Context, *v1alpha1.Cluster, bool) error
-)
-
-// getClusterStabilityCheckFn returns the cluster stability check function,
-// using the test override if one is set.
-func getClusterStabilityCheckFn() func(context.Context, *v1alpha1.Cluster, bool) error {
-	clusterStabilityCheckMu.RLock()
-	defer clusterStabilityCheckMu.RUnlock()
-
-	if clusterStabilityCheckOverride != nil {
-		return clusterStabilityCheckOverride
+// clusterStabilityCheck returns the cluster stability check function, falling
+// back to the default waitForClusterStability when the factory field is unset.
+func (f *InstallerFactories) clusterStabilityCheck() func(
+	context.Context, *v1alpha1.Cluster, bool,
+) error {
+	if f != nil && f.ClusterStabilityCheck != nil {
+		return f.ClusterStabilityCheck
 	}
 
 	return waitForClusterStability
 }
 
-// SetClusterStabilityCheckForTests overrides the cluster stability check for testing.
-// Returns a cleanup function that restores the previous check.
-func SetClusterStabilityCheckForTests(
-	fn func(context.Context, *v1alpha1.Cluster, bool) error,
-) func() {
-	clusterStabilityCheckMu.Lock()
-
-	previous := clusterStabilityCheckOverride
-	clusterStabilityCheckOverride = fn
-
-	clusterStabilityCheckMu.Unlock()
-
-	return func() {
-		clusterStabilityCheckMu.Lock()
-
-		clusterStabilityCheckOverride = previous
-
-		clusterStabilityCheckMu.Unlock()
-	}
-}
-
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	csrApproverWaitMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	csrApproverWaitOverride func(context.Context, *v1alpha1.Cluster) error
-)
-
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	nodeSchedulabilityWaitMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	nodeSchedulabilityWaitOverride func(context.Context, *v1alpha1.Cluster) error
-)
-
-// getNodeSchedulabilityWaitFn returns the node schedulability wait function,
-// using the test override if one is set.
-func getNodeSchedulabilityWaitFn() func(context.Context, *v1alpha1.Cluster) error {
-	nodeSchedulabilityWaitMu.RLock()
-	defer nodeSchedulabilityWaitMu.RUnlock()
-
-	if nodeSchedulabilityWaitOverride != nil {
-		return nodeSchedulabilityWaitOverride
+// nodeSchedulabilityWait returns the node schedulability wait function, falling
+// back to the default waitForNodeSchedulability when the factory field is unset.
+func (f *InstallerFactories) nodeSchedulabilityWait() func(
+	context.Context, *v1alpha1.Cluster,
+) error {
+	if f != nil && f.NodeSchedulabilityWait != nil {
+		return f.NodeSchedulabilityWait
 	}
 
 	return waitForNodeSchedulability
 }
 
-// SetNodeSchedulabilityWaitForTests overrides the node schedulability wait function for testing.
-// Returns a cleanup function that restores the previous function.
-func SetNodeSchedulabilityWaitForTests(
-	fn func(context.Context, *v1alpha1.Cluster) error,
-) func() {
-	nodeSchedulabilityWaitMu.Lock()
-
-	previous := nodeSchedulabilityWaitOverride
-	nodeSchedulabilityWaitOverride = fn
-
-	nodeSchedulabilityWaitMu.Unlock()
-
-	return func() {
-		nodeSchedulabilityWaitMu.Lock()
-
-		nodeSchedulabilityWaitOverride = previous
-
-		nodeSchedulabilityWaitMu.Unlock()
+// waitForCSRApprover returns the CSR approver wait function, falling back to the
+// default waitForKubeletCSRApprover when the factory field is unset.
+func (f *InstallerFactories) waitForCSRApprover() func(
+	context.Context, *v1alpha1.Cluster,
+) error {
+	if f != nil && f.WaitForCSRApprover != nil {
+		return f.WaitForCSRApprover
 	}
+
+	return waitForKubeletCSRApprover
+}
+
+// cloudProviderInitInstall returns the load-balancer install function used by
+// the cloud-provider init pre-phase, falling back to the default
+// InstallLoadBalancerSilent when the factory field is unset. The override only
+// affects the pre-phase; the normal parallel infra path uses
+// InstallLoadBalancerSilent directly.
+func (f *InstallerFactories) cloudProviderInitInstall() silentInstallFunc {
+	if f != nil && f.CloudProviderInitInstall != nil {
+		return f.CloudProviderInitInstall
+	}
+
+	return InstallLoadBalancerSilent
 }
 
 // waitForNodeSchedulability waits for all nodes to reach Ready state and for at
@@ -263,84 +222,6 @@ func waitForNodeSchedulability(
 	}
 
 	return nil
-}
-
-// getWaitForCSRApproverFn returns the CSR approver wait function,
-// using the test override if one is set.
-func getWaitForCSRApproverFn() func(context.Context, *v1alpha1.Cluster) error {
-	csrApproverWaitMu.RLock()
-	defer csrApproverWaitMu.RUnlock()
-
-	if csrApproverWaitOverride != nil {
-		return csrApproverWaitOverride
-	}
-
-	return waitForKubeletCSRApprover
-}
-
-// SetCSRApproverWaitForTests overrides the CSR approver wait function for testing.
-// Returns a cleanup function that restores the previous function.
-func SetCSRApproverWaitForTests(
-	fn func(context.Context, *v1alpha1.Cluster) error,
-) func() {
-	csrApproverWaitMu.Lock()
-
-	previous := csrApproverWaitOverride
-	csrApproverWaitOverride = fn
-
-	csrApproverWaitMu.Unlock()
-
-	return func() {
-		csrApproverWaitMu.Lock()
-
-		csrApproverWaitOverride = previous
-
-		csrApproverWaitMu.Unlock()
-	}
-}
-
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	cloudProviderInitInstallMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	cloudProviderInitInstallOverride silentInstallFunc
-)
-
-// getLoadBalancerInstallFn returns the load-balancer install function used by
-// the cloud-provider init pre-phase, using the test override if one is set.
-// This allows tests to mock the hcloud-ccm installation without needing a real
-// Helm client. Note: the override only affects the pre-phase; the normal
-// parallel infra path uses InstallLoadBalancerSilent directly.
-func getLoadBalancerInstallFn() silentInstallFunc {
-	cloudProviderInitInstallMu.RLock()
-	defer cloudProviderInitInstallMu.RUnlock()
-
-	if cloudProviderInitInstallOverride != nil {
-		return cloudProviderInitInstallOverride
-	}
-
-	return InstallLoadBalancerSilent
-}
-
-// SetCloudProviderInitInstallForTests overrides the load-balancer install
-// function used by the cloud-provider init pre-phase for testing. The override
-// only affects runCloudProviderInitPhase; the normal parallel infra path is not
-// affected. Returns a cleanup function that restores the previous function.
-func SetCloudProviderInitInstallForTests(fn silentInstallFunc) func() {
-	cloudProviderInitInstallMu.Lock()
-
-	previous := cloudProviderInitInstallOverride
-	cloudProviderInitInstallOverride = fn
-
-	cloudProviderInitInstallMu.Unlock()
-
-	return func() {
-		cloudProviderInitInstallMu.Lock()
-
-		cloudProviderInitInstallOverride = previous
-
-		cloudProviderInitInstallMu.Unlock()
-	}
 }
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -557,10 +438,10 @@ func runCloudProviderInitPhase(
 	factories *InstallerFactories,
 	cniInstalled bool,
 ) error {
-	ccmTask := newTask("load-balancer", clusterCfg, factories, getLoadBalancerInstallFn())
+	ccmTask := newTask("load-balancer", clusterCfg, factories, factories.cloudProviderInitInstall())
 
 	err := runInfraPhase(
-		ctx, clusterCfg, writer, labels, tmr,
+		ctx, clusterCfg, writer, labels, tmr, factories,
 		[]notify.ProgressTask{ccmTask},
 		cniInstalled, false,
 	)
@@ -568,7 +449,7 @@ func runCloudProviderInitPhase(
 		return err
 	}
 
-	err = getNodeSchedulabilityWaitFn()(ctx, clusterCfg)
+	err = factories.nodeSchedulabilityWait()(ctx, clusterCfg)
 	if err != nil {
 		return fmt.Errorf(
 			"nodes not schedulable after cloud provider initialization: %w", err,
@@ -696,7 +577,7 @@ func installComponentsInPhases(
 		certManagerTask := newTask("cert-manager", clusterCfg, factories, InstallCertManagerSilent)
 
 		err := runInfraPhase(
-			ctx, clusterCfg, writer, labels, tmr,
+			ctx, clusterCfg, writer, labels, tmr, factories,
 			[]notify.ProgressTask{certManagerTask},
 			cniInstalled, false,
 		)
@@ -722,6 +603,7 @@ func installComponentsInPhases(
 			writer,
 			labels,
 			tmr,
+			factories,
 			infraTasks,
 			cniInstalled,
 			needsCSRApproverWait,
@@ -735,7 +617,9 @@ func installComponentsInPhases(
 	if len(gitopsTasks) > 0 {
 		// After infra phase, CNI node readiness is no longer fresh — always
 		// run the full stability check before GitOps installation.
-		err := runGitOpsPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, gitopsTasks)
+		err := runGitOpsPhase(
+			ctx, clusterCfg, writer, labels, tmr, factories, infraTasks, gitopsTasks,
+		)
 		if err != nil {
 			return err
 		}
@@ -761,12 +645,13 @@ func runInfraPhase(
 	writer io.Writer,
 	labels notify.ProgressLabels,
 	tmr timer.Timer,
+	factories *InstallerFactories,
 	infraTasks []notify.ProgressTask,
 	cniInstalled bool,
 	needsCSRApproverWait bool,
 ) error {
 	if needsInClusterConnectivityCheck(clusterCfg) {
-		err := getClusterStabilityCheckFn()(ctx, clusterCfg, cniInstalled)
+		err := factories.clusterStabilityCheck()(ctx, clusterCfg, cniInstalled)
 		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable before infrastructure installation: %w", err,
@@ -775,7 +660,7 @@ func runInfraPhase(
 	}
 
 	if needsCSRApproverWait {
-		err := getWaitForCSRApproverFn()(ctx, clusterCfg)
+		err := factories.waitForCSRApprover()(ctx, clusterCfg)
 		if err != nil {
 			return fmt.Errorf(
 				"kubelet CSR approver not ready before infrastructure installation: %w", err,
@@ -814,10 +699,11 @@ func runGitOpsPhase(
 	writer io.Writer,
 	labels notify.ProgressLabels,
 	tmr timer.Timer,
+	factories *InstallerFactories,
 	infraTasks []notify.ProgressTask,
 	gitopsTasks []notify.ProgressTask,
 ) error {
-	err := getClusterStabilityCheckFn()(ctx, clusterCfg, false)
+	err := factories.clusterStabilityCheck()(ctx, clusterCfg, false)
 	if err != nil {
 		if len(infraTasks) > 0 {
 			return fmt.Errorf(

@@ -14,7 +14,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
-	dockerapi "github.com/docker/docker/client"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -31,7 +30,7 @@ const dockerPingTimeout = 5 * time.Second
 // container-starting integration tests are intentionally not run) and whenever
 // the Docker daemon is unreachable (e.g. sandboxed unit-test environments), so
 // the suite stays hermetic instead of failing.
-func skipIfDockerUnavailable(t *testing.T) dockerapi.APIClient {
+func skipIfDockerUnavailable(t *testing.T) dockerclient.Client {
 	t.Helper()
 
 	if os.Getenv("CI") == ciEnvValue {

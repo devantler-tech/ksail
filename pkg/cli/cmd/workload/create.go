@@ -7,7 +7,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
@@ -15,7 +14,7 @@ import (
 // NewCreateCmd creates the workload create command.
 // The runtime parameter is kept for consistency with other workload command constructors,
 // though it's currently unused as this command wraps kubectl and flux directly.
-func NewCreateCmd(_ *di.Runtime) *cobra.Command {
+func NewCreateCmd() *cobra.Command {
 	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
 	// This is re-resolved in PersistentPreRunE after flags are parsed.
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)

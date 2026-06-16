@@ -23,10 +23,6 @@ type Timer interface {
 	//   - stage: time elapsed since last NewStage() or Start()
 	// Can be called multiple times without side effects.
 	GetTiming() (total, stage time.Duration)
-
-	// Stop signals completion of timing. This is optional and
-	// provided for future extensibility. Currently a no-op.
-	Stop()
 }
 
 // Impl is the concrete implementation of the Timer interface.
@@ -74,11 +70,4 @@ func (t *Impl) GetTiming() (time.Duration, time.Duration) {
 	stage := now.Sub(t.stageStartTime)
 
 	return total, stage
-}
-
-// Stop signals the end of timing tracking.
-// This is a no-op in the current implementation but provided
-// for future extensibility (e.g., resource cleanup).
-func (t *Impl) Stop() {
-	// No-op: timer state remains accessible via GetTiming()
 }

@@ -9,7 +9,6 @@ import (
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/docker/docker/client"
 )
 
 // Info describes a registry mirror that should be managed for a cluster.
@@ -33,7 +32,7 @@ type Info struct {
 // port conflicts with registries created by other cluster distributions (e.g., K3d's native registries).
 func PrepareRegistryManager(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	extractor func(baseUsedPorts map[int]struct{}) []Info,
 ) (Backend, []Info, error) {
 	// Use the backend factory to create the registry manager

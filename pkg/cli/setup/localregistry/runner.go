@@ -7,10 +7,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -221,8 +221,8 @@ func runRegistryAction(
 func createServiceHandler(
 	localDeps Dependencies,
 	handler func(context.Context, registry.Service) error,
-) func(context.Context, client.APIClient) error {
-	return func(ctx context.Context, dockerClient client.APIClient) error {
+) func(context.Context, dockerclient.Client) error {
+	return func(ctx context.Context, dockerClient dockerclient.Client) error {
 		service, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
 		if err != nil {
 			return fmt.Errorf("create registry service: %w", err)
@@ -256,7 +256,7 @@ func runDockerStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
 	info setup.StageInfo,
-	action func(context.Context, client.APIClient) error,
+	action func(context.Context, dockerclient.Client) error,
 	localDeps Dependencies,
 ) error {
 	err := setup.RunDockerStage(

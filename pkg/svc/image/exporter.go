@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
-	"github.com/docker/docker/client"
 )
 
 // File permission constant.
@@ -52,12 +52,12 @@ type ExportOptions struct {
 
 // Exporter handles exporting container images from cluster containerd.
 type Exporter struct {
-	dockerClient client.APIClient
+	dockerClient dockerclient.Client
 	executor     *ContainerExecutor
 }
 
 // NewExporter creates a new image exporter.
-func NewExporter(dockerClient client.APIClient) *Exporter {
+func NewExporter(dockerClient dockerclient.Client) *Exporter {
 	return &Exporter{
 		dockerClient: dockerClient,
 		executor:     NewContainerExecutor(dockerClient),

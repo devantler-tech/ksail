@@ -20,6 +20,11 @@ import (
 // The function always expands tilde (~) characters in the path to the user's home directory,
 // regardless of whether the path came from the config or is the default.
 //
+// Unlike k8s.ResolveKubeconfigPath, this helper intentionally does NOT consult
+// the KUBECONFIG environment variable: it resolves a config-declared path (or
+// the default), which the Omni kubeconfig hook relies on to manage a specific
+// kubeconfig file independently of the active KUBECONFIG.
+//
 // Returns an error if path expansion fails.
 func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	kubeconfigPath := cfg.Spec.Cluster.Connection.Kubeconfig

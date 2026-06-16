@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
@@ -62,16 +61,14 @@ func main() { //nolint:cyclop,funlen
 	snapDir := "pkg/cli/cmd/workload/gen/__snapshots__"
 	testdataDir := "pkg/cli/cmd/workload/gen/testdata"
 
-	rt := di.NewRuntime()
-
 	writeSnap(snapDir+"/namespace_test.snap", "TestGenNamespace",
-		runCmd(gen.NewNamespaceCmd(rt), []string{"test-namespace"}))
+		runCmd(gen.NewNamespaceCmd(), []string{"test-namespace"}))
 
 	writeSnap(
 		snapDir+"/configmap_test.snap",
 		"TestGenConfigMap",
 		runCmd(
-			gen.NewConfigMapCmd(rt),
+			gen.NewConfigMapCmd(),
 			[]string{
 				"test-config",
 				"--from-literal=APP_ENV=production",
@@ -84,19 +81,19 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/deployment_test.snap",
 		"TestGenDeployment",
 		runCmd(
-			gen.NewDeploymentCmd(rt),
+			gen.NewDeploymentCmd(),
 			[]string{"test-deployment", "--image=nginx:1.21", "--replicas=3"},
 		),
 	)
 
 	writeSnap(snapDir+"/job_test.snap", "TestGenJob",
-		runCmd(gen.NewJobCmd(rt), []string{"test-job", "--image=busybox:latest"}))
+		runCmd(gen.NewJobCmd(), []string{"test-job", "--image=busybox:latest"}))
 
 	writeSnap(
 		snapDir+"/cronjob_test.snap",
 		"TestGenCronJob",
 		runCmd(
-			gen.NewCronJobCmd(rt),
+			gen.NewCronJobCmd(),
 			[]string{
 				"test-cronjob",
 				"--image=busybox:latest",
@@ -107,12 +104,12 @@ func main() { //nolint:cyclop,funlen
 	)
 
 	writeSnap(snapDir+"/ingress_test.snap", "TestGenIngressSimple",
-		runCmd(gen.NewIngressCmd(rt), []string{"test-ingress", "--rule=example.com/*=svc:80"}))
+		runCmd(gen.NewIngressCmd(), []string{"test-ingress", "--rule=example.com/*=svc:80"}))
 	appendSnap(
 		snapDir+"/ingress_test.snap",
 		"TestGenIngressWithTLS",
 		runCmd(
-			gen.NewIngressCmd(rt),
+			gen.NewIngressCmd(),
 			[]string{"test-ingress-tls", "--rule=secure.example.com/*=svc:443,tls=my-tls-secret"},
 		),
 	)
@@ -120,7 +117,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/ingress_test.snap",
 		"TestGenIngressMultipleRules",
 		runCmd(
-			gen.NewIngressCmd(rt),
+			gen.NewIngressCmd(),
 			[]string{
 				"test-ingress-multi",
 				"--rule=api.example.com/*=api-svc:8080",
@@ -133,7 +130,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/poddisruptionbudget_test.snap",
 		"TestGenPodDisruptionBudget",
 		runCmd(
-			gen.NewPodDisruptionBudgetCmd(rt),
+			gen.NewPodDisruptionBudgetCmd(),
 			[]string{"test-pdb", "--min-available=2", "--selector=app=test"},
 		),
 	)
@@ -142,19 +139,19 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/priorityclass_test.snap",
 		"TestGenPriorityClass",
 		runCmd(
-			gen.NewPriorityClassCmd(rt),
+			gen.NewPriorityClassCmd(),
 			[]string{"test-priority", "--value=1000", "--description=Test priority class"},
 		),
 	)
 
 	writeSnap(snapDir+"/quota_test.snap", "TestGenQuota",
-		runCmd(gen.NewQuotaCmd(rt), []string{"test-quota", "--hard=cpu=1,memory=1Gi,pods=10"}))
+		runCmd(gen.NewQuotaCmd(), []string{"test-quota", "--hard=cpu=1,memory=1Gi,pods=10"}))
 
 	writeSnap(
 		snapDir+"/rolebinding_test.snap",
 		"TestGenRoleBinding",
 		runCmd(
-			gen.NewRoleBindingCmd(rt),
+			gen.NewRoleBindingCmd(),
 			[]string{"test-rolebinding", "--role=test-role", "--user=test-user"},
 		),
 	)
@@ -163,7 +160,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/clusterrolebinding_test.snap",
 		"TestGenClusterRoleBinding",
 		runCmd(
-			gen.NewClusterRoleBindingCmd(rt),
+			gen.NewClusterRoleBindingCmd(),
 			[]string{
 				"test-clusterrolebinding",
 				"--clusterrole=test-clusterrole",
@@ -173,19 +170,19 @@ func main() { //nolint:cyclop,funlen
 	)
 
 	writeSnap(snapDir+"/serviceaccount_test.snap", "TestGenServiceAccount",
-		runCmd(gen.NewServiceAccountCmd(rt), []string{"test-sa"}))
+		runCmd(gen.NewServiceAccountCmd(), []string{"test-sa"}))
 
 	writeSnap(snapDir+"/service_test.snap", "TestGenServiceClusterIP",
-		runCmd(gen.NewServiceCmd(rt), []string{"clusterip", "test-svc", "--tcp=80:8080"}))
+		runCmd(gen.NewServiceCmd(), []string{"clusterip", "test-svc", "--tcp=80:8080"}))
 	appendSnap(snapDir+"/service_test.snap", "TestGenServiceNodePort",
-		runCmd(gen.NewServiceCmd(rt), []string{"nodeport", "test-svc", "--tcp=80:8080"}))
+		runCmd(gen.NewServiceCmd(), []string{"nodeport", "test-svc", "--tcp=80:8080"}))
 	appendSnap(snapDir+"/service_test.snap", "TestGenServiceLoadBalancer",
-		runCmd(gen.NewServiceCmd(rt), []string{"loadbalancer", "test-svc", "--tcp=80:8080"}))
+		runCmd(gen.NewServiceCmd(), []string{"loadbalancer", "test-svc", "--tcp=80:8080"}))
 	appendSnap(
 		snapDir+"/service_test.snap",
 		"TestGenServiceExternalName",
 		runCmd(
-			gen.NewServiceCmd(rt),
+			gen.NewServiceCmd(),
 			[]string{"externalname", "test-svc", "--external-name=example.com"},
 		),
 	)
@@ -194,7 +191,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/secret_test.snap",
 		"TestGenSecretGeneric",
 		runCmd(
-			gen.NewSecretCmd(rt),
+			gen.NewSecretCmd(),
 			[]string{
 				"generic",
 				"test-secret",
@@ -207,7 +204,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/secret_test.snap",
 		"TestGenSecretDockerRegistry",
 		runCmd(
-			gen.NewSecretCmd(rt),
+			gen.NewSecretCmd(),
 			[]string{
 				"docker-registry",
 				"test-docker-secret",
@@ -227,7 +224,7 @@ func main() { //nolint:cyclop,funlen
 		snapDir+"/secret_test.snap",
 		"TestGenSecretTLS",
 		runCmd(
-			gen.NewSecretCmd(rt),
+			gen.NewSecretCmd(),
 			[]string{"tls", "test-tls-secret", "--cert=" + certFile, "--key=" + keyFile},
 		),
 	)

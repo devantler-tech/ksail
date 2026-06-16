@@ -481,6 +481,20 @@ func ExportStripDistributionPrefix(contextName string) string {
 	return stripDistributionPrefix(contextName)
 }
 
+// ExportDetectClusterDistribution exports detectClusterDistribution for testing.
+// It builds a ResolvedClusterInfo for the Docker provider with the given cluster
+// name and kubeconfig path, then probes the kubeconfig using the shared
+// distribution context prefixes.
+func ExportDetectClusterDistribution(
+	clusterName, kubeconfigPath string,
+) *clusterdetector.Info {
+	return detectClusterDistribution(&lifecycle.ResolvedClusterInfo{
+		ClusterName:    clusterName,
+		Provider:       v1alpha1.ProviderDocker,
+		KubeconfigPath: kubeconfigPath,
+	})
+}
+
 // ExportResolveContextName builds a kubeconfig containing the given context names
 // and resolves clusterName against it, exposing resolveContextName for testing.
 func ExportResolveContextName(contextNames []string, clusterName string) (string, error) {

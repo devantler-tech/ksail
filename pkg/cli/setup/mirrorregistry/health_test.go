@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
 	factoryErr := errDockerUnavailable
 
 	cleanup := registry.SetBackendFactoryForTests(
-		func(_ client.APIClient) (registry.Backend, error) {
+		func(_ dockerclient.Client) (registry.Backend, error) {
 			return nil, factoryErr
 		},
 	)
@@ -77,7 +77,7 @@ func TestWaitForRegistriesReady_Success(t *testing.T) {
 	).Return(nil)
 
 	cleanup := registry.SetBackendFactoryForTests(
-		func(_ client.APIClient) (registry.Backend, error) {
+		func(_ dockerclient.Client) (registry.Backend, error) {
 			return mockBackend, nil
 		},
 	)
@@ -107,7 +107,7 @@ func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 	mockBackend.On("WaitForRegistriesReady", mock.Anything, mock.Anything).Return(backendErr)
 
 	cleanup := registry.SetBackendFactoryForTests(
-		func(_ client.APIClient) (registry.Backend, error) {
+		func(_ dockerclient.Client) (registry.Backend, error) {
 			return mockBackend, nil
 		},
 	)
@@ -147,7 +147,7 @@ func TestWaitForRegistriesReady_MultipleRegistries(t *testing.T) {
 	).Return(nil)
 
 	cleanup := registry.SetBackendFactoryForTests(
-		func(_ client.APIClient) (registry.Backend, error) {
+		func(_ dockerclient.Client) (registry.Backend, error) {
 			return mockBackend, nil
 		},
 	)

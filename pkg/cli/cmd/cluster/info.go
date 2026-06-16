@@ -3,14 +3,13 @@ package cluster
 import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewInfoCmd creates the cluster info command.
 // The command queries the infrastructure provider API first, then attempts
 // kubectl cluster-info, and only fails if no information is available at all.
-func NewInfoCmd(_ *di.Runtime) *cobra.Command {
+func NewInfoCmd() *cobra.Command {
 	var (
 		nameFlag     string
 		providerFlag v1alpha1.Provider

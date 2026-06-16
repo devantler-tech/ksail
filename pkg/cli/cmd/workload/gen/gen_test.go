@@ -9,7 +9,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -72,13 +71,12 @@ func TestGenDeployment(t *testing.T) {
 // returning stdout, stderr, and any execution error.
 func execGen(
 	t *testing.T,
-	cmdFactory func(*di.Runtime) *cobra.Command,
+	cmdFactory func() *cobra.Command,
 	args []string,
 ) (string, string, error) {
 	t.Helper()
 
-	rt := di.NewRuntime()
-	cmd := cmdFactory(rt)
+	cmd := cmdFactory()
 
 	var outBuf, errBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
@@ -92,7 +90,7 @@ func execGen(
 
 type genValidateCase struct {
 	name       string
-	cmdFactory func(*di.Runtime) *cobra.Command
+	cmdFactory func() *cobra.Command
 	args       []string
 }
 
@@ -167,8 +165,7 @@ func TestGenAndValidate(t *testing.T) {
 func TestNewGenCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewGenCmd(rt)
+	cmd := gen.NewGenCmd()
 
 	require.NotNil(t, cmd, "expected gen command to be created")
 	require.Equal(t, "gen", cmd.Use, "expected command use to be 'gen'")
@@ -179,8 +176,7 @@ func TestNewGenCmd(t *testing.T) {
 func TestNewGenCmd_HasSubcommands(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewGenCmd(rt)
+	cmd := gen.NewGenCmd()
 
 	subcommands := cmd.Commands()
 	require.NotEmpty(t, subcommands, "expected gen command to have subcommands")
@@ -219,8 +215,7 @@ func TestNewGenCmd_HasSubcommands(t *testing.T) {
 func TestNewNamespaceCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewNamespaceCmd(rt)
+	cmd := gen.NewNamespaceCmd()
 
 	require.NotNil(t, cmd, "expected namespace command to be created")
 	require.Equal(t, "namespace", cmd.Name(), "expected command name to be 'namespace'")
@@ -229,8 +224,7 @@ func TestNewNamespaceCmd(t *testing.T) {
 func TestNewDeploymentCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewDeploymentCmd(rt)
+	cmd := gen.NewDeploymentCmd()
 
 	require.NotNil(t, cmd, "expected deployment command to be created")
 	require.Equal(t, "deployment", cmd.Name(), "expected command name to be 'deployment'")
@@ -239,8 +233,7 @@ func TestNewDeploymentCmd(t *testing.T) {
 func TestNewServiceCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewServiceCmd(rt)
+	cmd := gen.NewServiceCmd()
 
 	require.NotNil(t, cmd, "expected service command to be created")
 	require.Equal(t, "service", cmd.Name(), "expected command name to be 'service'")
@@ -249,8 +242,7 @@ func TestNewServiceCmd(t *testing.T) {
 func TestNewConfigMapCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewConfigMapCmd(rt)
+	cmd := gen.NewConfigMapCmd()
 
 	require.NotNil(t, cmd, "expected configmap command to be created")
 	require.Equal(t, "configmap", cmd.Name(), "expected command name to be 'configmap'")
@@ -259,8 +251,7 @@ func TestNewConfigMapCmd(t *testing.T) {
 func TestNewSecretCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewSecretCmd(rt)
+	cmd := gen.NewSecretCmd()
 
 	require.NotNil(t, cmd, "expected secret command to be created")
 	require.Equal(t, "secret", cmd.Name(), "expected command name to be 'secret'")
@@ -269,8 +260,7 @@ func TestNewSecretCmd(t *testing.T) {
 func TestNewJobCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewJobCmd(rt)
+	cmd := gen.NewJobCmd()
 
 	require.NotNil(t, cmd, "expected job command to be created")
 	require.Equal(t, "job", cmd.Name(), "expected command name to be 'job'")
@@ -279,8 +269,7 @@ func TestNewJobCmd(t *testing.T) {
 func TestNewCronJobCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewCronJobCmd(rt)
+	cmd := gen.NewCronJobCmd()
 
 	require.NotNil(t, cmd, "expected cronjob command to be created")
 	require.Equal(t, "cronjob", cmd.Name(), "expected command name to be 'cronjob'")
@@ -289,8 +278,7 @@ func TestNewCronJobCmd(t *testing.T) {
 func TestNewIngressCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewIngressCmd(rt)
+	cmd := gen.NewIngressCmd()
 
 	require.NotNil(t, cmd, "expected ingress command to be created")
 	require.Equal(t, "ingress", cmd.Name(), "expected command name to be 'ingress'")
@@ -299,8 +287,7 @@ func TestNewIngressCmd(t *testing.T) {
 func TestNewRoleCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewRoleCmd(rt)
+	cmd := gen.NewRoleCmd()
 
 	require.NotNil(t, cmd, "expected role command to be created")
 	require.Equal(t, "role", cmd.Name(), "expected command name to be 'role'")
@@ -309,8 +296,7 @@ func TestNewRoleCmd(t *testing.T) {
 func TestNewRoleBindingCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewRoleBindingCmd(rt)
+	cmd := gen.NewRoleBindingCmd()
 
 	require.NotNil(t, cmd, "expected rolebinding command to be created")
 	require.Equal(t, "rolebinding", cmd.Name(), "expected command name to be 'rolebinding'")
@@ -319,8 +305,7 @@ func TestNewRoleBindingCmd(t *testing.T) {
 func TestNewClusterRoleCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewClusterRoleCmd(rt)
+	cmd := gen.NewClusterRoleCmd()
 
 	require.NotNil(t, cmd, "expected clusterrole command to be created")
 	require.Equal(t, "clusterrole", cmd.Name(), "expected command name to be 'clusterrole'")
@@ -329,8 +314,7 @@ func TestNewClusterRoleCmd(t *testing.T) {
 func TestNewClusterRoleBindingCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewClusterRoleBindingCmd(rt)
+	cmd := gen.NewClusterRoleBindingCmd()
 
 	require.NotNil(t, cmd, "expected clusterrolebinding command to be created")
 	require.Equal(
@@ -344,8 +328,7 @@ func TestNewClusterRoleBindingCmd(t *testing.T) {
 func TestNewServiceAccountCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewServiceAccountCmd(rt)
+	cmd := gen.NewServiceAccountCmd()
 
 	require.NotNil(t, cmd, "expected serviceaccount command to be created")
 	require.Equal(t, "serviceaccount", cmd.Name(), "expected command name to be 'serviceaccount'")
@@ -354,8 +337,7 @@ func TestNewServiceAccountCmd(t *testing.T) {
 func TestNewQuotaCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewQuotaCmd(rt)
+	cmd := gen.NewQuotaCmd()
 
 	require.NotNil(t, cmd, "expected quota command to be created")
 	require.Equal(t, "quota", cmd.Name(), "expected command name to be 'quota'")
@@ -364,8 +346,7 @@ func TestNewQuotaCmd(t *testing.T) {
 func TestNewPodDisruptionBudgetCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewPodDisruptionBudgetCmd(rt)
+	cmd := gen.NewPodDisruptionBudgetCmd()
 
 	require.NotNil(t, cmd, "expected poddisruptionbudget command to be created")
 	require.Equal(
@@ -379,8 +360,7 @@ func TestNewPodDisruptionBudgetCmd(t *testing.T) {
 func TestNewPriorityClassCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewPriorityClassCmd(rt)
+	cmd := gen.NewPriorityClassCmd()
 
 	require.NotNil(t, cmd, "expected priorityclass command to be created")
 	require.Equal(t, "priorityclass", cmd.Name(), "expected command name to be 'priorityclass'")
@@ -389,8 +369,7 @@ func TestNewPriorityClassCmd(t *testing.T) {
 func TestNewHelmReleaseCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := gen.NewHelmReleaseCmd(rt)
+	cmd := gen.NewHelmReleaseCmd()
 
 	require.NotNil(t, cmd, "expected helmrelease command to be created")
 	require.Equal(t, "helmrelease", cmd.Name(), "expected command name to be 'helmrelease'")

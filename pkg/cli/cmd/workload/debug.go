@@ -18,7 +18,6 @@ import (
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
-	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -288,7 +287,7 @@ func runDockerHostDebug(
 // with stdin, stdout, and TTY attached.
 func runInteractiveDockerExec(
 	ctx context.Context,
-	dockerClient dockerclient.APIClient,
+	dockerClient docker.Client,
 	containerName string,
 	cmdArgs []string,
 ) error {
@@ -403,7 +402,7 @@ func pipeDockerExecStreams(resp *dockertypes.HijackedResponse, isTTY bool) {
 // checkExecExitCode inspects the exec session and returns an error for non-zero exit codes.
 func checkExecExitCode(
 	ctx context.Context,
-	dockerClient dockerclient.APIClient,
+	dockerClient docker.Client,
 	execID string,
 ) error {
 	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID)

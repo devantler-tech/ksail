@@ -413,22 +413,13 @@ func FindArgoCDRBACCM(dir string) (string, error) {
 }
 
 // containsArgoCDRBACCM checks whether YAML data (possibly multi-document)
-// contains an argocd-rbac-cm ConfigMap.
+// contains an argocd-rbac-cm ConfigMap. As a read-only detection caller it uses
+// the lossy fsutil.SplitYAMLDocuments.
 func containsArgoCDRBACCM(data []byte) bool {
-	content := string(data)
-	if strings.HasPrefix(content, "---") {
-		content = "\n" + content
-	}
-
-	for part := range strings.SplitSeq(content, "\n---") {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			continue
-		}
-
+	for _, doc := range fsutil.SplitYAMLDocuments(data) {
 		var raw map[string]any
 
-		err := yaml.Unmarshal([]byte(trimmed), &raw)
+		err := yaml.Unmarshal(doc, &raw)
 		if err != nil {
 			continue
 		}

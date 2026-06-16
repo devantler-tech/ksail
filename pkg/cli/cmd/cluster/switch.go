@@ -1,35 +1,19 @@
 package cluster
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
-	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/picker"
-	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
-	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -174,7 +158,7 @@ Examples:
   ksail cluster switch`
 
 // NewSwitchCmd creates the switch command for clusters.
-func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
+func NewSwitchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "switch [cluster-name]",
 		Short: "Switch active cluster context",
@@ -350,7 +334,7 @@ func resolveContextName(
 	// present if the name was copied from enriched list output.
 	cleanName := stripParenthetical(clusterName)
 
-	matches := matchContextsForName(config, cleanName)
+	matches := clusterdetector.MatchContexts(config, cleanName)
 
 	switch len(matches) {
 	case 0:
@@ -379,48 +363,6 @@ func resolveContextName(
 			strings.Join(matches, ", "),
 		)
 	}
-}
-
-// matchContextsForName returns the kubeconfig context names that correspond to
-// the given (already cleaned) cluster name. It checks every known distribution
-// prefix plus the "k3k-" prefix used by nested K3s clusters on the Kubernetes
-// provider, then falls back to substring matching for providers (e.g. Omni)
-// whose context format doesn't follow the standard prefix conventions.
-func matchContextsForName(config *clientcmdapi.Config, cleanName string) []string {
-	var matches []string
-
-	for _, dist := range v1alpha1.ValidDistributions() {
-		candidate := dist.ContextName(cleanName)
-
-		if _, exists := config.Contexts[candidate]; exists {
-			matches = append(matches, candidate)
-		}
-	}
-
-	// K3s run via the k3k operator (Kubernetes provider) writes a "k3k-" context
-	// rather than the standalone "k3d-". Add it as an explicit candidate so nested
-	// K3s clusters resolve deterministically instead of falling back to substring
-	// matching (mirrors resolveCreatedContextName and lifecycle.ExtractClusterNameFromContext).
-	if cleanName != "" {
-		k3kCandidate := "k3k-" + cleanName
-		if _, exists := config.Contexts[k3kCandidate]; exists {
-			matches = append(matches, k3kCandidate)
-		}
-	}
-
-	// Fallback: if no distribution-prefix match was found, look for contexts
-	// that contain the cluster name as a substring. This handles providers like
-	// Omni whose kubeconfig context format (<org>-<cluster>-<sa>) doesn't
-	// follow the standard distribution prefix conventions.
-	if len(matches) == 0 {
-		for ctxName := range config.Contexts {
-			if strings.Contains(ctxName, cleanName) {
-				matches = append(matches, ctxName)
-			}
-		}
-	}
-
-	return matches
 }
 
 // stripParenthetical removes a trailing " (<text>)" suffix from input.
@@ -522,27 +464,12 @@ func clusterNamesFromPath(kubeconfigPath string) []string {
 
 // stripDistributionPrefix removes the distribution-specific prefix from a context name,
 // returning the underlying cluster name. Returns empty string if the context name
-// does not match any known distribution prefix.
+// does not match any known distribution prefix. The prefix conventions (including
+// the nested-on-Kubernetes "k3k-" alias) are owned by clusterdetector.
 func stripDistributionPrefix(contextName string) string {
-	const sentinel = "\x00"
+	_, clusterName, _ := clusterdetector.StripContextPrefix(contextName)
 
-	for _, dist := range v1alpha1.ValidDistributions() {
-		prefix := strings.TrimSuffix(dist.ContextName(sentinel), sentinel)
-
-		if after, found := strings.CutPrefix(contextName, prefix); found {
-			return after
-		}
-	}
-
-	// K3s run via the k3k operator (Kubernetes provider) uses a "k3k-" context
-	// rather than the standalone "k3d-"; recognize it so nested K3s clusters appear
-	// in shell completion and the interactive picker (mirrors
-	// lifecycle.ExtractClusterNameFromContext).
-	if after, found := strings.CutPrefix(contextName, "k3k-"); found {
-		return after
-	}
-
-	return ""
+	return clusterName
 }
 
 // resolveKubeconfigForSwitch resolves the kubeconfig path using the same priority
@@ -572,380 +499,4 @@ func resolveKubeconfigForSwitch(cmd *cobra.Command) (string, error) {
 	}
 
 	return resolved, nil
-}
-
-// overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
-func overrideInstallerFactory(apply func(*setup.InstallerFactories)) func() {
-	installerFactoriesOverrideMu.Lock()
-
-	previous := installerFactoriesOverride
-	override := setup.DefaultInstallerFactories()
-
-	if previous != nil {
-		*override = *previous
-	}
-
-	apply(override)
-	installerFactoriesOverride = override
-
-	installerFactoriesOverrideMu.Unlock()
-
-	return func() {
-		installerFactoriesOverrideMu.Lock()
-
-		installerFactoriesOverride = previous
-
-		installerFactoriesOverrideMu.Unlock()
-	}
-}
-
-// SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
-func SetCertManagerInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.CertManager = factory
-	})
-}
-
-// SetCSIInstallerFactoryForTests overrides the CSI installer factory.
-func SetCSIInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.CSI = factory
-	})
-}
-
-// SetArgoCDInstallerFactoryForTests overrides the Argo CD installer factory.
-func SetArgoCDInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.ArgoCD = factory
-	})
-}
-
-// SetPolicyEngineInstallerFactoryForTests overrides the policy engine installer factory.
-func SetPolicyEngineInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.PolicyEngine = factory
-	})
-}
-
-// SetClusterAutoscalerInstallerFactoryForTests overrides the cluster-autoscaler installer factory.
-func SetClusterAutoscalerInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.ClusterAutoscaler = factory
-	})
-}
-
-// SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
-func SetEnsureArgoCDResourcesForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster, string) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.EnsureArgoCDResources = fn
-	})
-}
-
-// SetFluxInstallerFactoryForTests overrides the Flux installer factory.
-func SetFluxInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		// Wrap the simplified test factory to match the Flux factory signature
-		f.Flux = func(_ helm.Interface, _ time.Duration, _ string) installer.Installer {
-			inst, err := factory(nil) // clusterCfg not used in test factory
-			if err != nil {
-				panic(fmt.Sprintf("test Flux installer factory returned an error: %v", err))
-			}
-
-			return inst
-		}
-	})
-}
-
-// SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
-func SetDockerClientInvokerForTests(
-	invoker func(*cobra.Command, func(client.APIClient) error) error,
-) func() {
-	dockerClientInvokerMu.Lock()
-
-	previous := dockerClientInvoker
-	dockerClientInvoker = invoker
-
-	dockerClientInvokerMu.Unlock()
-
-	return func() {
-		dockerClientInvokerMu.Lock()
-
-		dockerClientInvoker = previous
-
-		dockerClientInvokerMu.Unlock()
-	}
-}
-
-// SetProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
-func SetProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
-	clusterProvisionerFactoryMu.Lock()
-
-	previous := clusterProvisionerFactoryOverride
-	clusterProvisionerFactoryOverride = factory
-
-	clusterProvisionerFactoryMu.Unlock()
-
-	return func() {
-		clusterProvisionerFactoryMu.Lock()
-
-		clusterProvisionerFactoryOverride = previous
-
-		clusterProvisionerFactoryMu.Unlock()
-	}
-}
-
-// SetLocalRegistryServiceFactoryForTests overrides the local registry service factory for testing.
-func SetLocalRegistryServiceFactoryForTests(factory localregistry.ServiceFactoryFunc) func() {
-	localRegistryServiceFactoryMu.Lock()
-
-	previous := localRegistryServiceFactory
-	localRegistryServiceFactory = factory
-
-	localRegistryServiceFactoryMu.Unlock()
-
-	return func() {
-		localRegistryServiceFactoryMu.Lock()
-
-		localRegistryServiceFactory = previous
-
-		localRegistryServiceFactoryMu.Unlock()
-	}
-}
-
-// SetSetupFluxInstanceForTests overrides the FluxInstance setup function.
-func SetSetupFluxInstanceForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster, string, string) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.SetupFluxInstance = fn
-	})
-}
-
-// SetWaitForFluxReadyForTests overrides the Flux readiness wait function.
-func SetWaitForFluxReadyForTests(fn func(context.Context, string) error) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.WaitForFluxReady = fn
-	})
-}
-
-// SetEnsureOCIArtifactForTests overrides the OCI artifact ensure function.
-func SetEnsureOCIArtifactForTests(
-	fn func(context.Context, *cobra.Command, *v1alpha1.Cluster, string, io.Writer) (bool, error),
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.EnsureOCIArtifact = fn
-	})
-}
-
-// deleteTimeout is the maximum duration for the auto-delete operation.
-const deleteTimeout = 10 * time.Minute
-
-// waitForTTLAndDelete blocks until the TTL duration elapses and then auto-deletes the cluster.
-// The wait can be cancelled with SIGINT/SIGTERM, in which case the cluster is left running.
-// This implements the ephemeral cluster pattern: after creation, the process stays alive
-// and automatically tears down the cluster when the TTL expires.
-func waitForTTLAndDelete(
-	cmd *cobra.Command,
-	clusterName string,
-	clusterCfg *v1alpha1.Cluster,
-	ttl time.Duration,
-) error {
-	notify.Infof(cmd.OutOrStdout(),
-		"cluster will auto-destroy in %s (press Ctrl+C to cancel)", ttl)
-
-	// Create a context that is cancelled on SIGINT/SIGTERM and also respects cmd.Context().
-	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	timer := time.NewTimer(ttl)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		return autoDeleteCluster(cmd, clusterName, clusterCfg)
-	case <-ctx.Done():
-		notify.Infof(cmd.OutOrStdout(),
-			"TTL wait cancelled; cluster %q will remain running", clusterName)
-
-		return nil
-	}
-}
-
-// autoDeleteCluster performs an automatic cluster deletion after TTL expiry.
-// It creates a minimal provisioner based on distribution and provider info
-// from the original cluster config and deletes the cluster.
-func autoDeleteCluster(
-	cmd *cobra.Command,
-	clusterName string,
-	clusterCfg *v1alpha1.Cluster,
-) error {
-	notify.Infof(cmd.OutOrStdout(),
-		"TTL expired; auto-destroying cluster %q...", clusterName)
-
-	info := &clusterdetector.Info{
-		ClusterName:  clusterName,
-		Distribution: clusterCfg.Spec.Cluster.Distribution,
-		Provider:     clusterCfg.Spec.Cluster.Provider,
-	}
-
-	provisioner, err := createDeleteProvisioner(
-		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
-	)
-	if err != nil {
-		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
-	}
-
-	deleteCtx, cancel := context.WithTimeout(cmd.Context(), deleteTimeout)
-	defer cancel()
-
-	err = provisioner.Delete(deleteCtx, clusterName)
-	if err != nil {
-		return fmt.Errorf("TTL auto-delete failed: %w", err)
-	}
-
-	// Clean up persisted state (spec + TTL).
-	// Best-effort: warn on failure rather than blocking success.
-	stateErr := state.DeleteClusterState(clusterName)
-	if stateErr != nil {
-		notify.Warningf(cmd.OutOrStdout(),
-			"failed to clean up cluster state: %v", stateErr)
-	}
-
-	notify.Successf(cmd.OutOrStdout(),
-		"cluster %q auto-destroyed after TTL expiry", clusterName)
-
-	return nil
-}
-
-// ErrUnsupportedOutputFormat is returned when the --output flag is set to an unsupported value.
-var ErrUnsupportedOutputFormat = errors.New("unsupported --output format")
-
-// outputFormatText is the default human-readable output format.
-const outputFormatText = "text"
-
-// outputFormatJSON is the machine-readable JSON output format.
-const outputFormatJSON = "json"
-
-// ChangeJSON is the JSON representation of a single configuration change.
-// It is used by DiffJSONOutput for --output json mode.
-type ChangeJSON struct {
-	Field    string `json:"field"`
-	OldValue string `json:"oldValue"`
-	NewValue string `json:"newValue"`
-	Category string `json:"category"`
-	Reason   string `json:"reason"`
-}
-
-// DiffJSONOutput is the JSON representation of the diff result, emitted when
-// --output json is set. It is suitable for CI/MCP consumption.
-type DiffJSONOutput struct {
-	TotalChanges         int          `json:"totalChanges"`
-	InPlaceChanges       []ChangeJSON `json:"inPlaceChanges"`
-	RebootRequired       []ChangeJSON `json:"rebootRequired"`
-	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
-	RollingRecreate      []ChangeJSON `json:"rollingRecreate"`
-	WipeRequired         []ChangeJSON `json:"wipeRequired"`
-	UnknownBaseline      []ChangeJSON `json:"unknownBaseline"`
-	RequiresConfirmation bool         `json:"requiresConfirmation"`
-}
-
-// getOutputFormat returns the --output flag value from the command, defaulting to "text".
-// The value is normalised to lower-case so that "--output JSON" is accepted.
-// Safe to call even when the flag is not registered on cmd.
-func getOutputFormat(cmd *cobra.Command) string {
-	if cmd == nil {
-		return outputFormatText
-	}
-
-	flag := cmd.Flags().Lookup("output")
-	if flag == nil {
-		return outputFormatText
-	}
-
-	return strings.ToLower(flag.Value.String())
-}
-
-// validateOutputFormat returns an error when the --output flag value is
-// neither "text" nor "json".
-func validateOutputFormat(cmd *cobra.Command) error {
-	format := getOutputFormat(cmd)
-	if format != outputFormatText && format != outputFormatJSON {
-		return fmt.Errorf(
-			"%w: %q (expected %q or %q)",
-			ErrUnsupportedOutputFormat,
-			format,
-			outputFormatText,
-			outputFormatJSON,
-		)
-	}
-
-	return nil
-}
-
-// diffToJSON converts an UpdateResult to a DiffJSONOutput struct.
-func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
-	convertChanges := func(changes []clusterupdate.Change) []ChangeJSON {
-		result := make([]ChangeJSON, len(changes))
-
-		for i, change := range changes {
-			result[i] = ChangeJSON{
-				Field:    change.Field,
-				OldValue: change.OldValue,
-				NewValue: change.NewValue,
-				Category: change.Category.String(),
-				Reason:   change.Reason,
-			}
-		}
-
-		return result
-	}
-
-	return DiffJSONOutput{
-		TotalChanges:         diff.TotalChanges(),
-		InPlaceChanges:       convertChanges(diff.InPlaceChanges),
-		RebootRequired:       convertChanges(diff.RebootRequired),
-		RecreateRequired:     convertChanges(diff.RecreateRequired),
-		RollingRecreate:      convertChanges(diff.RollingRecreate),
-		WipeRequired:         convertChanges(diff.WipeRequired),
-		UnknownBaseline:      convertChanges(diff.UnknownBaseline),
-		RequiresConfirmation: diff.NeedsUserConfirmation(),
-	}
-}
-
-// emitDiffJSON serialises diff as indented JSON and writes it to cmd's stdout.
-func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
-	out := diffToJSON(diff)
-
-	var buf bytes.Buffer
-
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	// Keep '<', '>', '&' literal instead of \u-escaping them; this is CLI
-	// output, not HTML.
-	enc.SetEscapeHTML(false)
-
-	err := enc.Encode(out)
-	if err != nil {
-		// Encoding a plain struct with only basic types never fails.
-		notify.Errorf(cmd.OutOrStderr(), "failed to marshal diff to JSON: %v", err)
-
-		return
-	}
-
-	// enc.Encode already appends a trailing newline.
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 }

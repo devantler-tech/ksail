@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v7/pkg/svc/image"
@@ -28,7 +27,7 @@ Examples:
   ksail workload import --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewImportCmd creates the image import command.
-func NewImportCmd(_ *di.Runtime) *cobra.Command {
+func NewImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "import [<input>]",
 		Short:        "Import container images to the cluster",
