@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -710,6 +711,30 @@ func workerProviderWithToken(token string) *taloscontainer.Container {
 	})
 }
 
+// workerProviderWithEndpoint builds a minimal worker provider whose cluster
+// control-plane endpoint is set to the given URL, so two providers can differ ONLY
+// in the endpoint — the field syncSecretsFromCluster realigns during apply (#4963).
+func workerProviderWithEndpoint(t *testing.T, endpoint string) *taloscontainer.Container {
+	t.Helper()
+
+	parsed, err := url.Parse(endpoint)
+	require.NoError(t, err)
+
+	falseVal := false
+
+	return taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineInstall: &v1alpha1.InstallConfig{InstallWipe: &falseVal},
+		},
+		ClusterConfig: &v1alpha1.ClusterConfig{
+			ControlPlane: &v1alpha1.ControlPlaneConfig{
+				Endpoint: &v1alpha1.Endpoint{URL: parsed},
+			},
+		},
+	})
+}
+
 // Acceptance (b): an idempotent re-run — the rendered template already matches the
 // Secret — must report no drift, so `cluster update` stays "No changes detected".
 func TestAutoscalerTemplateDrift_NoneWhenSecretMatches(t *testing.T) {
@@ -824,6 +849,38 @@ func TestAutoscalerTemplateDrift_IgnoresPKIOnlyDifference(t *testing.T) {
 	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
 	require.NoError(t, err)
 	assert.Empty(t, changes, "a PKI-only difference must be redacted away, not reported as drift")
+}
+
+// The comparison must also ignore the cluster control-plane endpoint, which
+// syncSecretsFromCluster legitimately realigns during apply (#4963): the diff
+// phase renders the desired template from the un-synced local bundle (a
+// CIDR-derived private endpoint) while the apply path writes the Secret from the
+// synced bundle (the cluster's public endpoint). The endpoint is not a secret, so
+// without normalisation it leaks into the fingerprint and every `cluster update`
+// falsely reports an autoscalerWorkerTemplate in-place change that never converges.
+func TestAutoscalerTemplateDrift_IgnoresEndpointOnlyDifference(t *testing.T) {
+	t.Parallel()
+
+	// The Secret was written by a prior apply from the cluster-synced bundle (the
+	// control-plane's public endpoint); the diff phase renders the desired template
+	// from the un-synced local bundle (a CIDR-derived private endpoint).
+	storedPublicEndpoint := workerProviderWithEndpoint(t, "https://203.0.113.7:6443")
+	localPrivateEndpoint := workerProviderWithEndpoint(t, "https://10.0.0.1:6443")
+
+	secret := autoscalerSecretFor(t, "1", []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", storedPublicEndpoint, nil),
+	})
+	desired := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", localPrivateEndpoint, nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
+	require.NoError(t, err)
+	assert.Empty(
+		t,
+		changes,
+		"an endpoint-only difference must be normalised away, not reported as drift",
+	)
 }
 
 // Adding a pool must surface as drift (the new pool has no template in the Secret).
