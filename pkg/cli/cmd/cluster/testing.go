@@ -201,31 +201,3 @@ func SetClusterStabilityCheckForTests(
 		f.ClusterStabilityCheck = fn
 	})
 }
-
-// SetNodeSchedulabilityWaitForTests overrides the node schedulability wait function.
-func SetNodeSchedulabilityWaitForTests(
-	fn func(context.Context, *v1alpha1.Cluster) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.NodeSchedulabilityWait = fn
-	})
-}
-
-// SetCSRApproverWaitForTests overrides the kubelet CSR approver wait function.
-func SetCSRApproverWaitForTests(
-	fn func(context.Context, *v1alpha1.Cluster) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.WaitForCSRApprover = fn
-	})
-}
-
-// SetCloudProviderInitInstallForTests overrides the cloud-provider init
-// pre-phase load-balancer install function.
-func SetCloudProviderInitInstallForTests(
-	fn func(context.Context, *v1alpha1.Cluster, *setup.InstallerFactories) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.CloudProviderInitInstall = fn
-	})
-}
