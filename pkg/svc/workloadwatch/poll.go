@@ -122,6 +122,12 @@ func scanForDeletedFiles(snapshot FileSnapshot) string {
 func PollForChanges(ctx context.Context, dir string, applyCh chan string, debugWriter io.Writer) {
 	snapshot := BuildFileSnapshot(dir)
 
+	// "poll: started" is the readiness marker callers (and the workload-watch
+	// system test) wait for to confirm the polling fallback is initialized.
+	if debugWriter != nil {
+		_, _ = fmt.Fprintf(debugWriter, "  poll: started, %d files in snapshot\n", len(snapshot))
+	}
+
 	ticker := time.NewTicker(PollInterval)
 	defer ticker.Stop()
 

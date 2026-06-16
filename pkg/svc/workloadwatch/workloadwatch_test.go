@@ -1,8 +1,11 @@
 package workloadwatch_test
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,5 +207,30 @@ func TestFormatElapsed(t *testing.T) {
 
 	if got := workloadwatch.FormatElapsed(1500 * time.Millisecond); got != "1.5s" {
 		t.Fatalf("FormatElapsed = %q, want 1.5s", got)
+	}
+}
+
+// TestPollForChangesEmitsStartedMarker guards the "poll: started" readiness
+// marker the workload-watch system test waits on. The decomposition once dropped
+// this print, leaving the watcher functional but never signaling readiness.
+func TestPollForChangesEmitsStartedMarker(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("x: 1\n"), filePerm); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	// A pre-cancelled context makes PollForChanges write the startup marker and
+	// then return on the first select, without waiting for the poll interval.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var buf bytes.Buffer
+
+	workloadwatch.PollForChanges(ctx, dir, make(chan string, 1), &buf)
+
+	if !strings.Contains(buf.String(), "poll: started") {
+		t.Fatalf("PollForChanges did not emit 'poll: started' readiness marker; got %q", buf.String())
 	}
 }
