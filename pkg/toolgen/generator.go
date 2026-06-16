@@ -182,6 +182,7 @@ func commandToToolDefinition(cmd *cobra.Command, excludeFlags []string) ToolDefi
 		CommandParts:       cmdParts,
 		RequiresPermission: requiresPermission,
 		Annotations:        buildAnnotationHints(requiresPermission),
+		ConfirmFlags:       confirmFlagNames(cmd),
 	}
 }
 

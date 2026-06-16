@@ -10,10 +10,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// ClusterNamePattern is the DNS-1123-subdomain regex for cluster names:
+// lowercase alphanumeric with optional hyphens, starting with a letter and
+// ending with alphanumeric. It is the single source shared by the runtime
+// validator (clusterNameRegex) and the JSON-schema generator (schemas/), so the
+// editor schema and runtime validation cannot drift.
+const ClusterNamePattern = `^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`
+
 // clusterNameRegex matches DNS-1123 subdomain names: lowercase alphanumeric with optional hyphens.
 // Must start with a letter, end with alphanumeric, and be at most 63 characters.
 // See: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
-var clusterNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+var clusterNameRegex = regexp.MustCompile(ClusterNamePattern)
 
 // ClusterNameMaxLength is the maximum length for a cluster name.
 const ClusterNameMaxLength = 63
@@ -45,129 +52,6 @@ func ValidateClusterName(name string) error {
 	}
 
 	return nil
-}
-
-// ValidDistributions returns supported distribution values.
-func ValidDistributions() []Distribution {
-	return []Distribution{
-		DistributionVanilla,
-		DistributionK3s,
-		DistributionTalos,
-		DistributionVCluster,
-		DistributionKWOK,
-		DistributionEKS,
-	}
-}
-
-// ValidGitOpsEngines enumerates supported GitOps engine values.
-func ValidGitOpsEngines() []GitOpsEngine {
-	return []GitOpsEngine{
-		GitOpsEngineNone,
-		GitOpsEngineFlux,
-		GitOpsEngineArgoCD,
-	}
-}
-
-// ValidCNIs returns supported CNI values.
-func ValidCNIs() []CNI {
-	return []CNI{CNIDefault, CNICilium, CNICalico}
-}
-
-// ValidCSIs returns supported CSI values.
-func ValidCSIs() []CSI {
-	return []CSI{CSIDefault, CSIEnabled, CSIDisabled}
-}
-
-// ValidCDIs returns supported CDI values.
-func ValidCDIs() []CDI {
-	return []CDI{CDIDefault, CDIEnabled, CDIDisabled}
-}
-
-// ValidMetricsServers returns supported metrics server values.
-func ValidMetricsServers() []MetricsServer {
-	return []MetricsServer{
-		MetricsServerDefault,
-		MetricsServerEnabled,
-		MetricsServerDisabled,
-	}
-}
-
-// ValidLoadBalancers returns supported load balancer values.
-func ValidLoadBalancers() []LoadBalancer {
-	return []LoadBalancer{
-		LoadBalancerDefault,
-		LoadBalancerEnabled,
-		LoadBalancerDisabled,
-	}
-}
-
-// ValidCertManagers returns supported cert-manager values.
-func ValidCertManagers() []CertManager {
-	return []CertManager{
-		CertManagerEnabled,
-		CertManagerDisabled,
-	}
-}
-
-// ValidImageVerifications returns supported image verification values.
-func ValidImageVerifications() []ImageVerification {
-	return []ImageVerification{
-		ImageVerificationEnabled,
-		ImageVerificationDisabled,
-	}
-}
-
-// ValidPolicyEngines returns supported policy engine values.
-func ValidPolicyEngines() []PolicyEngine {
-	return []PolicyEngine{
-		PolicyEngineNone,
-		PolicyEngineKyverno,
-		PolicyEngineGatekeeper,
-	}
-}
-
-// ValidProviders returns supported provider values.
-func ValidProviders() []Provider {
-	return []Provider{
-		ProviderDocker,
-		ProviderHetzner,
-		ProviderOmni,
-		ProviderAWS,
-		ProviderKubernetes,
-	}
-}
-
-// ValidPlacementGroupStrategies returns supported placement group strategy values.
-func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
-	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}
-}
-
-// ValidNodeAutoscalings returns supported node autoscaling values.
-func ValidNodeAutoscalings() []NodeAutoscaling {
-	return []NodeAutoscaling{NodeAutoscalingEnabled, NodeAutoscalingDisabled}
-}
-
-// ValidAutoscalerExpanders returns supported AutoscalerExpander values.
-func ValidAutoscalerExpanders() []AutoscalerExpander {
-	return []AutoscalerExpander{
-		AutoscalerExpanderPrice,
-		AutoscalerExpanderLeastWaste,
-		AutoscalerExpanderLeastNodes,
-		AutoscalerExpanderRandom,
-	}
-}
-
-// ValidPodAutoscalerHorizontals returns supported PodAutoscalerHorizontal values.
-func ValidPodAutoscalerHorizontals() []PodAutoscalerHorizontal {
-	return []PodAutoscalerHorizontal{
-		PodAutoscalerHorizontalEnabled,
-		PodAutoscalerHorizontalDisabled,
-	}
-}
-
-// ValidPodAutoscalerVerticals returns supported PodAutoscalerVertical values.
-func ValidPodAutoscalerVerticals() []PodAutoscalerVertical {
-	return []PodAutoscalerVertical{PodAutoscalerVerticalEnabled, PodAutoscalerVerticalDisabled}
 }
 
 // ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.

@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // IngressFirewall defines whether the Talos OS-level ingress firewall is configured.
 // When Enabled, KSail generates NetworkDefaultActionConfig (ingress: block) and
 // NetworkRuleConfig documents as Talos machine config patches, providing defense-in-depth
@@ -19,23 +14,14 @@ const (
 	IngressFirewallDisabled IngressFirewall = "Disabled"
 )
 
+// ValidIngressFirewalls returns all valid IngressFirewall values.
+func ValidIngressFirewalls() []IngressFirewall {
+	return []IngressFirewall{IngressFirewallEnabled, IngressFirewallDisabled}
+}
+
 // Set for IngressFirewall (pflag.Value interface).
 func (f *IngressFirewall) Set(value string) error {
-	for _, v := range ValidIngressFirewalls() {
-		if strings.EqualFold(value, string(v)) {
-			*f = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidIngressFirewall,
-		value,
-		IngressFirewallEnabled,
-		IngressFirewallDisabled,
-	)
+	return setEnum(f, value, ValidIngressFirewalls(), ErrInvalidIngressFirewall)
 }
 
 // String returns the string representation of the IngressFirewall.
@@ -55,10 +41,5 @@ func (f *IngressFirewall) Default() any {
 
 // ValidValues returns all valid IngressFirewall values as strings.
 func (f *IngressFirewall) ValidValues() []string {
-	return []string{string(IngressFirewallEnabled), string(IngressFirewallDisabled)}
-}
-
-// ValidIngressFirewalls returns all valid IngressFirewall values.
-func ValidIngressFirewalls() []IngressFirewall {
-	return []IngressFirewall{IngressFirewallEnabled, IngressFirewallDisabled}
+	return validValueStrings(ValidIngressFirewalls())
 }

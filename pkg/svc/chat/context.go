@@ -1,100 +1,60 @@
 package chat
 
 import (
-	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
-	goruntime "runtime"
 	"strings"
-	"time"
 
 	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/spf13/cobra"
 )
 
 // BuildSystemSections builds system prompt section overrides for the "customize" mode.
 // It delegates to the generic chatui.BuildSystemSections with KSail-specific defaults.
-func BuildSystemSections() map[string]copilot.SectionOverride {
-	return chatui.BuildSystemSections(DefaultSystemContextConfig())
+// The root command supplies the CLI help text in-process.
+func BuildSystemSections(rootCmd *cobra.Command) map[string]copilot.SectionOverride {
+	return chatui.BuildSystemSections(DefaultSystemContextConfig(rootCmd))
 }
 
 // DefaultSystemContextConfig returns the default KSail system context configuration.
-func DefaultSystemContextConfig() chatui.SystemContextConfig {
+// The CLI help section is rendered from the in-process root command instead of
+// spawning a ksail subprocess, so it works regardless of PATH or install location.
+func DefaultSystemContextConfig(rootCmd *cobra.Command) chatui.SystemContextConfig {
 	return chatui.SystemContextConfig{
 		Identity: "You are KSail Assistant, an AI helper for KSail - " +
 			"a CLI tool for creating and managing local Kubernetes clusters.\n" +
 			"You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.",
 		Documentation:            loadDocumentation(),
-		CLIHelp:                  getCLIHelp(),
+		CLIHelp:                  rootCommandHelp(rootCmd),
 		Instructions:             ksailInstructions,
 		IncludeWorkingDirContext: true,
 		ConfigFileName:           "ksail.yaml",
 	}
 }
 
-// getCLIHelp captures the ksail --help output dynamically.
-func getCLIHelp() string {
-	ksailPath := FindKSailExecutable()
-	if ksailPath == "" {
+// rootCommandHelp renders the root command's help text (long description plus
+// usage) in-process, matching what `ksail --help` prints.
+func rootCommandHelp(rootCmd *cobra.Command) string {
+	if rootCmd == nil {
 		return ""
 	}
 
-	const cliHelpTimeout = 3 * time.Second
-
-	ctx, cancel := context.WithTimeout(context.Background(), cliHelpTimeout)
-	defer cancel()
-
-	//nolint:gosec // Running own ksail binary with fixed args is safe
-	cmd := exec.CommandContext(ctx, ksailPath, "--help")
-
-	output, err := cmd.Output()
-	if err != nil {
-		return ""
+	description := strings.TrimSpace(rootCmd.Long)
+	if description == "" {
+		description = strings.TrimSpace(rootCmd.Short)
 	}
 
-	return string(output)
+	usage := rootCmd.UsageString()
+	if description == "" {
+		return usage
+	}
+
+	return description + "\n\n" + usage
 }
 
 // loadDocumentation returns the generated documentation constant.
 // The documentation is pre-processed at go:generate time from docs/src/content/docs/.
 func loadDocumentation() string {
 	return generatedDocumentation
-}
-
-// FindKSailExecutable attempts to find the ksail executable.
-func FindKSailExecutable() string {
-	// Check if running from ksail itself
-	exe, err := os.Executable()
-	if err == nil && strings.Contains(filepath.Base(exe), "ksail") {
-		return exe
-	}
-
-	// Check PATH
-	path, err := exec.LookPath("ksail")
-	if err == nil {
-		return path
-	}
-
-	// Check common locations on macOS/Linux
-	if goruntime.GOOS != "windows" {
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			commonPaths := []string{
-				filepath.Join(homeDir, "go", "bin", "ksail"),
-				filepath.Join(homeDir, ".local", "bin", "ksail"),
-				"/usr/local/bin/ksail",
-			}
-			for _, p := range commonPaths {
-				_, statErr := os.Stat(p)
-				if statErr == nil {
-					return p
-				}
-			}
-		}
-	}
-
-	return ""
 }
 
 // ksailInstructions contains instructions for the AI assistant.

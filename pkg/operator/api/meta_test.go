@@ -23,7 +23,8 @@ type metaResponse struct {
 	} `json:"components"`
 }
 
-func fetchMeta(t *testing.T) metaResponse {
+// fetchMetaBody serves GET /api/v1/meta and returns the raw response body.
+func fetchMetaBody(t *testing.T) []byte {
 	t.Helper()
 
 	server := &api.Server{}
@@ -39,9 +40,15 @@ func fetchMeta(t *testing.T) metaResponse {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 
+	return recorder.Body.Bytes()
+}
+
+func fetchMeta(t *testing.T) metaResponse {
+	t.Helper()
+
 	var meta metaResponse
 
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &meta))
+	require.NoError(t, json.Unmarshal(fetchMetaBody(t), &meta))
 
 	return meta
 }
@@ -85,4 +92,73 @@ func TestMeta_ComponentsHaveValuesAndValidDefault(t *testing.T) {
 	for _, want := range []string{"cni", "csi", "gitOpsEngine", "policyEngine"} {
 		assert.True(t, slices.Contains(keys, want), "components must include %q", want)
 	}
+}
+
+// wantResourceKindsJSON pins the exact resourceKinds wire payload (order included): the SPA builds
+// its kind selector and action affordances from these flags, so any allowlist or predicate change
+// must update this contract knowingly. Note the metrics kinds are allowlisted but browsable=false —
+// they power the Overview's usage monitoring, not the kind selector.
+const wantResourceKindsJSON = `[
+{"kind":"Pod","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Deployment","namespaced":true,"scalable":true,"restartable":true,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"StatefulSet","namespaced":true,"scalable":true,"restartable":true,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"DaemonSet","namespaced":true,"scalable":false,"restartable":true,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"ReplicaSet","namespaced":true,"scalable":true,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Job","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"CronJob","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Service","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Ingress","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"ConfigMap","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"PersistentVolumeClaim","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Event","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":true},
+{"kind":"Node","namespaced":false,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":false,"browsable":true},
+{"kind":"Namespace","namespaced":false,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":false,"browsable":true},
+{"kind":"Kustomization","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":true,"deletable":true,"browsable":true},
+{"kind":"HelmRelease","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":true,"deletable":true,"browsable":true},
+{"kind":"GitRepository","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":true,"deletable":true,"browsable":true},
+{"kind":"OCIRepository","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":true,"deletable":true,"browsable":true},
+{"kind":"Application","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":true,"deletable":true,"browsable":true},
+{"kind":"NodeMetrics","namespaced":false,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":false,"browsable":false},
+{"kind":"PodMetrics","namespaced":true,"scalable":false,"restartable":false,
+ "reconcilable":false,"deletable":true,"browsable":false}
+]`
+
+// TestMeta_ResourceKindsExactJSON pins the resourceKinds payload exactly (values and order; JSONEq is
+// order-sensitive for arrays). It is the wire contract the SPA derives its kind selector and
+// affordance gates from, replacing the hand-mirrored TypeScript constants on current backends.
+func TestMeta_ResourceKindsExactJSON(t *testing.T) {
+	t.Parallel()
+
+	var payload struct {
+		ResourceKinds json.RawMessage `json:"resourceKinds"`
+	}
+
+	require.NoError(t, json.Unmarshal(fetchMetaBody(t), &payload))
+	require.NotEmpty(
+		t,
+		payload.ResourceKinds,
+		"meta must serve resourceKinds (additive field for the SPA's kind lists)",
+	)
+
+	assert.JSONEq(t, wantResourceKindsJSON, string(payload.ResourceKinds))
 }

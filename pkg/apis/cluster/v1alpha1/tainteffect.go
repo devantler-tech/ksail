@@ -17,16 +17,6 @@ const (
 	TaintEffectNoExecute TaintEffect = "NoExecute"
 )
 
-// ValidValues returns all valid TaintEffect values as strings. It satisfies the
-// [EnumValuer] interface so the schema generator emits an enum constraint.
-func (e *TaintEffect) ValidValues() []string {
-	return []string{
-		string(TaintEffectNoSchedule),
-		string(TaintEffectPreferNoSchedule),
-		string(TaintEffectNoExecute),
-	}
-}
-
 // ValidTaintEffects returns all valid taint effects.
 func ValidTaintEffects() []TaintEffect {
 	return []TaintEffect{
@@ -34,4 +24,10 @@ func ValidTaintEffects() []TaintEffect {
 		TaintEffectPreferNoSchedule,
 		TaintEffectNoExecute,
 	}
+}
+
+// ValidValues returns all valid TaintEffect values as strings. It satisfies the
+// [EnumValuer] interface so the schema generator emits an enum constraint.
+func (e *TaintEffect) ValidValues() []string {
+	return validValueStrings(ValidTaintEffects())
 }

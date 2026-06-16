@@ -29,6 +29,10 @@ func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
 	}
 
 	cmd.Flags().BoolP("force", "f", false, "Skip all confirmation prompts")
+	_ = cmd.Flags().SetAnnotation(
+		"force", annotations.AnnotationConfirmFlag,
+		[]string{annotations.AnnotationValueTrue},
+	)
 	cmd.Flags().Bool("unregister", true, "Remove tenant from kustomization.yaml")
 	cmd.Flags().String("kustomization-path", "", "Path to kustomization.yaml")
 	cmd.Flags().Bool("delete-repo", false, "Also delete the tenant Git repository")

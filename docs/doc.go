@@ -1,5 +1,8 @@
 // Package docs provides go:generate directives for generating reference
-// documentation (CLI flags and configuration reference) from Go source code.
+// documentation (CLI flags pages and index, configuration reference, and the
+// MCP tool catalog partial) from Go source code, plus the unit-testable
+// rendering helpers (render.go, fielddocs.go) used by the gen_docs.go
+// generator.
 //
 // Run: go generate ./docs/...
 //

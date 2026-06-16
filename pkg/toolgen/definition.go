@@ -1,5 +1,7 @@
 package toolgen
 
+import "slices"
+
 // ToolDefinition is an SDK-agnostic representation of a tool generated from a Cobra command.
 // It contains all the metadata needed to create SDK-specific tools (Copilot, MCP, etc.).
 type ToolDefinition struct {
@@ -40,6 +42,47 @@ type ToolDefinition struct {
 	// Subcommands maps subcommand names to their metadata.
 	// Only populated when IsConsolidated is true.
 	Subcommands map[string]*SubcommandDef
+
+	// ConfirmFlags lists the flags on this tool that carry the
+	// ai.toolgen.confirm-flag annotation (confirmation-prompt skips that the
+	// chat assistant may auto-inject). Only populated for non-consolidated
+	// tools; consolidated tools resolve confirm flags per-subcommand via
+	// Subcommands[*].Flags[*].ConfirmFlag.
+	ConfirmFlags []string
+}
+
+// ConfirmFlagsFor returns the sorted names of confirmation-skip flags
+// (flags carrying the ai.toolgen.confirm-flag annotation) that apply to an
+// invocation with the given parameters. For consolidated tools the result is
+// resolved per-subcommand from the subcommand selector parameter, so flags
+// like kubectl's destructive --force (which lacks the annotation) are never
+// reported. Returns nil when no confirm flags apply.
+func (t ToolDefinition) ConfirmFlagsFor(params map[string]any) []string {
+	if !t.IsConsolidated {
+		return t.ConfirmFlags
+	}
+
+	subcommandName, ok := params[t.SubcommandParam].(string)
+	if !ok {
+		return nil
+	}
+
+	subcommandDef, exists := t.Subcommands[subcommandName]
+	if !exists {
+		return nil
+	}
+
+	var confirmFlags []string
+
+	for flagName, flagDef := range subcommandDef.Flags {
+		if flagDef.ConfirmFlag {
+			confirmFlags = append(confirmFlags, flagName)
+		}
+	}
+
+	slices.Sort(confirmFlags)
+
+	return confirmFlags
 }
 
 // ToolAnnotationHints contains SDK-agnostic behavioral hints for a tool.
@@ -116,4 +159,10 @@ type FlagDef struct {
 	// AppliesToSubcommands lists which subcommands this flag applies to.
 	// Empty means it applies to all subcommands.
 	AppliesToSubcommands []string
+
+	// ConfirmFlag marks a flag carrying the ai.toolgen.confirm-flag annotation:
+	// a boolean whose only effect is to skip KSail's own interactive
+	// confirmation prompt. The chat assistant auto-injects such flags after
+	// permission approval.
+	ConfirmFlag bool
 }

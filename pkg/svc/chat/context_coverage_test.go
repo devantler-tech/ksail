@@ -12,7 +12,7 @@ import (
 func TestDefaultSystemContextConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := chat.DefaultSystemContextConfig()
+	cfg := chat.DefaultSystemContextConfig(newTestRootCmd())
 
 	assert.Contains(t, cfg.Identity, "KSail Assistant")
 	assert.True(t, cfg.IncludeWorkingDirContext)
@@ -24,7 +24,7 @@ func TestDefaultSystemContextConfig(t *testing.T) {
 func TestBuildSystemSections(t *testing.T) {
 	t.Parallel()
 
-	sections := chat.BuildSystemSections()
+	sections := chat.BuildSystemSections(newTestRootCmd())
 
 	// BuildSystemSections should return a non-nil map
 	require.NotNil(t, sections)
@@ -33,7 +33,7 @@ func TestBuildSystemSections(t *testing.T) {
 func TestBuildSystemContext_ContainsIdentity(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig())
+	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig(newTestRootCmd()))
 	require.NoError(t, err)
 
 	assert.Contains(t, ctx, "KSail Assistant")
@@ -44,7 +44,7 @@ func TestBuildSystemContext_ContainsIdentity(t *testing.T) {
 func TestBuildSystemContext_ContainsInstructions(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig())
+	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig(newTestRootCmd()))
 	require.NoError(t, err)
 
 	assert.Contains(t, ctx, "<instructions>")

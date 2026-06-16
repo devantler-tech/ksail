@@ -13,7 +13,7 @@ export interface KSailClusterConfiguration {
   apiVersion?: "ksail.io/v1alpha1";
   metadata?: {
     /**
-     * Cluster name (DNS-1123 compliant)
+     * Cluster name (DNS-1123 compliant: lowercase letters, numbers, and hyphens; must start with a letter and must not end with a hyphen).
      */
     name?: string;
   };
@@ -22,38 +22,154 @@ export interface KSailClusterConfiguration {
      * Editor command for interactive workflows (e.g. code --wait)
      */
     editor?: string;
+    /**
+     * Cluster configures the Kubernetes cluster KSail manages: distribution,
+     * provider, components, and connection settings.
+     */
     cluster?: {
+      /**
+       * DistributionConfig is the path to the distribution's own configuration file
+       * (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
+       * When empty, KSail uses the distribution's default file name.
+       */
       distributionConfig?: string;
+      /**
+       * Connection defines how KSail connects to the cluster: the kubeconfig path,
+       * context name, and operation timeout.
+       */
       connection?: {
+        /**
+         * Kubeconfig is the path to the kubeconfig file KSail reads and writes.
+         * Defaults to "~/.kube/config".
+         */
         kubeconfig?: string;
+        /**
+         * Context is the kubeconfig context for the cluster. When empty, KSail derives
+         * it from the distribution and cluster name (e.g. "kind-kind").
+         */
         context?: string;
+        /**
+         * Timeout is the maximum time KSail waits for cluster operations to complete
+         * (e.g. "5m").
+         */
         timeout?: string;
       };
+      /**
+       * Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
+       * K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS).
+       */
       distribution?: "Vanilla" | "K3s" | "Talos" | "VCluster" | "KWOK" | "EKS";
+      /**
+       * Provider selects the infrastructure that runs the cluster nodes: Docker,
+       * Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing
+       * cluster). Each distribution supports a subset of providers; when empty,
+       * KSail uses the distribution's default provider.
+       */
       provider?: "Docker" | "Hetzner" | "Omni" | "AWS" | "Kubernetes";
+      /**
+       * CNI selects the Container Network Interface plugin. Default keeps the
+       * distribution's built-in CNI; Cilium or Calico install that CNI instead.
+       */
       cni?: "Default" | "Cilium" | "Calico";
+      /**
+       * CSI controls Container Storage Interface support. Default keeps the
+       * distribution's behavior; Enabled installs a CSI driver
+       * (local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none.
+       */
       csi?: "Default" | "Enabled" | "Disabled";
+      /**
+       * CDI controls Container Device Interface support in the container runtime
+       * (Default, Enabled, or Disabled).
+       */
       cdi?: "Default" | "Enabled" | "Disabled";
+      /**
+       * MetricsServer controls metrics-server installation. Default keeps the
+       * distribution's behavior; Enabled or Disabled override it.
+       */
       metricsServer?: "Default" | "Enabled" | "Disabled";
+      /**
+       * LoadBalancer controls load-balancer support. Default keeps the
+       * distribution and provider behavior; Enabled or Disabled override it.
+       */
       loadBalancer?: "Default" | "Enabled" | "Disabled";
+      /**
+       * CertManager controls whether cert-manager is installed (Enabled or Disabled).
+       */
       certManager?: "Enabled" | "Disabled";
+      /**
+       * PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper.
+       */
       policyEngine?: "None" | "Kyverno" | "Gatekeeper";
+      /**
+       * LocalRegistry configures the host-local OCI registry (or an external
+       * registry for cloud providers) used by GitOps workflows.
+       */
       localRegistry?: {
+        /**
+         * Registry is the full registry specification in the format: [user:pass@]host[:port][/path]
+         * When populated, enables registry integration for GitOps workflows.
+         * Examples:
+         *   - "localhost:5050" (local Docker registry)
+         *   - "ghcr.io/myorg/myrepo" (GitHub Container Registry with path)
+         *   - "${USER}:${PASS}@ghcr.io:443/myorg" (with credentials from env vars)
+         * Credentials support ${ENV_VAR} placeholders for environment variable expansion.
+         */
         registry?: string;
       };
+      /**
+       * GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD.
+       */
       gitOpsEngine?: "None" | "Flux" | "ArgoCD";
+      /**
+       * SOPS configures automatic creation of the SOPS Age secret used to decrypt
+       * encrypted manifests in the cluster.
+       */
       sops?: {
+        /**
+         * Deprecated: Use Env.Var instead. AgeKeyEnvVar is the name of the environment
+         * variable containing the Age private key. Kept for backward compatibility.
+         * When Env.Var is set, it takes priority over AgeKeyEnvVar.
+         */
         ageKeyEnvVar?: string;
+        /**
+         * Enabled controls whether the SOPS Age secret is created.
+         * nil (default) = auto-detect (create if key is found via env var or key file).
+         * true = require key (error if not found).
+         * false = disable entirely (skip secret creation).
+         */
         enabled?: boolean;
+        /**
+         * Env configures the environment variable source for the Age private key.
+         */
         env?: {
+          /**
+           * Var is the name of the environment variable containing the Age private key.
+           * When set, takes priority over SOPS.AgeKeyEnvVar.
+           * Leave empty to fall back to AgeKeyEnvVar (default: "SOPS_AGE_KEY").
+           */
           var?: string;
         };
+        /**
+         * Extract configures extraction of Age private keys from a key file.
+         */
         extract?: {
+          /**
+           * File is the path to the Age key file (absolute or relative to the working directory).
+           * Defaults to the OS-specific SOPS age key path when empty.
+           */
           file?: string;
+          /**
+           * PublicKeys is a list of Age public keys (age1...) used to select which
+           * private keys to include in the SOPS secret. For each private key in the
+           * key file, its public key is derived and compared against this list.
+           * Only matching private keys are included.
+           * When empty (default), all private keys from the file are included.
+           */
           publicKeys?: string[];
         };
       };
       /**
+       * @deprecated
        * Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler.
        */
       nodeAutoscaling?: "Enabled" | "Disabled";
@@ -61,17 +177,51 @@ export interface KSailClusterConfiguration {
        * Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)
        */
       autoscaler?: {
+        /**
+         * Pod configures pod-level autoscaling (horizontal and vertical).
+         */
         pod?: {
+          /**
+           * Horizontal controls Horizontal Pod Autoscaler (HPA) support.
+           */
           horizontal?: "Enabled" | "Disabled";
+          /**
+           * Vertical controls Vertical Pod Autoscaler (VPA) support.
+           */
           vertical?: "Enabled" | "Disabled";
         };
+        /**
+         * Node configures node-level autoscaling via the Cluster Autoscaler.
+         */
         node?: {
+          /**
+           * Enabled controls whether the Cluster Autoscaler is installed to manage
+           * worker node counts dynamically.
+           */
           enabled?: boolean;
+          /**
+           * Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
+           */
           pools?: {
+            /**
+             * Name is the unique identifier for this node pool (DNS-1123 label).
+             */
             name?: string;
+            /**
+             * ServerType is the Hetzner server type for nodes in this pool (e.g. "cx23", "cax11").
+             */
             serverType?: string;
+            /**
+             * Location is the Hetzner datacenter location for this pool (e.g. "fsn1", "nbg1").
+             */
             location?: string;
+            /**
+             * Min is the minimum number of nodes in this pool.
+             */
             min?: number;
+            /**
+             * Max is the maximum number of nodes in this pool.
+             */
             max?: number;
             /**
              * Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template).
@@ -83,8 +233,18 @@ export interface KSailClusterConfiguration {
              * Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template).
              */
             taints?: {
+              /**
+               * Key is the taint key. Must be a valid Kubernetes label key (an optional
+               * DNS-subdomain prefix followed by a name segment).
+               */
               key?: string;
+              /**
+               * Value is the optional taint value.
+               */
               value?: string;
+              /**
+               * Effect is the scheduling effect: NoSchedule, PreferNoSchedule, or NoExecute.
+               */
               effect?: "NoSchedule" | "PreferNoSchedule" | "NoExecute";
             }[];
           }[];
@@ -92,7 +252,12 @@ export interface KSailClusterConfiguration {
            * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit
            */
           maxNodesTotal?: number;
-          expander?: "Price" | "LeastWaste" | "LeastNodes" | "Random";
+          /**
+           * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes
+           */
+          expander?:
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
           /**
            * How long a node should be unneeded before it is eligible for scale down (e.g. 10m)
            */
@@ -152,48 +317,191 @@ export interface KSailClusterConfiguration {
          */
         caFile?: string;
       };
+      /**
+       * Vanilla holds options specific to the Vanilla (Kind) distribution.
+       */
       vanilla?: {
+        /**
+         * MirrorsDir is the directory for containerd host mirror configuration.
+         * Defaults to "kind/mirrors" if not specified.
+         */
         mirrorsDir?: string;
       };
+      /**
+       * Talos holds options specific to the Talos distribution.
+       */
       talos?: {
+        /**
+         * Version pins the Talos OS (distribution) version used for cluster creation and
+         * upgrades. When set, KSail uses this version as the Docker container image tag
+         * and `cluster update` reconciles the cluster toward it (skipping downgrades).
+         * Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+         * When empty, `cluster create` uses KSail's built-in default version and
+         * `cluster update` follows the latest stable version available in the OCI
+         * registry. Override per invocation with the --distribution-version flag
+         * (precedence: flag > env > config > default).
+         */
         version?: string;
         /**
+         * @deprecated
          * DEPRECATED: use spec.cluster.controlPlanes instead
          */
         controlPlanes?: number;
         /**
+         * @deprecated
          * DEPRECATED: use spec.cluster.workers instead
          */
         workers?: number;
+        /**
+         * Config is the path to the talosconfig file.
+         * Defaults to "~/.talos/config".
+         */
         config?: string;
+        /**
+         * ISO is the cloud provider's ISO/image ID for booting Talos Linux.
+         * Only used when targeting cloud providers (e.g., Hetzner Cloud).
+         * For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
+         * Defaults to 125127 (Talos Linux 1.12.4 x86). The prior default 122630
+         * (Talos 1.11.2) was removed from Hetzner on 2026-03-18. For ARM, look up the
+         * matching Talos ISO ID in the Hetzner Cloud Console (Images → ISOs).
+         * When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
+         */
         iso?: number;
+        /**
+         * SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.
+         * When set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version
+         * instead of booting from the cloud ISO specified in ISO.
+         * Obtain a schematic ID from https://factory.talos.dev.
+         * Only used when targeting cloud providers (e.g., Hetzner Cloud).
+         */
         schematicId?: string;
+        /**
+         * Extensions lists Talos Image Factory official system extension names to include in the
+         * node image. KSail automatically computes the Image Factory schematic ID from this list
+         * and sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},
+         * where {version} is derived from the Talos config bundle's existing install image tag.
+         * For Hetzner, the schematic is also used for snapshot building.
+         * Extension names follow the Image Factory convention (e.g., "siderolabs/iscsi-tools").
+         * The Image Factory resolves extension versions automatically per Talos release.
+         * When SchematicID is also set, it takes precedence over Extensions.
+         */
         extensions?: string[];
+        /**
+         * ExtraPortMappings defines additional port mappings from Docker containers to the host.
+         * Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
+         * are not accessible from the host because Docker runs in a Linux VM.
+         * Ports are exposed on the first control-plane node (when multiple control-planes are configured).
+         */
         extraPortMappings?: {
+          /**
+           * ContainerPort is the port inside the container.
+           */
           containerPort?: number;
+          /**
+           * HostPort is the port on the host. If 0, Docker assigns a random port.
+           */
           hostPort?: number;
+          /**
+           * Protocol is the network protocol (TCP or UDP). Defaults to TCP.
+           */
           protocol?: "TCP" | "UDP";
         }[];
+        /**
+         * ImageVerification enables scaffolding of a Talos ImageVerificationConfig document
+         * during cluster init. When Enabled, generates an image-verification.yaml template
+         * in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
+         * and public key verification rules. Requires Talos 1.13+.
+         */
         imageVerification?: "Enabled" | "Disabled";
+        /**
+         * DrainTimeout is the per-node pod-eviction budget for rolling node drains during
+         * `cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When
+         * unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
+         * longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
+         * gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
+         * re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+         * Override per invocation with --drain-timeout. Example: "15m".
+         */
         drainTimeout?: string;
       };
     };
+    /**
+     * Provider holds infrastructure-provider-specific options
+     * (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters).
+     */
     provider?: {
+      /**
+       * Hetzner holds options for the Hetzner Cloud provider.
+       */
       hetzner?: {
+        /**
+         * ControlPlaneServerType is the Hetzner server type for control-plane nodes.
+         * Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+         */
         controlPlaneServerType?: string;
+        /**
+         * WorkerServerType is the Hetzner server type for worker nodes.
+         * Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+         */
         workerServerType?: string;
+        /**
+         * Location is the Hetzner datacenter location.
+         * Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
+         * Defaults to "fsn1".
+         */
         location?: string;
+        /**
+         * NetworkName is the name of the private network to create or use.
+         * If empty, a network named "<cluster-name>-network" will be created.
+         */
         networkName?: string;
+        /**
+         * NetworkCIDR is the CIDR block for the private network.
+         * Defaults to "10.0.0.0/16".
+         */
         networkCidr?: string;
+        /**
+         * SSHKeyName is the name of the SSH key to use for server access.
+         * The key must already exist in the Hetzner Cloud project.
+         * If empty, no SSH key is attached (only Talos API access).
+         */
         sshKeyName?: string;
+        /**
+         * TokenEnvVar is the environment variable containing the Hetzner API token.
+         * Defaults to "HCLOUD_TOKEN".
+         */
         tokenEnvVar?: string;
+        /**
+         * PlacementGroupStrategy controls whether and how placement groups are used.
+         * "Spread" (default) distributes servers across different physical hosts for HA.
+         * "None" disables placement groups, useful when Hetzner resources are constrained.
+         * Note: Spread groups are limited to 10 servers per datacenter.
+         */
         placementGroupStrategy?: "None" | "Spread";
+        /**
+         * PlacementGroup is the name of the placement group for server distribution.
+         * If empty, a placement group named "<cluster-name>-placement" will be created.
+         * Only used when PlacementGroupStrategy is "Spread".
+         */
         placementGroup?: string;
         /**
          * Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location).
          */
         fallbackLocations?: string[];
+        /**
+         * PlacementGroupFallbackToNone allows automatic fallback to no placement group
+         * when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).
+         * When true and placement fails, retries server creation without a placement group.
+         * Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
+         */
         placementGroupFallbackToNone?: boolean;
+        /**
+         * IngressFirewall controls the Talos OS-level ingress firewall configuration.
+         * When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig
+         * documents as Talos machine config patches, providing defense-in-depth at the node level
+         * independent of the Hetzner Cloud Firewall.
+         * See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+         */
         ingressFirewall?: "Enabled" | "Disabled";
         /**
          * Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10
@@ -219,39 +527,172 @@ export interface KSailClusterConfiguration {
          * Assign a public IPv6 to control-plane nodes. Defaults to true.
          */
         controlPlanePublicIPv6?: boolean;
+        /**
+         * AutoscalerNodePoolNames lists the node-group names configured in the
+         * Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
+         * deletes servers labelled with hcloud/node-group=<name> during cluster
+         * deletion so that autoscaler-managed nodes are cleaned up alongside
+         * KSail-managed nodes.
+         */
         autoscalerNodePoolNames?: string[];
       };
+      /**
+       * Omni holds options for the Sidero Omni provider.
+       */
       omni?: {
+        /**
+         * Endpoint is the Omni API endpoint URL.
+         * Example: "https://<account>.omni.siderolabs.io:443".
+         */
         endpoint?: string;
+        /**
+         * EndpointEnvVar is the environment variable containing the Omni API endpoint URL.
+         * When set, the value of this environment variable takes precedence over Endpoint.
+         * Defaults to "OMNI_ENDPOINT".
+         */
         endpointEnvVar?: string;
+        /**
+         * ServiceAccountKeyEnvVar is the environment variable containing the
+         * base64-encoded Omni service account key.
+         * Defaults to "OMNI_SERVICE_ACCOUNT_KEY".
+         */
         serviceAccountKeyEnvVar?: string;
+        /**
+         * TalosVersion is the Talos version to use for the cluster in Omni.
+         * Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+         * Generated templates normalize the value to include the "v" prefix.
+         * This determines the Talos Linux version that Omni will deploy to machines.
+         */
         talosVersion?: string;
+        /**
+         * KubernetesVersion is the Kubernetes version to use for the cluster in Omni.
+         * Accepts values with or without the "v" prefix (e.g., "v1.32.0" or "1.32.0").
+         * Generated templates normalize the value to include the "v" prefix.
+         * This determines the Kubernetes version that Omni will deploy.
+         */
         kubernetesVersion?: string;
+        /**
+         * MachineClass is the Omni machine class name to use for dynamic node allocation.
+         * Machine classes are user-defined in the Omni dashboard and match machines
+         * by labels (e.g., CPU, region, role). The specified class must exist in
+         * the Omni account before cluster creation. The number of machines allocated
+         * is derived from the controlPlanes and workers count in the cluster spec.
+         * Mutually exclusive with Machines — set one or the other.
+         * When neither MachineClass nor Machines is set, KSail automatically discovers
+         * available (unallocated) machines in Omni and uses them for node allocation.
+         */
         machineClass?: string;
+        /**
+         * Machines is a list of Omni machine UUIDs to use for static node allocation.
+         * The first N machines are assigned as control planes (where N = controlPlanes count),
+         * and the remaining machines are assigned as workers.
+         * Mutually exclusive with MachineClass — set one or the other.
+         * When neither MachineClass nor Machines is set, KSail automatically discovers
+         * available (unallocated) machines in Omni and uses them for node allocation.
+         */
         machines?: string[];
       };
+      /**
+       * AWS holds options for the AWS provider used by the EKS distribution.
+       */
       aws?: {
+        /**
+         * ProfileEnvVar is the environment variable containing the AWS shared-config profile name.
+         * Defaults to "AWS_PROFILE".
+         */
         profileEnvVar?: string;
+        /**
+         * RegionEnvVar is the environment variable containing the AWS region.
+         * When set, it overrides the region declared in eks.yaml.
+         * Defaults to "AWS_REGION".
+         */
         regionEnvVar?: string;
+        /**
+         * AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID.
+         * Defaults to "AWS_ACCESS_KEY_ID".
+         */
         accessKeyIdEnvVar?: string;
+        /**
+         * SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key.
+         * Defaults to "AWS_SECRET_ACCESS_KEY".
+         */
         secretAccessKeyEnvVar?: string;
+        /**
+         * SessionTokenEnvVar is the environment variable containing an AWS session token
+         * (used with temporary credentials from STS).
+         * Defaults to "AWS_SESSION_TOKEN".
+         */
         sessionTokenEnvVar?: string;
       };
+      /**
+       * Kubernetes holds options for the Kubernetes provider, which runs nested
+       * clusters as pods inside an existing host cluster.
+       */
       kubernetes?: {
+        /**
+         * Kubeconfig is the path to the kubeconfig for the host cluster.
+         * Defaults to "~/.kube/config".
+         */
         kubeconfig?: string;
+        /**
+         * KubeconfigEnvVar is the environment variable containing the host kubeconfig path.
+         * Defaults to "KSAIL_HOST_KUBECONFIG".
+         */
         kubeconfigEnvVar?: string;
+        /**
+         * Context is the kubeconfig context for the host cluster.
+         * When empty, uses the current context.
+         */
         context?: string;
+        /**
+         * ContextEnvVar is the environment variable containing the host kubeconfig context.
+         * Defaults to "KSAIL_HOST_CONTEXT".
+         */
         contextEnvVar?: string;
+        /**
+         * GatewayClassName is the GatewayClass to use for exposing the nested API server.
+         * Must reference a GatewayClass that exists on the host cluster.
+         * When empty, the API is exposed via ClusterIP Service only (no external Gateway).
+         */
         gatewayClassName?: string;
+        /**
+         * PodCIDR is the pod CIDR for the nested cluster.
+         * Must not overlap with the host cluster's pod or service CIDRs.
+         * Defaults to "10.64.0.0/16".
+         */
         podCidr?: string;
+        /**
+         * ServiceCIDR is the service CIDR for the nested cluster.
+         * Must not overlap with the host cluster's pod or service CIDRs.
+         * Defaults to "10.128.0.0/16".
+         */
         serviceCidr?: string;
+        /**
+         * Persistence defines storage persistence for the nested cluster's data directory.
+         */
         persistence?: {
+          /**
+           * Enabled controls whether a PVC is used for the nested cluster's data directory.
+           * When false (default), emptyDir is used and the cluster is ephemeral.
+           */
           enabled?: boolean;
+          /**
+           * StorageClassName is the StorageClass to use for the PVC.
+           * When empty, the cluster's default StorageClass is used.
+           */
           storageClassName?: string;
+          /**
+           * Size is the storage request size for the PVC.
+           * Defaults to "20Gi".
+           */
           size?: string;
         };
       };
     };
+    /**
+     * Workload configures workload management: the manifest source directory,
+     * OCI push and validation settings, and GitOps bootstrap options.
+     */
     workload?: {
       /**
        * Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given.
@@ -332,6 +773,9 @@ export interface KSailClusterConfiguration {
         skipKinds?: string[];
       };
     };
+    /**
+     * Chat configures the KSail AI chat assistant.
+     */
     chat?: {
       /**
        * Chat model (empty or 'auto' for API default)

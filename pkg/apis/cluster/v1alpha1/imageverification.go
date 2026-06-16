@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // ImageVerification defines image verification options for supported distributions.
 // Talos uses a native ImageVerificationConfig document; Kind uses containerd config patches.
 type ImageVerification string
@@ -16,23 +11,17 @@ const (
 	ImageVerificationDisabled ImageVerification = "Disabled"
 )
 
-// Set for ImageVerification (pflag.Value interface).
-func (iv *ImageVerification) Set(value string) error {
-	for _, v := range ValidImageVerifications() {
-		if strings.EqualFold(value, string(v)) {
-			*iv = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidImageVerification,
-		value,
+// ValidImageVerifications returns supported image verification values.
+func ValidImageVerifications() []ImageVerification {
+	return []ImageVerification{
 		ImageVerificationEnabled,
 		ImageVerificationDisabled,
-	)
+	}
+}
+
+// Set for ImageVerification (pflag.Value interface).
+func (iv *ImageVerification) Set(value string) error {
+	return setEnum(iv, value, ValidImageVerifications(), ErrInvalidImageVerification)
 }
 
 // String returns the string representation of the ImageVerification.
@@ -52,5 +41,5 @@ func (iv *ImageVerification) Default() any {
 
 // ValidValues returns all valid ImageVerification values as strings.
 func (iv *ImageVerification) ValidValues() []string {
-	return []string{string(ImageVerificationEnabled), string(ImageVerificationDisabled)}
+	return validValueStrings(ValidImageVerifications())
 }

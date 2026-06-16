@@ -402,11 +402,16 @@ jobs:
     # `go generate ./docs/...` (and ./schemas/...) re-compiles the cli import
     # graph. On events where build-artifact is skipped (push to main), this
     # falls through and the job still runs.
+    # Docs-content changes also trigger this job: the chat assistant docs
+    # (pkg/svc/chat/docs_generated.go) are generated from docs/src/content/docs
+    # and go stale on docs-only PRs otherwise.
     needs: [changes, build-artifact]
     if: >-
       !cancelled()
       && github.event_name != 'merge_group'
-      && (needs.changes.outputs.schema == 'true' || needs.changes.outputs.cli == 'true')
+      && (needs.changes.outputs.schema == 'true'
+        || needs.changes.outputs.cli == 'true'
+        || needs.changes.outputs.docs == 'true')
       && (needs.build-artifact.result == 'success' || needs.build-artifact.result == 'skipped')
     permissions:
       contents: read
@@ -467,6 +472,35 @@ jobs:
         if: needs.changes.outputs.cli == 'true'
         run: go generate ./docs/...
 
+      - name: 💬 Generate chat assistant docs
+        # pkg/svc/chat/docs_generated.go embeds the docs content, so it goes
+        # stale on BOTH docs-content changes and CLI changes (the reference
+        # docs regenerated above feed into it; ordering matters). Unlike the
+        # docs generator, gen_docs.go is a lightweight stdlib-only file reader
+        # — it does not link the embedded-CLI graph, so it adds no disk-space
+        # pressure to this job.
+        if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.docs == 'true'
+        run: go generate ./pkg/svc/chat/...
+
+      - name: ⚙️ Setup Node.js
+        if: needs.changes.outputs.schema == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "web/ui/package-lock.json"
+
+      - name: 🧬 Generate web UI config types
+        # The web UI build regenerates its types at build time (`npm run build`
+        # runs gen:types), so the SHIPPED UI is always fresh — but the COMMITTED
+        # web/ui/src/generated/ksail-config.ts is only ever updated by hand and
+        # silently drifts when the JSON schema changes. Regenerate it here so
+        # the patch/auto-commit machinery below diff-checks and fixes it.
+        if: needs.changes.outputs.schema == 'true'
+        run: |
+          npm --prefix web/ui ci
+          npm --prefix web/ui run gen:types
+
       - name: 📤 Upload patch
         run: |
           git add -N .
@@ -490,7 +524,7 @@ jobs:
         shell: bash
         run: |
           if [ -s /tmp/generate.patch ]; then
-            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...', 'go generate ./pkg/apis/...', and 'go generate ./docs/...' locally and commit the results."
+            echo "::error::Generated files are out of date. Please run 'make generate' locally and commit the results."
             echo ""
             cat /tmp/generate.patch
             exit 1

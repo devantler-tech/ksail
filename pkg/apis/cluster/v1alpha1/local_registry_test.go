@@ -328,3 +328,27 @@ func TestRedactRegistryCredentials(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// parseHostAndPort edge cases
+// ---------------------------------------------------------------------------
+
+func TestLocalRegistry_Parse_ColonAtStart(t *testing.T) {
+	t.Parallel()
+
+	reg := v1alpha1.LocalRegistry{Registry: ":5000"}
+	parsed := reg.Parse()
+
+	// colonIdx == 0 which is <= 0, so the whole string is treated as host
+	assert.Equal(t, ":5000", parsed.Host)
+}
+
+func TestLocalRegistry_Parse_InvalidPortTreatedAsHost(t *testing.T) {
+	t.Parallel()
+
+	reg := v1alpha1.LocalRegistry{Registry: "myhost:notaport"}
+	parsed := reg.Parse()
+
+	assert.Equal(t, "myhost:notaport", parsed.Host)
+	assert.Equal(t, int32(0), parsed.Port)
+}
