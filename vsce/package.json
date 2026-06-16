@@ -296,7 +296,7 @@
     "@types/node": "^25.9.2",
     "@types/vscode": "^1.120.0",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
-    "@typescript-eslint/parser": "^8.59.4",
+    "@typescript-eslint/parser": "^8.61.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.9.2",
