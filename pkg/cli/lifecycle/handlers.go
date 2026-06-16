@@ -49,37 +49,6 @@ type Deps struct {
 	Factory clusterprovisioner.Factory
 }
 
-// Option customizes how a lifecycle handler constructs its dependencies.
-// Options are primarily a test seam for injecting a deterministic timer.
-type Option func(*handlerConfig)
-
-// handlerConfig holds the resolved configuration for a wrapped lifecycle handler.
-type handlerConfig struct {
-	newTimer func() timer.Timer
-}
-
-// WithTimerFactory overrides the timer constructor used by WrapHandler.
-// It is exposed for tests that need to inject a deterministic or mock timer;
-// production code relies on the default timer.New().
-func WithTimerFactory(newTimer func() timer.Timer) Option {
-	return func(cfg *handlerConfig) {
-		cfg.newTimer = newTimer
-	}
-}
-
-// resolveHandlerConfig applies the supplied options over the defaults.
-func resolveHandlerConfig(opts ...Option) handlerConfig {
-	cfg := handlerConfig{
-		newTimer: func() timer.Timer { return timer.New() },
-	}
-
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
-	return cfg
-}
-
 // NewStandardRunE creates a standard RunE handler for simple lifecycle commands.
 // It constructs the lifecycle dependencies and delegates to handleRunE with the
 // provided lifecycle configuration.
@@ -89,14 +58,12 @@ func resolveHandlerConfig(opts ...Option) handlerConfig {
 func NewStandardRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	config Config,
-	opts ...Option,
 ) func(*cobra.Command, []string) error {
 	return WrapHandler(
 		cfgManager,
 		func(cmd *cobra.Command, manager *ksailconfigmanager.ConfigManager, deps Deps) error {
 			return handleRunE(cmd, manager, deps, config)
 		},
-		opts...,
 	)
 }
 
@@ -116,17 +83,14 @@ func NewStandardRunE(
 func WrapHandler(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	handler func(*cobra.Command, *ksailconfigmanager.ConfigManager, Deps) error,
-	opts ...Option,
 ) func(*cobra.Command, []string) error {
-	cfg := resolveHandlerConfig(opts...)
-
 	return func(cmd *cobra.Command, _ []string) error {
 		// Wrap output with StageSeparatingWriter for automatic stage separation
 		stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 		cmd.SetOut(stageWriter)
 
 		// Start timer and load config first to get distribution config
-		tmr := cfg.newTimer()
+		tmr := timer.New()
 		tmr.Start()
 
 		outputTimer := flags.MaybeTimer(cmd, tmr)
