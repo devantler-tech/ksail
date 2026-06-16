@@ -18,7 +18,7 @@ func TestDetectInfo_NonExistentKubeconfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	nonExistentPath := filepath.Join(tmpDir, "does-not-exist")
 
-	_, err := cluster.DetectInfo(nonExistentPath, "")
+	_, err := cluster.DetectInfo(t.Context(), nonExistentPath, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read kubeconfig")
@@ -35,7 +35,7 @@ func TestDetectInfo_MalformedKubeconfig(t *testing.T) {
 	err := os.WriteFile(kubeconfigPath, []byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE}, 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse kubeconfig")
@@ -66,7 +66,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cluster not found")
@@ -96,7 +96,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "K3s", string(info.Distribution))
@@ -129,7 +129,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cluster.ErrUnknownContextPattern)
@@ -151,6 +151,8 @@ func TestDetectProviderFromEndpoint_TalosInvalidURL(t *testing.T) {
 	t.Parallel()
 
 	_, err := cluster.DetectProviderFromEndpoint(
+		t.Context(),
+		cluster.EnvResolver,
 		"Talos",
 		"://invalid",
 		"cluster",
@@ -167,7 +169,9 @@ func TestDetectCloudProvider_HetznerTokenSetButIPNotFound(t *testing.T) {
 	// HCLOUD_TOKEN is set but checkHetznerOwnership fails.
 	t.Setenv("HCLOUD_TOKEN", "test-token-that-will-fail")
 
-	_, err := cluster.DetectCloudProvider("192.0.2.1", "nonexistent-cluster")
+	_, err := cluster.DetectCloudProvider(
+		t.Context(), cluster.EnvResolver, "192.0.2.1", "nonexistent-cluster",
+	)
 
 	require.Error(t, err)
 	// Should get ErrUnableToDetectProvider since token is set but IP not found
@@ -227,7 +231,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	// service-account@omni matches admin@ prefix → "omni" → Talos distribution
 	// But server URL is Omni → provider should be Omni
@@ -270,7 +274,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "K3s", string(info.Distribution))
@@ -308,7 +312,7 @@ users:
 	require.NoError(t, err)
 
 	// Use the "kind-" context explicitly
-	_, err = cluster.DetectInfo(kubeconfigPath, "kind-")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "kind-")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cluster.ErrEmptyClusterName)
@@ -341,7 +345,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "Talos", string(info.Distribution))

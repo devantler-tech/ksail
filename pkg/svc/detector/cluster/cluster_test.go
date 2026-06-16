@@ -136,7 +136,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
@@ -170,7 +170,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)
@@ -209,7 +209,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "kind-other")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "kind-other")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
@@ -240,7 +240,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "kind-nonexistent")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "kind-nonexistent")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context not found")
@@ -267,7 +267,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no current context")
@@ -345,7 +345,9 @@ func TestIsLocalhost(t *testing.T) {
 func TestDetectCloudProvider_NoCredentials(t *testing.T) {
 	t.Setenv("HCLOUD_TOKEN", "")
 
-	_, err := cluster.DetectCloudProvider("1.2.3.4", "my-cluster")
+	_, err := cluster.DetectCloudProvider(
+		t.Context(), cluster.EnvResolver, "1.2.3.4", "my-cluster",
+	)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
@@ -483,6 +485,8 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			t.Setenv("HCLOUD_TOKEN", "")
 
 			provider, err := cluster.DetectProviderFromEndpoint(
+				t.Context(),
+				cluster.EnvResolver,
 				testCase.distribution,
 				testCase.serverURL,
 				testCase.clusterName,
@@ -526,7 +530,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionKWOK, info.Distribution)
@@ -560,7 +564,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVCluster, info.Distribution)
@@ -594,7 +598,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = cluster.DetectInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
@@ -626,7 +630,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)

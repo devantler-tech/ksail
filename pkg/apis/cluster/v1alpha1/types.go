@@ -50,7 +50,8 @@ type ClusterList struct {
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
 	// Editor is the editor command launched for interactive workflows (e.g. "code --wait").
-	Editor string `json:"editor,omitzero" jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
+	// CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
+	Editor string `json:"editor,omitzero" jsonschema:"description=Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator."` //nolint:lll
 	// Cluster configures the Kubernetes cluster KSail manages: distribution,
 	// provider, components, and connection settings.
 	Cluster ClusterSpec `json:"cluster,omitzero"`
@@ -61,6 +62,7 @@ type Spec struct {
 	// OCI push and validation settings, and GitOps bootstrap options.
 	Workload WorkloadSpec `json:"workload,omitzero"`
 	// Chat configures the KSail AI chat assistant.
+	// CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
 	Chat ChatSpec `json:"chat,omitzero"`
 }
 
@@ -84,9 +86,11 @@ type ClusterSpec struct {
 	// DistributionConfig is the path to the distribution's own configuration file
 	// (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
 	// When empty, KSail uses the distribution's default file name.
-	DistributionConfig string `json:"distributionConfig,omitzero"`
+	// CLI-only (a local file path on the CLI host); ignored by the operator.
+	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema:"description=Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator."` //nolint:lll
 	// Connection defines how KSail connects to the cluster: the kubeconfig path,
 	// context name, and operation timeout.
+	// CLI-only (local kubeconfig path/context); ignored by the operator.
 	Connection Connection `json:"connection,omitzero"`
 	// Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
 	// K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS).
@@ -202,7 +206,8 @@ type ValidationConfig struct {
 type WatchConfig struct {
 	// Hooks are shell commands to run before each apply cycle.
 	// Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
-	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."` //nolint:lll
+	// CLI-only (local shell commands run by `ksail workload watch`); ignored by the operator.
+	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped. CLI-only; ignored by the operator."` //nolint:lll
 }
 
 // FluxConfig holds the Flux-specific bootstrap configuration KSail applies when

@@ -134,20 +134,8 @@ func buildDistributionConfig(
 // given Kubernetes version. The cluster name is baked into the PKI, so it must be set via WithName
 // (which regenerates the bundle).
 func newTalosConfig(name, kubernetesVersion string) (*talosconfigmanager.Configs, error) {
-	configs, err := talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
-		kubernetesVersion,
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build talos config: %w", err)
-	}
-
-	named, err := configs.WithName(name)
-	if err != nil {
-		return nil, fmt.Errorf("name talos config: %w", err)
-	}
-
-	return named, nil
+	//nolint:wrapcheck // NewDefaultConfigsWithVersionAndName already wraps build/name errors
+	return talosconfigmanager.NewDefaultConfigsWithVersionAndName(kubernetesVersion, name)
 }
 
 // awsRegion resolves the EKS region from the environment variable named by the cluster's AWS

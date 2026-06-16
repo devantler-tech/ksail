@@ -88,6 +88,7 @@ func FindKustomization(startDir string) (string, error) {
 	for {
 		candidate := filepath.Join(dir, "kustomization.yaml")
 
+		//nolint:gosec // G703: dir canonicalized (EvalCanonicalPath); stat-only walk-up
 		info, statErr := os.Stat(candidate)
 		if statErr == nil && !info.IsDir() {
 			return candidate, nil

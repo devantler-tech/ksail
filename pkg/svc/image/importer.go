@@ -14,7 +14,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
-	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/docker/docker/api/types/container"
 )
 
@@ -48,7 +47,7 @@ func (i *Importer) Import(
 	opts ImportOptions,
 ) error {
 	// Validate distribution and provider
-	err := i.validateImportParams(distribution, providerType)
+	err := validateImageOpParams(distribution, providerType)
 	if err != nil {
 		return err
 	}
@@ -103,50 +102,16 @@ func (i *Importer) Import(
 	return nil
 }
 
-// validateImportParams validates the distribution and provider for import operations.
-func (i *Importer) validateImportParams(
-	distribution v1alpha1.Distribution,
-	providerType v1alpha1.Provider,
-) error {
-	// Talos and VCluster are not supported - Talos is an immutable OS without shell access,
-	// VCluster (Vind) runs its own containerd inside Docker containers without standard
-	// exec-based image import support.
-	if distribution == v1alpha1.DistributionTalos ||
-		distribution == v1alpha1.DistributionVCluster {
-		return ErrUnsupportedDistribution
-	}
-
-	// Only Docker provider is supported via Docker SDK
-	if providerType != v1alpha1.ProviderDocker && providerType != "" {
-		return fmt.Errorf(
-			"%w: %s (only Docker provider supported)",
-			ErrUnsupportedProvider,
-			providerType,
-		)
-	}
-
-	return nil
-}
-
-// getK8sNodes gets the list of Kubernetes nodes for the cluster.
+// getK8sNodes gets the list of Kubernetes nodes for the cluster, filtering out
+// helper containers (load balancer, tools, registry) that lack containerd.
 func (i *Importer) getK8sNodes(
 	ctx context.Context,
 	clusterName string,
 	distribution v1alpha1.Distribution,
 ) ([]provider.NodeInfo, error) {
-	// Get the label scheme for the distribution
-	labelScheme := getLabelScheme(distribution)
-
-	// Get nodes for the cluster
-	dockerProvider := dockerprovider.NewProvider(i.dockerClient, labelScheme)
-
-	nodes, err := dockerProvider.ListNodes(ctx, clusterName)
+	nodes, err := listClusterNodes(ctx, i.dockerClient, clusterName, distribution)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("%w: cluster %s", ErrNoNodes, clusterName)
+		return nil, err
 	}
 
 	// Filter out helper containers and get actual K8s nodes

@@ -29,7 +29,7 @@
       "properties": {
         "editor": {
           "type": "string",
-          "description": "Editor command for interactive workflows (e.g. code --wait)"
+          "description": "Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator."
         },
         "cluster": {
           "allOf": [
@@ -170,7 +170,7 @@
           "properties": {
             "distributionConfig": {
               "type": "string",
-              "description": "DistributionConfig is the path to the distribution's own configuration file\n(kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).\nWhen empty, KSail uses the distribution's default file name."
+              "description": "Path to the distribution's own configuration file (kind.yaml"
             },
             "connection": {
               "properties": {
@@ -190,7 +190,7 @@
               },
               "additionalProperties": false,
               "type": "object",
-              "description": "Connection defines how KSail connects to the cluster: the kubeconfig path,\ncontext name, and operation timeout."
+              "description": "Connection defines how KSail connects to the cluster: the kubeconfig path,\ncontext name, and operation timeout.\nCLI-only (local kubeconfig path/context); ignored by the operator."
             },
             "distribution": {
               "type": "string",
@@ -975,7 +975,7 @@
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."
+                  "description": "Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped. CLI-only; ignored by the operator."
                 }
               },
               "additionalProperties": false,
@@ -1019,7 +1019,7 @@
           },
           "additionalProperties": false,
           "type": "object",
-          "description": "Chat configures the KSail AI chat assistant."
+          "description": "Chat configures the KSail AI chat assistant.\nCLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it)."
         }
       },
       "additionalProperties": false,

@@ -245,20 +245,12 @@ func (p *Provider) listContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	switch p.labelScheme {
-	case LabelSchemeKind:
-		return p.listKindContainers(ctx, clusterName)
-	case LabelSchemeK3d:
-		return p.listK3dContainers(ctx, clusterName)
-	case LabelSchemeTalos:
-		return p.listTalosContainers(ctx, clusterName)
-	case LabelSchemeVCluster:
-		return p.listVClusterContainers(ctx, clusterName)
-	case LabelSchemeKWOK:
-		return p.listKWOKContainers(ctx, clusterName)
-	default:
+	descriptor, ok := schemeDescriptors[p.labelScheme]
+	if !ok {
 		return nil, fmt.Errorf("%w: %s", provider.ErrUnknownLabelScheme, p.labelScheme)
 	}
+
+	return descriptor.list(p, ctx, clusterName)
 }
 
 // listKindContainers lists containers by name prefix (Kind doesn't use labels).
@@ -270,7 +262,7 @@ func (p *Provider) listKindContainers(
 	// etc. Mirror helper containers can share the same prefix, so keep only names that
 	// map back to the requested cluster via the Kind node naming rules.
 	return p.filterContainers(ctx, func(ctr container.Summary) bool {
-		return p.extractClusterName(ctr) == clusterName
+		return extractKindClusterName(ctr) == clusterName
 	})
 }
 
@@ -333,60 +325,22 @@ func (p *Provider) containerToNodeInfo(
 
 // extractClusterName extracts the cluster name from a container based on the label scheme.
 func (p *Provider) extractClusterName(ctr container.Summary) string {
-	switch p.labelScheme {
-	case LabelSchemeKind:
-		// Extract from container name: <cluster>-control-plane or <cluster>-worker[N]
-		if len(ctr.Names) > 0 {
-			name := strings.TrimPrefix(ctr.Names[0], "/")
-			// Look for Kind-style suffixes
-			for _, suffix := range []string{"-control-plane", "-worker"} {
-				if idx := strings.Index(name, suffix); idx > 0 {
-					return name[:idx]
-				}
-			}
-		}
-
-		return ""
-	case LabelSchemeK3d:
-		return ctr.Labels[LabelK3dCluster]
-	case LabelSchemeTalos:
-		return ctr.Labels[LabelTalosClusterName]
-	case LabelSchemeVCluster:
-		return extractVClusterName(ctr)
-	case LabelSchemeKWOK:
-		return extractKWOKClusterName(ctr)
-	default:
+	descriptor, ok := schemeDescriptors[p.labelScheme]
+	if !ok {
 		return ""
 	}
+
+	return descriptor.clusterName(ctr)
 }
 
 // extractRole extracts the node role from a container based on the label scheme.
 func (p *Provider) extractRole(ctr container.Summary) string {
-	switch p.labelScheme {
-	case LabelSchemeKind:
-		if len(ctr.Names) > 0 {
-			name := strings.TrimPrefix(ctr.Names[0], "/")
-			if strings.Contains(name, "control-plane") {
-				return roleControlPlane
-			}
-
-			if strings.Contains(name, "worker") {
-				return "worker"
-			}
-		}
-
-		return ""
-	case LabelSchemeK3d:
-		return ctr.Labels[LabelK3dRole]
-	case LabelSchemeTalos:
-		return ctr.Labels[LabelTalosType]
-	case LabelSchemeVCluster:
-		return extractVClusterRole(ctr)
-	case LabelSchemeKWOK:
-		return extractKWOKRole(ctr)
-	default:
+	descriptor, ok := schemeDescriptors[p.labelScheme]
+	if !ok {
 		return ""
 	}
+
+	return descriptor.role(ctr)
 }
 
 // vCluster container name prefixes.

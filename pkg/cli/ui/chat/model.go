@@ -469,15 +469,11 @@ func (m *Model) Update(
 	case userSubmitMsg:
 		return m.handleUserSubmit(msg)
 
-	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
-		ToolOutputChunkMsg, permissionRequestMsg, elicitationRequestMsg,
-		streamEndMsg, turnStartMsg, turnEndMsg,
-		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
-		usageMsg, compactionStartMsg, compactionCompleteMsg,
-		intentMsg, modelChangeMsg, shutdownMsg,
-		systemNotificationMsg, sessionWarningMsg,
-		ToolProgressMsg, TaskCompleteMsg,
-		autoModeSwitchRequestedMsg, autoModeSwitchCompletedMsg:
+	case streamMsg:
+		// Every per-turn stream event implements streamMsg; handleStreamEvent
+		// re-dispatches on the concrete type. This single case can never drift
+		// from that switch (see streammsg.go), so a new stream message type only
+		// needs to implement isStreamMsg() to be routed correctly.
 		return m.handleStreamEvent(msg)
 
 	case modeChangeRequestMsg:

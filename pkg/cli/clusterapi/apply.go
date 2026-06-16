@@ -36,13 +36,13 @@ type applyClientFunc func(
 	clusterName string,
 ) (dynamic.Interface, meta.RESTMapper, error)
 
-// defaultApplyClient resolves the cluster's kubeconfig context and builds a dynamic client plus a
-// discovery-backed REST mapper against it.
-func defaultApplyClient(
+// defaultApplyClient resolves the cluster's kubeconfig context (via the single restConfigForCluster
+// seam) and builds a dynamic client plus a discovery-backed REST mapper against it.
+func (s *Service) defaultApplyClient(
 	_ context.Context,
 	clusterName string,
 ) (dynamic.Interface, meta.RESTMapper, error) {
-	restConfig, err := restConfigForCluster(clusterName)
+	restConfig, err := s.restConfigForCluster(clusterName)
 	if err != nil {
 		return nil, nil, err
 	}

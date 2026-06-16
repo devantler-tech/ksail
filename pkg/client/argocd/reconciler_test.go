@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -188,6 +189,74 @@ func TestListApplications_APIError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list argocd applications")
 	assert.Contains(t, err.Error(), "simulated API failure")
+}
+
+// ---------------------------------------------------------------------------
+// TriggerRefresh
+// ---------------------------------------------------------------------------
+
+// newTriggerRefreshFakeClient builds a fake dynamic client seeded with the
+// given objects for TriggerRefresh tests.
+func newTriggerRefreshFakeClient(
+	objects ...runtime.Object,
+) *dynamicfake.FakeDynamicClient {
+	scheme := runtime.NewScheme()
+
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme,
+		map[schema.GroupVersionResource]string{
+			applicationGVR: "ApplicationList",
+		},
+		objects...,
+	)
+}
+
+func TestTriggerRefresh(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		hardRefresh    bool
+		wantAnnotation string
+	}{
+		{name: "normal refresh", hardRefresh: false, wantAnnotation: "normal"},
+		{name: "hard refresh", hardRefresh: true, wantAnnotation: "hard"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			fakeClient := newTriggerRefreshFakeClient(
+				newFakeApplication("ksail", "Synced", "Healthy"),
+			)
+			r := &argocd.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
+
+			err := r.TriggerRefresh(context.Background(), testCase.hardRefresh)
+			require.NoError(t, err)
+
+			got, getErr := fakeClient.Resource(applicationGVR).
+				Namespace("argocd").
+				Get(context.Background(), "ksail", metav1.GetOptions{})
+			require.NoError(t, getErr)
+			assert.Equal(
+				t,
+				testCase.wantAnnotation,
+				got.GetAnnotations()["argocd.argoproj.io/refresh"],
+			)
+		})
+	}
+}
+
+func TestTriggerRefresh_ApplicationMissing(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newTriggerRefreshFakeClient()
+	r := &argocd.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
+
+	err := r.TriggerRefresh(context.Background(), false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to trigger argocd refresh")
 }
 
 // ---------------------------------------------------------------------------

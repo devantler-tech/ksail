@@ -15,6 +15,7 @@ import (
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/retry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	dockercontainer "github.com/docker/docker/api/types/container"
@@ -158,6 +159,13 @@ var errDockerExecFailed = errors.New("docker exec failed")
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
 // Start/Stop/List/Exists delegate to the Docker infrastructure provider.
 type Provisioner struct {
+	// RecreationRequiredUpgrader supplies the recreation-based Upgrader behavior and
+	// the image-ref/suffix metadata accessors shared with Kind/K3d. VCluster keeps
+	// its own GetCurrentVersions and PrepareConfigForVersion, and overrides the two
+	// pin accessors because its pins are read from the embedded SDK chart at call
+	// time (see upgrader.go).
+	clusterupdate.RecreationRequiredUpgrader
+
 	name           string
 	valuesPath     string
 	disableFlannel bool
@@ -182,10 +190,11 @@ func NewProvisioner(
 	}
 
 	return &Provisioner{
-		name:           name,
-		valuesPath:     valuesPath,
-		disableFlannel: disableFlannel,
-		infraProvider:  infraProvider,
+		RecreationRequiredUpgrader: newRecreationUpgrader(),
+		name:                       name,
+		valuesPath:                 valuesPath,
+		disableFlannel:             disableFlannel,
+		infraProvider:              infraProvider,
 	}
 }
 

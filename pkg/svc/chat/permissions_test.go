@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +31,7 @@ func TestIsReadOperation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chatui.IsReadOperation(tc.kind)
+			result := IsReadOperation(tc.kind)
 			assert.Equal(t, tc.expected, result)
 		})
 	}

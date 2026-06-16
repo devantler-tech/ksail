@@ -7,27 +7,13 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	// vclusterNamespacePrefix and vclusterSecretPrefix mirror the names the vcluster provisioner
-	// gives a cluster's namespace ("vcluster-<name>") and kubeconfig Secret ("vc-<name>").
-	vclusterNamespacePrefix = "vcluster-"
-	vclusterSecretPrefix    = "vc-"
-	// vclusterKubeconfigKey is the Secret data key holding the kubeconfig YAML.
-	vclusterKubeconfigKey = "config"
-	// vclusterServerName is the TLS server name on the vcluster API server certificate. The
-	// in-cluster Service DNS name is not a SAN, so the served certificate is verified against this
-	// name (with the kubeconfig's CA) while connecting to the Service address.
-	vclusterServerName = "kubernetes"
-	// vclusterAPIPort is the port the vcluster API Service exposes in the hub.
-	vclusterAPIPort = 443
 )
 
 // errMissingKubeconfig is returned when the vcluster kubeconfig Secret has no kubeconfig data yet.
@@ -52,7 +38,7 @@ func ObserveVClusterStatus(
 
 	var secret corev1.Secret
 
-	key := types.NamespacedName{Namespace: conn.namespace, Name: conn.secretName}
+	key := types.NamespacedName{Namespace: conn.Namespace, Name: conn.SecretName}
 
 	err := hub.Get(ctx, key, &secret)
 	if apierrors.IsNotFound(err) {
@@ -65,14 +51,16 @@ func ObserveVClusterStatus(
 	}
 
 	observed := controller.ObservedStatus{
-		Endpoint: conn.endpoint,
+		Endpoint: conn.Endpoint,
 		KubeconfigSecret: &v1alpha1.SecretReference{
-			Namespace: conn.namespace,
-			Name:      conn.secretName,
+			Namespace: conn.Namespace,
+			Name:      conn.SecretName,
 		},
 	}
 
-	ready, total, err := countNodes(ctx, secret.Data[vclusterKubeconfigKey], conn.endpoint)
+	ready, total, err := countNodes(
+		ctx, secret.Data[vclusterprovisioner.KubeconfigSecretKey], conn.Endpoint,
+	)
 	if err != nil {
 		// Endpoint and Secret reference are still useful; surface the node-count failure for logging.
 		return observed, fmt.Errorf("count vcluster nodes: %w", err)

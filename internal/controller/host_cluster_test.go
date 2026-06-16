@@ -46,8 +46,9 @@ func hostRequest() ctrl.Request {
 	}
 }
 
-// newHostReconciler builds a reconciler whose provisioner builder fails the reconcile if invoked —
-// the host path must never touch a provisioner — and whose host observer reports fixed status.
+// newHostReconciler builds a reconciler that enforces the reserved host-cluster invariant: the host
+// path must never construct a provisioner (NewProvisioner fails the reconcile if invoked) nor install
+// components (InstallComponents fails the test if invoked). The host observer reports fixed status.
 func newHostReconciler(
 	t *testing.T,
 	fakeClient client.Client,
@@ -62,6 +63,15 @@ func newHostReconciler(
 			_ *v1alpha1.Cluster,
 		) (clusterprovisioner.Provisioner, error) {
 			return nil, errBoom
+		},
+		InstallComponents: func(
+			_ context.Context,
+			_ clusterprovisioner.Provisioner,
+			_ *v1alpha1.Cluster,
+		) (bool, error) {
+			t.Error("the host cluster must never get components installed")
+
+			return false, errBoom
 		},
 		ObserveHostStatus: func(
 			_ context.Context,
@@ -108,6 +118,11 @@ func TestReconcile_HostClusterReportsReadyWithoutProvisioner(t *testing.T) {
 	require.NotNil(t, components)
 	assert.Equal(t, metav1.ConditionUnknown, components.Status)
 	assert.Equal(t, "HostCluster", components.Reason)
+
+	// The host cluster carries an empty spec, so no CLI-only fields are set.
+	ignored := apimeta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionIgnoredFields)
+	require.NotNil(t, ignored)
+	assert.Equal(t, metav1.ConditionFalse, ignored.Status)
 }
 
 func TestReconcile_HostClusterDeleteSkipsProvisioner(t *testing.T) {

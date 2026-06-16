@@ -7,9 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/webhookwait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -54,34 +52,13 @@ func waitForGatekeeperWebhookReady(
 	clientset kubernetes.Interface,
 	deadline time.Duration,
 ) error {
-	err := readiness.PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
-		vwcClient := clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations()
-
-		webhookCfg, err := vwcClient.Get(ctx, gatekeeperValidatingWebhookName, metav1.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				// Webhook config not yet created — keep polling.
-				return false, nil
-			}
-
-			return false, fmt.Errorf("get %s: %w", gatekeeperValidatingWebhookName, err)
-		}
-
-		if len(webhookCfg.Webhooks) == 0 {
-			return false, nil
-		}
-
-		for _, webhook := range webhookCfg.Webhooks {
-			if len(webhook.ClientConfig.CABundle) == 0 {
-				return false, nil
-			}
-		}
-
-		return true, nil
-	})
-	if err != nil {
-		return fmt.Errorf("poll gatekeeper webhook readiness: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // webhookwait.Poll already wraps with the readiness description
+	return webhookwait.Poll(
+		ctx,
+		clientset,
+		webhookwait.Validating,
+		gatekeeperValidatingWebhookName,
+		"poll gatekeeper webhook readiness",
+		deadline,
+	)
 }

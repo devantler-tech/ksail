@@ -468,14 +468,37 @@ func (d *ComponentDetector) detectPolicyEngine(
 	}, v1alpha1.PolicyEngineNone)
 }
 
+// gitOpsEngineReleaseMappings is the single source of truth for the Helm
+// releases that identify a KSail-managed GitOps engine, in priority order.
+func gitOpsEngineReleaseMappings() []releaseMapping[v1alpha1.GitOpsEngine] {
+	return []releaseMapping[v1alpha1.GitOpsEngine]{
+		{ReleaseFluxOperator, NamespaceFluxOperator, v1alpha1.GitOpsEngineFlux},
+		{ReleaseArgoCD, NamespaceArgoCD, v1alpha1.GitOpsEngineArgoCD},
+	}
+}
+
+// DetectGitOpsEngine reports which GitOps engine is installed in the cluster by
+// checking the flux-operator / argocd Helm releases in priority order. It
+// returns GitOpsEngineNone when neither release is present, allowing callers to
+// fall back to a secondary signal (e.g. a namespace probe for non-KSail-managed
+// installs). The mapping is shared with the ComponentDetector's per-spec
+// detection so the two never disagree.
+func DetectGitOpsEngine(
+	ctx context.Context,
+	helmClient helm.Interface,
+) (v1alpha1.GitOpsEngine, error) {
+	return detectFirstRelease(
+		ctx, helmClient, gitOpsEngineReleaseMappings(), v1alpha1.GitOpsEngineNone,
+	)
+}
+
 // detectGitOpsEngine checks for Flux or ArgoCD Helm releases.
 func (d *ComponentDetector) detectGitOpsEngine(
 	ctx context.Context,
 ) (v1alpha1.GitOpsEngine, error) {
-	return detectFirstRelease(ctx, d.helmClient, []releaseMapping[v1alpha1.GitOpsEngine]{
-		{ReleaseFluxOperator, NamespaceFluxOperator, v1alpha1.GitOpsEngineFlux},
-		{ReleaseArgoCD, NamespaceArgoCD, v1alpha1.GitOpsEngineArgoCD},
-	}, v1alpha1.GitOpsEngineNone)
+	return detectFirstRelease(
+		ctx, d.helmClient, gitOpsEngineReleaseMappings(), v1alpha1.GitOpsEngineNone,
+	)
 }
 
 // deploymentExists checks whether a Deployment with the given name exists in

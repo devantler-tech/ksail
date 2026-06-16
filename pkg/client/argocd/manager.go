@@ -68,7 +68,7 @@ func (m *ManagerImpl) Ensure(ctx context.Context, opts EnsureOptions) error {
 		opts.TargetRevision = "dev"
 	}
 
-	err := m.ensureNamespace(ctx, argoCDNamespace)
+	err := m.ensureNamespace(ctx, DefaultNamespace)
 	if err != nil {
 		return err
 	}
@@ -100,8 +100,8 @@ func (m *ManagerImpl) UpdateTargetRevision(
 		name = defaultApplicationName
 	}
 
-	obj, err := m.dynamic.Resource(applicationGVR()).
-		Namespace(argoCDNamespace).
+	obj, err := m.dynamic.Resource(ApplicationGVR()).
+		Namespace(DefaultNamespace).
 		Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("get Argo CD Application %s: %w", name, err)
@@ -130,7 +130,7 @@ func (m *ManagerImpl) UpdateTargetRevision(
 		obj.SetAnnotations(annotations)
 	}
 
-	apps := m.dynamic.Resource(applicationGVR()).Namespace(argoCDNamespace)
+	apps := m.dynamic.Resource(ApplicationGVR()).Namespace(DefaultNamespace)
 
 	_, err = apps.Update(ctx, obj, metav1.UpdateOptions{})
 	if err != nil {
@@ -155,8 +155,8 @@ func (m *ManagerImpl) GetCurrentTargetRevision(
 		name = defaultApplicationName
 	}
 
-	obj, err := m.dynamic.Resource(applicationGVR()).
-		Namespace(argoCDNamespace).
+	obj, err := m.dynamic.Resource(ApplicationGVR()).
+		Namespace(DefaultNamespace).
 		Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -208,7 +208,7 @@ func (m *ManagerImpl) upsertRepositorySecret(
 	opts repositorySecretOptions,
 ) error {
 	desired := buildRepositorySecret(opts)
-	secrets := m.clientset.CoreV1().Secrets(argoCDNamespace)
+	secrets := m.clientset.CoreV1().Secrets(DefaultNamespace)
 
 	existing, err := secrets.Get(ctx, repositorySecretName, metav1.GetOptions{})
 	if err != nil {
@@ -237,7 +237,7 @@ func (m *ManagerImpl) upsertRepositorySecret(
 func (m *ManagerImpl) upsertApplication(ctx context.Context, opts EnsureOptions) error {
 	desired := buildApplication(opts)
 	name := desired.GetName()
-	apps := m.dynamic.Resource(applicationGVR()).Namespace(argoCDNamespace)
+	apps := m.dynamic.Resource(ApplicationGVR()).Namespace(DefaultNamespace)
 
 	existing, err := apps.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {

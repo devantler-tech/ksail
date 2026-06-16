@@ -68,34 +68,42 @@ Usage:
   workload [flags]
   workload [command]
 
-Available Commands:
+Resources:
   apply       Apply manifests
-  completion  Generate the autocompletion script for the specified shell
   create      Create resources
-  debug       Create debugging sessions for troubleshooting workloads and nodes
   delete      Delete resources
   describe    Describe resources
   edit        Edit a resource
-  exec        Execute a command in a container
   explain     Get documentation for a resource
-  export      Export container images from the cluster
   expose      Expose a resource as a service
-  forward     Forward one or more local ports to a pod
   gen         Generate Kubernetes resource manifests
   get         Get resources
-  help        Help about any command
+  scale       Scale resources
+  wait        Wait for a specific condition on one or many resources
+
+Images:
+  export      Export container images from the cluster
   images      List container images required by cluster components
   import      Import container images to the cluster
+
+GitOps:
   install     Install Helm charts
-  logs        Print container logs
   push        Package and push an OCI artifact to a registry
   reconcile   Trigger reconciliation for GitOps workloads
-  rollout     Manage the rollout of a resource
-  scale       Scale resources
   scan        Run security scans on Kubernetes manifests
   validate    Validate Kubernetes manifests and kustomizations
-  wait        Wait for a specific condition on one or many resources
+
+Dev loop:
+  debug       Create debugging sessions for troubleshooting workloads and nodes
+  exec        Execute a command in a container
+  forward     Forward one or more local ports to a pod
+  logs        Print container logs
+  rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
+
+Additional Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
 
 Flags:
   -h, --help   help for workload
@@ -3327,31 +3335,37 @@ Usage:
   ksail workload [flags]
   ksail workload [command]
 
-Available Commands:
+Resources:
   apply       Apply manifests
   create      Create resources
-  debug       Create debugging sessions for troubleshooting workloads and nodes
   delete      Delete resources
   describe    Describe resources
   edit        Edit a resource
-  exec        Execute a command in a container
   explain     Get documentation for a resource
-  export      Export container images from the cluster
   expose      Expose a resource as a service
-  forward     Forward one or more local ports to a pod
   gen         Generate Kubernetes resource manifests
   get         Get resources
+  scale       Scale resources
+  wait        Wait for a specific condition on one or many resources
+
+Images:
+  export      Export container images from the cluster
   images      List container images required by cluster components
   import      Import container images to the cluster
+
+GitOps:
   install     Install Helm charts
-  logs        Print container logs
   push        Package and push an OCI artifact to a registry
   reconcile   Trigger reconciliation for GitOps workloads
-  rollout     Manage the rollout of a resource
-  scale       Scale resources
   scan        Run security scans on Kubernetes manifests
   validate    Validate Kubernetes manifests and kustomizations
-  wait        Wait for a specific condition on one or many resources
+
+Dev loop:
+  debug       Create debugging sessions for troubleshooting workloads and nodes
+  exec        Execute a command in a container
+  forward     Forward one or more local ports to a pod
+  logs        Print container logs
+  rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
 
 Flags:

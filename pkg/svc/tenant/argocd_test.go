@@ -482,3 +482,71 @@ func TestRemoveArgoCDRBACPolicyFile_FileNotExist(t *testing.T) {
 	err := tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, "team-alpha")
 	require.NoError(t, err, "should be a no-op when file does not exist")
 }
+
+// multiDocRBACFile is a multi-document YAML file where the argocd-rbac-cm
+// ConfigMap is preceded by an unrelated document. The previous single-doc
+// file pipeline would mangle (drop) the leading document; the consolidated
+// multi-doc-aware pipeline preserves it.
+const multiDocRBACFile = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+`
+
+func TestRemoveArgoCDRBACPolicyFile_MultiDocPreservesOtherDocs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	rbacCMPath := filepath.Join(dir, "argocd-rbac-cm.yaml")
+
+	err := os.WriteFile(rbacCMPath, []byte(multiDocRBACFile), 0o600)
+	require.NoError(t, err)
+
+	err = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, "team-alpha")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // test-only path from t.TempDir()
+	require.NoError(t, err)
+
+	content := string(data)
+	// The sibling Namespace document must survive the rewrite.
+	require.Contains(t, content, "kind: Namespace")
+	require.Contains(t, content, "---")
+	// The tenant policy must be removed from the ConfigMap document.
+	require.NotContains(t, content, "role:team-alpha")
+}
+
+func TestMergeArgoCDRBACPolicyFile_MultiDocPreservesOtherDocs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	rbacCMPath := filepath.Join(dir, "argocd-rbac-cm.yaml")
+
+	err := os.WriteFile(rbacCMPath, []byte(multiDocRBACFile), 0o600)
+	require.NoError(t, err)
+
+	err = tenant.MergeArgoCDRBACPolicyFile(rbacCMPath, "team-beta")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // test-only path from t.TempDir()
+	require.NoError(t, err)
+
+	content := string(data)
+	// The sibling Namespace document must survive the rewrite.
+	require.Contains(t, content, "kind: Namespace")
+	require.Contains(t, content, "---")
+	// Both the pre-existing and the newly merged tenant policy must be present.
+	require.Contains(t, content, "role:team-alpha")
+	require.Contains(t, content, "role:team-beta")
+}

@@ -72,7 +72,7 @@ func runImportCommand(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	err = ctx.detectClusterInfo()
+	err = ctx.detectClusterInfo(cmd.Context())
 	if err != nil {
 		return err
 	}

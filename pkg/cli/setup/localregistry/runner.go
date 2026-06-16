@@ -8,12 +8,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
-	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
-	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 // stageAction is a function that performs a registry operation within a context.
@@ -27,7 +23,7 @@ func resolveStage(
 	case StageProvision:
 		return ProvisionStageInfo(), provisionAction, nil
 	case StageConnect:
-		return ConnectStageInfo(), connectActionBuilder, nil
+		return ConnectStageInfo(), connectAction, nil
 	case StageVerify:
 		// StageVerify is handled separately in RunStage via runVerifyStage
 		return setup.StageInfo{}, nil, fmt.Errorf(
@@ -65,7 +61,14 @@ func provisionAction(clusterCfg *v1alpha1.Cluster) stageAction {
 	}
 }
 
-func connectAction() stageAction {
+// connectAction returns the stage action that attaches an existing local
+// registry to the cluster network. The cluster argument is unused (the action
+// derives everything it needs from the registryContext) but is present so
+// connectAction satisfies the resolveStage action-builder signature directly.
+//
+// Note: External registries are skipped in prepareContext, so this action only
+// handles Docker-based local registries.
+func connectAction(_ *v1alpha1.Cluster) stageAction {
 	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
 		startOpts := registry.StartOptions{
 			Name:        registry.BuildLocalRegistryName(ctx.clusterName),
@@ -81,14 +84,6 @@ func connectAction() stageAction {
 	}
 }
 
-func connectActionBuilder(_ *v1alpha1.Cluster) stageAction {
-	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
-		// Note: External registries are now skipped in prepareContext,
-		// so this function only handles Docker-based local registries.
-		return connectAction()(execCtx, svc, ctx)
-	}
-}
-
 func runStageFromBuilder(
 	cmd *cobra.Command,
 	ctx *Context,
@@ -97,19 +92,16 @@ func runStageFromBuilder(
 	buildAction func(*v1alpha1.Cluster) stageAction,
 	localDeps Dependencies,
 ) error {
-	return runRegistryAction(
-		cmd,
-		ctx.ClusterCfg,
-		deps,
-		ctx.KindConfig,
-		ctx.K3dConfig,
-		ctx.TalosConfig,
-		ctx.VClusterConfig,
-		info,
-		buildAction(ctx.ClusterCfg),
-		localDeps,
-		true, // checkLocalRegistry
-	)
+	runner := &actionRunner{
+		cmd:       cmd,
+		ctx:       ctx,
+		deps:      deps,
+		info:      info,
+		action:    buildAction(ctx.ClusterCfg),
+		localDeps: localDeps,
+	}
+
+	return runner.run(true) // checkLocalRegistry
 }
 
 // shouldSkipK3d returns true if the action should be skipped for K3d distribution.
@@ -134,86 +126,66 @@ func wrapActionWithContext(
 	}
 }
 
-// actionRunner encapsulates shared parameters for running a registry stage action.
+// actionRunner encapsulates the parameters for running a registry stage action.
+// It holds the resolved stage [Context] directly instead of re-declaring the
+// per-distribution config pointers the Context already bundles.
 type actionRunner struct {
-	cmd            *cobra.Command
-	clusterCfg     *v1alpha1.Cluster
-	deps           lifecycle.Deps
-	kindConfig     *kindv1alpha4.Cluster
-	k3dConfig      *k3dv1alpha5.SimpleConfig
-	talosConfig    *talosconfigmanager.Configs
-	vclusterConfig *clusterprovisioner.VClusterConfig
-	info           setup.StageInfo
-	action         func(context.Context, registry.Service, registryContext) error
-	localDeps      Dependencies
+	cmd       *cobra.Command
+	ctx       *Context
+	deps      lifecycle.Deps
+	info      setup.StageInfo
+	action    func(context.Context, registry.Service, registryContext) error
+	localDeps Dependencies
 }
 
 // prepareContext validates preconditions and creates the registry context.
 // Returns nil context if the action should be skipped.
 func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext {
-	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
+	clusterCfg := r.ctx.ClusterCfg
+
+	localRegistryDisabled := !clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 	if checkLocalRegistry && localRegistryDisabled {
 		return nil
 	}
 
-	if shouldSkipK3d(r.clusterCfg) {
+	if shouldSkipK3d(clusterCfg) {
 		return nil
 	}
 
 	// External registries don't need Docker-based provisioning or connection.
 	// They're already running and accessible over the internet.
-	if r.clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+	if clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
 		return nil
 	}
 
-	ctx := newRegistryContext(
-		r.clusterCfg, r.kindConfig, r.k3dConfig, r.talosConfig, r.vclusterConfig,
+	regCtx := newRegistryContext(
+		clusterCfg, r.ctx.KindConfig, r.ctx.K3dConfig, r.ctx.TalosConfig, r.ctx.VClusterConfig,
 	)
 
-	return &ctx
+	return &regCtx
 }
 
 // run executes the action with the given checkLocalRegistry flag.
 func (r *actionRunner) run(checkLocalRegistry bool) error {
-	ctx := r.prepareContext(checkLocalRegistry)
-	if ctx == nil {
+	regCtx := r.prepareContext(checkLocalRegistry)
+	if regCtx == nil {
 		return nil
 	}
 
-	return runStage(
-		r.cmd, r.deps, r.info, wrapActionWithContext(*ctx, r.action), r.localDeps,
-	)
-}
+	handler := wrapActionWithContext(*regCtx, r.action)
 
-// runRegistryAction runs a registry action with the given parameters.
-// checkLocalRegistry: if true, skips action when local registry is disabled in config.
-func runRegistryAction(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	vclusterConfig *clusterprovisioner.VClusterConfig,
-	info setup.StageInfo,
-	action func(context.Context, registry.Service, registryContext) error,
-	localDeps Dependencies,
-	checkLocalRegistry bool,
-) error {
-	runner := &actionRunner{
-		cmd:            cmd,
-		clusterCfg:     clusterCfg,
-		deps:           deps,
-		kindConfig:     kindConfig,
-		k3dConfig:      k3dConfig,
-		talosConfig:    talosConfig,
-		vclusterConfig: vclusterConfig,
-		info:           info,
-		action:         action,
-		localDeps:      localDeps,
+	err := setup.RunDockerStage(
+		r.cmd,
+		r.deps.Timer,
+		r.info,
+		createServiceHandler(r.localDeps, handler),
+		r.localDeps.DockerInvoker,
+	)
+	if err != nil {
+		return fmt.Errorf("run docker stage: %w", err)
 	}
 
-	return runner.run(checkLocalRegistry)
+	return nil
 }
 
 // createServiceHandler creates a common handler that initializes the registry service
@@ -234,41 +206,4 @@ func createServiceHandler(
 
 		return handler(ctx, service)
 	}
-}
-
-func runStage(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	info setup.StageInfo,
-	handler func(context.Context, registry.Service) error,
-	localDeps Dependencies,
-) error {
-	return runDockerStage(
-		cmd,
-		deps,
-		info,
-		createServiceHandler(localDeps, handler),
-		localDeps,
-	)
-}
-
-func runDockerStage(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	info setup.StageInfo,
-	action func(context.Context, dockerclient.Client) error,
-	localDeps Dependencies,
-) error {
-	err := setup.RunDockerStage(
-		cmd,
-		deps.Timer,
-		info,
-		action,
-		localDeps.DockerInvoker,
-	)
-	if err != nil {
-		return fmt.Errorf("run docker stage: %w", err)
-	}
-
-	return nil
 }

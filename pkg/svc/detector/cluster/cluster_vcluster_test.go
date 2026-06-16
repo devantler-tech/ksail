@@ -93,7 +93,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVCluster, info.Distribution)
@@ -131,7 +131,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)
@@ -167,7 +167,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := cluster.DetectInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(t.Context(), kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
@@ -237,6 +237,8 @@ func TestDetectProviderFromEndpoint_TalosOmni(t *testing.T) {
 	t.Parallel()
 
 	provider, err := cluster.DetectProviderFromEndpoint(
+		t.Context(),
+		cluster.EnvResolver,
 		v1alpha1.DistributionTalos,
 		"https://acct.kubernetes.us-east-1.omni.siderolabs.io",
 		"prod",
@@ -252,6 +254,8 @@ func TestDetectProviderFromEndpoint_TalosLocalhost(t *testing.T) {
 	t.Parallel()
 
 	provider, err := cluster.DetectProviderFromEndpoint(
+		t.Context(),
+		cluster.EnvResolver,
 		v1alpha1.DistributionTalos,
 		"https://127.0.0.1:6443",
 		"local",
@@ -266,6 +270,8 @@ func TestDetectProviderFromEndpoint_VCluster(t *testing.T) {
 	t.Parallel()
 
 	provider, err := cluster.DetectProviderFromEndpoint(
+		t.Context(),
+		cluster.EnvResolver,
 		v1alpha1.DistributionVCluster,
 		"https://192.168.1.100:6443",
 		"my-cluster",

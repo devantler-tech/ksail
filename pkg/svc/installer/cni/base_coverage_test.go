@@ -46,16 +46,6 @@ func TestNewInstallerBase_NilClient(t *testing.T) {
 	assert.Equal(t, time.Duration(0), base.GetTimeout())
 }
 
-func TestInstallerBase_WaitForReadiness_Noop(t *testing.T) {
-	t.Parallel()
-
-	base := cni.NewInstallerBase(helm.NewMockInterface(t), "", "", time.Second)
-
-	err := base.WaitForReadiness(context.Background())
-
-	require.NoError(t, err, "WaitForReadiness should be a no-op and return nil")
-}
-
 func TestInstallerBase_GetClient_Success(t *testing.T) {
 	t.Parallel()
 

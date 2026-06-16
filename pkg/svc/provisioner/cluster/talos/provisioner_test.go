@@ -401,7 +401,6 @@ func TestProvisioner_Start_ClusterNotFound(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
-	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
 	mockClient.EXPECT().
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
@@ -414,24 +413,25 @@ func TestProvisioner_Start_ClusterNotFound(t *testing.T) {
 	err := provisioner.Start(ctx, "nonexistent")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, clustererr.ErrClusterNotFound)
+	assert.ErrorIs(t, err, provider.ErrNoNodes)
 }
 
 func TestProvisioner_Start_Success(t *testing.T) {
 	t.Parallel()
 
-	mockClient := docker.NewMockAPIClient(t)
-	setupContainerOperationMock(mockClient, "container-1", "test-cluster", true)
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("StartNodes", mock.Anything, "test-cluster").Return(nil)
 
 	configs := createTestTalosConfigs(t, "test-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
-		WithDockerClient(mockClient).
+		WithInfraProvider(mockProvider).
 		WithLogWriter(io.Discard)
 
 	ctx := context.Background()
 	err := provisioner.Start(ctx, "test-cluster")
 
 	require.NoError(t, err)
+	mockProvider.AssertExpectations(t)
 }
 
 func TestProvisioner_Stop_NoDockerClient(t *testing.T) {
@@ -452,7 +452,6 @@ func TestProvisioner_Stop_ClusterNotFound(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
-	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
 	mockClient.EXPECT().
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
@@ -465,61 +464,25 @@ func TestProvisioner_Stop_ClusterNotFound(t *testing.T) {
 	err := provisioner.Stop(ctx, "nonexistent")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, clustererr.ErrClusterNotFound)
+	assert.ErrorIs(t, err, provider.ErrNoNodes)
 }
 
 func TestProvisioner_Stop_Success(t *testing.T) {
 	t.Parallel()
 
-	mockClient := docker.NewMockAPIClient(t)
-	setupContainerOperationMock(mockClient, "container-1", "test-cluster", false)
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("StopNodes", mock.Anything, "test-cluster").Return(nil)
 
 	configs := createTestTalosConfigs(t, "test-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
-		WithDockerClient(mockClient).
+		WithInfraProvider(mockProvider).
 		WithLogWriter(io.Discard)
 
 	ctx := context.Background()
 	err := provisioner.Stop(ctx, "test-cluster")
 
 	require.NoError(t, err)
-}
-
-// setupContainerOperationMock configures mock expectations for Start/Stop operations.
-// isStart=true sets up ContainerStart mock, isStart=false sets up ContainerStop mock.
-func setupContainerOperationMock(
-	mockClient *docker.MockAPIClient,
-	containerID, clusterName string,
-	isStart bool,
-) {
-	containerSummary := container.Summary{
-		ID: containerID,
-		Labels: map[string]string{
-			talosprovisioner.LabelTalosOwned:       "true",
-			talosprovisioner.LabelTalosClusterName: clusterName,
-		},
-		Names: []string{"/" + clusterName + "-control-plane-1"},
-	}
-
-	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
-	// Exists check
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
-		Return([]container.Summary{containerSummary}, nil).Once()
-	// List containers for operation
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
-		Return([]container.Summary{containerSummary}, nil).Once()
-
-	if isStart {
-		mockClient.EXPECT().
-			ContainerStart(mock.Anything, containerID, mock.Anything).
-			Return(nil)
-	} else {
-		mockClient.EXPECT().
-			ContainerStop(mock.Anything, containerID, mock.Anything).
-			Return(nil)
-	}
+	mockProvider.AssertExpectations(t)
 }
 
 func TestProvisioner_List_NoDockerClient(t *testing.T) {

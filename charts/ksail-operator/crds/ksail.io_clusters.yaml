@@ -62,7 +62,9 @@ spec:
             description: Spec defines the desired state of a KSail cluster.
             properties:
               chat:
-                description: Chat configures the KSail AI chat assistant.
+                description: |-
+                  Chat configures the KSail AI chat assistant.
+                  CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
                 properties:
                   model:
                     type: string
@@ -220,6 +222,7 @@ spec:
                     description: |-
                       Connection defines how KSail connects to the cluster: the kubeconfig path,
                       context name, and operation timeout.
+                      CLI-only (local kubeconfig path/context); ignored by the operator.
                     properties:
                       context:
                         description: |-
@@ -260,6 +263,7 @@ spec:
                       DistributionConfig is the path to the distribution's own configuration file
                       (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
                       When empty, KSail uses the distribution's default file name.
+                      CLI-only (a local file path on the CLI host); ignored by the operator.
                     type: string
                   gitOpsEngine:
                     description: 'GitOpsEngine selects the GitOps engine KSail bootstraps:
@@ -552,8 +556,9 @@ spec:
                     type: integer
                 type: object
               editor:
-                description: Editor is the editor command launched for interactive
-                  workflows (e.g. "code --wait").
+                description: |-
+                  Editor is the editor command launched for interactive workflows (e.g. "code --wait").
+                  CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
                 type: string
               provider:
                 description: |-
@@ -934,6 +939,7 @@ spec:
                         description: |-
                           Hooks are shell commands to run before each apply cycle.
                           Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
+                          CLI-only (local shell commands run by `ksail workload watch`); ignored by the operator.
                         items:
                           type: string
                         type: array

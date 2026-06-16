@@ -86,7 +86,7 @@ func runScanCmd(
 		return fmt.Errorf("%w, got %.2f", ErrInvalidComplianceThreshold, complianceThreshold)
 	}
 
-	path, err := resolveValidatePath(cmd, args)
+	path, err := resolveValidatePathFromCmd(cmd, args)
 	if err != nil {
 		return err
 	}

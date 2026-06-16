@@ -66,6 +66,123 @@ type ResourceService interface {
 	) (*unstructured.Unstructured, error)
 }
 
+// ResourceClientProvider is the single per-backend seam behind the workload browser: it resolves a
+// dynamic client for a named cluster — the local backend from the matching kubeconfig context, the
+// operator from the cluster's kubeconfig secret. ResourceAdapter turns one ResourceClientProvider
+// into the full ResourceService + ResourceWriter surface, so the only per-backend code is this one
+// method instead of twelve resolve-then-delegate wrappers (six per backend) that drifted apart.
+type ResourceClientProvider interface {
+	// ResourceClient resolves a dynamic client for the named cluster (namespace is the Cluster's
+	// namespace, ignored by the local backend which keys clusters by name).
+	ResourceClient(ctx context.Context, namespace, name string) (dynamic.Interface, error)
+}
+
+// ResourceAdapter implements ResourceService and ResourceWriter for any ResourceClientProvider,
+// concentrating the resolve-client-then-delegate boilerplate (and one consistent error-wrapping
+// policy) in a single place. Both backends embed it and supply only ResourceClient. List/Get validate
+// the kind before resolving a client (so an unsupported kind 422s without a connection attempt); the
+// shared *With helpers carry the verb/kind/name error context, so the adapter adds none of its own.
+type ResourceAdapter struct {
+	// Provider resolves the dynamic client for a named cluster — the one per-backend difference.
+	Provider ResourceClientProvider
+}
+
+// ListResources resolves the kind, resolves the cluster's dynamic client, and lists the kind.
+func (a ResourceAdapter) ListResources(
+	ctx context.Context,
+	namespace, name string,
+	query ResourceQuery,
+) (*unstructured.UnstructuredList, error) {
+	kind, err := ResourceKindFor(query.Kind)
+	if err != nil {
+		return nil, err
+	}
+
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return ListResourcesWith(ctx, dyn, kind, query)
+}
+
+// GetResource resolves the kind, resolves the cluster's dynamic client, and fetches the resource.
+func (a ResourceAdapter) GetResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) (*unstructured.Unstructured, error) {
+	kind, err := ResourceKindFor(ref.Kind)
+	if err != nil {
+		return nil, err
+	}
+
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return GetResourceWith(ctx, dyn, kind, ref)
+}
+
+// ScaleResource resolves the cluster's dynamic client and scales a scalable workload (the *With helper
+// validates scalability/replicas).
+func (a ResourceAdapter) ScaleResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+	replicas int32,
+) error {
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return ScaleResourceWith(ctx, dyn, ref, replicas)
+}
+
+// RestartResource resolves the cluster's dynamic client and triggers a rolling restart.
+func (a ResourceAdapter) RestartResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return RestartResourceWith(ctx, dyn, ref)
+}
+
+// ReconcileResource resolves the cluster's dynamic client and triggers a GitOps reconcile.
+func (a ResourceAdapter) ReconcileResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return ReconcileResourceWith(ctx, dyn, ref)
+}
+
+// DeleteResource resolves the cluster's dynamic client and deletes a namespaced allowlisted resource.
+func (a ResourceAdapter) DeleteResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := a.Provider.ResourceClient(ctx, namespace, name)
+	if err != nil {
+		return err //nolint:wrapcheck // preserve the resolver's sentinel (ErrNotFound → 404)
+	}
+
+	return DeleteResourceWith(ctx, dyn, ref)
+}
+
 // ResourceKind describes a browsable resource type and its mapping to a GroupVersionResource.
 type ResourceKind struct {
 	GVR        schema.GroupVersionResource

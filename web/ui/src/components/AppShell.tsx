@@ -1,21 +1,9 @@
 import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
-import {
-  Activity,
-  KeyRound,
-  Layers,
-  LayoutDashboard,
-  Lock,
-  LogOut,
-  Menu as MenuIcon,
-  Moon,
-  Search,
-  Server,
-  Settings,
-  Sun,
-} from "lucide-react";
+import { Lock, LogOut, Menu as MenuIcon, Moon, Search, Sun } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
+import { clusterViews, globalViews, viewTitle, type RegisteredView, type View, type ViewGates } from "../lib/views.tsx";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
 import { IconButton } from "./ui.tsx";
@@ -23,24 +11,6 @@ import { IconButton } from "./ui.tsx";
 // isMacLike picks the platform-appropriate shortcut hint for the search button (the handler accepts
 // both ⌘K and Ctrl+K regardless; this only affects the displayed kbd).
 const isMacLike = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-
-// View is the top-level SPA section. Cluster-scoped views (overview/resources/events) operate on the
-// active cluster; the rest are global. Routing is view-state (no router dependency).
-export type View = "clusters" | "overview" | "resources" | "events" | "secrets" | "settings";
-
-// CLUSTER_VIEWS are the views that require an active cluster (the drill-in workspace).
-export const CLUSTER_VIEWS: View[] = ["overview", "resources", "events"];
-
-const VIEW_TITLES: Record<View, string> = {
-  clusters: "Clusters",
-  overview: "Overview",
-  resources: "Resources",
-  events: "Events",
-  secrets: "Secrets",
-  settings: "Settings",
-};
-
-type NavEntry = { view: View; label: string; icon: ReactNode; enabled: boolean };
 
 function NavItem({
   icon,
@@ -127,32 +97,29 @@ export function AppShell({
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Cluster-scoped nav (under the switcher): Overview is always available for an active cluster (its
-  // spec/status/conditions come from the cluster object); Resources/Events need the workload-read API.
-  const clusterNav: NavEntry[] = [
-    { view: "overview", label: "Overview", icon: <LayoutDashboard className="size-4" aria-hidden />, enabled: true },
-    { view: "resources", label: "Resources", icon: <Layers className="size-4" aria-hidden />, enabled: workloadEnabled },
-    { view: "events", label: "Events", icon: <Activity className="size-4" aria-hidden />, enabled: workloadEnabled },
-  ];
+  // gates feed the registry's per-view availability predicates. AppShell only ever shows the cluster
+  // zone when a cluster is active (see navContent), so the cluster-scope gate is always satisfied here.
+  const gates: ViewGates = { activeCluster: true, workloadEnabled, secretsEnabled, settingsEnabled };
 
-  const globalNav: NavEntry[] = [
-    { view: "clusters", label: "Clusters", icon: <Server className="size-4" aria-hidden />, enabled: true },
-    { view: "secrets", label: "Secrets", icon: <KeyRound className="size-4" aria-hidden />, enabled: secretsEnabled },
-    { view: "settings", label: "Settings", icon: <Settings className="size-4" aria-hidden />, enabled: settingsEnabled },
-  ];
-
-  const renderNav = (entries: NavEntry[], onPick: (next: View) => void) =>
+  // renderNav renders the enabled views from one registry partition (cluster or global), in registry
+  // order. Overview is always enabled for an active cluster (its spec/status/conditions come from the
+  // cluster object); Resources/Events/Secrets/Settings carry their own capability gates.
+  const renderNav = (entries: readonly RegisteredView[], onPick: (next: View) => void) =>
     entries
-      .filter((entry) => entry.enabled)
-      .map((entry) => (
-        <NavItem
-          key={entry.view}
-          icon={entry.icon}
-          label={entry.label}
-          active={view === entry.view}
-          onClick={() => onPick(entry.view)}
-        />
-      ));
+      .filter((entry) => entry.enabled(gates))
+      .map((entry) => {
+        const Icon = entry.icon;
+
+        return (
+          <NavItem
+            key={entry.id}
+            icon={<Icon className="size-4" aria-hidden />}
+            label={entry.title}
+            active={view === entry.id}
+            onClick={() => onPick(entry.id)}
+          />
+        );
+      });
 
   // navContent renders the two zones — the cluster workspace (switcher + scoped nav, only when a
   // cluster is active) above the always-present global zone. onPick lets the drawer close on navigate.
@@ -163,12 +130,12 @@ export function AppShell({
           <div className="pb-1">
             <ClusterSwitcher clusters={clusters} activeKey={activeClusterKey} onSelect={onSelectCluster} />
           </div>
-          {renderNav(clusterNav, onPick)}
+          {renderNav(clusterViews, onPick)}
           <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
           <SectionLabel>Manage</SectionLabel>
         </>
       ) : null}
-      {renderNav(globalNav, onPick)}
+      {renderNav(globalViews, onPick)}
     </nav>
   );
 
@@ -236,7 +203,7 @@ export function AppShell({
               <MenuIcon className="size-5" />
             </IconButton>
             <h1 className="truncate text-sm font-semibold text-slate-900 md:text-base dark:text-white">
-              {VIEW_TITLES[view]}
+              {viewTitle(view)}
             </h1>
             {readOnly ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30">

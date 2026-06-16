@@ -1,4 +1,4 @@
-import type { View } from "../components/AppShell.tsx";
+import { isView, type View } from "./views.tsx";
 
 // DeepLinkTarget is the in-app navigation a ksail:// link resolves to.
 export type DeepLinkTarget = { view?: View; clusterKey?: string };
@@ -35,24 +35,18 @@ export function parseDeepLink(raw: string): DeepLinkTarget | null {
 
   const [head, ...rest] = segments;
 
-  switch (head) {
-    case "cluster":
-      if (rest.length === 0) {
-        return { view: "clusters" };
-      }
+  if (head === "cluster") {
+    if (rest.length === 0) {
+      return { view: "clusters" };
+    }
 
-      return {
-        view: "clusters",
-        clusterKey: rest.length === 1 ? `default/${rest[0]}` : `${rest[0]}/${rest[1]}`,
-      };
-    case "clusters":
-    case "overview":
-    case "resources":
-    case "events":
-    case "secrets":
-    case "settings":
-      return { view: head };
-    default:
-      return null;
+    return {
+      view: "clusters",
+      clusterKey: rest.length === 1 ? `default/${rest[0]}` : `${rest[0]}/${rest[1]}`,
+    };
   }
+
+  // Any registered view id navigates directly to that view (ksail://overview, ksail://settings, …);
+  // isView keeps this in lockstep with the view registry so a new view is deep-linkable for free.
+  return isView(head) ? { view: head } : null;
 }

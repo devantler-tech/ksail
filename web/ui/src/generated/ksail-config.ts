@@ -19,7 +19,7 @@ export interface KSailClusterConfiguration {
   };
   spec?: {
     /**
-     * Editor command for interactive workflows (e.g. code --wait)
+     * Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator.
      */
     editor?: string;
     /**
@@ -28,14 +28,13 @@ export interface KSailClusterConfiguration {
      */
     cluster?: {
       /**
-       * DistributionConfig is the path to the distribution's own configuration file
-       * (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
-       * When empty, KSail uses the distribution's default file name.
+       * Path to the distribution's own configuration file (kind.yaml
        */
       distributionConfig?: string;
       /**
        * Connection defines how KSail connects to the cluster: the kubeconfig path,
        * context name, and operation timeout.
+       * CLI-only (local kubeconfig path/context); ignored by the operator.
        */
       connection?: {
         /**
@@ -763,7 +762,7 @@ export interface KSailClusterConfiguration {
        */
       watch?: {
         /**
-         * Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped.
+         * Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped. CLI-only; ignored by the operator.
          */
         hooks?: string[];
       };
@@ -779,6 +778,7 @@ export interface KSailClusterConfiguration {
     };
     /**
      * Chat configures the KSail AI chat assistant.
+     * CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
      */
     chat?: {
       /**

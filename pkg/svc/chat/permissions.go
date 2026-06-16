@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 )
@@ -26,7 +25,7 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
 		// Auto-approve read operations
-		if chatui.IsReadOperation(request.Kind) {
+		if IsReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil

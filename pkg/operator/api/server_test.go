@@ -108,28 +108,23 @@ func (s stubClusterService) Create(
 	return cluster, nil
 }
 
-func (s stubClusterService) Update(
+func (s stubClusterService) Delete(_ context.Context, _, _ string) error {
+	return nil
+}
+
+// updaterStub is a ClusterService that also implements api.ClusterUpdater, so a test can assert that
+// implementing the optional interface flips capabilities.clusterUpdate to true on /api/v1/config (the
+// way the operator backend advertises it).
+type updaterStub struct {
+	stubClusterService
+}
+
+func (updaterStub) Update(
 	_ context.Context,
 	_, _ string,
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
 	return cluster, nil
-}
-
-func (s stubClusterService) Delete(_ context.Context, _, _ string) error {
-	return nil
-}
-
-// capabilityStub is a ClusterService that also implements api.CapabilityReporter, so a test can
-// assert the reported capabilities flow through /api/v1/config.
-type capabilityStub struct {
-	stubClusterService
-
-	capabilities api.Capabilities
-}
-
-func (s capabilityStub) Capabilities() api.Capabilities {
-	return s.capabilities
 }
 
 func TestListClustersIncludesDefaultValuedFields(t *testing.T) {
@@ -383,14 +378,13 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	)
 }
 
-func TestConfigReportsServiceCapabilities(t *testing.T) {
+func TestConfigReportsNoClusterUpdateWithoutUpdater(t *testing.T) {
 	t.Parallel()
 
-	// A backend that cannot update clusters in place (the local UI/desktop backend) reports it via
-	// CapabilityReporter, and the config endpoint surfaces it so the SPA hides the edit affordance.
-	server := &api.Server{
-		Service: capabilityStub{capabilities: api.Capabilities{ClusterUpdate: false}},
-	}
+	// A backend that does not implement ClusterUpdater (the local UI/desktop backend) reports
+	// clusterUpdate=false, derived from the interface like the other flags, so the SPA hides the edit
+	// affordance rather than offering an action that returns 501.
+	server := &api.Server{Service: stubClusterService{}}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -404,11 +398,30 @@ func TestConfigReportsServiceCapabilities(t *testing.T) {
 	)
 }
 
-func TestConfigDefaultsToFullCapabilities(t *testing.T) {
+func TestConfigReportsClusterUpdateWithUpdater(t *testing.T) {
 	t.Parallel()
 
-	// A backend that does not implement CapabilityReporter (the operator's CR backend) is assumed to
-	// support the full surface, so clusterUpdate is true.
+	// A backend that implements ClusterUpdater (the operator's CR backend, and this updaterStub)
+	// advertises clusterUpdate=true — the same interface-derived mechanism as the other capabilities.
+	server := &api.Server{Service: updaterStub{}}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(
+		t,
+		recorder.Body.String(),
+		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,`+
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}`,
+	)
+}
+
+func TestConfigReportsClusterUpdateForOperatorBackend(t *testing.T) {
+	t.Parallel()
+
+	// The operator's CR backend implements ClusterUpdater (it patches the Cluster CR), so clusterUpdate
+	// is true.
 	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
@@ -421,6 +434,39 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}`,
 	)
+}
+
+// TestConfigReportsClusterUpdateForConnectedOperatorBackend pins that the production connected operator
+// backend (resource browser enabled) also implements ClusterUpdater — via its embedded crClusterService
+// — and the resource capabilities derive from the embedded ResourceAdapter, so the config reports
+// clusterUpdate=true alongside workloadRead/workloadWrite=true.
+func TestConfigReportsClusterUpdateForConnectedOperatorBackend(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: newConnectedService(t, nil)}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	body := recorder.Body.String()
+	assert.Contains(t, body, `"clusterUpdate":true`)
+	assert.Contains(t, body, `"workloadRead":true`)
+	assert.Contains(t, body, `"workloadWrite":true`)
+}
+
+// TestUpdateClusterNotSupportedReturns501 covers the local backend's PUT: a backend without
+// ClusterUpdater returns 501 with the message detail the deleted local stub carried, so the SPA's
+// error surface is unchanged.
+func TestUpdateClusterNotSupportedReturns501(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: stubClusterService{}}
+	body := `{"spec":{"cluster":{"distribution":"K3s"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/clusters/default/c1", body)
+
+	assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "updating clusters is not supported locally")
 }
 
 func TestConfigReportsMode(t *testing.T) {
