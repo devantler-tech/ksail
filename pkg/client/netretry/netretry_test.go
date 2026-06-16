@@ -56,6 +56,17 @@ var (
 	)
 	errStatus505 = errors.New("server error 505 HTTP Version Not Supported")
 	errStatus599 = errors.New("got status code 599 from proxy")
+	// Truncated/malformed Helm repository index served by a flaky upstream
+	// (#5257): surfaces via the sigs.k8s.io/yaml conversion wrapper.
+	errTruncatedIndex = errors.New(
+		"failed to download repository index file: " +
+			"error converting YAML to JSON: yaml: line 32: could not find expected ':'",
+	)
+	// Genuine invalid user-supplied values: a plain go-yaml unmarshal error with
+	// no conversion-wrapper prefix — must stay non-retryable.
+	errInvalidValuesYAML = errors.New(
+		"yaml: unmarshal errors:\n  line 3: cannot unmarshal !!str `oops` into int",
+	)
 )
 
 func TestIsRetryable(t *testing.T) {
@@ -100,6 +111,14 @@ func TestIsRetryable(t *testing.T) {
 		// Extended 5xx codes beyond original 500–504 range.
 		{name: "505 code", err: errStatus505, expected: true},
 		{name: "599 code", err: errStatus599, expected: true},
+		// Truncated/malformed downloaded Helm repository index (#5257).
+		{
+			name:     "truncated repo index (converting YAML to JSON)",
+			err:      errTruncatedIndex,
+			expected: true,
+		},
+		// Genuine invalid user values must NOT be retried (narrow-scope guard).
+		{name: "invalid values yaml not retried", err: errInvalidValuesYAML, expected: false},
 	}
 
 	for _, tt := range tests {

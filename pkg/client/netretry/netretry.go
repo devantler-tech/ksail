@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// transientTextPatterns contains fixed substrings for HTTP and TCP-level
-// transient errors. Declared at package level to avoid slice allocation on
-// every IsRetryable call.
+// transientTextPatterns contains fixed substrings for HTTP, TCP-level, and
+// malformed-download transient errors. Declared at package level to avoid slice
+// allocation on every IsRetryable call.
 //
 //nolint:gochecknoglobals // avoids per-call slice allocation in hot retry path
 var transientTextPatterns = []string{
@@ -21,6 +21,15 @@ var transientTextPatterns = []string{
 	"i/o timeout", "TLS handshake timeout",
 	"unexpected EOF", "no such host",
 	"context deadline exceeded",
+	// Malformed/truncated downloaded document: a flaky upstream (e.g. a CDN or
+	// GitHub Pages) momentarily serving a partial Helm repository index.yaml
+	// surfaces as a YAML->JSON conversion failure. A repository index is
+	// server-generated, valid YAML, so a parse failure on the downloaded copy is
+	// a transient truncation rather than a genuine config error — retry it. This
+	// is specific to the sigs.k8s.io/yaml conversion wrapper used for downloaded
+	// indexes/manifests; plain "yaml: unmarshal errors" (invalid user values)
+	// lack this prefix and stay non-retryable. See #5257.
+	"error converting YAML to JSON",
 }
 
 // httpStatusCodePattern matches HTTP 429 and 5xx status codes at word boundaries
@@ -32,8 +41,10 @@ var httpStatusCodePattern = regexp.MustCompile(`\b(429|5\d{2})\b`)
 var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
 
 // IsRetryable returns true if the error indicates a transient network error
-// that should be retried. This covers HTTP 429 and 5xx status codes and TCP-level
-// errors such as connection resets, timeouts, and unexpected EOF.
+// that should be retried. This covers HTTP 429 and 5xx status codes, TCP-level
+// errors such as connection resets, timeouts, and unexpected EOF, and a
+// truncated/malformed downloaded document (e.g. a partially-served Helm
+// repository index) surfaced as a YAML->JSON conversion failure.
 // Callers that need to handle additional domain-specific transient errors (e.g.,
 // Copilot auth "fetch failed") should augment this function with a local helper.
 func IsRetryable(err error) bool {
