@@ -217,6 +217,7 @@ func TestPollForChangesEmitsStartedMarker(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+
 	err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("x: 1\n"), filePerm)
 	if err != nil {
 		t.Fatalf("write file: %v", err)
