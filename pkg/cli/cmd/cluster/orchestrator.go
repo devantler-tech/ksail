@@ -34,15 +34,19 @@ import (
 
 // updateOrchestrator carries the run state shared across every phase of a
 // cluster update (version reconciliation, diff computation, apply, recreate).
-// Holding cmd/cfgManager/ctx/deps/clusterName/force/dryRun on the receiver
-// replaces the long positional-argument signatures the phases used to thread.
+// Holding cmd/cfgManager/ctx/deps/clusterName/consent/forceDrain/dryRun on the
+// receiver replaces the long positional-argument signatures the phases used to
+// thread. consent governs prompt-skipping and rolling-recreate authorization
+// (--yes or the deprecated --force); forceDrain governs the destructive
+// PDB-bypassing drain and partition wipes (--force-drain).
 type updateOrchestrator struct {
 	cmd         *cobra.Command
 	cfgManager  *ksailconfigmanager.ConfigManager
 	ctx         *localregistry.Context
 	deps        lifecycle.Deps
 	clusterName string
-	force       bool
+	consent     bool
+	forceDrain  bool
 	dryRun      bool
 }
 
@@ -53,7 +57,8 @@ func newUpdateOrchestrator(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	clusterName string,
-	force bool,
+	consent bool,
+	forceDrain bool,
 ) *updateOrchestrator {
 	return &updateOrchestrator{
 		cmd:         cmd,
@@ -61,7 +66,8 @@ func newUpdateOrchestrator(
 		ctx:         ctx,
 		deps:        deps,
 		clusterName: clusterName,
-		force:       force,
+		consent:     consent,
+		forceDrain:  forceDrain,
 		dryRun:      cfgManager.Viper.GetBool("dry-run"),
 	}
 }
@@ -1164,7 +1170,7 @@ func (o *updateOrchestrator) applyOrReportChanges(
 		return nil
 	}
 
-	allowRolling, proceed := confirmDisruptiveChanges(o.cmd, diff, o.force)
+	allowRolling, proceed := confirmDisruptiveChanges(o.cmd, diff, o.consent)
 	if !proceed {
 		notify.Infof(o.cmd.OutOrStdout(), "Update cancelled")
 
@@ -1175,7 +1181,7 @@ func (o *updateOrchestrator) applyOrReportChanges(
 
 	return applyInPlaceChanges(
 		o.cmd, updater, reconciler, o.clusterName,
-		currentSpec, o.ctx, diff, outputTimer, o.force, allowRolling,
+		currentSpec, o.ctx, diff, outputTimer, o.forceDrain, allowRolling,
 	)
 }
 
@@ -1205,9 +1211,10 @@ func (o *updateOrchestrator) handleRecreateRequired(diff *clusterupdate.UpdateRe
 var errUpdateChangesFailed = errors.New("one or more changes failed to apply")
 
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
-// force reflects an explicit --force/--yes (and governs partition wipes), while
-// allowRolling carries consent for rolling node replacement (via --force or an
-// interactive confirmation); the provisioner gates each separately in PrepareUpdate.
+// forceDrain reflects an explicit --force-drain (and governs partition wipes and
+// PDB-bypassing drains), while allowRolling carries consent for rolling node
+// replacement (via --yes/--force or an interactive confirmation); the provisioner
+// gates each separately in PrepareUpdate.
 func applyInPlaceChanges(
 	cmd *cobra.Command,
 	updater clusterprovisioner.Updater,
@@ -1217,13 +1224,13 @@ func applyInPlaceChanges(
 	ctx *localregistry.Context,
 	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
-	force bool,
+	forceDrain bool,
 	allowRolling bool,
 ) error {
 	updateOpts := clusterupdate.UpdateOptions{
 		DryRun:               false,
 		RollingReboot:        true,
-		Force:                force,
+		Force:                forceDrain,
 		AllowRollingRecreate: allowRolling,
 	}
 
@@ -1298,7 +1305,7 @@ func finalizeInPlaceApply(
 func (o *updateOrchestrator) executeRecreateFlow() error {
 	outputTimer := flags.MaybeTimer(o.cmd, o.deps.Timer)
 
-	if !confirmRecreate(o.cmd, o.clusterName, o.force) {
+	if !confirmRecreate(o.cmd, o.clusterName, o.consent) {
 		return nil
 	}
 

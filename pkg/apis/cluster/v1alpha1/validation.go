@@ -193,7 +193,7 @@ func validateExpanderForProvider(
 	provider Provider,
 	autoscaler *NodeAutoscalerConfig,
 ) error {
-	if !autoscaler.Enabled {
+	if !autoscaler.Enabled.IsEnabled() || len(autoscaler.Expander) == 0 {
 		return nil
 	}
 
@@ -373,7 +373,7 @@ func ValidateAutoscalerConfig(
 		return expanderErr
 	}
 
-	if autoscaler.Enabled && len(autoscaler.Pools) == 0 {
+	if autoscaler.Enabled.IsEnabled() && len(autoscaler.Pools) == 0 {
 		return ErrAutoscalerEnabledNoPools
 	}
 
@@ -396,7 +396,7 @@ func validateHetznerCapacity(
 ) error {
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
-		!autoscaler.Enabled {
+		!autoscaler.Enabled.IsEnabled() {
 		return nil
 	}
 

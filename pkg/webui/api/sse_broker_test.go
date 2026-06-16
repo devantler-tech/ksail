@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

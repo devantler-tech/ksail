@@ -10,9 +10,6 @@ import (
 )
 
 func TestShouldEnableSOPS(t *testing.T) {
-	trueVal := true
-	falseVal := false
-
 	tests := []struct {
 		name string
 		sops v1alpha1.SOPS
@@ -21,12 +18,15 @@ func TestShouldEnableSOPS(t *testing.T) {
 	}{
 		{
 			name: "explicitly disabled returns false",
-			sops: v1alpha1.SOPS{Enabled: &falseVal},
+			sops: v1alpha1.SOPS{Enabled: v1alpha1.SOPSEnabledDisabled},
 			want: false,
 		},
 		{
 			name: "explicitly enabled returns true",
-			sops: v1alpha1.SOPS{Enabled: &trueVal, AgeKeyEnvVar: "NONEXISTENT_KEY_99999"},
+			sops: v1alpha1.SOPS{
+				Enabled:      v1alpha1.SOPSEnabledEnabled,
+				AgeKeyEnvVar: "NONEXISTENT_KEY_99999",
+			},
 			want: true,
 		},
 		{

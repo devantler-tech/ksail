@@ -23,6 +23,21 @@ func acceptsPositionalArgs(cmd *cobra.Command) bool {
 		reflect.ValueOf(cobra.NoArgs).Pointer()
 }
 
+// isExcludedFromTools reports whether a command must be dropped from the
+// generated tool surface because it carries either the explicit exclude
+// annotation or the interactive marker (a TUI/$EDITOR/TTY-picker command that an
+// AI client cannot drive). It is enforced both in the unconsolidated walk
+// (generator.go) and inside consolidated parents (walkSubcommands) so the policy
+// cannot drift between the two code paths.
+func isExcludedFromTools(cmd *cobra.Command) bool {
+	if cmd.Annotations == nil {
+		return false
+	}
+
+	return cmd.Annotations[annotations.AnnotationExclude] == annotationValueTrue ||
+		cmd.Annotations[annotations.AnnotationInteractive] == annotationValueTrue
+}
+
 // shouldConsolidate checks if a command should consolidate its subcommands.
 func shouldConsolidate(cmd *cobra.Command) bool {
 	if cmd.Annotations == nil {
@@ -150,8 +165,14 @@ func walkSubcommands(
 	sink func(def *SubcommandDef, key string, requiresWrite bool),
 ) {
 	for _, subCmd := range cmd.Commands() {
-		// Skip hidden subcommands
-		if subCmd.Hidden {
+		// Skip hidden subcommands, and commands explicitly excluded or marked
+		// interactive (full-screen TUI / $EDITOR / TTY picker). The
+		// unconsolidated walk honors AnnotationExclude in generator.go, but
+		// consolidation returns early before that walk runs, so the consolidation
+		// collector must enforce the same policy here — otherwise an annotated
+		// interactive command (e.g. cluster connect) still leaks into the
+		// consolidated tool's subcommand enum.
+		if subCmd.Hidden || isExcludedFromTools(subCmd) {
 			continue
 		}
 

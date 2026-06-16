@@ -1301,7 +1301,7 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1311,7 +1311,7 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"false", "true", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerNodeCapacityBuffersChange(t *testing.T) {
@@ -1530,7 +1530,7 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	spec := newBaseSpec()
 	spec.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:       true,
+			Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
 			MaxNodesTotal: 20,
 			Expander: v1alpha1.AutoscalerExpanderList{
 				v1alpha1.AutoscalerExpanderLeastWaste,
@@ -1567,7 +1567,7 @@ func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 	newer := clone(old)
 	newer.ControlPlanes = 5
 	newer.Workers = 3
-	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1613,7 +1613,7 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	newer := clone(old)
 	newer.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:       true,
+			Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
 			MaxNodesTotal: 20,
 			Expander: v1alpha1.AutoscalerExpanderList{
 				v1alpha1.AutoscalerExpanderPrice,
@@ -1637,9 +1637,9 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 		"full autoscaler config change should produce in-place changes",
 	)
 
-	// "false" is the defaultVal substituted when old spec has zero-value bool.
+	// "Disabled" is the defaultVal substituted when old spec has the zero-value toggle.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"false", "true", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.maxNodesTotal",
 		"0", "20", clusterupdate.ChangeCategoryInPlace)
 	// "LeastWaste" is the defaultVal; using Price ensures old("LeastWaste") != new("Price").
@@ -1698,7 +1698,7 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 	old.Workers = 1
 	newer := clone(old)
 	newer.Workers = 5
-	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
 		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 	}
@@ -1711,9 +1711,9 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 		"autoscaler toggle, workers change, and pool addition should produce in-place changes",
 	)
 
-	// "false" is the defaultVal substituted for zero-value bool.
+	// "Disabled" is the defaultVal substituted for the zero-value toggle.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"false", "true", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
 		"", "Added", clusterupdate.ChangeCategoryInPlace)
 
@@ -2029,7 +2029,7 @@ func TestEngine_UnknownBaseline_SkipsNodeAutoscalerDiff(t *testing.T) {
 	clusterupdate.MarkComponentsUnknown(old)
 
 	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 	newer.Autoscaler.Node.MaxNodesTotal = 5
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)

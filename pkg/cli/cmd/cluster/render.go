@@ -287,32 +287,33 @@ func writeDataRows(
 }
 
 // confirmDisruptiveChanges prompts for confirmation when the diff contains
-// disruptive changes (node reboots or rolling node replacement) and --force/--yes
-// was not set. It returns whether rolling node replacement is authorized and
-// whether the update should proceed.
+// disruptive changes (node reboots or rolling node replacement) and consent
+// (--yes, or the deprecated --force) was not given. It returns whether rolling
+// node replacement is authorized and whether the update should proceed.
 //
-// Rolling replacement is authorized by an explicit --force OR an interactive
-// confirmation. It is reported separately from Force (which governs partition
-// wipes) so that confirming a rolling replacement never implicitly authorizes a
-// wipe that may be discovered during apply and was not shown in the prompt.
+// Rolling replacement is authorized by consent OR an interactive confirmation.
+// It is reported separately from the destructive --force-drain (which governs
+// partition wipes and PDB-bypassing drains) so that confirming a rolling
+// replacement never implicitly authorizes a wipe that may be discovered during
+// apply and was not shown in the prompt.
 func confirmDisruptiveChanges(
 	cmd *cobra.Command,
 	diff *clusterupdate.UpdateResult,
-	force bool,
+	consent bool,
 ) (bool, bool) {
 	if !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
-		return force, true
+		return consent, true
 	}
 
-	if confirm.ShouldSkipPrompt(force) {
-		return force, true
+	if confirm.ShouldSkipPrompt(consent) {
+		return consent, true
 	}
 
 	if !promptForDisruptiveChanges(cmd, diff) {
 		return false, false
 	}
 
-	return force || diff.HasRollingRecreate(), true
+	return consent || diff.HasRollingRecreate(), true
 }
 
 // promptForDisruptiveChanges warns about reboot-required and rolling-recreate
@@ -357,10 +358,11 @@ func promptForDisruptiveChanges(cmd *cobra.Command, diff *clusterupdate.UpdateRe
 	return confirm.PromptForConfirmation(cmd.OutOrStdout())
 }
 
-// confirmRecreate prompts the user to confirm cluster recreation unless --force is set.
-// It returns true if the update should proceed (confirmed or forced), and false if the user cancels.
-func confirmRecreate(cmd *cobra.Command, clusterName string, force bool) bool {
-	if confirm.ShouldSkipPrompt(force) {
+// confirmRecreate prompts the user to confirm cluster recreation unless consent
+// (--yes, or the deprecated --force) was given.
+// It returns true if the update should proceed (confirmed or consented), and false if the user cancels.
+func confirmRecreate(cmd *cobra.Command, clusterName string, consent bool) bool {
+	if confirm.ShouldSkipPrompt(consent) {
 		return true
 	}
 

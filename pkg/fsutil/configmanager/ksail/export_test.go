@@ -43,6 +43,9 @@ var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
 // MigrateDeprecatedNodeAutoscalingForTest exposes migrateDeprecatedNodeAutoscaling for testing.
 var MigrateDeprecatedNodeAutoscalingForTest = migrateDeprecatedNodeAutoscaling
 
+// MigrateDeprecatedImageVerificationForTest exposes migrateDeprecatedImageVerification for testing.
+var MigrateDeprecatedImageVerificationForTest = migrateDeprecatedImageVerification
+
 // ExpectedDistributionConfigNameForTest exports expectedDistributionConfigName for testing.
 func ExpectedDistributionConfigNameForTest(distribution v1alpha1.Distribution) string {
 	return expectedDistributionConfigName(distribution)

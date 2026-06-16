@@ -359,6 +359,34 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
+// TestSwitchCmd_InteractivePicker_NonTTY verifies the picker fails fast with an
+// actionable error when no picker is injected and stdin is not a terminal (the
+// go-test environment). This keeps the bubbletea picker from hanging or crashing
+// for AI tool clients and CI; clusters exist, so the guard is what trips.
+func TestSwitchCmd_InteractivePicker_NonTTY(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	require.NoError(t, os.WriteFile(
+		kubeconfigPath, []byte(testKubeconfigTwoContexts), 0o600,
+	))
+
+	cmd, _ := newSwitchTestCmd()
+
+	// No deps.PickCluster injected → default picker path → non-TTY guard.
+	// IsTTY is injected false because the go-test stdin may report as a TTY.
+	deps := cluster.SwitchDeps{
+		KubeconfigPath: kubeconfigPath,
+		IsTTY:          func() bool { return false },
+	}
+
+	_, err := cluster.ExportPickCluster(cmd, deps)
+	require.Error(t, err)
+	require.ErrorIs(t, err, cluster.ErrInteractivePickerNoTTY)
+}
+
 func TestSwitchCmd_FallbackKubeconfigFromEnv(t *testing.T) {
 	tmpDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")

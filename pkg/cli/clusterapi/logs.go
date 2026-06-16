@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )

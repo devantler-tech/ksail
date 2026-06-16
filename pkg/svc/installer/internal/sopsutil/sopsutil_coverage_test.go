@@ -114,7 +114,7 @@ func TestResolveEnabledAgeKey_NilEnabled(t *testing.T) {
 
 	sops := v1alpha1.SOPS{
 		AgeKeyEnvVar: "TEST_SOPSUTIL_NILCHECK_99999",
-		Enabled:      nil,
+		Enabled:      v1alpha1.SOPSEnabledDefault,
 	}
 	key, err := sopsutil.ResolveEnabledAgeKey(sops)
 

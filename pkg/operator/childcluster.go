@@ -6,8 +6,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -73,7 +73,7 @@ func childClusterRESTConfig(
 }
 
 // childClusterDynamicClient builds a dynamic client for a Cluster's managed vcluster. It is wired into
-// the operator API backend (api.NewCRClusterServiceWithResources) so the resource browser can read the
+// the operator API backend (NewCRClusterServiceWithResources) so the resource browser can read the
 // child cluster.
 func childClusterDynamicClient(
 	ctx context.Context,

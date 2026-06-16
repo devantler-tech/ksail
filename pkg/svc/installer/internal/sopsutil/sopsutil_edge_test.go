@@ -47,9 +47,8 @@ func TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", keyDir)
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_ENABLED_ERR", "")
 
-	enabled := true
 	sops := v1alpha1.SOPS{
-		Enabled:      &enabled,
+		Enabled:      v1alpha1.SOPSEnabledEnabled,
 		AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_ENABLED_ERR",
 	}
 

@@ -4,7 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ func TestNoUIServingWhenStaticFSNil(t *testing.T) {
 	t.Parallel()
 
 	// Without an embedded UI, the root path has no handler and returns 404; the API still works.
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	root := doRequest(server.Handler(), http.MethodGet, "/", "")
 	assert.Equal(t, http.StatusNotFound, root.Code)
@@ -27,7 +28,7 @@ func TestSecurityHeadersApplied(t *testing.T) {
 
 	// Security headers wrap every response, including the API when no UI is present.
 	recorder := doRequest(
-		(&api.Server{Service: api.NewCRClusterService(newClient(t))}).Handler(),
+		(&api.Server{Service: operator.NewCRClusterService(newClient(t))}).Handler(),
 		http.MethodGet,
 		"/api/v1/config",
 		"",

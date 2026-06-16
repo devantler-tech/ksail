@@ -12,14 +12,18 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  PROVIDER   DISTRIBUTION   CLUSTER
-  docker     Vanilla        dev-cluster
-  docker     K3s            test-cluster
-  hetzner    Talos          prod-cluster
+  PROVIDER   DISTRIBUTION   CLUSTER       STATUS
+  docker     Vanilla        dev-cluster   Running
+  docker     K3s            test-cluster  Stopped
+  hetzner    Talos          prod-cluster  Unknown
 
-When any cluster has a TTL set, a TTL column is included:
-  PROVIDER   DISTRIBUTION   CLUSTER       TTL
-  docker     K3s            dev-cluster   2h 30m
+The STATUS column reports the cluster's run-state: "Running" when its nodes are
+up, "Stopped" when they exist but are not running (e.g. a stopped Docker
+cluster), and "Unknown" for providers that cannot report it (cloud providers).
+
+When any cluster has a TTL set, a TTL column is appended:
+  PROVIDER   DISTRIBUTION   CLUSTER       STATUS    TTL
+  docker     K3s            dev-cluster   Running   2h 30m
 
 The PROVIDER and CLUSTER values from the output can be used directly
 with other cluster commands:
@@ -28,8 +32,9 @@ with other cluster commands:
 
 Use --output json for machine-readable output. The JSON is an array of objects:
   [
-    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "ttl": "2h 30m"}
+    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "status": "Running", "ttl": "2h 30m"}
   ]
+The "status" field is "Running", "Stopped", or "Unknown" (see the STATUS column).
 The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
 
 Examples:
@@ -52,7 +57,7 @@ Usage:
   ksail cluster list [flags]
 
 Flags:
-      --output string       Output format: text or json. Use json for machine-readable structured output (array of {name, provider, distribution, ttl}). (default "text")
+      --output string       Output format: text or json. Use json for machine-readable structured output (array of {name, provider, distribution, status, ttl}). (default "text")
   -p, --provider Provider   Filter by provider (Docker, Hetzner, Omni, AWS, Kubernetes). If not specified, lists all providers.
 
 Global Flags:

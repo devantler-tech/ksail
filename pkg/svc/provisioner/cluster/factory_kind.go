@@ -44,7 +44,7 @@ func (f DefaultFactory) createKindProvisioner(
 	}
 
 	// Apply containerd image verifier plugin patch when image verification is enabled.
-	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+	if cluster.Spec.Cluster.ImageVerification == v1alpha1.ImageVerificationEnabled {
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 

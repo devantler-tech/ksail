@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 )
 

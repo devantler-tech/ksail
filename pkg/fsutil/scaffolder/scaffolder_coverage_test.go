@@ -466,7 +466,7 @@ func TestScaffoldK3d_ContainerdConfig_ForceOverwrite(t *testing.T) {
 
 	tempDir := t.TempDir()
 	cluster := createK3dCluster("k3d-containerd-force")
-	cluster.Spec.Cluster.Talos.ImageVerification = v1alpha1.ImageVerificationEnabled
+	cluster.Spec.Cluster.ImageVerification = v1alpha1.ImageVerificationEnabled
 
 	// First scaffold
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)

@@ -22,17 +22,19 @@ export function isHostCluster(cluster: Cluster): boolean {
   return cluster.metadata.labels?.[HOST_CLUSTER_LABEL] === "true";
 }
 
-// CLUSTER_PHASE_STOPPED is the display-only phase the SPA derives for a cluster the backend reports as
-// stopped (its infrastructure exists but is not running). The backend does not emit it as a phase
-// value — that would be a breaking API enum change — it leaves status.phase unset and attaches a
-// Ready=False/reason=Stopped condition; clusterPhase folds that back into this presentational phase so
-// StatusBadge renders "Stopped" instead of a falsely green "Ready" or a bare "Unknown".
+// CLUSTER_PHASE_STOPPED is the phase displayed for a cluster the backend reports as stopped (its
+// infrastructure exists but is not running). The backend now emits this as the canonical
+// v1alpha1.ClusterPhase value "Stopped" (see clusterphase.go) AND, for backward compatibility with
+// older backends that predate the enum value, also attaches a Ready=False/reason=Stopped condition.
+// clusterPhase resolves either signal to this presentational phase so StatusBadge renders "Stopped"
+// instead of a falsely green "Ready" or a bare "Unknown".
 export const CLUSTER_PHASE_STOPPED = "Stopped";
 
-// clusterPhase returns the phase to display for a cluster: its reported status.phase when set,
-// otherwise CLUSTER_PHASE_STOPPED when the backend signalled a stopped cluster via a
-// Ready=False/reason=Stopped condition, otherwise "" (which StatusBadge renders as Unknown). This is
-// the single place the stopped-condition convention is decoded, so every status surface agrees.
+// clusterPhase returns the phase to display for a cluster: its reported status.phase when set
+// (including the canonical "Stopped" value), otherwise CLUSTER_PHASE_STOPPED when an older backend
+// signalled a stopped cluster only via a Ready=False/reason=Stopped condition, otherwise "" (which
+// StatusBadge renders as Unknown). This is the single place the stopped-condition convention is
+// decoded, so every status surface agrees.
 export function clusterPhase(cluster: Cluster): string {
   const phase = cluster.status?.phase ?? "";
   if (phase !== "") {

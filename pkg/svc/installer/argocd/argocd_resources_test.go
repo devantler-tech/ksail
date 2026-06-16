@@ -40,12 +40,11 @@ func TestEnsureSopsAgeSecret_EnabledWithKey_InvalidKubeconfig(t *testing.T) {
 	const testKey = "AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000"
 	t.Setenv("TEST_ARGOCD_SOPS_AGE_KEY_KUBECONFIG", testKey)
 
-	enabled := true
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled:      &enabled,
+					Enabled:      v1alpha1.SOPSEnabledEnabled,
 					AgeKeyEnvVar: "TEST_ARGOCD_SOPS_AGE_KEY_KUBECONFIG",
 				},
 			},

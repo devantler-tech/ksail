@@ -40,8 +40,9 @@ var errClusterUpdateNotSupported = fmt.Errorf(
 // ClusterService is the backend the REST handlers delegate to. It is expressed in the
 // Kubernetes-shaped wire types the web UI already consumes (v1alpha1.Cluster / v1alpha1.ClusterList)
 // so a single HTTP layer can be served by two implementations: the operator's controller-runtime
-// backend (crClusterService) which CRUDs Cluster custom resources, and the CLI's local backend
-// which drives the provider/provisioner lifecycle for `ksail ui`.
+// backend (pkg/operator's CR-backed service, via NewCRClusterService) which CRUDs Cluster custom
+// resources, and the CLI's local backend (pkg/cli/clusterapi) which drives the provider/provisioner
+// lifecycle for `ksail ui`.
 //
 // Implementations may return the sentinel errors below; clientErrorStatus maps them (and Kubernetes
 // apierrors) to HTTP status codes. Returning any other error yields HTTP 500.

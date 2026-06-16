@@ -78,8 +78,7 @@ func noKeyFileEnv(t *testing.T) {
 //nolint:paralleltest // Uses t.Setenv
 func TestResolveEnabledAgeKey(t *testing.T) {
 	t.Run("explicitly disabled returns empty without error", func(t *testing.T) {
-		disabled := false
-		sops := v1alpha1.SOPS{Enabled: &disabled}
+		sops := v1alpha1.SOPS{Enabled: v1alpha1.SOPSEnabledDisabled}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Empty(t, got)
@@ -115,9 +114,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444", "")
 		noKeyFileEnv(t)
 
-		enabled := true
 		sops := v1alpha1.SOPS{
-			Enabled:      &enabled,
+			Enabled:      v1alpha1.SOPSEnabledEnabled,
 			AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444",
 		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
@@ -128,9 +126,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_ENABLED_55555", testAgeKey)
 		noKeyFileEnv(t)
 
-		enabled := true
 		sops := v1alpha1.SOPS{
-			Enabled:      &enabled,
+			Enabled:      v1alpha1.SOPSEnabledEnabled,
 			AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555",
 		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)

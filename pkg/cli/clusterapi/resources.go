@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"

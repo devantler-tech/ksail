@@ -81,7 +81,7 @@ func (s *Scaffolder) buildKindConfig(output string) (*v1alpha4.Cluster, error) {
 	}
 
 	// Enable containerd image verifier plugin when image verification is enabled.
-	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+	if s.KSailConfig.Spec.Cluster.ImageVerification == v1alpha1.ImageVerificationEnabled {
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 

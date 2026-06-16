@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ func hostCluster() *v1alpha1.Cluster {
 func TestCreateRejectsReservedHostClusterLabel(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t))
+	service := operator.NewCRClusterService(newClient(t))
 
 	_, err := service.Create(context.Background(), hostCluster())
 	require.ErrorIs(t, err, api.ErrHostClusterProtected)
@@ -33,7 +34,7 @@ func TestCreateRejectsReservedHostClusterLabel(t *testing.T) {
 func TestUpdateRejectsHostCluster(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t, hostCluster()))
+	service := operator.NewCRClusterService(newClient(t, hostCluster()))
 	updater, ok := service.(api.ClusterUpdater)
 	require.True(t, ok, "operator backend must implement ClusterUpdater")
 
@@ -48,7 +49,7 @@ func TestDeleteRejectsHostCluster(t *testing.T) {
 	t.Parallel()
 
 	hub := newClient(t, hostCluster())
-	service := api.NewCRClusterService(hub)
+	service := operator.NewCRClusterService(hub)
 
 	err := service.Delete(context.Background(), defaultNS, "host")
 	require.ErrorIs(t, err, api.ErrHostClusterProtected)

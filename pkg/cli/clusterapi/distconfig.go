@@ -8,9 +8,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
 
 // File modes for the generated EKS config under ~/.ksail/clusters/<name>.

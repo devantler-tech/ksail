@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -48,7 +49,7 @@ func newInterceptedClient(
 func TestListReturnsEmptySliceNotNil(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t))
+	service := operator.NewCRClusterService(newClient(t))
 
 	list, err := service.List(context.Background())
 	require.NoError(t, err)
@@ -65,7 +66,7 @@ func TestListReturnsEmptySliceNotNil(t *testing.T) {
 func TestListNormalizesNilItems(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
 			// Return success without populating Items, leaving it nil for the service to normalize.
 			return nil
@@ -81,7 +82,7 @@ func TestListNormalizesNilItems(t *testing.T) {
 func TestGetReturnsCluster(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t, sampleCluster()))
+	service := operator.NewCRClusterService(newClient(t, sampleCluster()))
 
 	cluster, err := service.Get(context.Background(), defaultNS, "c1")
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func TestGetReturnsCluster(t *testing.T) {
 func TestListWrapsClientError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
 			return errBoom
 		},
@@ -107,7 +108,7 @@ func TestListWrapsClientError(t *testing.T) {
 func TestGetWrapsClientError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
 			return errBoom
 		},
@@ -124,7 +125,7 @@ func TestGetWrapsClientError(t *testing.T) {
 func TestCreatePropagatesNamespaceCheckError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Get: func(
 			ctx context.Context,
 			clt client.WithWatch,
@@ -150,7 +151,7 @@ func TestCreatePropagatesNamespaceCheckError(t *testing.T) {
 func TestCreateToleratesNamespaceAlreadyExists(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Create: func(ctx context.Context, clt client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 			if ns, ok := obj.(*corev1.Namespace); ok {
 				return apierrors.NewAlreadyExists(
@@ -176,7 +177,7 @@ func TestCreateToleratesNamespaceAlreadyExists(t *testing.T) {
 func TestCreatePropagatesNamespaceCreateError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Create: func(ctx context.Context, clt client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 			if _, ok := obj.(*corev1.Namespace); ok {
 				return errBoom
@@ -201,7 +202,7 @@ func TestCreateWrapsClusterCreateError(t *testing.T) {
 	// test is the Cluster create itself.
 	existingNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: defaultNS}}
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Create: func(ctx context.Context, clt client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 			if _, ok := obj.(*v1alpha1.Cluster); ok {
 				return errBoom
@@ -219,7 +220,7 @@ func TestCreateWrapsClusterCreateError(t *testing.T) {
 func TestUpdateWrapsGetError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
 			return errBoom
 		},
@@ -236,7 +237,7 @@ func TestUpdateWrapsUpdateError(t *testing.T) {
 	t.Parallel()
 
 	// The cluster exists so the Get succeeds; the failing call under test is the Update.
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Update: func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.UpdateOption) error {
 			return errBoom
 		},
@@ -252,7 +253,7 @@ func TestUpdateWrapsUpdateError(t *testing.T) {
 func TestDeleteWrapsClientError(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
+	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Delete: func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
 			return errBoom
 		},

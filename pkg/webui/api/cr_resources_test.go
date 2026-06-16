@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -56,7 +57,10 @@ func testGitOpsCR(apiVersion, kind, namespace, name string) *unstructured.Unstru
 func newConnectedService(t *testing.T, dyn dynamic.Interface) api.ClusterService {
 	t.Helper()
 
-	return api.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), childResolver(dyn))
+	return operator.NewCRClusterServiceWithResources(
+		newClient(t, sampleCluster()),
+		childResolver(dyn),
+	)
 }
 
 var errResolveBoom = errors.New("cannot reach child cluster")
@@ -79,7 +83,7 @@ func TestCRConnectedListsAndGetsChildResources(t *testing.T) {
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(clientgoscheme.Scheme, configMap)
 
-	service := api.NewCRClusterServiceWithResources(
+	service := operator.NewCRClusterServiceWithResources(
 		newClient(t, sampleCluster()),
 		childResolver(dyn),
 	)
@@ -106,7 +110,7 @@ func TestCRConnectedClusterNotFound(t *testing.T) {
 	t.Parallel()
 
 	dyn := dynamicfake.NewSimpleDynamicClient(clientgoscheme.Scheme)
-	service := api.NewCRClusterServiceWithResources(
+	service := operator.NewCRClusterServiceWithResources(
 		newClient(t),
 		childResolver(dyn),
 	)
@@ -125,7 +129,7 @@ func TestCRConnectedResolverError(t *testing.T) {
 	resolver := func(context.Context, *v1alpha1.Cluster) (dynamic.Interface, error) {
 		return nil, errResolveBoom
 	}
-	service := api.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
+	service := operator.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
 	resourceService, _ := service.(api.ResourceService)
 
 	_, err := resourceService.ListResources(
@@ -139,7 +143,7 @@ func TestCRConnectedUnknownKind(t *testing.T) {
 	t.Parallel()
 
 	dyn := dynamicfake.NewSimpleDynamicClient(clientgoscheme.Scheme)
-	service := api.NewCRClusterServiceWithResources(
+	service := operator.NewCRClusterServiceWithResources(
 		newClient(t, sampleCluster()),
 		childResolver(dyn),
 	)
@@ -157,7 +161,7 @@ func TestCRConnectedUnknownKind(t *testing.T) {
 func TestCRPlainServiceHasNoResourceBrowser(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t))
+	service := operator.NewCRClusterService(newClient(t))
 	_, ok := service.(api.ResourceService)
 	assert.False(t, ok, "plain operator service must not implement ResourceService")
 }
@@ -167,7 +171,7 @@ func TestCRPlainServiceHasNoResourceBrowser(t *testing.T) {
 func TestCRPlainServiceHasNoResourceWriter(t *testing.T) {
 	t.Parallel()
 
-	service := api.NewCRClusterService(newClient(t))
+	service := operator.NewCRClusterService(newClient(t))
 	_, ok := service.(api.ResourceWriter)
 	assert.False(t, ok, "plain operator service must not implement ResourceWriter")
 }
@@ -330,7 +334,7 @@ func TestCRConnectedWriteResolverError(t *testing.T) {
 	resolver := func(context.Context, *v1alpha1.Cluster) (dynamic.Interface, error) {
 		return nil, errResolveBoom
 	}
-	service := api.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
+	service := operator.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
 	writer, _ := service.(api.ResourceWriter)
 
 	err := writer.ScaleResource(

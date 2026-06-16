@@ -35,6 +35,9 @@ var ErrInvalidImageVerification = errors.New("invalid image verification")
 // ErrInvalidNodeAutoscaling is returned when an invalid node autoscaling option is specified.
 var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
 
+// ErrInvalidSOPSEnabled is returned when an invalid spec.cluster.sops.enabled value is specified.
+var ErrInvalidSOPSEnabled = errors.New("invalid sops enabled")
+
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 

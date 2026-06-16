@@ -1148,13 +1148,12 @@ func TestCluster_MarshalJSON_ExtraPortMappings(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Marshal: SOPS.Enabled (*bool) — exercises convertValue with pointer types
+// Marshal: SOPS.Enabled (SOPSEnabled toggle enum) — marshals as its string value
 // ---------------------------------------------------------------------------
 
-func TestCluster_MarshalJSON_SOPSEnabledPointer(t *testing.T) {
+func TestCluster_MarshalJSON_SOPSEnabled(t *testing.T) {
 	t.Parallel()
 
-	boolTrue := true
 	cluster := v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       v1alpha1.Kind,
@@ -1164,7 +1163,7 @@ func TestCluster_MarshalJSON_SOPSEnabledPointer(t *testing.T) {
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
 					AgeKeyEnvVar: "MY_KEY",
-					Enabled:      &boolTrue,
+					Enabled:      v1alpha1.SOPSEnabledEnabled,
 				},
 			},
 		},
@@ -1182,10 +1181,45 @@ func TestCluster_MarshalJSON_SOPSEnabledPointer(t *testing.T) {
 	clusterSpec := requireMap(t, spec, "cluster")
 	sops := requireMap(t, clusterSpec, "sops")
 
-	enabled, hasEnabled := sops["enabled"].(bool)
+	enabled, hasEnabled := sops["enabled"].(string)
 	require.True(t, hasEnabled)
-	assert.True(t, enabled)
+	assert.Equal(t, string(v1alpha1.SOPSEnabledEnabled), enabled)
 	assert.Equal(t, "MY_KEY", sops["ageKeyEnvVar"])
+}
+
+// TestCluster_MarshalJSON_SOPSEnabledDisabled verifies that the explicitly
+// disabled state (the old &false) marshals as "Disabled" (non-zero string), so a
+// round-trip preserves the explicit choice rather than reverting to auto-detect.
+func TestCluster_MarshalJSON_SOPSEnabledDisabled(t *testing.T) {
+	t.Parallel()
+
+	cluster := v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       v1alpha1.Kind,
+			APIVersion: v1alpha1.APIVersion,
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				SOPS: v1alpha1.SOPS{Enabled: v1alpha1.SOPSEnabledDisabled},
+			},
+		},
+	}
+
+	data, err := json.Marshal(&cluster)
+	require.NoError(t, err)
+
+	var result map[string]any
+
+	err = json.Unmarshal(data, &result)
+	require.NoError(t, err)
+
+	spec := requireMap(t, result, "spec")
+	clusterSpec := requireMap(t, spec, "cluster")
+	sops := requireMap(t, clusterSpec, "sops")
+
+	enabled, hasEnabled := sops["enabled"].(string)
+	require.True(t, hasEnabled)
+	assert.Equal(t, string(v1alpha1.SOPSEnabledDisabled), enabled)
 }
 
 // nonDefaultHetznerLocation is a non-default Hetzner location shared by the

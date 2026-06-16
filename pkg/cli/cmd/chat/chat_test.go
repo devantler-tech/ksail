@@ -265,66 +265,75 @@ func TestForceNotInjectedWithoutConfirmFlagAnnotation(t *testing.T) {
 	}
 }
 
+// confirmFlagInjectionCase is one regression expectation for annotation-based
+// confirm-flag injection against the real tool surface.
+type confirmFlagInjectionCase struct {
+	name     string
+	toolName string
+	args     map[string]any
+	// injectFlag is the confirm-flag expected to be injected (empty = none).
+	injectFlag string
+	// neverInject lists flags that must NOT be injected for this case (e.g. the
+	// destructive --force-drain on cluster update, or kubectl's --force).
+	neverInject []string
+}
+
 // confirmFlagInjectionCases lists the regression expectations for
 // annotation-based confirm-flag injection against the real tool surface:
 // chat-driven workload apply/delete must never receive kubectl's destructive
-// --force, init/create must not receive force=overwrite, while the
-// prompt-skipping force flags keep being injected.
-func confirmFlagInjectionCases() []struct {
-	name        string
-	toolName    string
-	args        map[string]any
-	expectForce bool
-} {
-	return []struct {
-		name        string
-		toolName    string
-		args        map[string]any
-		expectForce bool
-	}{
+// --force, init/create must not receive force=overwrite, cluster update is
+// auto-confirmed via --yes (NOT --force-drain, which is destructive), while the
+// other prompt-skipping --force flags keep being injected.
+func confirmFlagInjectionCases() []confirmFlagInjectionCase {
+	return []confirmFlagInjectionCase{
 		{
-			name:     "workload_write delete gets no kubectl force",
-			toolName: "workload_write",
-			args:     map[string]any{"workload_command": deleteSubcommand},
+			name:        "workload_write delete gets no kubectl force",
+			toolName:    "workload_write",
+			args:        map[string]any{"workload_command": deleteSubcommand},
+			neverInject: []string{forceFlagName},
 		},
 		{
-			name:     "workload_write apply gets no kubectl force",
-			toolName: "workload_write",
-			args:     map[string]any{"workload_command": "apply"},
+			name:        "workload_write apply gets no kubectl force",
+			toolName:    "workload_write",
+			args:        map[string]any{"workload_command": "apply"},
+			neverInject: []string{forceFlagName},
 		},
 		{
-			name:        "cluster_write update keeps confirmation force",
+			name:        "cluster_write update auto-confirms via --yes, never --force-drain",
 			toolName:    clusterWriteTool,
 			args:        map[string]any{clusterCommandParam: "update"},
-			expectForce: true,
+			injectFlag:  "yes",
+			neverInject: []string{forceFlagName, "force-drain"},
 		},
 		{
-			name:        "cluster_write delete keeps confirmation force",
+			name:       "cluster_write delete keeps confirmation force",
+			toolName:   clusterWriteTool,
+			args:       map[string]any{clusterCommandParam: deleteSubcommand},
+			injectFlag: forceFlagName,
+		},
+		{
+			name:        "cluster_write init gets no overwrite force",
 			toolName:    clusterWriteTool,
-			args:        map[string]any{clusterCommandParam: deleteSubcommand},
-			expectForce: true,
+			args:        map[string]any{clusterCommandParam: initSubcommand},
+			neverInject: []string{forceFlagName},
 		},
 		{
-			name:     "cluster_write init gets no overwrite force",
-			toolName: clusterWriteTool,
-			args:     map[string]any{clusterCommandParam: initSubcommand},
+			name:       "tenant_write delete keeps confirmation force",
+			toolName:   "tenant_write",
+			args:       map[string]any{"tenant_command": deleteSubcommand},
+			injectFlag: forceFlagName,
 		},
 		{
-			name:        "tenant_write delete keeps confirmation force",
+			name:        "tenant_write create gets no overwrite force",
 			toolName:    "tenant_write",
-			args:        map[string]any{"tenant_command": deleteSubcommand},
-			expectForce: true,
+			args:        map[string]any{"tenant_command": "create"},
+			neverInject: []string{forceFlagName},
 		},
 		{
-			name:     "tenant_write create gets no overwrite force",
-			toolName: "tenant_write",
-			args:     map[string]any{"tenant_command": "create"},
-		},
-		{
-			name:        "cipher_write rotate keeps confirmation force",
-			toolName:    "cipher_write",
-			args:        map[string]any{"cipher_operation": "rotate"},
-			expectForce: true,
+			name:       "cipher_write rotate keeps confirmation force",
+			toolName:   "cipher_write",
+			args:       map[string]any{"cipher_operation": "rotate"},
+			injectFlag: forceFlagName,
 		},
 	}
 }
@@ -356,12 +365,22 @@ func TestConfirmFlagInjection_RealToolSurface(t *testing.T) {
 				t.Fatal("Expected arguments to be passed to handler")
 			}
 
-			_, hasForce := receivedArgs[forceFlagName]
-			if hasForce != testCase.expectForce {
-				t.Errorf(
-					"force injection for %s %v: got %v, want %v",
-					testCase.toolName, testCase.args, hasForce, testCase.expectForce,
-				)
+			if testCase.injectFlag != "" {
+				if _, ok := receivedArgs[testCase.injectFlag]; !ok {
+					t.Errorf(
+						"expected confirm-flag %q to be injected for %s %v",
+						testCase.injectFlag, testCase.toolName, testCase.args,
+					)
+				}
+			}
+
+			for _, flagName := range testCase.neverInject {
+				if _, ok := receivedArgs[flagName]; ok {
+					t.Errorf(
+						"flag %q must NOT be injected for %s %v",
+						flagName, testCase.toolName, testCase.args,
+					)
+				}
 			}
 		})
 	}

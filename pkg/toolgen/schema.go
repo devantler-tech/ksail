@@ -29,6 +29,12 @@ func buildParameterSchema(cmd *cobra.Command, excludeFlags []string) map[string]
 			return
 		}
 
+		// Skip deprecated flags — still accepted at runtime, but never advertised
+		// as a tool parameter.
+		if flag.Deprecated != "" {
+			return
+		}
+
 		prop := flagToSchemaProperty(flag)
 		properties[flag.Name] = prop
 
@@ -290,6 +296,7 @@ func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 			Required:    required,
 			Default:     flag.DefValue,
 			ConfirmFlag: isConfirmFlag(flag),
+			Deprecated:  flag.Deprecated != "",
 			// AppliesToSubcommands will be populated during schema building
 		}
 	})
@@ -408,6 +415,12 @@ func mergeSubcommandFlags(
 			// Skip excluded flags — they are hidden from the AI schema but still
 			// forwarded at runtime via SubcommandDef.Flags in handleConsolidatedTool.
 			if slices.Contains(excludeFlags, flagName) {
+				continue
+			}
+
+			// Skip deprecated flags — same rationale: they are still forwarded at
+			// runtime, but never advertised as a tool parameter.
+			if flagDef.Deprecated {
 				continue
 			}
 

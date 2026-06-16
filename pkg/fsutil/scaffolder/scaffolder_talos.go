@@ -44,7 +44,7 @@ func (s *Scaffolder) buildTalosGeneratorConfig() (*talosgenerator.Config, bool) 
 	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
 
 	// Enable image verification scaffolding when explicitly enabled for Talos.
-	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
+	enableImageVerification := s.KSailConfig.Spec.Cluster.ImageVerification == v1alpha1.ImageVerificationEnabled
 
 	// Disable CDI when explicitly disabled. Talos 1.13+ enables CDI by default.
 	disableCDI := s.KSailConfig.Spec.Cluster.CDI == v1alpha1.CDIDisabled
