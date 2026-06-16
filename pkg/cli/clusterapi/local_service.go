@@ -127,7 +127,11 @@ func NewService() *Service {
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		jobs:              map[string]*job{},
 	}
-	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
+	service.discoverer = &clusterdiscovery.Discoverer{
+		DockerFactory: service.dockerFactory,
+		// The web UI renders per-cluster run-state, so opt into the Docker run-state probe.
+		ProbeRunState: true,
+	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.useDefaultClients()
 
@@ -348,17 +352,25 @@ func (s *Service) Delete(ctx context.Context, _, name string) error {
 // web UI can power a Docker-stopped cluster back on without recreating it. Like Create/Delete it runs
 // asynchronously: the cluster is marked Updating and the provisioner's Start runs in the background.
 func (s *Service) Start(ctx context.Context, _, name string) error {
-	return s.runLifecycle(ctx, name, func(p clusterprovisioner.Provisioner) error {
-		return p.Start(ctx, name)
-	})
+	return s.runLifecycle(
+		ctx,
+		name,
+		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
+			return p.Start(actionCtx, name)
+		},
+	)
 }
 
 // Stop powers a running cluster's nodes down without deleting it (api.ClusterLifecycleController). It
 // runs asynchronously like Start: the cluster is marked Updating while the provisioner's Stop runs.
 func (s *Service) Stop(ctx context.Context, _, name string) error {
-	return s.runLifecycle(ctx, name, func(p clusterprovisioner.Provisioner) error {
-		return p.Stop(ctx, name)
-	})
+	return s.runLifecycle(
+		ctx,
+		name,
+		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
+			return p.Stop(actionCtx, name)
+		},
+	)
 }
 
 // InstallsComponents reports whether this backend installs the declared cluster components. The local
@@ -460,7 +472,7 @@ func (s *Service) startJob(
 func (s *Service) runLifecycle(
 	ctx context.Context,
 	name string,
-	action func(clusterprovisioner.Provisioner) error,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
 	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseUpdating)
 	if err != nil {
@@ -479,7 +491,7 @@ func (s *Service) runLifecycleAction(
 	ctx context.Context,
 	name string,
 	spec v1alpha1.Spec,
-	action func(clusterprovisioner.Provisioner) error,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) {
 	err := s.runProvisioner(ctx, name, spec, action)
 
@@ -505,9 +517,14 @@ func (s *Service) runLifecycleAction(
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
-	err := s.runProvisioner(ctx, name, spec, func(p clusterprovisioner.Provisioner) error {
-		return p.Create(ctx, name)
-	})
+	err := s.runProvisioner(
+		ctx,
+		name,
+		spec,
+		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
+			return p.Create(actionCtx, name)
+		},
+	)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -531,9 +548,14 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 }
 
 func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
-	err := s.runProvisioner(ctx, name, spec, func(p clusterprovisioner.Provisioner) error {
-		return p.Delete(ctx, name)
-	})
+	err := s.runProvisioner(
+		ctx,
+		name,
+		spec,
+		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
+			return p.Delete(actionCtx, name)
+		},
+	)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -565,14 +587,16 @@ func (s *Service) runProvisioner(
 	ctx context.Context,
 	name string,
 	spec v1alpha1.Spec,
-	action func(clusterprovisioner.Provisioner) error,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
 	provisioner, err := s.buildProvisioner(ctx, spec, name)
 	if err != nil {
 		return err
 	}
 
-	return action(provisioner)
+	// Pass the background (WithoutCancel) ctx so the action outlives the HTTP request
+	// that triggered it — the action MUST use this ctx, not a captured request-scoped one.
+	return action(ctx, provisioner)
 }
 
 // enumerate discovers existing clusters across every configured provider, keyed by name (the first

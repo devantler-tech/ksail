@@ -111,6 +111,12 @@ type Discoverer struct {
 	// means a real query via a docker provider built from the environment; a probe that errors yields
 	// RunStateUnknown (never a discovery failure). Primarily for tests.
 	DockerStatus func(ctx context.Context, distribution v1alpha1.Distribution, name string) RunState
+
+	// ProbeRunState gates the per-cluster Docker run-state probe in listDocker. Callers that render
+	// run-state (the web UI) set it true; callers that only enumerate names (the `cluster list` CLI,
+	// which does not display run-state) leave it false to avoid N wasted Docker round-trips per
+	// invocation. A configured DockerStatus seam also enables probing so tests need not set this.
+	ProbeRunState bool
 }
 
 // DefaultProviders is the provider set `ksail cluster list` queries when no --provider filter is
@@ -260,11 +266,20 @@ func (d *Discoverer) listDocker(ctx context.Context) ([]Cluster, error) {
 			}
 
 			seen[name] = struct{}{}
+
+			// Only probe run-state when a caller actually renders it (web UI). The
+			// `cluster list` CLI does not display run-state, so it skips the per-cluster
+			// Docker round-trip and leaves RunStateUnknown.
+			runState := RunStateUnknown
+			if d.ProbeRunState || d.DockerStatus != nil {
+				runState = d.dockerRunState(ctx, distribution, name)
+			}
+
 			clusters = append(clusters, Cluster{
 				Name:         name,
 				Distribution: distribution,
 				Provider:     v1alpha1.ProviderDocker,
-				RunState:     d.dockerRunState(ctx, distribution, name),
+				RunState:     runState,
 			})
 		}
 	}

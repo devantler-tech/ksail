@@ -34,8 +34,8 @@ func BoolToToggleValue(enabled bool) string {
 // boolean alias at config load (see BoolToToggleValue). It is the single source
 // of truth for which fields the bool-coercion decode hook applies to: both the
 // bi-state {Enabled,Disabled} family (CertManager, ImageVerification,
-// IngressFirewall, PodAutoscalerHorizontal, PodAutoscalerVertical) and the
-// tri-state {Default,Enabled,Disabled} family (CSI, CDI, MetricsServer,
+// IngressFirewall, PodAutoscalerHorizontal, PodAutoscalerVertical,
+// NodeAutoscaling) and the tri-state {Default,Enabled,Disabled} family (CSI, CDI, MetricsServer,
 // LoadBalancer) accept booleans, since "Default" remains expressible as the
 // string value. Adding a new toggle enum requires adding it here; the drift
 // guard in toggle_test.go fails otherwise.
@@ -46,6 +46,10 @@ func ToggleEnumTypes() []reflect.Type {
 		reflect.TypeFor[IngressFirewall](),
 		reflect.TypeFor[PodAutoscalerHorizontal](),
 		reflect.TypeFor[PodAutoscalerVertical](),
+		// NodeAutoscaling is a deprecated alias for autoscaler.node.enabled but is
+		// still a bi-state {Enabled,Disabled} field, so accept `nodeAutoscaling: true`
+		// as a bool alias consistently with the rest of the toggle family.
+		reflect.TypeFor[NodeAutoscaling](),
 		reflect.TypeFor[CSI](),
 		reflect.TypeFor[CDI](),
 		reflect.TypeFor[MetricsServer](),

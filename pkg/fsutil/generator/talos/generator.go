@@ -278,12 +278,10 @@ func (g *Generator) generateConditionalPatches(
 			continue
 		}
 
-		content, err := spec.content(model)
-		if err != nil {
-			return err
-		}
-
-		err = writePatchFile(rootPath, spec, content, force)
+		// writePatchFile checks exists/!force BEFORE invoking spec.content, so a
+		// side-effecting content func (e.g. OIDC reads the CA file) is skipped for
+		// an already-present patch — keeping re-generation idempotent.
+		err := writePatchFile(rootPath, spec, model, force)
 		if err != nil {
 			return err
 		}

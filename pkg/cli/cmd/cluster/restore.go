@@ -151,13 +151,14 @@ func buildRestorer(
 
 	flags.inputPath = canonInput
 
-	kubeconfigPath, err := resolveTargetKubeconfig(cmd, flags.name)
+	kubeconfigPath, kubeContext, err := resolveTarget(cmd, flags.name)
 	if err != nil {
 		return nil, err
 	}
 
 	return backupsvc.NewRestorer(backupsvc.RestoreOptions{
 		KubeconfigPath:         kubeconfigPath,
+		Context:                kubeContext,
 		InputPath:              flags.inputPath,
 		ExistingResourcePolicy: flags.existingResourcePolicy,
 		DryRun:                 flags.dryRun,

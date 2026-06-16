@@ -21,6 +21,10 @@ var (
 // Client wraps kubectl command functionality.
 type Client struct {
 	ioStreams genericiooptions.IOStreams
+	// kubeContext, when non-empty, pins every command this client builds to a
+	// specific kubeconfig context (kubectl --context) instead of the file's
+	// current-context. Empty means "use current-context" (the default).
+	kubeContext string
 }
 
 // NewClient creates a new kubectl client instance.
@@ -40,6 +44,16 @@ func NewClientWithStdio() *Client {
 	})
 }
 
+// WithKubeContext returns a copy of the client pinned to the given kubeconfig
+// context, so the commands it builds target that context rather than the
+// kubeconfig's current-context. An empty context is a no-op (current-context).
+func (c *Client) WithKubeContext(kubeContext string) *Client {
+	clone := *c
+	clone.kubeContext = kubeContext
+
+	return &clone
+}
+
 // Factory and command customization helpers.
 
 // createFactory creates a kubectl factory with the given kubeconfig path.
@@ -51,6 +65,11 @@ func (c *Client) createFactory(
 	configFlags := genericclioptions.NewConfigFlags(true)
 	if kubeConfigPath != "" {
 		configFlags.KubeConfig = &kubeConfigPath
+	}
+
+	if c.kubeContext != "" {
+		kubeContext := c.kubeContext
+		configFlags.Context = &kubeContext
 	}
 
 	matchVersionKubeConfigFlags := cmdutil.NewMatchVersionFlags(configFlags)

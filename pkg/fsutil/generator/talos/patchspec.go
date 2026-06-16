@@ -221,17 +221,15 @@ func oidcContent(cfg *Config) (string, error) {
 	return builder.String(), nil
 }
 
-// writePatchFile writes content to subdir/filename under rootPath. It skips the
-// write when content is empty (the patch resolved to nothing) or when the file
-// already exists and force is false. It keeps the stricter stat-error handling
-// (propagate unexpected stat failures) that writeFirewallFile pioneered, so all
-// patches now fail loudly on e.g. permission errors instead of silently
-// swallowing them like the old per-patch writers.
-func writePatchFile(rootPath string, spec patchSpec, content string, force bool) error {
-	if content == "" {
-		return nil
-	}
-
+// writePatchFile writes the patch for spec to subdir/filename under rootPath. It
+// performs the exists/!force skip BEFORE generating content via spec.content, so a
+// content func with side effects (e.g. the OIDC patch reads the CA file off disk)
+// is never invoked for an already-present patch on a no-force re-run — keeping
+// re-generation idempotent even when an input the content depends on has moved.
+// It also skips when content resolves to empty. The stricter stat-error handling
+// (propagate unexpected stat failures) is preserved so patches fail loudly on
+// e.g. permission errors rather than silently swallowing them.
+func writePatchFile(rootPath string, spec patchSpec, model *Config, force bool) error {
 	path := filepath.Join(rootPath, spec.subdir, spec.filename)
 
 	if !force {
@@ -245,7 +243,16 @@ func writePatchFile(rootPath string, spec patchSpec, content string, force bool)
 		}
 	}
 
-	err := os.WriteFile(path, []byte(content), filePerm)
+	content, err := spec.content(model)
+	if err != nil {
+		return err
+	}
+
+	if content == "" {
+		return nil
+	}
+
+	err = os.WriteFile(path, []byte(content), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %w", spec.filename, err)
 	}

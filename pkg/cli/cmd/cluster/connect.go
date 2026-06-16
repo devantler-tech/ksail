@@ -11,6 +11,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // connectLead is the command-specific lead paragraph for `cluster connect`; the
@@ -43,7 +44,7 @@ func NewConnectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "connect",
 		Short:        "Connect to cluster with k9s",
-		Long:         lifecycle.WithClusterTargetingHelp(connectLead),
+		Long:         lifecycle.WithClusterTargetingHelpWithoutProvider(connectLead),
 		SilenceUsage: true,
 	}
 
@@ -118,7 +119,10 @@ func handleConnectRunE(
 			return fmt.Errorf("resolve cluster info: %w", resolveErr)
 		}
 
-		context = connectContextForCluster(cfg, resolved)
+		context, resolveErr = connectContextForCluster(cfg, resolved)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve cluster context: %w", resolveErr)
+		}
 
 		if resolved.KubeconfigPath != "" {
 			kubeConfigPath = resolved.KubeconfigPath
@@ -147,18 +151,25 @@ func handleConnectRunE(
 // connectContextForCluster derives the kubeconfig context k9s should target for
 // a --name-resolved cluster. When the resolved name matches the config's cluster
 // name, the configured context is preserved (it may carry a non-default value).
-// Otherwise the standard "<distribution>-<name>" context is derived from the
-// config's distribution so connect targets the requested cluster rather than the
-// config's own.
+// Otherwise the targeted cluster's ACTUAL context is resolved by scanning the
+// kubeconfig (distribution-agnostic, the same resolver `cluster switch` uses), so
+// a cross-distribution --name target gets the right context prefix instead of
+// the config's own distribution (e.g. a K3s cluster from a Vanilla config dir
+// resolves to "k3d-<name>", not "kind-<name>").
 func connectContextForCluster(
 	cfg *v1alpha1.Cluster,
 	resolved *lifecycle.ResolvedClusterInfo,
-) string {
+) (string, error) {
 	if cfg.Name != "" && cfg.Name == resolved.ClusterName {
-		return cfg.Spec.Cluster.Connection.Context
+		return cfg.Spec.Cluster.Connection.Context, nil
 	}
 
-	return cfg.Spec.Cluster.Distribution.ContextName(resolved.ClusterName)
+	config, err := clientcmd.LoadFromFile(resolved.KubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("load kubeconfig %q: %w", resolved.KubeconfigPath, err)
+	}
+
+	return resolveContextName(config, resolved.ClusterName)
 }
 
 // setupEditorEnv sets up the editor environment variables based on flag and config.

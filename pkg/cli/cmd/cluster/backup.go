@@ -117,8 +117,8 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
-	//nolint:contextcheck // resolveTargetKubeconfig→ResolveClusterInfo derives ctx from cmd (cluster-cmd convention)
-	kubeconfigPath, err := resolveTargetKubeconfig(cmd, flags.name)
+	//nolint:contextcheck // resolveTarget→ResolveClusterInfo derives ctx from cmd (cluster-cmd convention)
+	kubeconfigPath, kubeContext, err := resolveTarget(cmd, flags.name)
 	if err != nil {
 		return err
 	}
@@ -142,6 +142,7 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 
 	backupper := backupsvc.NewBackupper(backupsvc.BackupOptions{
 		KubeconfigPath:   kubeconfigPath,
+		Context:          kubeContext,
 		OutputPath:       flags.outputPath,
 		Namespaces:       flags.namespaces,
 		ExcludeTypes:     flags.excludeTypes,

@@ -8,37 +8,60 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ClusterTargetingHelp is the canonical resolution-priority block describing how
-// cluster-targeting commands pick a cluster, provider, and kubeconfig. Commands
-// compose it into their Long description instead of copy-pasting (and drifting)
-// the priority text. It is intentionally written as a standalone paragraph so it
-// reads correctly when appended to a command's own description.
-const ClusterTargetingHelp = `The cluster is resolved in the following priority order:
+// The resolution-priority blocks are single-sourced as segments so commands can
+// compose exactly the blocks for the flags they actually expose (e.g. connect
+// has no --provider flag), without duplicating the priority text.
+const (
+	clusterResolutionHelp = `The cluster is resolved in the following priority order:
   1. From the --name flag
   2. From metadata.name in the ksail.yaml config file (if present)
-  3. From the current kubeconfig context
+  3. From the current kubeconfig context`
 
-The provider is resolved in the following priority order:
+	providerResolutionHelp = `The provider is resolved in the following priority order:
   1. From the --provider flag
   2. From the ksail.yaml config file (if present)
-  3. Defaults to Docker
+  3. Defaults to Docker`
 
-The kubeconfig is resolved in the following priority order:
+	kubeconfigResolutionHelp = `The kubeconfig is resolved in the following priority order:
   1. From the --kubeconfig flag
   2. From the KUBECONFIG environment variable
   3. From the ksail.yaml config file (if present)
   4. Defaults to ~/.kube/config`
+)
+
+// ClusterTargetingHelp is the canonical resolution-priority block for commands
+// that expose all three targeting flags (--name, --provider, --kubeconfig).
+const ClusterTargetingHelp = clusterResolutionHelp + "\n\n" + providerResolutionHelp +
+	"\n\n" + kubeconfigResolutionHelp
+
+// ClusterTargetingHelpWithoutProvider is ClusterTargetingHelp for commands that
+// target a cluster by name + kubeconfig but do NOT expose a --provider flag (e.g.
+// connect, which derives the provider from config). It omits the provider block
+// so --help does not advertise a flag the command lacks.
+const ClusterTargetingHelpWithoutProvider = clusterResolutionHelp + "\n\n" + kubeconfigResolutionHelp
 
 // WithClusterTargetingHelp appends the shared cluster-targeting resolution block
 // to a command's description, separated by a blank line. Pass the command's own
 // lead paragraph; the priority block is single-sourced via ClusterTargetingHelp.
 func WithClusterTargetingHelp(lead string) string {
+	return appendHelpBlock(lead, ClusterTargetingHelp)
+}
+
+// WithClusterTargetingHelpWithoutProvider is WithClusterTargetingHelp for commands
+// that do not expose a --provider flag (the provider block is omitted).
+func WithClusterTargetingHelpWithoutProvider(lead string) string {
+	return appendHelpBlock(lead, ClusterTargetingHelpWithoutProvider)
+}
+
+// appendHelpBlock joins a command's lead paragraph and a resolution block with a
+// blank line, returning the block alone when the lead is empty.
+func appendHelpBlock(lead, block string) string {
 	lead = strings.TrimRight(lead, "\n")
 	if lead == "" {
-		return ClusterTargetingHelp
+		return block
 	}
 
-	return lead + "\n\n" + ClusterTargetingHelp
+	return lead + "\n\n" + block
 }
 
 // ClusterTargetFlags holds the bound values for the shared cluster-targeting
