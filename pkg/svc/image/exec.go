@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/stdcopy"
 )
