@@ -329,9 +329,9 @@ func (r *componentReconciler) reconcileGitOpsEngine(
 	newValue := v1alpha1.GitOpsEngine(change.NewValue)
 	oldValue := v1alpha1.GitOpsEngine(change.OldValue)
 
-	if newValue == v1alpha1.GitOpsEngineNone || newValue == "" {
+	if newValue.IsNone() {
 		// If already none/disabled, nothing to uninstall
-		if oldValue == v1alpha1.GitOpsEngineNone || oldValue == "" {
+		if oldValue.IsNone() {
 			return nil
 		}
 

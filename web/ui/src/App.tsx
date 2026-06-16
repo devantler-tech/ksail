@@ -112,6 +112,10 @@ export function App() {
   const canCipher = capability(config, "secretsCipher");
   const canLogs = capability(config, "workloadLogs");
   const canExecCap = capability(config, "workloadExec");
+  // canInstallComponents gates the create form's component selectors: the operator installs the
+  // declared components, the local backend does not yet (so the form hides them rather than offering
+  // options that backend silently drops).
+  const canInstallComponents = capability(config, "componentsInstall");
   const distributions = config?.distributions ?? DEFAULT_DISTRIBUTIONS;
   // providerStatus gates the create form's provider options. null = backend does not gate (operator).
   const providerStatus = config?.providers ?? null;
@@ -574,6 +578,8 @@ export function App() {
             initial={formInitial}
             distributions={distributions}
             providerStatus={providerStatus}
+            componentsInstall={canInstallComponents}
+            isOperator={mode === "operator"}
             onSubmit={handleSubmit}
             onSubmitRaw={handleSubmitRaw}
             onClose={() => setFormOpen(false)}

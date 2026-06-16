@@ -320,6 +320,13 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 	if _, ok := s.Service.(ExecService); ok {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/exec", s.handleExec)
 	}
+
+	// Start/stop an existing cluster's infrastructure without deleting it (ClusterLifecycleController).
+	// POST verbs, so the read-only guard rejects them with 403 when the UI is read-only.
+	if _, ok := s.Service.(ClusterLifecycleController); ok {
+		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/start", s.handleStartCluster)
+		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/stop", s.handleStopCluster)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -476,6 +483,13 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.SecretsCipher = s.Service.(CipherService)
 	_, capabilities.WorkloadLogs = s.Service.(LogService)
 	_, capabilities.WorkloadExec = s.Service.(ExecService)
+	_, capabilities.ClusterStartStop = s.Service.(ClusterLifecycleController)
+	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
+	// marker yet report false during a transitional period), so the create form's gate cannot diverge
+	// from whether components are actually installed.
+	if installer, ok := s.Service.(ComponentInstaller); ok {
+		capabilities.ComponentsInstall = installer.InstallsComponents()
+	}
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
@@ -593,6 +607,45 @@ func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.R
 	}
 
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleStartCluster(writer http.ResponseWriter, request *http.Request) {
+	s.handleClusterLifecycle(writer, request, ClusterLifecycleController.Start)
+}
+
+func (s *Server) handleStopCluster(writer http.ResponseWriter, request *http.Request) {
+	s.handleClusterLifecycle(writer, request, ClusterLifecycleController.Stop)
+}
+
+// handleClusterLifecycle drives the start/stop endpoints: both resolve the backend's
+// ClusterLifecycleController and invoke the supplied action (Start or Stop) for the path's cluster,
+// returning 202 Accepted on success (the operation runs asynchronously, like create/delete) or the
+// mapped client error. Sharing one body keeps the two near-identical handlers from duplicating.
+func (s *Server) handleClusterLifecycle(
+	writer http.ResponseWriter,
+	request *http.Request,
+	action func(ClusterLifecycleController, context.Context, string, string) error,
+) {
+	controller, ok := s.Service.(ClusterLifecycleController)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	err := action(
+		controller,
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusAccepted)
 }
 
 // resourceService returns the backend's ResourceService, or false when it does not implement one

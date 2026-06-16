@@ -25,6 +25,9 @@ import (
 type BackupOptions struct {
 	// KubeconfigPath is the resolved path to the kubeconfig used for export.
 	KubeconfigPath string
+	// Context, when non-empty, pins the backup to a specific kubeconfig context
+	// (e.g. resolved from --name) instead of the kubeconfig's current-context.
+	Context string
 	// OutputPath is the destination path for the backup archive. Callers should
 	// canonicalize it (e.g. via fsutil.EvalCanonicalPath) before invoking.
 	OutputPath string
@@ -79,14 +82,21 @@ func (b *Backupper) createBackupArchive(
 
 	_, _ = fmt.Fprintf(writer, "Gathering cluster metadata...\n")
 
+	// Record the targeted context when --name pinned one; otherwise fall back to
+	// the kubeconfig's current-context (the cluster the backup actually runs against).
+	clusterName := b.opts.Context
+	if clusterName == "" {
+		clusterName = getClusterNameFromKubeconfig(b.opts.KubeconfigPath)
+	}
+
 	metadata := &BackupMetadata{
 		Version:      "v1",
 		Timestamp:    time.Now(),
-		ClusterName:  getClusterNameFromKubeconfig(b.opts.KubeconfigPath),
+		ClusterName:  clusterName,
 		KSailVersion: buildmeta.Version,
 	}
 
-	populateClusterInfo(ctx, metadata, b.opts.KubeconfigPath)
+	populateClusterInfo(ctx, metadata, b.opts.KubeconfigPath, b.opts.Context)
 
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
 
@@ -126,9 +136,9 @@ func (b *Backupper) createBackupArchive(
 func populateClusterInfo(
 	ctx context.Context,
 	metadata *BackupMetadata,
-	kubeconfigPath string,
+	kubeconfigPath, kubeContext string,
 ) {
-	info, err := clusterdetector.DetectInfo(ctx, kubeconfigPath, "")
+	info, err := clusterdetector.DetectInfo(ctx, kubeconfigPath, kubeContext)
 	if err != nil {
 		return
 	}
@@ -271,7 +281,7 @@ func (b *Backupper) executeGetAndSave(
 	outputPath := filepath.Join(resourceDir, filename)
 
 	output, stderr, err := runKubectlGet(
-		ctx, b.opts.KubeconfigPath, resourceType, namespace, clusterScoped,
+		ctx, b.opts.KubeconfigPath, b.opts.Context, resourceType, namespace, clusterScoped,
 	)
 	if err != nil {
 		if strings.Contains(stderr, "the server doesn't have a resource type") {
@@ -306,7 +316,7 @@ func (b *Backupper) executeGetAndSave(
 
 func runKubectlGet(
 	ctx context.Context,
-	kubeconfigPath, resourceType, namespace string,
+	kubeconfigPath, kubeContext, resourceType, namespace string,
 	clusterScoped bool,
 ) (string, string, error) {
 	var outBuf, errBuf bytes.Buffer
@@ -315,7 +325,7 @@ func runKubectlGet(
 		In:     os.Stdin,
 		Out:    &outBuf,
 		ErrOut: &errBuf,
-	})
+	}).WithKubeContext(kubeContext)
 
 	getCmd := client.CreateGetCommand(kubeconfigPath)
 

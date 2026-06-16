@@ -207,28 +207,13 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 		return c, nil
 	}
 
-	// Use stored values for regeneration, falling back to defaults
-	kubernetesVersion := c.kubernetesVersion
-	if kubernetesVersion == "" {
-		kubernetesVersion = DefaultKubernetesVersion
-	}
+	// Regenerate with the new cluster name. The PKI is intentionally regenerated
+	// (secrets left nil) because the cluster name is embedded in the certificates.
+	return c.regenerate(func(params *regenParams) error {
+		params.name = name
 
-	networkCIDR := c.networkCIDR
-	if networkCIDR == "" {
-		networkCIDR = DefaultNetworkCIDR
-	}
-
-	// Regenerate the bundle with the new cluster name
-	return newConfigsWithEndpointAndSecrets(
-		name,
-		kubernetesVersion,
-		networkCIDR,
-		c.endpoint,
-		c.patches,
-		nil,
-		c.versionContract,
-		c.extensions,
-	)
+		return nil
+	})
 }
 
 // WithEndpoint creates a new Configs with a specific endpoint IP for the Talos API and Kubernetes API.
@@ -247,43 +232,13 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 		return c, nil
 	}
 
-	// Use stored values for regeneration, falling back to defaults
-	kubernetesVersion := c.kubernetesVersion
-	if kubernetesVersion == "" {
-		kubernetesVersion = DefaultKubernetesVersion
-	}
+	// Regenerate with the new endpoint, preserving the existing PKI so the configs
+	// applied to servers and the talosconfig keep using the same CA.
+	return c.regenerate(func(params *regenParams) error {
+		params.endpoint = endpointIP
 
-	networkCIDR := c.networkCIDR
-	if networkCIDR == "" {
-		networkCIDR = DefaultNetworkCIDR
-	}
-
-	// Extract existing secrets bundle to preserve PKI across endpoint changes
-	var existingSecrets *secrets.Bundle
-
-	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		bundle, err := secrets.NewBundleFromConfig(
-			secrets.NewFixedClock(time.Now()),
-			c.bundle.ControlPlaneCfg,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
-		}
-
-		existingSecrets = bundle
-	}
-
-	// Regenerate the bundle with the new endpoint but preserved secrets
-	return newConfigsWithEndpointAndSecrets(
-		c.Name,
-		kubernetesVersion,
-		networkCIDR,
-		endpointIP,
-		c.patches,
-		existingSecrets,
-		c.versionContract,
-		c.extensions,
-	)
+		return c.preserveSecrets(params)
+	})
 }
 
 // WithCertSANs creates a new Configs whose Kubernetes API server and machine certificates include
@@ -299,44 +254,15 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 		return c, nil
 	}
 
-	kubernetesVersion := c.kubernetesVersion
-	if kubernetesVersion == "" {
-		kubernetesVersion = DefaultKubernetesVersion
-	}
+	// Append the cert-SANs patch and regenerate, preserving the existing PKI.
+	return c.regenerate(func(params *regenParams) error {
+		patches := make([]Patch, 0, len(c.patches)+1)
+		patches = append(patches, c.patches...)
+		patches = append(patches, buildCertSANsPatch(sans))
+		params.patches = patches
 
-	networkCIDR := c.networkCIDR
-	if networkCIDR == "" {
-		networkCIDR = DefaultNetworkCIDR
-	}
-
-	var existingSecrets *secrets.Bundle
-
-	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		bundle, err := secrets.NewBundleFromConfig(
-			secrets.NewFixedClock(time.Now()),
-			c.bundle.ControlPlaneCfg,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
-		}
-
-		existingSecrets = bundle
-	}
-
-	patches := make([]Patch, 0, len(c.patches)+1)
-	patches = append(patches, c.patches...)
-	patches = append(patches, buildCertSANsPatch(sans))
-
-	return newConfigsWithEndpointAndSecrets(
-		c.Name,
-		kubernetesVersion,
-		networkCIDR,
-		c.endpoint,
-		patches,
-		existingSecrets,
-		c.versionContract,
-		c.extensions,
-	)
+		return c.preserveSecrets(params)
+	})
 }
 
 // buildCertSANsPatch builds a cluster-scope patch that sets the API server and machine certificate
@@ -395,26 +321,11 @@ func (c *Configs) WithSecrets(existingSecrets *secrets.Bundle) (*Configs, error)
 		return c, nil
 	}
 
-	kubernetesVersion := c.kubernetesVersion
-	if kubernetesVersion == "" {
-		kubernetesVersion = DefaultKubernetesVersion
-	}
+	return c.regenerate(func(params *regenParams) error {
+		params.secrets = existingSecrets
 
-	networkCIDR := c.networkCIDR
-	if networkCIDR == "" {
-		networkCIDR = DefaultNetworkCIDR
-	}
-
-	return newConfigsWithEndpointAndSecrets(
-		c.Name,
-		kubernetesVersion,
-		networkCIDR,
-		c.endpoint,
-		c.patches,
-		existingSecrets,
-		c.versionContract,
-		c.extensions,
-	)
+		return nil
+	})
 }
 
 // WithKubernetesVersion creates a new Configs that targets the given Kubernetes
@@ -435,37 +346,13 @@ func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
 		return c, nil
 	}
 
-	networkCIDR := c.networkCIDR
-	if networkCIDR == "" {
-		networkCIDR = DefaultNetworkCIDR
-	}
+	// Target the requested version while preserving the existing PKI so the
+	// regenerated config keeps matching the running cluster.
+	return c.regenerate(func(params *regenParams) error {
+		params.kubernetesVersion = version
 
-	// Preserve the existing PKI so the regenerated config keeps matching the
-	// running cluster's CA, tokens, and bootstrap secrets.
-	var existingSecrets *secrets.Bundle
-
-	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		bundle, err := secrets.NewBundleFromConfig(
-			secrets.NewFixedClock(time.Now()),
-			c.bundle.ControlPlaneCfg,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
-		}
-
-		existingSecrets = bundle
-	}
-
-	return newConfigsWithEndpointAndSecrets(
-		c.Name,
-		version,
-		networkCIDR,
-		c.endpoint,
-		c.patches,
-		existingSecrets,
-		c.versionContract,
-		c.extensions,
-	)
+		return c.preserveSecrets(params)
+	})
 }
 
 // ExtractSecrets extracts the secrets bundle from the current config for reuse.
@@ -854,6 +741,88 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 
 		c.bundle.WorkerCfg = patched
 	}
+
+	return nil
+}
+
+// regenParams bundles every input needed to regenerate a Configs bundle. It
+// replaces the 8-positional-parameter newConfigsWithEndpointAndSecrets call that
+// each With* method threaded by hand, so a new regeneration variant mutates a
+// named field instead of re-spelling the whole argument list.
+type regenParams struct {
+	name              string
+	kubernetesVersion string
+	networkCIDR       string
+	endpoint          string
+	patches           []Patch
+	secrets           *secrets.Bundle
+	versionContract   *talosconfig.VersionContract
+	extensions        []string
+}
+
+// snapshot captures the current Configs state as regenParams with the
+// kubernetesVersion/networkCIDR fallbacks applied once, so every With* method
+// stops re-deriving them. Secrets default to nil (full PKI regeneration); callers
+// that must preserve PKI set params.secrets via preserveSecrets in their mutate.
+func (c *Configs) snapshot() regenParams {
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	return regenParams{
+		name:              c.Name,
+		kubernetesVersion: kubernetesVersion,
+		networkCIDR:       networkCIDR,
+		endpoint:          c.endpoint,
+		patches:           c.patches,
+		secrets:           nil,
+		versionContract:   c.versionContract,
+		extensions:        c.extensions,
+	}
+}
+
+// regenerate rebuilds the bundle from a snapshot of the current state after
+// applying mutate. It is the single regeneration path shared by every With*
+// method (and replaces the per-method newConfigsWithEndpointAndSecrets calls).
+// mutate may return an error (e.g. when preserving PKI fails), which aborts the
+// regeneration.
+func (c *Configs) regenerate(mutate func(*regenParams) error) (*Configs, error) {
+	params := c.snapshot()
+
+	err := mutate(&params)
+	if err != nil {
+		return nil, err
+	}
+
+	return newConfigsWithEndpointAndSecrets(
+		params.name,
+		params.kubernetesVersion,
+		params.networkCIDR,
+		params.endpoint,
+		params.patches,
+		params.secrets,
+		params.versionContract,
+		params.extensions,
+	)
+}
+
+// preserveSecrets extracts the current PKI into params.secrets so regeneration
+// keeps the running cluster's CA, certificates, tokens, and bootstrap secrets.
+// It centralizes the secrets-extraction the WithEndpoint/WithCertSANs/
+// WithKubernetesVersion methods used to inline verbatim.
+func (c *Configs) preserveSecrets(params *regenParams) error {
+	existing, err := c.ExtractSecrets()
+	if err != nil {
+		return err
+	}
+
+	params.secrets = existing
 
 	return nil
 }

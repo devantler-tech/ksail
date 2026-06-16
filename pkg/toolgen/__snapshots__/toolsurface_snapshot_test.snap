@@ -70,6 +70,10 @@ workload_write
         "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: connect, diff)",
         "type": "string"
       },
+      "include-version-drift": {
+        "description": "Also report distribution/Kubernetes version drift the next 'cluster update' would reconcile (performs OCI registry lookups; off by default) (applies to: diff)",
+        "type": "boolean"
+      },
       "kubeconfig": {
         "default": "~/.kube/config",
         "description": "Path to kubeconfig file (applies to: connect, diff)",
@@ -80,12 +84,12 @@ workload_write
         "type": "string"
       },
       "name": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, diff, info)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "output": {
         "default": "text",
-        "description": "Output format: text or json. Use json for machine-readable structured output. (applies to: diagnose, diff)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, diff, list)",
         "type": "string"
       },
       "provider": {

@@ -27,7 +27,9 @@ func TestClusterTransitions(t *testing.T) {
 		},
 		{
 			name: "provisioning to ready is reported",
-			prev: map[string]clusterSnapshot{"default/a": snap("a", v1alpha1.ClusterPhaseProvisioning)},
+			prev: map[string]clusterSnapshot{
+				"default/a": snap("a", v1alpha1.ClusterPhaseProvisioning),
+			},
 			curr: map[string]clusterSnapshot{"default/a": snap("a", v1alpha1.ClusterPhaseReady)},
 			want: []clusterTransition{{Name: "a", Phase: v1alpha1.ClusterPhaseReady}},
 		},
@@ -92,12 +94,16 @@ func TestBusyCount(t *testing.T) {
 func TestTransitionNotification(t *testing.T) {
 	t.Parallel()
 
-	ready := transitionNotification(clusterTransition{Name: "demo", Phase: v1alpha1.ClusterPhaseReady})
+	ready := transitionNotification(
+		clusterTransition{Name: "demo", Phase: v1alpha1.ClusterPhaseReady},
+	)
 	if ready.Title != "Cluster ready" {
 		t.Errorf("ready title = %q", ready.Title)
 	}
 
-	failed := transitionNotification(clusterTransition{Name: "demo", Phase: v1alpha1.ClusterPhaseFailed})
+	failed := transitionNotification(
+		clusterTransition{Name: "demo", Phase: v1alpha1.ClusterPhaseFailed},
+	)
 	if failed.Title != "Cluster failed" {
 		t.Errorf("failed title = %q", failed.Title)
 	}

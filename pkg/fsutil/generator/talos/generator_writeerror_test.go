@@ -110,7 +110,7 @@ func TestGenerate_MirrorRegistriesWriteError(t *testing.T) {
 		PatchesDir:       "talos",
 		WorkerNodes:      1,
 		MirrorRegistries: []string{"docker.io=http://mirror.local:5000"},
-	}, "mirror registries")
+	}, "mirror-registries")
 }
 
 func TestGenerate_KubeletCertRotationWriteError(t *testing.T) {

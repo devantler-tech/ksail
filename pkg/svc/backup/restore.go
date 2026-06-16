@@ -22,6 +22,9 @@ import (
 type RestoreOptions struct {
 	// KubeconfigPath is the resolved path to the kubeconfig used for restore.
 	KubeconfigPath string
+	// Context, when non-empty, pins the restore to a specific kubeconfig context
+	// (e.g. resolved from --name) instead of the kubeconfig's current-context.
+	Context string
 	// InputPath is the backup archive to restore. Callers should canonicalize
 	// it (e.g. via fsutil.EvalCanonicalPath) before invoking.
 	InputPath string
@@ -213,7 +216,7 @@ func (r *Restorer) restoreResourceFile(
 		In:     os.Stdin,
 		Out:    &outBuf,
 		ErrOut: &errBuf,
-	})
+	}).WithKubeContext(r.opts.Context)
 
 	var cmd *cobra.Command
 

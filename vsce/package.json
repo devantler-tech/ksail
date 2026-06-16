@@ -287,7 +287,8 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "test": "vscode-test",
+    "compile-tests": "tsc -p tsconfig.json",
+    "test": "npm run compile-tests && node --test \"out/test/**/*.test.js\"",
     "clean": "rm -rf dist out"
   },
   "devDependencies": {

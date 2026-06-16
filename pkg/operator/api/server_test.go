@@ -70,7 +70,8 @@ func TestConfigReportsReadOnly(t *testing.T) {
 		`{"readOnly":true,"authEnabled":false,`+
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
-			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}}`,
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
+			`"clusterStartStop":false,"componentsInstall":true}}`,
 		recorder.Body.String(),
 	)
 }
@@ -373,7 +374,8 @@ func TestConfigDefaultsWritable(t *testing.T) {
 		`{"readOnly":false,"authEnabled":false,`+
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
-			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}}`,
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
+			`"clusterStartStop":false,"componentsInstall":true}}`,
 		recorder.Body.String(),
 	)
 }
@@ -394,7 +396,8 @@ func TestConfigReportsNoClusterUpdateWithoutUpdater(t *testing.T) {
 		recorder.Body.String(),
 		`"capabilities":{"clusterUpdate":false,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
-			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}`,
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
+			`"clusterStartStop":false,"componentsInstall":false}`,
 	)
 }
 
@@ -413,7 +416,8 @@ func TestConfigReportsClusterUpdateWithUpdater(t *testing.T) {
 		recorder.Body.String(),
 		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
-			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}`,
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
+			`"clusterStartStop":false,"componentsInstall":false}`,
 	)
 }
 
@@ -432,7 +436,8 @@ func TestConfigReportsClusterUpdateForOperatorBackend(t *testing.T) {
 		recorder.Body.String(),
 		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
-			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false}`,
+			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
+			`"clusterStartStop":false,"componentsInstall":true}`,
 	)
 }
 
@@ -467,6 +472,87 @@ func TestUpdateClusterNotSupportedReturns501(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotImplemented, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), "updating clusters is not supported locally")
+}
+
+// lifecycleStub is a ClusterService that also implements api.ClusterLifecycleController, recording the
+// start/stop calls it receives so a test can assert the routes reach the backend.
+type lifecycleStub struct {
+	stubClusterService
+
+	started []string
+	stopped []string
+}
+
+func (s *lifecycleStub) Start(_ context.Context, _, name string) error {
+	s.started = append(s.started, name)
+
+	return nil
+}
+
+func (s *lifecycleStub) Stop(_ context.Context, _, name string) error {
+	s.stopped = append(s.stopped, name)
+
+	return nil
+}
+
+// TestConfigReportsClusterStartStop pins that a backend implementing ClusterLifecycleController
+// advertises clusterStartStop=true (the interface-derived gate), while one that does not reports
+// false — so the SPA only offers start/stop where the routes actually exist.
+func TestConfigReportsClusterStartStop(t *testing.T) {
+	t.Parallel()
+
+	withStartStop := &api.Server{Service: &lifecycleStub{}}
+	without := &api.Server{Service: stubClusterService{}}
+
+	yes := doRequest(withStartStop.Handler(), http.MethodGet, "/api/v1/config", "")
+	no := doRequest(without.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Contains(t, yes.Body.String(), `"clusterStartStop":true`)
+	assert.Contains(t, no.Body.String(), `"clusterStartStop":false`)
+}
+
+// TestStartStopRoutesReachBackend covers the additive start/stop endpoints: a backend implementing
+// ClusterLifecycleController has the routes registered and they invoke Start/Stop, returning 202.
+func TestStartStopRoutesReachBackend(t *testing.T) {
+	t.Parallel()
+
+	backend := &lifecycleStub{}
+	server := &api.Server{Service: backend}
+	handler := server.Handler()
+
+	start := doRequest(handler, http.MethodPost, "/api/v1/clusters/default/c1/start", "")
+	assert.Equal(t, http.StatusAccepted, start.Code)
+
+	stop := doRequest(handler, http.MethodPost, "/api/v1/clusters/default/c1/stop", "")
+	assert.Equal(t, http.StatusAccepted, stop.Code)
+
+	assert.Equal(t, []string{"c1"}, backend.started)
+	assert.Equal(t, []string{"c1"}, backend.stopped)
+}
+
+// TestStartStopRoutesUnregisteredWithoutCapability pins that a backend without
+// ClusterLifecycleController does not expose the start/stop routes: the SPA catch-all (or, here, a 404
+// from the mux) handles them rather than a misleading success.
+func TestStartStopRoutesUnregisteredWithoutCapability(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: stubClusterService{}}
+	handler := server.Handler()
+
+	start := doRequest(handler, http.MethodPost, "/api/v1/clusters/default/c1/start", "")
+	assert.Equal(t, http.StatusNotFound, start.Code)
+}
+
+// TestStartStopRejectedInReadOnly pins that the start/stop endpoints (POST verbs) are blocked by the
+// read-only guard, like the other mutating routes.
+func TestStartStopRejectedInReadOnly(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: &lifecycleStub{}, ReadOnly: true}
+	handler := server.Handler()
+
+	start := doRequest(handler, http.MethodPost, "/api/v1/clusters/default/c1/start", "")
+	assert.Equal(t, http.StatusForbidden, start.Code)
 }
 
 func TestConfigReportsMode(t *testing.T) {

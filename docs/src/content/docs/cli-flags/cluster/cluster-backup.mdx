@@ -25,6 +25,7 @@ Usage:
 Flags:
       --compression int         Compression level (-1..9, -1 = gzip default) (default -1)
       --exclude-types strings   Resource types to exclude from backup (default [events])
+      --name string             Name of the cluster to back up (resolves the kubeconfig like the other cluster commands; defaults to the current kubeconfig context when unset)
   -n, --namespaces strings      Namespaces to backup (default: all)
   -o, --output string           Output path for backup archive (required)
 

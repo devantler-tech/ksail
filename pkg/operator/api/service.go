@@ -73,6 +73,32 @@ type ClusterUpdater interface {
 	) (*v1alpha1.Cluster, error)
 }
 
+// ClusterLifecycleController is an optional interface a ClusterService may implement to start and stop
+// an existing cluster's infrastructure without deleting it (POST .../start and .../stop). A backend
+// that implements it advertises capabilities.clusterStartStop=true and the routes are registered; a
+// backend that does not (the operator, whose clusters are reconciled, not power-cycled) leaves the
+// capability false and the routes unregistered, so the SPA hides the start/stop affordances. The local
+// `ksail ui`/desktop backend implements it over the provisioner's Start/Stop for Docker clusters.
+type ClusterLifecycleController interface {
+	// Start brings a stopped cluster's nodes back up.
+	Start(ctx context.Context, namespace, name string) error
+	// Stop powers a running cluster's nodes down without deleting it.
+	Stop(ctx context.Context, namespace, name string) error
+}
+
+// ComponentInstaller is an optional marker interface a ClusterService may implement to advertise that
+// it installs the cluster components (CNI, CSI, metrics-server, …) declared in the create form
+// (capabilities.componentsInstall=true). The SPA gates the create form's component selectors on it so
+// it does not offer options a backend silently drops. The operator backend installs components via its
+// reconciler and implements it; the local `ksail ui` backend only provisions the cluster (it does not
+// yet run the component pipeline), so it leaves the capability false until that reuse lands.
+type ComponentInstaller interface {
+	// InstallsComponents reports whether this backend installs declared cluster components. It exists
+	// solely so the capability is interface-derived (and so cannot drift from the routes), mirroring the
+	// marker style of the other optional interfaces.
+	InstallsComponents() bool
+}
+
 // Capabilities reports which optional operations a backend supports, so the SPA can hide affordances
 // a backend cannot fulfill instead of offering an action that fails. It is served on
 // /api/v1/config under "capabilities". New capability flags are added here as the UI surface grows
@@ -115,6 +141,18 @@ type Capabilities struct {
 	// terminal) — true exactly when the serving ClusterService implements ExecService. The SPA
 	// combines it with !readOnly before showing the terminal (exec can run arbitrary commands).
 	WorkloadExec bool `json:"workloadExec"`
+	// ClusterStartStop reports whether the backend can start/stop an existing cluster's infrastructure
+	// (POST .../start and .../stop) — true exactly when the serving ClusterService implements
+	// ClusterLifecycleController. The SPA shows the start/stop actions only then; the operator omits it
+	// (its clusters are reconciled, not power-cycled). Combined with !readOnly before showing the
+	// actions (they mutate infrastructure).
+	ClusterStartStop bool `json:"clusterStartStop"`
+	// ComponentsInstall reports whether the backend installs the cluster components (CNI, CSI, …) the
+	// create form offers — true exactly when the serving ClusterService implements ComponentInstaller
+	// and reports it. The SPA gates the create form's component selectors on it so it does not offer
+	// options a backend silently drops. The operator installs components via its reconciler; the local
+	// backend does not yet, so it leaves this false (the form then hides the component selectors).
+	ComponentsInstall bool `json:"componentsInstall"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

@@ -18,10 +18,22 @@ k9s flags and arguments placed after a "--" separator are passed through to
 k9s unchanged, allowing you to use any k9s functionality. Examples:
 
   ksail cluster connect
+  ksail cluster connect --name dev-cluster
   ksail cluster connect --editor "code --wait"
   ksail cluster connect -- --namespace default
   ksail cluster connect -- --context my-context
   ksail cluster connect -- --readonly
+
+The cluster is resolved in the following priority order:
+  1. From the --name flag
+  2. From metadata.name in the ksail.yaml config file (if present)
+  3. From the current kubeconfig context
+
+The kubeconfig is resolved in the following priority order:
+  1. From the --kubeconfig flag
+  2. From the KUBECONFIG environment variable
+  3. From the ksail.yaml config file (if present)
+  4. Defaults to ~/.kube/config
 
 Usage:
   ksail cluster connect [flags]
@@ -30,6 +42,7 @@ Flags:
   -c, --context string      Kubernetes context of cluster
       --editor string       editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
   -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
+  -n, --name string         Name of the cluster to connect to (resolved like the other cluster commands; overrides the kubeconfig context derived from ksail.yaml)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

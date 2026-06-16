@@ -23,11 +23,33 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// RunState is the coarse running/stopped state of a discovered cluster's infrastructure, distinct
+// from its Kubernetes lifecycle phase. Docker-based clusters can be stopped (their containers exist
+// but are not running) yet still appear in discovery, so this lets the local web-UI backend render a
+// Docker-stopped cluster as not-Ready instead of falsely green. It is best-effort: providers that do
+// not report it (cloud providers today) leave it RunStateUnknown.
+type RunState string
+
+const (
+	// RunStateUnknown means run-state was not determined (cloud providers, or a status probe that
+	// failed). Callers treat it as "no run-state signal" rather than stopped.
+	RunStateUnknown RunState = ""
+	// RunStateRunning means every node/container of the cluster is running.
+	RunStateRunning RunState = "running"
+	// RunStateStopped means the cluster's nodes/containers exist but none (or not all) are running —
+	// the cluster is present but not serving. The local backend surfaces this as a not-Ready condition.
+	RunStateStopped RunState = "stopped"
+)
+
 // Cluster is a single cluster discovered from a provider.
 type Cluster struct {
 	Name         string
 	Distribution v1alpha1.Distribution
 	Provider     v1alpha1.Provider
+	// RunState is the cluster's coarse running/stopped state when the provider can report it
+	// (Docker today). RunStateUnknown for providers that do not — callers must not treat unknown as
+	// stopped.
+	RunState RunState
 }
 
 // ProviderError records a non-fatal failure while listing one provider. Discovery continues for the
@@ -83,6 +105,18 @@ type Discoverer struct {
 	// DockerPing probes the Docker daemon for availability reporting. Nil means a real ping via a
 	// docker client built from the environment. Primarily for tests.
 	DockerPing func(ctx context.Context) error
+
+	// DockerStatus reports a Docker-based cluster's run-state (running/stopped) by distribution and
+	// name, so discovery can surface a stopped cluster as not-running rather than falsely Ready. Nil
+	// means a real query via a docker provider built from the environment; a probe that errors yields
+	// RunStateUnknown (never a discovery failure). Primarily for tests.
+	DockerStatus func(ctx context.Context, distribution v1alpha1.Distribution, name string) RunState
+
+	// ProbeRunState gates the per-cluster Docker run-state probe in listDocker. Callers that render
+	// run-state (the web UI) set it true; callers that only enumerate names (the `cluster list` CLI,
+	// which does not display run-state) leave it false to avoid N wasted Docker round-trips per
+	// invocation. A configured DockerStatus seam also enables probing so tests need not set this.
+	ProbeRunState bool
 }
 
 // DefaultProviders is the provider set `ksail cluster list` queries when no --provider filter is
@@ -232,10 +266,20 @@ func (d *Discoverer) listDocker(ctx context.Context) ([]Cluster, error) {
 			}
 
 			seen[name] = struct{}{}
+
+			// Only probe run-state when a caller actually renders it (web UI). The
+			// `cluster list` CLI does not display run-state, so it skips the per-cluster
+			// Docker round-trip and leaves RunStateUnknown.
+			runState := RunStateUnknown
+			if d.ProbeRunState || d.DockerStatus != nil {
+				runState = d.dockerRunState(ctx, distribution, name)
+			}
+
 			clusters = append(clusters, Cluster{
 				Name:         name,
 				Distribution: distribution,
 				Provider:     v1alpha1.ProviderDocker,
+				RunState:     runState,
 			})
 		}
 	}

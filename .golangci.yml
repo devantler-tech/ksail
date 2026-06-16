@@ -105,6 +105,10 @@ linters:
           list-mode: strict
           allow:
             - $gostd
+            # wails is the native desktop module's UI runtime (desktop/ is a separate Go module). The
+            # CLI binary never imports it; allowing it here lets the desktop module lint under this
+            # shared config without per-import nolint:depguard directives.
+            - github.com/wailsapp/wails
             - github.com/apricote
             - github.com/atotto
             - github.com/devantler-tech

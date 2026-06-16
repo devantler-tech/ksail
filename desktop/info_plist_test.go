@@ -13,14 +13,16 @@ import (
 func runMakeInfoPlist(t *testing.T, extraArgs ...string) string {
 	t.Helper()
 
-	if _, err := exec.LookPath("bash"); err != nil {
+	_, lookErr := exec.LookPath("bash")
+	if lookErr != nil {
 		t.Skip("bash not available; skipping Info.plist generation test")
 	}
 
 	out := filepath.Join(t.TempDir(), "Info.plist")
 	args := append([]string{"scripts/make-info-plist.sh", "1.2.3", out}, extraArgs...)
 
-	cmd := exec.Command("bash", args...)
+	//nolint:gosec // G204: args are test-owned constants (the checked-in script path + fixed version).
+	cmd := exec.CommandContext(t.Context(), "bash", args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

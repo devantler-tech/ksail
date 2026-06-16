@@ -1027,7 +1027,7 @@ func checkWorkloadTagDrift(
 	diff *clusterupdate.UpdateResult,
 ) {
 	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+	if gitOpsEngine.IsNone() {
 		return
 	}
 
