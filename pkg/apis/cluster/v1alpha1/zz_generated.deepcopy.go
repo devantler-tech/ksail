@@ -711,6 +711,11 @@ func (in *OptionsTalos) DeepCopyInto(out *OptionsTalos) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.ExtraKernelArgs != nil {
+		in, out := &in.ExtraKernelArgs, &out.ExtraKernelArgs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.ExtraPortMappings != nil {
 		in, out := &in.ExtraPortMappings, &out.ExtraPortMappings
 		*out = make([]PortMapping, len(*in))

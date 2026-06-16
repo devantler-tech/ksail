@@ -390,6 +390,18 @@ export interface KSailClusterConfiguration {
          */
         extensions?: string[];
         /**
+         * ExtraKernelArgs lists extra kernel command-line arguments to bake into the node image
+         * via the Talos Image Factory schematic (the schematic's customization.extraKernelArgs).
+         * KSail folds these into the same schematic it computes from Extensions, so they are applied
+         * consistently to the static install image, the Hetzner autoscaler snapshot, and the
+         * rolling-upgrade installer. This is the non-deprecated replacement for the Talos
+         * machine.install.extraKernelArgs config field (deprecated upstream in favour of Image
+         * Factory/imager), and it avoids that field's conflict with install.grubUseUKICmdline on
+         * Talos >= 1.13.4. Example: ["security=apparmor"].
+         * When SchematicID is set, it takes precedence and these are ignored.
+         */
+        extraKernelArgs?: string[];
+        /**
          * ExtraPortMappings defines additional port mappings from Docker containers to the host.
          * Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
          * are not accessible from the host because Docker runs in a Linux VM.

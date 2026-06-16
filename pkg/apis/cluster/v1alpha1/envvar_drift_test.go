@@ -138,6 +138,7 @@ func skippedClusterWorkloadConfigFields() []string {
 		"Cluster.SOPS.Extract.File",
 		"Cluster.SOPS.Extract.PublicKeys[]",
 		"Cluster.Talos.Extensions[]",
+		"Cluster.Talos.ExtraKernelArgs[]",
 		"Cluster.Talos.ExtraPortMappings[].Protocol",
 		"Workload.Flux.Verify.MatchOIDCIdentity[].Issuer",
 		"Workload.Flux.Verify.MatchOIDCIdentity[].Subject",

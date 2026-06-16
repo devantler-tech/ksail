@@ -54,7 +54,10 @@ type Configs struct {
 	// When non-empty, machine.install.image is patched to use a factory installer
 	// image and a schematic ID is computed.
 	extensions []string
-	// schematicID is the computed schematic ID from extensions.
+	// extraKernelArgs are extra kernel command-line arguments folded into the same
+	// Image Factory schematic as extensions (customization.extraKernelArgs).
+	extraKernelArgs []string
+	// schematicID is the computed schematic ID from extensions and extraKernelArgs.
 	schematicID string
 }
 
@@ -398,7 +401,7 @@ func (c *Configs) Patches() []Patch {
 }
 
 // SchematicID returns the computed Talos Image Factory schematic ID.
-// Returns an empty string if no extensions are configured.
+// Returns an empty string if no extensions or extra kernel args are configured.
 func (c *Configs) SchematicID() string {
 	return c.schematicID
 }
@@ -411,6 +414,18 @@ func (c *Configs) Extensions() []string {
 
 	result := make([]string, len(c.extensions))
 	copy(result, c.extensions)
+
+	return result
+}
+
+// ExtraKernelArgs returns a copy of the configured extra kernel args list.
+func (c *Configs) ExtraKernelArgs() []string {
+	if c.extraKernelArgs == nil {
+		return nil
+	}
+
+	result := make([]string, len(c.extraKernelArgs))
+	copy(result, c.extraKernelArgs)
 
 	return result
 }
@@ -518,10 +533,12 @@ func newConfigs(
 		patches,
 		versionContract,
 		nil,
+		nil,
 	)
 }
 
-// newConfigsWithExtensions creates Configs from patches and optional extensions.
+// newConfigsWithExtensions creates Configs from patches and optional extensions
+// and extra kernel args (both fold into the computed Image Factory schematic).
 func newConfigsWithExtensions(
 	clusterName string,
 	kubernetesVersion string,
@@ -529,6 +546,7 @@ func newConfigsWithExtensions(
 	patches []Patch,
 	versionContract *talosconfig.VersionContract,
 	extensions []string,
+	extraKernelArgs []string,
 ) (*Configs, error) {
 	return newConfigsWithEndpointAndSecrets(
 		clusterName,
@@ -539,6 +557,7 @@ func newConfigsWithExtensions(
 		nil,
 		versionContract,
 		extensions,
+		extraKernelArgs,
 	)
 }
 
@@ -639,12 +658,58 @@ func newConfigsWithEndpointAndSecrets(
 	existingSecrets *secrets.Bundle,
 	versionContract *talosconfig.VersionContract,
 	extensions []string,
+	extraKernelArgs []string,
 ) (*Configs, error) {
 	// Default nil versionContract so the stored and generated values always match.
 	if versionContract == nil {
 		versionContract = talosconfig.TalosVersion1_12
 	}
 
+	configBundle, err := buildConfigBundle(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		endpointIP,
+		patches,
+		existingSecrets,
+		versionContract,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	schematicID, err := applySchematic(extensions, extraKernelArgs, configBundle)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Configs{
+		Name:              clusterName,
+		bundle:            configBundle,
+		kubernetesVersion: kubernetesVersion,
+		networkCIDR:       networkCIDR,
+		endpoint:          endpointIP,
+		patches:           patches,
+		versionContract:   versionContract,
+		extensions:        extensions,
+		extraKernelArgs:   extraKernelArgs,
+		schematicID:       schematicID,
+	}, nil
+}
+
+// buildConfigBundle assembles the Talos config bundle from patches, endpoint, and
+// (optionally) an existing secrets bundle. It categorizes patches by scope, resolves
+// the control-plane IP, builds the generate/bundle options, and creates the bundle —
+// the shared bundle-construction half of newConfigsWithEndpointAndSecrets.
+func buildConfigBundle(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	endpointIP string,
+	patches []Patch,
+	existingSecrets *secrets.Bundle,
+	versionContract *talosconfig.VersionContract,
+) (*bundle.Bundle, error) {
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
 	if err != nil {
 		return nil, err
@@ -675,22 +740,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
 	}
 
-	schematicID, err := applySchematic(extensions, configBundle)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Configs{
-		Name:              clusterName,
-		bundle:            configBundle,
-		kubernetesVersion: kubernetesVersion,
-		networkCIDR:       networkCIDR,
-		endpoint:          endpointIP,
-		patches:           patches,
-		versionContract:   versionContract,
-		extensions:        extensions,
-		schematicID:       schematicID,
-	}, nil
+	return configBundle, nil
 }
 
 // MirrorRegistry represents a registry mirror configuration.
@@ -758,6 +808,7 @@ type regenParams struct {
 	secrets           *secrets.Bundle
 	versionContract   *talosconfig.VersionContract
 	extensions        []string
+	extraKernelArgs   []string
 }
 
 // snapshot captures the current Configs state as regenParams with the
@@ -784,6 +835,7 @@ func (c *Configs) snapshot() regenParams {
 		secrets:           nil,
 		versionContract:   c.versionContract,
 		extensions:        c.extensions,
+		extraKernelArgs:   c.extraKernelArgs,
 	}
 }
 
@@ -809,6 +861,7 @@ func (c *Configs) regenerate(mutate func(*regenParams) error) (*Configs, error) 
 		params.secrets,
 		params.versionContract,
 		params.extensions,
+		params.extraKernelArgs,
 	)
 }
 
@@ -898,15 +951,21 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	}
 }
 
-// applySchematic computes a schematic ID from extensions and patches machine.install.image.
-// Returns an empty string if no extensions are configured (after normalization).
-func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
+// applySchematic computes a schematic ID from extensions and extra kernel args and
+// patches machine.install.image. Returns an empty string if neither extensions nor
+// extra kernel args are configured (after normalization).
+func applySchematic(
+	extensions, extraKernelArgs []string,
+	configBundle *bundle.Bundle,
+) (string, error) {
 	normalized := NormalizeExtensions(extensions)
-	if len(normalized) == 0 {
+	kernelArgs := NormalizeKernelArgs(extraKernelArgs)
+
+	if len(normalized) == 0 && len(kernelArgs) == 0 {
 		return "", nil
 	}
 
-	schematic := NewSchematic(extensions)
+	schematic := NewSchematic(extensions, extraKernelArgs)
 
 	schematicID, err := schematic.ID()
 	if err != nil {

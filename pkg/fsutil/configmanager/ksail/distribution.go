@@ -140,16 +140,8 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// and remove the stale patch file so it is no longer applied at create time.
 	m.removeWorkerRoleLabelPatch(patchesDir)
 
-	// Wire extensions from ksail.yaml so that machine.install.image is patched
-	// to use a Talos Image Factory installer containing the requested extensions.
-	// Skip when an explicit SchematicID is set — it takes precedence over extensions.
-	// Normalize first so whitespace-only or empty entries don't trigger schematic computation.
-	if strings.TrimSpace(m.Config.Spec.Cluster.Talos.SchematicID) == "" {
-		normalized := talosconfigmanager.NormalizeExtensions(m.Config.Spec.Cluster.Talos.Extensions)
-		if len(normalized) > 0 {
-			talosManager.WithExtensions(normalized)
-		}
-	}
+	// Wire Image Factory schematic inputs (extensions + extra kernel args) from ksail.yaml.
+	m.addSchematicInputs(talosManager)
 
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
@@ -157,6 +149,30 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	}
 
 	return config, nil
+}
+
+// addSchematicInputs wires the Talos Image Factory schematic inputs from ksail.yaml
+// (spec.cluster.talos.extensions and .extraKernelArgs) into talosManager so that
+// machine.install.image — and, for Hetzner, the autoscaler snapshot — use a factory
+// installer carrying them. It is skipped when an explicit SchematicID is set, which
+// takes precedence over both. Inputs are normalized first so whitespace-only or empty
+// entries don't trigger schematic computation.
+func (m *ConfigManager) addSchematicInputs(talosManager *talosconfigmanager.ConfigManager) {
+	if strings.TrimSpace(m.Config.Spec.Cluster.Talos.SchematicID) != "" {
+		return
+	}
+
+	normalized := talosconfigmanager.NormalizeExtensions(m.Config.Spec.Cluster.Talos.Extensions)
+	if len(normalized) > 0 {
+		talosManager.WithExtensions(normalized)
+	}
+
+	kernelArgs := talosconfigmanager.NormalizeKernelArgs(
+		m.Config.Spec.Cluster.Talos.ExtraKernelArgs,
+	)
+	if len(kernelArgs) > 0 {
+		talosManager.WithKernelArgs(kernelArgs)
+	}
 }
 
 // addCalicoFeatureGatePatch enables the MutatingAdmissionPolicy feature gate /

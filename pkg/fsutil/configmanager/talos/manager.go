@@ -58,6 +58,9 @@ type ConfigManager struct {
 	// extensions is the list of Talos Image Factory official extension names.
 	// When non-empty, machine.install.image is patched to use a factory installer.
 	extensions []string
+	// extraKernelArgs are extra kernel command-line arguments folded into the same
+	// Image Factory schematic as extensions (customization.extraKernelArgs).
+	extraKernelArgs []string
 }
 
 // NewConfigManager creates a new configuration manager for Talos patches.
@@ -127,6 +130,19 @@ func (m *ConfigManager) WithExtensions(extensions []string) *ConfigManager {
 	return m
 }
 
+// WithKernelArgs sets extra kernel command-line arguments to fold into the Talos
+// Image Factory schematic (customization.extraKernelArgs). These are baked into the
+// installer image rather than set via the deprecated machine.install.extraKernelArgs
+// config field, so they apply consistently across the static install image, the
+// Hetzner autoscaler snapshot, and the rolling-upgrade installer.
+func (m *ConfigManager) WithKernelArgs(extraKernelArgs []string) *ConfigManager {
+	m.extraKernelArgs = extraKernelArgs
+	m.config = nil
+	m.configLoaded = false
+
+	return m
+}
+
 // Load loads Talos patches from directories and creates the config bundle.
 // Returns the loaded Configs, either freshly loaded or previously cached.
 // Timer, Silent, IgnoreConfigFile, and SkipValidation options are not currently used.
@@ -153,6 +169,7 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 		patches,
 		m.versionContract,
 		m.extensions,
+		m.extraKernelArgs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Talos configs: %w", err)
