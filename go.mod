@@ -79,7 +79,7 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
-	github.com/siderolabs/omni/client v1.8.1
+	github.com/siderolabs/omni/client v1.8.2
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.37.0
