@@ -80,15 +80,10 @@ spec:
       # endpointEnvVar: "MY_CUSTOM_OMNI_ENDPOINT"
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `omni.endpoint` | string | — | Omni API endpoint URL. Overridden by the env var in `endpointEnvVar`. |
-| `omni.endpointEnvVar` | string | `OMNI_ENDPOINT` | Environment variable containing the Omni API endpoint URL. Takes precedence over `endpoint`. |
-| `omni.serviceAccountKeyEnvVar` | string | `OMNI_SERVICE_ACCOUNT_KEY` | Environment variable containing the service account key |
-| `omni.talosVersion` | string | Omni latest | Talos Linux version to deploy (e.g., `v1.9.5` or `1.9.5`). If omitted, KSail resolves the latest available version from Omni. The `v` prefix is added automatically if omitted. |
-| `omni.kubernetesVersion` | string | Auto-resolved | Kubernetes version to deploy (e.g., `v1.32.3` or `1.32.3`). If omitted, KSail resolves a compatible version from Omni or Talos config defaults. The `v` prefix is added automatically if omitted. |
-| `omni.machineClass` | string | — | Omni machine class name for dynamic node allocation. The class must exist in your Omni account. Mutually exclusive with `machines`. |
-| `omni.machines` | list of strings | — | List of Omni machine UUIDs for static allocation. The first N are assigned as control planes. Mutually exclusive with `machineClass`. |
+The full `spec.provider.omni` field reference — every option with its type, default, and
+description — is generated from the API types: see
+[spec.provider.omni (OptionsOmni)](/configuration/declarative-configuration/#specprovideromni-optionsomni)
+in the Declarative Configuration reference.
 
 When neither `machineClass` nor `machines` is set, KSail automatically queries Omni for available (unallocated) machines and assigns the required number at cluster creation time. Setting both fields at once returns an error.
 

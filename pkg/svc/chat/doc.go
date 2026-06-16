@@ -17,4 +17,10 @@
 // Security: IsPathWithinDirectory canonicalizes paths (absolute + symlinks
 // resolved) to confine file access to the current working directory and
 // prevent directory traversal attacks.
+//
+// NOTE: gen_docs.go reads the generated CLI flags docs, so run
+// `go generate ./docs/...` BEFORE `go generate ./pkg/svc/chat/...` when
+// regenerating all documentation (or just run `make generate`).
 package chat
+
+//go:generate go run gen_docs.go

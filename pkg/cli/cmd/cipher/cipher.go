@@ -553,6 +553,10 @@ func NewRotateCmd() *cobra.Command {
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().
 		BoolVarP(&force, "force", "f", false, "skip confirmation prompt and rotate immediately")
+	_ = cmd.Flags().SetAnnotation(
+		"force", annotations.AnnotationConfirmFlag,
+		[]string{annotations.AnnotationValueTrue},
+	)
 	cmd.Flags().
 		BoolVar(&dryRun, "dry-run", false, "show which files would be rotated without making changes")
 

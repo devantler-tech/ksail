@@ -378,10 +378,15 @@ auto-fix; then `go build -o /tmp/ksail-maint . && go test ./... && golangci-lint
 Workflows and other files → `mega-linter-runner -f go` (MegaLinter runs `actionlint` on
 `.github/workflows/`). Docs → `cd docs && ([ -d node_modules ] || npm ci) && npm run build`.
 
-**Generated — never hand-edit; run the generator:** `docs/src/content/docs/cli-flags/`,
-`docs/src/content/docs/configuration/declarative-configuration.mdx`,
-`schemas/ksail-config.schema.json` → `go generate ./docs/...` / `go generate ./schemas/...`. See
-also `.github/instructions/`. **Shared machine / autonomous worktrees:** only create/inspect/delete
+**Generated — never hand-edit; run the generator:** `make generate` regenerates everything in
+dependency order and is THE regeneration command. The artifacts, for reference:
+`schemas/ksail-config.schema.json` (`go generate ./schemas/...`), CRD + deepcopy
+(`go generate ./pkg/apis/...`), `docs/src/content/docs/cli-flags/` +
+`docs/src/content/docs/configuration/declarative-configuration.mdx` (`go generate ./docs/...`),
+`pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
+(`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
+after schemas). See also `.github/instructions/`.
+**Shared machine / autonomous worktrees:** only create/inspect/delete
 clusters you created; build throwaway binaries to `/tmp` (not `./ksail`) to avoid polluting the
 worktree. Maintainers building locally should still use the standard `make build` (`go build -o
 ksail .`).

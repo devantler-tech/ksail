@@ -220,7 +220,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "metrics-server can be installed via Helm; disabling requires cluster recreation",
 			getVal: func(s *v1alpha1.ClusterSpec) string {
-				return string(s.MetricsServer.EffectiveValue(e.distribution))
+				return string(s.MetricsServer.EffectiveValue(e.distribution, e.provider))
 			},
 		},
 		{

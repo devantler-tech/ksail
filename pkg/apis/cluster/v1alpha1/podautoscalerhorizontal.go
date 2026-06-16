@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // PodAutoscalerHorizontal defines whether Horizontal Pod Autoscaling (HPA) is enabled.
 type PodAutoscalerHorizontal string
 
@@ -15,23 +10,17 @@ const (
 	PodAutoscalerHorizontalDisabled PodAutoscalerHorizontal = "Disabled"
 )
 
-// Set for PodAutoscalerHorizontal (pflag.Value interface).
-func (p *PodAutoscalerHorizontal) Set(value string) error {
-	for _, v := range ValidPodAutoscalerHorizontals() {
-		if strings.EqualFold(value, string(v)) {
-			*p = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidPodAutoscalerHorizontal,
-		value,
+// ValidPodAutoscalerHorizontals returns supported PodAutoscalerHorizontal values.
+func ValidPodAutoscalerHorizontals() []PodAutoscalerHorizontal {
+	return []PodAutoscalerHorizontal{
 		PodAutoscalerHorizontalEnabled,
 		PodAutoscalerHorizontalDisabled,
-	)
+	}
+}
+
+// Set for PodAutoscalerHorizontal (pflag.Value interface).
+func (p *PodAutoscalerHorizontal) Set(value string) error {
+	return setEnum(p, value, ValidPodAutoscalerHorizontals(), ErrInvalidPodAutoscalerHorizontal)
 }
 
 // String returns the string representation of the PodAutoscalerHorizontal.
@@ -51,8 +40,5 @@ func (p *PodAutoscalerHorizontal) Default() any {
 
 // ValidValues returns all valid PodAutoscalerHorizontal values as strings.
 func (p *PodAutoscalerHorizontal) ValidValues() []string {
-	return []string{
-		string(PodAutoscalerHorizontalEnabled),
-		string(PodAutoscalerHorizontalDisabled),
-	}
+	return validValueStrings(ValidPodAutoscalerHorizontals())
 }

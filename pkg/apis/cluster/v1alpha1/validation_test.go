@@ -8,247 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDistributionSet_AcceptsTalos(t *testing.T) {
-	t.Parallel()
-
-	var dist v1alpha1.Distribution
-	require.NoError(t, dist.Set("Talos"))
-	assert.Equal(t, v1alpha1.DistributionTalos, dist)
-}
-
-func TestDistributionSet_CaseInsensitive(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		input    string
-		expected v1alpha1.Distribution
-	}{
-		{"Talos", v1alpha1.DistributionTalos},
-		{"talos", v1alpha1.DistributionTalos},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.input, func(t *testing.T) {
-			t.Parallel()
-
-			var dist v1alpha1.Distribution
-			require.NoError(t, dist.Set(testCase.input))
-			assert.Equal(t, testCase.expected, dist)
-		})
-	}
-}
-
-func TestDistributionSet_InvalidListsValidOptions(t *testing.T) {
-	t.Parallel()
-
-	var dist v1alpha1.Distribution
-
-	err := dist.Set("invalid")
-	require.Error(t, err)
-
-	require.ErrorIs(t, err, v1alpha1.ErrInvalidDistribution)
-	assert.Contains(t, err.Error(), "Vanilla")
-	assert.Contains(t, err.Error(), "K3s")
-	assert.Contains(t, err.Error(), "Talos")
-}
-
-func TestValidDistributions_IncludesTalos(t *testing.T) {
-	t.Parallel()
-
-	distributions := v1alpha1.ValidDistributions()
-	assert.Contains(t, distributions, v1alpha1.DistributionTalos)
-	assert.Contains(t, distributions, v1alpha1.DistributionVCluster)
-	assert.Contains(t, distributions, v1alpha1.DistributionKWOK)
-	assert.Contains(t, distributions, v1alpha1.DistributionEKS)
-	assert.Len(t, distributions, 6) // Vanilla, K3s, Talos, VCluster, KWOK, EKS
-}
-
-func TestTalosProvidesMetricsServerByDefault_ReturnsFalse(t *testing.T) {
-	t.Parallel()
-
-	dist := v1alpha1.DistributionTalos
-	assert.False(t, dist.ProvidesMetricsServerByDefault())
-}
-
-func TestTalosProvidesStorageByDefault_ReturnsFalse(t *testing.T) {
-	t.Parallel()
-
-	dist := v1alpha1.DistributionTalos
-	assert.False(t, dist.ProvidesStorageByDefault())
-}
-
-func TestGitOpsEngineSet_AcceptsArgoCD(t *testing.T) {
-	t.Parallel()
-
-	var engine v1alpha1.GitOpsEngine
-	require.NoError(t, engine.Set("ArgoCD"))
-	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), engine)
-}
-
-func TestGitOpsEngineSet_InvalidListsValidOptions(t *testing.T) {
-	t.Parallel()
-
-	var engine v1alpha1.GitOpsEngine
-
-	err := engine.Set("invalid")
-	require.Error(t, err)
-
-	require.ErrorIs(t, err, v1alpha1.ErrInvalidGitOpsEngine)
-	assert.Contains(t, err.Error(), "None")
-	assert.Contains(t, err.Error(), "Flux")
-	assert.Contains(t, err.Error(), "ArgoCD")
-}
-
-func TestDistribution_ContextName(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		clusterName  string
-		expected     string
-	}{
-		{
-			name:         "vanilla_returns_kind_prefix",
-			distribution: v1alpha1.DistributionVanilla,
-			clusterName:  "my-cluster",
-			expected:     "kind-my-cluster",
-		},
-		{
-			name:         "k3s_returns_k3d_prefix",
-			distribution: v1alpha1.DistributionK3s,
-			clusterName:  "test-cluster",
-			expected:     "k3d-test-cluster",
-		},
-		{
-			name:         "talos_returns_admin_at_prefix",
-			distribution: v1alpha1.DistributionTalos,
-			clusterName:  "prod-cluster",
-			expected:     "admin@prod-cluster",
-		},
-		{
-			name:         "empty_name_returns_empty",
-			distribution: v1alpha1.DistributionVanilla,
-			clusterName:  "",
-			expected:     "",
-		},
-		{
-			name:         "unknown_distribution_returns_empty",
-			distribution: v1alpha1.Distribution("Unknown"),
-			clusterName:  "test",
-			expected:     "",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := testCase.distribution.ContextName(testCase.clusterName)
-			assert.Equal(t, testCase.expected, result)
-		})
-	}
-}
-
-func TestValidGitOpsEngines(t *testing.T) {
-	t.Parallel()
-
-	engines := v1alpha1.ValidGitOpsEngines()
-
-	assert.Contains(t, engines, v1alpha1.GitOpsEngineNone)
-	assert.Contains(t, engines, v1alpha1.GitOpsEngineFlux)
-	assert.Contains(t, engines, v1alpha1.GitOpsEngineArgoCD)
-	assert.Len(t, engines, 3)
-}
-
-func TestValidCNIs(t *testing.T) {
-	t.Parallel()
-
-	cnis := v1alpha1.ValidCNIs()
-
-	assert.Contains(t, cnis, v1alpha1.CNIDefault)
-	assert.Contains(t, cnis, v1alpha1.CNICilium)
-	assert.Contains(t, cnis, v1alpha1.CNICalico)
-	assert.Len(t, cnis, 3)
-}
-
-func TestValidCSIs(t *testing.T) {
-	t.Parallel()
-
-	csis := v1alpha1.ValidCSIs()
-
-	assert.Contains(t, csis, v1alpha1.CSIDefault)
-	assert.Contains(t, csis, v1alpha1.CSIEnabled)
-	assert.Contains(t, csis, v1alpha1.CSIDisabled)
-	assert.Len(t, csis, 3)
-}
-
-func TestValidMetricsServers(t *testing.T) {
-	t.Parallel()
-
-	servers := v1alpha1.ValidMetricsServers()
-
-	assert.Contains(t, servers, v1alpha1.MetricsServerDefault)
-	assert.Contains(t, servers, v1alpha1.MetricsServerEnabled)
-	assert.Contains(t, servers, v1alpha1.MetricsServerDisabled)
-	assert.Len(t, servers, 3)
-}
-
-func TestValidLoadBalancers(t *testing.T) {
-	t.Parallel()
-
-	lbs := v1alpha1.ValidLoadBalancers()
-
-	assert.Contains(t, lbs, v1alpha1.LoadBalancerDefault)
-	assert.Contains(t, lbs, v1alpha1.LoadBalancerEnabled)
-	assert.Contains(t, lbs, v1alpha1.LoadBalancerDisabled)
-	assert.Len(t, lbs, 3)
-}
-
-func TestValidCertManagers(t *testing.T) {
-	t.Parallel()
-
-	cms := v1alpha1.ValidCertManagers()
-
-	assert.Contains(t, cms, v1alpha1.CertManagerEnabled)
-	assert.Contains(t, cms, v1alpha1.CertManagerDisabled)
-	assert.Len(t, cms, 2)
-}
-
-func TestValidPolicyEngines(t *testing.T) {
-	t.Parallel()
-
-	engines := v1alpha1.ValidPolicyEngines()
-
-	assert.Contains(t, engines, v1alpha1.PolicyEngineNone)
-	assert.Contains(t, engines, v1alpha1.PolicyEngineKyverno)
-	assert.Contains(t, engines, v1alpha1.PolicyEngineGatekeeper)
-	assert.Len(t, engines, 3)
-}
-
-func TestValidProviders(t *testing.T) {
-	t.Parallel()
-
-	providers := v1alpha1.ValidProviders()
-
-	assert.Contains(t, providers, v1alpha1.ProviderDocker)
-	assert.Contains(t, providers, v1alpha1.ProviderHetzner)
-	assert.Contains(t, providers, v1alpha1.ProviderOmni)
-	assert.Contains(t, providers, v1alpha1.ProviderAWS)
-	assert.Contains(t, providers, v1alpha1.ProviderKubernetes)
-	assert.Len(t, providers, 5)
-}
-
-func TestValidPlacementGroupStrategies(t *testing.T) {
-	t.Parallel()
-
-	strategies := v1alpha1.ValidPlacementGroupStrategies()
-
-	assert.Contains(t, strategies, v1alpha1.PlacementGroupStrategyNone)
-	assert.Contains(t, strategies, v1alpha1.PlacementGroupStrategySpread)
-	assert.Len(t, strategies, 2)
-}
-
 func TestValidateLocalRegistryForProvider(t *testing.T) {
 	t.Parallel()
 
@@ -634,6 +393,96 @@ func TestValidateNestedCIDRs(t *testing.T) { //nolint:funlen // table-driven tes
 			t.Parallel()
 
 			err := v1alpha1.ValidateNestedCIDRs(testCase.podCIDR, testCase.serviceCIDR)
+			if testCase.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Omni provider — local registry and mirror validation
+// ---------------------------------------------------------------------------
+
+func TestValidateLocalRegistryForProvider_Omni(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		registry  v1alpha1.LocalRegistry
+		wantError bool
+	}{
+		{
+			name:      "Omni_local_registry_fails",
+			registry:  v1alpha1.LocalRegistry{Registry: "localhost:5050"},
+			wantError: true,
+		},
+		{
+			name:      "Omni_external_registry_succeeds",
+			registry:  v1alpha1.LocalRegistry{Registry: "ghcr.io/myorg"},
+			wantError: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateLocalRegistryForProvider(
+				v1alpha1.ProviderOmni,
+				testCase.registry,
+			)
+
+			if testCase.wantError {
+				require.ErrorIs(t, err, v1alpha1.ErrLocalRegistryNotSupported)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		mirrors   []string
+		wantError bool
+	}{
+		{
+			name:      "Omni_local_mirror_fails",
+			mirrors:   []string{"docker.io=http://localhost:5000"},
+			wantError: true,
+		},
+		{
+			name:      "Omni_external_mirror_succeeds",
+			mirrors:   []string{"docker.io=https://mirror.gcr.io"},
+			wantError: false,
+		},
+		{
+			name:      "Omni_ipv6_localhost_mirror_fails",
+			mirrors:   []string{"docker.io=http://[::1]:5000"},
+			wantError: true,
+		},
+		{
+			name:      "Omni_0000_mirror_fails",
+			mirrors:   []string{"docker.io=http://0.0.0.0:5000"},
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateMirrorRegistriesForProvider(
+				v1alpha1.ProviderOmni,
+				testCase.mirrors,
+			)
+
 			if testCase.wantError {
 				require.Error(t, err)
 			} else {

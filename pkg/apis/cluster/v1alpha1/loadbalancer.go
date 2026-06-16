@@ -1,9 +1,4 @@
-package v1alpha1 //nolint:dupl // enum types follow a consistent pattern by design
-
-import (
-	"fmt"
-	"strings"
-)
+package v1alpha1
 
 // LoadBalancer defines the LoadBalancer options for a KSail cluster.
 type LoadBalancer string
@@ -17,24 +12,18 @@ const (
 	LoadBalancerDisabled LoadBalancer = "Disabled"
 )
 
-// Set for LoadBalancer (pflag.Value interface).
-func (l *LoadBalancer) Set(value string) error {
-	for _, lb := range ValidLoadBalancers() {
-		if strings.EqualFold(value, string(lb)) {
-			*l = lb
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidLoadBalancer,
-		value,
+// ValidLoadBalancers returns supported load balancer values.
+func ValidLoadBalancers() []LoadBalancer {
+	return []LoadBalancer{
 		LoadBalancerDefault,
 		LoadBalancerEnabled,
 		LoadBalancerDisabled,
-	)
+	}
+}
+
+// Set for LoadBalancer (pflag.Value interface).
+func (l *LoadBalancer) Set(value string) error {
+	return setEnum(l, value, ValidLoadBalancers(), ErrInvalidLoadBalancer)
 }
 
 // String returns the string representation of the LoadBalancer.
@@ -54,27 +43,5 @@ func (l *LoadBalancer) Default() any {
 
 // ValidValues returns all valid LoadBalancer values as strings.
 func (l *LoadBalancer) ValidValues() []string {
-	return []string{
-		string(LoadBalancerDefault),
-		string(LoadBalancerEnabled),
-		string(LoadBalancerDisabled),
-	}
-}
-
-// EffectiveValue resolves Default to its concrete meaning for the given
-// distribution × provider combination. Enabled and Disabled pass through
-// unchanged. For distributions that bundle a load balancer (e.g. K3s),
-// Default resolves to Enabled; otherwise it resolves to Disabled.
-func (l *LoadBalancer) EffectiveValue(
-	distribution Distribution, provider Provider,
-) LoadBalancer {
-	if *l != LoadBalancerDefault && *l != "" {
-		return *l
-	}
-
-	if distribution.ProvidesLoadBalancerByDefault(provider) {
-		return LoadBalancerEnabled
-	}
-
-	return LoadBalancerDisabled
+	return validValueStrings(ValidLoadBalancers())
 }

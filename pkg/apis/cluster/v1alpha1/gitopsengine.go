@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // GitOpsEngine defines the GitOps Engine options for a KSail cluster.
 type GitOpsEngine string
 
@@ -18,24 +13,18 @@ const (
 	GitOpsEngineArgoCD GitOpsEngine = "ArgoCD"
 )
 
-// Set for GitOpsEngine (pflag.Value interface).
-func (g *GitOpsEngine) Set(value string) error {
-	for _, tool := range ValidGitOpsEngines() {
-		if strings.EqualFold(value, string(tool)) {
-			*g = tool
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidGitOpsEngine,
-		value,
+// ValidGitOpsEngines enumerates supported GitOps engine values.
+func ValidGitOpsEngines() []GitOpsEngine {
+	return []GitOpsEngine{
 		GitOpsEngineNone,
 		GitOpsEngineFlux,
 		GitOpsEngineArgoCD,
-	)
+	}
+}
+
+// Set for GitOpsEngine (pflag.Value interface).
+func (g *GitOpsEngine) Set(value string) error {
+	return setEnum(g, value, ValidGitOpsEngines(), ErrInvalidGitOpsEngine)
 }
 
 // String returns the string representation of the GitOpsEngine.
@@ -55,5 +44,5 @@ func (g *GitOpsEngine) Default() any {
 
 // ValidValues returns all valid GitOpsEngine values as strings.
 func (g *GitOpsEngine) ValidValues() []string {
-	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
+	return validValueStrings(ValidGitOpsEngines())
 }

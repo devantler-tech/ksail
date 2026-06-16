@@ -3,6 +3,7 @@ package toolgen
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 )
@@ -33,6 +34,13 @@ type ToolOptions struct {
 	ExcludeFlags []string
 	// IncludeHidden includes hidden commands in tool generation.
 	IncludeHidden bool
+	// ExecutablePath is the executable used to run tool commands.
+	// Production wiring (the MCP server and the chat assistant) sets it to
+	// DefaultExecutablePath() so tool calls invoke the running ksail binary
+	// regardless of PATH (MCP clients often launch servers with a minimal
+	// environment). When empty, the executor falls back to the tool's
+	// recorded root command name (PATH lookup).
+	ExecutablePath string
 	// CommandTimeout is the timeout for command execution.
 	CommandTimeout time.Duration
 	// WorkingDirectory is the directory to run commands in.
@@ -128,4 +136,19 @@ func DefaultOptions() ToolOptions {
 		IncludeHidden:  false,
 		CommandTimeout: defaultCommandTimeout,
 	}
+}
+
+// DefaultExecutablePath resolves the running binary's path for tool execution.
+// Returns "" when the path cannot be determined, in which case the executor
+// falls back to resolving the tool's root command name via PATH.
+// DefaultOptions deliberately leaves ToolOptions.ExecutablePath empty so
+// library/test consumers with synthetic command trees stay hermetic;
+// production entry points (MCP server, chat assistant) opt in explicitly.
+func DefaultExecutablePath() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+
+	return executable
 }

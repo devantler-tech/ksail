@@ -74,44 +74,22 @@ const (
 )
 
 // ExpectedDistributionConfigName returns the default config filename for a distribution.
+// Unknown distributions fall back to the Vanilla config filename.
 func ExpectedDistributionConfigName(distribution Distribution) string {
-	switch distribution {
-	case DistributionVanilla:
-		return DefaultVanillaDistributionConfig
-	case DistributionK3s:
-		return DefaultK3sDistributionConfig
-	case DistributionTalos:
-		return DefaultTalosDistributionConfig
-	case DistributionVCluster:
-		return DefaultVClusterDistributionConfig
-	case DistributionKWOK:
-		return DefaultKWOKDistributionConfig
-	case DistributionEKS:
-		return DefaultEKSDistributionConfig
-	default:
+	meta, found := distributionMetaFor(distribution)
+	if !found {
 		return DefaultVanillaDistributionConfig
 	}
+
+	return meta.configFile
 }
 
-// ExpectedContextName returns the default kube context name for a distribution.
+// ExpectedContextName returns the default kube context name for a distribution:
+// the distribution's context naming convention applied to its default cluster
+// name (e.g. "kind-kind", "k3d-k3d-default", "admin@talos-default"). For EKS the
+// IAM identity segment is only known after AWS credentials resolve at create
+// time, so scaffolding falls back to the region-less "eks-default.eksctl.io"
+// suffix to keep ksail.yaml deterministic. Returns "" for unknown distributions.
 func ExpectedContextName(distribution Distribution) string {
-	switch distribution {
-	case DistributionVanilla:
-		return "kind-kind"
-	case DistributionK3s:
-		return "k3d-k3d-default"
-	case DistributionTalos:
-		return "admin@talos-default"
-	case DistributionVCluster:
-		return "vcluster-docker_vcluster-default"
-	case DistributionKWOK:
-		return "kwok-kwok-default"
-	case DistributionEKS:
-		// eksctl generates kubeconfig contexts as <iam-identity>@<name>.<region>.eksctl.io;
-		// the identity segment is only known after AWS credentials resolve at create time.
-		// Scaffolding falls back to the region-less suffix so ksail.yaml remains deterministic.
-		return "eks-default.eksctl.io"
-	default:
-		return ""
-	}
+	return distribution.ContextName(distribution.DefaultClusterName())
 }

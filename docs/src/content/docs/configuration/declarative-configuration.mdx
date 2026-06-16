@@ -189,10 +189,10 @@ The `spec` field is a `Spec` object that defines editor, cluster, and workload c
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `editor` | string | – | Editor command for interactive workflows (e.g. code --wait) |
-| `cluster` | ClusterSpec | – |  |
-| `provider` | ProviderSpec | – |  |
-| `workload` | WorkloadSpec | – |  |
-| `chat` | ChatSpec | – |  |
+| `cluster` | ClusterSpec | – | Cluster configures the Kubernetes cluster KSail manages: distribution, provider, components, and connection settings. |
+| `provider` | ProviderSpec | – | Provider holds infrastructure-provider-specific options (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters). |
+| `workload` | WorkloadSpec | – | Workload configures workload management: the manifest source directory, OCI push and validation settings, and GitOps bootstrap options. |
+| `chat` | ChatSpec | – | Chat configures the KSail AI chat assistant. |
 
 ### spec.editor
 
@@ -202,20 +202,20 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `distributionConfig` | string | – |  |
-| `connection` | Connection | – |  |
-| `distribution` | enum | – |  |
-| `provider` | enum | – |  |
-| `cni` | enum | – |  |
-| `csi` | enum | – |  |
-| `cdi` | enum | – |  |
-| `metricsServer` | enum | – |  |
-| `loadBalancer` | enum | – |  |
-| `certManager` | enum | – |  |
-| `policyEngine` | enum | – |  |
-| `localRegistry` | LocalRegistry | – |  |
-| `gitOpsEngine` | enum | – |  |
-| `sops` | SOPS | – |  |
+| `distributionConfig` | string | – | DistributionConfig is the path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). When empty, KSail uses the distribution's default file name. |
+| `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. |
+| `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS). |
+| `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |
+| `cni` | enum | – | CNI selects the Container Network Interface plugin. Default keeps the distribution's built-in CNI; Cilium or Calico install that CNI instead. |
+| `csi` | enum | – | CSI controls Container Storage Interface support. Default keeps the distribution's behavior; Enabled installs a CSI driver (local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none. |
+| `cdi` | enum | – | CDI controls Container Device Interface support in the container runtime (Default, Enabled, or Disabled). |
+| `metricsServer` | enum | – | MetricsServer controls metrics-server installation. Default keeps the distribution's behavior; Enabled or Disabled override it. |
+| `loadBalancer` | enum | – | LoadBalancer controls load-balancer support. Default keeps the distribution and provider behavior; Enabled or Disabled override it. |
+| `certManager` | enum | – | CertManager controls whether cert-manager is installed (Enabled or Disabled). |
+| `policyEngine` | enum | – | PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper. |
+| `localRegistry` | LocalRegistry | – | LocalRegistry configures the host-local OCI registry (or an external registry for cloud providers) used by GitOps workflows. |
+| `gitOpsEngine` | enum | – | GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD. |
+| `sops` | SOPS | – | SOPS configures automatic creation of the SOPS Age secret used to decrypt encrypted manifests in the cluster. |
 | `nodeAutoscaling` | enum | – | Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler. |
 | `autoscaler` | AutoscalerConfig | – | Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling) |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
@@ -223,8 +223,8 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `workers` | int32 | – | Number of worker nodes to create for the cluster (provider/distribution-agnostic) |
 | `kubernetesVersion` | string | – | Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version. |
 | `oidc` | OIDCSpec | – | OIDC authentication configuration for the API server and kubeconfig |
-| `vanilla` | OptionsVanilla | – |  |
-| `talos` | OptionsTalos | – |  |
+| `vanilla` | OptionsVanilla | – | Vanilla holds options specific to the Vanilla (Kind) distribution. |
+| `talos` | OptionsTalos | – | Talos holds options specific to the Talos distribution. |
 
 #### distribution
 
@@ -372,20 +372,156 @@ The Kubernetes version is set at the top level (`spec.cluster.kubernetesVersion`
 
 - `kubernetesVersion` – Pin the Kubernetes version (e.g. `v1.32.0`). When unset, `cluster update` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned `talos.version`
 
-**Hetzner options (`spec.provider.hetzner`):**
+**Provider options (`spec.provider`):** infrastructure provider options (Hetzner, Omni, AWS, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
 
-- `controlPlaneServerType` – Server type for control-plane nodes (default: `cx23`)
-- `workerServerType` – Server type for worker nodes (default: `cx23`)
-- `location` – Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
-- `networkName` – Private network name (default: `<cluster>-network`)
-- `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
-- `sshKeyName` – SSH key name for server access (optional)
-- `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
-- `fallbackLocations` – Alternative locations to try when the primary is at capacity (default: `nbg1`, `hel1`)
+**Autoscaler options (`spec.cluster.autoscaler`):** pod and node autoscaling options are documented in the generated [spec.cluster.autoscaler (AutoscalerConfig)](#specclusterautoscaler-autoscalerconfig) sections below.
 
 **Vanilla options (`spec.cluster.vanilla`):**
 
 - `mirrorsDir` – Directory for containerd host mirror configuration
+
+### spec.cluster.autoscaler (AutoscalerConfig)
+
+AutoscalerConfig defines configuration for pod and node autoscaling.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `pod` | PodAutoscalerConfig | – | Pod configures pod-level autoscaling (horizontal and vertical). |
+| `node` | NodeAutoscalerConfig | – | Node configures node-level autoscaling via the Cluster Autoscaler. |
+
+### spec.cluster.autoscaler.pod (PodAutoscalerConfig)
+
+PodAutoscalerConfig defines configuration for pod-level autoscaling.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `horizontal` | enum | – | Horizontal controls Horizontal Pod Autoscaler (HPA) support. |
+| `vertical` | enum | – | Vertical controls Vertical Pod Autoscaler (VPA) support. |
+
+### spec.cluster.autoscaler.node (NodeAutoscalerConfig)
+
+NodeAutoscalerConfig defines configuration for node-level autoscaling. When Enabled, the Cluster Autoscaler manages worker node counts dynamically. KSail-specified node counts serve as a baseline; the autoscaler adds and removes workers based on workload demand. Node-count changes via ksail cluster update are still applied to the Talos machine config and will take effect normally.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `enabled` | boolean | – | Enabled controls whether the Cluster Autoscaler is installed to manage worker node counts dynamically. |
+| `pools` | []NodePool | – | Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only). |
+| `maxNodesTotal` | int32 | – | Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be &lt;= serverLimit |
+| `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes |
+| `scaleDownUnneededTime` | string | – | How long a node should be unneeded before it is eligible for scale down (e.g. 10m) |
+| `capacityBuffers` | boolean | – | Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true) |
+
+### spec.cluster.autoscaler.node.pools[] (NodePool)
+
+NodePool defines a Hetzner node pool managed by the cluster autoscaler.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `name` | string | – | Name is the unique identifier for this node pool (DNS-1123 label). |
+| `serverType` | string | – | ServerType is the Hetzner server type for nodes in this pool (e.g. "cx23", "cax11"). |
+| `location` | string | – | Location is the Hetzner datacenter location for this pool (e.g. "fsn1", "nbg1"). |
+| `min` | int32 | – | Min is the minimum number of nodes in this pool. |
+| `max` | int32 | – | Max is the maximum number of nodes in this pool. |
+| `labels` | map[string]string | – | Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template). |
+| `taints` | []NodePoolTaint | – | Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template). |
+
+### spec.cluster.autoscaler.node.pools[].taints[] (NodePoolTaint)
+
+NodePoolTaint defines a Kubernetes node taint applied to every node in an autoscaler node pool.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `key` | string | – | Key is the taint key. Must be a valid Kubernetes label key (an optional DNS-subdomain prefix followed by a name segment). |
+| `value` | string | – | Value is the optional taint value. |
+| `effect` | enum | – | Effect is the scheduling effect: NoSchedule, PreferNoSchedule, or NoExecute. |
+
+### spec.provider (ProviderSpec)
+
+ProviderSpec defines provider-specific configuration for infrastructure providers. This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from cluster/distribution concerns in ClusterSpec.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `hetzner` | OptionsHetzner | – | Hetzner holds options for the Hetzner Cloud provider. |
+| `omni` | OptionsOmni | – | Omni holds options for the Sidero Omni provider. |
+| `aws` | OptionsAWS | – | AWS holds options for the AWS provider used by the EKS distribution. |
+| `kubernetes` | OptionsKubernetes | – | Kubernetes holds options for the Kubernetes provider, which runs nested clusters as pods inside an existing host cluster. |
+
+### spec.provider.hetzner (OptionsHetzner)
+
+OptionsHetzner defines options specific to the Hetzner Cloud provider. These options are used when Provider is set to "Hetzner" for the Talos distribution.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `controlPlaneServerType` | string | `cx23` | ControlPlaneServerType is the Hetzner server type for control-plane nodes. Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23". |
+| `workerServerType` | string | `cx23` | WorkerServerType is the Hetzner server type for worker nodes. Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23". |
+| `location` | string | `fsn1` | Location is the Hetzner datacenter location. Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki). Defaults to "fsn1". |
+| `networkName` | string | – | NetworkName is the name of the private network to create or use. If empty, a network named "&lt;cluster-name&gt;-network" will be created. |
+| `networkCidr` | string | `10.0.0.0/16` | NetworkCIDR is the CIDR block for the private network. Defaults to "10.0.0.0/16". |
+| `sshKeyName` | string | – | SSHKeyName is the name of the SSH key to use for server access. The key must already exist in the Hetzner Cloud project. If empty, no SSH key is attached (only Talos API access). |
+| `tokenEnvVar` | string | `HCLOUD_TOKEN` | TokenEnvVar is the environment variable containing the Hetzner API token. Defaults to "HCLOUD_TOKEN". |
+| `placementGroupStrategy` | enum | `Spread` | PlacementGroupStrategy controls whether and how placement groups are used. "Spread" (default) distributes servers across different physical hosts for HA. "None" disables placement groups, useful when Hetzner resources are constrained. Note: Spread groups are limited to 10 servers per datacenter. |
+| `placementGroup` | string | – | PlacementGroup is the name of the placement group for server distribution. If empty, a placement group named "&lt;cluster-name&gt;-placement" will be created. Only used when PlacementGroupStrategy is "Spread". |
+| `fallbackLocations` | []string | – | Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location). |
+| `placementGroupFallbackToNone` | boolean | – | PlacementGroupFallbackToNone allows automatic fallback to no placement group when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity). When true and placement fails, retries server creation without a placement group. Defaults to false to preserve HA guarantees; set to true for best-effort provisioning. |
+| `ingressFirewall` | enum | `Enabled` | IngressFirewall controls the Talos OS-level ingress firewall configuration. When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig documents as Talos machine config patches, providing defense-in-depth at the node level independent of the Hetzner Cloud Firewall. See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/ |
+| `serverLimit` | int32 | `10` | Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10 |
+| `allowedCidrs` | []string | – | CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6). |
+| `workerPublicIPv4` | boolean | – | Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress). |
+| `workerPublicIPv6` | boolean | – | Assign a public IPv6 to worker nodes. Defaults to true. |
+| `controlPlanePublicIPv4` | boolean | – | Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network). |
+| `controlPlanePublicIPv6` | boolean | – | Assign a public IPv6 to control-plane nodes. Defaults to true. |
+| `autoscalerNodePoolNames` | []string | – | AutoscalerNodePoolNames lists the node-group names configured in the Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail deletes servers labelled with hcloud/node-group=&lt;name&gt; during cluster deletion so that autoscaler-managed nodes are cleaned up alongside KSail-managed nodes. |
+
+### spec.provider.omni (OptionsOmni)
+
+OptionsOmni defines options specific to the Sidero Omni provider. These options are used when Provider is set to "Omni" for the Talos distribution.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `endpoint` | string | – | Endpoint is the Omni API endpoint URL. Example: "https://&lt;account&gt;.omni.siderolabs.io:443". |
+| `endpointEnvVar` | string | `OMNI_ENDPOINT` | EndpointEnvVar is the environment variable containing the Omni API endpoint URL. When set, the value of this environment variable takes precedence over Endpoint. Defaults to "OMNI_ENDPOINT". |
+| `serviceAccountKeyEnvVar` | string | `OMNI_SERVICE_ACCOUNT_KEY` | ServiceAccountKeyEnvVar is the environment variable containing the base64-encoded Omni service account key. Defaults to "OMNI_SERVICE_ACCOUNT_KEY". |
+| `talosVersion` | string | – | TalosVersion is the Talos version to use for the cluster in Omni. Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2"). Generated templates normalize the value to include the "v" prefix. This determines the Talos Linux version that Omni will deploy to machines. |
+| `kubernetesVersion` | string | – | KubernetesVersion is the Kubernetes version to use for the cluster in Omni. Accepts values with or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Generated templates normalize the value to include the "v" prefix. This determines the Kubernetes version that Omni will deploy. |
+| `machineClass` | string | – | MachineClass is the Omni machine class name to use for dynamic node allocation. Machine classes are user-defined in the Omni dashboard and match machines by labels (e.g., CPU, region, role). The specified class must exist in the Omni account before cluster creation. The number of machines allocated is derived from the controlPlanes and workers count in the cluster spec. Mutually exclusive with Machines — set one or the other. When neither MachineClass nor Machines is set, KSail automatically discovers available (unallocated) machines in Omni and uses them for node allocation. |
+| `machines` | []string | – | Machines is a list of Omni machine UUIDs to use for static node allocation. The first N machines are assigned as control planes (where N = controlPlanes count), and the remaining machines are assigned as workers. Mutually exclusive with MachineClass — set one or the other. When neither MachineClass nor Machines is set, KSail automatically discovers available (unallocated) machines in Omni and uses them for node allocation. |
+
+### spec.provider.aws (OptionsAWS)
+
+OptionsAWS defines options specific to the AWS cloud provider. Credentials are resolved via the standard AWS SDK v2 credential chain; the *EnvVar fields let users point KSail at non-standard environment variable names (mirrors the Hetzner/Omni pattern).
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `profileEnvVar` | string | `AWS_PROFILE` | ProfileEnvVar is the environment variable containing the AWS shared-config profile name. Defaults to "AWS_PROFILE". |
+| `regionEnvVar` | string | `AWS_REGION` | RegionEnvVar is the environment variable containing the AWS region. When set, it overrides the region declared in eks.yaml. Defaults to "AWS_REGION". |
+| `accessKeyIdEnvVar` | string | `AWS_ACCESS_KEY_ID` | AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID. Defaults to "AWS_ACCESS_KEY_ID". |
+| `secretAccessKeyEnvVar` | string | `AWS_SECRET_ACCESS_KEY` | SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key. Defaults to "AWS_SECRET_ACCESS_KEY". |
+| `sessionTokenEnvVar` | string | `AWS_SESSION_TOKEN` | SessionTokenEnvVar is the environment variable containing an AWS session token (used with temporary credentials from STS). Defaults to "AWS_SESSION_TOKEN". |
+
+### spec.provider.kubernetes (OptionsKubernetes)
+
+OptionsKubernetes defines options specific to the Kubernetes provider. The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster. It uses Gateway API (TCPRoute) to expose the nested cluster's API server.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `kubeconfig` | string | `~/.kube/config` | Kubeconfig is the path to the kubeconfig for the host cluster. Defaults to "~/.kube/config". |
+| `kubeconfigEnvVar` | string | `KSAIL_HOST_KUBECONFIG` | KubeconfigEnvVar is the environment variable containing the host kubeconfig path. Defaults to "KSAIL_HOST_KUBECONFIG". |
+| `context` | string | – | Context is the kubeconfig context for the host cluster. When empty, uses the current context. |
+| `contextEnvVar` | string | `KSAIL_HOST_CONTEXT` | ContextEnvVar is the environment variable containing the host kubeconfig context. Defaults to "KSAIL_HOST_CONTEXT". |
+| `gatewayClassName` | string | – | GatewayClassName is the GatewayClass to use for exposing the nested API server. Must reference a GatewayClass that exists on the host cluster. When empty, the API is exposed via ClusterIP Service only (no external Gateway). |
+| `podCidr` | string | `10.64.0.0/16` | PodCIDR is the pod CIDR for the nested cluster. Must not overlap with the host cluster's pod or service CIDRs. Defaults to "10.64.0.0/16". |
+| `serviceCidr` | string | `10.128.0.0/16` | ServiceCIDR is the service CIDR for the nested cluster. Must not overlap with the host cluster's pod or service CIDRs. Defaults to "10.128.0.0/16". |
+| `persistence` | KubernetesPersistence | – | Persistence defines storage persistence for the nested cluster's data directory. |
+
+### spec.provider.kubernetes.persistence (KubernetesPersistence)
+
+KubernetesPersistence defines storage persistence configuration for the Kubernetes provider. When enabled, a PVC is created for the nested cluster's data directory to survive pod restarts. When disabled (default), emptyDir is used and clusters are fully ephemeral.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `enabled` | boolean | – | Enabled controls whether a PVC is used for the nested cluster's data directory. When false (default), emptyDir is used and the cluster is ephemeral. |
+| `storageClassName` | string | – | StorageClassName is the StorageClass to use for the PVC. When empty, the cluster's default StorageClass is used. |
+| `size` | string | `20Gi` | Size is the storage request size for the PVC. Defaults to "20Gi". |
 
 ### spec.workload (WorkloadSpec)
 
@@ -393,7 +529,7 @@ The Kubernetes version is set at the top level (`spec.cluster.kubernetesVersion`
 | ----- | ---- | ------- | ----------- |
 | `sourceDirectory` | string | `k8s` | Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given. |
 | `validateOnPush` | boolean | `false` | Validate manifests against schemas before pushing (validation disabled by default) |
-| `tag` | string | `dev` | OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev |
+| `tag` | string | `dev` | OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref &gt; this field &gt; registry-embedded tag &gt; dev. Reconciliation priority: this field &gt; registry-embedded tag &gt; dev |
 | `kustomizationFile` | string | – | Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml. |
 | `flux` | FluxConfig | – | Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner. |
 | `watch` | WatchConfig | – | Configuration for the workload watch command (pre-apply hooks, etc.) |

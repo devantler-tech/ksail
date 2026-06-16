@@ -14,11 +14,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/invopop/jsonschema"
@@ -28,7 +30,23 @@ import (
 const (
 	dirPermissions  = 0o750
 	filePermissions = 0o600
+
+	// v1alpha1SourceDir is the path to the v1alpha1 API package sources, relative
+	// to the schemas/ directory the generator always runs from (via go:generate or
+	// the package test). Go doc comments extracted from it become schema
+	// descriptions.
+	v1alpha1SourceDir = "../pkg/apis/cluster/v1alpha1"
+
+	// commentImportBase compensates for the ".." in v1alpha1SourceDir: the comment
+	// extractor joins base and each walked file's directory to derive the import
+	// path, so "<module>/schemas" + "../pkg/apis/cluster/v1alpha1" cleans to the
+	// v1alpha1 package's real import path.
+	commentImportBase = "github.com/devantler-tech/ksail/v7/schemas"
 )
+
+// errSchemaPathMissing reports that a schema customization targeted a property
+// path that no longer exists — a drift guard for the hand-listed paths below.
+var errSchemaPathMissing = errors.New("schema property path missing")
 
 func main() {
 	if err := run(os.Args); err != nil {
@@ -42,9 +60,18 @@ func run(args []string) error {
 		DoNotReference:            true,
 		Mapper:                    customTypeMapper,
 	}
+
+	// Turn the v1alpha1 Go doc comments into schema descriptions. Struct tags
+	// (jsonschema:"description=...") still win where both exist.
+	if err := reflector.AddGoComments(commentImportBase, v1alpha1SourceDir); err != nil {
+		return fmt.Errorf("extract Go comments from %s: %w", v1alpha1SourceDir, err)
+	}
+
 	schema := reflector.Reflect(&v1alpha1.Cluster{})
 
-	customizeSchema(schema)
+	if err := customizeSchema(schema); err != nil {
+		return err
+	}
 
 	schemaJSON, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
@@ -70,7 +97,7 @@ func run(args []string) error {
 }
 
 // customizeSchema applies all schema customizations.
-func customizeSchema(schema *jsonschema.Schema) {
+func customizeSchema(schema *jsonschema.Schema) error {
 	schema.ID = ""
 	schema.Title = "KSail Cluster Configuration"
 	schema.Description = "JSON schema for KSail cluster configuration (ksail.yaml)"
@@ -107,6 +134,103 @@ func customizeSchema(schema *jsonschema.Schema) {
 			p.Enum = []any{v1alpha1.APIVersion}
 		}
 	}
+
+	if err := markDeprecatedAliases(schema); err != nil {
+		return err
+	}
+
+	return addDistributionProviderConstraints(schema)
+}
+
+// propertyAt returns the schema node at the given property path, or nil when
+// any path segment is missing.
+func propertyAt(schema *jsonschema.Schema, path ...string) *jsonschema.Schema {
+	current := schema
+
+	for _, key := range path {
+		if current == nil || current.Properties == nil {
+			return nil
+		}
+
+		next, ok := current.Properties.Get(key)
+		if !ok {
+			return nil
+		}
+
+		current = next
+	}
+
+	return current
+}
+
+// markDeprecatedAliases sets "deprecated": true on the migration-alias fields
+// KSail still reads but rewrites on load (see migrateDeprecatedNodeCounts and
+// migrateDeprecatedNodeAutoscaling in pkg/fsutil/configmanager/ksail), so
+// editors flag them at authoring time.
+func markDeprecatedAliases(schema *jsonschema.Schema) error {
+	aliasPaths := [][]string{
+		{"spec", "cluster", "nodeAutoscaling"},
+		{"spec", "cluster", "talos", "controlPlanes"},
+		{"spec", "cluster", "talos", "workers"},
+	}
+
+	for _, path := range aliasPaths {
+		property := propertyAt(schema, path...)
+		if property == nil {
+			return fmt.Errorf("%w: %s", errSchemaPathMissing, strings.Join(path, "."))
+		}
+
+		property.Deprecated = true
+	}
+
+	return nil
+}
+
+// addDistributionProviderConstraints appends allOf/if-then subschemas to
+// spec.cluster restricting provider to the values each distribution supports
+// (derived from Provider.ValidateForDistribution, i.e. supportedProviders).
+// Editor schema only: the CRD deliberately gains no equivalent validation
+// markers — rejecting pre-existing CRs server-side would be a breaking change.
+func addDistributionProviderConstraints(schema *jsonschema.Schema) error {
+	cluster := propertyAt(schema, "spec", "cluster")
+	if cluster == nil {
+		return fmt.Errorf("%w: spec.cluster", errSchemaPathMissing)
+	}
+
+	for _, distribution := range v1alpha1.ValidDistributions() {
+		ifProperties := jsonschema.NewProperties()
+		ifProperties.Set("distribution", &jsonschema.Schema{Const: string(distribution)})
+
+		thenProperties := jsonschema.NewProperties()
+		thenProperties.Set("provider", &jsonschema.Schema{Enum: supportedProviderValues(distribution)})
+
+		cluster.AllOf = append(cluster.AllOf, &jsonschema.Schema{
+			If: &jsonschema.Schema{
+				Properties: ifProperties,
+				// Without this guard a config that omits distribution would
+				// match every if-branch and constrain provider to the
+				// intersection of all branches.
+				Required: []string{"distribution"},
+			},
+			Then: &jsonschema.Schema{Properties: thenProperties},
+		})
+	}
+
+	return nil
+}
+
+// supportedProviderValues returns the providers valid for the distribution as
+// schema enum values.
+func supportedProviderValues(distribution v1alpha1.Distribution) []any {
+	providers := make([]any, 0, len(v1alpha1.ValidProviders()))
+
+	for _, provider := range v1alpha1.ValidProviders() {
+		if provider.ValidateForDistribution(distribution) == nil {
+			providers = append(providers, string(provider))
+		}
+	}
+
+	return providers
 }
 
 // walkSchema traverses the schema tree and calls fn on each node.
@@ -187,18 +311,29 @@ func customTypeMapper(t reflect.Type) *jsonschema.Schema {
 	// for the operator/CRD, but ksail.yaml only supports the cluster name, so the configuration
 	// schema exposes just metadata.name (matching the previous custom Metadata type).
 	if t == reflect.TypeFor[metav1.ObjectMeta]() {
-		props := jsonschema.NewProperties()
-		props.Set("name", &jsonschema.Schema{
-			Type:        "string",
-			Description: "Cluster name (DNS-1123 compliant)",
-		})
-
-		return &jsonschema.Schema{
-			Type:                 "object",
-			Properties:           props,
-			AdditionalProperties: jsonschema.FalseSchema,
-		}
+		return objectMetaSchema()
 	}
 
 	return nil
+}
+
+// objectMetaSchema builds the metadata schema: just the cluster name, carrying
+// the same DNS-1123 constraints ValidateClusterName enforces at runtime.
+func objectMetaSchema() *jsonschema.Schema {
+	maxLength := uint64(v1alpha1.ClusterNameMaxLength)
+
+	props := jsonschema.NewProperties()
+	props.Set("name", &jsonschema.Schema{
+		Type: "string",
+		Description: "Cluster name (DNS-1123 compliant: lowercase letters, numbers, and hyphens; " +
+			"must start with a letter and must not end with a hyphen).",
+		Pattern:   v1alpha1.ClusterNamePattern,
+		MaxLength: &maxLength,
+	})
+
+	return &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           props,
+		AdditionalProperties: jsonschema.FalseSchema,
+	}
 }

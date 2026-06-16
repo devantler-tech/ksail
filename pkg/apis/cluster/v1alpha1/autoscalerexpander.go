@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -19,25 +21,19 @@ const (
 	AutoscalerExpanderRandom AutoscalerExpander = "Random"
 )
 
-// Set for AutoscalerExpander (pflag.Value interface).
-func (a *AutoscalerExpander) Set(value string) error {
-	for _, v := range ValidAutoscalerExpanders() {
-		if strings.EqualFold(value, string(v)) {
-			*a = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s)",
-		ErrInvalidAutoscalerExpander,
-		value,
+// ValidAutoscalerExpanders returns supported AutoscalerExpander values.
+func ValidAutoscalerExpanders() []AutoscalerExpander {
+	return []AutoscalerExpander{
 		AutoscalerExpanderPrice,
 		AutoscalerExpanderLeastWaste,
 		AutoscalerExpanderLeastNodes,
 		AutoscalerExpanderRandom,
-	)
+	}
+}
+
+// Set for AutoscalerExpander (pflag.Value interface).
+func (a *AutoscalerExpander) Set(value string) error {
+	return setEnum(a, value, ValidAutoscalerExpanders(), ErrInvalidAutoscalerExpander)
 }
 
 // String returns the string representation of the AutoscalerExpander.
@@ -57,12 +53,7 @@ func (a *AutoscalerExpander) Default() any {
 
 // ValidValues returns all valid AutoscalerExpander values as strings.
 func (a *AutoscalerExpander) ValidValues() []string {
-	return []string{
-		string(AutoscalerExpanderPrice),
-		string(AutoscalerExpanderLeastWaste),
-		string(AutoscalerExpanderLeastNodes),
-		string(AutoscalerExpanderRandom),
-	}
+	return validValueStrings(ValidAutoscalerExpanders())
 }
 
 // AutoscalerExpanderList is an ordered priority list of expander strategies for
@@ -85,4 +76,70 @@ func (l AutoscalerExpanderList) String() string {
 	}
 
 	return strings.Join(parts, ",")
+}
+
+// SplitAutoscalerExpanders splits a scalar expander value into its individual
+// entries, trimming surrounding whitespace from each. A comma-separated scalar
+// ("LeastNodes,LeastWaste") yields one entry per element, mirroring the upstream
+// cluster-autoscaler --expander priority-list syntax; an empty or whitespace-only
+// value yields an empty (non-nil) list. It is the shared normaliser for the JSON
+// unmarshaler (legacy persisted scalar form) and the YAML configuration decode
+// hook, so both accept identical scalar inputs.
+func SplitAutoscalerExpanders(raw string) AutoscalerExpanderList {
+	if strings.TrimSpace(raw) == "" {
+		return AutoscalerExpanderList{}
+	}
+
+	parts := strings.Split(raw, ",")
+	expanders := make(AutoscalerExpanderList, 0, len(parts))
+
+	for _, part := range parts {
+		expanders = append(expanders, AutoscalerExpander(strings.TrimSpace(part)))
+	}
+
+	return expanders
+}
+
+// UnmarshalJSON decodes an AutoscalerExpanderList from JSON, accepting both the
+// current priority-list form (["LeastNodes","LeastWaste"]) and the legacy scalar
+// form ("LeastWaste") that older ksail versions persisted to cluster state
+// (~/.ksail/clusters/<name>/spec.json) before this field became a list. A
+// comma-separated scalar ("LeastNodes,LeastWaste") is split into its entries,
+// matching the YAML configuration decode hook and the upstream cluster-autoscaler
+// --expander syntax. This keeps state files written before the migration readable
+// after an upgrade.
+func (l *AutoscalerExpanderList) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+
+	// JSON null leaves the list unchanged (idiomatic no-op).
+	if string(trimmed) == "null" {
+		return nil
+	}
+
+	// Current form: a JSON array of expander values. Decode into the underlying
+	// slice type to avoid recursing back into this method.
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var list []AutoscalerExpander
+
+		err := json.Unmarshal(data, &list)
+		if err != nil {
+			return fmt.Errorf("unmarshal autoscaler expander list: %w", err)
+		}
+
+		*l = list
+
+		return nil
+	}
+
+	// Legacy form: a single (optionally comma-separated) scalar string.
+	var raw string
+
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return fmt.Errorf("unmarshal autoscaler expander scalar: %w", err)
+	}
+
+	*l = SplitAutoscalerExpanders(raw)
+
+	return nil
 }

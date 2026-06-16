@@ -6,6 +6,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 )
 
+// annotationConfirmFlagName is the display name shared by the table-driven tests.
+const annotationConfirmFlagName = "AnnotationConfirmFlag"
+
 func TestAnnotationConstants_AreNonEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -28,6 +31,10 @@ func TestAnnotationConstants_AreNonEmpty(t *testing.T) {
 		{
 			name:  "AnnotationConsolidate",
 			value: annotations.AnnotationConsolidate,
+		},
+		{
+			name:  annotationConfirmFlagName,
+			value: annotations.AnnotationConfirmFlag,
 		},
 	}
 
@@ -67,6 +74,10 @@ func TestAnnotationConstants_HaveCorrectPrefix(t *testing.T) {
 			name:  "AnnotationConsolidate",
 			value: annotations.AnnotationConsolidate,
 		},
+		{
+			name:  annotationConfirmFlagName,
+			value: annotations.AnnotationConfirmFlag,
+		},
 	}
 
 	for _, test := range tests {
@@ -97,6 +108,7 @@ func TestAnnotationConstants_AreDistinct(t *testing.T) {
 		annotations.AnnotationDescription,
 		annotations.AnnotationPermission,
 		annotations.AnnotationConsolidate,
+		annotations.AnnotationConfirmFlag,
 	}
 
 	seen := make(map[string]bool)
@@ -136,6 +148,11 @@ func TestAnnotationConstants_HaveExpectedValues(t *testing.T) {
 			name:     "AnnotationConsolidate",
 			got:      annotations.AnnotationConsolidate,
 			expected: "ai.toolgen.consolidate",
+		},
+		{
+			name:     annotationConfirmFlagName,
+			got:      annotations.AnnotationConfirmFlag,
+			expected: "ai.toolgen.confirm-flag",
 		},
 	}
 

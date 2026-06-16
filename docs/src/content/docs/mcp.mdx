@@ -4,6 +4,7 @@ description: Expose KSail as an MCP server for AI assistants and automation tool
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
+import McpAvailableTools from "../../partials/mcp-available-tools.mdx";
 
 The KSail MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server exposes all KSail commands as tools for MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to create, configure, and manage Kubernetes clusters, and lets automation scripts orchestrate complex cluster operations through a universal interface.
 
@@ -27,44 +28,9 @@ The server listens on stdin, exposes supported KSail commands as MCP tools, and 
 
 ## Available Tools
 
-The MCP server automatically generates tools from all KSail commands except:
+{/* The tool inventory below is generated from the live command tree by go generate ./docs/... */}
 
-- `ksail chat` — Interactive chat (use MCP client's native chat instead)
-- `ksail mcp` — The MCP server itself
-- `ksail completion` — Shell completion (not relevant for MCP)
-- `ksail help` — Built-in help (use MCP tool discovery)
-
-Commands are consolidated by permission into **5 tools**:
-
-| Tool | Description | Subcommand Parameter |
-|------|-------------|----------------------|
-| `cluster_read` | Read-only cluster operations | `command` |
-| `cluster_write` | Cluster lifecycle mutations | `command` |
-| `workload_read` | Read-only workload operations | `workload_command` |
-| `workload_write` | Workload mutations | `workload_command` |
-| `cipher_write` | Secret mutations (encrypt, decrypt, edit, import) | `cipher_operation` |
-
-Each tool accepts a **subcommand parameter** that selects the specific operation. The table below shows available subcommands for each tool. Pass additional arguments via `args` where indicated.
-
-### Cluster Operations
-
-| Tool | Subcommands |
-|------|-------------|
-| `cluster_read` | `info`, `list`, `connect`, `switch` (pass cluster name via `args`; mutates local kubeconfig current-context), `diagnose` (pass `["--output", "json"]` via `args` for structured JSON output; the tool returns the JSON as a string that the client must parse) |
-| `cluster_write` | `init`, `create`, `update` (returns diff output), `delete`, `start`, `stop`, `backup`, `restore` |
-
-### Workload Operations
-
-| Tool | Subcommands |
-|------|-------------|
-| `workload_read` | `get`, `describe`, `logs`, `explain`, `wait` (pass target resource(s) via `args`), `images`, `export` (pass optional output path via `args`), `validate` (pass optional path via `args`), `gen_deployment`, `gen_service_clusterip`, `gen_namespace`, `gen_helmrelease` (pass release name via `args`), and other `gen_*` commands |
-| `workload_write` | `apply`, `create`, `delete`, `edit`, `exec` (pass pod and command via `args`, e.g., `["pod/foo", "--", "sh"]`), `expose` (pass resource type and name via `args`), `scale`, `reconcile`, `push`, `install` (pass release name and chart via `args`), `import`, `watch`, `rollout_restart`, `rollout_status`, and other `rollout_*` commands |
-
-### Secret Management
-
-| Tool | Subcommands |
-|------|-------------|
-| `cipher_write` | `decrypt` (pass file path via `args`), `encrypt`, `edit`, `import` (pass file path or age private key via `args`) |
+<McpAvailableTools />
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name, a description, and a JSON schema with the subcommand selector enum and merged flags.
 

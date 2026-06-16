@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // CNI defines the CNI options for a KSail cluster.
 type CNI string
 
@@ -17,18 +12,14 @@ const (
 	CNICalico CNI = "Calico"
 )
 
+// ValidCNIs returns supported CNI values.
+func ValidCNIs() []CNI {
+	return []CNI{CNIDefault, CNICilium, CNICalico}
+}
+
 // Set for CNI (pflag.Value interface).
 func (c *CNI) Set(value string) error {
-	for _, cni := range ValidCNIs() {
-		if strings.EqualFold(value, string(cni)) {
-			*c = cni
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidCNI, value, CNIDefault, CNICilium, CNICalico)
+	return setEnum(c, value, ValidCNIs(), ErrInvalidCNI)
 }
 
 // String returns the string representation of the CNI.
@@ -48,5 +39,5 @@ func (c *CNI) Default() any {
 
 // ValidValues returns all valid CNI values as strings.
 func (c *CNI) ValidValues() []string {
-	return []string{string(CNIDefault), string(CNICilium), string(CNICalico)}
+	return validValueStrings(ValidCNIs())
 }

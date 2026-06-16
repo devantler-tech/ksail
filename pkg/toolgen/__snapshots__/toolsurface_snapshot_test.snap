@@ -1,0 +1,2141 @@
+
+[TestToolSurfaceSnapshot - 1]
+cipher_write
+cluster_read
+cluster_write
+tenant_write
+workload_read
+workload_write
+---
+
+[TestToolSurfaceSnapshot/cluster_read - 1]
+{
+  "name": "cluster_read",
+  "title": "Cluster Read",
+  "description": "Manage cluster lifecycle",
+  "commandPath": "ksail cluster",
+  "requiresPermission": false,
+  "isConsolidated": true,
+  "subcommandParam": "command",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "command": {
+        "description": "The subcommand to execute. Options:\nconnect: Connect to cluster with k9s\ndiagnose: Diagnose failing cluster resources\ndiff: Show configuration drift between ksail.yaml and live cluster\ninfo: Display cluster information\nlist: List clusters\nrepair: Repair local KSail/Talos state files\nswitch: Switch active cluster context",
+        "enum": [
+          "connect",
+          "diagnose",
+          "diff",
+          "info",
+          "list",
+          "repair",
+          "switch"
+        ],
+        "type": "string"
+      },
+      "context": {
+        "description": "Kubernetes context of cluster (applies to: connect, diff)",
+        "type": "string"
+      },
+      "distribution": {
+        "description": "Kubernetes distribution to use (applies to: connect, diff)",
+        "type": "string"
+      },
+      "distribution-config": {
+        "description": "Configuration file for the distribution (applies to: connect, diff)",
+        "type": "string"
+      },
+      "editor": {
+        "description": "editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano') (applies to: connect)",
+        "type": "string"
+      },
+      "exit-code": {
+        "description": "Return exit code 2 when drift is detected (for CI gates) (applies to: diff)",
+        "type": "boolean"
+      },
+      "gitops-engine": {
+        "default": "None",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: connect, diff)",
+        "type": "string"
+      },
+      "kubeconfig": {
+        "default": "~/.kube/config",
+        "description": "Path to kubeconfig file (applies to: connect, diff)",
+        "type": "string"
+      },
+      "local-registry": {
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: connect, diff)",
+        "type": "string"
+      },
+      "name": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, diff, info)",
+        "type": "string"
+      },
+      "output": {
+        "default": "text",
+        "description": "Output format: text or json. Use json for machine-readable structured output. (applies to: diagnose, diff)",
+        "type": "string"
+      },
+      "provider": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, info, list)",
+        "type": "string"
+      },
+      "talosconfig": {
+        "description": "path to talosconfig (default: ~/.talos/config) (applies to: repair)",
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/cipher_write - 1]
+{
+  "name": "cipher_write",
+  "title": "Cipher Write",
+  "description": "Manage encrypted files with SOPS",
+  "commandPath": "ksail cipher",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "cipher_operation",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "add-key": {
+        "description": "public key to add as a master key recipient (applies to: rotate)",
+        "type": "string"
+      },
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cipher_operation": {
+        "description": "The subcommand to execute. Options:\ndecrypt: Decrypt a file with SOPS\nedit: Edit an encrypted file with SOPS\nencrypt: Encrypt a file with SOPS\nimport: Import an age key to the system's SOPS key location\nrotate: Rotate data keys for SOPS-encrypted files",
+        "enum": [
+          "decrypt",
+          "edit",
+          "encrypt",
+          "import",
+          "rotate"
+        ],
+        "type": "string"
+      },
+      "dry-run": {
+        "description": "show which files would be rotated without making changes (applies to: rotate)",
+        "type": "boolean"
+      },
+      "editor": {
+        "description": "editor command to use (e.g., 'code --wait', 'vim', 'nano') (applies to: edit)",
+        "type": "string"
+      },
+      "extract": {
+        "description": "extract a specific key from the decrypted file (JSONPath format) (applies to: decrypt)",
+        "type": "string"
+      },
+      "force": {
+        "description": "skip confirmation prompt and rotate immediately (applies to: rotate)",
+        "type": "boolean"
+      },
+      "ignore-mac": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: decrypt, edit)",
+        "type": "boolean"
+      },
+      "output": {
+        "description": "output file path (default: stdout) (applies to: decrypt)",
+        "type": "string"
+      },
+      "recursive": {
+        "description": "scan subdirectories when target is a folder (applies to: rotate)",
+        "type": "boolean"
+      },
+      "remove-key": {
+        "description": "public key to remove from master key recipients (applies to: rotate)",
+        "type": "string"
+      },
+      "show-master-keys": {
+        "description": "show master keys in the editor (applies to: edit)",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cipher_operation"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/tenant_write - 1]
+{
+  "name": "tenant_write",
+  "title": "Tenant Write",
+  "description": "Manage tenant lifecycle",
+  "commandPath": "ksail tenant",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "tenant_command",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cluster-role": {
+        "default": [
+          "edit"
+        ],
+        "description": "ClusterRole(s) to bind to the tenant ServiceAccount (repeatable)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "delete-repo": {
+        "description": "Also delete the tenant Git repository",
+        "type": "boolean"
+      },
+      "delivery": {
+        "default": "commit",
+        "description": "How to deliver platform changes: commit or pr",
+        "type": "string"
+      },
+      "disable-token-automount": {
+        "description": "Set automountServiceAccountToken: false on the tenant ServiceAccount",
+        "type": "boolean"
+      },
+      "flux-decryption": {
+        "description": "(Flux) Add a SOPS decryption block referencing the sops-age secret",
+        "type": "boolean"
+      },
+      "flux-retry-interval": {
+        "description": "(Flux) Flux Kustomization retryInterval",
+        "type": "string"
+      },
+      "flux-timeout": {
+        "description": "(Flux) Flux Kustomization timeout; setting it implies --flux-wait (default 5m when waiting)",
+        "type": "string"
+      },
+      "flux-wait": {
+        "description": "(Flux) Set wait: true and timeout on the Flux Kustomization",
+        "type": "boolean"
+      },
+      "force": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "boolean"
+      },
+      "git-provider": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "git-token": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "image-pull-secret": {
+        "description": "imagePullSecret to add to the tenant ServiceAccount (repeatable)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "kustomization-path": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "limit-default-cpu": {
+        "default": "500m",
+        "description": "Default container CPU limit",
+        "type": "string"
+      },
+      "limit-default-memory": {
+        "default": "512Mi",
+        "description": "Default container memory limit",
+        "type": "string"
+      },
+      "limit-request-cpu": {
+        "default": "100m",
+        "description": "Default container CPU request",
+        "type": "string"
+      },
+      "limit-request-memory": {
+        "default": "128Mi",
+        "description": "Default container memory request",
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Namespaces to create (repeatable, default: tenant-name)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oci-path": {
+        "description": "Path suffix appended to OCI registry URL to avoid tag collisions (e.g., 'manifests' produces oci://registry/owner/repo/manifests)",
+        "type": "string"
+      },
+      "output": {
+        "default": ".",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "platform-repo": {
+        "description": "Platform repo as owner/repo-name for PR delivery (default: auto-detect from git remote)",
+        "type": "string"
+      },
+      "pod-security": {
+        "description": "Pod Security Standards level for namespaces: restricted, baseline, or privileged",
+        "type": "string"
+      },
+      "production": {
+        "description": "Enable the recommended production baseline (PSS baseline, default-deny NetworkPolicy, ResourceQuota, LimitRange, hardened ServiceAccount and Flux sync)",
+        "type": "boolean"
+      },
+      "quota-cpu": {
+        "default": "4",
+        "description": "CPU quota (sets requests.cpu and limits.cpu)",
+        "type": "string"
+      },
+      "quota-memory": {
+        "default": "8Gi",
+        "description": "Memory quota (sets requests.memory and limits.memory)",
+        "type": "string"
+      },
+      "register": {
+        "description": "Register tenant in kustomization.yaml",
+        "type": "boolean"
+      },
+      "registry": {
+        "description": "OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)",
+        "type": "string"
+      },
+      "repo-visibility": {
+        "default": "Private",
+        "description": "Repo visibility: Private, Internal, or Public",
+        "type": "string"
+      },
+      "source-directory": {
+        "default": "k8s",
+        "description": "Directory name for tenant manifests in the tenant repo",
+        "type": "string"
+      },
+      "sync-source": {
+        "default": "oci",
+        "description": "Flux source type: oci or git",
+        "type": "string"
+      },
+      "target-branch": {
+        "description": "PR target branch (default: repo's default branch)",
+        "type": "string"
+      },
+      "tenant-repo": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "tenant_command": {
+        "description": "The subcommand to execute. Options:\ncreate: Create a new tenant\ndelete: Delete a tenant",
+        "enum": [
+          "create",
+          "delete"
+        ],
+        "type": "string"
+      },
+      "type": {
+        "description": "Tenant type: flux, argocd, or kubectl (default: auto-detect from ksail.yaml gitOpsEngine)",
+        "type": "string"
+      },
+      "unregister": {
+        "default": true,
+        "description": "Remove tenant from kustomization.yaml",
+        "type": "boolean"
+      },
+      "with-limit-range": {
+        "description": "Generate a LimitRange with default container requests/limits",
+        "type": "boolean"
+      },
+      "with-network-policy": {
+        "description": "Generate default-deny NetworkPolicy plus DNS and intra-namespace allow rules",
+        "type": "boolean"
+      },
+      "with-quota": {
+        "description": "Generate a ResourceQuota for each namespace",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "tenant_command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/cluster_write - 1]
+{
+  "name": "cluster_write",
+  "title": "Cluster Write",
+  "description": "Manage cluster lifecycle",
+  "commandPath": "ksail cluster",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "command",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "allowed-cidrs": {
+        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: create, init, update)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cdi": {
+        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "cert-manager": {
+        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "cni": {
+        "description": "Container Network Interface (CNI) to use (applies to: create, init, update)",
+        "type": "string"
+      },
+      "command": {
+        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\ninit: Initialize a new project\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
+        "enum": [
+          "backup",
+          "create",
+          "delete",
+          "init",
+          "restore",
+          "start",
+          "stop",
+          "update"
+        ],
+        "type": "string"
+      },
+      "compression": {
+        "default": -1,
+        "description": "Compression level (-1..9, -1 = gzip default) (applies to: backup)",
+        "type": "integer"
+      },
+      "context": {
+        "description": "Kubernetes context of cluster (applies to: create, init, update)",
+        "type": "string"
+      },
+      "control-planes": {
+        "default": 1,
+        "description": "Number of control-plane nodes (applies to: create, init, update)",
+        "type": "integer"
+      },
+      "csi": {
+        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "delete-storage": {
+        "description": "Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner) (applies to: delete)",
+        "type": "boolean"
+      },
+      "distribution": {
+        "description": "Kubernetes distribution to use (applies to: create, init, update)",
+        "type": "string"
+      },
+      "distribution-config": {
+        "description": "Configuration file for the distribution (applies to: create, init, update)",
+        "type": "string"
+      },
+      "distribution-version": {
+        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, init, update)",
+        "type": "string"
+      },
+      "drain-timeout": {
+        "default": "0s",
+        "description": "Per-node pod-eviction budget for rolling node drains during cluster update (default 10m when unset). Increase it for stateful workloads that need longer to evict gracefully (e.g... (applies to: create, update)",
+        "type": "string"
+      },
+      "dry-run": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: restore, update)",
+        "type": "boolean"
+      },
+      "exclude-types": {
+        "default": [
+          "events"
+        ],
+        "description": "Resource types to exclude from backup (applies to: backup)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "existing-resource-policy": {
+        "default": "none",
+        "description": "Policy for existing resources: none (skip) or update (patch) (applies to: restore)",
+        "type": "string"
+      },
+      "force": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: delete, init, update)",
+        "type": "boolean"
+      },
+      "gitops-engine": {
+        "default": "None",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "image-verification": {
+        "description": "Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch... (applies to: init)",
+        "type": "string"
+      },
+      "import-images": {
+        "description": "Path to tar archive with container images to import after cluster creation but before component installation (applies to: create, init, update)",
+        "type": "string"
+      },
+      "input": {
+        "description": "Input backup archive path (required) (applies to: restore)",
+        "type": "string"
+      },
+      "kubeconfig": {
+        "default": "~/.kube/config",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "kubernetes-version": {
+        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, init, update)",
+        "type": "string"
+      },
+      "kustomization-file": {
+        "description": "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local) (applies to: init)",
+        "type": "string"
+      },
+      "load-balancer": {
+        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "local-registry": {
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "metrics-server": {
+        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "mirror-registry": {
+        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]... (applies to: create, init, update)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "name": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "namespaces": {
+        "description": "Namespaces to backup (default: all) (applies to: backup)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "node-autoscaler-enabled": {
+        "description": "Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, init, update)",
+        "type": "boolean"
+      },
+      "node-autoscaling": {
+        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts... (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-ca-file": {
+        "description": "Path to CA certificate for self-signed OIDC providers (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-client-id": {
+        "description": "OIDC client ID for kubectl authentication (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-extra-scope": {
+        "description": "Additional OIDC scopes beyond openid (repeatable) (applies to: create, init, update)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oidc-groups-claim": {
+        "default": "groups",
+        "description": "JWT claim for Kubernetes groups (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-groups-prefix": {
+        "default": "oidc:",
+        "description": "Prefix for OIDC groups in Kubernetes (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-issuer-url": {
+        "description": "OIDC provider issuer URL (e.g. https://dex.example.com) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-username-claim": {
+        "default": "email",
+        "description": "JWT claim for Kubernetes username (applies to: create, init, update)",
+        "type": "string"
+      },
+      "oidc-username-prefix": {
+        "default": "oidc:",
+        "description": "Prefix for OIDC usernames in Kubernetes (applies to: create, init, update)",
+        "type": "string"
+      },
+      "output": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: backup, init, update)",
+        "type": "string"
+      },
+      "policy-engine": {
+        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper) (applies to: create, init, update)",
+        "type": "string"
+      },
+      "provider": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "source-directory": {
+        "default": "k8s",
+        "description": "Directory containing workloads to deploy (applies to: init)",
+        "type": "string"
+      },
+      "ttl": {
+        "description": "Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely. (applies to: create)",
+        "type": "string"
+      },
+      "workers": {
+        "default": 0,
+        "description": "Number of worker nodes (applies to: create, init, update)",
+        "type": "integer"
+      },
+      "yes": {
+        "description": "Skip confirmation prompt (alias for --force) (applies to: update)",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/workload_write - 1]
+{
+  "name": "workload_write",
+  "title": "Workload Write",
+  "description": "Manage workload operations",
+  "commandPath": "ksail workload",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "workload_command",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "aggregation-rule": {
+        "description": "An aggregation label selector for combining ClusterRoles. (applies to: create_clusterrole)",
+        "type": "string"
+      },
+      "all": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, apply_view-last-applied, delete, scale)",
+        "type": "boolean"
+      },
+      "all-namespaces": {
+        "description": "If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace. (applies to: delete)",
+        "type": "boolean"
+      },
+      "allow-missing-template-keys": {
+        "default": true,
+        "description": "If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats.",
+        "type": "boolean"
+      },
+      "annotation": {
+        "description": "Annotation to insert in the ingress object, in the format annotation=value (applies to: create_ingress)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "append-hash": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_configmap, create_secret_docker-registry, create_secret_generic, create_secret_tls)",
+        "type": "boolean"
+      },
+      "args": {
+        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, edit, exec, expose, import, install, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "arguments-only": {
+        "description": "If specified, everything after -- will be passed to the new container as Args instead of Command. (applies to: debug)",
+        "type": "boolean"
+      },
+      "atomic": {
+        "description": "if set, the installation deletes on failure (applies to: install)",
+        "type": "boolean"
+      },
+      "attach": {
+        "description": "If true, wait for the container to start running, and then attach as if 'kubectl attach ...' were called.  Default false, unless '-i/--stdin' is set, in which case the default is true. (applies to: debug)",
+        "type": "boolean"
+      },
+      "audience": {
+        "description": "Audience of the requested token. If unset, defaults to requesting a token for use with the Kubernetes API server. May be repeated to request a token valid for multiple audiences. (applies to: create_token)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "bound-object-kind": {
+        "description": "Kind of an object to bind the token to. Supported kinds are Node, Pod, Secret. If set, --bound-object-name must be provided. (applies to: create_token)",
+        "type": "string"
+      },
+      "bound-object-name": {
+        "description": "Name of an object to bind the token to. The token will expire when the object is deleted. Requires --bound-object-kind. (applies to: create_token)",
+        "type": "string"
+      },
+      "bound-object-uid": {
+        "description": "UID of an object to bind the token to. Requires --bound-object-kind and --bound-object-name. If unset, the UID of the existing object is used. (applies to: create_token)",
+        "type": "string"
+      },
+      "branch": {
+        "description": "git branch (applies to: create_source_git)",
+        "type": "string"
+      },
+      "cascade": {
+        "default": "background",
+        "description": "Must be \"background\", \"orphan\", or \"foreground\". Selects the deletion cascading strategy for the dependents (e.g. Pods created by a ReplicationController). Defaults to background. (applies to: apply, delete)",
+        "type": "string"
+      },
+      "cert": {
+        "description": "Path to PEM encoded public key certificate. (applies to: create_secret_tls)",
+        "type": "string"
+      },
+      "chart": {
+        "description": "Helm chart name or path (applies to: create_helmrelease)",
+        "type": "string"
+      },
+      "chart-version": {
+        "description": "Helm chart version (applies to: create_helmrelease)",
+        "type": "string"
+      },
+      "class": {
+        "description": "Ingress Class to be used (applies to: create_ingress)",
+        "type": "string"
+      },
+      "cluster": {
+        "description": "The name of the kubeconfig cluster to use (applies to: apply, create, debug, delete, exec, expose, rollout, scale)",
+        "type": "string"
+      },
+      "cluster-ip": {
+        "description": "ClusterIP to be assigned to the service. Leave empty to auto-allocate, or set to 'None' to create a headless service. (applies to: expose)",
+        "type": "string"
+      },
+      "clusterip": {
+        "description": "Assign your own ClusterIP or set to 'None' for a 'headless' service (no loadbalancing). (applies to: create_service_clusterip)",
+        "type": "string"
+      },
+      "clusterrole": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_clusterrolebinding, create_rolebinding)",
+        "type": "string"
+      },
+      "commit": {
+        "description": "git commit (applies to: create_source_git)",
+        "type": "string"
+      },
+      "container": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec)",
+        "type": "string"
+      },
+      "context": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, import, rollout, scale)",
+        "type": "string"
+      },
+      "copy-to": {
+        "description": "Create a copy of the target Pod with this name. (applies to: debug)",
+        "type": "string"
+      },
+      "create-annotation": {
+        "description": "Will create 'last-applied-configuration' annotations if current objects doesn't have one (applies to: apply_set-last-applied)",
+        "type": "boolean"
+      },
+      "create-namespace": {
+        "description": "create the release namespace if not present (applies to: install)",
+        "type": "boolean"
+      },
+      "create-target-namespace": {
+        "description": "create the target namespace if it doesn't exist (applies to: create_helmrelease)",
+        "type": "boolean"
+      },
+      "current-replicas": {
+        "default": -1,
+        "description": "Precondition for current size. Requires that the current size of the resource match this value in order to scale. -1 (default) for no condition. (applies to: scale)",
+        "type": "integer"
+      },
+      "custom": {
+        "description": "Path to a JSON or YAML file containing a partial container spec to customize built-in debug profiles. (applies to: debug)",
+        "type": "string"
+      },
+      "debug": {
+        "description": "Show diagnostic output for file events and polling (useful for troubleshooting watch behavior) (applies to: watch)",
+        "type": "boolean"
+      },
+      "default-backend": {
+        "description": "Default service for backend, in format of svcname:port (applies to: create_ingress)",
+        "type": "string"
+      },
+      "depends-on": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": {
+        "description": "description is an arbitrary string that usually provides guidelines on when this priority class should be used. (applies to: create_priorityclass)",
+        "type": "string"
+      },
+      "digest": {
+        "description": "OCI artifact digest (applies to: create_source_oci)",
+        "type": "string"
+      },
+      "docker-email": {
+        "description": "Email for Docker registry (applies to: create_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-password": {
+        "description": "Password for Docker registry authentication (applies to: create_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-server": {
+        "default": "https://index.docker.io/v1/",
+        "description": "Server location for Docker registry (applies to: create_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-username": {
+        "description": "Username for Docker registry authentication (applies to: create_secret_docker-registry)",
+        "type": "string"
+      },
+      "dry-run": {
+        "default": "none",
+        "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
+        "type": "string"
+      },
+      "duration": {
+        "default": "0s",
+        "description": "Requested lifetime of the issued token. If not set or if set to 0, the lifetime will be determined by the server automatically. The server may return a token with a longer or shorter lifetime. (applies to: create_token)",
+        "type": "string"
+      },
+      "edit": {
+        "description": "Edit the API resource before creating (applies to: create)",
+        "type": "boolean"
+      },
+      "editor": {
+        "description": "editor command to use (e.g., 'code --wait', 'vim', 'nano') (applies to: edit)",
+        "type": "string"
+      },
+      "env": {
+        "description": "Environment variables to set in the container. (applies to: debug)",
+        "type": "string"
+      },
+      "exclude": {
+        "description": "kustomization names to skip during progress monitoring (repeatable, comma-separated) (applies to: reconcile)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "export": {
+        "description": "export in YAML format to stdout (applies to: create_helmrelease, create_kustomization, create_source_git, create_source_helm, create_source_oci)",
+        "type": "boolean"
+      },
+      "external-ip": {
+        "description": "Additional external IP address (not managed by Kubernetes) to accept for the service. If this IP is routed to a node, the service can be accessed by this IP in addition to its generated service IP. (applies to: expose)",
+        "type": "string"
+      },
+      "external-name": {
+        "description": "External name of service (applies to: create_service_externalname)",
+        "type": "string"
+      },
+      "field-manager": {
+        "default": "kubectl-client-side-apply",
+        "description": "Name of the manager used to track field ownership.",
+        "type": "string"
+      },
+      "field-selector": {
+        "description": "Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type. (applies to: delete)",
+        "type": "string"
+      },
+      "filename": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, create, debug, delete, exec, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "force": {
+        "description": "If true, immediately remove resources from API and bypass graceful deletion. Note that immediate deletion of some resources may result in inconsistency or data loss and requires confirmation. (applies to: apply, delete)",
+        "type": "boolean"
+      },
+      "force-conflicts": {
+        "description": "If true, server-side apply will force the changes against conflicts. (applies to: apply)",
+        "type": "boolean"
+      },
+      "from": {
+        "description": "The name of the resource to create a Job from (only CronJob is supported). (applies to: create_job)",
+        "type": "string"
+      },
+      "from-env-file": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_configmap, create_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "from-file": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_configmap, create_secret_docker-registry, create_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "from-literal": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_configmap, create_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "global-default": {
+        "description": "global-default specifies whether this PriorityClass should be considered as the default priority. (applies to: create_priorityclass)",
+        "type": "boolean"
+      },
+      "grace-period": {
+        "default": -1,
+        "description": "Period of time in seconds given to the resource to terminate gracefully. Ignored if negative. Set to 1 for immediate shutdown. Can only be set to 0 when --force is true (force deletion). (applies to: apply, delete)",
+        "type": "integer"
+      },
+      "group": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_clusterrolebinding, create_rolebinding)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "hard": {
+        "description": "A comma-delimited set of resource=quantity pairs that define a hard limit. (applies to: create_quota)",
+        "type": "string"
+      },
+      "hook": {
+        "description": "Shell command to run before each apply (repeatable; appended after spec.workload.watch.hooks) (applies to: watch)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "host": {
+        "description": "Node name for host-level debugging (bypasses Kubernetes, targets the infrastructure node directly) (applies to: debug)",
+        "type": "string"
+      },
+      "ignore-not-found": {
+        "description": "Treat \"resource not found\" as a successful delete. Defaults to \"true\" when --all is specified. (applies to: delete)",
+        "type": "boolean"
+      },
+      "image": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_cronjob, create_deployment, create_job, debug)",
+        "type": "string"
+      },
+      "image-pull-policy": {
+        "description": "The image pull policy for the container. If left empty, this value will not be specified by the client and defaulted by the server. (applies to: debug)",
+        "type": "string"
+      },
+      "initial-apply": {
+        "description": "Apply all workloads once immediately on startup before entering the watch loop (applies to: watch)",
+        "type": "boolean"
+      },
+      "insecure": {
+        "description": "allow insecure connections (applies to: create_source_oci)",
+        "type": "boolean"
+      },
+      "interactive": {
+        "description": "If true, delete resource only when user confirms. (applies to: delete)",
+        "type": "boolean"
+      },
+      "interval": {
+        "default": "1m0s",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization, create_source_git, create_source_helm, create_source_oci)",
+        "type": "string"
+      },
+      "keep-annotations": {
+        "description": "If true, keep the original pod annotations.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "keep-init-containers": {
+        "default": true,
+        "description": "Run the init containers for the pod. Defaults to true.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "keep-labels": {
+        "description": "If true, keep the original pod labels.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "keep-liveness": {
+        "description": "If true, keep the original pod liveness probes.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "keep-readiness": {
+        "description": "If true, keep the original pod readiness probes.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "keep-startup": {
+        "description": "If true, keep the original startup probes.(This flag only works when used with '--copy-to') (applies to: debug)",
+        "type": "boolean"
+      },
+      "key": {
+        "description": "Path to private key associated with given certificate. (applies to: create_secret_tls)",
+        "type": "string"
+      },
+      "kubeconfig": {
+        "default": "~/.kube/config",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, import, rollout, scale)",
+        "type": "string"
+      },
+      "kustomize": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, apply_edit-last-applied, apply_view-last-applied, create, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "type": "string"
+      },
+      "labels": {
+        "description": "Labels to apply to the service created by this call. (applies to: expose)",
+        "type": "string"
+      },
+      "load-balancer-ip": {
+        "description": "IP to assign to the LoadBalancer. If empty, an ephemeral IP will be created and used (cloud-provider specific). (applies to: expose)",
+        "type": "string"
+      },
+      "max-unavailable": {
+        "description": "The maximum number or percentage of unavailable pods this budget requires. (applies to: create_poddisruptionbudget)",
+        "type": "string"
+      },
+      "min-available": {
+        "description": "The minimum number or percentage of available pods this budget requires. (applies to: create_poddisruptionbudget)",
+        "type": "string"
+      },
+      "name": {
+        "description": "The name for the newly created object. (applies to: expose)",
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, rollout, scale)",
+        "type": "string"
+      },
+      "node-port": {
+        "default": 0,
+        "description": "Port used to expose the service on each node in a cluster. (applies to: create_service_nodeport)",
+        "type": "integer"
+      },
+      "non-resource-url": {
+        "description": "A partial url that user should have access to. (applies to: create_clusterrole)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "now": {
+        "description": "If true, resources are signaled for immediate shutdown (same as --grace-period=1). (applies to: delete)",
+        "type": "boolean"
+      },
+      "oci-provider": {
+        "description": "OCI provider for authentication (applies to: create_source_helm)",
+        "type": "string"
+      },
+      "openapi-patch": {
+        "default": true,
+        "description": "If true, use openapi to calculate diff when the openapi presents and the resource can be found in the openapi spec. Otherwise, fall back to use baked-in types. (applies to: apply)",
+        "type": "boolean"
+      },
+      "output": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "override-type": {
+        "default": "merge",
+        "description": "The method used to override the generated object: json, merge, or strategic. (applies to: expose)",
+        "type": "string"
+      },
+      "overrides": {
+        "description": "An inline JSON override for the generated object. If this is non-empty, it is used to override the generated object. Requires that the object supply a valid apiVersion field. (applies to: expose)",
+        "type": "string"
+      },
+      "overwrite": {
+        "default": true,
+        "description": "Automatically resolve conflicts between the modified and live configuration by using values from the modified configuration (applies to: apply)",
+        "type": "boolean"
+      },
+      "pass-credentials": {
+        "description": "pass credentials to all domains (applies to: create_source_helm)",
+        "type": "boolean"
+      },
+      "path": {
+        "default": "./",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_kustomization, push, watch)",
+        "type": "string"
+      },
+      "pod-running-timeout": {
+        "default": "1m0s",
+        "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: exec)",
+        "type": "string"
+      },
+      "port": {
+        "default": -1,
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, expose)",
+        "type": "integer"
+      },
+      "preemption-policy": {
+        "default": "PreemptLowerPriority",
+        "description": "preemption-policy is the policy for preempting pods with lower priority. (applies to: create_priorityclass)",
+        "type": "string"
+      },
+      "profile": {
+        "default": "general",
+        "description": "Options are \"general\", \"baseline\", \"restricted\", \"netadmin\" or \"sysadmin\". Defaults to \"general\" (applies to: debug)",
+        "type": "string"
+      },
+      "protocol": {
+        "description": "The network protocol for the service to be created. Default is 'TCP'. (applies to: expose)",
+        "type": "string"
+      },
+      "provider": {
+        "default": "generic",
+        "description": "OCI provider (applies to: create_source_oci)",
+        "type": "string"
+      },
+      "prune": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create_kustomization)",
+        "type": "boolean"
+      },
+      "prune-allowlist": {
+        "description": "Overwrite the default allowlist with \u003cgroup/version/kind\u003e for --prune (applies to: apply)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "quiet": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec)",
+        "type": "boolean"
+      },
+      "raw": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete)",
+        "type": "string"
+      },
+      "record": {
+        "description": "Record current kubectl command in the resource annotation. If set to false, do not record the command. If set to true, record the command... (applies to: apply, apply_edit-last-applied, create, expose, scale)",
+        "type": "boolean"
+      },
+      "recursive": {
+        "description": "Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory. (applies to: apply, apply_edit-last-applied, apply_view-last-applied, create, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "type": "boolean"
+      },
+      "registry": {
+        "description": "Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var (applies to: push)",
+        "type": "string"
+      },
+      "replace": {
+        "description": "When used with '--copy-to', delete the original Pod. (applies to: debug)",
+        "type": "boolean"
+      },
+      "replicas": {
+        "default": 1,
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, scale)",
+        "type": "integer"
+      },
+      "resource": {
+        "description": "Resource that the rule applies to (applies to: create_clusterrole, create_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "resource-name": {
+        "description": "Resource in the white list that the rule applies to, repeat this flag for multiple items (applies to: create_clusterrole, create_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "resource-version": {
+        "description": "Precondition for resource version. Requires that the current resource version match this value in order to scale. (applies to: scale)",
+        "type": "string"
+      },
+      "restart": {
+        "description": "job's restart policy. supported values: OnFailure, Never (applies to: create_cronjob)",
+        "type": "string"
+      },
+      "revision": {
+        "default": 0,
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: rollout_history, rollout_status)",
+        "type": "integer"
+      },
+      "role": {
+        "description": "Role this RoleBinding should reference (applies to: create_rolebinding)",
+        "type": "string"
+      },
+      "rule": {
+        "description": "Rule in format host/path=service:port[,tls=secretname]. Paths containing the leading character '*' are considered pathType=Prefix. tls argument is optional. (applies to: create_ingress)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "same-node": {
+        "description": "When used with '--copy-to', schedule the copy of target Pod on the same node. (applies to: debug)",
+        "type": "boolean"
+      },
+      "save-config": {
+        "description": "If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged.....",
+        "type": "boolean"
+      },
+      "schedule": {
+        "description": "A schedule in the Cron format the job should be run with. (applies to: create_cronjob)",
+        "type": "string"
+      },
+      "scopes": {
+        "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: create_quota)",
+        "type": "string"
+      },
+      "secret-ref": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_source_git, create_source_helm, create_source_oci)",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, apply_view-last-applied, create, create_poddisruptionbudget, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "type": "string"
+      },
+      "server-side": {
+        "description": "If true, apply runs in the server instead of the client. (applies to: apply)",
+        "type": "boolean"
+      },
+      "serviceaccount": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_clusterrolebinding, create_rolebinding)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "session-affinity": {
+        "description": "If non-empty, set the session affinity for the service to this; legal values: 'None', 'ClientIP' (applies to: expose)",
+        "type": "string"
+      },
+      "set-image": {
+        "description": "When used with '--copy-to', a list of name=image pairs for changing container images, similar to how 'kubectl set image' works. (applies to: debug)",
+        "type": "string"
+      },
+      "share-processes": {
+        "default": true,
+        "description": "When used with '--copy-to', enable process namespace sharing in the copy. (applies to: debug)",
+        "type": "boolean"
+      },
+      "show-managed-fields": {
+        "description": "If true, keep the managedFields when printing objects in JSON or YAML format.",
+        "type": "boolean"
+      },
+      "source": {
+        "description": "source name in format 'Kind/name' or 'Kind/name.namespace' (applies to: create_helmrelease, create_kustomization)",
+        "type": "string"
+      },
+      "source-kind": {
+        "default": "HelmRepository",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization)",
+        "type": "string"
+      },
+      "stdin": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec)",
+        "type": "boolean"
+      },
+      "subresource": {
+        "description": "If specified, apply will operate on the subresource of the requested object.  Only allowed when using --server-side. (applies to: apply)",
+        "type": "string"
+      },
+      "tag": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_source_git, create_source_oci)",
+        "type": "string"
+      },
+      "tag-semver": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_source_git, create_source_oci)",
+        "type": "string"
+      },
+      "target": {
+        "description": "When using an ephemeral container, target processes in this container name. (applies to: debug)",
+        "type": "string"
+      },
+      "target-namespace": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization)",
+        "type": "string"
+      },
+      "target-port": {
+        "description": "Name or number for the port on the container that the service should direct traffic to. Optional. (applies to: expose)",
+        "type": "string"
+      },
+      "tcp": {
+        "description": "Port pairs can be specified as '\u003cport\u003e:\u003ctargetPort\u003e'. (applies to: create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "template": {
+        "description": "Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].",
+        "type": "string"
+      },
+      "timeout": {
+        "default": "0s",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, delete, install, reconcile, rollout_status, scale)",
+        "type": "string"
+      },
+      "to-revision": {
+        "default": 0,
+        "description": "The revision to rollback to. Default to 0 (last revision). (applies to: rollout_undo)",
+        "type": "integer"
+      },
+      "tty": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec)",
+        "type": "boolean"
+      },
+      "type": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_secret_generic, expose)",
+        "type": "string"
+      },
+      "url": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_source_git, create_source_helm, create_source_oci)",
+        "type": "string"
+      },
+      "validate": {
+        "default": "strict",
+        "description": "Behavior depends on the selected subcommand...",
+        "type": "string"
+      },
+      "value": {
+        "default": 0,
+        "description": "the value of this priority class. (applies to: create_priorityclass)",
+        "type": "integer"
+      },
+      "verb": {
+        "description": "Verb that applies to the resources contained in the rule (applies to: create_clusterrole, create_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "version": {
+        "description": "chart version constraint (default: latest) (applies to: install)",
+        "type": "string"
+      },
+      "wait": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create_kustomization, delete, install)",
+        "type": "boolean"
+      },
+      "watch": {
+        "default": true,
+        "description": "Watch the status of the rollout until it's done. (applies to: rollout_status)",
+        "type": "boolean"
+      },
+      "windows-line-endings": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply_edit-last-applied, create)",
+        "type": "boolean"
+      },
+      "workload_command": {
+        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nedit: Edit a resource\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
+        "enum": [
+          "apply",
+          "apply_edit-last-applied",
+          "apply_set-last-applied",
+          "apply_view-last-applied",
+          "create",
+          "create_clusterrole",
+          "create_clusterrolebinding",
+          "create_configmap",
+          "create_cronjob",
+          "create_deployment",
+          "create_helmrelease",
+          "create_ingress",
+          "create_job",
+          "create_kustomization",
+          "create_namespace",
+          "create_poddisruptionbudget",
+          "create_priorityclass",
+          "create_quota",
+          "create_role",
+          "create_rolebinding",
+          "create_secret",
+          "create_secret_docker-registry",
+          "create_secret_generic",
+          "create_secret_tls",
+          "create_service",
+          "create_service_clusterip",
+          "create_service_externalname",
+          "create_service_loadbalancer",
+          "create_service_nodeport",
+          "create_serviceaccount",
+          "create_source_git",
+          "create_source_helm",
+          "create_source_oci",
+          "create_token",
+          "debug",
+          "delete",
+          "edit",
+          "exec",
+          "expose",
+          "import",
+          "install",
+          "push",
+          "reconcile",
+          "rollout",
+          "rollout_history",
+          "rollout_pause",
+          "rollout_restart",
+          "rollout_resume",
+          "rollout_status",
+          "rollout_undo",
+          "scale",
+          "watch"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "workload_command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/workload_read - 1]
+{
+  "name": "workload_read",
+  "title": "Workload Read",
+  "description": "Manage workload operations",
+  "commandPath": "ksail workload",
+  "requiresPermission": false,
+  "isConsolidated": true,
+  "subcommandParam": "workload_command",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "address": {
+        "default": [
+          "localhost"
+        ],
+        "description": "Addresses to listen on (comma separated). Only accepts IP addresses or localhost as a value... (applies to: forward)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "aggregation-rule": {
+        "description": "An aggregation label selector for combining ClusterRoles. (applies to: gen_clusterrole)",
+        "type": "string"
+      },
+      "all": {
+        "description": "Select all resources in the namespace of the specified resource types (applies to: wait)",
+        "type": "boolean"
+      },
+      "all-containers": {
+        "description": "Get all containers' logs in the pod(s). (applies to: logs)",
+        "type": "boolean"
+      },
+      "all-namespaces": {
+        "description": "If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace. (applies to: describe, get, wait)",
+        "type": "boolean"
+      },
+      "all-pods": {
+        "description": "Get logs from all pod(s). Sets prefix to true. (applies to: logs)",
+        "type": "boolean"
+      },
+      "allow-missing-template-keys": {
+        "default": true,
+        "description": "If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats.",
+        "type": "boolean"
+      },
+      "annotation": {
+        "description": "Annotation to insert in the ingress object, in the format annotation=value (applies to: gen_ingress)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "api-version": {
+        "description": "Get different explanations for particular API version (API group/version) (applies to: explain)",
+        "type": "string"
+      },
+      "append-hash": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_configmap, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls)",
+        "type": "boolean"
+      },
+      "args": {
+        "description": "Positional arguments for the command (applies to: describe, explain, export, forward, gen_clusterrole, gen_clusterrolebinding, gen_configmap, gen_cronjob, gen_deployment, gen_helmrelease, gen_ingress, gen_job, gen_namespace, gen_poddisruptionbudget, gen_priorityclass, gen_quota, gen_role, gen_rolebinding, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls, gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport, gen_serviceaccount, get, logs, scan, validate, wait)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cert": {
+        "description": "Path to PEM encoded public key certificate. (applies to: gen_secret_tls)",
+        "type": "string"
+      },
+      "cert-manager": {
+        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip) (applies to: images)",
+        "type": "string"
+      },
+      "chart": {
+        "description": "Helm chart name or path (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "chart-ref": {
+        "description": "Helm chart reference (HelmChart/name, OCIRepository/name) (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "chart-version": {
+        "description": "Helm chart version, accepts a semver range (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "chunk-size": {
+        "default": 500,
+        "description": "Return large lists in chunks rather than all at once. Pass 0 to disable. (applies to: describe, get)",
+        "type": "integer"
+      },
+      "class": {
+        "description": "Ingress Class to be used (applies to: gen_ingress)",
+        "type": "string"
+      },
+      "cluster": {
+        "description": "The name of the kubeconfig cluster to use (applies to: describe, explain, forward, get, logs)",
+        "type": "string"
+      },
+      "clusterip": {
+        "description": "Assign your own ClusterIP or set to 'None' for a 'headless' service (no loadbalancing). (applies to: gen_service_clusterip)",
+        "type": "string"
+      },
+      "clusterrole": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_clusterrolebinding, gen_rolebinding)",
+        "type": "string"
+      },
+      "cni": {
+        "description": "Container Network Interface (CNI) to use (applies to: images)",
+        "type": "string"
+      },
+      "compliance-threshold": {
+        "default": 0,
+        "description": "Fail if compliance score is below this threshold (0-100) (applies to: scan)",
+        "type": "number"
+      },
+      "container": {
+        "description": "Print the logs of this container (applies to: logs)",
+        "type": "string"
+      },
+      "context": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, export, forward, get, logs)",
+        "type": "string"
+      },
+      "crds": {
+        "description": "CRDs policy (Create, CreateReplace, Skip) (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "create-target-namespace": {
+        "description": "create the target namespace if not present (applies to: gen_helmrelease)",
+        "type": "boolean"
+      },
+      "csi": {
+        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI) (applies to: images)",
+        "type": "string"
+      },
+      "default-backend": {
+        "description": "Default service for backend, in format of svcname:port (applies to: gen_ingress)",
+        "type": "string"
+      },
+      "depends-on": {
+        "description": "HelmReleases that must be ready before this release (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": {
+        "description": "description is an arbitrary string that usually provides guidelines on when this priority class should be used. (applies to: gen_priorityclass)",
+        "type": "string"
+      },
+      "distribution": {
+        "description": "Kubernetes distribution to use (applies to: images)",
+        "type": "string"
+      },
+      "docker-email": {
+        "description": "Email for Docker registry (applies to: gen_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-password": {
+        "description": "Password for Docker registry authentication (applies to: gen_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-server": {
+        "default": "https://index.docker.io/v1/",
+        "description": "Server location for Docker registry (applies to: gen_secret_docker-registry)",
+        "type": "string"
+      },
+      "docker-username": {
+        "description": "Username for Docker registry authentication (applies to: gen_secret_docker-registry)",
+        "type": "string"
+      },
+      "dry-run": {
+        "default": "none",
+        "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
+        "type": "string"
+      },
+      "export": {
+        "description": "export in YAML format to stdout (applies to: gen_helmrelease)",
+        "type": "boolean"
+      },
+      "external-name": {
+        "description": "External name of service (applies to: gen_service_externalname)",
+        "type": "string"
+      },
+      "field-manager": {
+        "default": "kubectl-create",
+        "description": "Name of the manager used to track field ownership.",
+        "type": "string"
+      },
+      "field-selector": {
+        "description": "Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type. (applies to: get, wait)",
+        "type": "string"
+      },
+      "filename": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, get, wait)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "follow": {
+        "description": "Specify if the logs should be streamed. (applies to: logs)",
+        "type": "boolean"
+      },
+      "for": {
+        "description": "The condition to wait on: [create|delete|condition=condition-name[=condition-value]|jsonpath='{JSONPath expression}'=[JSONPath value]]. The default condition-value is true... (applies to: wait)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "format": {
+        "default": "pretty-printer",
+        "description": "Output format (pretty-printer, json, sarif, junit) (applies to: scan)",
+        "type": "string"
+      },
+      "framework": {
+        "default": [
+          "nsa"
+        ],
+        "description": "Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (applies to: scan)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "from": {
+        "description": "The name of the resource to create a Job from (only CronJob is supported). (applies to: gen_job)",
+        "type": "string"
+      },
+      "from-env-file": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_configmap, gen_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "from-file": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_configmap, gen_secret_docker-registry, gen_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "from-literal": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_configmap, gen_secret_generic)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "gitops-engine": {
+        "default": "None",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: images)",
+        "type": "string"
+      },
+      "global-default": {
+        "description": "global-default specifies whether this PriorityClass should be considered as the default priority. (applies to: gen_priorityclass)",
+        "type": "boolean"
+      },
+      "group": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_clusterrolebinding, gen_rolebinding)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "hard": {
+        "description": "A comma-delimited set of resource=quantity pairs that define a hard limit. (applies to: gen_quota)",
+        "type": "string"
+      },
+      "ignore-errors": {
+        "description": "If watching / following pod logs, allow for any errors that occur to be non-fatal (applies to: logs)",
+        "type": "boolean"
+      },
+      "ignore-missing-schemas": {
+        "default": true,
+        "description": "Ignore resources with missing schemas (applies to: validate)",
+        "type": "boolean"
+      },
+      "ignore-not-found": {
+        "description": "If set to true, suppresses NotFound error for specific objects that do not exist. Using this flag with commands that query for collections of resources has no effect when no resources are found. (applies to: get)",
+        "type": "boolean"
+      },
+      "image": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: export, gen_cronjob, gen_deployment, gen_job)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "interval": {
+        "default": "1m0s",
+        "description": "reconciliation interval (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "key": {
+        "description": "Path to private key associated with given certificate. (applies to: gen_secret_tls)",
+        "type": "string"
+      },
+      "kubeconfig": {
+        "default": "~/.kube/config",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, export, forward, get, logs)",
+        "type": "string"
+      },
+      "kubeconfig-secret-ref": {
+        "description": "KubeConfig secret reference for remote reconciliation (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "kustomize": {
+        "description": "Process the kustomization directory. This flag can't be used together with -f or -R. (applies to: describe, get)",
+        "type": "string"
+      },
+      "label-columns": {
+        "description": "Accepts a comma separated list of labels that are going to be presented as columns. Names are case-sensitive. You can also use multiple flag options like -L label1 -L label2... (applies to: get)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "limit-bytes": {
+        "default": 0,
+        "description": "Maximum bytes of logs to return. Defaults to no limit. (applies to: logs)",
+        "type": "integer"
+      },
+      "load-balancer": {
+        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall) (applies to: images)",
+        "type": "string"
+      },
+      "local": {
+        "description": "If true, annotation will NOT contact api-server but run locally. (applies to: wait)",
+        "type": "boolean"
+      },
+      "max-log-requests": {
+        "default": 5,
+        "description": "Specify maximum number of concurrent logs to follow when using by a selector. Defaults to 5. (applies to: logs)",
+        "type": "integer"
+      },
+      "max-unavailable": {
+        "description": "The maximum number or percentage of unavailable pods this budget requires. (applies to: gen_poddisruptionbudget)",
+        "type": "string"
+      },
+      "metrics-server": {
+        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (applies to: images)",
+        "type": "string"
+      },
+      "min-available": {
+        "description": "The minimum number or percentage of available pods this budget requires. (applies to: gen_poddisruptionbudget)",
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs)",
+        "type": "string"
+      },
+      "no-headers": {
+        "description": "When using the default or custom-column output format, don't print headers (default print headers). (applies to: get)",
+        "type": "boolean"
+      },
+      "node-port": {
+        "default": 0,
+        "description": "Port used to expose the service on each node in a cluster. (applies to: gen_service_nodeport)",
+        "type": "integer"
+      },
+      "non-resource-url": {
+        "description": "A partial url that user should have access to. (applies to: gen_clusterrole)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "output": {
+        "default": "plaintext",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "output-watch-events": {
+        "description": "Output watch event objects when --watch or --watch-only is used. Existing objects are output as initial ADDED events. (applies to: get)",
+        "type": "boolean"
+      },
+      "pod-running-timeout": {
+        "default": "1m0s",
+        "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: forward, logs)",
+        "type": "string"
+      },
+      "policy-engine": {
+        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper) (applies to: images)",
+        "type": "string"
+      },
+      "port": {
+        "default": -1,
+        "description": "The containerPort that this deployment exposes. (applies to: gen_deployment)",
+        "type": "integer"
+      },
+      "preemption-policy": {
+        "default": "PreemptLowerPriority",
+        "description": "preemption-policy is the policy for preempting pods with lower priority. (applies to: gen_priorityclass)",
+        "type": "string"
+      },
+      "prefix": {
+        "description": "Prefix each log line with the log source (pod name and container name) (applies to: logs)",
+        "type": "boolean"
+      },
+      "previous": {
+        "description": "If true, print the logs for the previous instance of the container in a pod if it exists. (applies to: logs)",
+        "type": "boolean"
+      },
+      "provider": {
+        "description": "Infrastructure provider backend (e.g., Docker) (applies to: images)",
+        "type": "string"
+      },
+      "raw": {
+        "description": "Raw URI to request from the server.  Uses the transport specified by the kubeconfig file. (applies to: get)",
+        "type": "string"
+      },
+      "recursive": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, get, wait)",
+        "type": "boolean"
+      },
+      "release-name": {
+        "description": "name used for the Helm release (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "replicas": {
+        "default": 1,
+        "description": "Number of replicas to create. Default is 1. (applies to: gen_deployment)",
+        "type": "integer"
+      },
+      "resource": {
+        "description": "Resource that the rule applies to (applies to: gen_clusterrole, gen_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "resource-name": {
+        "description": "Resource in the white list that the rule applies to, repeat this flag for multiple items (applies to: gen_clusterrole, gen_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "restart": {
+        "description": "job's restart policy. supported values: OnFailure, Never (applies to: gen_cronjob)",
+        "type": "string"
+      },
+      "role": {
+        "description": "Role this RoleBinding should reference (applies to: gen_rolebinding)",
+        "type": "string"
+      },
+      "rule": {
+        "description": "Rule in format host/path=service:port[,tls=secretname]. Paths containing the leading character '*' are considered pathType=Prefix. tls argument is optional. (applies to: gen_ingress)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "save-config": {
+        "description": "If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged...",
+        "type": "boolean"
+      },
+      "schedule": {
+        "description": "A schedule in the Cron format the job should be run with. (applies to: gen_cronjob)",
+        "type": "string"
+      },
+      "scopes": {
+        "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, gen_poddisruptionbudget, get, logs, wait)",
+        "type": "string"
+      },
+      "server-print": {
+        "default": true,
+        "description": "If true, have the server return the appropriate table output. Supports extension APIs and CRDs. (applies to: get)",
+        "type": "boolean"
+      },
+      "service-account": {
+        "description": "service account name to impersonate (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "serviceaccount": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_clusterrolebinding, gen_rolebinding)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "show-events": {
+        "default": true,
+        "description": "If true, display events related to the described object. Defaults to true for a single object, false for multiple objects and prefix matching. (applies to: describe)",
+        "type": "boolean"
+      },
+      "show-kind": {
+        "description": "If present, list the resource type for the requested object(s). (applies to: get)",
+        "type": "boolean"
+      },
+      "show-labels": {
+        "description": "When printing, show all labels as the last column (default hide labels column) (applies to: get)",
+        "type": "boolean"
+      },
+      "show-managed-fields": {
+        "description": "If true, keep the managedFields when printing objects in JSON or YAML format.",
+        "type": "boolean"
+      },
+      "since": {
+        "default": "0s",
+        "description": "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs. Only one of since-time / since may be used. (applies to: logs)",
+        "type": "string"
+      },
+      "since-time": {
+        "description": "Only return logs after a specific date (RFC3339). Defaults to all logs. Only one of since-time / since may be used. (applies to: logs)",
+        "type": "string"
+      },
+      "skip-kinds": {
+        "description": "Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml) (applies to: validate)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "skip-secrets": {
+        "default": true,
+        "description": "Skip validation of Kubernetes Secrets (applies to: validate)",
+        "type": "boolean"
+      },
+      "sort-by": {
+        "description": "If non-empty, sort list types using this field specification.  The field specification is expressed as a JSONPath expression (e.g. '{.metadata.name}')... (applies to: get)",
+        "type": "string"
+      },
+      "source": {
+        "description": "source that contains the chart (HelmRepository/name, GitRepository/name, Bucket/name) (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "storage-namespace": {
+        "description": "namespace for Helm storage (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "strict": {
+        "description": "Enable strict validation mode (applies to: validate)",
+        "type": "boolean"
+      },
+      "subresource": {
+        "description": "If specified, gets the subresource of the requested object. (applies to: get)",
+        "type": "string"
+      },
+      "tail": {
+        "default": -1,
+        "description": "Lines of recent log file to display. Defaults to -1 with no selector, showing all log lines otherwise 10, if a selector is provided. (applies to: logs)",
+        "type": "integer"
+      },
+      "target-namespace": {
+        "description": "namespace to target when performing operations (applies to: gen_helmrelease)",
+        "type": "string"
+      },
+      "tcp": {
+        "description": "Port pairs can be specified as '\u003cport\u003e:\u003ctargetPort\u003e'. (applies to: gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "template": {
+        "description": "Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].",
+        "type": "string"
+      },
+      "timeout": {
+        "default": "5m0s",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_helmrelease, wait)",
+        "type": "string"
+      },
+      "timestamps": {
+        "description": "Include timestamps on each line in the log output (applies to: logs)",
+        "type": "boolean"
+      },
+      "type": {
+        "description": "The type of secret to create (applies to: gen_secret_generic)",
+        "type": "string"
+      },
+      "validate": {
+        "default": "strict",
+        "description": "Must be one of: strict (or true), warn, ignore (or false). \"true\" or \"strict\" will use a schema to validate the input and fail the request if invalid...",
+        "type": "string"
+      },
+      "value": {
+        "default": 0,
+        "description": "the value of this priority class. (applies to: gen_priorityclass)",
+        "type": "integer"
+      },
+      "values": {
+        "description": "local values YAML files (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "values-from": {
+        "description": "values from ConfigMap or Secret (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "verb": {
+        "description": "Verb that applies to the resources contained in the rule (applies to: gen_clusterrole, gen_role)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "verbose": {
+        "description": "Show all resources in output, not just failed ones (applies to: scan)",
+        "type": "boolean"
+      },
+      "watch": {
+        "description": "After listing/getting the requested object, watch for changes. (applies to: get)",
+        "type": "boolean"
+      },
+      "watch-only": {
+        "description": "Watch for changes to the requested object(s), without listing/getting first. (applies to: get)",
+        "type": "boolean"
+      },
+      "workload_command": {
+        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nexport: Export container images from the cluster\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
+        "enum": [
+          "describe",
+          "explain",
+          "export",
+          "forward",
+          "gen_clusterrole",
+          "gen_clusterrolebinding",
+          "gen_configmap",
+          "gen_cronjob",
+          "gen_deployment",
+          "gen_helmrelease",
+          "gen_ingress",
+          "gen_job",
+          "gen_namespace",
+          "gen_poddisruptionbudget",
+          "gen_priorityclass",
+          "gen_quota",
+          "gen_role",
+          "gen_rolebinding",
+          "gen_secret_docker-registry",
+          "gen_secret_generic",
+          "gen_secret_tls",
+          "gen_service_clusterip",
+          "gen_service_externalname",
+          "gen_service_loadbalancer",
+          "gen_service_nodeport",
+          "gen_serviceaccount",
+          "get",
+          "images",
+          "logs",
+          "scan",
+          "validate",
+          "wait"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "workload_command"
+    ],
+    "type": "object"
+  }
+}
+---

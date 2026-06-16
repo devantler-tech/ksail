@@ -2,21 +2,17 @@ import { Copy, FileCode, Layers, RotateCw, ScrollText, SquareTerminal } from "lu
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import yaml from "js-yaml";
 import {
-  CLUSTER_SCOPED_KINDS,
   deleteResource,
   errorMessage,
   listResources,
-  RECONCILABLE_KINDS,
   reconcileResource,
-  RESOURCE_KINDS,
-  RESTARTABLE_KINDS,
   restartResource,
   scaleResource,
-  SCALABLE_KINDS,
   type Cluster,
   type K8sObject,
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
+import { useResourceKinds } from "../lib/meta.ts";
 import { epochMs, relativeAge } from "../lib/format.ts";
 import { clusterKey, eventFields, eventLastSeenMs, splitClusterKey, type EventFields } from "../lib/k8s.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
@@ -267,6 +263,9 @@ export function ResourcesView({
   canExec: boolean;
 }) {
   const toast = useToast();
+  // kindLists drives the kind selector and the action affordances: served by /api/v1/meta's
+  // resourceKinds on current backends, with the api.ts constants as the older-backend fallback.
+  const kindLists = useResourceKinds();
   // clusterId is the active cluster's "namespace/name" — the fetch target shared by every request.
   const clusterId = cluster ? clusterKey(cluster) : "";
   const [kind, setKind] = useState<string>("Pod");
@@ -422,7 +421,7 @@ export function ResourcesView({
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <SelectField label="Kind" value={kind} onChange={(event) => setKind(event.target.value)} className="min-w-40">
-          {RESOURCE_KINDS.map((name) => (
+          {kindLists.kinds.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -522,7 +521,7 @@ export function ResourcesView({
           <div className="space-y-3">
             {canWrite || ((canLogs || canExec) && kind === "Pod") ? (
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
-                {canWrite && SCALABLE_KINDS.includes(kind) ? (
+                {canWrite && kindLists.scalable.includes(kind) ? (
                   <form
                     className="flex items-center gap-1.5"
                     onSubmit={(event) => {
@@ -564,7 +563,7 @@ export function ResourcesView({
                     </Button>
                   </form>
                 ) : null}
-                {canWrite && RESTARTABLE_KINDS.includes(kind) ? (
+                {canWrite && kindLists.restartable.includes(kind) ? (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -585,7 +584,7 @@ export function ResourcesView({
                     Restart
                   </Button>
                 ) : null}
-                {canWrite && RECONCILABLE_KINDS.includes(kind) ? (
+                {canWrite && kindLists.reconcilable.includes(kind) ? (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -636,7 +635,7 @@ export function ResourcesView({
                     Exec
                   </Button>
                 ) : null}
-                {canWrite && !CLUSTER_SCOPED_KINDS.includes(kind) ? (
+                {canWrite && !kindLists.deleteDenied.includes(kind) ? (
                   <Button size="sm" variant="danger" disabled={actionBusy} onClick={() => setDeleteOpen(true)}>
                     Delete
                   </Button>

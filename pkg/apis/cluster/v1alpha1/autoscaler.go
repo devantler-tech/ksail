@@ -2,14 +2,18 @@ package v1alpha1
 
 // AutoscalerConfig defines configuration for pod and node autoscaling.
 type AutoscalerConfig struct {
-	Pod  PodAutoscalerConfig  `json:"pod,omitzero"`
+	// Pod configures pod-level autoscaling (horizontal and vertical).
+	Pod PodAutoscalerConfig `json:"pod,omitzero"`
+	// Node configures node-level autoscaling via the Cluster Autoscaler.
 	Node NodeAutoscalerConfig `json:"node,omitzero"`
 }
 
 // PodAutoscalerConfig defines configuration for pod-level autoscaling.
 type PodAutoscalerConfig struct {
+	// Horizontal controls Horizontal Pod Autoscaler (HPA) support.
 	Horizontal PodAutoscalerHorizontal `json:"horizontal,omitzero"`
-	Vertical   PodAutoscalerVertical   `json:"vertical,omitzero"`
+	// Vertical controls Vertical Pod Autoscaler (VPA) support.
+	Vertical PodAutoscalerVertical `json:"vertical,omitzero"`
 }
 
 // NodeAutoscalerConfig defines configuration for node-level autoscaling.
@@ -18,12 +22,27 @@ type PodAutoscalerConfig struct {
 // workers based on workload demand. Node-count changes via ksail cluster update
 // are still applied to the Talos machine config and will take effect normally.
 type NodeAutoscalerConfig struct {
-	Enabled               bool                   `json:"enabled,omitzero"`
-	Pools                 []NodePool             `json:"pools,omitzero"`
-	MaxNodesTotal         int32                  `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"`                                //nolint:lll
-	Expander              AutoscalerExpanderList `json:"expander,omitzero"              jsonschema:"description=Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."`                                                                                                                                                            //nolint:lll
-	ScaleDownUnneededTime string                 `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"`                                                                                                                                                                                                                                                                                                                                                                                              //nolint:lll
-	CapacityBuffers       bool                   `json:"capacityBuffers,omitzero"       jsonschema:"description=Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
+	// Enabled controls whether the Cluster Autoscaler is installed to manage
+	// worker node counts dynamically.
+	Enabled bool `json:"enabled,omitzero"`
+	// Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
+	Pools []NodePool `json:"pools,omitzero"`
+	// MaxNodesTotal caps the total number of nodes in the cluster
+	// (control-planes + workers + autoscaler nodes). 0 disables the global cap.
+	MaxNodesTotal int32 `json:"maxNodesTotal,omitzero" jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
+	// Expander selects the Cluster Autoscaler expander strategy. It accepts a
+	// single value (e.g. LeastWaste) or an ordered priority list
+	// (e.g. [LeastNodes, LeastWaste]) applied as a chain.
+	Expander AutoscalerExpanderList `json:"expander,omitzero" jsonschema:"description=Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."` //nolint:lll
+	// ScaleDownUnneededTime is how long a node must be unneeded before it is
+	// eligible for scale down (e.g. "10m").
+	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	// CapacityBuffers enables the Cluster Autoscaler capacity-buffers feature:
+	// KSail installs the CapacityBuffer CRD and turns on the buffer controller
+	// and pod-injection flags, so CapacityBuffer resources reserve scale-up
+	// headroom as virtual (pod-less) chunks — a native replacement for
+	// low-priority balloon-pod overprovisioning.
+	CapacityBuffers bool `json:"capacityBuffers,omitzero" jsonschema:"description=Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
 }
 
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.

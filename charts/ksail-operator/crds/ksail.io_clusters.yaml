@@ -62,7 +62,7 @@ spec:
             description: Spec defines the desired state of a KSail cluster.
             properties:
               chat:
-                description: ChatSpec defines AI chat assistant configuration.
+                description: Chat configures the KSail AI chat assistant.
                 properties:
                   model:
                     type: string
@@ -73,7 +73,9 @@ spec:
                     type: string
                 type: object
               cluster:
-                description: ClusterSpec defines cluster-related configuration.
+                description: |-
+                  Cluster configures the Kubernetes cluster KSail manages: distribution,
+                  provider, components, and connection settings.
                 properties:
                   autoscaler:
                     description: |-
@@ -81,37 +83,41 @@ spec:
                       Supersedes spec.cluster.nodeAutoscaling (deprecated; aliased on load).
                     properties:
                       node:
-                        description: |-
-                          NodeAutoscalerConfig defines configuration for node-level autoscaling.
-                          When Enabled, the Cluster Autoscaler manages worker node counts dynamically.
-                          KSail-specified node counts serve as a baseline; the autoscaler adds and removes
-                          workers based on workload demand. Node-count changes via ksail cluster update
-                          are still applied to the Talos machine config and will take effect normally.
+                        description: Node configures node-level autoscaling via the
+                          Cluster Autoscaler.
                         properties:
                           capacityBuffers:
+                            description: |-
+                              CapacityBuffers enables the Cluster Autoscaler capacity-buffers feature:
+                              KSail installs the CapacityBuffer CRD and turns on the buffer controller
+                              and pod-injection flags, so CapacityBuffer resources reserve scale-up
+                              headroom as virtual (pod-less) chunks — a native replacement for
+                              low-priority balloon-pod overprovisioning.
                             type: boolean
                           enabled:
+                            description: |-
+                              Enabled controls whether the Cluster Autoscaler is installed to manage
+                              worker node counts dynamically.
                             type: boolean
                           expander:
                             description: |-
-                              AutoscalerExpanderList is an ordered priority list of expander strategies for
-                              the cluster autoscaler. The autoscaler applies them as a chain: the first
-                              expander filters candidate node groups and each subsequent expander breaks the
-                              ties left by the previous one. This mirrors the upstream cluster-autoscaler
-                              priority-list form (e.g. --expander=least-nodes,least-waste).
-
-                              In ksail.yaml the field accepts either a single scalar value
-                              (expander: LeastWaste) or a YAML sequence (expander: [LeastNodes, LeastWaste]);
-                              the configuration loader normalises a scalar into a single-element list.
+                              Expander selects the Cluster Autoscaler expander strategy. It accepts a
+                              single value (e.g. LeastWaste) or an ordered priority list
+                              (e.g. [LeastNodes, LeastWaste]) applied as a chain.
                             items:
                               description: AutoscalerExpander defines the node expander
                                 strategy for the cluster autoscaler.
                               type: string
                             type: array
                           maxNodesTotal:
+                            description: |-
+                              MaxNodesTotal caps the total number of nodes in the cluster
+                              (control-planes + workers + autoscaler nodes). 0 disables the global cap.
                             format: int32
                             type: integer
                           pools:
+                            description: Pools defines the node pools the Cluster
+                              Autoscaler may scale (Hetzner only).
                             items:
                               description: NodePool defines a Hetzner node pool managed
                                 by the cluster autoscaler.
@@ -177,42 +183,58 @@ spec:
                               type: object
                             type: array
                           scaleDownUnneededTime:
+                            description: |-
+                              ScaleDownUnneededTime is how long a node must be unneeded before it is
+                              eligible for scale down (e.g. "10m").
                             type: string
                         type: object
                       pod:
-                        description: PodAutoscalerConfig defines configuration for
-                          pod-level autoscaling.
+                        description: Pod configures pod-level autoscaling (horizontal
+                          and vertical).
                         properties:
                           horizontal:
-                            description: PodAutoscalerHorizontal defines whether Horizontal
-                              Pod Autoscaling (HPA) is enabled.
+                            description: Horizontal controls Horizontal Pod Autoscaler
+                              (HPA) support.
                             type: string
                           vertical:
-                            description: PodAutoscalerVertical defines whether Vertical
-                              Pod Autoscaling (VPA) is enabled.
+                            description: Vertical controls Vertical Pod Autoscaler
+                              (VPA) support.
                             type: string
                         type: object
                     type: object
                   cdi:
-                    description: CDI defines the CDI (Container Device Interface)
-                      options for a KSail cluster.
+                    description: |-
+                      CDI controls Container Device Interface support in the container runtime
+                      (Default, Enabled, or Disabled).
                     type: string
                   certManager:
-                    description: CertManager defines the cert-manager options for
-                      a KSail cluster.
+                    description: CertManager controls whether cert-manager is installed
+                      (Enabled or Disabled).
                     type: string
                   cni:
-                    description: CNI defines the CNI options for a KSail cluster.
+                    description: |-
+                      CNI selects the Container Network Interface plugin. Default keeps the
+                      distribution's built-in CNI; Cilium or Calico install that CNI instead.
                     type: string
                   connection:
-                    description: Connection defines connection options for a KSail
-                      cluster.
+                    description: |-
+                      Connection defines how KSail connects to the cluster: the kubeconfig path,
+                      context name, and operation timeout.
                     properties:
                       context:
+                        description: |-
+                          Context is the kubeconfig context for the cluster. When empty, KSail derives
+                          it from the distribution and cluster name (e.g. "kind-kind").
                         type: string
                       kubeconfig:
+                        description: |-
+                          Kubeconfig is the path to the kubeconfig file KSail reads and writes.
+                          Defaults to "~/.kube/config".
                         type: string
                       timeout:
+                        description: |-
+                          Timeout is the maximum time KSail waits for cluster operations to complete
+                          (e.g. "5m").
                         type: string
                     type: object
                   controlPlanes:
@@ -223,17 +245,25 @@ spec:
                     format: int32
                     type: integer
                   csi:
-                    description: CSI defines the CSI options for a KSail cluster.
+                    description: |-
+                      CSI controls Container Storage Interface support. Default keeps the
+                      distribution's behavior; Enabled installs a CSI driver
+                      (local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none.
                     type: string
                   distribution:
-                    description: Distribution defines the distribution options for
-                      a KSail cluster.
+                    description: |-
+                      Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
+                      K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS).
                     type: string
                   distributionConfig:
+                    description: |-
+                      DistributionConfig is the path to the distribution's own configuration file
+                      (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
+                      When empty, KSail uses the distribution's default file name.
                     type: string
                   gitOpsEngine:
-                    description: GitOpsEngine defines the GitOps Engine options for
-                      a KSail cluster.
+                    description: 'GitOpsEngine selects the GitOps engine KSail bootstraps:
+                      None, Flux, or ArgoCD.'
                     type: string
                   importImages:
                     type: string
@@ -257,13 +287,14 @@ spec:
                       --kubernetes-version flag (precedence: flag > env > config > default).
                     type: string
                   loadBalancer:
-                    description: LoadBalancer defines the LoadBalancer options for
-                      a KSail cluster.
+                    description: |-
+                      LoadBalancer controls load-balancer support. Default keeps the
+                      distribution and provider behavior; Enabled or Disabled override it.
                     type: string
                   localRegistry:
                     description: |-
-                      LocalRegistry defines options for the host-local OCI registry integration.
-                      For cloud providers (e.g., Hetzner), this can be used to configure an external registry.
+                      LocalRegistry configures the host-local OCI registry (or an external
+                      registry for cloud providers) used by GitOps workflows.
                     properties:
                       registry:
                         description: |-
@@ -277,16 +308,14 @@ spec:
                         type: string
                     type: object
                   metricsServer:
-                    description: MetricsServer defines the Metrics Server options
-                      for a KSail cluster.
+                    description: |-
+                      MetricsServer controls metrics-server installation. Default keeps the
+                      distribution's behavior; Enabled or Disabled override it.
                     type: string
                   nodeAutoscaling:
                     description: |-
-                      NodeAutoscaling is a deprecated alias for [NodeAutoscalerEnabled].
-                      Setting NodeAutoscalingEnabled migrates to NodeAutoscalerEnabledEnabled at load time.
-                      Regardless of this setting, KSail always manages and diffs baseline node counts
-                      (controlPlanes and workers) during cluster update operations.
-                      NOTE: Use spec.cluster.autoscaler.node.enabled ([NodeAutoscalerEnabled]) instead.
+                      NodeAutoscaling is a deprecated alias for spec.cluster.autoscaler.node.enabled
+                      and is migrated on load. Do not set both nodeAutoscaling and autoscaler.
                     type: string
                   oidc:
                     description: |-
@@ -330,21 +359,20 @@ spec:
                         type: string
                     type: object
                   policyEngine:
-                    description: PolicyEngine defines the policy engine options for
-                      a KSail cluster.
+                    description: 'PolicyEngine selects the policy engine to install:
+                      None, Kyverno, or Gatekeeper.'
                     type: string
                   provider:
                     description: |-
-                      Provider defines the infrastructure provider backend for running clusters.
-                      This is a unified type used across distributions that support multiple providers.
+                      Provider selects the infrastructure that runs the cluster nodes: Docker,
+                      Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing
+                      cluster). Each distribution supports a subset of providers; when empty,
+                      KSail uses the distribution's default provider.
                     type: string
                   sops:
                     description: |-
-                      SOPS defines configuration for automatic SOPS Age secret creation in the cluster.
-                      When enabled (default: auto-detect), KSail creates a "sops-age" generic Secret
-                      containing the Age private key(s):
-                        - For Flux: in the flux-system namespace, referenced by Kustomization CRDs via spec.decryption.secretRef.
-                        - For ArgoCD: in the argocd namespace, for use by Config Management Plugins or repo-server SOPS integration.
+                      SOPS configures automatic creation of the SOPS Age secret used to decrypt
+                      encrypted manifests in the cluster.
                     properties:
                       ageKeyEnvVar:
                         description: |-
@@ -392,8 +420,7 @@ spec:
                         type: object
                     type: object
                   talos:
-                    description: OptionsTalos defines options specific to the Talos
-                      distribution.
+                    description: Talos holds options specific to the Talos distribution.
                     properties:
                       config:
                         description: |-
@@ -506,7 +533,8 @@ spec:
                         type: integer
                     type: object
                   vanilla:
-                    description: Distribution-specific options
+                    description: Vanilla holds options specific to the Vanilla (Kind)
+                      distribution.
                     properties:
                       mirrorsDir:
                         description: |-
@@ -524,19 +552,17 @@ spec:
                     type: integer
                 type: object
               editor:
+                description: Editor is the editor command launched for interactive
+                  workflows (e.g. "code --wait").
                 type: string
               provider:
                 description: |-
-                  ProviderSpec defines provider-specific configuration for infrastructure providers.
-                  This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from
-                  cluster/distribution concerns in ClusterSpec.
+                  Provider holds infrastructure-provider-specific options
+                  (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters).
                 properties:
                   aws:
-                    description: |-
-                      OptionsAWS defines options specific to the AWS cloud provider.
-                      Credentials are resolved via the standard AWS SDK v2 credential chain;
-                      the *EnvVar fields let users point KSail at non-standard environment
-                      variable names (mirrors the Hetzner/Omni pattern).
+                    description: AWS holds options for the AWS provider used by the
+                      EKS distribution.
                     properties:
                       accessKeyIdEnvVar:
                         description: |-
@@ -567,9 +593,7 @@ spec:
                         type: string
                     type: object
                   hetzner:
-                    description: |-
-                      OptionsHetzner defines options specific to the Hetzner Cloud provider.
-                      These options are used when Provider is set to "Hetzner" for the Talos distribution.
+                    description: Hetzner holds options for the Hetzner Cloud provider.
                     properties:
                       allowedCidrs:
                         description: |-
@@ -702,9 +726,8 @@ spec:
                     type: object
                   kubernetes:
                     description: |-
-                      OptionsKubernetes defines options specific to the Kubernetes provider.
-                      The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster.
-                      It uses Gateway API (TCPRoute) to expose the nested cluster's API server.
+                      Kubernetes holds options for the Kubernetes provider, which runs nested
+                      clusters as pods inside an existing host cluster.
                     properties:
                       context:
                         description: |-
@@ -766,9 +789,7 @@ spec:
                         type: string
                     type: object
                   omni:
-                    description: |-
-                      OptionsOmni defines options specific to the Sidero Omni provider.
-                      These options are used when Provider is set to "Omni" for the Talos distribution.
+                    description: Omni holds options for the Sidero Omni provider.
                     properties:
                       endpoint:
                         description: |-
@@ -826,7 +847,9 @@ spec:
                     type: object
                 type: object
               workload:
-                description: WorkloadSpec defines workload-related configuration.
+                description: |-
+                  Workload configures workload management: the manifest source directory,
+                  OCI push and validation settings, and GitOps bootstrap options.
                 properties:
                   flux:
                     description: |-
