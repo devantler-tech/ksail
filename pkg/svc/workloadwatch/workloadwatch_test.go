@@ -217,7 +217,8 @@ func TestPollForChangesEmitsStartedMarker(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("x: 1\n"), filePerm); err != nil {
+	err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("x: 1\n"), filePerm)
+	if err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
@@ -231,6 +232,9 @@ func TestPollForChangesEmitsStartedMarker(t *testing.T) {
 	workloadwatch.PollForChanges(ctx, dir, make(chan string, 1), &buf)
 
 	if !strings.Contains(buf.String(), "poll: started") {
-		t.Fatalf("PollForChanges did not emit 'poll: started' readiness marker; got %q", buf.String())
+		t.Fatalf(
+			"PollForChanges did not emit 'poll: started' readiness marker; got %q",
+			buf.String(),
+		)
 	}
 }
