@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -538,14 +539,17 @@ func (p *Provisioner) readAutoscalerConfigSecret(
 // in-place Change (or none) when they differ, the Secret/key is absent, or a pool
 // was added/removed.
 //
-// The comparison is over each pool's SECRETS-REDACTED worker config fingerprint —
-// not the raw Secret bytes — for the same reason machine-config drift redacts
-// (configFingerprint): the cloud-init embeds the full worker config including PKI,
-// and the local bundle's PKI legitimately differs from the running cluster's
-// (syncSecretsFromCluster realigns secrets/endpoint during apply, #4963). Comparing
-// raw bytes would report PKI-only drift on every run; redacting isolates the
-// comparison to the machine-config patches, labels, and taints this bug is about,
-// keeping idempotent re-runs at "No changes detected".
+// The comparison is over each pool's normalised worker config fingerprint — not
+// the raw Secret bytes (see redactedWorkerConfigFingerprint): the cloud-init embeds
+// the full worker config, and two fields legitimately differ between the un-synced
+// local bundle the diff phase renders and the cluster-synced bundle the apply path
+// stores, because syncSecretsFromCluster realigns both during apply (#4963) — the
+// PKI (neutralised by RedactSecrets) and the cluster control-plane endpoint
+// (CIDR-derived private IP locally vs the control-plane's public IP on the cluster,
+// neutralised by normalizeEndpointForFingerprint; the endpoint is not a secret, so
+// redaction alone left it leaking a phantom in-place diff on every run). Both
+// normalisations isolate the comparison to the machine-config patches, labels, and
+// taints this bug is about, keeping idempotent re-runs at "No changes detected".
 func autoscalerTemplateDrift(
 	existing *corev1.Secret,
 	pools []AutoscalerPoolConfig,
@@ -673,17 +677,67 @@ func decodeAutoscalerCloudInit(cloudInit string) ([]byte, error) {
 	return decompressed, nil
 }
 
+// fingerprintEndpointPlaceholder is the canonical cluster control-plane endpoint
+// substituted into a worker config before fingerprinting. The diff phase renders
+// the desired template from the un-synced local bundle (a CIDR-derived private
+// endpoint) while the apply path writes the Secret from the cluster-synced bundle
+// (the control-plane's public endpoint) — syncSecretsFromCluster realigns the
+// endpoint exactly as it realigns the PKI (#4963). The endpoint is not a secret,
+// so RedactSecrets leaves it in place; substituting a fixed value keeps an
+// endpoint-only difference from reading as drift on every run, isolating the
+// comparison to the machine-config patches, labels, and taints (see
+// autoscalerTemplateDrift).
+const fingerprintEndpointPlaceholder = "https://cluster-endpoint:6443"
+
 // redactedWorkerConfigFingerprint returns a short, stable fingerprint of a worker
 // config's secrets-redacted, canonical encoding (the same normalisation
-// configFingerprint uses), so two configs that differ only in PKI fingerprint
-// identically.
+// configFingerprint uses), with the cluster control-plane endpoint normalised to a
+// fixed placeholder, so two configs that differ only in PKI or endpoint — both
+// realigned from the running cluster during apply (#4963) — fingerprint identically.
 func redactedWorkerConfigFingerprint(workerYAML []byte) (string, error) {
 	provider, err := configloader.NewFromBytes(workerYAML)
 	if err != nil {
 		return "", fmt.Errorf("load worker config for fingerprint: %w", err)
 	}
 
+	provider, err = normalizeEndpointForFingerprint(provider)
+	if err != nil {
+		return "", err
+	}
+
 	return configFingerprint(provider), nil
+}
+
+// normalizeEndpointForFingerprint substitutes the cluster control-plane endpoint
+// with a fixed placeholder so two worker templates that differ only in endpoint
+// fingerprint identically. It is a no-op when the config carries no endpoint (the
+// structure is preserved otherwise, so a config that defines an endpoint and one
+// that does not still fingerprint differently — but both sides of the autoscaler
+// comparison come from the same bundle, so they always agree on its presence).
+func normalizeEndpointForFingerprint(
+	provider talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	placeholder, err := url.Parse(fingerprintEndpointPlaceholder)
+	if err != nil {
+		return nil, fmt.Errorf("parse endpoint placeholder for fingerprint: %w", err)
+	}
+
+	patched, err := provider.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		if cfg.ClusterConfig == nil ||
+			cfg.ClusterConfig.ControlPlane == nil ||
+			cfg.ClusterConfig.ControlPlane.Endpoint == nil {
+			return nil
+		}
+
+		cfg.ClusterConfig.ControlPlane.Endpoint = &v1alpha1.Endpoint{URL: placeholder}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("normalize endpoint for fingerprint: %w", err)
+	}
+
+	return patched, nil
 }
 
 // autoscalerTemplateDigest renders a poolName→fingerprint map into a single short,
