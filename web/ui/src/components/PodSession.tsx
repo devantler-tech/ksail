@@ -77,20 +77,19 @@ interface PodTarget {
   clusterName: string;
 }
 
-// PodLogs is the Logs slide-over: streams the chosen container's logs for the targeted Pod.
-export function PodLogs({
-  pod,
-  container,
-  onContainerChange,
-  onClose,
-  target,
-}: {
+// PodPanelProps is the shared prop shape of the Logs and Exec slide-over panels (selected Pod,
+// chosen container + change handler, close handler, and the cluster coordinates the stream
+// addresses). Shared so the two siblings don't duplicate the prop type (jscpd threshold is 0).
+interface PodPanelProps {
   pod: K8sObject | null;
   container: string;
   onContainerChange: (value: string) => void;
   onClose: () => void;
   target: PodTarget;
-}) {
+}
+
+// PodLogs is the Logs slide-over: streams the chosen container's logs for the targeted Pod.
+export function PodLogs({ pod, container, onContainerChange, onClose, target }: PodPanelProps) {
   return (
     <PodSlideOver verb="Logs" pod={pod} container={container} onContainerChange={onContainerChange} onClose={onClose}>
       {(activePod) => (
@@ -108,19 +107,7 @@ export function PodLogs({
 
 // PodExec is the Exec slide-over: opens an in-browser terminal into the chosen container of the
 // targeted Pod. The xterm-backed terminal loads lazily (see ExecTerminal).
-export function PodExec({
-  pod,
-  container,
-  onContainerChange,
-  onClose,
-  target,
-}: {
-  pod: K8sObject | null;
-  container: string;
-  onContainerChange: (value: string) => void;
-  onClose: () => void;
-  target: PodTarget;
-}) {
+export function PodExec({ pod, container, onContainerChange, onClose, target }: PodPanelProps) {
   return (
     <PodSlideOver verb="Exec" pod={pod} container={container} onContainerChange={onContainerChange} onClose={onClose}>
       {(activePod) => (

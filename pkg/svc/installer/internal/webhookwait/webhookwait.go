@@ -96,6 +96,11 @@ func getCABundles(
 	kind Kind,
 	configName string,
 ) ([][]byte, error) {
+	// The Mutating and Validating branches are structurally identical but operate
+	// on distinct, non-interchangeable API types (MutatingWebhookConfiguration vs
+	// ValidatingWebhookConfiguration), so the CABundle extraction cannot be shared
+	// without generics/reflection that would obscure it.
+	// jscpd:ignore-start
 	if kind == Mutating {
 		cfg, err := clientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
@@ -125,4 +130,5 @@ func getCABundles(
 	}
 
 	return caBundles, nil
+	// jscpd:ignore-end
 }

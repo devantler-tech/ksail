@@ -262,6 +262,11 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	})
 }
 
+// These thin per-distribution wrappers delegate to the shared nested.DinDLifecycle;
+// they are structurally identical to the Kind sibling by design (only the name
+// resolution differs) and are intentionally not abstracted further.
+// jscpd:ignore-start
+
 // Exists checks if the KWOK-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := p.resolveName(name)
@@ -293,6 +298,8 @@ func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
 		LogWriter:      os.Stdout,
 	}
 }
+
+// jscpd:ignore-end
 
 // discoverAPIServerPort reads the kubeconfig that kwokctl wrote and extracts
 // the API server port from the cluster entry. kwokctl (docker compose runtime)

@@ -81,6 +81,10 @@ func ExpandFluxSubstitutions(data []byte) []byte {
 // from outer trimming), distinct from fsutil.SplitYAMLDocuments which strips
 // leading document markers for lossy read-only detection callers.
 func splitYAMLDocuments(data []byte) [][]byte {
+	// Round-trip-preserving YAML reader loop. Structurally similar to clusterapi's
+	// splitManifests but with distinct error handling (fall back to the whole input
+	// here vs. hard error there), so the two are deliberately kept separate.
+	// jscpd:ignore-start
 	reader := yamlio.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
 	var docs [][]byte
@@ -94,6 +98,7 @@ func splitYAMLDocuments(data []byte) [][]byte {
 		if err != nil {
 			return [][]byte{data}
 		}
+		// jscpd:ignore-end
 
 		doc = bytes.TrimSpace(doc)
 		if len(doc) == 0 {

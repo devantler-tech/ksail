@@ -128,6 +128,25 @@ func NewDefaultConfigsWithVersionAndPatches(
 	)
 }
 
+// NewDefaultConfigsWithVersionAndName builds a default Talos config bundle at the
+// given Kubernetes version and names it after the cluster (the name is baked into
+// the PKI, so it must be set via WithName, which regenerates the bundle). It is
+// the shared "default Talos config for cluster <name> at version <v>" used by both
+// the operator backend and the local ksail provisioner factory.
+func NewDefaultConfigsWithVersionAndName(kubernetesVersion, name string) (*Configs, error) {
+	configs, err := NewDefaultConfigsWithVersionAndPatches(kubernetesVersion, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build talos config: %w", err)
+	}
+
+	named, err := configs.WithName(name)
+	if err != nil {
+		return nil, fmt.Errorf("name talos config: %w", err)
+	}
+
+	return named, nil
+}
+
 // Bundle returns the underlying Talos config bundle.
 // This provides full access to all bundle functionality.
 func (c *Configs) Bundle() *bundle.Bundle {

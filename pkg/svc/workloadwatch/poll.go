@@ -18,12 +18,11 @@ const PollInterval = 3 * time.Second
 // Used by the polling fallback to detect changes missed by fsnotify.
 type FileSnapshot map[string]time.Time
 
-// BuildFileSnapshot walks the directory tree and records modification times
-// for all regular files. Uses os.Stat instead of d.Info() to avoid stale
-// cached stat data when files are replaced via rename (e.g. sed -i).
-func BuildFileSnapshot(dir string) FileSnapshot {
-	snap := make(FileSnapshot)
-
+// walkRegularFiles walks the directory tree and invokes visit for each regular
+// file with its current modification time. Uses os.Stat instead of d.Info() to
+// avoid stale cached stat data when files are replaced via rename (e.g. sed -i);
+// inaccessible entries, directories, and stat errors are skipped.
+func walkRegularFiles(dir string, visit func(path string, modTime time.Time)) {
 	_ = filepath.WalkDir(dir, func(path string, dirEntry os.DirEntry, walkErr error) error {
 		if walkErr != nil || dirEntry.IsDir() {
 			return nil //nolint:nilerr // skip inaccessible entries
@@ -34,9 +33,19 @@ func BuildFileSnapshot(dir string) FileSnapshot {
 			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
 
-		snap[path] = info.ModTime()
+		visit(path, info.ModTime())
 
 		return nil
+	})
+}
+
+// BuildFileSnapshot walks the directory tree and records modification times
+// for all regular files.
+func BuildFileSnapshot(dir string) FileSnapshot {
+	snap := make(FileSnapshot)
+
+	walkRegularFiles(dir, func(path string, modTime time.Time) {
+		snap[path] = modTime
 	})
 
 	return snap
@@ -62,17 +71,7 @@ func DetectChangedFile(dir string, snapshot FileSnapshot) string {
 func scanForModifiedFiles(dir string, snapshot FileSnapshot) string {
 	var changed string
 
-	_ = filepath.WalkDir(dir, func(path string, dirEntry os.DirEntry, walkErr error) error {
-		if walkErr != nil || dirEntry.IsDir() {
-			return nil //nolint:nilerr // skip inaccessible entries
-		}
-
-		info, statErr := os.Stat(path)
-		if statErr != nil || !info.Mode().IsRegular() {
-			return nil //nolint:nilerr // skip non-regular entries and stat errors
-		}
-
-		modTime := info.ModTime()
+	walkRegularFiles(dir, func(path string, modTime time.Time) {
 		if prev, ok := snapshot[path]; !ok || !modTime.Equal(prev) {
 			snapshot[path] = modTime
 
@@ -80,8 +79,6 @@ func scanForModifiedFiles(dir string, snapshot FileSnapshot) string {
 				changed = path
 			}
 		}
-
-		return nil
 	})
 
 	return changed

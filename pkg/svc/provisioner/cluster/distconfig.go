@@ -109,17 +109,9 @@ func newTalosDistributionConfig(
 		cluster.Spec.Cluster.KubernetesVersion,
 	)
 
-	configs, err := talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
-		kubernetesVersion,
-		nil,
-	)
+	named, err := talosconfigmanager.NewDefaultConfigsWithVersionAndName(kubernetesVersion, name)
 	if err != nil {
-		return nil, fmt.Errorf("build talos config: %w", err)
-	}
-
-	named, err := configs.WithName(name)
-	if err != nil {
-		return nil, fmt.Errorf("name talos config: %w", err)
+		return nil, fmt.Errorf("build talos distribution config: %w", err)
 	}
 
 	return &DistributionConfig{Talos: named}, nil
