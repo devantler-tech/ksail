@@ -64,15 +64,18 @@ func containsArgoCDRBACCM(data []byte) bool {
 }
 
 // isArgoCDRBACConfigMap reports whether a decoded YAML document is the
-// argocd-rbac-cm ConfigMap, matching on apiVersion, kind, and name.
+// argocd-rbac-cm ConfigMap, matching on kind and name. It deliberately does NOT
+// require apiVersion: v1 so the find path (FindArgoCDRBACCM) stays consistent
+// with the rewrite path (isRBACConfigMapDoc, kind+name only) — otherwise a
+// hand-edited file whose ConfigMap omits apiVersion would be found-then-missed
+// on the delete path, leaving a removed tenant's RBAC policy lines behind.
 func isArgoCDRBACConfigMap(raw map[string]any) bool {
-	apiVersion, _ := raw["apiVersion"].(string)
 	kind, _ := raw["kind"].(string)
 
 	meta, _ := raw["metadata"].(map[string]any)
 	name, _ := meta["name"].(string)
 
-	return apiVersion == "v1" && kind == configMapKind && name == rbacConfigMapName
+	return kind == configMapKind && name == rbacConfigMapName
 }
 
 // MergeArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file (or creates a new one)

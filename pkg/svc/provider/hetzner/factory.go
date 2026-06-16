@@ -22,9 +22,11 @@ var ErrTokenRequired = errors.New("hetzner API token not set")
 // so callers that need direct API access — such as the Talos provisioner wiring
 // the SnapshotManager — can reuse the same authenticated client.
 //
-// This function is the single credential-resolution path used by the Talos
-// provisioner factory and the cluster info/diagnose status helpers, so a custom
-// spec.provider.hetzner.tokenEnvVar is honored consistently.
+// This function is the credential-resolution path used by the Talos provisioner
+// factory, so a custom spec.provider.hetzner.tokenEnvVar is honored there. The
+// cluster info/diagnose status helpers still read HCLOUD_TOKEN directly and do
+// not yet route through here (tracked separately); they honor only the default
+// env var.
 func NewProviderFromOptions(opts v1alpha1.OptionsHetzner) (*Provider, *hcloud.Client, error) {
 	tokenEnvVar := opts.TokenEnvVar
 	if tokenEnvVar == "" {

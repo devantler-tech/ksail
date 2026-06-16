@@ -366,6 +366,48 @@ func TestProvider_ListAllClusters_K3d(t *testing.T) {
 	assert.ElementsMatch(t, []string{"cluster1", "cluster2"}, clusters)
 }
 
+// TestProvider_ListAllClusters_Talos_OwnedFilter verifies that the Talos List
+// path only enumerates KSail-owned containers (talos.owned=true): a foreign
+// Talos-in-Docker container that carries talos.cluster.name but lacks the owned
+// label (e.g. created directly by talosctl) must NOT appear, matching the
+// pre-decomposition List() filter and keeping List() in agreement with Exists().
+func TestProvider_ListAllClusters_Talos_OwnedFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := dockerclient.NewMockAPIClient(t)
+
+	allContainers := []container.Summary{
+		{
+			ID:    "1",
+			Names: []string{"/owned-cp"},
+			Labels: map[string]string{
+				docker.LabelTalosOwned:       "true",
+				docker.LabelTalosClusterName: "owned-cluster",
+			},
+		},
+		{
+			ID:    "2",
+			Names: []string{"/foreign-cp"},
+			Labels: map[string]string{
+				// No talos.owned label — created outside KSail (e.g. talosctl).
+				docker.LabelTalosClusterName: "foreign-cluster",
+			},
+		},
+	}
+
+	client.EXPECT().
+		ContainerList(ctx, container.ListOptions{All: true}).
+		Return(allContainers, nil)
+
+	prov := docker.NewProvider(client, docker.LabelSchemeTalos)
+
+	clusters, err := prov.ListAllClusters(ctx)
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"owned-cluster"}, clusters)
+}
+
 func TestProvider_NodesExist_NilClient(t *testing.T) {
 	t.Parallel()
 

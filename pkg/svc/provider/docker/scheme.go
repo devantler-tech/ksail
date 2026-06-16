@@ -38,7 +38,7 @@ var schemeDescriptors = map[LabelScheme]schemeDescriptor{
 	},
 	LabelSchemeTalos: {
 		list:        (*Provider).listTalosContainers,
-		clusterName: func(ctr container.Summary) string { return ctr.Labels[LabelTalosClusterName] },
+		clusterName: talosOwnedClusterName,
 		role:        func(ctr container.Summary) string { return ctr.Labels[LabelTalosType] },
 	},
 	LabelSchemeVCluster: {
@@ -51,6 +51,20 @@ var schemeDescriptors = map[LabelScheme]schemeDescriptor{
 		clusterName: extractKWOKClusterName,
 		role:        extractKWOKRole,
 	},
+}
+
+// talosOwnedClusterName returns the Talos cluster name only for KSail-owned
+// containers (talos.owned=true), returning "" otherwise. The owned gate mirrors
+// the pre-decomposition List() filter (filters.Arg("label", talos.owned=true))
+// so foreign Talos-in-Docker containers — e.g. created directly by talosctl —
+// are not enumerated as KSail clusters. Exists()/listTalosContainers apply the
+// same owned filter, keeping the two paths in agreement.
+func talosOwnedClusterName(ctr container.Summary) string {
+	if ctr.Labels[LabelTalosOwned] != "true" {
+		return ""
+	}
+
+	return ctr.Labels[LabelTalosClusterName]
 }
 
 // extractKindClusterName extracts the cluster name from a Kind container name.
