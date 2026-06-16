@@ -1314,6 +1314,24 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 		"false", "true", clusterupdate.ChangeCategoryInPlace)
 }
 
+func TestEngine_AutoscalerNodeCapacityBuffersChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Node.CapacityBuffers = true
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler node capacity buffers change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.capacityBuffers",
+		"false", "true", clusterupdate.ChangeCategoryInPlace)
+}
+
 func TestEngine_AutoscalerExpanderChange(t *testing.T) {
 	t.Parallel()
 

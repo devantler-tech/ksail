@@ -5,6 +5,12 @@
 # This is not a deployable chart - it exists solely so Dependabot can track the pinned
 # chart version. The chart version diverges from the cluster-autoscaler image version,
 # so it cannot be tracked via a Dockerfile FROM directive like the image-pinned installers.
+#
+# CRD SYNC: the vendored CapacityBuffer CRD (autoscaling.x-k8s.io_capacitybuffers.yaml,
+# embedded by capacitybuffers.go) must version-track the chart's appVersion (chart 9.57.0
+# = Cluster Autoscaler 1.35.0). When a chart bump changes the appVersion, re-sync the CRD
+# from the matching kubernetes/autoscaler cluster-autoscaler-release-X.YY branch — see the
+# comment on the go:embed in capacitybuffers.go for the exact URL.
 apiVersion: v2
 name: ksail-clusterautoscaler-pin
 description: Dependabot version pin for the cluster-autoscaler Helm chart (not a deployable chart).

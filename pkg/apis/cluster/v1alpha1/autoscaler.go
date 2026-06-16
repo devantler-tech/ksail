@@ -37,6 +37,12 @@ type NodeAutoscalerConfig struct {
 	// ScaleDownUnneededTime is how long a node must be unneeded before it is
 	// eligible for scale down (e.g. "10m").
 	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	// CapacityBuffers enables the Cluster Autoscaler capacity-buffers feature:
+	// KSail installs the CapacityBuffer CRD and turns on the buffer controller
+	// and pod-injection flags, so CapacityBuffer resources reserve scale-up
+	// headroom as virtual (pod-less) chunks — a native replacement for
+	// low-priority balloon-pod overprovisioning.
+	CapacityBuffers bool `json:"capacityBuffers,omitzero" jsonschema:"description=Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
 }
 
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.

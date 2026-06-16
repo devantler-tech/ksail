@@ -262,6 +262,10 @@ export interface KSailClusterConfiguration {
            * How long a node should be unneeded before it is eligible for scale down (e.g. 10m)
            */
           scaleDownUnneededTime?: string;
+          /**
+           * Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)
+           */
+          capacityBuffers?: boolean;
         };
       };
       /**

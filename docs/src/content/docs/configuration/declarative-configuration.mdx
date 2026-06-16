@@ -409,6 +409,7 @@ NodeAutoscalerConfig defines configuration for node-level autoscaling. When Enab
 | `maxNodesTotal` | int32 | – | Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be &lt;= serverLimit |
 | `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes |
 | `scaleDownUnneededTime` | string | – | How long a node should be unneeded before it is eligible for scale down (e.g. 10m) |
+| `capacityBuffers` | boolean | – | Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true) |
 
 ### spec.cluster.autoscaler.node.pools[] (NodePool)
 

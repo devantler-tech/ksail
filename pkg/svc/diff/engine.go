@@ -783,6 +783,12 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 		oldNode.ScaleDownUnneededTime, newNode.ScaleDownUnneededTime, "",
 		"scaleDownUnneededTime can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.capacityBuffers",
+		strconv.FormatBool(oldNode.CapacityBuffers), strconv.FormatBool(newNode.CapacityBuffers),
+		"false",
+		"capacity buffers can be toggled via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
 }
 
 // checkAutoscalerPodScalarsChange emits in-place changes for scalar pod-autoscaler fields.

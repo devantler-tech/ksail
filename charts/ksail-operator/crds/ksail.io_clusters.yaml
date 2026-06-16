@@ -86,6 +86,14 @@ spec:
                         description: Node configures node-level autoscaling via the
                           Cluster Autoscaler.
                         properties:
+                          capacityBuffers:
+                            description: |-
+                              CapacityBuffers enables the Cluster Autoscaler capacity-buffers feature:
+                              KSail installs the CapacityBuffer CRD and turns on the buffer controller
+                              and pod-injection flags, so CapacityBuffer resources reserve scale-up
+                              headroom as virtual (pod-less) chunks — a native replacement for
+                              low-priority balloon-pod overprovisioning.
+                            type: boolean
                           enabled:
                             description: |-
                               Enabled controls whether the Cluster Autoscaler is installed to manage
