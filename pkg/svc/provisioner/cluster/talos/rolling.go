@@ -426,7 +426,7 @@ func (p *Provisioner) stageNodeConfigForReboot(
 		return nil
 	}
 
-	config, err := p.buildStagedNodeConfig(ctx, node, secretsSource)
+	config, err := p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
 	if err != nil {
 		return err
 	}
@@ -444,13 +444,16 @@ func (p *Provisioner) stageNodeConfigForReboot(
 	return nil
 }
 
-// buildStagedNodeConfig builds the machine config to STAGE on a node ahead of a
-// rolling reboot: the node's running config regenerated through
-// buildDesiredNodeConfig, which preserves the per-node post-generation transforms
-// (static hostname, registry mirrors, cert SANs) instead of reverting to the
-// freshly regenerated base config. secretsSource supplies the cluster PKI and must
-// be a control-plane config (see buildDesiredNodeConfig and #4963).
-func (p *Provisioner) buildStagedNodeConfig(
+// fetchAndBuildDesiredNodeConfig fetches a node's running config and rebuilds the
+// machine config KSail wants on it through buildDesiredNodeConfig, which preserves
+// the per-node post-generation transforms (static hostname, registry mirrors, cert
+// SANs) instead of reverting to the freshly regenerated base config. The caller
+// decides how to apply the result: the rolling-reboot path STAGES it
+// (stageNodeConfigForReboot), while the pre-upgrade reconcile applies it NO_REBOOT
+// so the Talos installer validates the desired config (reconcileNodeConfigBeforeUpgrade,
+// #5294). secretsSource supplies the cluster PKI and must be a control-plane config
+// (see buildDesiredNodeConfig and #4963).
+func (p *Provisioner) fetchAndBuildDesiredNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
 	secretsSource talosconfig.Provider,

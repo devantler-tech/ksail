@@ -11,6 +11,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/api/common"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
 
 const (
@@ -320,6 +321,9 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 
 // rollingUpgradeNodes performs a rolling Talos OS upgrade across all cluster
 // nodes. Workers are upgraded first, then control-planes, one node at a time.
+// Before each node's OS upgrade it reconciles the node's desired machine config so
+// the new installer validates the desired config rather than the stale committed
+// one (issue #5294, see reconcileNodeConfigBeforeUpgrade).
 func (p *Provisioner) rollingUpgradeNodes(
 	ctx context.Context,
 	clusterName, installerImage, desiredTag string,
@@ -332,11 +336,31 @@ func (p *Provisioner) rollingUpgradeNodes(
 	// Sort workers first, then control-planes for minimal disruption.
 	ordered := sortNodesWorkersFirst(nodes)
 
+	// The desired-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node (mirrors rollingApplyRebootChanges); all nodes
+	// are still at the old version here, and a control-plane's PKI is unchanged by an
+	// OS upgrade, so the source stays valid across the roll.
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Upgrading %s (%s)...\n",
 			i+1, len(ordered), node.IP, node.Role,
 		)
+
+		// Reconcile the desired config onto the node before upgrading it. Best-effort:
+		// a failure here must not regress upgrades that already validate cleanly
+		// against the committed config, so warn and proceed (the upgrade then behaves
+		// as it did pre-#5294, and the update's in-place reconcile re-surfaces any
+		// genuine drift afterwards).
+		configErr := p.reconcileNodeConfigBeforeUpgrade(ctx, node, secretsSource)
+		if configErr != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  ⚠ Could not reconcile config on %s before upgrade: %v\n",
+				node.IP, configErr,
+			)
+		}
 
 		upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage, desiredTag)
 		if upgradeErr != nil {
@@ -347,6 +371,50 @@ func (p *Provisioner) rollingUpgradeNodes(
 			"  ✓ Node %s (%s) upgraded successfully\n",
 			node.IP, node.Role,
 		)
+	}
+
+	return nil
+}
+
+// reconcileNodeConfigBeforeUpgrade applies a node's desired machine config with
+// NO_REBOOT mode immediately before its Talos OS upgrade, so the new installer
+// validates the desired config rather than the stale committed one (issue #5294).
+//
+// The Talos upgrade installer reads each node's *active* machine config — machined's
+// Upgrade task pipes the running config to the installer container's stdin, which it
+// validates before installing. A config change that a newer release requires as a
+// prerequisite (e.g. the v1.13.4 install-section validation in the issue) must
+// therefore be the *active* config before the upgrade runs. Merely STAGING it is not
+// enough: a staged config only becomes active on the next boot, which happens after
+// the installer has already validated and run. NO_REBOOT makes the desired config
+// active up front; the install section is immediate-apply-safe in Talos, so the
+// apply needs no reboot of its own (the upgrade reboots anyway).
+//
+// It is a no-op when no Talos config is loaded (nothing to reconcile). secretsSource
+// supplies the cluster PKI for the rebuild and must be a control-plane config (see
+// buildDesiredNodeConfig).
+func (p *Provisioner) reconcileNodeConfigBeforeUpgrade(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+) error {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	desired, err := p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
+	if err != nil {
+		return fmt.Errorf("build desired config: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Reconciling config on %s before upgrade...\n", node.IP)
+
+	applyErr := p.applyConfigWithMode(
+		ctx, node.IP, desired,
+		machineapi.ApplyConfigurationRequest_NO_REBOOT,
+	)
+	if applyErr != nil {
+		return fmt.Errorf("apply %s config before upgrade: %w", node.Role, applyErr)
 	}
 
 	return nil

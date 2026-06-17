@@ -108,8 +108,8 @@ func TestRolling_SortNodesWorkersFirst(t *testing.T) { //nolint:funlen // table-
 // the raw config would strip the hostname so a Hetzner node re-registers under a
 // generated talos-xxxxx name on reboot (e.g. during a reboot-required config
 // change). This drives the actual staging-path config rebuild
-// (buildStagedNodeConfig) with the node's running config injected via the fetcher
-// seam.
+// (fetchAndBuildDesiredNodeConfig) with the node's running config injected via the
+// fetcher seam.
 func TestRolling_BuildStagedNodeConfig_PreservesNodeHostname(t *testing.T) {
 	t.Parallel()
 
@@ -139,7 +139,7 @@ func TestRolling_BuildStagedNodeConfig_PreservesNodeHostname(t *testing.T) {
 		"10.0.0.2", talosprovisioner.RoleControlPlane,
 	)
 
-	staged, err := prov.BuildStagedNodeConfigForTest(context.Background(), node, running)
+	staged, err := prov.FetchAndBuildDesiredNodeConfigForTest(context.Background(), node, running)
 	require.NoError(t, err)
 
 	assert.Equal(t, "prod-control-plane-1", staged.RawV1Alpha1().Hostname(),
@@ -189,7 +189,11 @@ func TestRolling_BuildStagedNodeConfig_PreservesWorkerHostname(t *testing.T) {
 
 	node := talosprovisioner.NewNodeWithRoleForTest("10.0.0.3", talosprovisioner.RoleWorker)
 
-	staged, err := prov.BuildStagedNodeConfigForTest(context.Background(), node, secretsSource)
+	staged, err := prov.FetchAndBuildDesiredNodeConfigForTest(
+		context.Background(),
+		node,
+		secretsSource,
+	)
 	require.NoError(t, err)
 
 	assert.Equal(t, "prod-worker-1", staged.RawV1Alpha1().Hostname(),

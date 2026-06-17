@@ -163,8 +163,8 @@ type Provisioner struct {
 	nodeReachabilityCheck func(ctx context.Context, ip string) error
 	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
 	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
-	// known running config without real Talos API connectivity (used by the rolling
-	// reboot's staged-config rebuild — see buildStagedNodeConfig).
+	// known running config without real Talos API connectivity (used by the per-node
+	// desired-config rebuild — see fetchAndBuildDesiredNodeConfig).
 	nodeConfigFetcher func(ctx context.Context, nodeIP string) (talosconfig.Provider, error)
 	logWriter         io.Writer
 	logMu             sync.Mutex
