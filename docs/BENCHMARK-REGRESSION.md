@@ -7,24 +7,30 @@ KSail includes automated benchmark regression testing to detect performance chan
 The benchmark jobs in the [CI workflow](../.github/workflows/ci.yaml) run on pushes to `main` and pull requests. They use [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) for regression detection and historical tracking.
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
-2. Runs benchmarks on the current branch
-3. Compares results against the stored baseline (persisted in the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data))
-4. **Fails the CI check** if a benchmark regresses beyond the configured threshold
+2. Runs benchmarks on the current branch (`-count=1` on pull requests, `-count=5` on pushes to `main`)
+3. Compares the **deterministic allocation metrics** (`B/op`, `allocs/op`) against the stored baseline (persisted in the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data))
+4. **Fails the pull-request check** if an allocation metric regresses beyond the threshold
 
-On pushes to `main`, benchmark results are auto-pushed to the `benchmark-data` branch as the new baseline. On pull requests, results are compared against the baseline without updating it.
+Wall-clock `ns/op` is still recorded for the historical chart, but it is **never** used to gate — see [Regression Detection](#regression-detection) for why.
+
+On pushes to `main`, the full results (including `ns/op`) are auto-pushed to the `benchmark-data` branch as the new baseline. On pull requests, results are compared against the baseline without updating it.
 
 ## Regression Detection
 
-The workflow uses threshold-based regression detection:
+Shared GitHub-hosted runners have wall-clock variance of 2–5× between runs, so gating on `ns/op` produces false-positive "Performance Alert" comments on changes that never touch the benchmarked code. The gate therefore compares **only the deterministic metrics** — `allocs/op` and `B/op` — which depend on the code path, not on CPU speed or thermal throttling. A real algorithmic regression shows up in allocations; runner jitter does not.
 
-| Setting           | Value | Meaning                                                                                              |
-|-------------------|-------|------------------------------------------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline                 |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline |
+Mechanically, the `🔍 Prepare benchmark regression gate input` step writes two files:
 
-On pull requests, the benchmark gate is **informational only**: results are posted as a PR comment when the alert threshold is exceeded, but CI never blocks on it. This is intentional — shared GitHub Actions runners have hardware variance of 2–5× between runs, making per-PR blocking gates unreliable. Real regressions are caught on pushes to `main`.
+- `bench-filtered.txt` — the real measurements (including `ns/op`), used to update the baseline and the history chart.
+- `bench-compare.txt` — the same data with `ns/op` pinned to `1`, used as the gate input. `github-action-benchmark`'s `go` parser turns each line into one comparable series per metric; pinning `ns/op` makes its series compare as ~0× of the baseline (so it can never alert), while the `B/op` and `allocs/op` series keep their real values **and byte-identical names** and still compare 1:1.
 
-On push or merge-queue events, `fail-threshold` is active: a ≥2× regression fails CI, protecting `main` from persistent algorithmic regressions.
+| Setting           | Value | Meaning                                                            |
+|-------------------|-------|-------------------------------------------------------------------|
+| `alert-threshold` | 150%  | A deterministic metric is flagged when it is ≥1.5× the baseline    |
+| `fail-threshold`  | 150%  | Threshold above which the gate fails the check (pull requests only) |
+
+- **On pull requests**, a ≥1.5× regression in `allocs/op` or `B/op` posts a comment **and fails the check**, blocking the merge. Because the gated metrics are jitter-free, this gate is reliable — it won't fire on runner noise.
+- **On pushes to `main`**, the gate never fails: the `📤 Store Benchmark Data` job simply updates the baseline (and the `ns/op` chart). An intentional allocation increase that lands on `main` therefore re-baselines itself, so it can neither wedge `main` nor block the auto-release.
 
 ## Historical Results
 
@@ -61,6 +67,6 @@ Follow the conventions established in the existing benchmark files:
 
 **No baseline data yet:** The first push to `main` after enabling the workflow auto-pushes the initial baseline to the `benchmark-data` branch. PRs opened before that will skip the comparison.
 
-**Benchmark times are inconsistent:** CI runs each benchmark 3 times on pull requests (`-count=3`) and 5 times on pushes to `main` (`-count=5`). The samples are averaged into a single representative value before comparison, giving a stable 1:1 comparison against the stored baseline. On pull requests, the benchmark gate is informational only — shared CI runners can vary 2–5× in hardware speed between runs, so per-PR blocking would produce too many false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate entirely since their timing is dominated by disk-cache state rather than algorithmic complexity.
+**Benchmark times are inconsistent:** This is expected on shared CI runners (2–5× variance between runs) and is exactly why the gate ignores `ns/op` and compares only the deterministic `allocs/op`/`B/op` metrics (see [Regression Detection](#regression-detection)). CI runs each benchmark once on pull requests (`-count=1`, since allocation metrics need no averaging) and 5 times on pushes to `main` (`-count=5`, to smooth the `ns/op` history chart), averaging the samples into one representative value per benchmark. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) and sub-100 `ns/op` benchmarks are excluded from the gate entirely, since their timing is dominated by disk-cache state or clock jitter rather than algorithmic complexity.
 
 **Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped unless a file in one of the 16 packages that contain `Benchmark*` functions, `go.mod`, `go.sum`, or `.github/workflows/ci.yaml` changed. PRs that only touch unrelated Go code (e.g. a new CLI command, documentation, or a package not in the benchmark filter) will skip benchmarks entirely. In the merge queue, benchmark jobs are always skipped.

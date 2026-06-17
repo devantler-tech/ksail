@@ -1307,12 +1307,13 @@ jobs:
         shell: bash
         env:
           PACKAGES: ${{ steps.discover.outputs.packages }}
-          # Reduce -count on PRs (-count=3) to halve benchmark wall time while
-          # keeping enough samples for the awk averaging step in
-          # "Prepare benchmark regression gate input" to produce a stable signal.
-          # On push to main (which feeds benchmark-store / the historical chart),
-          # keep -count=5 for higher-quality baselines.
-          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '3' }}
+          # The regression gate compares only the deterministic allocation
+          # metrics (B/op, allocs/op), which are independent of sample count, so
+          # PRs run -count=1 for the fastest possible signal (wall-clock ns/op is
+          # never gated — see "Compare benchmark results"). On push to main
+          # (which feeds benchmark-store / the historical ns/op chart) keep
+          # -count=5 for higher-quality wall-clock baselines.
+          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '1' }}
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
@@ -1377,19 +1378,39 @@ jobs:
             }
           ' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
 
+          # Derive the regression-gate input by neutralizing the wall-clock
+          # metric. github-action-benchmark's "go" parser turns each
+          # "<name> <iters> <v1> <u1> <v2> <u2> ..." line into one comparable
+          # series per metric (plus a bare ns/op series). Pinning the ns/op value
+          # to a constant 1 makes both ns/op-bearing series compare as ~0x of the
+          # baseline so wall-clock jitter on shared runners can never trip the
+          # alert, while the deterministic B/op and allocs/op series keep their
+          # real values AND byte-identical names — so they still compare 1:1
+          # against the stored baseline. The unmodified bench-filtered.txt (real
+          # ns/op) still feeds the history chart via the benchmark-store job.
+          sed -E 's/[0-9]+ ns\/op/1 ns\/op/' \
+            "$RUNNER_TEMP/bench-filtered.txt" > "$RUNNER_TEMP/bench-compare.txt"
+
       - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           tool: go
-          output-file-path: ${{ runner.temp }}/bench-filtered.txt
+          # bench-compare.txt pins ns/op to 1, so only the deterministic
+          # B/op and allocs/op series carry real values here.
+          output-file-path: ${{ runner.temp }}/bench-compare.txt
           gh-pages-branch: benchmark-data
           benchmark-data-dir-path: dev/bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           alert-threshold: "150%"
-          fail-threshold: ${{ github.event_name != 'pull_request' && '200%' || '' }}
-          fail-on-alert: false
+          fail-threshold: "150%"
+          # Deterministic metrics are jitter-free, so PRs block on a real
+          # allocation/byte regression (≥1.5x). Pushes to main never fail
+          # (comment-on-alert/fail-on-alert are PR-only): the benchmark-store
+          # job updates the baseline so it self-heals after an intentional
+          # increase lands, avoiding a wedged main / blocked release.
+          fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
