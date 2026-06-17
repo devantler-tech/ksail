@@ -141,20 +141,21 @@ func (k *Provisioner) applyWorkerScaling(
 	return err
 }
 
-// addAgentNodes adds new agent nodes to the cluster.
+// addAgentNodes adds new agent nodes to the cluster, reclaiming the lowest
+// available index for each new node so a removed agent's name is reused rather
+// than always appending past the highest index (#5312).
 func (k *Provisioner) addAgentNodes(
 	ctx context.Context,
 	clusterName string,
 	count int,
 	result *clusterupdate.UpdateResult,
 ) error {
-	for i := range count {
-		nodeName := fmt.Sprintf(
-			"k3d-%s-agent-%d",
-			clusterName,
-			k.nextAgentIndex(ctx, clusterName, i),
-		)
+	existing, err := k.listAgentNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list agent nodes: %w", err)
+	}
 
+	for _, nodeName := range agentNodeNames(existing, clusterName, count) {
 		args := []string{
 			nodeName,
 			"--cluster", clusterName,
@@ -169,14 +170,14 @@ func (k *Provisioner) addAgentNodes(
 		nodeRunner := runner.NewCobraCommandRunner(io.Discard, io.Discard)
 		cmd := nodecommand.NewCmdNodeCreate()
 
-		_, err := nodeRunner.Run(ctx, cmd, args)
-		if err != nil {
+		_, runErr := nodeRunner.Run(ctx, cmd, args)
+		if runErr != nil {
 			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:  "k3d.agents",
-				Reason: fmt.Sprintf("failed to create agent node %s: %v", nodeName, err),
+				Reason: fmt.Sprintf("failed to create agent node %s: %v", nodeName, runErr),
 			})
 
-			return fmt.Errorf("failed to create agent node %s: %w", nodeName, err)
+			return fmt.Errorf("failed to create agent node %s: %w", nodeName, runErr)
 		}
 
 		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
@@ -382,39 +383,23 @@ func (k *Provisioner) listAgentNodes(
 	return agents, nil
 }
 
-// nextAgentIndex calculates the next agent index for naming.
-// It finds the maximum existing agent index to avoid naming collisions when there
-// are gaps in the index sequence, then adds 1 plus the batch offset.
-func (k *Provisioner) nextAgentIndex(
-	ctx context.Context,
-	clusterName string,
-	batchOffset int,
-) int {
-	agents, err := k.listAgentNodes(ctx, clusterName)
-	if err != nil {
-		return batchOffset
-	}
-
-	if len(agents) == 0 {
-		return batchOffset
-	}
-
-	maxIndex := -1
+// agentNodeNames returns the names for `count` new agent nodes, reclaiming the
+// lowest-available index in the 0-based "k3d-<cluster>-agent-<n>" series before
+// extending past the highest existing index (#5312). All names are computed up
+// front from a single inventory snapshot: this keeps a multi-node scale-up's
+// indices distinct and gap-filling, and avoids the previous per-node re-list +
+// batch-offset scheme, which double-counted (and so skipped indices) once a
+// freshly created node became visible to the next list call.
+func agentNodeNames(existing []string, clusterName string, count int) []string {
 	prefix := fmt.Sprintf("k3d-%s-agent-", clusterName)
+	indices := clusterupdate.AvailableNodeIndices(existing, prefix, 0, count)
 
-	for _, name := range agents {
-		idx, found := strings.CutPrefix(name, prefix)
-		if !found {
-			continue
-		}
-
-		n, parseErr := strconv.Atoi(idx)
-		if parseErr == nil && n > maxIndex {
-			maxIndex = n
-		}
+	names := make([]string, len(indices))
+	for i, index := range indices {
+		names[i] = fmt.Sprintf("k3d-%s-agent-%d", clusterName, index)
 	}
 
-	return maxIndex + 1 + batchOffset
+	return names
 }
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the

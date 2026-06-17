@@ -69,6 +69,11 @@ func ParseClusterNamesForTest(output string) ([]string, error) {
 	return parseClusterNames(output)
 }
 
+// AgentNodeNamesForTest exposes agentNodeNames for unit testing.
+func AgentNodeNamesForTest(existing []string, clusterName string, count int) []string {
+	return agentNodeNames(existing, clusterName, count)
+}
+
 // ResolveNameForTest exposes resolveName for unit testing.
 func (k *Provisioner) ResolveNameForTest(name string) string {
 	return k.resolveName(name)

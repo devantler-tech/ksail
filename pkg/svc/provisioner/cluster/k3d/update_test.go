@@ -224,3 +224,80 @@ func TestCreateProvisioner_NilConfig(t *testing.T) {
 	provisioner := k3dprovisioner.CreateProvisioner(nil, "")
 	require.NotNil(t, provisioner)
 }
+
+//nolint:funlen // Table-driven allocation cases are clearest enumerated inline.
+func TestAgentNodeNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		existing []string
+		count    int
+		want     []string
+	}{
+		{
+			name:     "empty cluster starts at agent-0",
+			existing: nil,
+			count:    1,
+			want:     []string{"k3d-mycluster-agent-0"},
+		},
+		{
+			name:     "empty cluster, multiple nodes are contiguous from 0",
+			existing: nil,
+			count:    3,
+			want: []string{
+				"k3d-mycluster-agent-0",
+				"k3d-mycluster-agent-1",
+				"k3d-mycluster-agent-2",
+			},
+		},
+		{
+			name:     "contiguous series extends past the highest index",
+			existing: []string{"k3d-mycluster-agent-0", "k3d-mycluster-agent-1"},
+			count:    1,
+			want:     []string{"k3d-mycluster-agent-2"},
+		},
+		{
+			// Core #5312 behaviour: a freed middle index is reclaimed, not max+1.
+			name:     "reclaims a freed middle index",
+			existing: []string{"k3d-mycluster-agent-0", "k3d-mycluster-agent-2"},
+			count:    1,
+			want:     []string{"k3d-mycluster-agent-1"},
+		},
+		{
+			name:     "fills the gap then extends for a multi-node scale-up",
+			existing: []string{"k3d-mycluster-agent-0", "k3d-mycluster-agent-2"},
+			count:    2,
+			want:     []string{"k3d-mycluster-agent-1", "k3d-mycluster-agent-3"},
+		},
+		{
+			name:     "reclaims a leading gap at index 0",
+			existing: []string{"k3d-mycluster-agent-1", "k3d-mycluster-agent-2"},
+			count:    1,
+			want:     []string{"k3d-mycluster-agent-0"},
+		},
+		{
+			name:     "ignores names that do not match the cluster prefix",
+			existing: []string{"k3d-other-agent-0", "k3d-mycluster-server-0"},
+			count:    1,
+			want:     []string{"k3d-mycluster-agent-0"},
+		},
+		{
+			name:     "zero count yields no names",
+			existing: []string{"k3d-mycluster-agent-0"},
+			count:    0,
+			want:     []string{},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := k3dprovisioner.AgentNodeNamesForTest(
+				testCase.existing, "mycluster", testCase.count,
+			)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
