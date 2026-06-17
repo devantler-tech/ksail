@@ -12,6 +12,6 @@
 # - ghcr.io/fluxcd/notification-controller → deployed by FluxInstance
 
 FROM ghcr.io/fluxcd/source-controller:v1.8.5
-FROM ghcr.io/fluxcd/kustomize-controller:v1.8.5
+FROM ghcr.io/fluxcd/kustomize-controller:v1.9.0
 FROM ghcr.io/fluxcd/helm-controller:v1.5.5
 FROM ghcr.io/fluxcd/notification-controller:v1.8.4
