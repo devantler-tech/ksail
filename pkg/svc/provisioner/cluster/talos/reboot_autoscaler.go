@@ -43,27 +43,11 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
-	servers, err := p.listAutoscalerServers(ctx, clusterName)
-	if err != nil {
+	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
+		ctx, clusterName, "  ⓘ No autoscaler nodes to reboot\n",
+	)
+	if err != nil || !ok {
 		return err
-	}
-
-	if len(servers) == 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  ⓘ No autoscaler nodes to reboot\n")
-
-		return nil
-	}
-
-	clientset, err := p.createK8sClient(clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Wait for the restarted autoscaler to be ready so any scale-up a drain triggers
-	// is served from the refreshed template, not the pre-restart pod.
-	rolloutErr := p.waitForAutoscalerRollout(ctx, clientset)
-	if rolloutErr != nil {
-		return rolloutErr
 	}
 
 	// buildStagedNodeConfig rebuilds each node's config from its running config + the
@@ -72,9 +56,7 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 	// "parse PEM block".
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
-	return p.rollingRebootAutoscalerServers(
-		ctx, clientset, sortServersByName(servers), secretsSource, result,
-	)
+	return p.rollingRebootAutoscalerServers(ctx, clientset, ordered, secretsSource, result)
 }
 
 // rollingRebootAutoscalerServers reboots the given autoscaler servers in place, one
@@ -114,25 +96,25 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 		rebootErr := p.rollingRebootSingleNode(
 			ctx, clientset, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource,
 		)
-		if rebootErr != nil {
-			if errors.Is(rebootErr, ErrNodeNotFoundByIP) {
-				_, _ = fmt.Fprintf(p.logWriter,
-					"  ⚠ Autoscaler node %s is not registered in Kubernetes; skipping reboot\n",
-					server.Name)
 
-				continue
-			}
+		switch {
+		case rebootErr == nil:
+			result.RebootsPerformed++
 
+			recordAppliedChange(result, RoleWorker, server.Name, "rebooted")
+
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Rebooted autoscaler node %s\n", server.Name)
+		case errors.Is(rebootErr, ErrNodeNotFoundByIP):
+			// Present in Hetzner but not (yet) joined: it can't be drained, so skip it
+			// instead of wedging the whole convergence (mirrors drainResolvedNode).
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  ⚠ Autoscaler node %s is not registered in Kubernetes; skipping reboot\n",
+				server.Name)
+		default:
 			recordFailedChange(result, RoleWorker, server.Name, rebootErr)
 
 			return fmt.Errorf("rolling reboot autoscaler node %s: %w", server.Name, rebootErr)
 		}
-
-		result.RebootsPerformed++
-
-		recordAppliedChange(result, RoleWorker, server.Name, "rebooted")
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Rebooted autoscaler node %s\n", server.Name)
 	}
 
 	return nil
