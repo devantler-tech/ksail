@@ -422,23 +422,41 @@ func (p *Provisioner) stageNodeConfigForReboot(
 	node nodeWithRole,
 	secretsSource talosconfig.Provider,
 ) error {
+	return p.applyDesiredNodeConfig(
+		ctx, node, secretsSource,
+		machineapi.ApplyConfigurationRequest_STAGED, "Staging",
+	)
+}
+
+// applyDesiredNodeConfig rebuilds a node's desired machine config (see
+// fetchAndBuildDesiredNodeConfig) and applies it with the given mode, logging the
+// step with actionLabel (e.g. "Staging", "Reconciling"). It is the shared core of
+// the two per-node config-application paths: the rolling-reboot path STAGES the
+// config (stageNodeConfigForReboot) and the pre-upgrade reconcile applies it
+// NO_REBOOT (reconcileNodeConfigBeforeUpgrade). It is a no-op when no Talos config is
+// loaded (nothing to apply). secretsSource supplies the cluster PKI and must be a
+// control-plane config (see buildDesiredNodeConfig and #4963).
+func (p *Provisioner) applyDesiredNodeConfig(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+	mode machineapi.ApplyConfigurationRequest_Mode,
+	actionLabel string,
+) error {
 	if p.talosConfigs == nil {
 		return nil
 	}
 
-	config, err := p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
+	desired, err := p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
 	if err != nil {
-		return err
+		return fmt.Errorf("build desired config: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
+	_, _ = fmt.Fprintf(p.logWriter, "    %s config on %s...\n", actionLabel, node.IP)
 
-	stageErr := p.applyConfigWithMode(
-		ctx, node.IP, config,
-		machineapi.ApplyConfigurationRequest_STAGED,
-	)
-	if stageErr != nil {
-		return fmt.Errorf("stage config: %w", stageErr)
+	err = p.applyConfigWithMode(ctx, node.IP, desired, mode)
+	if err != nil {
+		return fmt.Errorf("apply config: %w", err)
 	}
 
 	return nil

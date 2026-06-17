@@ -337,11 +337,13 @@ func (p *Provisioner) rollingUpgradeNodes(
 	ordered := sortNodesWorkersFirst(nodes)
 
 	// The desired-config rebuild needs the cluster PKI, which only a control-plane
-	// node carries. Resolve one control-plane config up front and reuse it as the
-	// secrets source for every node (mirrors rollingApplyRebootChanges); all nodes
-	// are still at the old version here, and a control-plane's PKI is unchanged by an
-	// OS upgrade, so the source stays valid across the roll.
-	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+	// node carries. Reuse the node list already fetched above (rather than re-listing
+	// via fetchSecretsSource) to resolve one control-plane config up front, then reuse
+	// it as the secrets source for every node: all nodes are still at the old version
+	// here, and a control-plane's PKI is unchanged by an OS upgrade, so the source
+	// stays valid across the roll. A nil result (no control-plane reachable) degrades
+	// to a best-effort per-node reconcile.
+	secretsSource, _, _ := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
@@ -398,24 +400,8 @@ func (p *Provisioner) reconcileNodeConfigBeforeUpgrade(
 	node nodeWithRole,
 	secretsSource talosconfig.Provider,
 ) error {
-	if p.talosConfigs == nil {
-		return nil
-	}
-
-	desired, err := p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
-	if err != nil {
-		return fmt.Errorf("build desired config: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Reconciling config on %s before upgrade...\n", node.IP)
-
-	applyErr := p.applyConfigWithMode(
-		ctx, node.IP, desired,
-		machineapi.ApplyConfigurationRequest_NO_REBOOT,
+	return p.applyDesiredNodeConfig(
+		ctx, node, secretsSource,
+		machineapi.ApplyConfigurationRequest_NO_REBOOT, "Reconciling",
 	)
-	if applyErr != nil {
-		return fmt.Errorf("apply %s config before upgrade: %w", node.Role, applyErr)
-	}
-
-	return nil
 }
