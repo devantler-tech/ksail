@@ -26,31 +26,26 @@ func availableNodeIndices(names []string, prefix string, count int) []int {
 		return []int{}
 	}
 
-	used, maxIndex := scanUsedNodeIndices(names, prefix)
+	used := usedNodeIndices(names, prefix)
 	indices := make([]int, 0, count)
 
-	// Reclaim the lowest freed indices first (gaps within 1..maxIndex).
-	for index := 1; index <= maxIndex && len(indices) < count; index++ {
+	// Walk the series from 1 and take each free index. Gaps left by removed
+	// nodes are reclaimed first; once they run out, every higher index is free
+	// (nothing past the max is in `used`), so the series simply extends.
+	for index := 1; len(indices) < count; index++ {
 		if !used[index] {
 			indices = append(indices, index)
 		}
 	}
 
-	// Extend the series past the highest used index for any remaining nodes.
-	for index := maxIndex + 1; len(indices) < count; index++ {
-		indices = append(indices, index)
-	}
-
 	return indices
 }
 
-// scanUsedNodeIndices parses the 1-based numeric suffixes of names sharing the
-// given prefix, returning the set of indices in use and the highest one seen
-// (0 when no name matches). Names without the prefix or without a parsable
+// usedNodeIndices returns the set of 1-based numeric suffixes in use among names
+// sharing the given prefix. Names without the prefix or without a parsable
 // positive suffix are ignored.
-func scanUsedNodeIndices(names []string, prefix string) (map[int]bool, int) {
+func usedNodeIndices(names []string, prefix string) map[int]bool {
 	used := make(map[int]bool, len(names))
-	maxIndex := 0
 
 	for _, name := range names {
 		suffix, found := strings.CutPrefix(name, prefix)
@@ -64,12 +59,9 @@ func scanUsedNodeIndices(names []string, prefix string) (map[int]bool, int) {
 		}
 
 		used[index] = true
-		if index > maxIndex {
-			maxIndex = index
-		}
 	}
 
-	return used, maxIndex
+	return used
 }
 
 // recordAppliedChange adds an applied change to the update result.
