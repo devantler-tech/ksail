@@ -15,14 +15,17 @@ const factoryInstallerRepository = "factory.talos.dev/installer"
 // Re-exported so callers don't need to import the image-factory package directly.
 type Schematic = schematic.Schematic
 
-// NewSchematic creates a Schematic from a list of official extension names.
-// The extensions are normalized (trimmed, empty entries removed, deduplicated)
-// and sorted to ensure deterministic schematic IDs.
-func NewSchematic(extensions []string) *Schematic {
+// NewSchematic creates a Schematic from a list of official extension names and
+// extra kernel arguments. The extensions are normalized (trimmed, empty entries
+// removed, deduplicated, sorted); the kernel args are only trimmed of whitespace
+// and empties, preserving order, so the schematic ID stays deterministic for a
+// given configuration.
+func NewSchematic(extensions, extraKernelArgs []string) *Schematic {
 	normalized := NormalizeExtensions(extensions)
 
 	return &Schematic{
 		Customization: schematic.Customization{
+			ExtraKernelArgs: NormalizeKernelArgs(extraKernelArgs),
 			SystemExtensions: schematic.SystemExtensions{
 				OfficialExtensions: normalized,
 			},
@@ -53,6 +56,32 @@ func NormalizeExtensions(extensions []string) []string {
 	}
 
 	slices.Sort(result)
+
+	return result
+}
+
+// NormalizeKernelArgs trims whitespace and drops empty entries from the extra
+// kernel argument list. Unlike extensions, kernel args are NOT deduplicated or
+// sorted: their order can be semantically meaningful (later args may override
+// earlier ones), so the declared order is preserved and is what gets hashed into
+// the schematic ID. Returns nil when no non-empty args remain, so an empty list
+// omits customization.extraKernelArgs entirely and leaves the schematic ID
+// identical to the extensions-only result.
+func NormalizeKernelArgs(extraKernelArgs []string) []string {
+	result := make([]string, 0, len(extraKernelArgs))
+
+	for _, arg := range extraKernelArgs {
+		arg = strings.TrimSpace(arg)
+		if arg == "" {
+			continue
+		}
+
+		result = append(result, arg)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
 
 	return result
 }

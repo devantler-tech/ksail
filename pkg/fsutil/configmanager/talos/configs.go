@@ -900,13 +900,25 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 
 // applySchematic computes a schematic ID from extensions and patches machine.install.image.
 // Returns an empty string if no extensions are configured (after normalization).
+//
+// Any machine.install.extraKernelArgs the patches set on the (already generated) config are
+// folded into the Image Factory schematic — baked into the installer image alongside the
+// extensions, so they apply consistently to the static install image, the Hetzner autoscaler
+// snapshot, and the rolling-upgrade installer — and then cleared from the rendered config.
+// This keeps kernel args declared in native Talos patch files while moving off the deprecated
+// machine.install.extraKernelArgs field, and avoids the Talos >=1.13.4 rejection of that field
+// alongside the default install.grubUseUKICmdline. Folding is gated on extensions being
+// configured, the same signal that already selects a factory installer (so container-mode
+// Docker clusters, which use no factory installer, are unaffected).
 func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
 	normalized := NormalizeExtensions(extensions)
 	if len(normalized) == 0 {
 		return "", nil
 	}
 
-	schematic := NewSchematic(extensions)
+	kernelArgs := schematicKernelArgs(configBundle)
+
+	schematic := NewSchematic(extensions, kernelArgs)
 
 	schematicID, err := schematic.ID()
 	if err != nil {
@@ -921,7 +933,88 @@ func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, e
 		return "", fmt.Errorf("failed to apply installer image: %w", err)
 	}
 
+	if len(kernelArgs) > 0 {
+		err = clearInstallExtraKernelArgs(configBundle)
+		if err != nil {
+			return "", fmt.Errorf("failed to clear install extra kernel args: %w", err)
+		}
+	}
+
 	return schematicID, nil
+}
+
+// schematicKernelArgs returns the deduplicated union of machine.install.extraKernelArgs
+// across the control-plane and worker configs. A cluster-scope patch sets the same args on
+// both; a control-plane- or worker-scope patch sets them on one. These are folded into the
+// Image Factory schematic and then cleared from the rendered config by
+// clearInstallExtraKernelArgs.
+func schematicKernelArgs(configBundle *bundle.Bundle) []string {
+	seen := make(map[string]struct{})
+
+	var args []string
+
+	for _, provider := range []talosconfig.Provider{
+		configBundle.ControlPlane(),
+		configBundle.Worker(),
+	} {
+		if provider == nil || provider.Machine() == nil || provider.Machine().Install() == nil {
+			continue
+		}
+
+		for _, arg := range provider.Machine().Install().ExtraKernelArgs() {
+			arg = strings.TrimSpace(arg)
+			if arg == "" {
+				continue
+			}
+
+			if _, ok := seen[arg]; ok {
+				continue
+			}
+
+			seen[arg] = struct{}{}
+			args = append(args, arg)
+		}
+	}
+
+	return args
+}
+
+// clearInstallExtraKernelArgs removes machine.install.extraKernelArgs from the control-plane
+// and worker configs after they have been folded into the Image Factory schematic, so the
+// rendered config does not carry the deprecated field (which Talos >=1.13.4 rejects together
+// with the default install.grubUseUKICmdline).
+func clearInstallExtraKernelArgs(configBundle *bundle.Bundle) error {
+	patcher := func(cfg *v1alpha1.Config) error {
+		if cfg.MachineConfig == nil || cfg.MachineConfig.MachineInstall == nil {
+			return nil
+		}
+
+		// Intentionally clearing the deprecated field after folding its values into
+		// the Image Factory schematic — this is the move OFF the deprecated field.
+		cfg.MachineConfig.MachineInstall.InstallExtraKernelArgs = nil //nolint:staticcheck
+
+		return nil
+	}
+
+	if configBundle.ControlPlaneCfg != nil {
+		patched, err := configBundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to clear control plane extra kernel args: %w", err)
+		}
+
+		configBundle.ControlPlaneCfg = patched
+	}
+
+	if configBundle.WorkerCfg != nil {
+		patched, err := configBundle.WorkerCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to clear worker extra kernel args: %w", err)
+		}
+
+		configBundle.WorkerCfg = patched
+	}
+
+	return nil
 }
 
 // resolveInstallerVersion determines the Talos version tag for the factory installer image.
