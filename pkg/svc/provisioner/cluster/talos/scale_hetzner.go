@@ -42,10 +42,10 @@ func (p *Provisioner) addHetznerNodes(
 		return err
 	}
 
-	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
+	indices := availableHetznerNodeIndices(existing, clusterName, role, count)
 
 	servers, err := p.provisionHetznerScaleServers(
-		ctx, hzProvider, clusterName, role, nextIndex, count, result,
+		ctx, hzProvider, clusterName, role, indices, result,
 	)
 	if err != nil {
 		return err
@@ -64,15 +64,15 @@ func (p *Provisioner) addHetznerNodes(
 }
 
 // provisionHetznerScaleServers runs the pre-flight checks (server-type
-// availability, shared infrastructure, Talos snapshot image), creates count new
-// servers for role starting at nextIndex, and returns the ones that came up.
+// availability, shared infrastructure, Talos snapshot image), creates one new
+// server for each index in indices, and returns the ones that came up.
 // Per-node creation failures are recorded on result; the successfully created
 // servers are returned for config apply by the caller.
 func (p *Provisioner) provisionHetznerScaleServers(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	clusterName, role string,
-	nextIndex, count int,
+	indices []int,
 	result *clusterupdate.UpdateResult,
 ) ([]*hcloud.Server, error) {
 	// Verify server type availability before creating infrastructure.
@@ -96,7 +96,7 @@ func (p *Provisioner) provisionHetznerScaleServers(
 	}
 
 	creationResults, err := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count, imageID,
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), indices, imageID,
 	)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,10 @@ func (p *Provisioner) provisionHetznerScaleServers(
 	return p.collectCreatedHetznerServers(creationResults, role)
 }
 
-// launchHetznerScaleCreation creates count Hetzner servers starting at nextIndex, in parallel.
+// launchHetznerScaleCreation creates one Hetzner server per entry in indices, in
+// parallel. The indices are the node-name suffixes to allocate (lowest free first;
+// see availableHetznerNodeIndices), so gaps from removed nodes are reclaimed rather
+// than always appending past the highest index.
 // imageID is the cluster's Talos snapshot image (0 when none is configured); it takes precedence
 // over the maintenance-mode ISO so scaled and recreated nodes boot the same Talos version as the
 // rest of the cluster (see hetznerBootSource). Results are returned indexed — goroutines always
@@ -123,18 +126,16 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	clusterName, role string,
 	infra HetznerInfra,
 	retryOpts hetzner.ServerRetryOpts,
-	nextIndex, count int,
+	indices []int,
 	imageID int64,
 ) ([]hetznerNodeCreationResult, error) {
-	results := make([]hetznerNodeCreationResult, count)
+	results := make([]hetznerNodeCreationResult, len(indices))
 
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
 
-	for nodeIdx := range count {
+	for nodeIdx, nodeNumber := range indices {
 		group.Go(func() error {
-			nodeNumber := nextIndex + nodeIdx
-
 			nodeName, nameErr := hetznerNodeName(clusterName, role, nodeNumber)
 			if nameErr != nil {
 				// Validation failure: record it and skip provisioning (no billable
@@ -388,10 +389,15 @@ func (p *Provisioner) listHetznerNodesByRole(
 	return servers, nil
 }
 
-// nextHetznerNodeIndex finds the next available index for a node role.
-// It scans existing server names to find the max index, avoiding naming collisions
-// when there are gaps in the index sequence (e.g., nodes 1,2,4 after removing 3).
-func nextHetznerNodeIndex(servers []*hcloud.Server, clusterName, role string) int {
+// availableHetznerNodeIndices returns the next `count` 1-based indices to allocate
+// for a node role, reclaiming the lowest freed index first so a recreated node
+// reuses a removed node's name (e.g. nodes 1,3 after removing 2 yield 2) rather
+// than climbing to max+1 (#5312).
+func availableHetznerNodeIndices(
+	servers []*hcloud.Server,
+	clusterName, role string,
+	count int,
+) []int {
 	prefix := fmt.Sprintf("%s-%s-", clusterName, role)
 
 	names := make([]string, len(servers))
@@ -399,7 +405,7 @@ func nextHetznerNodeIndex(servers []*hcloud.Server, clusterName, role string) in
 		names[i] = server.Name
 	}
 
-	return nextNodeIndexFromNames(names, prefix)
+	return availableNodeIndices(names, prefix, count)
 }
 
 // deleteHetznerServer deletes a single Hetzner Cloud server.

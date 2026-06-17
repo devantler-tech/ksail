@@ -8,30 +8,68 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
-// nextNodeIndexFromNames scans a slice of node names that share a common prefix
-// and returns the next available numeric suffix to use after that prefix.
+// availableNodeIndices scans node names that share a common prefix and returns
+// the next `count` numeric suffixes to allocate, preferring the lowest free
+// indices. Gaps left by removed nodes are reclaimed (lowest first) before the
+// series is extended past its highest used index, so a recreated node reclaims a
+// lost node's name instead of drifting to an ever-higher index (#5312). Given
+// existing indices {1, 3} and count 2 it returns [2, 4]; with no matching names
+// it returns [1, 2, ..., count].
+//
 // Each name is expected to have the form "<prefix><n>" where n is a positive
-// integer; the function computes max(n)+1 over all matching names and returns it.
-// If no matching names are found (or no parsable numeric suffix is present),
-// the function returns 1, which corresponds to the first suffix. Callers that
-// maintain separate 0-based indexes for internal data structures may still need to
-// map between this suffix and their own indexing scheme.
-func nextNodeIndexFromNames(names []string, prefix string) int {
-	maxIndex := 1
+// integer; names without the prefix or without a parsable positive suffix are
+// ignored. The returned suffixes are 1-based; callers that maintain separate
+// 0-based indexes for internal data structures map between this suffix and their
+// own indexing scheme.
+func availableNodeIndices(names []string, prefix string, count int) []int {
+	if count <= 0 {
+		return []int{}
+	}
+
+	used, maxIndex := scanUsedNodeIndices(names, prefix)
+	indices := make([]int, 0, count)
+
+	// Reclaim the lowest freed indices first (gaps within 1..maxIndex).
+	for index := 1; index <= maxIndex && len(indices) < count; index++ {
+		if !used[index] {
+			indices = append(indices, index)
+		}
+	}
+
+	// Extend the series past the highest used index for any remaining nodes.
+	for index := maxIndex + 1; len(indices) < count; index++ {
+		indices = append(indices, index)
+	}
+
+	return indices
+}
+
+// scanUsedNodeIndices parses the 1-based numeric suffixes of names sharing the
+// given prefix, returning the set of indices in use and the highest one seen
+// (0 when no name matches). Names without the prefix or without a parsable
+// positive suffix are ignored.
+func scanUsedNodeIndices(names []string, prefix string) (map[int]bool, int) {
+	used := make(map[int]bool, len(names))
+	maxIndex := 0
 
 	for _, name := range names {
-		idx, found := strings.CutPrefix(name, prefix)
+		suffix, found := strings.CutPrefix(name, prefix)
 		if !found {
 			continue
 		}
 
-		n, err := strconv.Atoi(idx)
-		if err == nil && n >= maxIndex {
-			maxIndex = n + 1
+		index, err := strconv.Atoi(suffix)
+		if err != nil || index < 1 {
+			continue
+		}
+
+		used[index] = true
+		if index > maxIndex {
+			maxIndex = index
 		}
 	}
 
-	return maxIndex
+	return used, maxIndex
 }
 
 // recordAppliedChange adds an applied change to the update result.

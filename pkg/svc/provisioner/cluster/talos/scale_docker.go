@@ -99,7 +99,7 @@ func (p *Provisioner) addDockerNodes(
 		return fmt.Errorf("failed to list %s nodes: %w", role, err)
 	}
 
-	nextIndex := nextDockerNodeIndex(existing, clusterName, role)
+	indices := availableDockerNodeIndices(existing, clusterName, role, count)
 
 	cidr, err := netip.ParsePrefix(p.options.NetworkCIDR)
 	if err != nil {
@@ -126,7 +126,7 @@ func (p *Provisioner) addDockerNodes(
 
 	// Pre-calculate all node names and IPs sequentially before parallelizing creation.
 	specs, err := preCalculateNodeSpecs(
-		cidr, clusterName, role, nextIndex, count, cpCount,
+		cidr, clusterName, role, indices, cpCount,
 	)
 	if err != nil {
 		return err
@@ -202,16 +202,19 @@ func (p *Provisioner) waitForNewDockerNodesReachable(
 	return group.Wait() //nolint:wrapcheck // per-node errors are wrapped in the closure above
 }
 
-// preCalculateNodeSpecs determines the name and static IP for each node to be created.
+// preCalculateNodeSpecs determines the name and static IP for each node to be
+// created, one per (0-based) index in indices. Indices may be non-contiguous when
+// reclaiming freed slots (see availableDockerNodeIndices), so each node's name and
+// IP are derived from its own index rather than a running offset.
 func preCalculateNodeSpecs(
 	cidr netip.Prefix,
 	clusterName, role string,
-	nextIndex, count, cpCount int,
+	indices []int,
+	cpCount int,
 ) ([]nodeSpec, error) {
-	specs := make([]nodeSpec, count)
+	specs := make([]nodeSpec, len(indices))
 
-	for idx := range count {
-		nodeIndex := nextIndex + idx
+	for idx, nodeIndex := range indices {
 		nodeName := dockerNodeName(clusterName, role, nodeIndex)
 
 		nodeIP, ipErr := calculateNodeIP(cidr, role, nodeIndex, cpCount)
@@ -549,11 +552,14 @@ func (p *Provisioner) configForRole(role string) talosconfig.Provider {
 	return p.talosConfigs.Worker()
 }
 
-// nextDockerNodeIndex finds the next available 0-based index for a node role.
-// It scans existing container names to find the max suffix, then converts the
-// result to the 0-based index expected by dockerNodeName (which applies +1
-// internally when formatting names).
-func nextDockerNodeIndex(containers []container.Summary, clusterName, role string) int {
+// availableDockerNodeIndices returns the next `count` 0-based indices for a node
+// role, reclaiming the lowest freed slot first so a recreated node reuses a removed
+// node's name and static IP rather than climbing to max+1 (#5312).
+func availableDockerNodeIndices(
+	containers []container.Summary,
+	clusterName, role string,
+	count int,
+) []int {
 	// Build the name prefix used by dockerNodeName (e.g. "mycluster-controlplane-").
 	// dockerNodeName(clusterName, role, 0) returns "<clusterName>-<talosRole>-1";
 	// trimming the last character gives the base prefix without the index digit.
@@ -565,11 +571,15 @@ func nextDockerNodeIndex(containers []container.Summary, clusterName, role strin
 		names[i] = containerName(ctr)
 	}
 
-	// nextNodeIndexFromNames returns the next available numeric suffix (1-based).
-	// dockerNodeName uses index+1 for the suffix, so convert: index = nextSuffix-1.
-	nextSuffix := nextNodeIndexFromNames(names, prefix)
+	// availableNodeIndices returns 1-based suffixes; dockerNodeName and
+	// calculateNodeIP expect 0-based indexes (they apply +1 internally), so
+	// convert each: index = suffix - 1.
+	indices := availableNodeIndices(names, prefix, count)
+	for i := range indices {
+		indices[i]--
+	}
 
-	return nextSuffix - 1
+	return indices
 }
 
 // dockerNodeName formats a Docker container name for a Talos node.

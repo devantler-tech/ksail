@@ -34,9 +34,9 @@ func NewNodeWithRoleForTest(ip, role string) NodeWithRoleForTest {
 	return nodeWithRole{IP: ip, Role: role}
 }
 
-// NextNodeIndexFromNamesForTest exposes nextNodeIndexFromNames for unit testing.
-func NextNodeIndexFromNamesForTest(names []string, prefix string) int {
-	return nextNodeIndexFromNames(names, prefix)
+// AvailableNodeIndicesForTest exposes availableNodeIndices for unit testing.
+func AvailableNodeIndicesForTest(names []string, prefix string, count int) []int {
+	return availableNodeIndices(names, prefix, count)
 }
 
 // AddDockerNodesForTest exposes addDockerNodes for unit testing.
@@ -206,13 +206,19 @@ func CalculateNodeIPForTest(
 }
 
 // PreCalculateNodeSpecsForTest exposes preCalculateNodeSpecs for unit testing.
-// Returns node names and IPs as parallel slices (nodeSpec is unexported).
+// It builds a contiguous index range from nextIndex for backwards-compatible test
+// inputs. Returns node names and IPs as parallel slices (nodeSpec is unexported).
 func PreCalculateNodeSpecsForTest(
 	cidr netip.Prefix,
 	clusterName, role string,
 	nextIndex, count, cpCount int,
 ) ([]string, []netip.Addr, error) {
-	specs, err := preCalculateNodeSpecs(cidr, clusterName, role, nextIndex, count, cpCount)
+	indices := make([]int, count)
+	for i := range count {
+		indices[i] = nextIndex + i
+	}
+
+	specs, err := preCalculateNodeSpecs(cidr, clusterName, role, indices, cpCount)
 	if err != nil {
 		return nil, nil, err
 	}
