@@ -24,9 +24,9 @@ Mechanically, the `🔍 Prepare benchmark regression gate input` step writes two
 - `bench-filtered.txt` — the real measurements (including `ns/op`), used to update the baseline and the history chart.
 - `bench-compare.txt` — the same data with `ns/op` pinned to `1`, used as the gate input. `github-action-benchmark`'s `go` parser turns each line into one comparable series per metric; pinning `ns/op` makes its series compare as ~0× of the baseline (so it can never alert), while the `B/op` and `allocs/op` series keep their real values **and byte-identical names** and still compare 1:1.
 
-| Setting           | Value | Meaning                                                            |
-|-------------------|-------|-------------------------------------------------------------------|
-| `alert-threshold` | 150%  | A deterministic metric is flagged when it is ≥1.5× the baseline    |
+| Setting           | Value | Meaning                                                             |
+|-------------------|-------|---------------------------------------------------------------------|
+| `alert-threshold` | 150%  | A deterministic metric is flagged when it is ≥1.5× the baseline     |
 | `fail-threshold`  | 150%  | Threshold above which the gate fails the check (pull requests only) |
 
 - **On pull requests**, a ≥1.5× regression in `allocs/op` or `B/op` posts a comment **and fails the check**, blocking the merge. Because the gated metrics are jitter-free, this gate is reliable — it won't fire on runner noise.
