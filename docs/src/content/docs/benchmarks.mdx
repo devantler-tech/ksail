@@ -13,12 +13,14 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## Regression Detection
 
-| Setting           | Value | Meaning                                                                                              |
-|-------------------|-------|------------------------------------------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline (never blocks CI on PRs) |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline         |
+Shared GitHub-hosted runners vary 2–5× in wall-clock speed between runs, so the gate compares **only the deterministic allocation metrics** (`allocs/op`, `B/op`) — never wall-clock `ns/op`, which is tracked for the chart above but is too noisy to gate on. A real algorithmic regression shows up in allocations; runner jitter does not.
 
-On pull requests where benchmarks run and benchmark functions are discovered, a comment is posted only when the alert threshold is exceeded, highlighting the regressed benchmarks.
+| Setting           | Value | Meaning                                                            |
+|-------------------|-------|-------------------------------------------------------------------|
+| `alert-threshold` | 150%  | A deterministic metric is flagged when it is ≥1.5× the baseline    |
+| `fail-threshold`  | 150%  | Threshold above which the gate fails the check (pull requests only) |
+
+On pull requests, a ≥1.5× regression in `allocs/op` or `B/op` posts a comment **and fails the check**, blocking the merge. Pushes to `main` never fail — they refresh the baseline and the `ns/op` chart above, so an intentional allocation increase re-baselines itself.
 
 Benchmark results are also recorded in every [CI workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml). On pushes to `main`, results are auto-pushed to the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data).
 
