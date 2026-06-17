@@ -7,6 +7,7 @@ import (
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -234,19 +235,36 @@ func TestConfigsFoldsKernelArgsIntoSchematic(t *testing.T) {
 		assert.Equal(t, want, folded.SchematicID())
 	})
 	t.Run(
-		"deprecated install.extraKernelArgs is cleared from the rendered config",
+		"deprecated extraKernelArgs cleared and grubUseUKICmdline pinned true",
 		func(t *testing.T) {
 			t.Parallel()
 			folded := loadWithExtensionsAndKernelArgs(t, exts, []string{"security=apparmor"})
-			assert.Empty(
-				t,
-				folded.ControlPlane().Machine().Install().ExtraKernelArgs(),
-				"control-plane install.extraKernelArgs should be folded into the schematic and cleared",
-			)
-			assert.Empty(t, folded.Worker().Machine().Install().ExtraKernelArgs(),
-				"worker install.extraKernelArgs should be folded into the schematic and cleared")
+
+			for _, cfg := range []talosconfig.Provider{folded.ControlPlane(), folded.Worker()} {
+				install := cfg.Machine().Install()
+				assert.Empty(t, install.ExtraKernelArgs(),
+					"install.extraKernelArgs should be folded into the schematic and cleared")
+				assert.True(t, install.GrubUseUKICmdline(),
+					"grubUseUKICmdline must be true so the UKI-embedded folded args apply")
+			}
 		},
 	)
+	t.Run("pins grubUseUKICmdline true even when a patch set it false", func(t *testing.T) {
+		t.Parallel()
+		// Mirrors platform's pre-fold stopgap (extraKernelArgs + grubUseUKICmdline:false).
+		// After folding into the UKI cmdline, false would silently drop the args, so KSail
+		// must flip it to true — this is what makes the migration safe with no platform change.
+		folded := loadWithExtensionsAndPatch(t, exts,
+			"machine:\n  install:\n    extraKernelArgs:\n      - security=apparmor\n"+
+				"    grubUseUKICmdline: false\n")
+
+		for _, cfg := range []talosconfig.Provider{folded.ControlPlane(), folded.Worker()} {
+			install := cfg.Machine().Install()
+			assert.Empty(t, install.ExtraKernelArgs())
+			assert.True(t, install.GrubUseUKICmdline(),
+				"grubUseUKICmdline:false from the patch must be overridden to true after folding")
+		}
+	})
 	t.Run("not folded without extensions (Docker/container-mode safe)", func(t *testing.T) {
 		t.Parallel()
 		// No extensions => no factory installer => kernel args are left untouched on
@@ -262,24 +280,38 @@ func TestConfigsFoldsKernelArgsIntoSchematic(t *testing.T) {
 func loadWithExtensionsAndKernelArgs(t *testing.T, extensions, kernelArgs []string) *talos.Configs {
 	t.Helper()
 
+	if len(kernelArgs) == 0 {
+		return loadWithExtensionsAndPatch(t, extensions, "")
+	}
+
+	var content strings.Builder
+
+	content.WriteString("machine:\n  install:\n    extraKernelArgs:\n")
+
+	for _, arg := range kernelArgs {
+		content.WriteString("      - " + arg + "\n")
+	}
+
+	return loadWithExtensionsAndPatch(t, extensions, content.String())
+}
+
+func loadWithExtensionsAndPatch(
+	t *testing.T,
+	extensions []string,
+	patchYAML string,
+) *talos.Configs {
+	t.Helper()
+
 	manager := talos.NewConfigManager("", "ext-test", "1.32.0", "10.5.0.0/24")
 	if len(extensions) > 0 {
 		manager = manager.WithExtensions(extensions)
 	}
 
-	if len(kernelArgs) > 0 {
-		var content strings.Builder
-
-		content.WriteString("machine:\n  install:\n    extraKernelArgs:\n")
-
-		for _, arg := range kernelArgs {
-			content.WriteString("      - " + arg + "\n")
-		}
-
+	if patchYAML != "" {
 		manager = manager.WithAdditionalPatches([]talos.Patch{{
 			Path:    "extra-kernel-args",
 			Scope:   talos.PatchScopeCluster,
-			Content: []byte(content.String()),
+			Content: []byte(patchYAML),
 		}})
 	}
 
