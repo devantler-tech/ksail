@@ -299,7 +299,6 @@ func (a *authenticator) readState(request *http.Request) (stateData, bool) {
 func newAuthCookie(name, value, path string, maxAge int, secure bool) *http.Cookie {
 	// G124 false positive: HttpOnly + SameSite=Lax are set; Secure is caller-driven
 	// (false only for local HTTP port-forwards, where a Secure cookie is dropped).
-
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
