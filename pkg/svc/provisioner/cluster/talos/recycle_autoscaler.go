@@ -25,10 +25,12 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // recycleAutoscalerNodes drains and deletes the cluster-autoscaler-managed nodes so
 // the autoscaler re-provisions any still-needed capacity from the refreshed Talos
 // snapshot + worker config. It is the disruptive propagation path, reserved for
-// changes an already-booted node cannot adopt in place: a new Talos boot image
-// (snapshot/OS bump) or a reboot/wipe/recreate-class change. Config-only drift that
-// Talos applies with NO_REBOOT goes through applyInPlaceToAutoscalerNodes instead,
-// so it never drains — see autoscalerRecycleRequired for the gate.
+// changes that can only reach an already-booted node by replacing it with a fresh
+// server: a new Talos boot image (snapshot/OS bump) or a wipe/recreate-class change.
+// A reboot-required change (CNI/disk-quota) instead reboots the same servers in
+// place via rollingRebootAutoscalerNodes, and config-only drift that Talos applies
+// with NO_REBOOT goes through applyInPlaceToAutoscalerNodes — neither needs a fresh
+// server. See autoscalerRecycleRequired / autoscalerRebootRequired for the gate.
 //
 // Why this is needed: `cluster update` upgrades only KSail-owned nodes in place
 // (control planes + static workers, listed via the ksail.owned label). Autoscaler
