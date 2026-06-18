@@ -212,6 +212,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `metricsServer` | enum | – | MetricsServer controls metrics-server installation. Default keeps the distribution's behavior; Enabled or Disabled override it. |
 | `loadBalancer` | enum | – | LoadBalancer controls load-balancer support. Default keeps the distribution and provider behavior; Enabled or Disabled override it. |
 | `certManager` | enum | – | CertManager controls whether cert-manager is installed (Enabled or Disabled). |
+| `imageVerification` | enum | – | Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it. |
 | `policyEngine` | enum | – | PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper. |
 | `localRegistry` | LocalRegistry | – | LocalRegistry configures the host-local OCI registry (or an external registry for cloud providers) used by GitOps workflows. |
 | `gitOpsEngine` | enum | – | GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD. |
@@ -404,7 +405,7 @@ NodeAutoscalerConfig defines configuration for node-level autoscaling. When Enab
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `enabled` | boolean | – | Enabled controls whether the Cluster Autoscaler is installed to manage worker node counts dynamically. |
+| `enabled` | enum | – | Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled |
 | `pools` | []NodePool | – | Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only). |
 | `maxNodesTotal` | int32 | – | Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be &lt;= serverLimit |
 | `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes |

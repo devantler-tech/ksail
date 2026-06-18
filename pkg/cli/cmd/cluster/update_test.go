@@ -3,10 +3,12 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -14,6 +16,55 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// hasConfirmFlagAnnotation reports whether the named flag on cmd carries the
+// ai.toolgen.confirm-flag annotation (the marker the chat assistant uses to
+// auto-inject a prompt-skip after permission approval).
+func hasConfirmFlagAnnotation(cmd *cobra.Command, flagName string) bool {
+	flag := cmd.Flags().Lookup(flagName)
+	if flag == nil {
+		return false
+	}
+
+	return slices.Contains(
+		flag.Annotations[annotations.AnnotationConfirmFlag],
+		annotations.AnnotationValueTrue,
+	)
+}
+
+// TestUpdateConfirmFlagRepointedToYes verifies item 5.2's re-point: only --yes
+// carries the ai.toolgen.confirm-flag annotation, so the chat/MCP assistant
+// auto-confirms cluster updates via --yes. The destructive --force-drain and the
+// deprecated --force alias must NOT be auto-injected.
+func TestUpdateConfirmFlagRepointedToYes(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewUpdateCmd()
+
+	assert.True(t, hasConfirmFlagAnnotation(cmd, "yes"),
+		"--yes must carry the confirm-flag annotation so chat/MCP auto-confirms via --yes")
+	assert.False(t, hasConfirmFlagAnnotation(cmd, "force-drain"),
+		"--force-drain must NOT be a confirm flag — it is destructive")
+	assert.False(t, hasConfirmFlagAnnotation(cmd, "force"),
+		"the deprecated --force alias must NOT be a confirm flag")
+}
+
+// TestUpdateForceFlagSplit verifies item 5.2's flag split: --force survives as a
+// hidden deprecated alias, and --force-drain is the new destructive flag.
+func TestUpdateForceFlagSplit(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewUpdateCmd()
+
+	forceFlag := cmd.Flags().Lookup("force")
+	require.NotNil(t, forceFlag, "--force should survive as a hidden deprecated alias")
+	assert.NotEmpty(t, forceFlag.Deprecated, "--force should be marked deprecated")
+	assert.True(t, forceFlag.Hidden, "--force should be hidden")
+
+	forceDrainFlag := cmd.Flags().Lookup("force-drain")
+	require.NotNil(t, forceDrainFlag, "--force-drain flag should exist")
+	assert.False(t, forceDrainFlag.Hidden, "--force-drain should be visible in help")
+}
 
 func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 	t.Parallel()
@@ -166,12 +217,6 @@ func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test
 		t.Error("expected Long description to be set")
 	}
 
-	// Verify flags
-	forceFlag := cmd.Flags().Lookup("force")
-	if forceFlag == nil {
-		t.Error("expected --force flag to exist")
-	}
-
 	nameFlag := cmd.Flags().Lookup("name")
 	if nameFlag == nil {
 		t.Error("expected --name flag to exist")
@@ -212,7 +257,7 @@ func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test
 	}
 }
 
-func TestResolveForce(t *testing.T) {
+func TestResolveConsent(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -221,7 +266,12 @@ func TestResolveForce(t *testing.T) {
 		yesValue   string
 		expected   bool
 	}{
-		{name: "--force resolves to true", forceValue: true, yesValue: "", expected: true},
+		{
+			name:       "deprecated --force resolves to true",
+			forceValue: true,
+			yesValue:   "",
+			expected:   true,
+		},
 		{name: "--yes resolves to true", forceValue: false, yesValue: "true", expected: true},
 		{
 			name:       "--yes=false resolves to false",
@@ -243,9 +293,9 @@ func TestResolveForce(t *testing.T) {
 				_ = cmd.Flags().Set("yes", testCase.yesValue)
 			}
 
-			result := cluster.ExportResolveForce(testCase.forceValue, cmd.Flags().Lookup("yes"))
+			result := cluster.ExportResolveConsent(testCase.forceValue, cmd.Flags().Lookup("yes"))
 			if result != testCase.expected {
-				t.Errorf("expected resolveForce(%v, yes=%q) = %v, got %v",
+				t.Errorf("expected resolveConsent(%v, yes=%q) = %v, got %v",
 					testCase.forceValue, testCase.yesValue, testCase.expected, result)
 			}
 		})
@@ -1204,34 +1254,35 @@ func TestConfirmDisruptiveChanges( //nolint:funlen // Table-driven tests are nat
 	}
 
 	// Only branches that do not depend on TTY state are asserted: the
-	// no-disruptive-change path, and the --force path (ShouldSkipPrompt always
-	// skips the prompt when force is set). The interactive prompt branch reads a
-	// global TTY/stdin state that is not injectable, so it is left to E2E.
+	// no-disruptive-change path, and the consent path (ShouldSkipPrompt always
+	// skips the prompt when consent is given via --yes/--force). The interactive
+	// prompt branch reads a global TTY/stdin state that is not injectable, so it
+	// is left to E2E.
 	tests := []struct {
 		name             string
 		diff             *clusterupdate.UpdateResult
-		force            bool
+		consent          bool
 		wantAllowRolling bool
 		wantProceed      bool
 	}{
 		{
-			name:             "no disruptive changes proceeds without elevating force",
+			name:             "no disruptive changes proceeds without elevating consent",
 			diff:             inPlace,
-			force:            false,
+			consent:          false,
 			wantAllowRolling: false,
 			wantProceed:      true,
 		},
 		{
-			name:             "rolling-recreate with --force proceeds with force",
+			name:             "rolling-recreate with consent proceeds",
 			diff:             rolling,
-			force:            true,
+			consent:          true,
 			wantAllowRolling: true,
 			wantProceed:      true,
 		},
 		{
-			name:             "reboot-only with --force proceeds with force",
+			name:             "reboot-only with consent proceeds",
 			diff:             reboot,
-			force:            true,
+			consent:          true,
 			wantAllowRolling: true,
 			wantProceed:      true,
 		},
@@ -1248,7 +1299,7 @@ func TestConfirmDisruptiveChanges( //nolint:funlen // Table-driven tests are nat
 			allowRolling, proceed := cluster.ExportConfirmDisruptiveChanges(
 				cmd,
 				testCase.diff,
-				testCase.force,
+				testCase.consent,
 			)
 
 			assert.Equal(t, testCase.wantAllowRolling, allowRolling)

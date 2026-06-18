@@ -21,8 +21,10 @@ func GenerateTools(root *cobra.Command, opts ToolOptions) []ToolDefinition {
 
 // generateToolsRecursive traverses the command tree depth-first.
 func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts ToolOptions) {
-	// Check for explicit exclusion annotation - skip entirely (including children)
-	if hasExcludeAnnotation(cmd) {
+	// Skip entirely (including children) when the command is excluded or marked
+	// interactive. isExcludedFromTools is the single policy shared with the
+	// consolidation collector (walkSubcommands).
+	if isExcludedFromTools(cmd) {
 		return
 	}
 
@@ -45,12 +47,6 @@ func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts To
 
 	// Traverse children and potentially add this command as a tool
 	processCommandAndChildren(cmd, tools, opts, isExcluded)
-}
-
-// hasExcludeAnnotation checks if a command has the explicit exclude annotation.
-func hasExcludeAnnotation(cmd *cobra.Command) bool {
-	return cmd.Annotations != nil &&
-		cmd.Annotations[annotations.AnnotationExclude] == annotationValueTrue
 }
 
 // processCommandAndChildren traverses children and adds the command as a tool if applicable.

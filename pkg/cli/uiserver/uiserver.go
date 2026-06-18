@@ -10,9 +10,9 @@ import (
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
 
 // Host is the loopback address the UI binds to. Binding only to localhost is the security boundary:

@@ -79,13 +79,17 @@ type OptionsTalos struct {
 	// during cluster init. When Enabled, generates an image-verification.yaml template
 	// in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
 	// and public key verification rules. Requires Talos 1.13+.
-	ImageVerification ImageVerification `json:"imageVerification,omitzero"`
+	//
+	// Deprecated: use spec.cluster.imageVerification. This field is kept as a
+	// migration alias and emits a warning on load (the value is copied into the
+	// cluster-level field). Removal planned in a future minor release.
+	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.imageVerification instead"` //nolint:lll
 	// DrainTimeout is the per-node pod-eviction budget for rolling node drains during
 	// `cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When
 	// unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
 	// longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
 	// gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
-	// re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+	// re-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.
 	// Override per invocation with --drain-timeout. Example: "15m".
 	DrainTimeout metav1.Duration `json:"drainTimeout,omitzero"`
 }

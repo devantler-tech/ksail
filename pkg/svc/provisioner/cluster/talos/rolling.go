@@ -168,7 +168,7 @@ func (p *Provisioner) drainNode(
 		hint := ""
 		if !p.drainForce {
 			hint = "; raise spec.cluster.talos.drainTimeout (or --drain-timeout) to give " +
-				"workloads more time, or re-run with --force to delete pods bypassing " +
+				"workloads more time, or re-run with --force-drain to delete pods bypassing " +
 				"PodDisruptionBudgets"
 		}
 

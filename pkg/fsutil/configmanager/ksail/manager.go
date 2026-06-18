@@ -223,6 +223,14 @@ func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error 
 		return err
 	}
 
+	// Re-run image-verification migration so a deprecated config value still in the
+	// Talos-scoped field is reconciled against any --image-verification flag override
+	// (which writes the promoted cluster-level field).
+	err = migrateDeprecatedImageVerification(m.Config, m.Writer)
+	if err != nil {
+		return err
+	}
+
 	m.applyGitOpsAwareDefaults(flagOverrides)
 	m.applyDistributionConfigDefaults()
 
@@ -349,6 +357,13 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 		m.Viper.IsSet("spec.cluster.autoscaler.node.enabled"),
 		m.Writer,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Migrate deprecated spec.cluster.talos.imageVerification into the promoted
+	// cluster-level spec.cluster.imageVerification.
+	err = migrateDeprecatedImageVerification(m.Config, m.Writer)
 	if err != nil {
 		return err
 	}

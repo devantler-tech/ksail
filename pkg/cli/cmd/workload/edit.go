@@ -60,6 +60,9 @@ Example:
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: permissionWrite,
+			// edit opens the resource in $EDITOR, which an AI tool client cannot
+			// drive — keep it out of the generated MCP/chat tool surface.
+			annotations.AnnotationInteractive: annotations.AnnotationValueTrue,
 		},
 	}
 

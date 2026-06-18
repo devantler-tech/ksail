@@ -5,6 +5,15 @@ const (
 	// Set to "true" to exclude a command and all its subcommands.
 	AnnotationExclude = "ai.toolgen.exclude"
 
+	// AnnotationInteractive marks a command that requires an interactive terminal
+	// (a full-screen TUI, an $EDITOR, or a TTY picker) and therefore cannot be
+	// driven by an AI tool client. Set to "true" to drop the command from the
+	// generated MCP/chat tool surface — both in the unconsolidated walk and inside
+	// consolidated parents (where AnnotationExclude is not honored). Unlike
+	// AnnotationExclude, it documents intent: the command is omitted because it is
+	// interactive, not because it is a meta/server command.
+	AnnotationInteractive = "ai.toolgen.interactive"
+
 	// AnnotationDescription is a command annotation to provide a custom description.
 	// If not set, the command's Short description is used.
 	AnnotationDescription = "ai.toolgen.description"

@@ -1,17 +1,18 @@
-package api
+package operator
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // childDynamicClientFunc builds a dynamic client for a Cluster's managed (child) cluster. The
-// connection logic lives in pkg/operator, which already imports this package, so it is injected here
-// rather than imported — avoiding an import cycle.
+// connection logic lives elsewhere in pkg/operator (childcluster.go), so it is injected here rather
+// than imported, keeping this CR backend independent of the connection plumbing.
 type childDynamicClientFunc func(
 	ctx context.Context,
 	cluster *v1alpha1.Cluster,
@@ -25,7 +26,7 @@ type childDynamicClientFunc func(
 // child-cluster resolver does not advertise the resource capability.
 type crConnectedClusterService struct {
 	*crClusterService
-	ResourceAdapter
+	api.ResourceAdapter
 
 	newDynamicClient childDynamicClientFunc
 }
@@ -33,13 +34,13 @@ type crConnectedClusterService struct {
 // Ensure the connected operator backend exposes the read-only resource browser and the safe write
 // actions (scale, rollout restart, delete, GitOps reconcile) via the shared adapter.
 var (
-	_ ResourceService        = (*crConnectedClusterService)(nil)
-	_ ResourceWriter         = (*crConnectedClusterService)(nil)
-	_ ResourceClientProvider = (*crConnectedClusterService)(nil)
+	_ api.ResourceService        = (*crConnectedClusterService)(nil)
+	_ api.ResourceWriter         = (*crConnectedClusterService)(nil)
+	_ api.ResourceClientProvider = (*crConnectedClusterService)(nil)
 	// Inherited from the embedded *crClusterService: in-place update and component-install advertising
 	// (componentsInstall=true) carry through to the connected operator backend.
-	_ ClusterUpdater     = (*crConnectedClusterService)(nil)
-	_ ComponentInstaller = (*crConnectedClusterService)(nil)
+	_ api.ClusterUpdater     = (*crConnectedClusterService)(nil)
+	_ api.ComponentInstaller = (*crConnectedClusterService)(nil)
 )
 
 // NewCRClusterServiceWithResources returns an operator ClusterService that can also browse resources in
@@ -47,12 +48,12 @@ var (
 func NewCRClusterServiceWithResources(
 	kubeClient client.Client,
 	newDynamicClient childDynamicClientFunc,
-) ClusterService {
+) api.ClusterService {
 	service := &crConnectedClusterService{
 		crClusterService: &crClusterService{client: kubeClient},
 		newDynamicClient: newDynamicClient,
 	}
-	service.ResourceAdapter = ResourceAdapter{Provider: service}
+	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 
 	return service
 }

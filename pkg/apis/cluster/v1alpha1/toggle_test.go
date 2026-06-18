@@ -1,6 +1,7 @@
 package v1alpha1_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -21,8 +22,135 @@ func TestIsToggleEnumType(t *testing.T) {
 
 	assert.True(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[v1alpha1.CertManager]()))
 	assert.True(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[v1alpha1.CSI]()))
+	assert.True(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[v1alpha1.SOPSEnabled]()))
+	assert.True(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[v1alpha1.NodeAutoscalerEnabled]()))
 	assert.False(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[v1alpha1.GitOpsEngine]()))
 	assert.False(t, v1alpha1.IsToggleEnumType(reflect.TypeFor[string]()))
+}
+
+// TestSOPSEnabled_SetAcceptsBoolAlias verifies the SOPSEnabled flag Set accepts the
+// legacy boolean spelling as a deprecation alias while still accepting the canonical
+// enum spellings.
+func TestSOPSEnabled_SetAcceptsBoolAlias(t *testing.T) {
+	t.Parallel()
+
+	var sops v1alpha1.SOPSEnabled
+
+	require.NoError(t, sops.Set("true"))
+	assert.Equal(t, v1alpha1.SOPSEnabledEnabled, sops)
+
+	require.NoError(t, sops.Set("false"))
+	assert.Equal(t, v1alpha1.SOPSEnabledDisabled, sops)
+
+	require.NoError(t, sops.Set("Default"))
+	assert.Equal(t, v1alpha1.SOPSEnabledDefault, sops)
+
+	require.Error(t, sops.Set("bogus"))
+}
+
+// TestNodeAutoscalerEnabled_SetAcceptsBoolAlias verifies the NodeAutoscalerEnabled
+// flag Set accepts the legacy boolean spelling as a deprecation alias.
+func TestNodeAutoscalerEnabled_SetAcceptsBoolAlias(t *testing.T) {
+	t.Parallel()
+
+	var node v1alpha1.NodeAutoscalerEnabled
+
+	require.NoError(t, node.Set("true"))
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, node)
+	assert.True(t, node.IsEnabled())
+
+	require.NoError(t, node.Set("Disabled"))
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledDisabled, node)
+	assert.False(t, node.IsEnabled())
+}
+
+// TestToggleEnumsUnmarshalLegacyBoolJSON guards the dual-unmarshal-path
+// backward-compat: sops.enabled (was *bool) and autoscaler.node.enabled (was
+// bool) migrated to string toggle enums, but older ksail versions persisted them
+// to ~/.ksail/clusters/<name>/spec.json (and accept them over the REST API) as
+// JSON booleans. A plain json.Unmarshal of those legacy bool values must still
+// load (true -> Enabled, false -> Disabled) so `cluster update`/`info` keep
+// working after an upgrade — the YAML decode hook does not run on the json path.
+func TestToggleEnumsUnmarshalLegacyBoolJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		jsonData        string
+		wantSOPS        v1alpha1.SOPSEnabled
+		wantNodeEnabled v1alpha1.NodeAutoscalerEnabled
+	}{
+		{
+			name:            "legacy bool true",
+			jsonData:        `{"sops":{"enabled":true},"autoscaler":{"node":{"enabled":true}}}`,
+			wantSOPS:        v1alpha1.SOPSEnabledEnabled,
+			wantNodeEnabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+		},
+		{
+			name:            "legacy bool false",
+			jsonData:        `{"sops":{"enabled":false},"autoscaler":{"node":{"enabled":false}}}`,
+			wantSOPS:        v1alpha1.SOPSEnabledDisabled,
+			wantNodeEnabled: v1alpha1.NodeAutoscalerEnabledDisabled,
+		},
+		{
+			name:            "current string form",
+			jsonData:        `{"sops":{"enabled":"Default"},"autoscaler":{"node":{"enabled":"Enabled"}}}`,
+			wantSOPS:        v1alpha1.SOPSEnabledDefault,
+			wantNodeEnabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var spec v1alpha1.ClusterSpec
+
+			require.NoError(t, json.Unmarshal([]byte(testCase.jsonData), &spec))
+			assert.Equal(t, testCase.wantSOPS, spec.SOPS.Enabled)
+			assert.Equal(t, testCase.wantNodeEnabled, spec.Autoscaler.Node.Enabled)
+		})
+	}
+}
+
+// TestToggleEnumUnmarshalJSONNull verifies a JSON null leaves the toggle value at
+// its zero value (idiomatic no-op), matching default encoding/json behavior.
+func TestToggleEnumUnmarshalJSONNull(t *testing.T) {
+	t.Parallel()
+
+	var sops v1alpha1.SOPSEnabled
+
+	require.NoError(t, sops.UnmarshalJSON([]byte("null")))
+	assert.Equal(t, v1alpha1.SOPSEnabled(""), sops)
+
+	var node v1alpha1.NodeAutoscalerEnabled
+
+	require.NoError(t, node.UnmarshalJSON([]byte("null")))
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabled(""), node)
+}
+
+// TestToggleEnumUnmarshalJSONRejectsInvalid guards that the JSON load path
+// validates toggle values like the CLI Set path: an unknown string is rejected
+// (not silently stored, which would fail-open at e.g. the SOPS secret boundary),
+// while a case-insensitive valid string is normalised to the canonical spelling.
+func TestToggleEnumUnmarshalJSONRejectsInvalid(t *testing.T) {
+	t.Parallel()
+
+	var sops v1alpha1.SOPSEnabled
+
+	require.Error(t, sops.UnmarshalJSON([]byte(`"Enabld"`)))
+	require.Error(t, sops.UnmarshalJSON([]byte(`"garbage"`)))
+
+	// Case-insensitive valid value is accepted and stored canonically.
+	require.NoError(t, sops.UnmarshalJSON([]byte(`"enabled"`)))
+	assert.Equal(t, v1alpha1.SOPSEnabledEnabled, sops)
+
+	var node v1alpha1.NodeAutoscalerEnabled
+
+	require.Error(t, node.UnmarshalJSON([]byte(`"Enbaled"`)))
+
+	require.NoError(t, node.UnmarshalJSON([]byte(`"disabled"`)))
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledDisabled, node)
 }
 
 // enumValuer is the minimal interface every enum implements; ValidValues lets

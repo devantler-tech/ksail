@@ -65,6 +65,46 @@ func TestCollectAllSubcommands_SkipsHiddenCommands(t *testing.T) {
 	assert.Contains(t, subcommands, "list")
 }
 
+// TestCollectAllSubcommands_SkipsExcludedAndInteractive verifies that the
+// consolidation collector drops commands carrying ai.toolgen.exclude or
+// ai.toolgen.interactive — the fix for interactive commands (cluster connect,
+// switch picker, workload edit) leaking into the consolidated tool surface.
+func TestCollectAllSubcommands_SkipsExcludedAndInteractive(t *testing.T) {
+	t.Parallel()
+
+	parent := &cobra.Command{Use: "cluster", Short: "Cluster commands"}
+	visibleCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List clusters",
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	excludedCmd := &cobra.Command{
+		Use:   "secret",
+		Short: "Excluded command",
+		Annotations: map[string]string{
+			annotations.AnnotationExclude: annotations.AnnotationValueTrue,
+		},
+		RunE: func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	interactiveCmd := &cobra.Command{
+		Use:   "connect",
+		Short: "Interactive TUI command",
+		Annotations: map[string]string{
+			annotations.AnnotationInteractive: annotations.AnnotationValueTrue,
+		},
+		RunE: func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	parent.AddCommand(visibleCmd, excludedCmd, interactiveCmd)
+
+	subcommands := make(map[string]*toolgen.SubcommandDef)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
+
+	require.Len(t, subcommands, 1)
+	assert.Contains(t, subcommands, "list")
+	assert.NotContains(t, subcommands, "secret")
+	assert.NotContains(t, subcommands, "connect")
+}
+
 func TestCollectAllSubcommands_NestedSubcommands(t *testing.T) {
 	t.Parallel()
 

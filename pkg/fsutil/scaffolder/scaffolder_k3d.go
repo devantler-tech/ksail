@@ -119,7 +119,7 @@ func (s *Scaffolder) applyK3dImageVerificationVolumes(
 	config *k3dv1alpha5.SimpleConfig,
 	output string,
 ) {
-	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
+	if s.KSailConfig.Spec.Cluster.ImageVerification != v1alpha1.ImageVerificationEnabled {
 		return
 	}
 
@@ -338,7 +338,7 @@ func (s *Scaffolder) generateK3dContainerdConfig(output string, force bool) erro
 		return nil
 	}
 
-	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
+	if s.KSailConfig.Spec.Cluster.ImageVerification != v1alpha1.ImageVerificationEnabled {
 		return nil
 	}
 

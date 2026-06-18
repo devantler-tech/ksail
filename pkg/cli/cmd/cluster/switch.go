@@ -9,7 +9,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/picker"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -27,6 +29,15 @@ var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
 
 // ErrNoClusters is returned when no KSail-managed clusters are found in the kubeconfig.
 var ErrNoClusters = errors.New("no KSail-managed clusters found in kubeconfig")
+
+// ErrInteractivePickerNoTTY is returned when the interactive picker is requested
+// (switch invoked without a cluster-name argument) but stdin is not a terminal —
+// e.g. an AI tool client, CI pipeline, or piped input. Pass the cluster name as
+// an argument instead of relying on the picker.
+var ErrInteractivePickerNoTTY = errors.New(
+	"cluster switch requires a cluster name when stdin is not a terminal " +
+		"(the interactive picker needs a TTY); run: ksail cluster switch <name>",
+)
 
 // switchHistoryMaxItems is the maximum number of recently-switched clusters to remember.
 const switchHistoryMaxItems = 5
@@ -164,6 +175,13 @@ func NewSwitchCmd() *cobra.Command {
 		Short: "Switch active cluster context",
 		Long:  switchLongDesc,
 		Args:  cobra.MaximumNArgs(1),
+		// switch without an argument opens an interactive TTY picker (bubbletea),
+		// which an AI tool client cannot drive — keep it out of the generated
+		// MCP/chat tool surface. The picker path also returns a clean non-TTY
+		// error (pickCluster) for any caller that reaches it without a terminal.
+		Annotations: map[string]string{
+			annotations.AnnotationInteractive: annotations.AnnotationValueTrue,
+		},
 		ValidArgsFunction: func(
 			cmd *cobra.Command,
 			_ []string,
@@ -208,6 +226,11 @@ type SwitchDeps struct {
 	// SaveToSwitchHistory overrides history saving for testing.
 	// If nil, the default saveToSwitchHistory is used.
 	SaveToSwitchHistory func(name string)
+
+	// IsTTY overrides the terminal detection used to gate the interactive picker.
+	// If nil, confirm.IsTTY is used. Tests inject it because the go-test stdin
+	// may report as a TTY even though bubbletea cannot open /dev/tty.
+	IsTTY func() bool
 }
 
 // resolveSwitchKubeconfig returns the kubeconfig path for switch operations.
@@ -312,6 +335,19 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	pick := deps.PickCluster
 	if pick == nil {
 		pick = picker.Run
+
+		// The default bubbletea picker needs a TTY. Fail fast with an actionable
+		// error in non-interactive environments (AI tool clients, CI, piped
+		// stdin) instead of hanging or crashing the alt-screen renderer. Tests
+		// inject deps.PickCluster (bypassing this guard) or deps.IsTTY.
+		isTTY := deps.IsTTY
+		if isTTY == nil {
+			isTTY = confirm.IsTTY
+		}
+
+		if !isTTY() {
+			return "", ErrInteractivePickerNoTTY
+		}
 	}
 
 	selected, err := pick("Select a cluster:", names)

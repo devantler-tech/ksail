@@ -69,12 +69,11 @@ func TestEnsureSopsAgeSecret_EnabledWithKey_ValidKubeconfig(t *testing.T) {
 
 	kubeconfig := writeDeepTestKubeconfig(t)
 
-	enabled := true
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled:      &enabled,
+					Enabled:      v1alpha1.SOPSEnabledEnabled,
 					AgeKeyEnvVar: "TEST_ARGOCD_DEEP_SOPS_KEY",
 				},
 			},

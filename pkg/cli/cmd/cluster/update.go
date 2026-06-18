@@ -9,9 +9,20 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// forceFlagName is the name of the confirmation-skip --force flag shared by
-// the cluster lifecycle commands.
+// forceFlagName is the name of the confirmation-skip --force flag used by the
+// delete command (where --force has never meant anything but skip-prompt).
 const forceFlagName = "force"
+
+// yesFlagName is the name of the confirmation-skip --yes flag on update. It skips
+// KSail's interactive prompts only; it carries the ai.toolgen.confirm-flag
+// annotation so the chat assistant auto-injects it after permission approval.
+const yesFlagName = "yes"
+
+// forceDrainFlagName is the name of the update --force-drain flag. It enables the
+// destructive node-drain behavior (pods deleted directly, bypassing
+// PodDisruptionBudgets) and partition wipes that the old --force flag implied. It
+// is deliberately NOT a confirm-flag, so the chat assistant never injects it.
+const forceDrainFlagName = "force-drain"
 
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
@@ -34,10 +45,17 @@ Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
   - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
-    migration); requires --force
+    migration); requires --force-drain
   - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
-    server-type change); requires confirmation (or --force to skip the prompt)
+    server-type change); requires confirmation (or --yes to skip the prompt)
   - Recreate-Required: Require full cluster recreation
+
+Confirmation vs. disruption are two separate flags:
+  - --yes (-y) skips KSail's interactive confirmation prompts only.
+  - --force-drain additionally lets node drains delete pods directly (bypassing
+    PodDisruptionBudgets) and authorizes partition wipes — use it when a budget
+    would otherwise block a rolling reboot/recreate (may cause workload
+    disruption or data loss).
 
 Use --dry-run to preview changes without applying them.
 Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
@@ -49,19 +67,7 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 
 	cfgManager := setupMutationCmdFlags(cmd)
 
-	cmd.Flags().Bool("force", false,
-		"Skip confirmation prompts and proceed with cluster recreation. Also makes node "+
-			"drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling "+
-			"reboot/recreate completes even when a budget would block graceful eviction "+
-			"(may cause workload disruption or data loss)")
-	_ = cmd.Flags().SetAnnotation(
-		forceFlagName, annotations.AnnotationConfirmFlag,
-		[]string{annotations.AnnotationValueTrue},
-	)
-	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
-
-	cmd.Flags().BoolP("yes", "y", false,
-		"Skip confirmation prompt (alias for --force)")
+	registerUpdateConsentFlags(cmd, cfgManager)
 
 	cmd.Flags().Bool("dry-run", false,
 		"Preview changes without applying them")
@@ -73,6 +79,43 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cmd.RunE = lifecycle.WrapHandler(cfgManager, handleUpdateRunE)
 
 	return cmd
+}
+
+// registerUpdateConsentFlags registers the split consent/disruption flags for
+// update: --yes (skip prompts, confirm-flag annotated), --force-drain (the
+// destructive PDB-bypassing drain + partition wipes), and the hidden deprecated
+// --force alias that maps to --yes for one release.
+func registerUpdateConsentFlags(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+) {
+	cmd.Flags().BoolP(yesFlagName, "y", false,
+		"Skip KSail's interactive confirmation prompts (does NOT bypass "+
+			"PodDisruptionBudgets — use --force-drain for that)")
+	// --yes only skips KSail's own prompt, so the chat assistant may auto-inject
+	// it after SDK-native permission approval.
+	_ = cmd.Flags().SetAnnotation(
+		yesFlagName, annotations.AnnotationConfirmFlag,
+		[]string{annotations.AnnotationValueTrue},
+	)
+
+	cmd.Flags().Bool(forceDrainFlagName, false,
+		"Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a "+
+			"rolling reboot/recreate completes even when a budget would block graceful "+
+			"eviction; also authorizes partition wipes (may cause workload disruption "+
+			"or data loss). This is the destructive behavior the old --force implied.")
+
+	// --force is a deprecated combined flag retained for one release: it keeps its
+	// full pre-split behavior (skip prompts AND the PDB-bypassing drain + partition
+	// wipe) so existing scripts are unaffected, but is superseded by the narrower
+	// --yes (skip prompts) and --force-drain (destructive drain). MarkDeprecated
+	// hides it from help and prints a migration warning when used.
+	cmd.Flags().Bool(forceFlagName, false,
+		"Deprecated: use --yes (skip prompts) and/or --force-drain (destructive drain)")
+	_ = cmd.Flags().MarkDeprecated(forceFlagName,
+		"use --yes to skip prompts and/or --force-drain for the PDB-bypassing drain "+
+			"(--force still does both for now, but will be removed)")
+	_ = cfgManager.Viper.BindPFlag(forceFlagName, cmd.Flags().Lookup(forceFlagName))
 }
 
 // handleUpdateRunE wires the resolved run state into an updateOrchestrator and
@@ -105,17 +148,33 @@ func handleUpdateRunE(
 		return err
 	}
 
-	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
+	// The deprecated --force retains its FULL pre-split behavior for one release: it
+	// both skips prompts (like --yes) AND enables the PDB-bypassing drain + partition
+	// wipe (like --force-drain). This keeps existing `update --force` scripts working
+	// unchanged; --yes and --force-drain are the new, narrower replacements.
+	forceDeprecated := cfgManager.Viper.GetBool(forceFlagName)
 
-	orchestrator := newUpdateOrchestrator(cmd, cfgManager, ctx, deps, clusterName, force)
+	consent := resolveConsent(
+		forceDeprecated,
+		cmd.Flags().Lookup(yesFlagName),
+	)
+	// --force-drain is not viper-bound, so read it straight off the flag set.
+	forceDrainFlag, _ := cmd.Flags().GetBool(forceDrainFlagName)
+	forceDrain := forceDrainFlag || forceDeprecated
+
+	orchestrator := newUpdateOrchestrator(
+		cmd, cfgManager, ctx, deps, clusterName, consent, forceDrain,
+	)
 
 	return orchestrator.run(outputTimer)
 }
 
-// resolveForce returns true if the viper-resolved force flag is set,
-// or if the --yes flag was explicitly set to true on the command line.
-// This consolidates the --force/--yes alias logic into one place.
-func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
+// resolveConsent reports whether the user consented to skip KSail's interactive
+// confirmation prompts. Consent is granted by --yes or by the deprecated --force
+// alias (resolved through viper). It deliberately does NOT govern the destructive
+// PDB-bypassing drain or partition wipes — that is the separate --force-drain
+// flag (read in handleUpdateRunE).
+func resolveConsent(viperForce bool, yesFlag *pflag.Flag) bool {
 	return viperForce || (yesFlag != nil && yesFlag.Changed && yesFlag.Value.String() == "true")
 }
 

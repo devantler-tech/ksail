@@ -293,10 +293,8 @@ func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionVanilla,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationEnabled,
-				},
+				Distribution:      v1alpha1.DistributionVanilla,
+				ImageVerification: v1alpha1.ImageVerificationEnabled,
 			},
 		},
 	}
@@ -328,10 +326,8 @@ func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionVanilla,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationDisabled,
-				},
+				Distribution:      v1alpha1.DistributionVanilla,
+				ImageVerification: v1alpha1.ImageVerificationDisabled,
 			},
 		},
 	}
@@ -376,10 +372,8 @@ func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) 
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3s,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationEnabled,
-				},
+				Distribution:      v1alpha1.DistributionK3s,
+				ImageVerification: v1alpha1.ImageVerificationEnabled,
 			},
 		},
 	}
@@ -421,10 +415,8 @@ func TestCreateK3dProvisioner_ImageVerificationMissingTemplate(t *testing.T) {
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3s,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationEnabled,
-				},
+				Distribution:      v1alpha1.DistributionK3s,
+				ImageVerification: v1alpha1.ImageVerificationEnabled,
 			},
 		},
 	}
@@ -450,10 +442,8 @@ func TestCreateK3dProvisioner_ImageVerificationDisabledNoVolumeMount(t *testing.
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3s,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationDisabled,
-				},
+				Distribution:      v1alpha1.DistributionK3s,
+				ImageVerification: v1alpha1.ImageVerificationDisabled,
 			},
 		},
 	}

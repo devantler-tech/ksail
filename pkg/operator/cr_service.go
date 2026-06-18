@@ -1,10 +1,11 @@
-package api
+package operator
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,8 +27,8 @@ type crClusterService struct {
 // also implements ComponentInstaller (its reconciler installs the declared components when a
 // provisioner exposes a Connector), so the create form offers the component selectors.
 var (
-	_ ClusterUpdater     = (*crClusterService)(nil)
-	_ ComponentInstaller = (*crClusterService)(nil)
+	_ api.ClusterUpdater     = (*crClusterService)(nil)
+	_ api.ComponentInstaller = (*crClusterService)(nil)
 )
 
 // InstallsComponents reports true: the operator's reconciler installs the cluster components declared
@@ -39,7 +40,7 @@ func (s *crClusterService) InstallsComponents() bool {
 }
 
 // NewCRClusterService returns a ClusterService backed by the controller-runtime client.
-func NewCRClusterService(kubeClient client.Client) ClusterService {
+func NewCRClusterService(kubeClient client.Client) api.ClusterService {
 	return &crClusterService{client: kubeClient}
 }
 
@@ -85,7 +86,7 @@ func (s *crClusterService) Create(
 	if cluster.IsHostCluster() {
 		return nil, fmt.Errorf(
 			"%w: the %s label is reserved for the operator",
-			ErrHostClusterProtected, v1alpha1.HostClusterLabel,
+			api.ErrHostClusterProtected, v1alpha1.HostClusterLabel,
 		)
 	}
 
@@ -129,7 +130,7 @@ func (s *crClusterService) Update(
 	// The host cluster's spec is not reconciled (the operator does not manage the hub's lifecycle),
 	// so spec edits through the API would only mislead.
 	if existing.IsHostCluster() {
-		return nil, ErrHostClusterProtected
+		return nil, api.ErrHostClusterProtected
 	}
 
 	existing.Spec = cluster.Spec
@@ -154,7 +155,7 @@ func (s *crClusterService) Delete(ctx context.Context, namespace, name string) e
 
 	getErr := s.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &existing)
 	if getErr == nil && existing.IsHostCluster() {
-		return ErrHostClusterProtected
+		return api.ErrHostClusterProtected
 	}
 
 	err := s.client.Delete(ctx, cluster)

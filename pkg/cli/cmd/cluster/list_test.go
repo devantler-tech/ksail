@@ -12,6 +12,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -26,6 +27,16 @@ var (
 	errTestListClusters = errors.New("failed to list clusters")
 	errTestFactoryError = errors.New("factory error")
 )
+
+// runningDockerStatus reports every cluster as Running, so STATUS-column snapshots are deterministic
+// without a live Docker daemon (the real probe is exercised by clusterdiscovery's own tests).
+func runningDockerStatus(
+	_ context.Context,
+	_ v1alpha1.Distribution,
+	_ string,
+) clusterdiscovery.RunState {
+	return clusterdiscovery.RunStateRunning
+}
 
 // fakeProvisionerWithClusters returns a list of clusters for testing.
 type fakeProvisionerWithClusters struct {
@@ -101,6 +112,7 @@ func TestListCmd_SingleClusterFound_DockerProvider(t *testing.T) {
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
+		DockerStatusFunc: runningDockerStatus,
 	}
 
 	// Filter to Docker provider
@@ -126,6 +138,7 @@ func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 				clusters: []string{"cluster-1", "cluster-2", "cluster-3"},
 			}
 		},
+		DockerStatusFunc: runningDockerStatus,
 	}
 
 	// Filter to Docker provider
@@ -152,6 +165,7 @@ func TestListCmd_AllProviders(t *testing.T) {
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
+		DockerStatusFunc: runningDockerStatus,
 	}
 
 	// No filter = list all providers (default behavior)
@@ -343,6 +357,42 @@ func TestDisplayListResults_NoTTLColumn(t *testing.T) {
 	assert.NotContains(t, output, "TTL")
 }
 
+func TestStatusLabel(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "Running", cluster.ExportStatusLabel(clusterdiscovery.RunStateRunning))
+	assert.Equal(t, "Stopped", cluster.ExportStatusLabel(clusterdiscovery.RunStateStopped))
+	assert.Equal(t, "Unknown", cluster.ExportStatusLabel(clusterdiscovery.RunStateUnknown))
+}
+
+func TestDisplayListResults_StatusColumn(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResultWithRunState(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"running-cluster",
+			clusterdiscovery.RunStateRunning,
+		),
+		cluster.ExportNewListResultWithRunState(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionK3s,
+			"stopped-cluster",
+			clusterdiscovery.RunStateStopped,
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "STATUS")
+	assert.Contains(t, output, "Running")
+	assert.Contains(t, output, "Stopped")
+}
+
 func TestComponentLabel_Empty(t *testing.T) {
 	t.Parallel()
 
@@ -513,6 +563,7 @@ type jsonListRow struct {
 	Name         string  `json:"name"`
 	Provider     string  `json:"provider"`
 	Distribution string  `json:"distribution"`
+	Status       string  `json:"status"`
 	TTL          *string `json:"ttl"`
 }
 
@@ -561,6 +612,7 @@ func TestListCmd_OutputJSON_Contract(t *testing.T) {
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"json-contract-cluster"}}
 		},
+		DockerStatusFunc: runningDockerStatus,
 	}
 
 	require.NoError(t, cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps))
@@ -572,6 +624,8 @@ func TestListCmd_OutputJSON_Contract(t *testing.T) {
 	assert.Equal(t, "json-contract-cluster", rows[0].Name)
 	assert.Equal(t, "docker", rows[0].Provider)
 	assert.Equal(t, string(v1alpha1.DistributionVanilla), rows[0].Distribution)
+	// Run-state probe stubbed to Running → status field is "Running".
+	assert.Equal(t, "Running", rows[0].Status)
 	// No TTL set → null.
 	assert.Nil(t, rows[0].TTL)
 }

@@ -8,8 +8,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -159,7 +159,7 @@ func setupAPIServer(mgr ctrl.Manager, opts Options) error {
 	}
 
 	server := &api.Server{
-		Service:     api.NewCRClusterServiceWithResources(hub, newChildClient),
+		Service:     NewCRClusterServiceWithResources(hub, newChildClient),
 		ReadOnly:    opts.ReadOnly,
 		BindAddress: opts.APIBindAddress,
 		OIDC:        opts.OIDC,

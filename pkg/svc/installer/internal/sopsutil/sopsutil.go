@@ -73,9 +73,9 @@ func resolveKeyFilePath(sops v1alpha1.SOPS) (string, error) {
 // Age private key(s). It respects explicit enable/disable and falls back
 // to auto-detection. Returns ("", nil) when SOPS should be skipped.
 func ResolveEnabledAgeKey(sops v1alpha1.SOPS) (string, error) {
-	explicitlyEnabled := sops.Enabled != nil && *sops.Enabled
+	explicitlyEnabled := sops.Enabled.IsExplicitlyEnabled()
 
-	if sops.Enabled != nil && !explicitlyEnabled {
+	if sops.Enabled.IsExplicitlyDisabled() {
 		return "", nil
 	}
 

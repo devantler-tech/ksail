@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	sopsclient "github.com/devantler-tech/ksail/v7/pkg/client/sops"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	sopsage "github.com/getsops/sops/v3/age"

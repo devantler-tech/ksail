@@ -408,6 +408,56 @@ func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
 	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), manager.Config.Spec.Cluster.GitOpsEngine)
 }
 
+// TestNodeAutoscalerEnabledBareFlagForm guards the bool->enum migration
+// backward-compat: node-autoscaler-enabled was a bool flag (pflag auto-applied
+// the valueless `--node-autoscaler-enabled` form = true). After migrating to the
+// NodeAutoscalerEnabled string enum it registers via Var, which would otherwise
+// reject the bare form ("flag needs an argument"). The selector's BareFlagValue
+// (NoOptDefVal) must restore it so existing scripts using the bare flag keep
+// working; the =value forms must still work too.
+func TestNodeAutoscalerEnabledBareFlagForm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		args     []string
+		expected v1alpha1.NodeAutoscalerEnabled
+	}{
+		{
+			name:     "bare form means Enabled",
+			args:     []string{"--node-autoscaler-enabled"},
+			expected: v1alpha1.NodeAutoscalerEnabledEnabled,
+		},
+		{
+			name:     "legacy =true alias",
+			args:     []string{"--node-autoscaler-enabled=true"},
+			expected: v1alpha1.NodeAutoscalerEnabledEnabled,
+		},
+		{
+			name:     "explicit =Disabled",
+			args:     []string{"--node-autoscaler-enabled=Disabled"},
+			expected: v1alpha1.NodeAutoscalerEnabledDisabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			selector := configmanager.NodeAutoscalerEnabledFieldSelector()
+			manager := configmanager.NewConfigManager(io.Discard, "", selector)
+			cmd := &cobra.Command{Use: "test"}
+			manager.AddFlagsFromFields(cmd)
+
+			require.NoError(t, cmd.ParseFlags(testCase.args))
+			assert.Equal(
+				t, testCase.expected,
+				manager.Config.Spec.Cluster.Autoscaler.Node.Enabled,
+			)
+		})
+	}
+}
+
 func TestAddFlagsFromFields_BoolField(t *testing.T) {
 	t.Parallel()
 

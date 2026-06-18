@@ -48,7 +48,7 @@ func NewRestoreCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "restore",
+		Use:   "restore [<input>]",
 		Short: "Restore cluster resources from backup",
 		Long: `Restores Kubernetes resources from a backup archive ` +
 			`to the target cluster.
@@ -58,11 +58,12 @@ Resources are restored in the correct order ` +
 Existing resources can be skipped or updated based on the policy.
 
 Example:
-  ksail cluster restore --input ./my-backup.tar.gz
-  ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
-  ksail cluster restore --input ./backup.tar.gz --dry-run`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runRestore(cmd.Context(), cmd, flags)
+  ksail cluster restore ./my-backup.tar.gz
+  ksail cluster restore ./backup.tar.gz --existing-resource-policy update
+  ksail cluster restore ./backup.tar.gz --dry-run`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRestore(cmd.Context(), cmd, flags, args)
 		},
 		SilenceUsage: true,
 		Annotations: map[string]string{
@@ -70,10 +71,13 @@ Example:
 		},
 	}
 
+	// Deprecated: the archive path is now the first positional argument.
 	cmd.Flags().StringVarP(
 		&flags.inputPath, "input", "i", "",
-		"Input backup archive path (required)",
+		"Deprecated: pass the archive path as the first positional argument instead",
 	)
+	_ = cmd.Flags().MarkDeprecated("input",
+		"pass the archive path as the first positional argument (ksail cluster restore <path>)")
 	cmd.Flags().StringVar(
 		&flags.existingResourcePolicy,
 		"existing-resource-policy", resourcePolicyNone,
@@ -89,8 +93,6 @@ Example:
 			"cluster commands; defaults to the current kubeconfig context when unset)",
 	)
 
-	cobra.CheckErr(cmd.MarkFlagRequired("input"))
-
 	return cmd
 }
 
@@ -98,7 +100,15 @@ func runRestore(
 	ctx context.Context,
 	cmd *cobra.Command,
 	flags *restoreFlags,
+	args []string,
 ) error {
+	inputPath, err := resolveArchivePath(args, flags.inputPath, "--input")
+	if err != nil {
+		return err
+	}
+
+	flags.inputPath = inputPath
+
 	//nolint:contextcheck // buildRestorer→resolveTargetKubeconfig derives ctx from cmd (cluster-cmd convention)
 	restorer, err := buildRestorer(cmd, flags)
 	if err != nil {

@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func (f *fakeSettings) Update(
 func TestSettingsRoutesAbsentWhenServiceUnset(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/settings", "")
 
@@ -49,7 +50,7 @@ func TestConfigReportsSettingsEnabled(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service:  api.NewCRClusterService(newClient(t)),
+		Service:  operator.NewCRClusterService(newClient(t)),
 		Settings: &fakeSettings{},
 	}
 
@@ -63,7 +64,7 @@ func TestGetSettingsReturnsCredentials(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service: api.NewCRClusterService(newClient(t)),
+		Service: operator.NewCRClusterService(newClient(t)),
 		Settings: &fakeSettings{response: api.SettingsResponse{
 			Credentials: []api.CredentialSetting{
 				{Key: "hetzner.token", Provider: "Hetzner", EnvVar: "HCLOUD_TOKEN", Secret: true},
@@ -84,7 +85,7 @@ func TestUpdateSettingsDecodesAndDelegates(t *testing.T) {
 	t.Parallel()
 
 	settings := &fakeSettings{}
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), Settings: settings}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
 
 	body := `{"updates":[{"key":"hetzner.token","envVar":"MY_HCLOUD","value":"tok"}]}`
 	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/settings", body)
@@ -103,7 +104,7 @@ func TestUpdateSettingsMapsInvalidToUnprocessable(t *testing.T) {
 	t.Parallel()
 
 	settings := &fakeSettings{updateErr: api.ErrInvalid}
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), Settings: settings}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
 
 	recorder := doRequest(
 		server.Handler(),

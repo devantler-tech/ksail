@@ -20,10 +20,17 @@ Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
   - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
-    migration); requires --force
+    migration); requires --force-drain
   - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
-    server-type change); requires confirmation (or --force to skip the prompt)
+    server-type change); requires confirmation (or --yes to skip the prompt)
   - Recreate-Required: Require full cluster recreation
+
+Confirmation vs. disruption are two separate flags:
+  - --yes (-y) skips KSail's interactive confirmation prompts only.
+  - --force-drain additionally lets node drains delete pods directly (bypassing
+    PodDisruptionBudgets) and authorizes partition wipes — use it when a budget
+    would otherwise block a rolling reboot/recreate (may cause workload
+    disruption or data loss).
 
 Use --dry-run to preview changes without applying them.
 Use --output json to emit a machine-readable diff for CI/MCP consumption.
@@ -32,43 +39,43 @@ Usage:
   ksail cluster update [flags]
 
 Flags:
-      --allowed-cidrs strings              CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6). Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24
-      --cdi CDI                            Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)
-      --cert-manager CertManager           Cert-Manager configuration (Enabled: install, Disabled: skip)
-      --cni CNI                            Container Network Interface (CNI) to use
-  -c, --context string                     Kubernetes context of cluster
-      --control-planes int32               Number of control-plane nodes (default 1)
-      --csi CSI                            Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
-  -d, --distribution Distribution          Kubernetes distribution to use
-      --distribution-config string         Configuration file for the distribution
-      --distribution-version string        Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version. Other distributions carry their version in the distribution config.
-      --drain-timeout duration             Per-node pod-eviction budget for rolling node drains during cluster update (default 10m when unset). Increase it for stateful workloads that need longer to evict gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.
-      --dry-run                            Preview changes without applying them
-      --force                              Skip confirmation prompts and proceed with cluster recreation. Also makes node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction (may cause workload disruption or data loss)
-  -g, --gitops-engine GitOpsEngine         GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-      --import-images string               Path to tar archive with container images to import after cluster creation but before component installation
-  -k, --kubeconfig string                  Path to kubeconfig file (default "~/.kube/config")
-      --kubernetes-version string          Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version. Honored by the Talos distribution; Kind/K3d/EKS carry the version in their distribution config instead.
-      --load-balancer LoadBalancer         LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
-      --local-registry string              Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
-      --metrics-server MetricsServer       Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
-      --mirror-registry strings            Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
-  -n, --name string                        Cluster name used for container names, registry names, and kubeconfig context
-      --node-autoscaler-enabled            Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manage node counts; other distributions currently ignore this setting)
-      --node-autoscaling NodeAutoscaling   [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
-      --oidc-ca-file string                Path to CA certificate for self-signed OIDC providers
-      --oidc-client-id string              OIDC client ID for kubectl authentication
-      --oidc-extra-scope strings           Additional OIDC scopes beyond openid (repeatable)
-      --oidc-groups-claim string           JWT claim for Kubernetes groups (default "groups")
-      --oidc-groups-prefix string          Prefix for OIDC groups in Kubernetes (default "oidc:")
-      --oidc-issuer-url string             OIDC provider issuer URL (e.g. https://dex.example.com)
-      --oidc-username-claim string         JWT claim for Kubernetes username (default "email")
-      --oidc-username-prefix string        Prefix for OIDC usernames in Kubernetes (default "oidc:")
-      --output string                      Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
-      --policy-engine PolicyEngine         Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
-  -p, --provider Provider                  Infrastructure provider backend (e.g., Docker)
-      --workers int32                      Number of worker nodes
-  -y, --yes                                Skip confirmation prompt (alias for --force)
+      --allowed-cidrs strings                                     CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6). Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24
+      --cdi CDI                                                   Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)
+      --cert-manager CertManager                                  Cert-Manager configuration (Enabled: install, Disabled: skip)
+      --cni CNI                                                   Container Network Interface (CNI) to use
+  -c, --context string                                            Kubernetes context of cluster
+      --control-planes int32                                      Number of control-plane nodes (default 1)
+      --csi CSI                                                   Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
+  -d, --distribution Distribution                                 Kubernetes distribution to use
+      --distribution-config string                                Configuration file for the distribution
+      --distribution-version string                               Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version. Other distributions carry their version in the distribution config.
+      --drain-timeout duration                                    Per-node pod-eviction budget for rolling node drains during cluster update (default 10m when unset). Increase it for stateful workloads that need longer to evict gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; re-run with --force-drain to delete pods bypassing PodDisruptionBudgets. Talos only.
+      --dry-run                                                   Preview changes without applying them
+      --force-drain                                               Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction; also authorizes partition wipes (may cause workload disruption or data loss). This is the destructive behavior the old --force implied.
+  -g, --gitops-engine GitOpsEngine                                GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
+      --import-images string                                      Path to tar archive with container images to import after cluster creation but before component installation
+  -k, --kubeconfig string                                         Path to kubeconfig file (default "~/.kube/config")
+      --kubernetes-version string                                 Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version. Honored by the Talos distribution; Kind/K3d/EKS carry the version in their distribution config instead.
+      --load-balancer LoadBalancer                                LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
+      --local-registry string                                     Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
+      --metrics-server MetricsServer                              Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
+      --mirror-registry strings                                   Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
+  -n, --name string                                               Cluster name used for container names, registry names, and kubeconfig context
+      --node-autoscaler-enabled NodeAutoscalerEnabled[=Enabled]   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --node-autoscaling NodeAutoscaling                          [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --oidc-ca-file string                                       Path to CA certificate for self-signed OIDC providers
+      --oidc-client-id string                                     OIDC client ID for kubectl authentication
+      --oidc-extra-scope strings                                  Additional OIDC scopes beyond openid (repeatable)
+      --oidc-groups-claim string                                  JWT claim for Kubernetes groups (default "groups")
+      --oidc-groups-prefix string                                 Prefix for OIDC groups in Kubernetes (default "oidc:")
+      --oidc-issuer-url string                                    OIDC provider issuer URL (e.g. https://dex.example.com)
+      --oidc-username-claim string                                JWT claim for Kubernetes username (default "email")
+      --oidc-username-prefix string                               Prefix for OIDC usernames in Kubernetes (default "oidc:")
+      --output string                                             Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
+      --policy-engine PolicyEngine                                Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+  -p, --provider Provider                                         Infrastructure provider backend (e.g., Docker)
+      --workers int32                                             Number of worker nodes
+  -y, --yes                                                       Skip KSail's interactive confirmation prompts (does NOT bypass PodDisruptionBudgets — use --force-drain for that)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

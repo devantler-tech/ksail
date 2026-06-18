@@ -287,7 +287,7 @@ func TestReconcileClusterAutoscaler_NilFactory(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
 	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
-	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = true
+	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	change := clusterupdate.Change{
 		Field:    "cluster.autoscaler.node.enabled",
@@ -311,7 +311,7 @@ func TestReconcileClusterAutoscaler_NotNeeded_Noop(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
 	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderDocker
-	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = false
+	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledDisabled
 
 	change := clusterupdate.Change{
 		Field:    "cluster.autoscaler.node.enabled",
@@ -337,7 +337,7 @@ func TestReconcileClusterAutoscaler_Uninstall_NilFactory(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
 	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
-	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = false
+	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledDisabled
 
 	change := clusterupdate.Change{
 		Field:    "cluster.autoscaler.node.enabled",

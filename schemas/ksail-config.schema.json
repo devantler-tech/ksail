@@ -268,6 +268,14 @@
               ],
               "description": "CertManager controls whether cert-manager is installed (Enabled or Disabled)."
             },
+            "imageVerification": {
+              "type": "string",
+              "enum": [
+                "Enabled",
+                "Disabled"
+              ],
+              "description": "Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it."
+            },
             "policyEngine": {
               "type": "string",
               "enum": [
@@ -304,8 +312,13 @@
                   "description": "Deprecated: Use Env.Var instead. AgeKeyEnvVar is the name of the environment\nvariable containing the Age private key. Kept for backward compatibility.\nWhen Env.Var is set, it takes priority over AgeKeyEnvVar."
                 },
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enabled controls whether the SOPS Age secret is created.\nnil (default) = auto-detect (create if key is found via env var or key file).\ntrue = require key (error if not found).\nfalse = disable entirely (skip secret creation)."
+                  "type": "string",
+                  "enum": [
+                    "Default",
+                    "Enabled",
+                    "Disabled"
+                  ],
+                  "description": "Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled"
                 },
                 "env": {
                   "properties": {
@@ -378,8 +391,12 @@
                 "node": {
                   "properties": {
                     "enabled": {
-                      "type": "boolean",
-                      "description": "Enabled controls whether the Cluster Autoscaler is installed to manage\nworker node counts dynamically."
+                      "type": "string",
+                      "enum": [
+                        "Enabled",
+                        "Disabled"
+                      ],
+                      "description": "Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled"
                     },
                     "pools": {
                       "items": {
@@ -646,12 +663,12 @@
                     "Enabled",
                     "Disabled"
                   ],
-                  "description": "ImageVerification enables scaffolding of a Talos ImageVerificationConfig document\nduring cluster init. When Enabled, generates an image-verification.yaml template\nin the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)\nand public key verification rules. Requires Talos 1.13+."
+                  "description": "DEPRECATED: use spec.cluster.imageVerification instead"
                 },
                 "drainTimeout": {
                   "type": "string",
                   "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
-                  "description": "DrainTimeout is the per-node pod-eviction budget for rolling node drains during\n`cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When\nunset, KSail uses 10m. Increase it for clusters whose stateful workloads need\nlonger to evict gracefully — e.g. Longhorn volume rebuilds or database failovers\ngated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;\nre-run with --force to delete pods bypassing PodDisruptionBudgets instead.\nOverride per invocation with --drain-timeout. Example: \"15m\"."
+                  "description": "DrainTimeout is the per-node pod-eviction budget for rolling node drains during\n`cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When\nunset, KSail uses 10m. Increase it for clusters whose stateful workloads need\nlonger to evict gracefully — e.g. Longhorn volume rebuilds or database failovers\ngated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;\nre-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.\nOverride per invocation with --drain-timeout. Example: \"15m\"."
                 }
               },
               "additionalProperties": false,

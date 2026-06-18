@@ -23,8 +23,9 @@ type PodAutoscalerConfig struct {
 // are still applied to the Talos machine config and will take effect normally.
 type NodeAutoscalerConfig struct {
 	// Enabled controls whether the Cluster Autoscaler is installed to manage
-	// worker node counts dynamically.
-	Enabled bool `json:"enabled,omitzero"`
+	// worker node counts dynamically (Enabled or Disabled). A YAML boolean is
+	// still accepted on load (true -> Enabled, false -> Disabled).
+	Enabled NodeAutoscalerEnabled `json:"enabled,omitzero" jsonschema:"description=Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
 	// Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
 	Pools []NodePool `json:"pools,omitzero"`
 	// MaxNodesTotal caps the total number of nodes in the cluster

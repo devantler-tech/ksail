@@ -21,7 +21,11 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesEnabledWhenNewUnset(t *testing.T
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, false, &out))
 
-	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
+	assert.Equal(
+		t,
+		v1alpha1.NodeAutoscalerEnabledEnabled,
+		cfg.Spec.Cluster.Autoscaler.Node.Enabled,
+	)
 
 	assert.Empty(
 		t,
@@ -44,8 +48,9 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesDisabledWhenNewUnset(t *testing.
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, false, &out))
 
-	assert.False(
+	assert.Equal(
 		t,
+		v1alpha1.NodeAutoscalerEnabledDisabled,
 		cfg.Spec.Cluster.Autoscaler.Node.Enabled,
 	)
 
@@ -60,13 +65,17 @@ func TestMigrateDeprecatedNodeAutoscaling_NoOpWhenLegacyUnset(t *testing.T) {
 	t.Parallel()
 
 	cfg := v1alpha1.NewCluster()
-	cfg.Spec.Cluster.Autoscaler.Node.Enabled = true
+	cfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	var out bytes.Buffer
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, &out))
 
-	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
+	assert.Equal(
+		t,
+		v1alpha1.NodeAutoscalerEnabledEnabled,
+		cfg.Spec.Cluster.Autoscaler.Node.Enabled,
+	)
 	assert.Empty(t, out.String(), "no warning expected when legacy field unset")
 }
 
@@ -76,7 +85,7 @@ func TestMigrateDeprecatedNodeAutoscaling_MatchingValuesAreSilent(t *testing.T) 
 	cfg := v1alpha1.NewCluster()
 
 	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
-	cfg.Spec.Cluster.Autoscaler.Node.Enabled = true
+	cfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	var out bytes.Buffer
 
@@ -96,7 +105,7 @@ func TestMigrateDeprecatedNodeAutoscaling_ConflictReturnsError(t *testing.T) {
 	cfg := v1alpha1.NewCluster()
 
 	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscalingDisabled
-	cfg.Spec.Cluster.Autoscaler.Node.Enabled = true
+	cfg.Spec.Cluster.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, nil)
 	require.ErrorIs(t, err, configmanager.ErrDeprecatedFieldConflict)

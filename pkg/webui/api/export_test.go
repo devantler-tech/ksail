@@ -4,16 +4,16 @@ import (
 	"context"
 	"net/http"
 	"time"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // NewAuthTestServer returns a Server with session-based OIDC auth enabled but without a live OIDC
 // provider. It exercises the auth guard, the config endpoint, and session cookies (which need only
-// the session secret); the provider-backed login/callback flow is not covered here.
-func NewAuthTestServer(kubeClient client.Client, secret []byte) *Server {
+// the session secret); the provider-backed login/callback flow is not covered here. The backend is
+// injected (rather than built here) because the concrete cluster backends live outside this package
+// — the operator's CR-backed service in pkg/operator, the local service in pkg/cli/clusterapi.
+func NewAuthTestServer(service ClusterService, secret []byte) *Server {
 	return &Server{
-		Service: NewCRClusterService(kubeClient),
+		Service: service,
 		OIDC:    OIDCConfig{IssuerURL: "https://issuer.test", SessionSecret: secret},
 		auth:    &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}},
 	}

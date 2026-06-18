@@ -14,6 +14,14 @@ type FieldSelector[T any] struct {
 	Shorthand    string       // Optional single-character CLI shorthand (e.g. "d"); "" for none
 	Description  string       // Human-readable description for CLI flags
 	DefaultValue any          // Default value for the field
+	// BareFlagValue, when non-empty, is the value a valueless (bare) flag form
+	// resolves to (pflag NoOptDefVal). It restores the bare-flag behavior of a
+	// toggle field that was a bool before migrating to a string enum: pflag only
+	// auto-applies the no-argument form to bool-typed flags, so without this an
+	// enum-typed --foo (registered via Var) would fail with "flag needs an
+	// argument". Set it to the enum's "on" value (e.g. "Enabled") so existing
+	// scripts invoking the bare flag keep working through the deprecation window.
+	BareFlagValue string
 }
 
 // DefaultDistributionFieldSelector creates a standard field selector for distribution.
@@ -292,7 +300,7 @@ func DrainTimeoutFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Description: "Per-node pod-eviction budget for rolling node drains during cluster update " +
 			"(default 10m when unset). Increase it for stateful workloads that need longer to evict " +
 			"gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; " +
-			"re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.",
+			"re-run with --force-drain to delete pods bypassing PodDisruptionBudgets. Talos only.",
 	}
 }
 
@@ -311,7 +319,7 @@ func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Talos.ImageVerification
+			return &c.Spec.Cluster.ImageVerification
 		},
 		FlagName: "image-verification",
 		Description: "Image verification (Talos: scaffold ImageVerificationConfig template; " +
@@ -347,6 +355,12 @@ func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
 }
 
 // NodeAutoscalerEnabledFieldSelector creates a field selector for the node autoscaler enabled flag.
+//
+// The field is the NodeAutoscalerEnabled toggle enum; the --node-autoscaler-enabled
+// flag therefore takes an Enabled/Disabled value (a YAML boolean is still accepted
+// in ksail.yaml via the toggle bool-alias decode hook). DefaultValue is the enum's
+// Disabled value; the field-selector default loop fills it in (post-migration) when
+// the field is left at its zero value.
 func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
@@ -354,9 +368,13 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		},
 		FlagName: "node-autoscaler-enabled",
 		Description: "Node autoscaling " +
-			"(Talos: true defers worker and control-plane scaling to an external autoscaler, " +
-			"false lets KSail manage node counts; other distributions currently ignore this setting)",
-		DefaultValue: false,
+			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
+			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+		DefaultValue: v1alpha1.NodeAutoscalerEnabledDisabled,
+		// This field was a bool flag before the bool->enum migration; keep the bare
+		// `--node-autoscaler-enabled` form (no value) meaning Enabled so existing
+		// scripts that relied on the old bool flag's no-argument form keep working.
+		BareFlagValue: string(v1alpha1.NodeAutoscalerEnabledEnabled),
 	}
 }
 

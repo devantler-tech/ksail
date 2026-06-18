@@ -128,6 +128,15 @@ func (m *ConfigManager) handlePflagValue(
 		cmd.Flags().Var(pflagValue, flagName, fieldSelector.Description)
 	}
 
+	// Restore the bare (no-argument) flag form for enums that were bool flags
+	// before migrating to a string enum. pflag only auto-sets NoOptDefVal for
+	// bool-typed flags, so a Var-registered enum otherwise rejects the valueless
+	// `--foo` form ("flag needs an argument"). Setting NoOptDefVal makes the bare
+	// form resolve to the configured value, keeping existing scripts working.
+	if fieldSelector.BareFlagValue != "" {
+		cmd.Flags().Lookup(flagName).NoOptDefVal = fieldSelector.BareFlagValue
+	}
+
 	return true
 }
 

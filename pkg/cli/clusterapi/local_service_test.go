@@ -12,10 +12,10 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -226,9 +226,10 @@ func TestListMapsExistingClusters(t *testing.T) {
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
 }
 
-// TestListReportsStoppedClusterAsNotReady guards 4.4c: a discovered Docker cluster whose run-state is
-// Stopped must NOT report ClusterPhaseReady (so the web UI does not render it green); instead it
-// carries a Ready=False/reason=Stopped condition the SPA can surface.
+// TestListReportsStoppedClusterAsNotReady guards 5.7: a discovered Docker cluster whose run-state is
+// Stopped reports the ClusterPhaseStopped phase (so the web UI renders it distinctly, not green) and
+// also carries the backward-compatible Ready=False/reason=Stopped condition for consumers predating
+// the Stopped phase value.
 func TestListReportsStoppedClusterAsNotReady(t *testing.T) {
 	t.Parallel()
 
@@ -246,8 +247,8 @@ func TestListReportsStoppedClusterAsNotReady(t *testing.T) {
 	require.Len(t, list.Items, 1)
 
 	got := list.Items[0]
-	assert.NotEqual(t, v1alpha1.ClusterPhaseReady, got.Status.Phase,
-		"a stopped cluster must not render as Ready")
+	assert.Equal(t, v1alpha1.ClusterPhaseStopped, got.Status.Phase,
+		"a stopped cluster reports the Stopped phase, not Ready")
 
 	conditions := conditionsOf(list, devClusterName)
 	require.Len(t, conditions, 1)

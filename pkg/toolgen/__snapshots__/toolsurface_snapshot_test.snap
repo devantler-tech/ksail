@@ -33,32 +33,26 @@ workload_write
         "type": "array"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nconnect: Connect to cluster with k9s\ndiagnose: Diagnose failing cluster resources\ndiff: Show configuration drift between ksail.yaml and live cluster\ninfo: Display cluster information\nlist: List clusters\nrepair: Repair local KSail/Talos state files\nswitch: Switch active cluster context",
+        "description": "The subcommand to execute. Options:\ndiagnose: Diagnose failing cluster resources\ndiff: Show configuration drift between ksail.yaml and live cluster\ninfo: Display cluster information\nlist: List clusters\nrepair: Repair local KSail/Talos state files",
         "enum": [
-          "connect",
           "diagnose",
           "diff",
           "info",
           "list",
-          "repair",
-          "switch"
+          "repair"
         ],
         "type": "string"
       },
       "context": {
-        "description": "Kubernetes context of cluster (applies to: connect, diff)",
+        "description": "Kubernetes context of cluster (applies to: diff)",
         "type": "string"
       },
       "distribution": {
-        "description": "Kubernetes distribution to use (applies to: connect, diff)",
+        "description": "Kubernetes distribution to use (applies to: diff)",
         "type": "string"
       },
       "distribution-config": {
-        "description": "Configuration file for the distribution (applies to: connect, diff)",
-        "type": "string"
-      },
-      "editor": {
-        "description": "editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano') (applies to: connect)",
+        "description": "Configuration file for the distribution (applies to: diff)",
         "type": "string"
       },
       "exit-code": {
@@ -67,7 +61,7 @@ workload_write
       },
       "gitops-engine": {
         "default": "None",
-        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: connect, diff)",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: diff)",
         "type": "string"
       },
       "include-version-drift": {
@@ -76,11 +70,11 @@ workload_write
       },
       "kubeconfig": {
         "default": "~/.kube/config",
-        "description": "Path to kubeconfig file (applies to: connect, diff)",
+        "description": "Path to kubeconfig file (applies to: diff)",
         "type": "string"
       },
       "local-registry": {
-        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: connect, diff)",
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: diff)",
         "type": "string"
       },
       "name": {
@@ -89,11 +83,11 @@ workload_write
       },
       "output": {
         "default": "text",
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, diff, list)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "provider": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: diagnose, info, list)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "talosconfig": {
@@ -522,7 +516,11 @@ workload_write
         "type": "string"
       },
       "force": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: delete, init, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: delete, init)",
+        "type": "boolean"
+      },
+      "force-drain": {
+        "description": "Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction... (applies to: update)",
         "type": "boolean"
       },
       "gitops-engine": {
@@ -536,10 +534,6 @@ workload_write
       },
       "import-images": {
         "description": "Path to tar archive with container images to import after cluster creation but before component installation (applies to: create, init, update)",
-        "type": "string"
-      },
-      "input": {
-        "description": "Input backup archive path (required) (applies to: restore)",
         "type": "string"
       },
       "kubeconfig": {
@@ -586,8 +580,8 @@ workload_write
         "type": "array"
       },
       "node-autoscaler-enabled": {
-        "description": "Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, init, update)",
-        "type": "boolean"
+        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, init, update)",
+        "type": "string"
       },
       "node-autoscaling": {
         "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts... (applies to: create, init, update)",
@@ -633,7 +627,7 @@ workload_write
         "type": "string"
       },
       "output": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: backup, init, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: init, update)",
         "type": "string"
       },
       "policy-engine": {
@@ -659,7 +653,7 @@ workload_write
         "type": "integer"
       },
       "yes": {
-        "description": "Skip confirmation prompt (alias for --force) (applies to: update)",
+        "description": "Skip KSail's interactive confirmation prompts (does NOT bypass PodDisruptionBudgets — use --force-drain for that) (applies to: update)",
         "type": "boolean"
       }
     },
@@ -717,7 +711,7 @@ workload_write
         "type": "boolean"
       },
       "args": {
-        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, edit, exec, expose, import, install, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, exec, expose, import, install, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
         "items": {
           "type": "string"
         },
@@ -885,10 +879,6 @@ workload_write
       "edit": {
         "description": "Edit the API resource before creating (applies to: create)",
         "type": "boolean"
-      },
-      "editor": {
-        "description": "editor command to use (e.g., 'code --wait', 'vim', 'nano') (applies to: edit)",
-        "type": "string"
       },
       "env": {
         "description": "Environment variables to set in the container. (applies to: debug)",
@@ -1184,10 +1174,6 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete)",
         "type": "string"
       },
-      "record": {
-        "description": "Record current kubectl command in the resource annotation. If set to false, do not record the command. If set to true, record the command... (applies to: apply, apply_edit-last-applied, create, expose, scale)",
-        "type": "boolean"
-      },
       "recursive": {
         "description": "Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory. (applies to: apply, apply_edit-last-applied, apply_view-last-applied, create, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
         "type": "boolean"
@@ -1400,7 +1386,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nedit: Edit a resource\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
+        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
         "enum": [
           "apply",
           "apply_edit-last-applied",
@@ -1438,7 +1424,6 @@ workload_write
           "create_token",
           "debug",
           "delete",
-          "edit",
           "exec",
           "expose",
           "import",

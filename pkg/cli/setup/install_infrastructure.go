@@ -125,7 +125,7 @@ func NeedsClusterAutoscalerInstall(clusterCfg *v1alpha1.Cluster) bool {
 		return false
 	}
 
-	return clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled ||
+	return clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled.IsEnabled() ||
 		clusterCfg.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
 }
 
