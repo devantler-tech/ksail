@@ -286,7 +286,7 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@d87d78b80422efad5133db7f480dc12027cb9fa5 # v5.6.2
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@d3a8a00a579bdbe53703fc1b3f48c0cc04446661 # v5.6.4
     permissions:
       contents: write
       issues: write
@@ -381,6 +381,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🧹 Free disk space
+        # The KSail binary links the full embedded-CLI import graph into a large
+        # binary; the Go linker can exhaust a stock runner's disk on a cache-miss
+        # build ("no space left on device"). Reclaim space before building.
+        uses: ./.github/actions/free-disk-space
+
       - name: ⚙️ Setup Go
         id: setup-go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -427,33 +433,8 @@ jobs:
         # `go generate ./docs/...` re-links the full embedded-CLI import graph
         # (kubectl, helm, kind, k3d, vcluster, flux, argocd, eksctl, …) into a
         # large binary; on a stock ubuntu-latest runner the linker can exhaust
-        # disk ("no space left on device"). Reclaim space generation does not
-        # need before Go is set up. Mirrors the system-test job's step (no
-        # `docker system prune` here — this job never touches Docker). Each
-        # removal is best-effort: missing paths are not an error.
-        run: |
-          set -euo pipefail
-          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-          sudo rm -rf \
-            /usr/local/lib/android \
-            /usr/share/dotnet \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /usr/share/swift \
-            /opt/hostedtoolcache/CodeQL \
-            /opt/hostedtoolcache/PyPy \
-            /opt/hostedtoolcache/Ruby \
-            /opt/hostedtoolcache/Python \
-            /usr/local/share/chromium \
-            /usr/local/share/powershell \
-            /usr/local/julia* \
-            /usr/local/aws-cli \
-            /usr/local/aws-sam-cli \
-            /usr/share/gradle* \
-            /usr/share/az* \
-            /usr/share/miniconda || true
-          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-          echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
+        # disk ("no space left on device"). Reclaim space before Go is set up.
+        uses: ./.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -991,6 +972,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🧹 Free disk space
+        # E2E builds the operator image and spins up a Kubernetes cluster in
+        # Docker — reclaim disk first to avoid runner "no space left on device".
+        uses: ./.github/actions/free-disk-space
+        with:
+          docker-prune: "true"
+
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -1022,6 +1010,11 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+
+      - name: 🧹 Free disk space
+        # Builds the ksail binary on a cache miss and pulls Helm charts —
+        # reclaim disk first to avoid runner "no space left on device".
+        uses: ./.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -1064,6 +1057,12 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+
+      - name: 🧹 Free disk space
+        # Pulls every system-test image through four mirror registries and tars
+        # the volumes (multi-GB) — the prime "no space left on device" offender
+        # (e.g. run 27774791970). Reclaim disk before warming the cache.
+        uses: ./.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -1182,37 +1181,11 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Free disk space
-        # Targeted `rm -rf` of large hosted-tooling directories that the system
-        # tests do not need. Avoids the slow `apt-get remove` path used by
-        # endersonmenezes/free-disk-space, which previously consumed 3–9 min per
-        # job (with apt autoremove pulling in update-initramfs / man-db rebuilds).
-        # Each directory removal is best-effort: missing paths are not an error.
-        run: |
-          set -euo pipefail
-          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-          # Largest offenders on ubuntu-latest (sizes from
-          # https://github.com/actions/runner-images). Order by descending size.
-          sudo rm -rf \
-            /usr/local/lib/android \
-            /usr/share/dotnet \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /usr/share/swift \
-            /opt/hostedtoolcache/CodeQL \
-            /opt/hostedtoolcache/PyPy \
-            /opt/hostedtoolcache/Ruby \
-            /opt/hostedtoolcache/Python \
-            /usr/local/share/chromium \
-            /usr/local/share/powershell \
-            /usr/local/julia* \
-            /usr/local/aws-cli \
-            /usr/local/aws-sam-cli \
-            /usr/share/gradle* \
-            /usr/share/az* \
-            /usr/share/miniconda || true
-          docker system prune -af --volumes || true
-          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-          echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
+        # Reclaim ~30 GB before pulling system-test images and spinning up
+        # clusters in Docker; docker-prune also clears the Docker daemon.
+        uses: ./.github/actions/free-disk-space
+        with:
+          docker-prune: "true"
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
