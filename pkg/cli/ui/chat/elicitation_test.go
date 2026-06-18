@@ -71,10 +71,10 @@ func TestCreateTUIElicitationHandler_SendsRequestAndReturnsResult(t *testing.T) 
 	go func() {
 		result, err := handler(copilot.ElicitationContext{
 			Message:           "Pick a repository",
-			ElicitationSource: "github-mcp",
-			Mode:              "form",
-			RequestedSchema: map[string]any{
-				"properties": map[string]any{
+			ElicitationSource: new("github-mcp"),
+			Mode:              new(copilot.ElicitationRequestedModeForm),
+			RequestedSchema: &copilot.ElicitationSchema{
+				Properties: map[string]any{
 					"repo": map[string]any{"type": "string"},
 				},
 			},
@@ -101,7 +101,7 @@ func TestCreateTUIElicitationHandler_SendsRequestAndReturnsResult(t *testing.T) 
 	}
 
 	result := <-resultChan
-	assert.Equal(t, "accept", result.Action)
+	assert.Equal(t, copilot.ElicitationActionAccept, result.Action)
 	assert.Equal(t, "ksail", result.Content["repo"])
 }
 
@@ -116,7 +116,7 @@ func TestCreateTUIElicitationHandler_DeclineResult(t *testing.T) {
 	go func() {
 		result, err := handler(copilot.ElicitationContext{
 			Message: "Confirm action",
-			Mode:    "form",
+			Mode:    new(copilot.ElicitationRequestedModeForm),
 		})
 		assert.NoError(t, err)
 
@@ -132,6 +132,6 @@ func TestCreateTUIElicitationHandler_DeclineResult(t *testing.T) {
 	}
 
 	result := <-resultChan
-	assert.Equal(t, "decline", result.Action)
+	assert.Equal(t, copilot.ElicitationActionDecline, result.Action)
 	assert.Nil(t, result.Content)
 }

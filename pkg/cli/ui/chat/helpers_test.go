@@ -20,7 +20,7 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 		{name: "write", kind: copilot.PermissionRequestKindWrite, expected: "File Write"},
 		{name: "read", kind: copilot.PermissionRequestKindRead, expected: "File Read"},
 		{name: "url", kind: copilot.PermissionRequestKindURL, expected: "URL"},
-		{name: "mcp", kind: copilot.PermissionRequestKindMcp, expected: "MCP Tool"},
+		{name: "mcp", kind: copilot.PermissionRequestKindMCP, expected: "MCP Tool"},
 		{
 			name:     "custom-tool",
 			kind:     copilot.PermissionRequestKindCustomTool,
@@ -61,18 +61,16 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 	}{
 		{
 			name: "full command text",
-			request: copilot.PermissionRequest{
-				Kind:            copilot.PermissionRequestKindShell,
-				FullCommandText: new("rm -rf /tmp/test"),
+			request: &copilot.PermissionRequestShell{
+				FullCommandText: "rm -rf /tmp/test",
 			},
 			wantTool:    "Shell Command",
 			wantCommand: "rm -rf /tmp/test",
 		},
 		{
 			name: "tool name field",
-			request: copilot.PermissionRequest{
-				Kind:     copilot.PermissionRequestKindMcp,
-				ToolName: new("ksail_cluster_create"),
+			request: &copilot.PermissionRequestMCP{
+				ToolName: "ksail_cluster_create",
 			},
 			wantTool:    "MCP Tool",
 			wantCommand: "ksail_cluster_create",
@@ -107,34 +105,31 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 	}{
 		{
 			name: "path field",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindRead,
-				Path: new("/etc/config.yaml"),
+			request: &copilot.PermissionRequestRead{
+				Path: "/etc/config.yaml",
 			},
 			wantTool:    "File Read",
 			wantCommand: "/etc/config.yaml",
 		},
 		{
 			name: "fileName field",
-			request: copilot.PermissionRequest{
-				Kind:     copilot.PermissionRequestKindWrite,
-				FileName: new("/tmp/output.txt"),
+			request: &copilot.PermissionRequestWrite{
+				FileName: "/tmp/output.txt",
 			},
 			wantTool:    "File Write",
 			wantCommand: "/tmp/output.txt",
 		},
 		{
 			name: "url field",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindURL,
-				URL:  new("https://example.com"),
+			request: &copilot.PermissionRequestURL{
+				URL: "https://example.com",
 			},
 			wantTool:    "URL",
 			wantCommand: "https://example.com",
 		},
 		{
 			name:        "no fields falls back to kind",
-			request:     copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMemory},
+			request:     &copilot.PermissionRequestMemory{},
 			wantTool:    "Memory",
 			wantCommand: "memory",
 		},

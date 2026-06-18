@@ -130,12 +130,12 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 			return nil, verifyErr
 		}
 
-		opts.CLIPath = cliPath
+		opts.Connection = &copilot.StdioConnection{Path: cliPath}
 	}
 
 	cwd, cwdErr := os.Getwd()
 	if cwdErr == nil {
-		opts.Cwd = cwd
+		opts.WorkingDirectory = cwd
 	}
 
 	for _, envVar := range tokenEnvVars {

@@ -568,7 +568,6 @@ func TestDispatch_AutoModeSwitchRequested_EmitsMessage(t *testing.T) {
 
 	errorCode := "rate_limit_exceeded"
 	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
-		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
 		Data: &copilot.AutoModeSwitchRequestedData{
 			RequestID: "req-123",
 			ErrorCode: &errorCode,
@@ -602,7 +601,6 @@ func TestDispatch_AutoModeSwitchRequested_NilErrorCode(t *testing.T) {
 	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
 
 	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
-		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
 		Data: &copilot.AutoModeSwitchRequestedData{
 			RequestID: "req-456",
 			ErrorCode: nil,
@@ -634,10 +632,12 @@ func TestDispatch_AutoModeSwitchRequested_InvalidDataIgnored(t *testing.T) {
 	eventChan := make(chan tea.Msg, 10)
 	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
 
-	// Wrong data type — dispatcher should silently ignore
+	// Data routes to the requested handler via Type(), but is not the expected
+	// *AutoModeSwitchRequestedData — exercises the handler's type guard.
 	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
-		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
-		Data: &copilot.AutoModeSwitchCompletedData{}, // wrong type
+		Data: &copilot.RawSessionEventData{
+			EventType: copilot.SessionEventTypeAutoModeSwitchRequested,
+		},
 	})
 
 	assert.Empty(t, eventChan)
@@ -650,7 +650,6 @@ func TestDispatch_AutoModeSwitchCompleted_EmitsMessage(t *testing.T) {
 	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
 
 	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
-		Type: copilot.SessionEventTypeAutoModeSwitchCompleted,
 		Data: &copilot.AutoModeSwitchCompletedData{
 			RequestID: "req-789",
 			Response:  "yes",
@@ -681,10 +680,12 @@ func TestDispatch_AutoModeSwitchCompleted_InvalidDataIgnored(t *testing.T) {
 	eventChan := make(chan tea.Msg, 10)
 	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
 
-	// Wrong data type — dispatcher should silently ignore
+	// Data routes to the completed handler via Type(), but is not the expected
+	// *AutoModeSwitchCompletedData — exercises the handler's type guard.
 	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
-		Type: copilot.SessionEventTypeAutoModeSwitchCompleted,
-		Data: &copilot.AutoModeSwitchRequestedData{}, // wrong type
+		Data: &copilot.RawSessionEventData{
+			EventType: copilot.SessionEventTypeAutoModeSwitchCompleted,
+		},
 	})
 
 	assert.Empty(t, eventChan)

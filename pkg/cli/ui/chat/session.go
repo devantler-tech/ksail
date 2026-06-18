@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -150,7 +149,7 @@ func ListSessions(
 
 	// Sort by SDK ModifiedTime descending (most recent first)
 	slices.SortFunc(sessions, func(a, b SessionMetadata) int {
-		return cmp.Compare(b.SDKMetadata.ModifiedTime, a.SDKMetadata.ModifiedTime)
+		return b.SDKMetadata.ModifiedTime.Compare(a.SDKMetadata.ModifiedTime)
 	})
 
 	return sessions, nil

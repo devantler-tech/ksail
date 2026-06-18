@@ -3,7 +3,6 @@ package chat
 import (
 	"fmt"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -389,7 +388,7 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 
 // loadSessionMessages loads and renders messages from a resumed session.
 func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
-	events, err := m.session.GetMessages(m.ctx)
+	events, err := m.session.GetEvents(m.ctx)
 	if err != nil {
 		m.messages = []message{}
 	} else {
@@ -431,7 +430,7 @@ func (m *Model) sessionEventsToMessages(
 		var role, content string
 
 		//nolint:exhaustive // Only event types that map to transcript messages are handled here.
-		switch event.Type {
+		switch event.Type() {
 		case copilot.SessionEventTypeUserMessage:
 			role = roleUser
 
@@ -637,12 +636,8 @@ func (m *Model) styleSessionItem(line string, index int, isCurrentSession bool) 
 // formatSessionTime returns a formatted relative time for a session.
 // Uses SDK's ModifiedTime if available, otherwise falls back to local UpdatedAt.
 func (m *Model) formatSessionTime(session *SessionMetadata) string {
-	if session.SDKMetadata != nil && session.SDKMetadata.ModifiedTime != "" {
-		// Parse SDK's ISO timestamp
-		t, err := time.Parse(time.RFC3339, session.SDKMetadata.ModifiedTime)
-		if err == nil {
-			return FormatRelativeTime(t)
-		}
+	if session.SDKMetadata != nil && !session.SDKMetadata.ModifiedTime.IsZero() {
+		return FormatRelativeTime(session.SDKMetadata.ModifiedTime)
 	}
 	// Fall back to local UpdatedAt
 	return FormatRelativeTime(session.UpdatedAt)

@@ -69,7 +69,7 @@ func setupChatTools(
 func buildTUIOnEventHandler(eventChan chan<- tea.Msg) copilot.SessionEventHandler {
 	return func(event copilot.SessionEvent) {
 		//nolint:exhaustive // Only session-level events not in per-turn dispatcher; rest ignored.
-		switch event.Type {
+		switch event.Type() {
 		case copilot.SessionEventTypeToolExecutionProgress:
 			if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
 				eventChan <- chatui.ToolProgressMsg{

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -185,31 +186,22 @@ func CreateTUIPermissionHandler(
 	return func(
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,
-	) (copilot.PermissionRequestResult, error) {
+	) (rpc.PermissionDecision, error) {
 		// In Autopilot mode, auto-approve all SDK permission requests
 		if chatModeRef != nil && chatModeRef.Mode() == AutopilotMode {
-			return copilot.PermissionRequestResult{
-				Kind: copilot.PermissionRequestResultKindApproved,
-			}, nil
+			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
 		// Auto-approve read operations to avoid excessive prompting.
-		if chatsvc.IsReadOperation(request.Kind) {
-			return copilot.PermissionRequestResult{
-				Kind: copilot.PermissionRequestResultKindApproved,
-			}, nil
+		if chatsvc.IsReadOperation(request.Kind()) {
+			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
-		toolCallID := ""
-		if request.ToolCallID != nil {
-			toolCallID = *request.ToolCallID
-		}
+		toolCallID := permissionToolCallID(request)
 
 		// Deduplicate: auto-approve if this ToolCallID was already approved.
 		if dedup.wasApproved(toolCallID) {
-			return copilot.PermissionRequestResult{
-				Kind: copilot.PermissionRequestResultKindApproved,
-			}, nil
+			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
 		toolName, command := extractPermissionDetails(request)
@@ -227,14 +219,10 @@ func CreateTUIPermissionHandler(
 		if approved {
 			dedup.markApproved(toolCallID)
 
-			return copilot.PermissionRequestResult{
-				Kind: copilot.PermissionRequestResultKindApproved,
-			}, nil
+			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
-		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindRejected,
-		}, nil
+		return &rpc.PermissionDecisionReject{}, nil
 	}
 }
 
@@ -242,31 +230,73 @@ func CreateTUIPermissionHandler(
 // from an SDK permission request.
 // The PermissionRequest has typed fields for each permission kind.
 func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
-	toolName := formatPermissionKind(request.Kind)
+	toolName := formatPermissionKind(request.Kind())
 
-	if detail := firstNonEmpty(
-		request.FullCommandText,
-		request.FileName,
-		request.Path,
-		request.ToolName,
-		request.URL,
-		request.Diff,
-	); detail != "" {
+	if detail := permissionDetail(request); detail != "" {
 		return toolName, detail
 	}
 
-	return toolName, string(request.Kind)
+	return toolName, string(request.Kind())
 }
 
-// firstNonEmpty returns the first non-nil, non-empty string from the given pointers.
-func firstNonEmpty(ptrs ...*string) string {
-	for _, p := range ptrs {
-		if p != nil && *p != "" {
-			return *p
+// permissionDetail returns the most relevant human-readable detail for a permission
+// request. In v1.0.0 each permission kind is a distinct pointer type, so the relevant
+// field is selected via a type switch over the concrete request variants.
+func permissionDetail(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		return req.FullCommandText
+	case *copilot.PermissionRequestWrite:
+		if req.FileName != "" {
+			return req.FileName
 		}
+
+		return req.Diff
+	case *copilot.PermissionRequestRead:
+		return req.Path
+	case *copilot.PermissionRequestURL:
+		return req.URL
+	case *copilot.PermissionRequestCustomTool:
+		return req.ToolName
+	case *copilot.PermissionRequestMCP:
+		return req.ToolName
 	}
 
 	return ""
+}
+
+// permissionToolCallID extracts the tool-call ID from a permission request, if present.
+// Each concrete request variant carries its own optional ToolCallID field.
+func permissionToolCallID(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestWrite:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestRead:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestURL:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestCustomTool:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestMCP:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestMemory:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestHook:
+		return derefString(req.ToolCallID)
+	}
+
+	return ""
+}
+
+// derefString returns the pointed-to string, or "" when the pointer is nil.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+
+	return *s
 }
 
 // permissionKindLabels maps known permission kinds to human-readable tool names.
@@ -275,7 +305,7 @@ var permissionKindLabels = map[copilot.PermissionRequestKind]string{
 	copilot.PermissionRequestKindWrite:      "File Write",
 	copilot.PermissionRequestKindRead:       "File Read",
 	copilot.PermissionRequestKindURL:        "URL",
-	copilot.PermissionRequestKindMcp:        "MCP Tool",
+	copilot.PermissionRequestKindMCP:        "MCP Tool",
 	copilot.PermissionRequestKindCustomTool: "Custom Tool",
 	copilot.PermissionRequestKindMemory:     "Memory",
 	copilot.PermissionRequestKindHook:       "Hook",

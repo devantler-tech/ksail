@@ -85,7 +85,7 @@ func TestStatusBar_AutoModelResolved(t *testing.T) {
 	chat.ExportSetAvailableModels(model, []copilot.ModelInfo{
 		{
 			ID:      "gpt-4o",
-			Billing: &copilot.ModelBilling{Multiplier: 1.0},
+			Billing: &copilot.ModelBilling{Multiplier: new(1.0)},
 		},
 	})
 

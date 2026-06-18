@@ -106,7 +106,7 @@ func TestFindModelMultiplier(t *testing.T) {
 		{
 			name: "found with billing",
 			models: []copilot.ModelInfo{
-				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
+				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: new(1.0)}},
 			},
 			modelID:  "gpt-4o",
 			expected: 1.0,
@@ -128,7 +128,7 @@ func TestFindModelMultiplier(t *testing.T) {
 		{
 			name: "different multiplier",
 			models: []copilot.ModelInfo{
-				{ID: "claude-3", Billing: &copilot.ModelBilling{Multiplier: 2.5}},
+				{ID: "claude-3", Billing: &copilot.ModelBilling{Multiplier: new(2.5)}},
 			},
 			modelID:  "claude-3",
 			expected: 2.5,
@@ -320,7 +320,7 @@ func buildModelStatusTextCases() []modelStatusTextCase {
 			name:         "auto mode resolved with multiplier",
 			currentModel: "gpt-4o",
 			models: []copilot.ModelInfo{
-				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
+				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: new(1.0)}},
 			},
 			expected: "gpt-4o (1x)",
 		},
@@ -328,7 +328,7 @@ func buildModelStatusTextCases() []modelStatusTextCase {
 			name:         "auto mode resolved with fractional multiplier",
 			currentModel: "claude-haiku-4.5",
 			models: []copilot.ModelInfo{
-				{ID: "claude-haiku-4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+				{ID: "claude-haiku-4.5", Billing: &copilot.ModelBilling{Multiplier: new(0.33)}},
 			},
 			expected: "claude-haiku-4.5 (0.33x)",
 		},

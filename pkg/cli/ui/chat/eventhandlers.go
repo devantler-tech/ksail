@@ -40,7 +40,7 @@ func (d *sessionEventDispatcher) dispatch(
 	event copilot.SessionEvent,
 ) {
 	//nolint:exhaustive // Only event types that affect dispatcher state are handled here.
-	switch event.Type {
+	switch event.Type() {
 	case copilot.SessionEventTypeAssistantTurnStart:
 		d.handleTurnStart()
 	case copilot.SessionEventTypeAssistantMessageDelta:
@@ -51,7 +51,7 @@ func (d *sessionEventDispatcher) dispatch(
 		copilot.SessionEventTypeAssistantReasoningDelta:
 		d.handleReasoning(event)
 	case copilot.SessionEventTypeSessionIdle, copilot.SessionEventTypeAssistantTurnEnd:
-		d.handleSessionLifecycle(event.Type)
+		d.handleSessionLifecycle(event.Type())
 	case copilot.SessionEventTypeAbort:
 		d.handleAbort()
 	case copilot.SessionEventTypeSessionError:
@@ -90,7 +90,6 @@ func (d *sessionEventDispatcher) dispatch(
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
-	//nolint:exhaustive // Only lifecycle event types relevant to ending or transitioning a stream are handled here.
 	switch eventType {
 	case copilot.SessionEventTypeSessionIdle:
 		d.eventChan <- streamEndMsg{}
@@ -130,7 +129,7 @@ func (d *sessionEventDispatcher) handleReasoning(event copilot.SessionEvent) {
 
 	d.eventChan <- reasoningMsg{
 		content: content,
-		isDelta: event.Type == copilot.SessionEventTypeAssistantReasoningDelta,
+		isDelta: event.Type() == copilot.SessionEventTypeAssistantReasoningDelta,
 	}
 }
 
@@ -210,11 +209,11 @@ func (d *sessionEventDispatcher) handleUsage(event copilot.SessionEvent) {
 	}
 
 	if data.InputTokens != nil {
-		msg.inputTokens = *data.InputTokens
+		msg.inputTokens = float64(*data.InputTokens)
 	}
 
 	if data.OutputTokens != nil {
-		msg.outputTokens = *data.OutputTokens
+		msg.outputTokens = float64(*data.OutputTokens)
 	}
 
 	if data.Cost != nil {
@@ -231,9 +230,9 @@ func (d *sessionEventDispatcher) handleUsage(event copilot.SessionEvent) {
 			}
 
 			msg.quotaSnapshots[key] = quotaSnapshot{
-				entitlementRequests:   snapshot.EntitlementRequests,
+				entitlementRequests:   float64(snapshot.EntitlementRequests),
 				isUnlimited:           snapshot.IsUnlimitedEntitlement,
-				usedRequests:          snapshot.UsedRequests,
+				usedRequests:          float64(snapshot.UsedRequests),
 				remainingPercentage:   snapshot.RemainingPercentage,
 				resetDate:             resetStr,
 				overage:               snapshot.Overage,
@@ -260,15 +259,15 @@ func (d *sessionEventDispatcher) handleCompactionComplete(event copilot.SessionE
 	}
 
 	if data.PreCompactionTokens != nil {
-		msg.preCompactionTokens = *data.PreCompactionTokens
+		msg.preCompactionTokens = float64(*data.PreCompactionTokens)
 	}
 
 	if data.PostCompactionTokens != nil {
-		msg.postCompactionTokens = *data.PostCompactionTokens
+		msg.postCompactionTokens = float64(*data.PostCompactionTokens)
 	}
 
 	if data.TokensRemoved != nil {
-		msg.tokensRemoved = *data.TokensRemoved
+		msg.tokensRemoved = float64(*data.TokensRemoved)
 	}
 
 	d.eventChan <- msg
@@ -316,7 +315,7 @@ func (d *sessionEventDispatcher) handleSystemNotification(event copilot.SessionE
 
 	d.eventChan <- systemNotificationMsg{
 		message:  data.Content,
-		infoType: string(data.Kind.Type),
+		infoType: string(data.Kind.Type()),
 	}
 }
 
@@ -383,6 +382,6 @@ func (d *sessionEventDispatcher) handleAutoModeSwitchCompleted(event copilot.Ses
 
 	d.eventChan <- autoModeSwitchCompletedMsg{
 		requestID: data.RequestID,
-		response:  data.Response,
+		response:  string(data.Response),
 	}
 }

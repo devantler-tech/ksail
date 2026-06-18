@@ -269,7 +269,7 @@ func isExitCommand(input string) bool {
 func buildNonTUIOnEventHandler(writer io.Writer) copilot.SessionEventHandler {
 	return func(event copilot.SessionEvent) {
 		//nolint:exhaustive // Only session-level events not in per-turn handler; rest ignored.
-		switch event.Type {
+		switch event.Type() {
 		case copilot.SessionEventTypeToolExecutionProgress:
 			if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
 				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", data.ProgressMessage)
@@ -333,7 +333,7 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	defer state.mu.Unlock()
 
 	//nolint:exhaustive // Only a subset of ~30 SDK event types are relevant for streaming display.
-	switch event.Type {
+	switch event.Type() {
 	case copilot.SessionEventTypeAssistantMessageDelta:
 		if data, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
 			return streamingOutput{action: actionDelta, text: data.DeltaContent}

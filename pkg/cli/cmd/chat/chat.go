@@ -36,7 +36,7 @@ func buildSessionConfig(
 	exhaustionThreshold := 0.95
 
 	config := &copilot.SessionConfig{
-		Streaming: streaming,
+		Streaming: &streaming,
 		SystemMessage: &copilot.SystemMessageConfig{
 			Mode:     "customize",
 			Sections: sections,

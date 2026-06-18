@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 // CreatePermissionHandler creates a permission handler that manages user consent
@@ -23,12 +24,10 @@ import (
 func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
-	) (copilot.PermissionRequestResult, error) {
+	) (rpc.PermissionDecision, error) {
 		// Auto-approve read operations
-		if IsReadOperation(request.Kind) {
-			return copilot.PermissionRequestResult{
-				Kind: copilot.PermissionRequestResultKindApproved,
-			}, nil
+		if IsReadOperation(request.Kind()) {
+			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
 		// Prompt for write operations
@@ -40,7 +39,7 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 func promptForPermission(
 	writer io.Writer,
 	request copilot.PermissionRequest,
-) (copilot.PermissionRequestResult, error) {
+) (rpc.PermissionDecision, error) {
 	// Display permission request details
 	_, _ = fmt.Fprintln(writer, "")
 
@@ -48,7 +47,7 @@ func promptForPermission(
 	desc := getPermissionDescription(request)
 	if desc != "" {
 		// Show the command/action being requested
-		_, _ = fmt.Fprintf(writer, "┌─ Permission Required (%s)\n", request.Kind)
+		_, _ = fmt.Fprintf(writer, "┌─ Permission Required (%s)\n", request.Kind())
 
 		for line := range strings.SplitSeq(desc, "\n") {
 			if line != "" {
@@ -60,7 +59,7 @@ func promptForPermission(
 	} else {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "Permission requested: " + string(request.Kind),
+			Content: "Permission requested: " + string(request.Kind()),
 			Writer:  writer,
 		})
 	}
@@ -71,7 +70,7 @@ func promptForPermission(
 // readPermissionResponse reads and processes the user's permission response from stdin.
 func readPermissionResponse(
 	writer io.Writer,
-) (copilot.PermissionRequestResult, error) {
+) (rpc.PermissionDecision, error) {
 	_, _ = fmt.Fprint(writer, "Allow this operation? [y/N]: ")
 
 	reader := bufio.NewReader(os.Stdin)
@@ -79,18 +78,14 @@ func readPermissionResponse(
 	line, readErr := reader.ReadString('\n')
 
 	// I/O error (typically EOF) is expected in non-interactive contexts.
-	// Treat it as a denial rather than propagating the error.
+	// Treat it as "user not available" rather than propagating the error.
 	//nolint:nilerr // I/O errors (EOF) treated as denial in non-interactive contexts
 	if readErr != nil {
-		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindUserNotAvailable,
-		}, nil
+		return &rpc.PermissionDecisionUserNotAvailable{}, nil
 	}
 
 	if strings.TrimSpace(line) == "" {
-		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindRejected,
-		}, nil
+		return &rpc.PermissionDecisionReject{}, nil
 	}
 
 	input := strings.TrimSpace(strings.ToLower(line))
@@ -102,9 +97,7 @@ func readPermissionResponse(
 			Writer:  writer,
 		})
 
-		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindApproved,
-		}, nil
+		return &rpc.PermissionDecisionApproveOnce{}, nil
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -113,66 +106,59 @@ func readPermissionResponse(
 		Writer:  writer,
 	})
 
-	return copilot.PermissionRequestResult{
-		Kind: copilot.PermissionRequestResultKindRejected,
-	}, nil
+	return &rpc.PermissionDecisionReject{}, nil
 }
 
 // getPermissionDescription extracts a human-readable description from the permission request.
+// In v1.0.0 the SDK delivers permission requests as discriminated pointer types, so the
+// relevant fields are read via a type switch over the concrete request variants.
 func getPermissionDescription(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestCustomTool:
+		return labeled("Tool: ", req.ToolName)
+	case *copilot.PermissionRequestMCP:
+		return labeled("Tool: ", req.ToolName)
+	case *copilot.PermissionRequestShell:
+		return labeled("$ ", req.FullCommandText)
+	case *copilot.PermissionRequestRead:
+		return labeled("Path: ", req.Path)
+	case *copilot.PermissionRequestURL:
+		return labeled("URL: ", req.URL)
+	case *copilot.PermissionRequestWrite:
+		return writePermissionDescription(req)
+	default:
+		return ""
+	}
+}
+
+// labeled returns "label+value" when value is non-empty, otherwise an empty string.
+func labeled(label, value string) string {
+	if value == "" {
+		return ""
+	}
+
+	return label + value
+}
+
+// writePermissionDescription renders the target path and a truncated diff preview
+// for a file-write permission request.
+func writePermissionDescription(req *copilot.PermissionRequestWrite) string {
+	const maxDiffPreview = 200
+
 	var parts []string
 
-	parts = appendToolName(parts, request.ToolName)
-	parts = appendCommand(parts, request.FullCommandText)
-	parts = appendPath(parts, request.Path, request.FileName)
-	parts = appendDiffPreview(parts, request.Diff)
+	if req.FileName != "" {
+		parts = append(parts, "Path: "+req.FileName)
+	}
+
+	if req.Diff != "" {
+		preview := req.Diff
+		if len(preview) > maxDiffPreview {
+			preview = preview[:maxDiffPreview] + "..."
+		}
+
+		parts = append(parts, "Diff:\n"+preview)
+	}
 
 	return strings.Join(parts, "\n")
-}
-
-// appendToolName appends the tool name to parts if present.
-func appendToolName(parts []string, toolName *string) []string {
-	if toolName != nil && *toolName != "" {
-		return append(parts, "Tool: "+*toolName)
-	}
-
-	return parts
-}
-
-// appendCommand appends the shell command to parts if present.
-func appendCommand(parts []string, fullCommandText *string) []string {
-	if fullCommandText != nil && *fullCommandText != "" {
-		return append(parts, "$ "+*fullCommandText)
-	}
-
-	return parts
-}
-
-// appendPath appends the file path to parts if present.
-func appendPath(parts []string, path *string, fileName *string) []string {
-	if fileName != nil && *fileName != "" {
-		return append(parts, "Path: "+*fileName)
-	}
-
-	if path != nil && *path != "" {
-		return append(parts, "Path: "+*path)
-	}
-
-	return parts
-}
-
-// appendDiffPreview appends a truncated diff preview to parts if present.
-func appendDiffPreview(parts []string, diff *string) []string {
-	const maxContentPreview = 200
-
-	if diff == nil || *diff == "" {
-		return parts
-	}
-
-	preview := *diff
-	if len(preview) > maxContentPreview {
-		preview = preview[:maxContentPreview] + "..."
-	}
-
-	return append(parts, "Diff:\n"+preview)
 }
