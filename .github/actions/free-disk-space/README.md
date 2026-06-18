@@ -28,8 +28,8 @@ Targeted `rm -rf` is deliberately used instead of the slower `apt-get remove` pa
 
 ## Inputs
 
-| Name           | Required | Default | Description                                                                                             |
-| -------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| Name           | Required | Default | Description                                                                                      |
+|----------------|----------|---------|--------------------------------------------------------------------------------------------------|
 | `docker-prune` | No       | `false` | Also run `docker system prune -af --volumes`. Set to `true` for jobs that use the Docker daemon. |
 
 ## Usage
