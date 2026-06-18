@@ -1,0 +1,65 @@
+name: Free Disk Space
+description: |
+  Reclaim disk on `ubuntu-latest` runners by removing large pre-installed
+  hosted-tooling directories that KSail's CI jobs never use (Android SDK, .NET,
+  GHC, Boost, Swift, CodeQL, PyPy, Ruby, Python, Chromium, PowerShell, Julia,
+  AWS CLI, Gradle, Azure CLI, miniconda).
+
+  Disk-heavy jobs — building the embedded-CLI binary (links kubectl, helm, kind,
+  k3d, vcluster, flux, argocd, eksctl, … into one large binary), mirroring all
+  system-test container images to tarballs, and spinning up Kubernetes clusters
+  in Docker — can exhaust the stock runner's root filesystem. When `/` fills up
+  the runner process itself crashes mid-job with
+  `System.IO.IOException: No space left on device` while writing its own
+  `_diag` logs, which is a non-deterministic, transient failure: it depends on
+  how much free space the runner happened to start with. Reclaiming this space
+  up front (~30 GB) gives every disk-heavy job comfortable headroom.
+
+  Targeted `rm -rf` is used instead of the slow `apt-get remove` path (e.g.
+  endersonmenezes/free-disk-space), which previously consumed 3–9 min per job
+  with apt autoremove pulling in update-initramfs / man-db rebuilds. Each
+  removal is best-effort: missing paths are not an error.
+
+inputs:
+  docker-prune:
+    description: |
+      Also run `docker system prune -af --volumes`. Set to 'true' for jobs that
+      use the Docker daemon and may have images/volumes to reclaim.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧹 Free disk space
+      shell: bash
+      env:
+        DOCKER_PRUNE: ${{ inputs.docker-prune }}
+      run: |
+        set -euo pipefail
+        before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+        # Largest offenders on ubuntu-latest (sizes from
+        # https://github.com/actions/runner-images). Order by descending size.
+        sudo rm -rf \
+          /usr/local/lib/android \
+          /usr/share/dotnet \
+          /opt/ghc \
+          /usr/local/share/boost \
+          /usr/share/swift \
+          /opt/hostedtoolcache/CodeQL \
+          /opt/hostedtoolcache/PyPy \
+          /opt/hostedtoolcache/Ruby \
+          /opt/hostedtoolcache/Python \
+          /usr/local/share/chromium \
+          /usr/local/share/powershell \
+          /usr/local/julia* \
+          /usr/local/aws-cli \
+          /usr/local/aws-sam-cli \
+          /usr/share/gradle* \
+          /usr/share/az* \
+          /usr/share/miniconda || true
+        if [ "$DOCKER_PRUNE" = "true" ]; then
+          docker system prune -af --volumes || true
+        fi
+        after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+        echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
