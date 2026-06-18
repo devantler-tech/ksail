@@ -5,21 +5,21 @@ No clusters found.
 ---
 
 [TestListCmd_SingleClusterFound_DockerProvider - 1]
-PROVIDER   DISTRIBUTION   CLUSTER
-docker     Vanilla        test-cluster
+PROVIDER   DISTRIBUTION   CLUSTER        STATUS
+docker     Vanilla        test-cluster   Running
 
 ---
 
 [TestListCmd_MultipleClustersFound_DockerProvider - 1]
-PROVIDER   DISTRIBUTION   CLUSTER
-docker     Vanilla        cluster-1
-docker     Vanilla        cluster-2
-docker     Vanilla        cluster-3
+PROVIDER   DISTRIBUTION   CLUSTER     STATUS
+docker     Vanilla        cluster-1   Running
+docker     Vanilla        cluster-2   Running
+docker     Vanilla        cluster-3   Running
 
 ---
 
 [TestListCmd_AllProviders - 1]
-PROVIDER   DISTRIBUTION   CLUSTER
-docker     Vanilla        test-cluster
+PROVIDER   DISTRIBUTION   CLUSTER        STATUS
+docker     Vanilla        test-cluster   Running
 
 ---

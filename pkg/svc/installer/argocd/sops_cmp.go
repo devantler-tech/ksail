@@ -12,11 +12,11 @@ import (
 // The decision mirrors EnsureSopsAgeSecret: explicitly disabled → false,
 // explicitly enabled → true, auto-detect → true only if an Age key is available.
 func ShouldEnableSOPS(sops v1alpha1.SOPS) bool {
-	if sops.Enabled != nil && !*sops.Enabled {
+	if sops.Enabled.IsExplicitlyDisabled() {
 		return false
 	}
 
-	if sops.Enabled != nil && *sops.Enabled {
+	if sops.Enabled.IsExplicitlyEnabled() {
 		return true
 	}
 

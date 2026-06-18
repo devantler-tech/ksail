@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
@@ -46,6 +47,11 @@ func NewConnectCmd() *cobra.Command {
 		Short:        "Connect to cluster with k9s",
 		Long:         lifecycle.WithClusterTargetingHelpWithoutProvider(connectLead),
 		SilenceUsage: true,
+		// connect launches the k9s full-screen TUI, which an AI tool client
+		// cannot drive — keep it out of the generated MCP/chat tool surface.
+		Annotations: map[string]string{
+			annotations.AnnotationInteractive: annotations.AnnotationValueTrue,
+		},
 	}
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(

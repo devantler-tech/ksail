@@ -456,7 +456,7 @@ func newAutoscalerClusterConfig() *v1alpha1.Cluster {
 				Provider:     v1alpha1.ProviderHetzner,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: true,
+						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
 						Pools: []v1alpha1.NodePool{
 							{
 								Name:       "worker",

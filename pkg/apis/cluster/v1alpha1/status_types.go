@@ -29,7 +29,7 @@ const (
 // persist its own state under ~/.ksail/clusters/<name>/spec.json independently.
 type ClusterStatus struct {
 	// Phase is a high-level summary of the cluster lifecycle.
-	// +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Updating;Deleting;Failed
+	// +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Stopped;Updating;Deleting;Failed
 	Phase ClusterPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest observations of the cluster's state.

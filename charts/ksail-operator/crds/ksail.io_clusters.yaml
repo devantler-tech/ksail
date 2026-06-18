@@ -99,8 +99,9 @@ spec:
                           enabled:
                             description: |-
                               Enabled controls whether the Cluster Autoscaler is installed to manage
-                              worker node counts dynamically.
-                            type: boolean
+                              worker node counts dynamically (Enabled or Disabled). A YAML boolean is
+                              still accepted on load (true -> Enabled, false -> Disabled).
+                            type: string
                           expander:
                             description: |-
                               Expander selects the Cluster Autoscaler expander strategy. It accepts a
@@ -269,6 +270,18 @@ spec:
                     description: 'GitOpsEngine selects the GitOps engine KSail bootstraps:
                       None, Flux, or ArgoCD.'
                     type: string
+                  imageVerification:
+                    description: |-
+                      ImageVerification controls container-image signature verification scaffolding
+                      for every supported distribution (not just Talos):
+                        - Talos: scaffolds a native ImageVerificationConfig document (Talos 1.13+).
+                        - Vanilla (Kind): injects a containerd image-verifier plugin patch.
+                        - K3s (K3d): scaffolds a containerd config template with the image-verifier
+                          plugin and mounts it into the node containers.
+                      Enabled requires verifier binaries (and typically policy) to be present in the
+                      node image bin_dir. Disabled (default) skips it.
+                      Supersedes spec.cluster.talos.imageVerification (deprecated; aliased on load).
+                    type: string
                   importImages:
                     type: string
                   kubernetesVersion:
@@ -386,11 +399,12 @@ spec:
                         type: string
                       enabled:
                         description: |-
-                          Enabled controls whether the SOPS Age secret is created.
-                          nil (default) = auto-detect (create if key is found via env var or key file).
-                          true = require key (error if not found).
-                          false = disable entirely (skip secret creation).
-                        type: boolean
+                          Enabled controls whether the SOPS Age secret is created (tri-state toggle):
+                            - Default ("" / unset) = auto-detect (create if a key is found via env var or key file).
+                            - Enabled = require key (error if not found).
+                            - Disabled = disable entirely (skip secret creation).
+                          A YAML boolean is still accepted on load (true -> Enabled, false -> Disabled).
+                        type: string
                       env:
                         description: Env configures the environment variable source
                           for the Age private key.
@@ -447,7 +461,7 @@ spec:
                           unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
                           longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
                           gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
-                          re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+                          re-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.
                           Override per invocation with --drain-timeout. Example: "15m".
                         type: string
                       extensions:
@@ -494,6 +508,10 @@ spec:
                           during cluster init. When Enabled, generates an image-verification.yaml template
                           in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
                           and public key verification rules. Requires Talos 1.13+.
+
+                          Deprecated: use spec.cluster.imageVerification. This field is kept as a
+                          migration alias and emits a warning on load (the value is copied into the
+                          cluster-level field). Removal planned in a future minor release.
                         type: string
                       iso:
                         description: |-
@@ -1081,6 +1099,7 @@ spec:
                 - Pending
                 - Provisioning
                 - Ready
+                - Stopped
                 - Updating
                 - Deleting
                 - Failed

@@ -400,6 +400,11 @@ func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageCha
 	return autoscalerRecycleRequired(diff, imageChanged)
 }
 
+// AutoscalerRebootRequiredForTest exposes autoscalerRebootRequired for unit testing.
+func AutoscalerRebootRequiredForTest(diff *clusterupdate.UpdateResult) bool {
+	return autoscalerRebootRequired(diff)
+}
+
 // UpdateApplyStepNamesForTest returns the ordered names of the post-PrepareUpdate
 // apply steps, so tests can assert the step ordering (notably that the autoscaler
 // baseline refresh runs before static-node scaling — #5219) without driving a
@@ -456,6 +461,15 @@ func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
+}
+
+// RollingRebootAutoscalerNodesForTest exposes rollingRebootAutoscalerNodes for unit testing.
+func (p *Provisioner) RollingRebootAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
 }
 
 // RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
@@ -633,7 +647,7 @@ func (p *Provisioner) DetectRoleMachineConfigDriftForTest(
 }
 
 // WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests
-// can drive the rolling-reboot staged-config rebuild (buildStagedNodeConfig)
+// can drive the per-node desired-config rebuild (fetchAndBuildDesiredNodeConfig)
 // without real Talos API connectivity.
 func (p *Provisioner) WithNodeConfigFetcherForTest(
 	fn func(ctx context.Context, nodeIP string) (talosconfig.Provider, error),
@@ -643,14 +657,26 @@ func (p *Provisioner) WithNodeConfigFetcherForTest(
 	return p
 }
 
-// BuildStagedNodeConfigForTest exposes buildStagedNodeConfig — the rolling-reboot
-// staged-config rebuild — for unit testing.
-func (p *Provisioner) BuildStagedNodeConfigForTest(
+// FetchAndBuildDesiredNodeConfigForTest exposes fetchAndBuildDesiredNodeConfig — the
+// per-node desired-config rebuild shared by the rolling-reboot staging path and the
+// pre-upgrade reconcile — for unit testing.
+func (p *Provisioner) FetchAndBuildDesiredNodeConfigForTest(
 	ctx context.Context,
 	node NodeWithRoleForTest,
 	secretsSource talosconfig.Provider,
 ) (talosconfig.Provider, error) {
-	return p.buildStagedNodeConfig(ctx, node, secretsSource)
+	return p.fetchAndBuildDesiredNodeConfig(ctx, node, secretsSource)
+}
+
+// ReconcileNodeConfigBeforeUpgradeForTest exposes reconcileNodeConfigBeforeUpgrade —
+// the NO_REBOOT config reconcile applied to a node ahead of its Talos OS upgrade
+// (issue #5294) — for unit testing.
+func (p *Provisioner) ReconcileNodeConfigBeforeUpgradeForTest(
+	ctx context.Context,
+	node NodeWithRoleForTest,
+	secretsSource talosconfig.Provider,
+) error {
+	return p.reconcileNodeConfigBeforeUpgrade(ctx, node, secretsSource)
 }
 
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.

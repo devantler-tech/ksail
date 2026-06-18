@@ -20,11 +20,11 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -669,12 +669,12 @@ func newCluster(
 }
 
 // discoveredPhase maps a discovered cluster's run-state to the phase the list reports. A running (or
-// run-state-unknown, e.g. cloud) cluster is Ready; a stopped Docker cluster reports no phase so the
-// web UI does not render it green — List attaches a Ready=False/reason=Stopped condition instead (the
-// "Stopped" phase value itself is a breaking apis change reserved for a later phase).
+// run-state-unknown, e.g. cloud) cluster is Ready; a stopped Docker cluster reports the
+// ClusterPhaseStopped phase so the web UI renders it distinctly rather than green. List also attaches
+// a Ready=False/reason=Stopped condition for consumers predating the Stopped phase value.
 func discoveredPhase(runState clusterdiscovery.RunState) v1alpha1.ClusterPhase {
 	if runState == clusterdiscovery.RunStateStopped {
-		return ""
+		return v1alpha1.ClusterPhaseStopped
 	}
 
 	return v1alpha1.ClusterPhaseReady
@@ -723,8 +723,11 @@ func jobConditionFor(
 		reason, detail = "Error", message
 	case v1alpha1.ClusterPhaseReady,
 		v1alpha1.ClusterPhasePending,
+		v1alpha1.ClusterPhaseStopped,
 		v1alpha1.ClusterPhaseUpdating:
-		// Ready/Pending/Updating clusters carry no synthetic job condition.
+		// Ready/Pending/Updating clusters carry no synthetic job condition. A Stopped cluster's
+		// Ready=False/reason=Stopped condition is attached by listEntryCondition's run-state branch
+		// (discovered-stopped clusters never enter the job store), so it carries none here either.
 		return metav1.Condition{}, false
 	default:
 		return metav1.Condition{}, false

@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -82,9 +83,9 @@ func ExportResolveCreatedContextName(
 	return resolveCreatedContextName(distribution, provider, clusterName)
 }
 
-// ExportResolveForce exports resolveForce for testing.
-func ExportResolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
-	return resolveForce(viperForce, yesFlag)
+// ExportResolveConsent exports resolveConsent for testing.
+func ExportResolveConsent(viperForce bool, yesFlag *pflag.Flag) bool {
+	return resolveConsent(viperForce, yesFlag)
 }
 
 // ExportDisplayChangesSummary exports displayChangesSummary for testing.
@@ -200,6 +201,27 @@ func ExportNewListResult(
 		ClusterName:  clusterName,
 		TTL:          ttl,
 	}
+}
+
+// ExportNewListResultWithRunState creates a listResult carrying a run-state for testing the STATUS
+// column / JSON status field.
+func ExportNewListResultWithRunState(
+	provider v1alpha1.Provider,
+	distribution v1alpha1.Distribution,
+	clusterName string,
+	runState clusterdiscovery.RunState,
+) ExportListResult {
+	return listResult{
+		Provider:     provider,
+		Distribution: distribution,
+		ClusterName:  clusterName,
+		RunState:     runState,
+	}
+}
+
+// ExportStatusLabel exports statusLabel for testing the run-state → STATUS vocabulary mapping.
+func ExportStatusLabel(runState clusterdiscovery.RunState) string {
+	return statusLabel(runState)
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.
@@ -440,6 +462,15 @@ func ExportPrepareOutputPath(outputPath string) (string, error) {
 // ExportPrintBackupSummary exports printBackupSummary for testing.
 func ExportPrintBackupSummary(writer io.Writer, outputPath string) {
 	printBackupSummary(writer, outputPath)
+}
+
+// ExportResolveArchivePath exports resolveArchivePath for testing.
+func ExportResolveArchivePath(
+	args []string,
+	deprecatedFlagValue string,
+	deprecatedFlagDisplay string,
+) (string, error) {
+	return resolveArchivePath(args, deprecatedFlagValue, deprecatedFlagDisplay)
 }
 
 // ExportCategoryIcon exports categoryIcon for testing.

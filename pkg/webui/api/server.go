@@ -1,7 +1,12 @@
-// Package api serves the KSail operator's REST/JSON API over the Cluster custom resource.
-// It is a thin layer over the controller-runtime client and is registered as a manager
-// Runnable. When read-only mode is enabled, all mutating verbs are rejected server-side so the
-// optional web UI cannot diverge from a GitOps-enforced source of truth.
+// Package api is the shared REST/JSON transport layer for the KSail web UI (the embedded SPA in
+// pkg/webui). It serves the same HTTP surface — clusters, resources, logs, exec, settings, cipher,
+// SSE events, and OIDC auth — across both deployment surfaces: the in-cluster operator (whose
+// controller-runtime-backed ClusterService CRUDs Cluster custom resources and is registered as a
+// manager Runnable) and the local `ksail ui`/desktop backend (whose CLI-lifecycle-backed
+// ClusterService runs against the local toolchain). Backends plug in through the ClusterService
+// interface and its optional capability interfaces; the Server itself is backend-agnostic. When
+// read-only mode is enabled, all mutating verbs are rejected server-side so the web UI cannot
+// diverge from a GitOps-enforced source of truth.
 package api
 
 import (

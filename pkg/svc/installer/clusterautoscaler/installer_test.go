@@ -461,7 +461,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 	t.Parallel()
 
 	cfg := v1alpha1.NodeAutoscalerConfig{
-		Enabled: true,
+		Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
 		Pools: []v1alpha1.NodePool{
 			{Name: "pool1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 3},
 		},

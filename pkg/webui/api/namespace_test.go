@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +19,7 @@ func TestCreateClusterCreatesMissingNamespace(t *testing.T) {
 	t.Parallel()
 
 	kubeClient := newClient(t)
-	server := &api.Server{Service: api.NewCRClusterService(kubeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(kubeClient)}
 
 	recorder := doRequest(
 		server.Handler(),
@@ -53,7 +54,7 @@ func TestCreateClusterPreservesExistingNamespace(t *testing.T) {
 
 	existing := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "preexisting"}}
 	kubeClient := newClient(t, existing)
-	server := &api.Server{Service: api.NewCRClusterService(kubeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(kubeClient)}
 
 	recorder := doRequest(
 		server.Handler(),

@@ -54,26 +54,26 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 // set by the user (e.g. via Viper.IsSet). When false, a zero new field is treated as
 // "unset" and the legacy value is copied over with a deprecation warning.
 //
-// Migration rules (bool semantics — Go zero value for bool is false):
+// Migration rules (the new field is now the NodeAutoscalerEnabled toggle enum;
+// its zero value is the empty string, treated as Disabled by IsEnabled):
 //   - old is empty → no-op (canonical or already-migrated path).
-//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=true  → equivalent; silently zero old.
-//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=false → conflict; return error.
-//   - old non-empty && newFieldExplicit=true  && new=false && mapped=true  → conflict; return error.
-//   - old non-empty && newFieldExplicit=true  && new=false && mapped=false → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=true  && new==mapped → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=true  && new!=mapped → conflict; return error.
 //   - old non-empty && newFieldExplicit=false → copy mapping to new, zero old, warn.
 //
-// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to a bool.
-// Returns an error if the legacy value is not one of the recognized NodeAutoscaling values.
+// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to the new
+// NodeAutoscalerEnabled toggle enum. Returns an error if the legacy value is not
+// one of the recognized NodeAutoscaling values.
 func mapNodeAutoscalingToEnabled(
 	old v1alpha1.NodeAutoscaling,
-) (bool, error) {
+) (v1alpha1.NodeAutoscalerEnabled, error) {
 	switch old {
 	case v1alpha1.NodeAutoscalingEnabled:
-		return true, nil
+		return v1alpha1.NodeAutoscalerEnabledEnabled, nil
 	case v1alpha1.NodeAutoscalingDisabled:
-		return false, nil
+		return v1alpha1.NodeAutoscalerEnabledDisabled, nil
 	default:
-		return false, fmt.Errorf(
+		return "", fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s is not a recognized value "+
 				"(valid options: %s, %s)",
 			v1alpha1.ErrInvalidNodeAutoscaling,
@@ -109,7 +109,7 @@ func migrateDeprecatedNodeAutoscaling(
 	if newFieldExplicit && *newField != mapped {
 		return fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s conflicts with "+
-				"spec.cluster.autoscaler.node.enabled=%t "+
+				"spec.cluster.autoscaler.node.enabled=%s "+
 				"(set only spec.cluster.autoscaler.node.enabled)",
 			ErrDeprecatedFieldConflict,
 			*old,
@@ -137,6 +137,58 @@ func migrateDeprecatedNodeAutoscaling(
 	return nil
 }
 
+// migrateDeprecatedImageVerification copies the legacy Talos-scoped
+// spec.cluster.talos.imageVerification into the promoted cluster-level
+// spec.cluster.imageVerification (which now steers Kind/K3s behavior too) when the
+// new field is unset. Emits a deprecation notice to the supplied writer when a
+// legacy value is copied into the new field.
+//
+// Migration rules (string enum; Go zero value is ""):
+//   - old == ""                              → no-op (canonical or already-migrated path).
+//   - old != "" && new == ""                 → copy old → new, zero old, warn.
+//   - old != "" && new != "" && old == new   → silently zero old (equivalent).
+//   - old != "" && new != "" && old != new   → return an error (ambiguous configuration).
+func migrateDeprecatedImageVerification(cfg *v1alpha1.Cluster, out io.Writer) error {
+	if cfg == nil {
+		return nil
+	}
+
+	cluster := &cfg.Spec.Cluster
+	//nolint:staticcheck // intentional: migration of deprecated field
+	old := &cluster.Talos.ImageVerification
+	newField := &cluster.ImageVerification
+
+	if *old == "" {
+		return nil
+	}
+
+	if *newField != "" && *newField != *old {
+		return fmt.Errorf(
+			"%w: spec.cluster.talos.imageVerification=%s conflicts with "+
+				"spec.cluster.imageVerification=%s (set only spec.cluster.imageVerification)",
+			ErrDeprecatedFieldConflict,
+			*old, *newField,
+		)
+	}
+
+	copied := *newField == ""
+	if copied {
+		*newField = *old
+	}
+
+	*old = ""
+
+	if copied && out != nil {
+		_, _ = fmt.Fprintf(
+			out,
+			"warning: spec.cluster.talos.imageVerification is deprecated; "+
+				"use spec.cluster.imageVerification. KSail migrated the value automatically.\n",
+		)
+	}
+
+	return nil
+}
+
 // warnDeprecatedTalosPatchFields emits deprecation warnings for ksail.yaml fields
 // that wrap native Talos machine config patches. These fields are deprecated for Talos
 // clusters; users should manage patches directly in the talos/ patch directories.
@@ -152,7 +204,6 @@ func warnDeprecatedTalosPatchFields(cfg *v1alpha1.Cluster, out io.Writer) {
 	warnCDIDeprecation(cfg, out)
 	warnOIDCDeprecation(cfg, out)
 	warnIngressFirewallDeprecation(cfg, out)
-	warnImageVerificationDeprecation(cfg, out)
 }
 
 func warnCDIDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
@@ -190,16 +241,6 @@ func warnIngressFirewallDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 		"warning: spec.provider.hetzner.ingressFirewall is deprecated for Talos clusters. "+
 			"To disable the ingress firewall, remove the firewall patch files from "+
 			"talos/cluster/, talos/control-planes/, and talos/workers/ instead.\n")
-}
-
-func warnImageVerificationDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
-	if cfg.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
-		return
-	}
-
-	_, _ = fmt.Fprintf(out,
-		"warning: spec.cluster.talos.imageVerification is deprecated. "+
-			"Add an ImageVerificationConfig document to talos/cluster/image-verification.yaml directly.\n")
 }
 
 func migrateDeprecatedInt32(

@@ -484,6 +484,25 @@ func TestBuildParameterSchema_ExcludesConfiguredFlags(t *testing.T) {
 	assert.True(t, hasName, "name flag should be present in schema")
 }
 
+// Test that deprecated flags are excluded from the generated schema (they still
+// work at runtime, but must not be advertised to AI clients as a tool param).
+func TestBuildParameterSchema_ExcludesDeprecatedFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := newTestCmd()
+	cmd.Flags().String("output", "", "Deprecated path flag")
+	require.NoError(t, cmd.Flags().MarkDeprecated("output", "use a positional argument"))
+	cmd.Flags().String("name", "", "Name value")
+
+	properties := generateToolProperties(t, cmd)
+
+	_, hasOutput := properties["output"]
+	assert.False(t, hasOutput, "deprecated flag should be excluded from schema")
+
+	_, hasName := properties["name"]
+	assert.True(t, hasName, "non-deprecated flag should be present in schema")
+}
+
 // Test buildEnumProperty via enum-valued flags.
 func TestBuildParameterSchema_EnumValues(t *testing.T) {
 	t.Parallel()

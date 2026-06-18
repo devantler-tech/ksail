@@ -24,6 +24,7 @@ func TestClusterPhase_ValidValues(t *testing.T) {
 		"Pending",
 		"Provisioning",
 		"Ready",
+		"Stopped",
 		"Updating",
 		"Deleting",
 		"Failed",

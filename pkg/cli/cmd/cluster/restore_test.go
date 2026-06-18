@@ -168,8 +168,9 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 	}
 }
 
-// TestNewRestoreCmd_InputFlagIsRequired verifies that --input is marked required.
-func TestNewRestoreCmd_InputFlagIsRequired(t *testing.T) {
+// TestNewRestoreCmd_ArchivePathRequired verifies that omitting both the archive
+// positional argument and the deprecated --input flag errors.
+func TestNewRestoreCmd_ArchivePathRequired(t *testing.T) {
 	t.Parallel()
 
 	restoreCmd := cluster.NewRestoreCmd()
@@ -182,7 +183,20 @@ func TestNewRestoreCmd_InputFlagIsRequired(t *testing.T) {
 	err := restoreCmd.Execute()
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "input")
+	require.ErrorIs(t, err, cluster.ErrArchivePathRequired)
+}
+
+// TestNewRestoreCmd_InputFlagStillWorks verifies the deprecated --input alias is
+// still accepted (it now feeds the same path resolution as the positional arg).
+func TestNewRestoreCmd_InputFlagStillWorks(t *testing.T) {
+	t.Parallel()
+
+	restoreCmd := cluster.NewRestoreCmd()
+	require.NotNil(t, restoreCmd)
+
+	inputFlag := restoreCmd.Flags().Lookup("input")
+	require.NotNil(t, inputFlag, "deprecated --input flag should still be registered")
+	assert.NotEmpty(t, inputFlag.Deprecated, "--input should be marked deprecated")
 }
 
 // TestRestoreCmd_InvalidResourcePolicy verifies that an invalid
@@ -272,7 +286,7 @@ func TestRestoreCmd_Metadata(t *testing.T) {
 	restoreCmd := cluster.NewRestoreCmd()
 	require.NotNil(t, restoreCmd)
 
-	assert.Equal(t, "restore", restoreCmd.Use)
+	assert.Equal(t, "restore [<input>]", restoreCmd.Use)
 	assert.NotEmpty(t, restoreCmd.Short)
 	assert.NotEmpty(t, restoreCmd.Long)
 	assert.True(t, restoreCmd.SilenceUsage)

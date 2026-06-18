@@ -25,10 +25,12 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // recycleAutoscalerNodes drains and deletes the cluster-autoscaler-managed nodes so
 // the autoscaler re-provisions any still-needed capacity from the refreshed Talos
 // snapshot + worker config. It is the disruptive propagation path, reserved for
-// changes an already-booted node cannot adopt in place: a new Talos boot image
-// (snapshot/OS bump) or a reboot/wipe/recreate-class change. Config-only drift that
-// Talos applies with NO_REBOOT goes through applyInPlaceToAutoscalerNodes instead,
-// so it never drains — see autoscalerRecycleRequired for the gate.
+// changes that can only reach an already-booted node by replacing it with a fresh
+// server: a new Talos boot image (snapshot/OS bump) or a wipe/recreate-class change.
+// A reboot-required change (CNI/disk-quota) instead reboots the same servers in
+// place via rollingRebootAutoscalerNodes, and config-only drift that Talos applies
+// with NO_REBOOT goes through applyInPlaceToAutoscalerNodes — neither needs a fresh
+// server. See autoscalerRecycleRequired / autoscalerRebootRequired for the gate.
 //
 // Why this is needed: `cluster update` upgrades only KSail-owned nodes in place
 // (control planes + static workers, listed via the ksail.owned label). Autoscaler
@@ -43,15 +45,11 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // demand. Compute-only autoscaler nodes hold no persistent storage and no etcd
 // membership, so replace-by-recreation is the idiomatic, lossless path.
 func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName string) error {
-	servers, err := p.listAutoscalerServers(ctx, clusterName)
-	if err != nil {
+	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
+		ctx, clusterName, "  ⓘ No autoscaler nodes to recycle\n",
+	)
+	if err != nil || !ok {
 		return err
-	}
-
-	if len(servers) == 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  ⓘ No autoscaler nodes to recycle\n")
-
-		return nil
 	}
 
 	hzProvider, err := p.hetznerProvider()
@@ -59,19 +57,7 @@ func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName st
 		return err
 	}
 
-	clientset, err := p.createK8sClient(clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Wait for the restarted autoscaler to be ready so any scale-up the drain
-	// triggers is served from the new template, not the pre-restart pod.
-	rolloutErr := p.waitForAutoscalerRollout(ctx, clientset)
-	if rolloutErr != nil {
-		return rolloutErr
-	}
-
-	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, sortServersByName(servers))
+	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, ordered)
 }
 
 // listAutoscalerServers returns the running autoscaler-managed servers for the
@@ -100,6 +86,42 @@ func (p *Provisioner) listAutoscalerServers(
 	}
 
 	return servers, nil
+}
+
+// prepareAutoscalerNodeConvergence lists the cluster's autoscaler servers and, when
+// any exist, creates a Kubernetes client and waits for the refreshed cluster-
+// autoscaler rollout — so a scale-up a subsequent drain triggers is served by the
+// autoscaler pod already carrying the new template, not the pre-restart one. It
+// returns ok=false (after logging noneMsg) when there are no autoscaler nodes, so the
+// caller no-ops. The returned servers are sorted by name for deterministic,
+// one-at-a-time processing. Shared by the recycle and rolling-reboot paths.
+func (p *Provisioner) prepareAutoscalerNodeConvergence(
+	ctx context.Context,
+	clusterName string,
+	noneMsg string,
+) (kubernetes.Interface, []*hcloud.Server, bool, error) {
+	servers, err := p.listAutoscalerServers(ctx, clusterName)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	if len(servers) == 0 {
+		_, _ = fmt.Fprint(p.logWriter, noneMsg)
+
+		return nil, nil, false, nil
+	}
+
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	rolloutErr := p.waitForAutoscalerRollout(ctx, clientset)
+	if rolloutErr != nil {
+		return nil, nil, false, rolloutErr
+	}
+
+	return clientset, sortServersByName(servers), true, nil
 }
 
 // applyInPlaceToAutoscalerNodes pushes the refreshed worker configuration to the

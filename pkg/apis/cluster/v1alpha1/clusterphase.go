@@ -13,6 +13,13 @@ const (
 	ClusterPhaseProvisioning ClusterPhase = "Provisioning"
 	// ClusterPhaseReady indicates the cluster exists and is reconciled to the desired state.
 	ClusterPhaseReady ClusterPhase = "Ready"
+	// ClusterPhaseStopped indicates the cluster's infrastructure exists but is not running (e.g. a
+	// Docker-based cluster whose containers are stopped). It is a deliberate, recoverable state — the
+	// cluster can be started again without recreating it — distinct from Ready (running) and Failed
+	// (an error). Backends that cannot tell a cluster apart from running (cloud providers today) never
+	// report it. For backward compatibility the same state is also surfaced as a
+	// Ready=False/reason=Stopped status condition, so consumers predating this enum value keep working.
+	ClusterPhaseStopped ClusterPhase = "Stopped"
 	// ClusterPhaseUpdating indicates the operator is applying configuration changes to a
 	// running cluster.
 	ClusterPhaseUpdating ClusterPhase = "Updating"
@@ -36,6 +43,7 @@ func (p ClusterPhase) ValidValues() []string {
 		string(ClusterPhasePending),
 		string(ClusterPhaseProvisioning),
 		string(ClusterPhaseReady),
+		string(ClusterPhaseStopped),
 		string(ClusterPhaseUpdating),
 		string(ClusterPhaseDeleting),
 		string(ClusterPhaseFailed),

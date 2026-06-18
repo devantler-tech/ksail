@@ -61,7 +61,7 @@ func TestImageVerificationFieldSelector(t *testing.T) {
 
 	value, ok := ptr.(*v1alpha1.ImageVerification)
 	require.True(t, ok)
-	assert.Same(t, &cluster.Spec.Cluster.Talos.ImageVerification, value)
+	assert.Same(t, &cluster.Spec.Cluster.ImageVerification, value)
 }
 
 // ---------------------------------------------------------------------------

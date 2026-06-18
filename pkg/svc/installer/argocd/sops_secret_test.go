@@ -135,12 +135,11 @@ func TestBuildSopsAgeSecret(t *testing.T) {
 func TestEnsureSopsAgeSecret_Disabled(t *testing.T) {
 	t.Parallel()
 
-	disabled := false
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled: &disabled,
+					Enabled: v1alpha1.SOPSEnabledDisabled,
 				},
 			},
 		},
@@ -176,12 +175,11 @@ func TestEnsureSopsAgeSecret_EnabledNoKey(t *testing.T) {
 	// Prevent local key file fallback
 	t.Setenv("SOPS_AGE_KEY_FILE", "/tmp/nonexistent-ksail-argocd-test-enabled.txt")
 
-	enabled := true
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled:      &enabled,
+					Enabled:      v1alpha1.SOPSEnabledEnabled,
 					AgeKeyEnvVar: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_88888",
 				},
 			},

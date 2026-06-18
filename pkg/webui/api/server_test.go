@@ -9,7 +9,8 @@ import (
 	"testing/fstest"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/operator"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +61,7 @@ func doRequest(handler http.Handler, method, target, body string) *httptest.Resp
 func TestConfigReportsReadOnly(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), ReadOnly: true}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), ReadOnly: true}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -79,7 +80,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 func TestListClusters(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t, sampleCluster()))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t, sampleCluster()))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -152,7 +153,7 @@ func TestListClustersIncludesDefaultValuedFields(t *testing.T) {
 func TestListClustersEmptyReturnsArray(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -164,7 +165,7 @@ func TestListClustersEmptyReturnsArray(t *testing.T) {
 func TestGetClusterNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters/default/missing", "")
 
@@ -174,7 +175,7 @@ func TestGetClusterNotFound(t *testing.T) {
 func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 	// Body exceeds the 1 MiB cap, so the decode must surface 413, not a generic 400.
 	body := `{"metadata":{"name":"big","namespace":"default","labels":{"big":"` +
 		strings.Repeat("a", 1<<20) + `"}}}`
@@ -187,7 +188,7 @@ func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
 func TestCreateClusterWhenWritable(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 	body := `{"metadata":{"name":"new","namespace":"default"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -203,7 +204,7 @@ const readOnlyBody = `{"readOnly":true,"reason":"UI is configured read-only (Git
 func TestReadOnlyRejectsCreate(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), ReadOnly: true}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), ReadOnly: true}
 	body := `{"metadata":{"name":"new","namespace":"default"}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -217,7 +218,7 @@ func TestReadOnlyRejectsDelete(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		Service:  operator.NewCRClusterService(newClient(t, sampleCluster())),
 		ReadOnly: true,
 	}
 
@@ -230,7 +231,7 @@ func TestReadOnlyAllowsReads(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		Service:  operator.NewCRClusterService(newClient(t, sampleCluster())),
 		ReadOnly: true,
 	}
 
@@ -243,7 +244,7 @@ func TestDeleteClusterWhenWritable(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t, sampleCluster())
-	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
 
 	recorder := doRequest(server.Handler(), http.MethodDelete, "/api/v1/clusters/default/c1", "")
 
@@ -260,7 +261,7 @@ func TestDeleteClusterWhenWritable(t *testing.T) {
 func TestHealthz(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/healthz", "")
 
@@ -271,7 +272,7 @@ func TestUpdateClusterAppliesSpec(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t, sampleCluster())
-	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
 	body := `{"spec":{"cluster":{"distribution":"K3s"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/clusters/default/c1", body)
@@ -290,7 +291,7 @@ func TestUpdateClusterAppliesSpec(t *testing.T) {
 func TestUpdateClusterNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 	body := `{"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(
@@ -306,7 +307,7 @@ func TestCreateDefaultsNamespace(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t)
-	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
 	body := `{"metadata":{"name":"nons"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -324,7 +325,7 @@ func TestCreateSanitizesClientInput(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t)
-	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
+	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
 	// Client tries to set operator-managed fields; they must be stripped.
 	body := `{"metadata":{"name":"san","namespace":"default",` +
 		`"finalizers":["ksail.io/finalizer"],` +
@@ -354,7 +355,7 @@ func TestCreateSanitizesClientInput(t *testing.T) {
 func TestCreateConflictReturns409(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t, sampleCluster()))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t, sampleCluster()))}
 	body := `{"metadata":{"name":"c1","namespace":"default"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -364,7 +365,7 @@ func TestCreateConflictReturns409(t *testing.T) {
 func TestConfigDefaultsWritable(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -426,7 +427,7 @@ func TestConfigReportsClusterUpdateForOperatorBackend(t *testing.T) {
 
 	// The operator's CR backend implements ClusterUpdater (it patches the Cluster CR), so clusterUpdate
 	// is true.
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -560,7 +561,10 @@ func TestConfigReportsMode(t *testing.T) {
 
 	// The serving surface (operator vs. local `ksail ui`) is reported so the SPA can label the UI
 	// accurately; it is omitted when unset.
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), Mode: api.ModeOperator}
+	server := &api.Server{
+		Service: operator.NewCRClusterService(newClient(t)),
+		Mode:    api.ModeOperator,
+	}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -576,7 +580,7 @@ func TestStaticFSServesAssetsAndSPAFallback(t *testing.T) {
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}
 	server := &api.Server{
-		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		Service:  operator.NewCRClusterService(newClient(t, sampleCluster())),
 		StaticFS: staticFS,
 	}
 
@@ -607,7 +611,7 @@ func TestConfigIncludesDistributions(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service:       api.NewCRClusterService(newClient(t)),
+		Service:       operator.NewCRClusterService(newClient(t)),
 		Distributions: []string{"Vanilla", "K3s", "VCluster"},
 	}
 
@@ -621,7 +625,7 @@ func TestConfigOmitsProvidersWhenStatusUnset(t *testing.T) {
 	t.Parallel()
 
 	// The operator leaves ProviderStatus nil; the SPA then offers every provider (no gating).
-	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -633,7 +637,7 @@ func TestConfigIncludesProviderStatusWhenSet(t *testing.T) {
 	t.Parallel()
 
 	server := &api.Server{
-		Service: api.NewCRClusterService(newClient(t)),
+		Service: operator.NewCRClusterService(newClient(t)),
 		ProviderStatus: func(context.Context) []api.ProviderInfo {
 			return []api.ProviderInfo{
 				{Name: "Docker", Available: true},
@@ -660,7 +664,10 @@ const sessionSecret = "0123456789abcdef0123456789abcdef"
 func TestAuthGuardRejectsUnauthenticated(t *testing.T) {
 	t.Parallel()
 
-	server := api.NewAuthTestServer(newClient(t, sampleCluster()), []byte(sessionSecret))
+	server := api.NewAuthTestServer(
+		operator.NewCRClusterService(newClient(t, sampleCluster())),
+		[]byte(sessionSecret),
+	)
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -671,7 +678,10 @@ func TestAuthGuardRejectsUnauthenticated(t *testing.T) {
 func TestAuthGuardAllowsValidSession(t *testing.T) {
 	t.Parallel()
 
-	server := api.NewAuthTestServer(newClient(t, sampleCluster()), []byte(sessionSecret))
+	server := api.NewAuthTestServer(
+		operator.NewCRClusterService(newClient(t, sampleCluster())),
+		[]byte(sessionSecret),
+	)
 
 	request := httptest.NewRequestWithContext(
 		context.Background(),
@@ -690,7 +700,10 @@ func TestAuthGuardAllowsValidSession(t *testing.T) {
 func TestReadOnlyAllowsAuthLogout(t *testing.T) {
 	t.Parallel()
 
-	server := api.NewAuthTestServer(newClient(t), []byte(sessionSecret))
+	server := api.NewAuthTestServer(
+		operator.NewCRClusterService(newClient(t)),
+		[]byte(sessionSecret),
+	)
 	server.ReadOnly = true
 
 	request := httptest.NewRequestWithContext(
@@ -711,7 +724,10 @@ func TestReadOnlyAllowsAuthLogout(t *testing.T) {
 func TestAuthGuardLeavesConfigOpen(t *testing.T) {
 	t.Parallel()
 
-	server := api.NewAuthTestServer(newClient(t), []byte(sessionSecret))
+	server := api.NewAuthTestServer(
+		operator.NewCRClusterService(newClient(t)),
+		[]byte(sessionSecret),
+	)
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 

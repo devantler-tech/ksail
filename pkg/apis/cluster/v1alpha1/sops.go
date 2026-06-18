@@ -10,11 +10,12 @@ type SOPS struct {
 	// variable containing the Age private key. Kept for backward compatibility.
 	// When Env.Var is set, it takes priority over AgeKeyEnvVar.
 	AgeKeyEnvVar string `default:"SOPS_AGE_KEY" json:"ageKeyEnvVar,omitzero"`
-	// Enabled controls whether the SOPS Age secret is created.
-	// nil (default) = auto-detect (create if key is found via env var or key file).
-	// true = require key (error if not found).
-	// false = disable entirely (skip secret creation).
-	Enabled *bool `json:"enabled,omitzero"`
+	// Enabled controls whether the SOPS Age secret is created (tri-state toggle):
+	//   - Default ("" / unset) = auto-detect (create if a key is found via env var or key file).
+	//   - Enabled = require key (error if not found).
+	//   - Disabled = disable entirely (skip secret creation).
+	// A YAML boolean is still accepted on load (true -> Enabled, false -> Disabled).
+	Enabled SOPSEnabled `json:"enabled,omitzero" jsonschema:"description=Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
 	// Env configures the environment variable source for the Age private key.
 	Env SOPSEnv `json:"env,omitzero"`
 	// Extract configures extraction of Age private keys from a key file.

@@ -243,7 +243,7 @@ func TestApplyDetectedComponents(t *testing.T) {
 		PolicyEngine:  v1alpha1.PolicyEngineKyverno,
 		GitOpsEngine:  v1alpha1.GitOpsEngineFlux,
 	}
-	detected.Autoscaler.Node.Enabled = true
+	detected.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	clusterupdate.ApplyDetectedComponents(dst, detected)
 

@@ -118,6 +118,16 @@ type ClusterSpec struct {
 	LoadBalancer LoadBalancer `json:"loadBalancer,omitzero"`
 	// CertManager controls whether cert-manager is installed (Enabled or Disabled).
 	CertManager CertManager `json:"certManager,omitzero"`
+	// ImageVerification controls container-image signature verification scaffolding
+	// for every supported distribution (not just Talos):
+	//   - Talos: scaffolds a native ImageVerificationConfig document (Talos 1.13+).
+	//   - Vanilla (Kind): injects a containerd image-verifier plugin patch.
+	//   - K3s (K3d): scaffolds a containerd config template with the image-verifier
+	//     plugin and mounts it into the node containers.
+	// Enabled requires verifier binaries (and typically policy) to be present in the
+	// node image bin_dir. Disabled (default) skips it.
+	// Supersedes spec.cluster.talos.imageVerification (deprecated; aliased on load).
+	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema:"description=Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it."` //nolint:lll
 	// PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper.
 	PolicyEngine PolicyEngine `json:"policyEngine,omitzero"`
 	// LocalRegistry configures the host-local OCI registry (or an external

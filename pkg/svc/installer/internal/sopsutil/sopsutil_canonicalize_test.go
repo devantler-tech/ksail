@@ -117,7 +117,7 @@ func TestResolveEnabledAgeKey_AutoDetectWithCanonicalError(t *testing.T) {
 
 	sops := v1alpha1.SOPS{
 		AgeKeyEnvVar: "TEST_SOPSUTIL_AUTODETECT_ERR",
-		Enabled:      nil, // auto-detect
+		Enabled:      v1alpha1.SOPSEnabledDefault, // auto-detect
 	}
 
 	key, resolveErr := sopsutil.ResolveEnabledAgeKey(sops)

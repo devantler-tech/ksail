@@ -1068,7 +1068,7 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
 
 	require.NoError(t, err)
-	assert.True(t, cfg.Enabled)
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, cfg.Enabled)
 	assert.Equal(t, v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice}, cfg.Expander)
 	assert.Equal(t, int32(10), cfg.MaxNodesTotal)
 	assert.Equal(t, "10m", cfg.ScaleDownUnneededTime)
@@ -1122,7 +1122,7 @@ func TestDetectNodeAutoscaler_NotInstalled(t *testing.T) {
 	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
 
 	require.NoError(t, err)
-	assert.False(t, cfg.Enabled)
+	assert.False(t, cfg.Enabled.IsEnabled())
 	assert.Empty(t, cfg.Pools)
 }
 
@@ -1145,7 +1145,7 @@ func TestDetectNodeAutoscaler_ValuesUnreadable(t *testing.T) {
 	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
 
 	require.NoError(t, err)
-	assert.True(t, cfg.Enabled)
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, cfg.Enabled)
 	assert.Empty(t, cfg.Pools)
 }
 

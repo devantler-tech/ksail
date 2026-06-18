@@ -14,13 +14,17 @@ import (
 // `cluster list --output json`. The shape is a stable contract consumed by the
 // VS Code extension: a JSON array of these objects.
 //
+// Status is the cluster's run-state ("Running"/"Stopped"/"Unknown"), matching the
+// human STATUS column — it lets consumers (the VS Code extension) read cluster
+// status from this contract instead of sniffing `docker ps`.
+//
 // TTL is a pointer so it serialises to null when no TTL is set (and to the
-// human-readable remaining duration, or "EXPIRED", otherwise). No "status" field
-// is included yet — that is a separate (breaking) Phase 5 addition.
+// human-readable remaining duration, or "EXPIRED", otherwise).
 type ListItemJSON struct {
 	Name         string  `json:"name"`
 	Provider     string  `json:"provider"`
 	Distribution string  `json:"distribution"`
+	Status       string  `json:"status"`
 	TTL          *string `json:"ttl"`
 }
 
@@ -39,6 +43,7 @@ func buildListJSON(providers []v1alpha1.Provider, results []listResult) []ListIt
 				Name:         result.ClusterName,
 				Provider:     strings.ToLower(string(result.Provider)),
 				Distribution: string(result.Distribution),
+				Status:       statusLabel(result.RunState),
 				TTL:          listTTLValue(result),
 			})
 		}

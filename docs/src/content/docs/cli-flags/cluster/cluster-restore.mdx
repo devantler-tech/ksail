@@ -12,17 +12,16 @@ Resources are restored in the correct order (CRDs first, then namespaces, storag
 Existing resources can be skipped or updated based on the policy.
 
 Example:
-  ksail cluster restore --input ./my-backup.tar.gz
-  ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
-  ksail cluster restore --input ./backup.tar.gz --dry-run
+  ksail cluster restore ./my-backup.tar.gz
+  ksail cluster restore ./backup.tar.gz --existing-resource-policy update
+  ksail cluster restore ./backup.tar.gz --dry-run
 
 Usage:
-  ksail cluster restore [flags]
+  ksail cluster restore [<input>] [flags]
 
 Flags:
       --dry-run                           Print what would be restored without applying
       --existing-resource-policy string   Policy for existing resources: none (skip) or update (patch) (default "none")
-  -i, --input string                      Input backup archive path (required)
       --name string                       Name of the cluster to restore into (resolves the kubeconfig like the other cluster commands; defaults to the current kubeconfig context when unset)
 
 Global Flags:

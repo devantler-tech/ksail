@@ -1,6 +1,9 @@
 package v1alpha1
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 )
@@ -35,8 +38,9 @@ func BoolToToggleValue(enabled bool) string {
 // of truth for which fields the bool-coercion decode hook applies to: both the
 // bi-state {Enabled,Disabled} family (CertManager, ImageVerification,
 // IngressFirewall, PodAutoscalerHorizontal, PodAutoscalerVertical,
-// NodeAutoscaling) and the tri-state {Default,Enabled,Disabled} family (CSI, CDI, MetricsServer,
-// LoadBalancer) accept booleans, since "Default" remains expressible as the
+// NodeAutoscaling, NodeAutoscalerEnabled) and the tri-state
+// {Default,Enabled,Disabled} family (CSI, CDI, MetricsServer, LoadBalancer,
+// SOPSEnabled) accept booleans, since "Default" remains expressible as the
 // string value. Adding a new toggle enum requires adding it here; the drift
 // guard in toggle_test.go fails otherwise.
 func ToggleEnumTypes() []reflect.Type {
@@ -46,15 +50,66 @@ func ToggleEnumTypes() []reflect.Type {
 		reflect.TypeFor[IngressFirewall](),
 		reflect.TypeFor[PodAutoscalerHorizontal](),
 		reflect.TypeFor[PodAutoscalerVertical](),
-		// NodeAutoscaling is a deprecated alias for autoscaler.node.enabled but is
-		// still a bi-state {Enabled,Disabled} field, so accept `nodeAutoscaling: true`
-		// as a bool alias consistently with the rest of the toggle family.
+		// NodeAutoscaling is the deprecated alias field spec.cluster.nodeAutoscaling
+		// (bi-state); NodeAutoscalerEnabled is the canonical
+		// spec.cluster.autoscaler.node.enabled (bool→enum in phase 5). Both accept
+		// `: true` as a bool alias consistently with the rest of the toggle family.
 		reflect.TypeFor[NodeAutoscaling](),
+		reflect.TypeFor[NodeAutoscalerEnabled](),
 		reflect.TypeFor[CSI](),
 		reflect.TypeFor[CDI](),
 		reflect.TypeFor[MetricsServer](),
 		reflect.TypeFor[LoadBalancer](),
+		reflect.TypeFor[SOPSEnabled](),
 	}
+}
+
+// unmarshalToggleEnumJSON decodes a toggle enum from JSON, accepting the legacy
+// boolean spelling (true -> Enabled, false -> Disabled) that older ksail versions
+// persisted to cluster state (~/.ksail/clusters/<name>/spec.json) and that REST
+// API / operator clients may still send for fields that were a bool before the
+// bool->enum migration. It is the encoding/json counterpart of the config-load
+// bool-alias decode hook (BoolToToggleValue): the YAML path coerces via
+// mapstructure, but the enum's UnmarshalJSON is what runs on the json.Unmarshal
+// read paths (pkg/svc/state, pkg/webui/api), so state files and payloads written
+// before the migration stay readable after an upgrade. A JSON string is validated
+// against valid (case-insensitively, storing the canonical spelling) exactly like
+// the pflag Set path (setToggleEnum -> setEnum), so an unknown value is rejected
+// rather than silently stored — matching the pre-migration *bool/bool fields,
+// which json.Unmarshal already rejected for a non-bool token.
+func unmarshalToggleEnumJSON[T ~string](
+	target *T,
+	data []byte,
+	valid []T,
+	errSentinel error,
+) error {
+	trimmed := bytes.TrimSpace(data)
+
+	// JSON null leaves the value unchanged (matches default encoding/json behavior).
+	if string(trimmed) == "null" {
+		return nil
+	}
+
+	// Legacy boolean spelling: coerce true/false through the shared normaliser.
+	// BoolToToggleValue yields a canonical Enabled/Disabled, valid for every toggle.
+	var boolValue bool
+
+	err := json.Unmarshal(trimmed, &boolValue)
+	if err == nil {
+		*target = T(BoolToToggleValue(boolValue))
+
+		return nil
+	}
+
+	// Current spelling: a JSON string validated against the enum's valid set.
+	var strValue string
+
+	err = json.Unmarshal(trimmed, &strValue)
+	if err != nil {
+		return fmt.Errorf("unmarshal toggle enum: %w", err)
+	}
+
+	return setEnum(target, strValue, valid, errSentinel)
 }
 
 // IsToggleEnumType reports whether t is one of the toggle enum types that

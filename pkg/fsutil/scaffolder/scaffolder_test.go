@@ -789,7 +789,7 @@ func captureKindConfigForImageVerification(
 	buffer := &bytes.Buffer{}
 	instance, mocks := newScaffolderWithMocks(t, buffer)
 	instance.KSailConfig.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
-	instance.KSailConfig.Spec.Cluster.Talos.ImageVerification = imageVerification
+	instance.KSailConfig.Spec.Cluster.ImageVerification = imageVerification
 
 	var captured *v1alpha4.Cluster
 
@@ -1464,10 +1464,8 @@ func TestCreateK3dConfig_ImageVerificationEnabled(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3s,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationEnabled,
-				},
+				Distribution:      v1alpha1.DistributionK3s,
+				ImageVerification: v1alpha1.ImageVerificationEnabled,
 			},
 		},
 	}
@@ -1498,10 +1496,8 @@ func TestCreateK3dConfig_ImageVerificationDisabled(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3s,
-				Talos: v1alpha1.OptionsTalos{
-					ImageVerification: v1alpha1.ImageVerificationDisabled,
-				},
+				Distribution:      v1alpha1.DistributionK3s,
+				ImageVerification: v1alpha1.ImageVerificationDisabled,
 			},
 		},
 	}
@@ -1524,7 +1520,7 @@ func TestScaffoldK3d_ImageVerificationEnabled_CreatesContainerdConfig(t *testing
 
 	tempDir := t.TempDir()
 	cluster := createK3dCluster("k3d-imgver-test")
-	cluster.Spec.Cluster.Talos.ImageVerification = v1alpha1.ImageVerificationEnabled
+	cluster.Spec.Cluster.ImageVerification = v1alpha1.ImageVerificationEnabled
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
@@ -1551,7 +1547,7 @@ func TestScaffoldK3d_ImageVerificationDisabled_SkipsContainerdConfig(t *testing.
 
 	tempDir := t.TempDir()
 	cluster := createK3dCluster("k3d-imgver-disabled-test")
-	cluster.Spec.Cluster.Talos.ImageVerification = v1alpha1.ImageVerificationDisabled
+	cluster.Spec.Cluster.ImageVerification = v1alpha1.ImageVerificationDisabled
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 

@@ -15,19 +15,18 @@ Note: This backs up resource manifests (YAML) only. Persistent volume
 contents are not included in the current implementation.
 
 Example:
-  ksail cluster backup --output ./my-backup.tar.gz
-  ksail cluster backup -o ./backup.tar.gz --namespaces default,kube-system
-  ksail cluster backup -o ./backup.tar.gz --exclude-types events,pods
+  ksail cluster backup ./my-backup.tar.gz
+  ksail cluster backup ./backup.tar.gz --namespaces default,kube-system
+  ksail cluster backup ./backup.tar.gz --exclude-types events,pods
 
 Usage:
-  ksail cluster backup [flags]
+  ksail cluster backup [<output>] [flags]
 
 Flags:
       --compression int         Compression level (-1..9, -1 = gzip default) (default -1)
       --exclude-types strings   Resource types to exclude from backup (default [events])
       --name string             Name of the cluster to back up (resolves the kubeconfig like the other cluster commands; defaults to the current kubeconfig context when unset)
-  -n, --namespaces strings      Namespaces to backup (default: all)
-  -o, --output string           Output path for backup archive (required)
+      --namespaces strings      Namespaces to backup (default: all)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

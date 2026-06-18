@@ -60,7 +60,7 @@ spec:
 	require.NotNil(t, cluster)
 
 	node := cluster.Spec.Cluster.Autoscaler.Node
-	assert.True(t, node.Enabled)
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, node.Enabled)
 	assert.Equal(t, int32(20), node.MaxNodesTotal)
 	assert.Equal(
 		t,
@@ -113,8 +113,8 @@ spec:
 	require.NoError(t, err)
 	require.NotNil(t, cluster)
 
-	assert.True(
-		t, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
+	assert.Equal(
+		t, v1alpha1.NodeAutoscalerEnabledEnabled, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
 		"migration should copy NodeAutoscaling=Enabled to Autoscaler.Node.Enabled",
 	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
@@ -166,10 +166,11 @@ spec:
 	require.NoError(t, err, "loading a config with only autoscaler.node.enabled must not error")
 	require.NotNil(t, cluster)
 
-	assert.True(
+	assert.Equal(
 		t,
+		v1alpha1.NodeAutoscalerEnabledEnabled,
 		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
-		"autoscaler.node.enabled should be Enabled as specified in the config file",
+		"autoscaler.node.enabled=true (YAML bool) should coerce to the Enabled toggle value",
 	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
 		"deprecated nodeAutoscaling field should remain empty when not set in config")

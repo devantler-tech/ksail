@@ -588,7 +588,7 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 		return cfg, nil
 	}
 
-	cfg.Enabled = true
+	cfg.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 
 	values, err := d.helmClient.GetReleaseValues(
 		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,

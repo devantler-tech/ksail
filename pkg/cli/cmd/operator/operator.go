@@ -9,7 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	operatorsvc "github.com/devantler-tech/ksail/v7/pkg/operator"
-	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime"
 )

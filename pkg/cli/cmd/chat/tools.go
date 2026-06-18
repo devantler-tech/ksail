@@ -112,12 +112,13 @@ func validatePathAccess(
 }
 
 // WrapToolsWithForceInjection wraps tools to inject confirmation-skip flags
-// (flags annotated with ai.toolgen.confirm-flag, e.g. cluster update/delete
-// --force) after SDK-native permission approval, so approved write operations
-// don't block on KSail's own interactive prompts. Permission handling is
-// delegated entirely to the SDK's OnPermissionRequest handler — this wrapper
-// only handles confirm-flag injection, resolved per-subcommand for
-// consolidated tools.
+// (flags annotated with ai.toolgen.confirm-flag, e.g. cluster update --yes and
+// cluster delete --force) after SDK-native permission approval, so approved
+// write operations don't block on KSail's own interactive prompts. The
+// destructive cluster update --force-drain is deliberately NOT annotated, so it
+// is never auto-injected. Permission handling is delegated entirely to the SDK's
+// OnPermissionRequest handler — this wrapper only handles confirm-flag
+// injection, resolved per-subcommand for consolidated tools.
 func WrapToolsWithForceInjection(
 	tools []copilot.Tool,
 	toolMetadata map[string]toolgen.ToolDefinition,

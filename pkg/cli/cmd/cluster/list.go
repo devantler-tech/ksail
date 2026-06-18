@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,14 +22,18 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  PROVIDER   DISTRIBUTION   CLUSTER
-  docker     Vanilla        dev-cluster
-  docker     K3s            test-cluster
-  hetzner    Talos          prod-cluster
+  PROVIDER   DISTRIBUTION   CLUSTER       STATUS
+  docker     Vanilla        dev-cluster   Running
+  docker     K3s            test-cluster  Stopped
+  hetzner    Talos          prod-cluster  Unknown
 
-When any cluster has a TTL set, a TTL column is included:
-  PROVIDER   DISTRIBUTION   CLUSTER       TTL
-  docker     K3s            dev-cluster   2h 30m
+The STATUS column reports the cluster's run-state: "Running" when its nodes are
+up, "Stopped" when they exist but are not running (e.g. a stopped Docker
+cluster), and "Unknown" for providers that cannot report it (cloud providers).
+
+When any cluster has a TTL set, a TTL column is appended:
+  PROVIDER   DISTRIBUTION   CLUSTER       STATUS    TTL
+  docker     K3s            dev-cluster   Running   2h 30m
 
 The PROVIDER and CLUSTER values from the output can be used directly
 with other cluster commands:
@@ -37,8 +42,9 @@ with other cluster commands:
 
 Use --output json for machine-readable output. The JSON is an array of objects:
   [
-    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "ttl": "2h 30m"}
+    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "status": "Running", "ttl": "2h 30m"}
   ]
+The "status" field is "Running", "Stopped", or "Unknown" (see the STATUS column).
 The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
 
 Examples:
@@ -86,7 +92,7 @@ func NewListCmd() *cobra.Command {
 
 	cmd.Flags().String("output", outputFormatText,
 		"Output format: text or json. Use json for machine-readable structured output "+
-			"(array of {name, provider, distribution, ttl}).")
+			"(array of {name, provider, distribution, status, ttl}).")
 
 	return cmd
 }
@@ -97,6 +103,15 @@ type ListDeps struct {
 	// If nil, real factories with empty configs are used. Primarily for testing: it is routed into
 	// the shared clusterdiscovery.Discoverer as the Docker provider's factory.
 	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
+
+	// DockerStatusFunc optionally reports a Docker cluster's run-state, routed into the discoverer's
+	// DockerStatus seam. If nil, discovery probes the real Docker daemon. Primarily for testing, so
+	// the STATUS column is deterministic without a live Docker daemon.
+	DockerStatusFunc func(
+		ctx context.Context,
+		distribution v1alpha1.Distribution,
+		name string,
+	) clusterdiscovery.RunState
 }
 
 // HandleListRunE handles the list command. It delegates cluster enumeration to the shared
@@ -109,16 +124,7 @@ func HandleListRunE(
 ) error {
 	providers := resolveProviders(providerFilter)
 
-	discoverer := &clusterdiscovery.Discoverer{}
-	if deps.DistributionFactoryCreator != nil {
-		discoverer.DockerFactory = func(
-			distribution v1alpha1.Distribution,
-		) (clusterprovisioner.Factory, error) {
-			return deps.DistributionFactoryCreator(distribution), nil
-		}
-	}
-
-	clusters, failures := discoverer.Discover(cmd.Context(), providers)
+	clusters, failures := newDiscoverer(deps).Discover(cmd.Context(), providers)
 
 	for _, failure := range failures {
 		_, _ = fmt.Fprintf(
@@ -152,6 +158,7 @@ func HandleListRunE(
 			Distribution: cluster.Distribution,
 			ClusterName:  cluster.Name,
 			TTL:          ttl,
+			RunState:     cluster.RunState,
 		})
 	}
 
@@ -164,6 +171,26 @@ func HandleListRunE(
 	return nil
 }
 
+// newDiscoverer builds the shared clusterdiscovery.Discoverer for the list command, routing the
+// optional test seams (Docker factory + run-state probe) from deps. With no seams it queries real
+// providers and probes the real Docker daemon for run-state.
+func newDiscoverer(deps ListDeps) *clusterdiscovery.Discoverer {
+	discoverer := &clusterdiscovery.Discoverer{}
+	if deps.DistributionFactoryCreator != nil {
+		discoverer.DockerFactory = func(
+			distribution v1alpha1.Distribution,
+		) (clusterprovisioner.Factory, error) {
+			return deps.DistributionFactoryCreator(distribution), nil
+		}
+	}
+
+	if deps.DockerStatusFunc != nil {
+		discoverer.DockerStatus = deps.DockerStatusFunc
+	}
+
+	return discoverer
+}
+
 // resolveProviders returns the list of providers to query based on the filter.
 func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	if filter == "" {
@@ -173,16 +200,8 @@ func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	return []v1alpha1.Provider{filter}
 }
 
-// tableRow holds pre-formatted strings for a single row in the cluster list table.
-type tableRow struct {
-	provider     string
-	distribution string
-	cluster      string
-	ttl          string
-}
-
 // displayListResults outputs the cluster list as an aligned table.
-// Columns: PROVIDER, DISTRIBUTION, CLUSTER, and optionally TTL (when any cluster has one).
+// Columns: PROVIDER, DISTRIBUTION, CLUSTER, STATUS, and optionally TTL (when any cluster has one).
 // If no clusters exist, displays "No clusters found.".
 func displayListResults(
 	writer io.Writer,
@@ -195,16 +214,15 @@ func displayListResults(
 		return
 	}
 
-	rows, hasTTL := buildTableRows(providers, results)
-	printTable(writer, rows, hasTTL)
+	printTable(writer, tableHeaders(results), buildTableRows(providers, results))
 }
 
-// buildTableRows converts listResults into ordered tableRows following provider order.
-// Returns the rows and whether any row has a TTL value.
-func buildTableRows(providers []v1alpha1.Provider, results []listResult) ([]tableRow, bool) {
-	hasTTL := false
+// buildTableRows converts listResults into ordered table rows following provider order. Each row is
+// the ordered column values matching the header set built by tableHeaders for the same results.
+func buildTableRows(providers []v1alpha1.Provider, results []listResult) [][]string {
+	hasTTL := anyTTL(results)
 
-	var rows []tableRow
+	var rows [][]string
 
 	for _, prov := range providers {
 		for _, result := range results {
@@ -212,21 +230,43 @@ func buildTableRows(providers []v1alpha1.Provider, results []listResult) ([]tabl
 				continue
 			}
 
-			ttlStr := formatTTLValue(result.TTL)
-			if ttlStr != "" {
-				hasTTL = true
+			row := []string{
+				strings.ToLower(string(result.Provider)),
+				string(result.Distribution),
+				result.ClusterName,
+				statusLabel(result.RunState),
+			}
+			if hasTTL {
+				row = append(row, formatTTLValue(result.TTL))
 			}
 
-			rows = append(rows, tableRow{
-				provider:     strings.ToLower(string(result.Provider)),
-				distribution: string(result.Distribution),
-				cluster:      result.ClusterName,
-				ttl:          ttlStr,
-			})
+			rows = append(rows, row)
 		}
 	}
 
-	return rows, hasTTL
+	return rows
+}
+
+// tableHeaders returns the column headers for the results: the fixed PROVIDER/DISTRIBUTION/CLUSTER/
+// STATUS columns plus a trailing TTL column only when some cluster has a TTL (matching buildTableRows).
+func tableHeaders(results []listResult) []string {
+	headers := []string{"PROVIDER", "DISTRIBUTION", "CLUSTER", "STATUS"}
+	if anyTTL(results) {
+		headers = append(headers, "TTL")
+	}
+
+	return headers
+}
+
+// anyTTL reports whether any result has a non-empty TTL display value, gating the TTL column.
+func anyTTL(results []listResult) bool {
+	for _, result := range results {
+		if formatTTLValue(result.TTL) != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // formatTTLValue returns the human-readable TTL string for display, or "" if no TTL is set.
@@ -243,69 +283,49 @@ func formatTTLValue(ttl *state.TTLInfo) string {
 	return formatRemainingDuration(remaining)
 }
 
-// printTable writes an aligned table of cluster rows to the writer.
-func printTable(writer io.Writer, rows []tableRow, hasTTL bool) {
-	provW := len("PROVIDER")
-	distW := len("DISTRIBUTION")
-	clusterW := len("CLUSTER")
+// printTable writes an aligned table with the given header and data rows. Column widths size to the
+// widest cell (header or value); the final column is not padded so trailing whitespace is avoided.
+func printTable(writer io.Writer, headers []string, rows [][]string) {
+	widths := columnWidths(headers, rows)
+
+	printTableLine(writer, headers, widths)
 
 	for _, row := range rows {
-		if len(row.provider) > provW {
-			provW = len(row.provider)
-		}
-
-		if len(row.distribution) > distW {
-			distW = len(row.distribution)
-		}
-
-		if len(row.cluster) > clusterW {
-			clusterW = len(row.cluster)
-		}
-	}
-
-	if hasTTL {
-		_, _ = fmt.Fprintf(
-			writer, "%-*s%-*s%-*s%s\n",
-			provW+tableColumnGap, "PROVIDER",
-			distW+tableColumnGap, "DISTRIBUTION",
-			clusterW+tableColumnGap, "CLUSTER",
-			"TTL",
-		)
-	} else {
-		_, _ = fmt.Fprintf(
-			writer, "%-*s%-*s%s\n",
-			provW+tableColumnGap, "PROVIDER",
-			distW+tableColumnGap, "DISTRIBUTION",
-			"CLUSTER",
-		)
-	}
-
-	for _, row := range rows {
-		printTableRow(writer, row, provW, distW, clusterW, hasTTL)
+		printTableLine(writer, row, widths)
 	}
 }
 
-// printTableRow writes a single data row. When the table has a TTL column,
-// the cluster field is padded for alignment even on rows without a TTL value.
-func printTableRow(writer io.Writer, row tableRow, provW, distW, clusterW int, hasTTLColumn bool) {
-	if hasTTLColumn {
-		_, _ = fmt.Fprintf(
-			writer, "%-*s%-*s%-*s%s\n",
-			provW+tableColumnGap, row.provider,
-			distW+tableColumnGap, row.distribution,
-			clusterW+tableColumnGap, row.cluster,
-			row.ttl,
-		)
-
-		return
+// columnWidths computes each column's display width as the widest of its header and any cell.
+func columnWidths(headers []string, rows [][]string) []int {
+	widths := make([]int, len(headers))
+	for col, header := range headers {
+		widths[col] = len(header)
 	}
 
-	_, _ = fmt.Fprintf(
-		writer, "%-*s%-*s%s\n",
-		provW+tableColumnGap, row.provider,
-		distW+tableColumnGap, row.distribution,
-		row.cluster,
-	)
+	for _, row := range rows {
+		for col, cell := range row {
+			if col < len(widths) && len(cell) > widths[col] {
+				widths[col] = len(cell)
+			}
+		}
+	}
+
+	return widths
+}
+
+// printTableLine writes one row (header or data), left-padding every column except the last to its
+// width plus the inter-column gap so columns align without trailing whitespace.
+func printTableLine(writer io.Writer, cells []string, widths []int) {
+	last := len(cells) - 1
+	for col, cell := range cells {
+		if col == last {
+			_, _ = fmt.Fprintln(writer, cell)
+
+			continue
+		}
+
+		_, _ = fmt.Fprintf(writer, "%-*s", widths[col]+tableColumnGap, cell)
+	}
 }
 
 // minutesPerHour is the number of minutes in one hour.
@@ -350,6 +370,27 @@ type listResult struct {
 	Distribution v1alpha1.Distribution
 	ClusterName  string
 	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
+	// RunState is the cluster's coarse running/stopped run-state as reported by discovery (Docker
+	// only). It drives the STATUS column and the JSON "status" field. RunStateUnknown for providers
+	// that cannot report it (cloud providers today).
+	RunState clusterdiscovery.RunState
+}
+
+// statusLabel maps a discovered run-state to the human STATUS column / JSON "status" value: "Running"
+// for a running cluster, "Stopped" for a stopped one, and "Unknown" when the provider cannot report
+// run-state (cloud providers today). It is the single source of the status vocabulary the CLI emits,
+// kept aligned with the v1alpha1.ClusterPhase the web UI surfaces (Ready≈Running, Stopped).
+func statusLabel(runState clusterdiscovery.RunState) string {
+	switch runState {
+	case clusterdiscovery.RunStateRunning:
+		return "Running"
+	case clusterdiscovery.RunStateStopped:
+		return "Stopped"
+	case clusterdiscovery.RunStateUnknown:
+		return "Unknown"
+	default:
+		return "Unknown"
+	}
 }
 
 // tableColumnGap is the minimum gap between columns in table output.

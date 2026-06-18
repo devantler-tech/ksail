@@ -275,7 +275,7 @@ func TestGetComponentRequirements(t *testing.T) {
 						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
 						Autoscaler: v1alpha1.AutoscalerConfig{
 							Node: v1alpha1.NodeAutoscalerConfig{
-								Enabled: true,
+								Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
 							},
 						},
 					},
@@ -302,7 +302,7 @@ func TestGetComponentRequirements(t *testing.T) {
 						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
 						Autoscaler: v1alpha1.AutoscalerConfig{
 							Node: v1alpha1.NodeAutoscalerConfig{
-								Enabled: true,
+								Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
 							},
 						},
 					},
@@ -324,7 +324,7 @@ func TestGetComponentRequirements(t *testing.T) {
 						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
 						Autoscaler: v1alpha1.AutoscalerConfig{
 							Node: v1alpha1.NodeAutoscalerConfig{
-								Enabled: true,
+								Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
 							},
 						},
 					},

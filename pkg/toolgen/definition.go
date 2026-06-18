@@ -165,4 +165,11 @@ type FlagDef struct {
 	// confirmation prompt. The chat assistant auto-injects such flags after
 	// permission approval.
 	ConfirmFlag bool
+
+	// Deprecated marks a flag that carries a cobra deprecation message (set via
+	// MarkDeprecated). Deprecated flags are hidden from the generated tool schema
+	// — they would advertise a soon-to-be-removed alias to AI clients — but are
+	// still forwarded at runtime so old invocations keep working during the
+	// deprecation window.
+	Deprecated bool
 }

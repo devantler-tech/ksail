@@ -96,6 +96,10 @@ export interface KSailClusterConfiguration {
        */
       certManager?: "Enabled" | "Disabled";
       /**
+       * Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it.
+       */
+      imageVerification?: "Enabled" | "Disabled";
+      /**
        * PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper.
        */
       policyEngine?: "None" | "Kyverno" | "Gatekeeper";
@@ -131,12 +135,9 @@ export interface KSailClusterConfiguration {
          */
         ageKeyEnvVar?: string;
         /**
-         * Enabled controls whether the SOPS Age secret is created.
-         * nil (default) = auto-detect (create if key is found via env var or key file).
-         * true = require key (error if not found).
-         * false = disable entirely (skip secret creation).
+         * Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled
          */
-        enabled?: boolean;
+        enabled?: "Default" | "Enabled" | "Disabled";
         /**
          * Env configures the environment variable source for the Age private key.
          */
@@ -194,10 +195,9 @@ export interface KSailClusterConfiguration {
          */
         node?: {
           /**
-           * Enabled controls whether the Cluster Autoscaler is installed to manage
-           * worker node counts dynamically.
+           * Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled
            */
-          enabled?: boolean;
+          enabled?: "Enabled" | "Disabled";
           /**
            * Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
            */
@@ -410,10 +410,7 @@ export interface KSailClusterConfiguration {
           protocol?: "TCP" | "UDP";
         }[];
         /**
-         * ImageVerification enables scaffolding of a Talos ImageVerificationConfig document
-         * during cluster init. When Enabled, generates an image-verification.yaml template
-         * in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
-         * and public key verification rules. Requires Talos 1.13+.
+         * DEPRECATED: use spec.cluster.imageVerification instead
          */
         imageVerification?: "Enabled" | "Disabled";
         /**
@@ -422,7 +419,7 @@ export interface KSailClusterConfiguration {
          * unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
          * longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
          * gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
-         * re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+         * re-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.
          * Override per invocation with --drain-timeout. Example: "15m".
          */
         drainTimeout?: string;

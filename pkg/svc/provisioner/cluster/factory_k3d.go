@@ -137,7 +137,7 @@ func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setu
 	// Apply containerd image verifier plugin volume mount when image verification is enabled.
 	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
 	// to generate the final containerd config with the image verifier plugin enabled.
-	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+	if cluster.Spec.Cluster.ImageVerification == v1alpha1.ImageVerificationEnabled {
 		templatePath := filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
 
 		absTemplatePath, err := filepath.Abs(templatePath)
