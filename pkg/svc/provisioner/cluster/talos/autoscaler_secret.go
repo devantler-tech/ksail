@@ -41,8 +41,9 @@ func (p *Provisioner) syncHetznerFirewallRules(
 // When the Secret changes it brings existing autoscaler nodes to the new baseline
 // — but only as disruptively as the change demands (see
 // propagateAutoscalerBaseline): a NO_REBOOT in-place apply for config-only drift,
-// a drain-and-replace recycle only when a new boot image or a reboot-class change
-// genuinely requires fresh nodes.
+// an in-place reboot of the same servers for a reboot-required change, and a
+// drain-and-replace recycle only when a new boot image or a wipe/recreate-class
+// change genuinely requires fresh nodes.
 func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	clusterName string,
@@ -103,12 +104,18 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 }
 
 // propagateAutoscalerBaseline brings existing autoscaler nodes to the refreshed
-// baseline, choosing the least disruptive mechanism the change allows. A new boot
-// image (Talos OS bump) or a reboot/wipe/recreate-class change can only reach an
-// immutable Talos node by replacing it, so those recycle (drain → delete → the
-// autoscaler re-provisions from the new template). A config-only change that Talos
-// can apply with NO_REBOOT is pushed in place instead — no drain, so it never
-// stalls on a PodDisruptionBudget the way a recycle can.
+// baseline, choosing the least disruptive mechanism the change allows. The three
+// paths are checked most-disruptive first:
+//
+//   - recycle (drain → delete → the autoscaler re-provisions a fresh node from the
+//     new template) — only when a fresh server is unavoidable: a new boot image
+//     (Talos OS bump) or a wipe/recreate/rolling-recreate change.
+//   - in-place reboot of the SAME servers (rollingRebootAutoscalerNodes) — for a
+//     reboot-required change (CNI swap, disk-quota toggle) an already-booted node
+//     can adopt by rebooting, with no fresh server. This keeps a capacity-constrained
+//     project at its Hetzner server limit converging where a recycle could not (#5219).
+//   - in-place NO_REBOOT apply (applyInPlaceToAutoscalerNodes) — for config-only
+//     drift; no drain, so it never stalls on a PodDisruptionBudget.
 func (p *Provisioner) propagateAutoscalerBaseline(
 	ctx context.Context,
 	clusterName string,
@@ -116,19 +123,30 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 	imageChanged bool,
 	result *clusterupdate.UpdateResult,
 ) error {
-	if autoscalerRecycleRequired(diff, imageChanged) {
+	switch {
+	case autoscalerRecycleRequired(diff, imageChanged):
 		return p.recycleAutoscalerNodes(ctx, clusterName)
+	case autoscalerRebootRequired(diff):
+		return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
+	default:
+		return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 	}
-
-	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 }
 
 // autoscalerRecycleRequired reports whether the refreshed baseline can only reach
-// existing autoscaler nodes by replacing them. That is true when the Talos boot
-// image changed (a new snapshot an already-booted node cannot adopt in place) or
-// when the diff carries a reboot/wipe/recreate/rolling-recreate change Talos
-// cannot apply with NO_REBOOT. A nil diff (no classification available) defers to
-// the image signal alone, defaulting to the non-disruptive in-place path.
+// existing autoscaler nodes by replacing them with fresh servers. That is true when
+// the Talos boot image changed (a new snapshot an already-booted node cannot adopt
+// in place) or when the diff carries a wipe/recreate/rolling-recreate change that no
+// apply against the running server can land. A nil diff (no classification
+// available) defers to the image signal alone, defaulting to the non-disruptive
+// in-place path.
+//
+// A reboot-required change (CNI swap, disk-quota toggle) is deliberately NOT here:
+// an already-booted server can adopt it via an in-place reboot of the SAME server
+// (autoscalerRebootRequired → rollingRebootAutoscalerNodes) — no fresh server, so a
+// capacity-constrained project at its Hetzner server limit still converges (#5219).
+// Recycle is checked before the reboot path in propagateAutoscalerBaseline, so a
+// change that needs BOTH a fresh server and a reboot still recycles.
 func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
 	if imageChanged {
 		return true
@@ -138,8 +156,18 @@ func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bo
 		return false
 	}
 
-	return diff.HasRebootRequired() || diff.HasWipeRequired() ||
+	return diff.HasWipeRequired() ||
 		diff.HasRecreateRequired() || diff.HasRollingRecreate()
+}
+
+// autoscalerRebootRequired reports whether the refreshed baseline carries a
+// reboot-required change (CNI swap, disk-quota toggle) that an in-place NO_REBOOT
+// apply cannot land but an in-place reboot of the SAME server can — no fresh server
+// needed. Gated below autoscalerRecycleRequired in propagateAutoscalerBaseline, so a
+// change that ALSO needs a fresh server (image/wipe/recreate/rolling-recreate) still
+// recycles instead.
+func autoscalerRebootRequired(diff *clusterupdate.UpdateResult) bool {
+	return diff != nil && diff.HasRebootRequired()
 }
 
 // autoscalerSecretApplicable reports whether the cluster-autoscaler-config Secret

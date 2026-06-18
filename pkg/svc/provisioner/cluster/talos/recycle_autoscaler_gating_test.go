@@ -50,7 +50,8 @@ func TestAutoscalerRecycleRequired(t *testing.T) {
 	}{
 		{"in-place only does not recycle", inPlaceDiff(), false, false},
 		{"boot image change forces recycle", inPlaceDiff(), true, true},
-		{"reboot-required recycles", rebootDiff, false, true},
+		{"reboot-required does not recycle", rebootDiff, false, false},
+		{"reboot-required with image change recycles", rebootDiff, true, true},
 		{"wipe-required recycles", wipeDiff, false, true},
 		{"recreate-required recycles", recreateDiff, false, true},
 		{"rolling-recreate recycles", rollingDiff, false, true},

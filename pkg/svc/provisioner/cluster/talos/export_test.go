@@ -394,6 +394,11 @@ func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageCha
 	return autoscalerRecycleRequired(diff, imageChanged)
 }
 
+// AutoscalerRebootRequiredForTest exposes autoscalerRebootRequired for unit testing.
+func AutoscalerRebootRequiredForTest(diff *clusterupdate.UpdateResult) bool {
+	return autoscalerRebootRequired(diff)
+}
+
 // UpdateApplyStepNamesForTest returns the ordered names of the post-PrepareUpdate
 // apply steps, so tests can assert the step ordering (notably that the autoscaler
 // baseline refresh runs before static-node scaling — #5219) without driving a
@@ -450,6 +455,15 @@ func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
+}
+
+// RollingRebootAutoscalerNodesForTest exposes rollingRebootAutoscalerNodes for unit testing.
+func (p *Provisioner) RollingRebootAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
 }
 
 // RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
