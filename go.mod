@@ -10,7 +10,7 @@ exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787
 require (
 	filippo.io/age v1.3.1
 	github.com/containerd/errdefs v1.0.0
-	github.com/derailed/k9s v0.50.18
+	github.com/derailed/k9s v0.51.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.7.0
 	github.com/fatih/color v1.19.0
@@ -597,7 +597,7 @@ require (
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
-	github.com/lmittmann/tint v1.0.7 // indirect
+	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/loft-sh/admin-apis v0.0.0-20260311181619-506013b79ba0 // indirect
 	github.com/loft-sh/agentapi/v4 v4.8.2-rc.1 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
@@ -728,7 +728,7 @@ require (
 	github.com/quay/claircore/toolkit v1.2.4 // indirect
 	github.com/quay/zlog v1.1.8 // indirect
 	github.com/raeperd/recvcheck v0.2.0 // indirect
-	github.com/rakyll/hey v0.1.4 // indirect
+	github.com/rakyll/hey v0.1.5 // indirect
 	github.com/rancher/wharfie v0.7.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
