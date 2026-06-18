@@ -104,7 +104,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -135,7 +135,7 @@ jobs:
       desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -286,7 +286,7 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@e5eea909adaf782180f325c37a1311661b25bbb7 # v5.6.0
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@d87d78b80422efad5133db7f480dc12027cb9fa5 # v5.6.2
     permissions:
       contents: write
       issues: write
@@ -377,7 +377,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -417,7 +417,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
@@ -552,7 +552,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
 
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: true
@@ -636,7 +636,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -676,7 +676,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -764,7 +764,7 @@ jobs:
       contents: write
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -786,7 +786,7 @@ jobs:
       contents: write
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -808,7 +808,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -840,7 +840,7 @@ jobs:
         working-directory: vsce
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -882,7 +882,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -943,7 +943,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -987,7 +987,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1019,7 +1019,7 @@ jobs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1061,7 +1061,7 @@ jobs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1177,7 +1177,7 @@ jobs:
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1274,7 +1274,7 @@ jobs:
       skip: ${{ steps.discover.outputs.skip }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1307,12 +1307,13 @@ jobs:
         shell: bash
         env:
           PACKAGES: ${{ steps.discover.outputs.packages }}
-          # Reduce -count on PRs (-count=3) to halve benchmark wall time while
-          # keeping enough samples for the awk averaging step in
-          # "Prepare benchmark regression gate input" to produce a stable signal.
-          # On push to main (which feeds benchmark-store / the historical chart),
-          # keep -count=5 for higher-quality baselines.
-          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '3' }}
+          # The regression gate compares only the deterministic allocation
+          # metrics (B/op, allocs/op), which are independent of sample count, so
+          # PRs run -count=1 for the fastest possible signal (wall-clock ns/op is
+          # never gated — see "Compare benchmark results"). On push to main
+          # (which feeds benchmark-store / the historical ns/op chart) keep
+          # -count=5 for higher-quality wall-clock baselines.
+          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '1' }}
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
@@ -1377,19 +1378,39 @@ jobs:
             }
           ' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
 
+          # Derive the regression-gate input by neutralizing the wall-clock
+          # metric. github-action-benchmark's "go" parser turns each
+          # "<name> <iters> <v1> <u1> <v2> <u2> ..." line into one comparable
+          # series per metric (plus a bare ns/op series). Pinning the ns/op value
+          # to a constant 1 makes both ns/op-bearing series compare as ~0x of the
+          # baseline so wall-clock jitter on shared runners can never trip the
+          # alert, while the deterministic B/op and allocs/op series keep their
+          # real values AND byte-identical names — so they still compare 1:1
+          # against the stored baseline. The unmodified bench-filtered.txt (real
+          # ns/op) still feeds the history chart via the benchmark-store job.
+          sed -E 's/[0-9]+ ns\/op/1 ns\/op/' \
+            "$RUNNER_TEMP/bench-filtered.txt" > "$RUNNER_TEMP/bench-compare.txt"
+
       - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           tool: go
-          output-file-path: ${{ runner.temp }}/bench-filtered.txt
+          # bench-compare.txt pins ns/op to 1, so only the deterministic
+          # B/op and allocs/op series carry real values here.
+          output-file-path: ${{ runner.temp }}/bench-compare.txt
           gh-pages-branch: benchmark-data
           benchmark-data-dir-path: dev/bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           alert-threshold: "150%"
-          fail-threshold: ${{ github.event_name != 'pull_request' && '200%' || '' }}
-          fail-on-alert: false
+          fail-threshold: "150%"
+          # Deterministic metrics are jitter-free, so PRs block on a real
+          # allocation/byte regression (≥1.5x). Pushes to main never fail
+          # (comment-on-alert/fail-on-alert are PR-only): the benchmark-store
+          # job updates the baseline so it self-heals after an intentional
+          # increase lands, avoiding a wedged main / blocked release.
+          fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
@@ -1416,7 +1437,7 @@ jobs:
       contents: write
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1449,7 +1470,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
@@ -1532,7 +1553,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@0e1232924bf8b07a40b1b24e13e200744fbabcfa # v6.0.0
+      - uses: devantler-tech/actions/aggregate-job-checks@9d98cb8be059537ec1e82f71c90d75ecba321713 # v6.1.0
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
