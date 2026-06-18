@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -126,8 +128,56 @@ func TestUpgradeDistribution_ContainerMode(t *testing.T) {
 		// Hetzner clusters run on real machines and upgrade in place, so neither
 		// the Docker recreate nor the skip path must fire. With no infrastructure
 		// provider wired, node listing yields an empty set and the rolling upgrade
-		// is a no-op.
+		// (including the pre-upgrade config reconcile) is a no-op.
 		require.NotErrorIs(t, err, clustererr.ErrUpgradeSkipped)
 		require.NotErrorIs(t, err, clustererr.ErrRecreationRequired)
 	})
+}
+
+// TestReconcileNodeConfigBeforeUpgrade_NoopWithoutTalosConfig verifies the
+// pre-upgrade config reconcile (issue #5294) is a no-op when no Talos config is
+// loaded: there is nothing to reconcile, so it must return without error and without
+// touching the node, letting the OS upgrade proceed unchanged.
+func TestReconcileNodeConfigBeforeUpgrade_NoopWithoutTalosConfig(t *testing.T) {
+	t.Parallel()
+
+	prov := talosprovisioner.NewProvisioner(nil, nil)
+	node := talosprovisioner.NewNodeWithRoleForTest(
+		"10.0.0.2", talosprovisioner.RoleControlPlane,
+	)
+
+	err := prov.ReconcileNodeConfigBeforeUpgradeForTest(context.Background(), node, nil)
+	require.NoError(t, err)
+}
+
+// TestReconcileNodeConfigBeforeUpgrade_BuildErrorPropagates verifies that a failure
+// to build the node's desired config is surfaced (wrapped) rather than swallowed, so
+// the rolling-upgrade caller can warn before proceeding. It drives the worker-role
+// build path with no control-plane secrets source: a worker's running config carries
+// no CA private key, so the realignment fails the control-plane-PKI precondition
+// (#4963) before any live ApplyConfiguration RPC is attempted — exercising
+// reconcileNodeConfigBeforeUpgrade up to, but not including, node I/O.
+func TestReconcileNodeConfigBeforeUpgrade_BuildErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	workerRunning := runningWithHostname(t, talosprovisioner.RoleWorker, "prod-worker-1")
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil).
+		WithNodeConfigFetcherForTest(
+			func(_ context.Context, _ string) (talosconfig.Provider, error) {
+				return workerRunning, nil
+			},
+		)
+
+	node := talosprovisioner.NewNodeWithRoleForTest("10.0.0.3", talosprovisioner.RoleWorker)
+
+	err = prov.ReconcileNodeConfigBeforeUpgradeForTest(context.Background(), node, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "build desired config",
+		"the build failure must be wrapped so the caller can attribute it")
+	assert.Contains(t, err.Error(), "control-plane PKI",
+		"the actionable #4963 precondition must be surfaced")
 }
