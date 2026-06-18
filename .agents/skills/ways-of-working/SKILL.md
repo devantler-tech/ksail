@@ -10,7 +10,7 @@ license: Apache-2.0
 metadata:
     github-path: ways-of-working/SKILL.md
     github-ref: refs/tags/v1.0.0
-    github-repo: https://github.com/devantler-tech/skills
+    github-repo: https://github.com/devantler-tech/agent-skills
     github-tree-sha: 9a47a2db8c9bdf70402d1790fd3004af517cafe3
 ---
 
