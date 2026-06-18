@@ -352,9 +352,10 @@ func (p *Provisioner) cordonAndDrain(
 	return nil
 }
 
-// createReplacementServer provisions a single new server for the role using the
-// next available node index (computed after the outgoing server was deleted, so
-// names do not collide).
+// createReplacementServer provisions a single new server for the role. The index
+// is computed after the outgoing server was deleted, so its freed slot is the
+// lowest available index and the replacement reclaims the removed node's name
+// rather than allocating a higher one (#5312).
 func (p *Provisioner) createReplacementServer(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
@@ -366,7 +367,7 @@ func (p *Provisioner) createReplacementServer(
 		return nil, fmt.Errorf("failed to list %s nodes: %w", role, listErr)
 	}
 
-	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
+	indices := availableHetznerNodeIndices(existing, clusterName, role, 1)
 
 	// Boot the replacement from the cluster's Talos snapshot image (when configured)
 	// rather than the maintenance-mode ISO, so it runs the same Talos version as the
@@ -377,7 +378,7 @@ func (p *Provisioner) createReplacementServer(
 	}
 
 	creationResults, createErr := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1, imageID,
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), indices, imageID,
 	)
 	if createErr != nil {
 		return nil, createErr
