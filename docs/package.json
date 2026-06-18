@@ -13,7 +13,7 @@
     "astro": "^6.4.7",
     "astro-mermaid": "^2.0.2",
     "mermaid": "^11.15.0",
-    "sharp": "^0.35.0",
+    "sharp": "^0.35.1",
     "starlight-links-validator": "^0.24.0"
   },
   "devDependencies": {
