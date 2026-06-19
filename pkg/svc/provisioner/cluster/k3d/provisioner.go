@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,9 +19,22 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	k3dlogger "github.com/k3d-io/k3d/v5/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+// ErrK3dRuntimeUnavailable is returned by the k3d provisioner when the k3d
+// runtime (the Docker daemon) is unavailable. k3d's embedded cobra commands react
+// to an unreachable runtime by calling logrus Fatal on their own logger, which by
+// default calls os.Exit(1) and would terminate the whole host process — fatal for
+// a long-lived host such as the desktop app or `ksail ui`, which must keep running
+// when Docker Desktop is not started. NewProvisioner permanently rewires k3d's
+// logger to raise this sentinel via panic instead, and every site that runs a k3d
+// command routes through runK3dSafely, which recovers it into this error — so a
+// Docker-down list, lifecycle, or node-scaling operation fails gracefully rather
+// than crashing.
+var ErrK3dRuntimeUnavailable = errors.New("k3d runtime unavailable (is the Docker daemon running?)")
 
 var (
 	// listMutex protects concurrent access to os.Stdout during List operations.
@@ -78,6 +92,21 @@ func NewProvisioner(
 			TimestampFormat:  "2006-01-02T15:04:05Z",
 		})
 		logrus.SetLevel(logrus.InfoLevel)
+
+		// k3d logs through its OWN logrus instance (k3dlogger.Log(), not the standard
+		// logger above), and its embedded cobra commands call logrus Fatal on it when
+		// the runtime (Docker) is unreachable — Create alone has 19 such calls. logrus
+		// Fatal invokes ExitFunc, which defaults to os.Exit(1) and would terminate the
+		// whole host process: fatal for a long-lived host such as the desktop app or
+		// `ksail ui`, where running create/delete/start/stop (or background discovery)
+		// with Docker stopped must yield an error, not a crash. Permanently replace
+		// ExitFunc with one that panics ErrK3dRuntimeUnavailable; every site that runs a
+		// k3d command routes through runK3dSafely, which recovers it into an ordinary
+		// error. Set once and never restored —
+		// embedded k3d must never os.Exit the host, and a fixed value avoids races
+		// between concurrent commands sharing this process-global logger (a long-running
+		// Create must not race a quick List save/restore of the shared ExitFunc).
+		k3dlogger.Log().ExitFunc = func(int) { panic(ErrK3dRuntimeUnavailable) }
 	})
 
 	prov := &Provisioner{
@@ -235,25 +264,28 @@ func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 // JSON output. k3d's PrintClusters writes directly to os.Stdout using
 // fmt.Println (not Cobra's cmd.OutOrStdout()), so the output is captured by
 // temporarily redirecting os.Stdout.
+//
+// k3d reacts to an unreachable runtime (Docker down) by calling logrus Fatal,
+// which by default calls os.Exit(1) and would kill the whole host process. That
+// Fatal is neutralized once in NewProvisioner (k3dlogger ExitFunc → panic
+// ErrK3dRuntimeUnavailable); the list goroutine (runListCommandToPipe) recovers
+// the panic into a normal error return, and silenceK3dLogging keeps k3d's noise
+// off the console while discovery captures the cluster JSON.
 func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error) {
-	// Lock first so that the logrus save/restore and the os.Stdout save/restore
+	// Lock first so that the logger save/restore and the os.Stdout save/restore
 	// are both protected by the same critical section. Without this ordering a
-	// second concurrent caller could read originalLogOutput as io.Discard (the
+	// second concurrent caller could read the saved output as io.Discard (the
 	// value set by the first caller) and later restore to io.Discard, leaving
-	// the global logrus logger permanently muted.
+	// the global loggers permanently muted.
 	listMutex.Lock()
 
-	// Temporarily redirect logrus to discard output during list
-	// to prevent log messages from appearing in console.
-	originalLogOutput := logrus.StandardLogger().Out
-
-	logrus.SetOutput(io.Discard)
+	restoreLogging := silenceK3dLogging()
 
 	originalStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
-		logrus.SetOutput(originalLogOutput)
+		restoreLogging()
 		listMutex.Unlock()
 
 		return "", fmt.Errorf("cluster list: create stdout pipe: %w", err)
@@ -265,13 +297,7 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	// while the command is running (otherwise it may block on a full pipe buffer)
 	errChan := make(chan error, 1)
 
-	go func() {
-		_, runErr := k.runListCommand(ctx)
-		// Close write end to signal EOF to the reader
-		_ = pipeWriter.Close()
-
-		errChan <- runErr
-	}()
+	go k.runListCommandToPipe(ctx, pipeWriter, errChan)
 
 	// Read all output from the pipe (this is the JSON from k3d)
 	var outputBuf bytes.Buffer
@@ -279,15 +305,19 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	_, copyErr := io.Copy(&outputBuf, pipeReader)
 	_ = pipeReader.Close()
 
-	// Restore stdout and logrus, then release the lock.
+	// Wait for the command goroutine to finish BEFORE restoring os.Stdout. The
+	// channel receive is the happens-before edge with the goroutine's access to
+	// os.Stdout — k3d's docker client reads it via moby/term.StdStreams — so
+	// restoring earlier races that read under the race detector. (The pipe EOF that
+	// unblocked io.Copy is not a tracked synchronization edge.)
+	runErr := <-errChan
+
+	// Restore stdout and the loggers, then release the lock.
 	os.Stdout = originalStdout
 
-	logrus.SetOutput(originalLogOutput)
+	restoreLogging()
 
 	listMutex.Unlock()
-
-	// Wait for command to complete and get any error
-	runErr := <-errChan
 
 	if copyErr != nil {
 		return "", fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
@@ -298,6 +328,53 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	}
 
 	return strings.TrimSpace(outputBuf.String()), nil
+}
+
+// runListCommandToPipe runs the k3d cluster-list command as its own goroutine (so
+// the caller can drain the pipe concurrently — k3d writes its JSON directly to
+// os.Stdout), closing pipeWriter to signal EOF and reporting the command's error
+// (or ErrK3dRuntimeUnavailable, via runK3dSafely) on errChan.
+func (k *Provisioner) runListCommandToPipe(
+	ctx context.Context,
+	pipeWriter *os.File,
+	errChan chan<- error,
+) {
+	// Always close the write end so the pipe reader (io.Copy) unblocks — whether
+	// the command returns, errors, or its runtime-down Fatal is recovered.
+	defer func() { _ = pipeWriter.Close() }()
+
+	errChan <- k.runK3dSafely(func() error {
+		_, runErr := k.runListCommand(ctx)
+
+		return runErr
+	})
+}
+
+// silenceK3dLogging mutes both the standard logrus logger and k3d's dedicated
+// logger for the duration of a list, so k3d's progress lines and its (already
+// neutralized) runtime-down Fatal message do not leak to the console while
+// discovery captures the cluster JSON from os.Stdout. It returns a function that
+// restores both, which the caller must invoke before releasing listMutex.
+//
+// The process-exiting Fatal itself is neutralized once and for all in
+// NewProvisioner (k3dlogger ExitFunc → panic ErrK3dRuntimeUnavailable), not here;
+// this only silences output. k3d logs through its own logrus instance
+// (k3dlogger.Log()), not the standard logger, so muting only
+// logrus.StandardLogger() would not suppress k3d's output — both are handled.
+func silenceK3dLogging() func() {
+	originalStdOut := logrus.StandardLogger().Out
+
+	logrus.SetOutput(io.Discard)
+
+	k3dLog := k3dlogger.Log()
+	originalK3dOut := k3dLog.Out
+
+	k3dLog.SetOutput(io.Discard)
+
+	return func() {
+		logrus.SetOutput(originalStdOut)
+		k3dLog.SetOutput(originalK3dOut)
+	}
 }
 
 // runListCommand executes the k3d cluster list command and returns the output.
@@ -399,10 +476,46 @@ func (k *Provisioner) runLifecycleCommand(
 		}
 	}
 
-	_, runErr := k.runner.Run(ctx, cmd, args)
+	runErr := k.runK3dSafely(func() error {
+		_, runErr := k.runner.Run(ctx, cmd, args)
+
+		return runErr //nolint:wrapcheck // wrapped below with the operation prefix
+	})
 	if runErr != nil {
 		return fmt.Errorf("%s: %w", errorPrefix, runErr)
 	}
 
 	return nil
+}
+
+// runK3dSafely runs action and converts the runtime-down panic raised by k3d's
+// neutralized Fatal (the ExitFunc set in NewProvisioner) into a returned
+// ErrK3dRuntimeUnavailable, so a Docker-down k3d command fails with an error
+// instead of terminating the host process (e.g. the desktop app, where these run
+// in background goroutines). It is the single recover seam every site that runs an
+// embedded k3d command routes through — List, the create/delete/start/stop
+// lifecycle commands, and the node create/delete/list commands in update.go — so
+// "embedded k3d can never exit the host" holds package-wide rather than as a
+// per-call-site checklist. A command may have partially run, so the panic is
+// surfaced as an error and execution does not continue past it; any non-sentinel
+// panic is a genuine bug and is re-raised.
+func (k *Provisioner) runK3dSafely(action func() error) (err error) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			return
+		}
+
+		recoveredErr, ok := recovered.(error)
+		if ok && errors.Is(recoveredErr, ErrK3dRuntimeUnavailable) {
+			err = ErrK3dRuntimeUnavailable
+
+			return
+		}
+
+		// Not our sentinel: a genuine bug. Re-panic so it is not swallowed.
+		panic(recovered)
+	}()
+
+	return action()
 }

@@ -5,9 +5,38 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+// ListAgentNodesForTest exposes listAgentNodes (the pipe+goroutine node-list path)
+// so its runtime-down behavior can be exercised.
+func (k *Provisioner) ListAgentNodesForTest(ctx context.Context, clusterName string) error {
+	_, err := k.listAgentNodes(ctx, clusterName)
+
+	return err
+}
+
+// AddAgentNodesForTest exposes addAgentNodes (a synchronous node-command site) so
+// its runtime-down behavior can be exercised.
+func (k *Provisioner) AddAgentNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	count int,
+) error {
+	return k.addAgentNodes(ctx, clusterName, count, &clusterupdate.UpdateResult{})
+}
+
+// RemoveAgentNodesForTest exposes removeAgentNodes (a synchronous node-command
+// site) so its runtime-down behavior can be exercised.
+func (k *Provisioner) RemoveAgentNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	count int,
+) error {
+	return k.removeAgentNodes(ctx, clusterName, count, &clusterupdate.UpdateResult{})
+}
 
 // K3kReadyTimeoutForTest exposes k3kReadyTimeout for unit testing.
 func K3kReadyTimeoutForTest() time.Duration {
