@@ -204,12 +204,7 @@ func resolveScanInput(
 		return path, noop, nil
 	}
 
-	renderer, err := newGitOpsRenderer()
-	if err != nil {
-		return "", noop, fmt.Errorf("initialize GitOps renderer: %w", err)
-	}
-
-	tmpDir, cleanup, err := renderer.renderToTempDir(ctx, cmd, path)
+	tmpDir, cleanup, err := newGitOpsRenderer().renderToTempDir(ctx, cmd, path)
 	if err != nil {
 		return "", noop, err
 	}

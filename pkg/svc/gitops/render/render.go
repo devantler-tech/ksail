@@ -130,7 +130,7 @@ func Expand(ctx context.Context, stream []byte, opts Options) (Result, error) {
 	for docIndex, doc := range docs {
 		meta := metas[docIndex]
 		if isHelmRelease(meta) {
-			expandHelmRelease(ctx, opts.Resolver, index, doc, &result)
+			expandHelmRelease(ctx, opts.Resolver, index, doc, meta, &result)
 
 			continue
 		}
@@ -154,6 +154,7 @@ func expandHelmRelease(
 	resolver ChartResolver,
 	index SourceIndex,
 	doc []byte,
+	meta objectMeta,
 	result *Result,
 ) {
 	var helmRelease helmv2.HelmRelease
@@ -163,7 +164,7 @@ func expandHelmRelease(
 		// Unparseable HelmRelease: pass through so CR-schema validation flags it.
 		result.Documents = append(
 			result.Documents,
-			newDocument(doc, parseObjectMeta(doc), Provenance{Origin: OriginStream}),
+			newDocument(doc, meta, Provenance{Origin: OriginStream}),
 		)
 
 		return
@@ -181,7 +182,7 @@ func expandHelmRelease(
 		})
 		result.Documents = append(
 			result.Documents,
-			newDocument(doc, parseObjectMeta(doc), Provenance{Origin: OriginStream}),
+			newDocument(doc, meta, Provenance{Origin: OriginStream}),
 		)
 
 		return

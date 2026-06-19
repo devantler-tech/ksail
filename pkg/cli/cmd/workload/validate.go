@@ -192,10 +192,7 @@ func runValidateCmd(
 		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
 	)
 
-	renderer, err := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
-	if err != nil {
-		return err
-	}
+	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
 	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer)
 }
@@ -207,17 +204,12 @@ func runValidateCmd(
 func buildValidateRenderer(
 	cfg *v1alpha1.Cluster,
 	configFound, skipHelmRender bool,
-) (*gitopsRenderer, error) {
+) *gitopsRenderer {
 	if !helmRenderEnabled(cfg, configFound, skipHelmRender) {
-		return nil, nil //nolint:nilnil // nil renderer signals "Helm rendering disabled"
+		return nil
 	}
 
-	renderer, err := newGitOpsRenderer()
-	if err != nil {
-		return nil, fmt.Errorf("initialize GitOps renderer: %w", err)
-	}
-
-	return renderer, nil
+	return newGitOpsRenderer()
 }
 
 // helmRenderEnabled resolves whether validate renders HelmReleases: the

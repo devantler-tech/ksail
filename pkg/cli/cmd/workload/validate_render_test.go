@@ -31,6 +31,15 @@ func writeHelmReleaseKustomization(t *testing.T, chartURL string) string {
 	t.Helper()
 
 	dir := t.TempDir()
+	writeKustomizationFiles(t, dir, chartURL)
+
+	return dir
+}
+
+// writeKustomizationFiles writes the OCIRepository + HelmRelease kustomization
+// into an existing directory.
+func writeKustomizationFiles(t *testing.T, dir, chartURL string) {
+	t.Helper()
 
 	files := map[string]string{
 		"kustomization.yaml": `apiVersion: kustomize.config.k8s.io/v1beta1
@@ -64,8 +73,6 @@ spec:
 	for name, content := range files {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
 	}
-
-	return dir
 }
 
 func runValidate(t *testing.T, args ...string) (string, error) {
@@ -161,4 +168,24 @@ spec:
 
 	_, err := runValidate(t, file)
 	require.NoError(t, err, "a single HelmRelease file must validate as a CR (no render)")
+}
+
+// TestValidateRendersConcurrentlyNoRace renders several kustomizations in one run
+// (validate fans out across kustomizations) to guard the concurrency contract:
+// each render constructs its own Helm template client, so there is no shared
+// helm.action.Configuration. Run with -race to catch a regression that shares one.
+func TestValidateRendersConcurrentlyNoRace(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	chartURL := localChartURL(t, "validchart")
+
+	for _, app := range []string{"app1", "app2", "app3", "app4"} {
+		appDir := filepath.Join(root, app)
+		require.NoError(t, os.MkdirAll(appDir, 0o750))
+		writeKustomizationFiles(t, appDir, chartURL)
+	}
+
+	_, err := runValidate(t, root, "--skip-kinds", "OCIRepository")
+	require.NoError(t, err, "concurrent rendering of multiple kustomizations must succeed")
 }
