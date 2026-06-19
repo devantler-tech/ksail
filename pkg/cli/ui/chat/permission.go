@@ -36,6 +36,12 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		return m.allowPermission()
+	case "s", "S":
+		if m.pendingPermission.canOfferSessionApproval {
+			return m.allowPermissionForSession()
+		}
+
+		return m.allowPermission()
 	case "a", "A":
 		return m.allowAlwaysPermission()
 	case "n", "N", keyEscape:
@@ -110,6 +116,16 @@ func (m *Model) clearPendingPermission() {
 // allowPermission approves the pending permission request.
 func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
 	m.sendPermissionResponse(permissionResponse{approved: true})
+
+	m.clearPendingPermission()
+
+	return m, m.waitForEvent()
+}
+
+// allowPermissionForSession approves the pending permission request for this session
+// when session-scoped approvals are supported by the request kind.
+func (m *Model) allowPermissionForSession() (tea.Model, tea.Cmd) {
+	m.sendPermissionResponse(permissionResponse{approved: true, approveForSession: true})
 
 	m.clearPendingPermission()
 
@@ -192,16 +208,7 @@ func (m *Model) renderPermissionModal() string {
 		contentLines++
 	}
 
-	if m.permissionDenyInput {
-		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
-		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
-
-		contentLines += 3
-	} else {
-		content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
-
-		contentLines += 3
-	}
+	contentLines += m.renderPermissionPromptSection(&content, mStyles)
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -212,6 +219,34 @@ func (m *Model) renderPermissionModal() string {
 		Height(contentLines)
 
 	return modalStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// Content-line counts contributed by the permission modal's bottom prompt section, used to
+// size the modal height.
+const (
+	denyInputPromptLines = 3 // blank line + reason-input line (+ spacing)
+	allowPromptLines     = 4 // blank line + "Allow this operation?" + key-hint line (+ spacing)
+)
+
+// renderPermissionPromptSection writes the bottom section of the permission modal — either the
+// optional-reason input (when denying) or the allow/deny prompt with key hints — and returns
+// the number of content lines it added.
+func (m *Model) renderPermissionPromptSection(
+	content *strings.Builder, mStyles modalContentStyles,
+) int {
+	if m.permissionDenyInput {
+		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
+		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
+
+		return denyInputPromptLines
+	}
+
+	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+	content.WriteString(
+		mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n",
+	)
+
+	return allowPromptLines
 }
 
 // permissionDeduplicator tracks approved ToolCallIDs to prevent duplicate permission prompts.
@@ -286,16 +321,23 @@ func CreateTUIPermissionHandler(
 		responseChan := make(chan permissionResponse, 1)
 
 		eventChan <- permissionRequestMsg{
-			toolCallID: toolCallID,
-			toolName:   toolName,
-			command:    command,
-			arguments:  permissionArguments(request),
-			response:   responseChan,
+			toolCallID:              toolCallID,
+			toolName:                toolName,
+			command:                 command,
+			arguments:               permissionArguments(request),
+			response:                responseChan,
+			canOfferSessionApproval: canOfferSessionApproval(request),
 		}
 
 		resp := <-responseChan
 		if resp.approved {
 			dedup.markApproved(toolCallID)
+
+			if resp.approveForSession {
+				if approval := sessionApproval(request); approval != nil {
+					return &rpc.PermissionDecisionApproveForSession{Approval: approval}, nil
+				}
+			}
 
 			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
@@ -312,6 +354,61 @@ func rejectDecision(feedback string) rpc.PermissionDecision {
 	}
 
 	return &rpc.PermissionDecisionReject{Feedback: &feedback}
+}
+
+// canOfferSessionApproval reports whether KSail can build a correct session-scoped
+// Approval for the given request. It is intentionally conservative: only Shell and
+// Write requests are supported (both expose CanOfferSessionApproval and have a
+// well-defined Approval variant), and only when the SDK itself permits it.
+func canOfferSessionApproval(request copilot.PermissionRequest) bool {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		return req.CanOfferSessionApproval
+	case *copilot.PermissionRequestWrite:
+		return req.CanOfferSessionApproval
+	default:
+		return false
+	}
+}
+
+// sessionApproval builds the session-scoped Approval describing what the SDK should
+// remember for the rest of the session. Only the kinds reported by
+// canOfferSessionApproval produce a meaningful Approval:
+//   - Shell -> Commands keyed by the parsed command identifiers in the request.
+//   - Write -> the empty Write approval (covers file writes for the session).
+//
+// For every other kind a nil Approval is returned; callers must only request a
+// session approval for supported kinds.
+func sessionApproval(
+	request copilot.PermissionRequest,
+) rpc.PermissionDecisionApproveForSessionApproval {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		identifiers := make([]string, 0, len(req.Commands))
+		for _, cmd := range req.Commands {
+			if cmd.Identifier != "" {
+				identifiers = append(identifiers, cmd.Identifier)
+			}
+		}
+
+		return rpc.PermissionDecisionApproveForSessionApprovalCommands{
+			CommandIdentifiers: identifiers,
+		}
+	case *copilot.PermissionRequestWrite:
+		return rpc.PermissionDecisionApproveForSessionApprovalWrite{}
+	default:
+		return nil
+	}
+}
+
+// permissionPromptHint renders the key hint shown beneath the permission prompt.
+// The "s" (session) option is only advertised when it is applicable.
+func permissionPromptHint(req *permissionRequestMsg) string {
+	if req != nil && req.canOfferSessionApproval {
+		return "[y] allow once  [s] allow for session  [a] always (autopilot)  [n] deny"
+	}
+
+	return "[y] allow once  [a] always (autopilot)  [n] deny"
 }
 
 // extractPermissionDetails extracts human-readable tool name and command

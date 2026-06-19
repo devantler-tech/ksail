@@ -62,6 +62,11 @@ var ExportPermissionResponseFeedback = func(r PermissionResponseForTest) string 
 	return r.feedback
 }
 
+// ExportPermissionResponseApproveForSession returns the approveForSession field of a permissionResponse.
+var ExportPermissionResponseApproveForSession = func(r PermissionResponseForTest) bool {
+	return r.approveForSession
+}
+
 // ExportSetPendingPermission sets Model.pendingPermission for testing.
 var ExportSetPendingPermission = func(
 	m *Model, toolName, command, arguments string, response chan<- permissionResponse,
@@ -71,6 +76,20 @@ var ExportSetPendingPermission = func(
 		command:   command,
 		arguments: arguments,
 		response:  response,
+	}
+}
+
+// ExportSetPendingPermissionSession sets Model.pendingPermission for testing with
+// canOfferSessionApproval enabled, so the "s" key path can be exercised.
+var ExportSetPendingPermissionSession = func(
+	m *Model, toolName, command, arguments string, response chan<- permissionResponse,
+) {
+	m.pendingPermission = &permissionRequestMsg{
+		toolName:                toolName,
+		command:                 command,
+		arguments:               arguments,
+		response:                response,
+		canOfferSessionApproval: true,
 	}
 }
 
@@ -149,6 +168,12 @@ var ExportExtractPermissionDetails = extractPermissionDetails
 
 // ExportPermissionArguments exposes permissionArguments for testing.
 var ExportPermissionArguments = permissionArguments
+
+// ExportSessionApproval exposes sessionApproval for testing.
+var ExportSessionApproval = sessionApproval
+
+// ExportCanOfferSessionApproval exposes canOfferSessionApproval for testing.
+var ExportCanOfferSessionApproval = canOfferSessionApproval
 
 // ExportFormatPermissionKind exposes formatPermissionKind for testing.
 var ExportFormatPermissionKind = formatPermissionKind

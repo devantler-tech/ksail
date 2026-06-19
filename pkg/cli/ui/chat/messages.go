@@ -71,8 +71,9 @@ type ToolOutputChunkMsg struct {
 // SDK handler. When approved is false, feedback may hold an optional free-text reason
 // the user typed, which is forwarded to the agent via rpc.PermissionDecisionReject.Feedback.
 type permissionResponse struct {
-	approved bool   // true=allow, false=deny
-	feedback string // optional denial reason (only meaningful when approved is false)
+	approved          bool   // true=allow, false=deny
+	feedback          string // optional denial reason (only meaningful when approved is false)
+	approveForSession bool   // when approved, request SDK session-scoped approval if supported
 }
 
 // permissionRequestMsg carries a permission request from a tool execution.
@@ -83,6 +84,10 @@ type permissionRequestMsg struct {
 	command    string                    // the actual command or action being requested
 	arguments  string                    // formatted arguments for display
 	response   chan<- permissionResponse // channel to send the user's decision
+	// canOfferSessionApproval reports whether a session-scoped approval ("s") is
+	// applicable for this request. It is only true for kinds where KSail can build a
+	// correct session Approval (currently Shell and Write).
+	canOfferSessionApproval bool
 }
 
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.
