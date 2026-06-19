@@ -1,11 +1,15 @@
 package chat //nolint:testpackage // white-box tests for unexported functions
 
 import (
+	"bytes"
+	"io"
 	"strings"
 	"testing"
 
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // longDiff is a diff string exceeding 200 characters, used to test truncation.
@@ -118,4 +122,83 @@ func TestGetPermissionDescription_DiffPreview(t *testing.T) {
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
+}
+
+func TestReadPermissionResponseFrom_Approve(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"y\n", "yes\n", " Y \n", "YES\n"} {
+		t.Run(strings.TrimSpace(input), func(t *testing.T) {
+			t.Parallel()
+
+			writer := &bytes.Buffer{}
+
+			decision, err := readPermissionResponseFrom(writer, strings.NewReader(input))
+			require.NoError(t, err)
+			assert.Equal(t, rpc.PermissionDecisionKindApproveOnce, decision.Kind())
+		})
+	}
+}
+
+func TestReadPermissionResponseFrom_DenyWithoutFeedback(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"\n", "n\n", "no\n", "  \n", "NO\n"} {
+		t.Run(strings.TrimSpace(input), func(t *testing.T) {
+			t.Parallel()
+
+			writer := &bytes.Buffer{}
+
+			decision, err := readPermissionResponseFrom(writer, strings.NewReader(input))
+			require.NoError(t, err)
+
+			reject, ok := decision.(*rpc.PermissionDecisionReject)
+			require.True(t, ok, "expected a reject decision, got %T", decision)
+			assert.Nil(t, reject.Feedback, "expected no feedback for a plain denial")
+		})
+	}
+}
+
+func TestReadPermissionResponseFrom_DenyWithFeedback(t *testing.T) {
+	t.Parallel()
+
+	writer := &bytes.Buffer{}
+
+	decision, err := readPermissionResponseFrom(
+		writer, strings.NewReader("  this command is too risky  \n"),
+	)
+	require.NoError(t, err)
+
+	reject, ok := decision.(*rpc.PermissionDecisionReject)
+	require.True(t, ok, "expected a reject decision, got %T", decision)
+	require.NotNil(t, reject.Feedback, "expected feedback to be set for a typed reason")
+	assert.Equal(t, "this command is too risky", *reject.Feedback)
+}
+
+func TestReadPermissionResponseFrom_EOF(t *testing.T) {
+	t.Parallel()
+
+	writer := &bytes.Buffer{}
+
+	// An empty reader yields EOF immediately, which is treated as "user not available".
+	decision, err := readPermissionResponseFrom(writer, strings.NewReader(""))
+	require.NoError(t, err)
+	assert.Equal(t, rpc.PermissionDecisionKindUserNotAvailable, decision.Kind())
+}
+
+// staticErrReader returns a non-EOF error on Read to exercise the I/O-error path.
+type staticErrReader struct{}
+
+func (staticErrReader) Read([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestReadPermissionResponseFrom_ReadError(t *testing.T) {
+	t.Parallel()
+
+	writer := &bytes.Buffer{}
+
+	decision, err := readPermissionResponseFrom(writer, staticErrReader{})
+	require.NoError(t, err)
+	assert.Equal(t, rpc.PermissionDecisionKindUserNotAvailable, decision.Kind())
 }

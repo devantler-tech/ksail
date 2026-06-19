@@ -16,7 +16,7 @@ func TestPermissionModal_VisibleInView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Shell Command", "rm -rf /tmp/test", "", responseChan)
 
 	output := model.View()
@@ -39,7 +39,7 @@ func TestPermissionModal_WithArguments(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "File Edit", "/etc/config", "--force", responseChan)
 
 	output := model.View()
@@ -54,7 +54,7 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
@@ -63,8 +63,8 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 
 	// Read the response with timeout to avoid hanging on regression
 	select {
-	case approved := <-responseChan:
-		if !approved {
+	case resp := <-responseChan:
+		if !chat.ExportPermissionResponseApproved(resp) {
 			t.Error("expected permission to be approved after pressing 'y'")
 		}
 	case <-time.After(1 * time.Second):
@@ -87,7 +87,7 @@ func TestPermissionKey_AllowWithUpperY(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
@@ -95,8 +95,8 @@ func TestPermissionKey_AllowWithUpperY(t *testing.T) {
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
 
 	select {
-	case approved := <-responseChan:
-		if !approved {
+	case resp := <-responseChan:
+		if !chat.ExportPermissionResponseApproved(resp) {
 			t.Error("expected permission to be approved after pressing 'Y'")
 		}
 	case <-time.After(1 * time.Second):
@@ -110,53 +110,154 @@ func TestPermissionKey_AllowWithUpperY(t *testing.T) {
 	}
 }
 
-// TestPermissionKey_DenyWithN tests that pressing 'n' denies a permission request.
+// TestPermissionKey_DenyWithN tests that pressing 'n' opens the optional-reason input and that
+// confirming with Enter (no reason) denies without feedback.
 func TestPermissionKey_DenyWithN(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
+	chat.ExportSetPendingPermission(model, "Shell Command", "rm -rf /", "", responseChan)
+
+	var updatedModel tea.Model = model
+
+	// 'n' opens the reason input; nothing is sent yet.
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	chatModel := requireModel(t, updatedModel)
+
+	if !chat.ExportIsPermissionDenyInput(chatModel) {
+		t.Error("expected deny-reason input to be active after pressing 'n'")
+	}
+
+	if len(responseChan) != 0 {
+		t.Error("expected no response to be sent before confirming the denial")
+	}
+
+	// Enter confirms the denial without a reason.
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	select {
+	case resp := <-responseChan:
+		if chat.ExportPermissionResponseApproved(resp) {
+			t.Error("expected permission to be denied")
+		}
+
+		if fb := chat.ExportPermissionResponseFeedback(resp); fb != "" {
+			t.Errorf("expected no feedback, got %q", fb)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after confirming denial")
+	}
+
+	if chat.ExportHasPendingPermission(requireModel(t, updatedModel)) {
+		t.Error("expected pending permission to be cleared after denial")
+	}
+}
+
+// TestPermissionKey_DenyWithReason tests that a typed reason is forwarded as denial feedback.
+func TestPermissionKey_DenyWithReason(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
+	chat.ExportSetPendingPermission(model, "Shell Command", "rm -rf /", "", responseChan)
+
+	var updatedModel tea.Model = model
+
+	// Open the reason input, type a reason, then confirm.
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	updatedModel, _ = updatedModel.Update(
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("too risky")},
+	)
+
+	if got := chat.ExportPermissionDenyValue(requireModel(t, updatedModel)); got != "too risky" {
+		t.Errorf("expected deny input value %q, got %q", "too risky", got)
+	}
+
+	_, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	select {
+	case resp := <-responseChan:
+		if chat.ExportPermissionResponseApproved(resp) {
+			t.Error("expected permission to be denied")
+		}
+
+		if fb := chat.ExportPermissionResponseFeedback(resp); fb != "too risky" {
+			t.Errorf("expected feedback %q, got %q", "too risky", fb)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after confirming denial")
+	}
+}
+
+// TestPermissionKey_DenyInputBackspace tests that backspace edits the reason input.
+func TestPermissionKey_DenyInputBackspace(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Shell Command", "rm -rf /", "", responseChan)
 
 	var updatedModel tea.Model = model
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("noo")})
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 
-	select {
-	case denied := <-responseChan:
-		if denied {
-			t.Error("expected permission to be denied after pressing 'n'")
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("timed out waiting for permission response after pressing 'n'")
-	}
-
-	// Permission should be cleared
-	chatModel, ok := updatedModel.(*chat.Model)
-	if !ok {
-		t.Fatal("expected *chat.Model type assertion to succeed")
-	}
-
-	if chat.ExportHasPendingPermission(chatModel) {
-		t.Error("expected pending permission to be cleared after denial")
+	if got := chat.ExportPermissionDenyValue(requireModel(t, updatedModel)); got != "no" {
+		t.Errorf("expected deny input value %q after backspace, got %q", "no", got)
 	}
 }
 
-// TestPermissionKey_DenyWithEsc tests that pressing 'esc' denies a permission request.
-func TestPermissionKey_DenyWithEsc(t *testing.T) {
+// TestPermissionKey_DenyInputEscCancels tests that Esc cancels reason entry and returns to the
+// allow/deny prompt without sending a response.
+func TestPermissionKey_DenyInputEscCancels(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
 
+	// Open reason input, then cancel with Esc.
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
+	chatModel := requireModel(t, updatedModel)
+
+	if chat.ExportIsPermissionDenyInput(chatModel) {
+		t.Error("expected deny-reason input to be cancelled after Esc")
+	}
+
+	if !chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected permission prompt to remain active after cancelling reason entry")
+	}
+
+	if len(responseChan) != 0 {
+		t.Error("expected no response to be sent when cancelling reason entry")
+	}
+}
+
+// TestPermissionKey_DenyWithEsc tests that pressing 'esc' opens the optional-reason input and
+// confirming with Enter denies the request.
+func TestPermissionKey_DenyWithEsc(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
+	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
+
+	var updatedModel tea.Model = model
+
+	// 'esc' opens the reason input; Enter confirms the denial.
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
 	select {
-	case denied := <-responseChan:
-		if denied {
+	case resp := <-responseChan:
+		if chat.ExportPermissionResponseApproved(resp) {
 			t.Error("expected permission to be denied after pressing escape")
 		}
 	case <-time.After(1 * time.Second):
@@ -298,13 +399,15 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 		t.Fatal("expected permission request to be sent to event channel with nil chatModeRef")
 	}
 
-	// Feed the message through a TUI model, then press 'esc' to deny
+	// Feed the message through a TUI model, then press 'esc' to open the reason input and
+	// Enter to confirm the denial.
 	model := chat.NewModel(newTestParams())
 
 	var updatedModel tea.Model = model
 
 	updatedModel, _ = updatedModel.Update(msg)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Verify the handler goroutine returns rejected
 	select {
@@ -336,7 +439,7 @@ func TestPermissionModal_AllowThisOperation(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Terminal", "npm install", "", responseChan)
 
 	output := model.View()
@@ -354,7 +457,7 @@ func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 	chat.ExportSetChatMode(model, chat.InteractiveMode)
 
-	responseChan := make(chan bool, 1)
+	responseChan := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "Terminal", "echo hello", "", responseChan)
 
 	// Press 'a' to allow always
@@ -374,8 +477,8 @@ func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {
 
 	// Verify the permission was approved
 	select {
-	case approved := <-responseChan:
-		if !approved {
+	case resp := <-responseChan:
+		if !chat.ExportPermissionResponseApproved(resp) {
 			t.Error("expected permission to be approved after 'a'")
 		}
 	case <-time.After(5 * time.Second):

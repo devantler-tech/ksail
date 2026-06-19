@@ -44,8 +44,28 @@ var ExportSetReasoningPickerIndex = func(m *Model, index int) {
 	m.reasoningPickerIndex = index
 }
 
+// PermissionResponseForTest is an exported alias for permissionResponse.
+type PermissionResponseForTest = permissionResponse
+
+// ExportNewPermissionResponse creates a permissionResponse for testing.
+var ExportNewPermissionResponse = func(approved bool, feedback string) PermissionResponseForTest {
+	return permissionResponse{approved: approved, feedback: feedback}
+}
+
+// ExportPermissionResponseApproved returns the approved field of a permissionResponse.
+var ExportPermissionResponseApproved = func(r PermissionResponseForTest) bool {
+	return r.approved
+}
+
+// ExportPermissionResponseFeedback returns the feedback field of a permissionResponse.
+var ExportPermissionResponseFeedback = func(r PermissionResponseForTest) string {
+	return r.feedback
+}
+
 // ExportSetPendingPermission sets Model.pendingPermission for testing.
-var ExportSetPendingPermission = func(m *Model, toolName, command, arguments string, response chan<- bool) {
+var ExportSetPendingPermission = func(
+	m *Model, toolName, command, arguments string, response chan<- permissionResponse,
+) {
 	m.pendingPermission = &permissionRequestMsg{
 		toolName:  toolName,
 		command:   command,
@@ -57,6 +77,16 @@ var ExportSetPendingPermission = func(m *Model, toolName, command, arguments str
 // ExportHasPendingPermission returns whether Model.pendingPermission is set.
 var ExportHasPendingPermission = func(m *Model) bool {
 	return m.pendingPermission != nil
+}
+
+// ExportIsPermissionDenyInput returns whether the deny-reason input is active.
+var ExportIsPermissionDenyInput = func(m *Model) bool {
+	return m.permissionDenyInput
+}
+
+// ExportPermissionDenyValue returns the current deny-reason input value.
+var ExportPermissionDenyValue = func(m *Model) string {
+	return m.permissionDenyValue
 }
 
 // ExportSetLastQuotaSnapshots sets Model.lastQuotaSnapshots for testing.
@@ -597,7 +627,7 @@ type PermissionRequestMsgForTest = permissionRequestMsg
 
 var ExportNewPermissionRequestMsg = func(
 	toolCallID, toolName, command, arguments string,
-	response chan<- bool,
+	response chan<- permissionResponse,
 ) PermissionRequestMsgForTest {
 	return permissionRequestMsg{
 		toolCallID: toolCallID,

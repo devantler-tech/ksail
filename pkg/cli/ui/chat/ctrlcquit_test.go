@@ -70,8 +70,8 @@ func ctrlCQuitCases() []ctrlCQuitCase {
 			chat.ExportSetShowReasoningPicker(m, true)
 		}},
 		{name: "permission prompt", setup: func(m *chat.Model) {
-			// Buffered so the handler's `response <- false` never blocks.
-			resp := make(chan bool, 1)
+			// Buffered so the handler's response send never blocks.
+			resp := make(chan chat.PermissionResponseForTest, 1)
 			chat.ExportSetPendingPermission(m, "tool", "cmd", "args", resp)
 		}},
 		{name: "elicitation prompt", setup: func(m *chat.Model) {

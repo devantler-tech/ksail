@@ -284,7 +284,9 @@ type Model struct {
 	reasoningPickerIndex int  // currently highlighted effort level in picker
 
 	// Permission request handling
-	pendingPermission *permissionRequestMsg // current permission request awaiting user response
+	pendingPermission   *permissionRequestMsg // current permission request awaiting user response
+	permissionDenyInput bool                  // true while collecting an optional denial reason
+	permissionDenyValue string                // current text of the optional denial reason
 
 	// Elicitation request handling
 	pendingElicitation *pendingElicitation // current elicitation request awaiting user response
