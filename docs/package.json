@@ -17,7 +17,7 @@
     "starlight-links-validator": "^0.24.0"
   },
   "devDependencies": {
-    "starlight-github-alerts": "^0.2.0"
+    "starlight-github-alerts": "^0.2.1"
   },
   "overrides": {
     "esbuild": "^0.28.1"
