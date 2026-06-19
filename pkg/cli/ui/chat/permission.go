@@ -28,15 +28,20 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// While collecting an optional denial reason, route keys to the deny-input handler.
+	if m.permissionDenyInput {
+		return m.handlePermissionDenyKey(msg)
+	}
+
 	switch msg.String() {
 	case "y", "Y":
 		return m.allowPermission()
 	case "a", "A":
 		return m.allowAlwaysPermission()
-	case "n", "N", "esc":
-		return m.denyPermission()
-	case "ctrl+c":
-		m.pendingPermission.response <- false
+	case "n", "N", keyEscape:
+		return m.beginDenyPermission()
+	case keyCtrlC:
+		m.sendPermissionResponse(permissionResponse{approved: false})
 
 		m.pendingPermission = nil
 
@@ -46,13 +51,67 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// allowPermission approves the pending permission request.
-func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
-	m.pendingPermission.response <- true
+// handlePermissionDenyKey handles keyboard input while collecting an optional denial reason.
+// Enter submits the reason (empty allowed), Esc cancels back to the allow/deny prompt, and
+// Ctrl+C aborts the session.
+func (m *Model) handlePermissionDenyKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		return m.submitDenyPermission()
+	case keyEscape:
+		// Cancel reason entry and return to the allow/deny prompt.
+		m.permissionDenyInput = false
+		m.permissionDenyValue = ""
+		m.updateDimensions()
+		m.updateViewportContent()
 
+		return m, nil
+	case keyCtrlC:
+		m.sendPermissionResponse(permissionResponse{approved: false})
+		m.resetPermissionState()
+
+		return m.handleQuit()
+	case keyBackspace:
+		if m.permissionDenyValue != "" {
+			m.permissionDenyValue = m.permissionDenyValue[:len(m.permissionDenyValue)-1]
+		}
+
+		return m, nil
+	default:
+		if len(msg.Runes) > 0 {
+			m.permissionDenyValue += string(msg.Runes)
+		}
+
+		return m, nil
+	}
+}
+
+// sendPermissionResponse forwards the decision to the waiting SDK handler, if any.
+func (m *Model) sendPermissionResponse(resp permissionResponse) {
+	if m.pendingPermission != nil {
+		m.pendingPermission.response <- resp
+	}
+}
+
+// resetPermissionState clears all permission-prompt state without recomputing layout.
+func (m *Model) resetPermissionState() {
 	m.pendingPermission = nil
+	m.permissionDenyInput = false
+	m.permissionDenyValue = ""
+}
+
+// clearPendingPermission resets all permission-prompt state and recomputes layout.
+func (m *Model) clearPendingPermission() {
+	m.resetPermissionState()
 	m.updateDimensions()
 	m.updateViewportContent()
+}
+
+// allowPermission approves the pending permission request.
+func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
+	m.sendPermissionResponse(permissionResponse{approved: true})
+
+	m.clearPendingPermission()
 
 	return m, m.waitForEvent()
 }
@@ -70,13 +129,25 @@ func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
 	return m.allowPermission()
 }
 
-// denyPermission denies the pending permission request.
-func (m *Model) denyPermission() (tea.Model, tea.Cmd) {
-	m.pendingPermission.response <- false
-
-	m.pendingPermission = nil
+// beginDenyPermission switches the prompt into reason-entry mode, where the user can type an
+// optional free-text denial reason before confirming with Enter.
+func (m *Model) beginDenyPermission() (tea.Model, tea.Cmd) {
+	m.permissionDenyInput = true
+	m.permissionDenyValue = ""
 	m.updateDimensions()
 	m.updateViewportContent()
+
+	return m, nil
+}
+
+// submitDenyPermission denies the pending permission request, forwarding any typed reason as
+// feedback. An empty reason denies without feedback.
+func (m *Model) submitDenyPermission() (tea.Model, tea.Cmd) {
+	feedback := strings.TrimSpace(m.permissionDenyValue)
+
+	m.sendPermissionResponse(permissionResponse{approved: false, feedback: feedback})
+
+	m.clearPendingPermission()
 
 	return m, m.waitForEvent()
 }
@@ -121,9 +192,16 @@ func (m *Model) renderPermissionModal() string {
 		contentLines++
 	}
 
-	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+	if m.permissionDenyInput {
+		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
+		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
 
-	contentLines += 3
+		contentLines += 3
+	} else {
+		content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+
+		contentLines += 3
+	}
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -205,7 +283,7 @@ func CreateTUIPermissionHandler(
 		}
 
 		toolName, command := extractPermissionDetails(request)
-		responseChan := make(chan bool, 1)
+		responseChan := make(chan permissionResponse, 1)
 
 		eventChan <- permissionRequestMsg{
 			toolCallID: toolCallID,
@@ -215,15 +293,25 @@ func CreateTUIPermissionHandler(
 			response:   responseChan,
 		}
 
-		approved := <-responseChan
-		if approved {
+		resp := <-responseChan
+		if resp.approved {
 			dedup.markApproved(toolCallID)
 
 			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
-		return &rpc.PermissionDecisionReject{}, nil
+		return rejectDecision(resp.feedback), nil
 	}
+}
+
+// rejectDecision builds a rejection decision, attaching the optional feedback reason when
+// non-empty (nil otherwise).
+func rejectDecision(feedback string) rpc.PermissionDecision {
+	if feedback == "" {
+		return &rpc.PermissionDecisionReject{}
+	}
+
+	return &rpc.PermissionDecisionReject{Feedback: &feedback}
 }
 
 // extractPermissionDetails extracts human-readable tool name and command

@@ -399,7 +399,7 @@ func TestRenderInputOrModal_ShowsPermissionModal(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan bool, 1)
+	resp := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "rm -rf /tmp/test", "", resp)
 
 	var updated tea.Model = model

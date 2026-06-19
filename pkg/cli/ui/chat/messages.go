@@ -67,14 +67,22 @@ type ToolOutputChunkMsg struct {
 	Chunk  string
 }
 
+// permissionResponse carries the outcome of a TUI permission prompt back to the
+// SDK handler. When approved is false, feedback may hold an optional free-text reason
+// the user typed, which is forwarded to the agent via rpc.PermissionDecisionReject.Feedback.
+type permissionResponse struct {
+	approved bool   // true=allow, false=deny
+	feedback string // optional denial reason (only meaningful when approved is false)
+}
+
 // permissionRequestMsg carries a permission request from a tool execution.
 // The TUI will display this to the user for approval/denial.
 type permissionRequestMsg struct {
-	toolCallID string      // unique identifier for this tool call
-	toolName   string      // name of the tool requesting permission
-	command    string      // the actual command or action being requested
-	arguments  string      // formatted arguments for display
-	response   chan<- bool // channel to send user response (true=allow, false=deny)
+	toolCallID string                    // unique identifier for this tool call
+	toolName   string                    // name of the tool requesting permission
+	command    string                    // the actual command or action being requested
+	arguments  string                    // formatted arguments for display
+	response   chan<- permissionResponse // channel to send the user's decision
 }
 
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.

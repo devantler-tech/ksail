@@ -116,7 +116,7 @@ func TestHandleStreamEvent_PermissionRequestMsg(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 	chat.ExportSetStreaming(model, true)
 
-	resp := make(chan bool, 1)
+	resp := make(chan chat.PermissionResponseForTest, 1)
 	updated, _ := model.Update(chat.ExportNewPermissionRequestMsg(
 		"call-1",
 		"bash",
