@@ -67,29 +67,23 @@ type ToolOutputChunkMsg struct {
 	Chunk  string
 }
 
-// permissionOutcome captures the user's decision for a permission prompt.
-// It is richer than a bool so the TUI can distinguish a one-time approval from a
-// session-scoped approval (which the SDK remembers for matching requests).
-type permissionOutcome int
-
-const (
-	// outcomeReject denies the pending permission request.
-	outcomeReject permissionOutcome = iota
-	// outcomeApproveOnce approves the request for this single invocation.
-	outcomeApproveOnce
-	// outcomeApproveSession approves the request and asks the SDK to remember the
-	// approval for matching requests for the rest of the session.
-	outcomeApproveSession
-)
+// permissionResponse carries the outcome of a TUI permission prompt back to the
+// SDK handler. When approved is false, feedback may hold an optional free-text reason
+// the user typed, which is forwarded to the agent via rpc.PermissionDecisionReject.Feedback.
+type permissionResponse struct {
+	approved          bool   // true=allow, false=deny
+	feedback          string // optional denial reason (only meaningful when approved is false)
+	approveForSession bool   // when approved, request SDK session-scoped approval if supported
+}
 
 // permissionRequestMsg carries a permission request from a tool execution.
 // The TUI will display this to the user for approval/denial.
 type permissionRequestMsg struct {
-	toolCallID string                   // unique identifier for this tool call
-	toolName   string                   // name of the tool requesting permission
-	command    string                   // the actual command or action being requested
-	arguments  string                   // formatted arguments for display
-	response   chan<- permissionOutcome // channel to send the user's decision
+	toolCallID string                    // unique identifier for this tool call
+	toolName   string                    // name of the tool requesting permission
+	command    string                    // the actual command or action being requested
+	arguments  string                    // formatted arguments for display
+	response   chan<- permissionResponse // channel to send the user's decision
 	// canOfferSessionApproval reports whether a session-scoped approval ("s") is
 	// applicable for this request. It is only true for kinds where KSail can build a
 	// correct session Approval (currently Shell and Write).

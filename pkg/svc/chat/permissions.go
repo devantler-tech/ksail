@@ -68,12 +68,25 @@ func promptForPermission(
 }
 
 // readPermissionResponse reads and processes the user's permission response from stdin.
+//
+// The user may approve with "y"/"yes", deny with an empty line/"n"/"no", or deny while
+// providing a free-text reason by typing anything else. A denial reason is forwarded to the
+// agent via rpc.PermissionDecisionReject.Feedback so it can adjust its next attempt.
 func readPermissionResponse(
 	writer io.Writer,
 ) (rpc.PermissionDecision, error) {
-	_, _ = fmt.Fprint(writer, "Allow this operation? [y/N]: ")
+	return readPermissionResponseFrom(writer, os.Stdin)
+}
 
-	reader := bufio.NewReader(os.Stdin)
+// readPermissionResponseFrom is the testable core of readPermissionResponse, reading the
+// user's response from the provided reader instead of os.Stdin.
+func readPermissionResponseFrom(
+	writer io.Writer,
+	stdin io.Reader,
+) (rpc.PermissionDecision, error) {
+	_, _ = fmt.Fprint(writer, "Allow this operation? [y/N, or type a reason to deny]: ")
+
+	reader := bufio.NewReader(stdin)
 
 	line, readErr := reader.ReadString('\n')
 
@@ -84,13 +97,8 @@ func readPermissionResponse(
 		return &rpc.PermissionDecisionUserNotAvailable{}, nil
 	}
 
-	if strings.TrimSpace(line) == "" {
-		return &rpc.PermissionDecisionReject{}, nil
-	}
-
-	input := strings.TrimSpace(strings.ToLower(line))
-
-	if input == "y" || input == "yes" {
+	trimmed := strings.TrimSpace(line)
+	if isApproval(trimmed) {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,
 			Content: "Permission granted",
@@ -100,13 +108,40 @@ func readPermissionResponse(
 		return &rpc.PermissionDecisionApproveOnce{}, nil
 	}
 
+	return rejectWithOptionalFeedback(writer, trimmed), nil
+}
+
+// isApproval reports whether the trimmed response line approves the operation.
+func isApproval(trimmed string) bool {
+	switch strings.ToLower(trimmed) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// rejectWithOptionalFeedback builds a rejection decision, attaching any free-text reason the
+// user typed. A blank line, "n", or "no" rejects without feedback; anything else is treated as
+// the feedback reason.
+func rejectWithOptionalFeedback(
+	writer io.Writer,
+	trimmed string,
+) rpc.PermissionDecision {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.InfoType,
 		Content: "Permission denied",
 		Writer:  writer,
 	})
 
-	return &rpc.PermissionDecisionReject{}, nil
+	switch strings.ToLower(trimmed) {
+	case "", "n", "no":
+		return &rpc.PermissionDecisionReject{}
+	default:
+		feedback := trimmed
+
+		return &rpc.PermissionDecisionReject{Feedback: &feedback}
+	}
 }
 
 // getPermissionDescription extracts a human-readable description from the permission request.
@@ -126,9 +161,31 @@ func getPermissionDescription(request copilot.PermissionRequest) string {
 		return labeled("URL: ", req.URL)
 	case *copilot.PermissionRequestWrite:
 		return writePermissionDescription(req)
+	case *copilot.PermissionRequestExtensionManagement:
+		return extensionManagementDescription(req)
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return labeled("Extension: ", req.ExtensionName)
 	default:
 		return ""
 	}
+}
+
+// extensionManagementDescription renders the operation and (when present) the
+// extension name for an extension-management permission request.
+func extensionManagementDescription(req *copilot.PermissionRequestExtensionManagement) string {
+	var parts []string
+
+	if op := labeled("Operation: ", req.Operation); op != "" {
+		parts = append(parts, op)
+	}
+
+	if req.ExtensionName != nil {
+		if name := labeled("Extension: ", *req.ExtensionName); name != "" {
+			parts = append(parts, name)
+		}
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // labeled returns "label+value" when value is non-empty, otherwise an empty string.

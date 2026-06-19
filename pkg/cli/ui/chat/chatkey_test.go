@@ -545,7 +545,7 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan chat.PermissionOutcomeForTest, 1)
+	resp := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "ls", "", resp)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -556,31 +556,43 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 
 	// Check the channel response
 	require.Len(t, resp, 1)
-	assert.Equal(t, chat.OutcomeApproveOnceForTest, <-resp)
+	assert.True(t, chat.ExportPermissionResponseApproved(<-resp))
 }
 
-func TestHandlePermissionKey_NDenies(t *testing.T) {
+func TestHandlePermissionKey_NOpensDenyInput(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan chat.PermissionOutcomeForTest, 1)
+	resp := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "rm /", "", resp)
 
+	// Pressing 'n' opens the optional-reason input rather than denying immediately.
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	m, ok := updated.(*chat.Model)
 	require.True(t, ok)
 
-	assert.False(t, chat.ExportHasPendingPermission(m))
+	assert.True(t, chat.ExportHasPendingPermission(m))
+	assert.True(t, chat.ExportIsPermissionDenyInput(m))
+	assert.Empty(t, resp, "no response should be sent until the reason is confirmed")
 
+	// Pressing Enter (with no reason) confirms the denial without feedback.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, ok = updated.(*chat.Model)
+	require.True(t, ok)
+
+	assert.False(t, chat.ExportHasPendingPermission(m))
 	require.Len(t, resp, 1)
-	assert.Equal(t, chat.OutcomeRejectForTest, <-resp)
+
+	decision := <-resp
+	assert.False(t, chat.ExportPermissionResponseApproved(decision))
+	assert.Empty(t, chat.ExportPermissionResponseFeedback(decision))
 }
 
 func TestHandlePermissionKey_CtrlC_DeniesAndQuits(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan chat.PermissionOutcomeForTest, 1)
+	resp := make(chan chat.PermissionResponseForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "cmd", "", resp)
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -591,7 +603,7 @@ func TestHandlePermissionKey_CtrlC_DeniesAndQuits(t *testing.T) {
 	assert.NotNil(t, cmd)
 
 	require.Len(t, resp, 1)
-	assert.Equal(t, chat.OutcomeRejectForTest, <-resp)
+	assert.False(t, chat.ExportPermissionResponseApproved(<-resp))
 }
 
 // --- handleViewportAndTextareaKey tests ---

@@ -217,7 +217,7 @@ func (m *Model) getContextHelpParts() []string {
 		return []string{m.styles.helpKey.Render(keyEscape) + " close"}
 
 	case m.pendingPermission != nil:
-		return getPermissionHelpParts(m.styles.helpKey)
+		return m.getPermissionHelpParts()
 
 	case m.showModelPicker:
 		return m.getModelPickerHelpParts()
@@ -233,8 +233,18 @@ func (m *Model) getContextHelpParts() []string {
 	}
 }
 
-// getPermissionHelpParts returns help for permission prompts.
-func getPermissionHelpParts(helpKeyStyle lipgloss.Style) []string {
+// getPermissionHelpParts returns help for permission prompts, adapting to whether the user is
+// entering an optional denial reason.
+func (m *Model) getPermissionHelpParts() []string {
+	helpKeyStyle := m.styles.helpKey
+
+	if m.permissionDenyInput {
+		return []string{
+			helpKeyStyle.Render(keyEnter) + " confirm deny",
+			helpKeyStyle.Render(keyEscape) + " back",
+		}
+	}
+
 	return []string{
 		helpKeyStyle.Render("y") + " allow",
 		helpKeyStyle.Render("n") + " deny",

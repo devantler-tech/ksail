@@ -28,23 +28,26 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// While collecting an optional denial reason, route keys to the deny-input handler.
+	if m.permissionDenyInput {
+		return m.handlePermissionDenyKey(msg)
+	}
+
 	switch msg.String() {
 	case "y", "Y":
-		return m.resolvePermission(outcomeApproveOnce)
+		return m.allowPermission()
 	case "s", "S":
-		// Session approval is only honoured for kinds where KSail can build a
-		// correct Approval; otherwise fall back to a one-time approval.
 		if m.pendingPermission.canOfferSessionApproval {
-			return m.resolvePermission(outcomeApproveSession)
+			return m.allowPermissionForSession()
 		}
 
-		return m.resolvePermission(outcomeApproveOnce)
+		return m.allowPermission()
 	case "a", "A":
 		return m.allowAlwaysPermission()
-	case "n", "N", "esc":
-		return m.resolvePermission(outcomeReject)
-	case "ctrl+c":
-		m.pendingPermission.response <- outcomeReject
+	case "n", "N", keyEscape:
+		return m.beginDenyPermission()
+	case keyCtrlC:
+		m.sendPermissionResponse(permissionResponse{approved: false})
 
 		m.pendingPermission = nil
 
@@ -54,14 +57,77 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resolvePermission sends the chosen outcome on the response channel, clears the
-// pending prompt, and resumes waiting for events.
-func (m *Model) resolvePermission(outcome permissionOutcome) (tea.Model, tea.Cmd) {
-	m.pendingPermission.response <- outcome
+// handlePermissionDenyKey handles keyboard input while collecting an optional denial reason.
+// Enter submits the reason (empty allowed), Esc cancels back to the allow/deny prompt, and
+// Ctrl+C aborts the session.
+func (m *Model) handlePermissionDenyKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		return m.submitDenyPermission()
+	case keyEscape:
+		// Cancel reason entry and return to the allow/deny prompt.
+		m.permissionDenyInput = false
+		m.permissionDenyValue = ""
+		m.updateDimensions()
+		m.updateViewportContent()
 
+		return m, nil
+	case keyCtrlC:
+		m.sendPermissionResponse(permissionResponse{approved: false})
+		m.resetPermissionState()
+
+		return m.handleQuit()
+	case keyBackspace:
+		if m.permissionDenyValue != "" {
+			m.permissionDenyValue = m.permissionDenyValue[:len(m.permissionDenyValue)-1]
+		}
+
+		return m, nil
+	default:
+		if len(msg.Runes) > 0 {
+			m.permissionDenyValue += string(msg.Runes)
+		}
+
+		return m, nil
+	}
+}
+
+// sendPermissionResponse forwards the decision to the waiting SDK handler, if any.
+func (m *Model) sendPermissionResponse(resp permissionResponse) {
+	if m.pendingPermission != nil {
+		m.pendingPermission.response <- resp
+	}
+}
+
+// resetPermissionState clears all permission-prompt state without recomputing layout.
+func (m *Model) resetPermissionState() {
 	m.pendingPermission = nil
+	m.permissionDenyInput = false
+	m.permissionDenyValue = ""
+}
+
+// clearPendingPermission resets all permission-prompt state and recomputes layout.
+func (m *Model) clearPendingPermission() {
+	m.resetPermissionState()
 	m.updateDimensions()
 	m.updateViewportContent()
+}
+
+// allowPermission approves the pending permission request.
+func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
+	m.sendPermissionResponse(permissionResponse{approved: true})
+
+	m.clearPendingPermission()
+
+	return m, m.waitForEvent()
+}
+
+// allowPermissionForSession approves the pending permission request for this session
+// when session-scoped approvals are supported by the request kind.
+func (m *Model) allowPermissionForSession() (tea.Model, tea.Cmd) {
+	m.sendPermissionResponse(permissionResponse{approved: true, approveForSession: true})
+
+	m.clearPendingPermission()
 
 	return m, m.waitForEvent()
 }
@@ -76,7 +142,30 @@ func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
 		m.chatMode = AutopilotMode
 	}
 
-	return m.resolvePermission(outcomeApproveOnce)
+	return m.allowPermission()
+}
+
+// beginDenyPermission switches the prompt into reason-entry mode, where the user can type an
+// optional free-text denial reason before confirming with Enter.
+func (m *Model) beginDenyPermission() (tea.Model, tea.Cmd) {
+	m.permissionDenyInput = true
+	m.permissionDenyValue = ""
+	m.updateDimensions()
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// submitDenyPermission denies the pending permission request, forwarding any typed reason as
+// feedback. An empty reason denies without feedback.
+func (m *Model) submitDenyPermission() (tea.Model, tea.Cmd) {
+	feedback := strings.TrimSpace(m.permissionDenyValue)
+
+	m.sendPermissionResponse(permissionResponse{approved: false, feedback: feedback})
+
+	m.clearPendingPermission()
+
+	return m, m.waitForEvent()
 }
 
 // renderPermissionModal renders the permission prompt as an inline modal section.
@@ -119,13 +208,17 @@ func (m *Model) renderPermissionModal() string {
 		contentLines++
 	}
 
-	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+	if m.permissionDenyInput {
+		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
+		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
 
-	contentLines += 3
+		contentLines += 3
+	} else {
+		content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+		content.WriteString(mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n")
 
-	content.WriteString(mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n")
-
-	contentLines++
+		contentLines += 4
+	}
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -207,34 +300,42 @@ func CreateTUIPermissionHandler(
 		}
 
 		toolName, command := extractPermissionDetails(request)
-		responseChan := make(chan permissionOutcome, 1)
+		responseChan := make(chan permissionResponse, 1)
 
 		eventChan <- permissionRequestMsg{
 			toolCallID:              toolCallID,
 			toolName:                toolName,
 			command:                 command,
-			arguments:               "",
+			arguments:               permissionArguments(request),
 			response:                responseChan,
 			canOfferSessionApproval: canOfferSessionApproval(request),
 		}
 
-		switch <-responseChan {
-		case outcomeApproveSession:
+		resp := <-responseChan
+		if resp.approved {
 			dedup.markApproved(toolCallID)
 
-			return &rpc.PermissionDecisionApproveForSession{
-				Approval: sessionApproval(request),
-			}, nil
-		case outcomeApproveOnce:
-			dedup.markApproved(toolCallID)
+			if resp.approveForSession {
+				if approval := sessionApproval(request); approval != nil {
+					return &rpc.PermissionDecisionApproveForSession{Approval: approval}, nil
+				}
+			}
 
 			return &rpc.PermissionDecisionApproveOnce{}, nil
-		case outcomeReject:
-			return &rpc.PermissionDecisionReject{}, nil
 		}
 
-		return &rpc.PermissionDecisionReject{}, nil
+		return rejectDecision(resp.feedback), nil
 	}
+}
+
+// rejectDecision builds a rejection decision, attaching the optional feedback reason when
+// non-empty (nil otherwise).
+func rejectDecision(feedback string) rpc.PermissionDecision {
+	if feedback == "" {
+		return &rpc.PermissionDecisionReject{}
+	}
+
+	return &rpc.PermissionDecisionReject{Feedback: &feedback}
 }
 
 // canOfferSessionApproval reports whether KSail can build a correct session-scoped
@@ -328,6 +429,52 @@ func permissionDetail(request copilot.PermissionRequest) string {
 		return req.ToolName
 	}
 
+	return extensionPermissionDetail(request)
+}
+
+// extensionPermissionDetail returns the human-readable detail for the
+// extension-related permission request variants, or "" for any other type.
+func extensionPermissionDetail(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestExtensionManagement:
+		if name := derefString(req.ExtensionName); name != "" {
+			return req.Operation + " " + name
+		}
+
+		return req.Operation
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return req.ExtensionName
+	}
+
+	return ""
+}
+
+// permissionArguments returns a short, kind-specific line of extra context for a
+// permission request, shown to the user under the "Arguments:" label in the modal.
+// It returns "" when there's nothing useful to add for the request's kind.
+func permissionArguments(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		if warning := derefString(req.Warning); warning != "" {
+			return "⚠ " + warning
+		}
+	case *copilot.PermissionRequestMCP:
+		if req.ServerName == "" {
+			return ""
+		}
+
+		detail := "Server: " + req.ServerName
+		if req.ReadOnly {
+			detail += " (read-only)"
+		}
+
+		return detail
+	case *copilot.PermissionRequestWrite:
+		if req.NewFileContents != nil {
+			return "New file"
+		}
+	}
+
 	return ""
 }
 
@@ -353,6 +500,19 @@ func permissionToolCallID(request copilot.PermissionRequest) string {
 		return derefString(req.ToolCallID)
 	}
 
+	return extensionPermissionToolCallID(request)
+}
+
+// extensionPermissionToolCallID extracts the tool-call ID from the
+// extension-related permission request variants, or "" for any other type.
+func extensionPermissionToolCallID(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestExtensionManagement:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return derefString(req.ToolCallID)
+	}
+
 	return ""
 }
 
@@ -367,14 +527,16 @@ func derefString(s *string) string {
 
 // permissionKindLabels maps known permission kinds to human-readable tool names.
 var permissionKindLabels = map[copilot.PermissionRequestKind]string{
-	copilot.PermissionRequestKindShell:      "Shell Command",
-	copilot.PermissionRequestKindWrite:      "File Write",
-	copilot.PermissionRequestKindRead:       "File Read",
-	copilot.PermissionRequestKindURL:        "URL",
-	copilot.PermissionRequestKindMCP:        "MCP Tool",
-	copilot.PermissionRequestKindCustomTool: "Custom Tool",
-	copilot.PermissionRequestKindMemory:     "Memory",
-	copilot.PermissionRequestKindHook:       "Hook",
+	copilot.PermissionRequestKindShell:                     "Shell Command",
+	copilot.PermissionRequestKindWrite:                     "File Write",
+	copilot.PermissionRequestKindRead:                      "File Read",
+	copilot.PermissionRequestKindURL:                       "URL",
+	copilot.PermissionRequestKindMCP:                       "MCP Tool",
+	copilot.PermissionRequestKindCustomTool:                "Custom Tool",
+	copilot.PermissionRequestKindMemory:                    "Memory",
+	copilot.PermissionRequestKindHook:                      "Hook",
+	copilot.PermissionRequestKindExtensionManagement:       "Extension Management",
+	copilot.PermissionRequestKindExtensionPermissionAccess: "Extension Access",
 }
 
 // formatPermissionKind converts a permission kind to a human-readable tool name.
