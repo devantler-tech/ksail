@@ -211,7 +211,7 @@ func CreateTUIPermissionHandler(
 			toolCallID: toolCallID,
 			toolName:   toolName,
 			command:    command,
-			arguments:  "",
+			arguments:  permissionArguments(request),
 			response:   responseChan,
 		}
 
@@ -260,6 +260,35 @@ func permissionDetail(request copilot.PermissionRequest) string {
 		return req.ToolName
 	case *copilot.PermissionRequestMCP:
 		return req.ToolName
+	}
+
+	return ""
+}
+
+// permissionArguments returns a short, kind-specific line of extra context for a
+// permission request, shown to the user under the "Arguments:" label in the modal.
+// It returns "" when there's nothing useful to add for the request's kind.
+func permissionArguments(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		if warning := derefString(req.Warning); warning != "" {
+			return "⚠ " + warning
+		}
+	case *copilot.PermissionRequestMCP:
+		if req.ServerName == "" {
+			return ""
+		}
+
+		detail := "Server: " + req.ServerName
+		if req.ReadOnly {
+			detail += " (read-only)"
+		}
+
+		return detail
+	case *copilot.PermissionRequestWrite:
+		if req.NewFileContents != nil {
+			return "New file"
+		}
 	}
 
 	return ""

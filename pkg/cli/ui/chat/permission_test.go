@@ -346,6 +346,103 @@ func TestPermissionModal_AllowThisOperation(t *testing.T) {
 	}
 }
 
+// assertPermissionArguments runs a table of permissionArguments cases.
+func assertPermissionArguments(t *testing.T, tests []struct {
+	name    string
+	request copilot.PermissionRequest
+	want    string
+},
+) {
+	t.Helper()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := chat.ExportPermissionArguments(testCase.request)
+			if got != testCase.want {
+				t.Errorf("permissionArguments() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+// TestPermissionArguments_Shell tests shell-warning extraction for permission requests.
+func TestPermissionArguments_Shell(t *testing.T) {
+	t.Parallel()
+
+	assertPermissionArguments(t, []struct {
+		name    string
+		request copilot.PermissionRequest
+		want    string
+	}{
+		{
+			name: "shell with warning",
+			request: &copilot.PermissionRequestShell{
+				FullCommandText: "rm -rf /",
+				Warning:         new("dangerous"),
+			},
+			want: "⚠ dangerous",
+		},
+		{
+			name: "shell without warning",
+			request: &copilot.PermissionRequestShell{
+				FullCommandText: "ls",
+			},
+			want: "",
+		},
+		{
+			name:    "read has no extra context",
+			request: &copilot.PermissionRequestRead{Path: "/etc/config.yaml"},
+			want:    "",
+		},
+	})
+}
+
+// TestPermissionArguments_MCPAndWrite tests MCP server and write new-file extraction.
+func TestPermissionArguments_MCPAndWrite(t *testing.T) {
+	t.Parallel()
+
+	assertPermissionArguments(t, []struct {
+		name    string
+		request copilot.PermissionRequest
+		want    string
+	}{
+		{
+			name: "mcp with server name",
+			request: &copilot.PermissionRequestMCP{
+				ServerName: "ksail",
+				ToolName:   "cluster_create",
+			},
+			want: "Server: ksail",
+		},
+		{
+			name: "mcp read-only",
+			request: &copilot.PermissionRequestMCP{
+				ServerName: "ksail",
+				ToolName:   "cluster_list",
+				ReadOnly:   true,
+			},
+			want: "Server: ksail (read-only)",
+		},
+		{
+			name: "write new file",
+			request: &copilot.PermissionRequestWrite{
+				FileName:        "/tmp/output.txt",
+				NewFileContents: new("hello"),
+			},
+			want: "New file",
+		},
+		{
+			name: "write existing file",
+			request: &copilot.PermissionRequestWrite{
+				FileName: "/tmp/output.txt",
+			},
+			want: "",
+		},
+	})
+}
+
 // TestPermissionModal_AllowAlwaysSwitchesToAutopilot tests that pressing 'a' on the
 // permission prompt switches to Autopilot mode and approves the request.
 func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {

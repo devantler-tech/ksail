@@ -117,6 +117,9 @@ var ExportSetLastUsageModel = func(m *Model, model string) {
 // ExportExtractPermissionDetails exposes extractPermissionDetails for testing.
 var ExportExtractPermissionDetails = extractPermissionDetails
 
+// ExportPermissionArguments exposes permissionArguments for testing.
+var ExportPermissionArguments = permissionArguments
+
 // ExportFormatPermissionKind exposes formatPermissionKind for testing.
 var ExportFormatPermissionKind = formatPermissionKind
 
