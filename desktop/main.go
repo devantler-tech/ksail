@@ -130,6 +130,11 @@ func run() error {
 		func(event *application.ApplicationEvent) { handleDeepLink(window, event.Context().URL()) },
 	)
 
+	// This is a menu-bar app: closing the window (red button / ⌘W / menu Close) hides it to the tray
+	// instead of destroying it, so it stays reopenable via the tray's "Show KSail". Must be registered
+	// before Run(). See hideWindowOnClose.
+	hideWindowOnClose(window)
+
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
 	installSystemTray(app, window)
@@ -169,4 +174,37 @@ func installSystemTray(app *application.App, window *application.WebviewWindow) 
 	trayMenu.AddSeparator()
 	trayMenu.Add("Quit KSail").OnClick(func(_ *application.Context) { app.Quit() })
 	tray.SetMenu(trayMenu)
+}
+
+// windowHider is the subset of *application.WebviewWindow the close-to-tray hook needs. Declaring it as
+// an interface lets the hook's behavior be unit-tested without a live Wails window (which needs a GUI).
+type windowHider interface {
+	Hide() application.Window
+}
+
+// hideWindowOnClose makes closing the window hide it to the menu bar/tray instead of destroying it, so
+// the single window stays alive and reopenable from the tray's "Show KSail" for the app's lifetime.
+// Quitting is explicit — the tray's "Quit KSail" (app.Quit) and ⌘Q both terminate the app process
+// directly, bypassing this hook.
+//
+// Wails v3's built-in WindowClosing handler is a *listener* that destroys the window: it marks it
+// destroyed, closes the native window, and removes it from the app's window registry. Once destroyed,
+// the tray's window.Show() can only try to recreate the window (a no-op on this alpha, so "nothing
+// happens"), and window.Hide() invokes hide on the freed native window, crashing the whole process —
+// exactly the two reported tray failures. A *hook* runs before listeners and, when it cancels the
+// event, short-circuits them (see WebviewWindow.HandleWindowEvent), so cancelling here skips the
+// destroy and we hide instead. On macOS the native windowShouldClose: already returns false (it never
+// closes the NSWindow itself; the Go listener did the destroying), so cancelling fully prevents it.
+func hideWindowOnClose(window *application.WebviewWindow) {
+	window.RegisterHook(events.Common.WindowClosing, hideOnCloseHook(window))
+}
+
+// hideOnCloseHook is the WindowClosing hook body: cancel the close (so Wails' destroying listener is
+// skipped) then hide the window. Split from hideWindowOnClose so it can be unit-tested against a fake
+// windowHider and a real application.WindowEvent.
+func hideOnCloseHook(window windowHider) func(*application.WindowEvent) {
+	return func(event *application.WindowEvent) {
+		event.Cancel()
+		window.Hide()
+	}
 }
