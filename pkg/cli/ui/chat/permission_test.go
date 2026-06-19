@@ -622,6 +622,7 @@ func TestPermissionKey_SessionApprovalWithS(t *testing.T) {
 	chat.ExportSetPendingPermissionSession(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 
 	select {
@@ -629,6 +630,7 @@ func TestPermissionKey_SessionApprovalWithS(t *testing.T) {
 		if !chat.ExportPermissionResponseApproved(resp) {
 			t.Fatal("expected approval after pressing 's'")
 		}
+
 		if !chat.ExportPermissionResponseApproveForSession(resp) {
 			t.Error("expected session approval after pressing 's'")
 		}
@@ -640,6 +642,7 @@ func TestPermissionKey_SessionApprovalWithS(t *testing.T) {
 	if !ok {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
+
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after session approval")
 	}
@@ -661,6 +664,7 @@ func TestPermissionKey_SFallsBackToApproveOnce(t *testing.T) {
 		if !chat.ExportPermissionResponseApproved(resp) {
 			t.Fatal("expected approval fallback after pressing 's'")
 		}
+
 		if chat.ExportPermissionResponseApproveForSession(resp) {
 			t.Error("did not expect session approval fallback for unsupported request")
 		}

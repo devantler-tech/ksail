@@ -208,17 +208,7 @@ func (m *Model) renderPermissionModal() string {
 		contentLines++
 	}
 
-	if m.permissionDenyInput {
-		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
-		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
-
-		contentLines += 3
-	} else {
-		content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
-		content.WriteString(mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n")
-
-		contentLines += 4
-	}
+	contentLines += m.renderPermissionPromptSection(&content, mStyles)
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -229,6 +219,34 @@ func (m *Model) renderPermissionModal() string {
 		Height(contentLines)
 
 	return modalStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// Content-line counts contributed by the permission modal's bottom prompt section, used to
+// size the modal height.
+const (
+	denyInputPromptLines = 3 // blank line + reason-input line (+ spacing)
+	allowPromptLines     = 4 // blank line + "Allow this operation?" + key-hint line (+ spacing)
+)
+
+// renderPermissionPromptSection writes the bottom section of the permission modal — either the
+// optional-reason input (when denying) or the allow/deny prompt with key hints — and returns
+// the number of content lines it added.
+func (m *Model) renderPermissionPromptSection(
+	content *strings.Builder, mStyles modalContentStyles,
+) int {
+	if m.permissionDenyInput {
+		reasonLine := "Reason for denial (optional): " + m.permissionDenyValue
+		content.WriteString("\n" + mStyles.clipStyle.Render(reasonLine) + "\n")
+
+		return denyInputPromptLines
+	}
+
+	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
+	content.WriteString(
+		mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n",
+	)
+
+	return allowPromptLines
 }
 
 // permissionDeduplicator tracks approved ToolCallIDs to prevent duplicate permission prompts.
