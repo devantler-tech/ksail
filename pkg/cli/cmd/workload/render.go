@@ -3,6 +3,8 @@ package workload
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -12,6 +14,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 )
+
+// renderedManifestPerm is the permission for the rendered manifests file written
+// to the scan temp directory.
+const renderedManifestPerm = 0o600
 
 // gitopsRenderer expands a kustomization directory into the manifests Flux
 // actually applies: Kustomize build, Flux variable substitution, then in-process
@@ -52,6 +58,44 @@ func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Res
 	}
 
 	return result, nil
+}
+
+// renderToTempDir renders one kustomization directory to a fresh temp directory
+// and returns it together with a cleanup func, so a file-based scanner
+// (kubescape) can read the actually-applied manifests. Non-silent render
+// degradations are warned to the user. The caller must invoke cleanup (e.g. via
+// defer) to remove the temp directory.
+func (g *gitopsRenderer) renderToTempDir(
+	ctx context.Context,
+	cmd *cobra.Command,
+	kustDir string,
+) (string, func(), error) {
+	result, err := g.expand(ctx, kustDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("render %q: %w", kustDir, err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ksail-scan-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create scan temp dir: %w", err)
+	}
+
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
+
+	manifestPath := filepath.Join(tmpDir, "manifests.yaml")
+
+	err = os.WriteFile(manifestPath, result.Bytes(), renderedManifestPerm)
+	if err != nil {
+		cleanup()
+
+		return "", nil, fmt.Errorf("write rendered manifests: %w", err)
+	}
+
+	sink := &degradationSink{}
+	sink.add(result.Degradations)
+	sink.report(cmd)
+
+	return tmpDir, cleanup, nil
 }
 
 // degradationSink collects non-silent render degradations across parallel

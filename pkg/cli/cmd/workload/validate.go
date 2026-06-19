@@ -273,16 +273,6 @@ func loadValidateConfigSilently(cmd *cobra.Command) (*v1alpha1.Cluster, bool, er
 	return cfg, found, nil
 }
 
-// resolveValidatePathFromCmd loads ksail.yaml once and resolves the path to
-// validate. It is the entry point for callers (validate, scan) that only need
-// the source path; the validate command additionally derives skip-kinds from
-// the same load to avoid a second read.
-func resolveValidatePathFromCmd(cmd *cobra.Command, args []string) (string, error) {
-	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
-
-	return resolveValidatePath(args, cfg, configFound, loadErr)
-}
-
 // resolveValidatePath determines which path to validate from the single config
 // load. If an explicit argument is given, it is returned directly. Otherwise
 // the configured sourceDirectory is used; a config file that exists but failed

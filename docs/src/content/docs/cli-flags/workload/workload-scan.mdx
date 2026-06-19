@@ -11,6 +11,12 @@ Run security scans on Kubernetes manifests using Kubescape.
 This command scans manifests in the specified path against security frameworks
 such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
 
+When the target directory is a Kustomize root, manifests are rendered before
+scanning (Kustomize build + Flux variable substitution + in-process Helm
+templating of HelmReleases), so findings reflect overlay patches and chart output
+rather than the raw files. HelmReleases that cannot be rendered offline are left
+as-is with a warning. Use --raw to scan the raw files instead.
+
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
@@ -29,6 +35,7 @@ Flags:
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
   -o, --output string                  Output file path (stdout if empty)
+      --raw                            Scan raw manifest files instead of the Kustomize + Helm rendered output (restores the pre-rendering behavior)
       --verbose                        Show all resources in output, not just failed ones
 
 Global Flags:
