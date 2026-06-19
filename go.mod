@@ -62,7 +62,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/cosi-project/runtime v1.16.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/github/copilot-sdk/go v1.0.0
+	github.com/github/copilot-sdk/go v1.0.1
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/go-github/v72 v72.0.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
