@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-bad
+  namespace: default
+# data must be a map of string values; a scalar here is schema-invalid and is
+# only detectable once the chart is rendered (the HelmRelease CR itself is valid).
+data: "this should be a map, not a string"

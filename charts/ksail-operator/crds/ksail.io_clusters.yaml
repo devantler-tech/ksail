@@ -938,6 +938,10 @@ spec:
                     description: ValidationConfig defines configuration for the workload
                       validate command.
                     properties:
+                      helmRender:
+                        description: HelmRender controls whether HelmReleases are
+                          rendered before validation.
+                        type: boolean
                       skipKinds:
                         description: |-
                           SkipKinds lists additional Kubernetes kinds to skip during validation.

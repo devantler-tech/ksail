@@ -1,0 +1,6 @@
+apiVersion: v2
+name: invalidchart
+description: A minimal chart that renders a schema-invalid ConfigMap (offline test fixture).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
