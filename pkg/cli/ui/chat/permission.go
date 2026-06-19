@@ -262,6 +262,23 @@ func permissionDetail(request copilot.PermissionRequest) string {
 		return req.ToolName
 	}
 
+	return extensionPermissionDetail(request)
+}
+
+// extensionPermissionDetail returns the human-readable detail for the
+// extension-related permission request variants, or "" for any other type.
+func extensionPermissionDetail(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestExtensionManagement:
+		if name := derefString(req.ExtensionName); name != "" {
+			return req.Operation + " " + name
+		}
+
+		return req.Operation
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return req.ExtensionName
+	}
+
 	return ""
 }
 
@@ -287,6 +304,19 @@ func permissionToolCallID(request copilot.PermissionRequest) string {
 		return derefString(req.ToolCallID)
 	}
 
+	return extensionPermissionToolCallID(request)
+}
+
+// extensionPermissionToolCallID extracts the tool-call ID from the
+// extension-related permission request variants, or "" for any other type.
+func extensionPermissionToolCallID(request copilot.PermissionRequest) string {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestExtensionManagement:
+		return derefString(req.ToolCallID)
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return derefString(req.ToolCallID)
+	}
+
 	return ""
 }
 
@@ -301,14 +331,16 @@ func derefString(s *string) string {
 
 // permissionKindLabels maps known permission kinds to human-readable tool names.
 var permissionKindLabels = map[copilot.PermissionRequestKind]string{
-	copilot.PermissionRequestKindShell:      "Shell Command",
-	copilot.PermissionRequestKindWrite:      "File Write",
-	copilot.PermissionRequestKindRead:       "File Read",
-	copilot.PermissionRequestKindURL:        "URL",
-	copilot.PermissionRequestKindMCP:        "MCP Tool",
-	copilot.PermissionRequestKindCustomTool: "Custom Tool",
-	copilot.PermissionRequestKindMemory:     "Memory",
-	copilot.PermissionRequestKindHook:       "Hook",
+	copilot.PermissionRequestKindShell:                     "Shell Command",
+	copilot.PermissionRequestKindWrite:                     "File Write",
+	copilot.PermissionRequestKindRead:                      "File Read",
+	copilot.PermissionRequestKindURL:                       "URL",
+	copilot.PermissionRequestKindMCP:                       "MCP Tool",
+	copilot.PermissionRequestKindCustomTool:                "Custom Tool",
+	copilot.PermissionRequestKindMemory:                    "Memory",
+	copilot.PermissionRequestKindHook:                      "Hook",
+	copilot.PermissionRequestKindExtensionManagement:       "Extension Management",
+	copilot.PermissionRequestKindExtensionPermissionAccess: "Extension Access",
 }
 
 // formatPermissionKind converts a permission kind to a human-readable tool name.

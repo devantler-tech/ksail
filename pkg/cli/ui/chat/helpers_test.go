@@ -28,6 +28,16 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 		},
 		{name: "memory", kind: copilot.PermissionRequestKindMemory, expected: "Memory"},
 		{name: "hook", kind: copilot.PermissionRequestKindHook, expected: "Hook"},
+		{
+			name:     "extension-management",
+			kind:     copilot.PermissionRequestKindExtensionManagement,
+			expected: "Extension Management",
+		},
+		{
+			name:     "extension-permission-access",
+			kind:     copilot.PermissionRequestKindExtensionPermissionAccess,
+			expected: "Extension Access",
+		},
 		{name: "empty kind", kind: "", expected: "Unknown Operation"},
 		{name: "custom kind", kind: "custom_action", expected: "Custom Action"},
 	}
@@ -132,6 +142,60 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 			request:     &copilot.PermissionRequestMemory{},
 			wantTool:    "Memory",
 			wantCommand: "memory",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			toolName, command := chat.ExportExtractPermissionDetails(testCase.request)
+			if toolName != testCase.wantTool {
+				t.Errorf("toolName = %q, want %q", toolName, testCase.wantTool)
+			}
+
+			if command != testCase.wantCommand {
+				t.Errorf("command = %q, want %q", command, testCase.wantCommand)
+			}
+		})
+	}
+}
+
+// TestExtractPermissionDetails_Extension tests permission detail extraction for extension kinds.
+func TestExtractPermissionDetails_Extension(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		request     copilot.PermissionRequest
+		wantTool    string
+		wantCommand string
+	}{
+		{
+			name: "extension management with name",
+			request: &copilot.PermissionRequestExtensionManagement{
+				ExtensionName: new("my-extension"),
+				Operation:     "scaffold",
+			},
+			wantTool:    "Extension Management",
+			wantCommand: "scaffold my-extension",
+		},
+		{
+			name: "extension management without name falls back to operation",
+			request: &copilot.PermissionRequestExtensionManagement{
+				Operation: "reload",
+			},
+			wantTool:    "Extension Management",
+			wantCommand: "reload",
+		},
+		{
+			name: "extension permission access",
+			request: &copilot.PermissionRequestExtensionPermissionAccess{
+				ExtensionName: "my-extension",
+				Capabilities:  []string{"read"},
+			},
+			wantTool:    "Extension Access",
+			wantCommand: "my-extension",
 		},
 	}
 

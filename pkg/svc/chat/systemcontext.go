@@ -161,7 +161,9 @@ func IsReadOperation(kind copilot.PermissionRequestKind) bool {
 		copilot.PermissionRequestKindMCP,
 		copilot.PermissionRequestKindMemory,
 		copilot.PermissionRequestKindWrite,
-		copilot.PermissionRequestKindHook:
+		copilot.PermissionRequestKindHook,
+		copilot.PermissionRequestKindExtensionManagement,
+		copilot.PermissionRequestKindExtensionPermissionAccess:
 		return false
 	default:
 		return false
