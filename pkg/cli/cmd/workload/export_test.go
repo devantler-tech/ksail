@@ -121,6 +121,25 @@ func ExportHasKustomizationFile(dir string) bool {
 	return hasKustomizationFile(dir)
 }
 
+// ExportResolveScanInput exposes resolveScanInput for testing the scan render
+// decision (rendered temp dir vs raw path) and temp-dir cleanup without
+// invoking kubescape.
+func ExportResolveScanInput(
+	ctx context.Context,
+	cmd *cobra.Command,
+	path string,
+	cfg *v1alpha1.Cluster,
+	configFound, noRender bool,
+) (string, func(), error) {
+	return resolveScanInput(ctx, cmd, path, cfg, configFound, noRender)
+}
+
+// ExportResolveScanOutput exposes resolveScanOutput for testing the scan
+// --output directory creation and canonicalization.
+func ExportResolveScanOutput(output string) (string, error) {
+	return resolveScanOutput(output)
+}
+
 // ExportPollInterval exposes the engine's poll interval constant for testing.
 const ExportPollInterval = workloadwatch.PollInterval
 

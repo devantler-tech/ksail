@@ -45,6 +45,7 @@ func NewValidateCmd() *cobra.Command {
 		skipSecrets          bool
 		strict               bool
 		ignoreMissingSchemas bool
+		skipHelmRender       bool
 		skipKinds            []string
 	)
 
@@ -85,23 +86,35 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 				cmd.Context(),
 				cmd,
 				args,
-				skipSecrets,
-				strict,
-				ignoreMissingSchemas,
-				skipKinds,
+				validateFlags{
+					skipSecrets:          skipSecrets,
+					strict:               strict,
+					ignoreMissingSchemas: ignoreMissingSchemas,
+					skipHelmRender:       skipHelmRender,
+					skipKinds:            skipKinds,
+				},
 			)
 		},
 	}
 
-	addValidateFlags(cmd, &skipSecrets, &strict, &ignoreMissingSchemas, &skipKinds)
+	addValidateFlags(cmd, &skipSecrets, &strict, &ignoreMissingSchemas, &skipHelmRender, &skipKinds)
 
 	return cmd
+}
+
+// validateFlags carries the resolved validate command flags.
+type validateFlags struct {
+	skipSecrets          bool
+	strict               bool
+	ignoreMissingSchemas bool
+	skipHelmRender       bool
+	skipKinds            []string
 }
 
 // addValidateFlags registers the flags for the validate command.
 func addValidateFlags(
 	cmd *cobra.Command,
-	skipSecrets, strict, ignoreMissingSchemas *bool,
+	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender *bool,
 	skipKinds *[]string,
 ) {
 	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
@@ -111,6 +124,13 @@ func addValidateFlags(
 		"ignore-missing-schemas",
 		true,
 		"Ignore resources with missing schemas",
+	)
+	cmd.Flags().BoolVar(
+		skipHelmRender,
+		"skip-helm-render",
+		false,
+		"Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). "+
+			"By default, charts are rendered in-process and the rendered manifests are validated.",
 	)
 	cmd.Flags().StringSliceVar(
 		skipKinds,
@@ -125,10 +145,7 @@ func runValidateCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,
-	skipSecrets bool,
-	strict bool,
-	ignoreMissingSchemas bool,
-	skipKinds []string,
+	flags validateFlags,
 ) error {
 	// Load ksail.yaml exactly once. Both the source-directory and the
 	// configured skip-kinds are derived from this single load, with
@@ -157,11 +174,11 @@ func runValidateCmd(
 
 	// Build validation options
 	validationOpts := &kubeconform.ValidationOptions{
-		Strict:               strict,
-		IgnoreMissingSchemas: ignoreMissingSchemas,
+		Strict:               flags.strict,
+		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
 	}
 
-	if skipSecrets {
+	if flags.skipSecrets {
 		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
 	}
 
@@ -169,13 +186,45 @@ func runValidateCmd(
 	// spec.workload.validation.skipKinds in ksail.yaml. This lets a repo opt out
 	// of validating CRDs whose CRDs-catalog schema is stale or missing (which
 	// kubeconform would otherwise reject as "additional properties not allowed").
-	validationOpts.SkipKinds = append(validationOpts.SkipKinds, skipKinds...)
+	validationOpts.SkipKinds = append(validationOpts.SkipKinds, flags.skipKinds...)
 	validationOpts.SkipKinds = append(
 		validationOpts.SkipKinds,
 		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
 	)
 
-	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
+	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
+
+	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer)
+}
+
+// buildValidateRenderer returns a gitopsRenderer when Helm rendering is enabled,
+// or nil when it is disabled (so validate falls back to validating the
+// HelmRelease CR as-is). Rendering is on by default and disabled by
+// --skip-helm-render or spec.workload.validation.helmRender: false.
+func buildValidateRenderer(
+	cfg *v1alpha1.Cluster,
+	configFound, skipHelmRender bool,
+) *gitopsRenderer {
+	if !helmRenderEnabled(cfg, configFound, skipHelmRender) {
+		return nil
+	}
+
+	return newGitOpsRenderer()
+}
+
+// helmRenderEnabled resolves whether validate renders HelmReleases: the
+// --skip-helm-render flag forces it off; otherwise
+// spec.workload.validation.helmRender governs, defaulting to true when unset.
+func helmRenderEnabled(cfg *v1alpha1.Cluster, configFound, skipHelmRender bool) bool {
+	if skipHelmRender {
+		return false
+	}
+
+	if configFound && cfg != nil && cfg.Spec.Workload.Validation.HelmRender != nil {
+		return *cfg.Spec.Workload.Validation.HelmRender
+	}
+
+	return true
 }
 
 // loadValidateConfigSilently loads ksail.yaml once (honoring --config) for the
@@ -214,16 +263,6 @@ func loadValidateConfigSilently(cmd *cobra.Command) (*v1alpha1.Cluster, bool, er
 	}
 
 	return cfg, found, nil
-}
-
-// resolveValidatePathFromCmd loads ksail.yaml once and resolves the path to
-// validate. It is the entry point for callers (validate, scan) that only need
-// the source path; the validate command additionally derives skip-kinds from
-// the same load to avoid a second read.
-func resolveValidatePathFromCmd(cmd *cobra.Command, args []string) (string, error) {
-	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
-
-	return resolveValidatePath(args, cfg, configFound, loadErr)
 }
 
 // resolveValidatePath determines which path to validate from the single config
@@ -283,13 +322,16 @@ func configuredSkipKinds(
 	return cfg.Spec.Workload.Validation.SkipKinds
 }
 
-// validatePath validates all manifests in the given path.
+// validatePath validates all manifests in the given path. Helm rendering applies
+// only to kustomization builds (directory inputs); a single-file input is
+// validated as-is so a lone HelmRelease file remains a CR-schema check.
 func validatePath(
 	ctx context.Context,
 	cmd *cobra.Command,
 	path string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	renderer *gitopsRenderer,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -305,7 +347,7 @@ func validatePath(
 	}
 
 	// If it's a directory, walk it to find YAML files and kustomizations
-	return validateDirectory(ctx, cmd, path, kubeconformClient, opts)
+	return validateDirectory(ctx, cmd, path, kubeconformClient, opts, renderer)
 }
 
 // validateFile validates a single YAML file.
@@ -345,6 +387,7 @@ func validateDirectory(
 	dirPath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	renderer *gitopsRenderer,
 ) error {
 	// Find all kustomizations
 	kustomizations, err := findKustomizations(dirPath)
@@ -369,20 +412,18 @@ func validateDirectory(
 	}
 
 	if len(kustomizations) > 0 {
-		kustomizeClient := kustomize.NewClient()
+		validator := &kustomizationValidator{
+			dirPath:     dirPath,
+			kubeconform: kubeconformClient,
+			kustomize:   kustomize.NewClient(),
+			renderer:    renderer,
+			sink:        &degradationSink{},
+			opts:        opts,
+		}
 
-		err := runParallelValidation(
-			ctx, cmd, kustomizations, dirPath, "Validating kustomizations", "✅",
-			buildKustomizationValidator(
-				dirPath,
-				kubeconformClient,
-				kustomizeClient,
-				opts,
-			),
-			append(progressOpts, notify.WithCountLabel("kustomizations"))...,
-		)
+		err := validator.run(ctx, cmd, kustomizations, progressOpts)
 		if err != nil {
-			return fmt.Errorf("kustomization validation failed: %w", err)
+			return err
 		}
 	}
 
@@ -448,29 +489,63 @@ func runParallelValidation(
 	return nil
 }
 
-// validateKustomizationSilent validates a kustomization without output (for parallel execution).
-// Build errors are returned unwrapped so that simplifyBuildError in the caller can strip the
-// kustomize client's verbose "kustomize build <path>:" prefix correctly.
-func validateKustomizationSilent(
+// kustomizationValidator validates one kustomization directory, optionally
+// Helm-rendering it first. Its validate method is the task function passed to
+// the parallel progress group.
+type kustomizationValidator struct {
+	dirPath     string
+	kubeconform *kubeconform.Client
+	kustomize   *kustomize.Client
+	renderer    *gitopsRenderer // nil → Helm rendering disabled
+	sink        *degradationSink
+	opts        *kubeconform.ValidationOptions
+}
+
+// run validates every kustomization directory in parallel and then reports any
+// render degradations. Degradations are reported after the progress group so the
+// warnings do not interleave with its ANSI output.
+func (v *kustomizationValidator) run(
 	ctx context.Context,
-	kustDir string,
-	kubeconformClient *kubeconform.Client,
-	kustomizeClient *kustomize.Client,
-	opts *kubeconform.ValidationOptions,
+	cmd *cobra.Command,
+	kustomizations []string,
+	progressOpts []notify.ProgressOption,
 ) error {
-	// Build the kustomization — return the raw error so simplifyBuildError can strip its prefix.
-	output, err := kustomizeClient.Build(ctx, kustDir)
+	err := runParallelValidation(
+		ctx, cmd, kustomizations, v.dirPath, "Validating kustomizations", "✅",
+		v.validate,
+		append(progressOpts, notify.WithCountLabel("kustomizations"))...,
+	)
+
+	v.sink.report(cmd)
+
 	if err != nil {
-		return err //nolint:wrapcheck // intentionally unwrapped: simplifyBuildError in the caller strips the kustomize prefix
+		return fmt.Errorf("kustomization validation failed: %w", err)
 	}
 
-	// Validate the output
-	err = kubeconformClient.ValidateBytes(
-		ctx,
-		kustDir,
-		fluxsubst.ExpandFluxSubstitutions(output.Bytes()),
-		opts,
-	)
+	return nil
+}
+
+// validate builds (and optionally renders) a kustomization and validates the
+// output, simplifying any kustomize build error for readability.
+func (v *kustomizationValidator) validate(ctx context.Context, kustDir string) error {
+	err := v.validateSilent(ctx, kustDir)
+	if err != nil {
+		return simplifyBuildError(err, v.dirPath)
+	}
+
+	return nil
+}
+
+// validateSilent produces the validation input for a kustomization and validates
+// it without output (for parallel execution). The kustomize build error is
+// returned unwrapped so simplifyBuildError can strip its verbose prefix.
+func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir string) error {
+	data, err := v.manifests(ctx, kustDir)
+	if err != nil {
+		return err
+	}
+
+	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, v.opts)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
 	}
@@ -478,28 +553,26 @@ func validateKustomizationSilent(
 	return nil
 }
 
-// buildKustomizationValidator returns a task function that validates a kustomization directory.
-// Errors are simplified for readability by stripping verbose kustomize output.
-func buildKustomizationValidator(
-	dirPath string,
-	kubeconformClient *kubeconform.Client,
-	kustomizeClient *kustomize.Client,
-	opts *kubeconform.ValidationOptions,
-) func(context.Context, string) error {
-	return func(taskCtx context.Context, kustDir string) error {
-		err := validateKustomizationSilent(
-			taskCtx,
-			kustDir,
-			kubeconformClient,
-			kustomizeClient,
-			opts,
-		)
+// manifests returns the validation input: the Helm-rendered output when
+// rendering is enabled, otherwise the Flux-substituted kustomize build output.
+func (v *kustomizationValidator) manifests(ctx context.Context, kustDir string) ([]byte, error) {
+	if v.renderer != nil {
+		result, err := v.renderer.expand(ctx, kustDir)
 		if err != nil {
-			return simplifyBuildError(err, dirPath)
+			return nil, err
 		}
 
-		return nil
+		v.sink.add(result.Degradations)
+
+		return result.Bytes(), nil
 	}
+
+	output, err := v.kustomize.Build(ctx, kustDir)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
+	}
+
+	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil
 }
 
 // validateFileSilent validates a single YAML file without output (for parallel execution).

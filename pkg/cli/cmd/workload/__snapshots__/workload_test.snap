@@ -158,6 +158,12 @@ Run security scans on Kubernetes manifests using Kubescape.
 This command scans manifests in the specified path against security frameworks
 such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
 
+When the target directory is a Kustomize root, manifests are rendered before
+scanning (Kustomize build + Flux variable substitution + in-process Helm
+templating of HelmReleases), so findings reflect overlay patches and chart output
+rather than the raw files. HelmReleases that cannot be rendered offline are left
+as-is with a warning. Use --no-render to scan the raw files instead.
+
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
@@ -176,6 +182,7 @@ Flags:
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
   -h, --help                           help for scan
+      --no-render                      Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
   -o, --output string                  Output file path (stdout if empty)
       --verbose                        Show all resources in output, not just failed ones
 
@@ -217,6 +224,7 @@ Usage:
 Flags:
   -h, --help                     help for validate
       --ignore-missing-schemas   Ignore resources with missing schemas (default true)
+      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
       --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
       --skip-secrets             Skip validation of Kubernetes Secrets (default true)
       --strict                   Enable strict validation mode
@@ -3123,6 +3131,12 @@ Run security scans on Kubernetes manifests using Kubescape.
 This command scans manifests in the specified path against security frameworks
 such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
 
+When the target directory is a Kustomize root, manifests are rendered before
+scanning (Kustomize build + Flux variable substitution + in-process Helm
+templating of HelmReleases), so findings reflect overlay patches and chart output
+rather than the raw files. HelmReleases that cannot be rendered offline are left
+as-is with a warning. Use --no-render to scan the raw files instead.
+
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
@@ -3141,6 +3155,7 @@ Flags:
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
   -h, --help                           help for scan
+      --no-render                      Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
   -o, --output string                  Output file path (stdout if empty)
       --verbose                        Show all resources in output, not just failed ones
 
@@ -3186,6 +3201,7 @@ Usage:
 Flags:
   -h, --help                     help for validate
       --ignore-missing-schemas   Ignore resources with missing schemas (default true)
+      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
       --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
       --skip-secrets             Skip validation of Kubernetes Secrets (default true)
       --strict                   Enable strict validation mode

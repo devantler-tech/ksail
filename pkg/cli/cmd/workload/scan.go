@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ func NewScanCmd() *cobra.Command {
 		output              string
 		complianceThreshold float32
 		verbose             bool
+		noRender            bool
 	)
 
 	cmd := &cobra.Command{
@@ -32,6 +34,12 @@ func NewScanCmd() *cobra.Command {
 
 This command scans manifests in the specified path against security frameworks
 such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
+
+When the target directory is a Kustomize root, manifests are rendered before
+scanning (Kustomize build + Flux variable substitution + in-process Helm
+templating of HelmReleases), so findings reflect overlay patches and chart output
+rather than the raw files. HelmReleases that cannot be rendered offline are left
+as-is with a warning. Use --no-render to scan the raw files instead.
 
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
@@ -48,45 +56,72 @@ For more information, see https://github.com/kubescape/kubescape`,
 				cmd.Context(),
 				cmd,
 				args,
-				frameworks,
-				format,
-				output,
-				complianceThreshold,
-				verbose,
+				scanFlags{
+					frameworks:          frameworks,
+					format:              format,
+					output:              output,
+					complianceThreshold: complianceThreshold,
+					verbose:             verbose,
+					noRender:            noRender,
+				},
 			)
 		},
 		SilenceUsage: true,
 	}
 
-	cmd.Flags().StringSliceVar(&frameworks, "framework", []string{"nsa"},
-		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss)")
-	cmd.Flags().StringVar(&format, "format", "pretty-printer",
-		"Output format (pretty-printer, json, sarif, junit)")
-	cmd.Flags().StringVarP(&output, "output", "o", "",
-		"Output file path (stdout if empty)")
-	cmd.Flags().Float32Var(&complianceThreshold, "compliance-threshold", 0,
-		"Fail if compliance score is below this threshold (0-100)")
-	cmd.Flags().BoolVar(&verbose, "verbose", false,
-		"Show all resources in output, not just failed ones")
+	addScanFlags(cmd, &frameworks, &format, &output, &complianceThreshold, &verbose, &noRender)
 
 	return cmd
+}
+
+// scanFlags carries the resolved scan command flags.
+type scanFlags struct {
+	frameworks          []string
+	format              string
+	output              string
+	complianceThreshold float32
+	verbose             bool
+	noRender            bool
+}
+
+// addScanFlags registers the flags for the scan command.
+func addScanFlags(
+	cmd *cobra.Command,
+	frameworks *[]string,
+	format, output *string,
+	complianceThreshold *float32,
+	verbose, noRender *bool,
+) {
+	cmd.Flags().StringSliceVar(frameworks, "framework", []string{"nsa"},
+		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss)")
+	cmd.Flags().StringVar(format, "format", "pretty-printer",
+		"Output format (pretty-printer, json, sarif, junit)")
+	cmd.Flags().StringVarP(output, "output", "o", "",
+		"Output file path (stdout if empty)")
+	cmd.Flags().Float32Var(complianceThreshold, "compliance-threshold", 0,
+		"Fail if compliance score is below this threshold (0-100)")
+	cmd.Flags().BoolVar(verbose, "verbose", false,
+		"Show all resources in output, not just failed ones")
+	cmd.Flags().BoolVar(noRender, "no-render", false,
+		"Scan the raw manifest files instead of the Kustomize + Helm rendered output "+
+			"(skip rendering entirely; restores the pre-rendering behavior)")
 }
 
 func runScanCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,
-	frameworks []string,
-	format string,
-	output string,
-	complianceThreshold float32,
-	verbose bool,
+	flags scanFlags,
 ) error {
-	if complianceThreshold < 0 || complianceThreshold > 100 {
-		return fmt.Errorf("%w, got %.2f", ErrInvalidComplianceThreshold, complianceThreshold)
+	if flags.complianceThreshold < 0 || flags.complianceThreshold > 100 {
+		return fmt.Errorf("%w, got %.2f", ErrInvalidComplianceThreshold, flags.complianceThreshold)
 	}
 
-	path, err := resolveValidatePathFromCmd(cmd, args)
+	// Load ksail.yaml once so the source path and the Helm-render setting are
+	// derived from a single read (mirrors the validate command).
+	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
+
+	path, err := resolveValidatePath(args, cfg, configFound, loadErr)
 	if err != nil {
 		return err
 	}
@@ -98,34 +133,88 @@ func runScanCmd(
 
 	path = canonPath
 
-	if output != "" {
-		mkdirErr := os.MkdirAll(filepath.Dir(output), dirPerm)
-		if mkdirErr != nil {
-			return fmt.Errorf("create output directory: %w", mkdirErr)
-		}
-
-		canonOutput, canonErr := fsutil.EvalCanonicalPath(output)
-		if canonErr != nil {
-			return fmt.Errorf("resolve output path %q: %w", output, canonErr)
-		}
-
-		output = canonOutput
+	output, err := resolveScanOutput(flags.output)
+	if err != nil {
+		return err
 	}
+
+	// Scan the Kustomize + Helm rendered manifests so findings reflect overlay
+	// patches and chart output; --no-render (or helmRender: false) scans raw files.
+	scanPath, cleanup, err := resolveScanInput(ctx, cmd, path, cfg, configFound, flags.noRender)
+	if err != nil {
+		return err
+	}
+
+	defer cleanup()
 
 	kubescapeClient := kubescapeclient.NewClient()
 
 	scanOpts := &kubescapeclient.ScanOptions{
-		Frameworks:          frameworks,
-		Format:              format,
+		Frameworks:          flags.frameworks,
+		Format:              flags.format,
 		Output:              output,
-		ComplianceThreshold: complianceThreshold,
-		Verbose:             verbose,
+		ComplianceThreshold: flags.complianceThreshold,
+		Verbose:             flags.verbose,
 	}
 
-	err = kubescapeClient.ScanDirectory(ctx, path, scanOpts)
+	err = kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
 	if err != nil {
 		return fmt.Errorf("scan directory: %w", err)
 	}
 
 	return nil
+}
+
+// resolveScanOutput canonicalizes the output file path (creating its parent
+// directory), returning "" when no output file is configured.
+func resolveScanOutput(output string) (string, error) {
+	if output == "" {
+		return "", nil
+	}
+
+	err := os.MkdirAll(filepath.Dir(output), dirPerm)
+	if err != nil {
+		return "", fmt.Errorf("create output directory: %w", err)
+	}
+
+	canonOutput, err := fsutil.EvalCanonicalPath(output)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %q: %w", output, err)
+	}
+
+	return canonOutput, nil
+}
+
+// resolveScanInput returns the path kubescape should scan plus a cleanup func.
+// When Helm rendering is enabled and the target is a kustomization root, the
+// applied manifests are rendered to a temp directory (kustomize build → Flux
+// substitution → Helm) and that directory is scanned; otherwise the path is
+// scanned as-is (the raw, pre-render behavior — also used for --raw, single
+// files, and directories without a kustomization).
+func resolveScanInput(
+	ctx context.Context,
+	cmd *cobra.Command,
+	path string,
+	cfg *v1alpha1.Cluster,
+	configFound, noRender bool,
+) (string, func(), error) {
+	noop := func() {}
+
+	if !helmRenderEnabled(cfg, configFound, noRender) || !hasKustomizationFile(path) {
+		return path, noop, nil
+	}
+
+	tmpDir, cleanup, err := newGitOpsRenderer().renderToTempDir(ctx, cmd, path)
+	if err != nil {
+		return "", noop, err
+	}
+
+	canonTmp, err := fsutil.EvalCanonicalPath(tmpDir)
+	if err != nil {
+		cleanup()
+
+		return "", noop, fmt.Errorf("resolve scan temp dir: %w", err)
+	}
+
+	return canonTmp, cleanup, nil
 }

@@ -1818,6 +1818,10 @@ workload_write
         "description": "When using the default or custom-column output format, don't print headers (default print headers). (applies to: get)",
         "type": "boolean"
       },
+      "no-render": {
+        "description": "Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior) (applies to: scan)",
+        "type": "boolean"
+      },
       "node-port": {
         "default": 0,
         "description": "Port used to expose the service on each node in a cluster. (applies to: gen_service_nodeport)",
@@ -1973,6 +1977,10 @@ workload_write
       "since-time": {
         "description": "Only return logs after a specific date (RFC3339). Defaults to all logs. Only one of since-time / since may be used. (applies to: logs)",
         "type": "string"
+      },
+      "skip-helm-render": {
+        "description": "Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated. (applies to: validate)",
+        "type": "boolean"
       },
       "skip-kinds": {
         "description": "Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml) (applies to: validate)",

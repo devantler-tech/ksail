@@ -210,6 +210,9 @@ type ValidationConfig struct {
 	// kubeconform would otherwise reject (e.g. valid newer fields flagged as
 	// "additional properties not allowed").
 	SkipKinds []string `json:"skipKinds,omitzero" jsonschema_description:"Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."` //nolint:lll
+
+	// HelmRender controls whether HelmReleases are rendered before validation.
+	HelmRender *bool `json:"helmRender,omitzero" jsonschema_description:"Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."` //nolint:lll
 }
 
 // WatchConfig defines configuration for the workload watch command.

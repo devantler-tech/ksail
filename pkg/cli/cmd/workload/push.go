@@ -171,10 +171,16 @@ func validateManifests(cmd *cobra.Command, sourceDir string, outputTimer timer.T
 		cmd.Context(),
 		cmd,
 		[]string{sourceDir},
-		true, // skipSecrets
-		true, // strict
-		true, // ignoreMissingSchemas
-		nil,  // extra skip-kinds are read from ksail.yaml (configuredSkipKinds)
+		validateFlags{
+			skipSecrets:          true,
+			strict:               true,
+			ignoreMissingSchemas: true,
+			// Push-time validation keeps the existing CR-level check (no Helm
+			// render) so a push stays fast and offline; `ksail workload validate`
+			// is where rendered-manifest validation applies.
+			skipHelmRender: true,
+			skipKinds:      nil, // extra skip-kinds are read from ksail.yaml (configuredSkipKinds)
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
