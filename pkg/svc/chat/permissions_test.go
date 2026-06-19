@@ -27,6 +27,12 @@ func TestIsReadOperation(t *testing.T) {
 		{"url kind", copilot.PermissionRequestKindURL, true},
 		{"write kind", copilot.PermissionRequestKindWrite, false},
 		{"shell kind", copilot.PermissionRequestKindShell, false},
+		{"extension management kind", copilot.PermissionRequestKindExtensionManagement, false},
+		{
+			"extension permission access kind",
+			copilot.PermissionRequestKindExtensionPermissionAccess,
+			false,
+		},
 		{"empty kind", "", false},
 		{"unknown kind", "unknown", false},
 	}
@@ -86,6 +92,49 @@ func TestGetPermissionDescription_BasicFields(t *testing.T) {
 			} else {
 				assert.Contains(t, result, testCase.expected)
 			}
+		})
+	}
+}
+
+func TestGetPermissionDescription_Extension(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		request  copilot.PermissionRequest
+		expected string
+	}{
+		{
+			name: "extension management with name",
+			request: &copilot.PermissionRequestExtensionManagement{
+				ExtensionName: new("my-extension"),
+				Operation:     "scaffold",
+			},
+			expected: "Operation: scaffold\nExtension: my-extension",
+		},
+		{
+			name: "extension management without name",
+			request: &copilot.PermissionRequestExtensionManagement{
+				Operation: "reload",
+			},
+			expected: "Operation: reload",
+		},
+		{
+			name: "extension permission access",
+			request: &copilot.PermissionRequestExtensionPermissionAccess{
+				ExtensionName: "my-extension",
+				Capabilities:  []string{"read"},
+			},
+			expected: "Extension: my-extension",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := getPermissionDescription(testCase.request)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }

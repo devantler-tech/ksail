@@ -161,9 +161,31 @@ func getPermissionDescription(request copilot.PermissionRequest) string {
 		return labeled("URL: ", req.URL)
 	case *copilot.PermissionRequestWrite:
 		return writePermissionDescription(req)
+	case *copilot.PermissionRequestExtensionManagement:
+		return extensionManagementDescription(req)
+	case *copilot.PermissionRequestExtensionPermissionAccess:
+		return labeled("Extension: ", req.ExtensionName)
 	default:
 		return ""
 	}
+}
+
+// extensionManagementDescription renders the operation and (when present) the
+// extension name for an extension-management permission request.
+func extensionManagementDescription(req *copilot.PermissionRequestExtensionManagement) string {
+	var parts []string
+
+	if op := labeled("Operation: ", req.Operation); op != "" {
+		parts = append(parts, op)
+	}
+
+	if req.ExtensionName != nil {
+		if name := labeled("Extension: ", *req.ExtensionName); name != "" {
+			parts = append(parts, name)
+		}
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // labeled returns "label+value" when value is non-empty, otherwise an empty string.
