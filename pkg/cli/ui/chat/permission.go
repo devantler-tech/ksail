@@ -30,13 +30,21 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "y", "Y":
-		return m.allowPermission()
+		return m.resolvePermission(outcomeApproveOnce)
+	case "s", "S":
+		// Session approval is only honoured for kinds where KSail can build a
+		// correct Approval; otherwise fall back to a one-time approval.
+		if m.pendingPermission.canOfferSessionApproval {
+			return m.resolvePermission(outcomeApproveSession)
+		}
+
+		return m.resolvePermission(outcomeApproveOnce)
 	case "a", "A":
 		return m.allowAlwaysPermission()
 	case "n", "N", "esc":
-		return m.denyPermission()
+		return m.resolvePermission(outcomeReject)
 	case "ctrl+c":
-		m.pendingPermission.response <- false
+		m.pendingPermission.response <- outcomeReject
 
 		m.pendingPermission = nil
 
@@ -46,9 +54,10 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// allowPermission approves the pending permission request.
-func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
-	m.pendingPermission.response <- true
+// resolvePermission sends the chosen outcome on the response channel, clears the
+// pending prompt, and resumes waiting for events.
+func (m *Model) resolvePermission(outcome permissionOutcome) (tea.Model, tea.Cmd) {
+	m.pendingPermission.response <- outcome
 
 	m.pendingPermission = nil
 	m.updateDimensions()
@@ -67,18 +76,7 @@ func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
 		m.chatMode = AutopilotMode
 	}
 
-	return m.allowPermission()
-}
-
-// denyPermission denies the pending permission request.
-func (m *Model) denyPermission() (tea.Model, tea.Cmd) {
-	m.pendingPermission.response <- false
-
-	m.pendingPermission = nil
-	m.updateDimensions()
-	m.updateViewportContent()
-
-	return m, m.waitForEvent()
+	return m.resolvePermission(outcomeApproveOnce)
 }
 
 // renderPermissionModal renders the permission prompt as an inline modal section.
@@ -124,6 +122,10 @@ func (m *Model) renderPermissionModal() string {
 	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
 
 	contentLines += 3
+
+	content.WriteString(mStyles.clipStyle.Render(permissionPromptHint(m.pendingPermission)) + "\n")
+
+	contentLines++
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -205,25 +207,89 @@ func CreateTUIPermissionHandler(
 		}
 
 		toolName, command := extractPermissionDetails(request)
-		responseChan := make(chan bool, 1)
+		responseChan := make(chan permissionOutcome, 1)
 
 		eventChan <- permissionRequestMsg{
-			toolCallID: toolCallID,
-			toolName:   toolName,
-			command:    command,
-			arguments:  "",
-			response:   responseChan,
+			toolCallID:              toolCallID,
+			toolName:                toolName,
+			command:                 command,
+			arguments:               "",
+			response:                responseChan,
+			canOfferSessionApproval: canOfferSessionApproval(request),
 		}
 
-		approved := <-responseChan
-		if approved {
+		switch <-responseChan {
+		case outcomeApproveSession:
+			dedup.markApproved(toolCallID)
+
+			return &rpc.PermissionDecisionApproveForSession{
+				Approval: sessionApproval(request),
+			}, nil
+		case outcomeApproveOnce:
 			dedup.markApproved(toolCallID)
 
 			return &rpc.PermissionDecisionApproveOnce{}, nil
+		case outcomeReject:
+			return &rpc.PermissionDecisionReject{}, nil
 		}
 
 		return &rpc.PermissionDecisionReject{}, nil
 	}
+}
+
+// canOfferSessionApproval reports whether KSail can build a correct session-scoped
+// Approval for the given request. It is intentionally conservative: only Shell and
+// Write requests are supported (both expose CanOfferSessionApproval and have a
+// well-defined Approval variant), and only when the SDK itself permits it.
+func canOfferSessionApproval(request copilot.PermissionRequest) bool {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		return req.CanOfferSessionApproval
+	case *copilot.PermissionRequestWrite:
+		return req.CanOfferSessionApproval
+	default:
+		return false
+	}
+}
+
+// sessionApproval builds the session-scoped Approval describing what the SDK should
+// remember for the rest of the session. Only the kinds reported by
+// canOfferSessionApproval produce a meaningful Approval:
+//   - Shell -> Commands keyed by the parsed command identifiers in the request.
+//   - Write -> the empty Write approval (covers file writes for the session).
+//
+// For every other kind a nil Approval is returned; callers must only request a
+// session approval for supported kinds.
+func sessionApproval(
+	request copilot.PermissionRequest,
+) rpc.PermissionDecisionApproveForSessionApproval {
+	switch req := request.(type) {
+	case *copilot.PermissionRequestShell:
+		identifiers := make([]string, 0, len(req.Commands))
+		for _, cmd := range req.Commands {
+			if cmd.Identifier != "" {
+				identifiers = append(identifiers, cmd.Identifier)
+			}
+		}
+
+		return rpc.PermissionDecisionApproveForSessionApprovalCommands{
+			CommandIdentifiers: identifiers,
+		}
+	case *copilot.PermissionRequestWrite:
+		return rpc.PermissionDecisionApproveForSessionApprovalWrite{}
+	default:
+		return nil
+	}
+}
+
+// permissionPromptHint renders the key hint shown beneath the permission prompt.
+// The "s" (session) option is only advertised when it is applicable.
+func permissionPromptHint(req *permissionRequestMsg) string {
+	if req != nil && req.canOfferSessionApproval {
+		return "[y] allow once  [s] allow for session  [a] always (autopilot)  [n] deny"
+	}
+
+	return "[y] allow once  [a] always (autopilot)  [n] deny"
 }
 
 // extractPermissionDetails extracts human-readable tool name and command

@@ -44,8 +44,22 @@ var ExportSetReasoningPickerIndex = func(m *Model, index int) {
 	m.reasoningPickerIndex = index
 }
 
+// PermissionOutcomeForTest is an exported alias for permissionOutcome.
+type PermissionOutcomeForTest = permissionOutcome
+
+// Exported permissionOutcome constants for testing.
+const (
+	OutcomeRejectForTest         = outcomeReject
+	OutcomeApproveOnceForTest    = outcomeApproveOnce
+	OutcomeApproveSessionForTest = outcomeApproveSession
+)
+
 // ExportSetPendingPermission sets Model.pendingPermission for testing.
-var ExportSetPendingPermission = func(m *Model, toolName, command, arguments string, response chan<- bool) {
+var ExportSetPendingPermission = func(
+	m *Model,
+	toolName, command, arguments string,
+	response chan<- permissionOutcome,
+) {
 	m.pendingPermission = &permissionRequestMsg{
 		toolName:  toolName,
 		command:   command,
@@ -53,6 +67,28 @@ var ExportSetPendingPermission = func(m *Model, toolName, command, arguments str
 		response:  response,
 	}
 }
+
+// ExportSetPendingPermissionSession sets Model.pendingPermission for testing with
+// canOfferSessionApproval enabled, so the "s" key path can be exercised.
+var ExportSetPendingPermissionSession = func(
+	m *Model,
+	toolName, command, arguments string,
+	response chan<- permissionOutcome,
+) {
+	m.pendingPermission = &permissionRequestMsg{
+		toolName:                toolName,
+		command:                 command,
+		arguments:               arguments,
+		response:                response,
+		canOfferSessionApproval: true,
+	}
+}
+
+// ExportSessionApproval exposes sessionApproval for testing.
+var ExportSessionApproval = sessionApproval
+
+// ExportCanOfferSessionApproval exposes canOfferSessionApproval for testing.
+var ExportCanOfferSessionApproval = canOfferSessionApproval
 
 // ExportHasPendingPermission returns whether Model.pendingPermission is set.
 var ExportHasPendingPermission = func(m *Model) bool {
@@ -597,7 +633,7 @@ type PermissionRequestMsgForTest = permissionRequestMsg
 
 var ExportNewPermissionRequestMsg = func(
 	toolCallID, toolName, command, arguments string,
-	response chan<- bool,
+	response chan<- permissionOutcome,
 ) PermissionRequestMsgForTest {
 	return permissionRequestMsg{
 		toolCallID: toolCallID,

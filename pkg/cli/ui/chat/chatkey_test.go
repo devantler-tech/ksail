@@ -545,7 +545,7 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan bool, 1)
+	resp := make(chan chat.PermissionOutcomeForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "ls", "", resp)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -556,14 +556,14 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 
 	// Check the channel response
 	require.Len(t, resp, 1)
-	assert.True(t, <-resp)
+	assert.Equal(t, chat.OutcomeApproveOnceForTest, <-resp)
 }
 
 func TestHandlePermissionKey_NDenies(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan bool, 1)
+	resp := make(chan chat.PermissionOutcomeForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "rm /", "", resp)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
@@ -573,14 +573,14 @@ func TestHandlePermissionKey_NDenies(t *testing.T) {
 	assert.False(t, chat.ExportHasPendingPermission(m))
 
 	require.Len(t, resp, 1)
-	assert.False(t, <-resp)
+	assert.Equal(t, chat.OutcomeRejectForTest, <-resp)
 }
 
 func TestHandlePermissionKey_CtrlC_DeniesAndQuits(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	resp := make(chan bool, 1)
+	resp := make(chan chat.PermissionOutcomeForTest, 1)
 	chat.ExportSetPendingPermission(model, "bash", "cmd", "", resp)
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -591,7 +591,7 @@ func TestHandlePermissionKey_CtrlC_DeniesAndQuits(t *testing.T) {
 	assert.NotNil(t, cmd)
 
 	require.Len(t, resp, 1)
-	assert.False(t, <-resp)
+	assert.Equal(t, chat.OutcomeRejectForTest, <-resp)
 }
 
 // --- handleViewportAndTextareaKey tests ---
