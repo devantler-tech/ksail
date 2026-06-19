@@ -170,7 +170,11 @@ func (k *Provisioner) addAgentNodes(
 		nodeRunner := runner.NewCobraCommandRunner(io.Discard, io.Discard)
 		cmd := nodecommand.NewCmdNodeCreate()
 
-		_, runErr := nodeRunner.Run(ctx, cmd, args)
+		runErr := k.runK3dSafely(func() error {
+			_, e := nodeRunner.Run(ctx, cmd, args)
+
+			return e //nolint:wrapcheck // wrapped below
+		})
 		if runErr != nil {
 			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:  "k3d.agents",
@@ -214,7 +218,11 @@ func (k *Provisioner) removeAgentNodes(
 		nodeRunner := runner.NewCobraCommandRunner(io.Discard, io.Discard)
 		cmd := nodecommand.NewCmdNodeDelete()
 
-		_, err := nodeRunner.Run(ctx, cmd, []string{nodeName})
+		err := k.runK3dSafely(func() error {
+			_, e := nodeRunner.Run(ctx, cmd, []string{nodeName})
+
+			return e //nolint:wrapcheck // wrapped below
+		})
 		if err != nil {
 			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:  "k3d.agents",
@@ -294,11 +302,15 @@ func (k *Provisioner) listClusterNodes(
 	errChan := make(chan error, 1)
 
 	go func() {
-		_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
-		// Close write end to signal EOF to the reader
-		_ = pipeWriter.Close()
+		// Always close the write end so the pipe reader (io.Copy) unblocks — whether
+		// the command returns, errors, or its runtime-down Fatal is recovered.
+		defer func() { _ = pipeWriter.Close() }()
 
-		errChan <- runErr
+		errChan <- k.runK3dSafely(func() error {
+			_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
+
+			return runErr //nolint:wrapcheck // wrapped by the caller with "failed to list nodes:"
+		})
 	}()
 
 	// Read all output from the pipe (this is the JSON from k3d)
