@@ -24,28 +24,38 @@ func CreateElicitationHandler(reader io.Reader, writer io.Writer) copilot.Elicit
 		_, _ = fmt.Fprintln(writer, "")
 		_, _ = fmt.Fprintln(writer, "┌─ Input Requested")
 
-		if ctx.ElicitationSource != "" {
-			_, _ = fmt.Fprintf(writer, "│  Source: %s\n", ctx.ElicitationSource)
+		if ctx.ElicitationSource != nil && *ctx.ElicitationSource != "" {
+			_, _ = fmt.Fprintf(writer, "│  Source: %s\n", *ctx.ElicitationSource)
 		}
 
 		if ctx.Message != "" {
 			_, _ = fmt.Fprintf(writer, "│  %s\n", ctx.Message)
 		}
 
-		if ctx.Mode == "url" && ctx.URL != "" {
-			_, _ = fmt.Fprintf(writer, "│  Open: %s\n", ctx.URL)
+		if elicitationModeIs(ctx.Mode, copilot.ElicitationRequestedModeURL) &&
+			ctx.URL != nil && *ctx.URL != "" {
+			_, _ = fmt.Fprintf(writer, "│  Open: %s\n", *ctx.URL)
 		}
 
 		_, _ = fmt.Fprint(writer, "└─\n")
 
 		// For form-mode with schema fields, collect field values
-		if ctx.Mode == "form" && ctx.RequestedSchema != nil {
+		if elicitationModeIs(ctx.Mode, copilot.ElicitationRequestedModeForm) &&
+			ctx.RequestedSchema != nil {
 			return promptElicitationFields(bufReader, writer, ctx.RequestedSchema)
 		}
 
 		// Simple accept/decline for URL mode or schema-less requests
 		return promptElicitationAccept(bufReader, writer)
 	}
+}
+
+// elicitationModeIs reports whether the elicitation mode pointer is set and equals want.
+// In v1.0.0 ElicitationContext.Mode is an optional (*ElicitationRequestedMode).
+func elicitationModeIs(
+	mode *copilot.ElicitationRequestedMode, want copilot.ElicitationRequestedMode,
+) bool {
+	return mode != nil && *mode == want
 }
 
 // errElicitationEOF is returned by readLine when the reader reaches EOF.
@@ -94,10 +104,10 @@ func promptElicitationAccept(
 // promptElicitationFields prompts for each field in the schema.
 // The user can type "!cancel" on any field to decline the elicitation.
 func promptElicitationFields(
-	reader *bufio.Reader, writer io.Writer, schema map[string]any,
+	reader *bufio.Reader, writer io.Writer, schema *copilot.ElicitationSchema,
 ) (copilot.ElicitationResult, error) {
-	props, ok := schema["properties"].(map[string]any)
-	if !ok || len(props) == 0 {
+	props := schema.Properties
+	if len(props) == 0 {
 		return promptElicitationAccept(reader, writer)
 	}
 

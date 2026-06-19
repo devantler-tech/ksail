@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 // TestPermissionModal_VisibleInView tests that the permission modal renders when a request is pending.
@@ -182,9 +183,8 @@ func TestPermissionHandler_AutopilotAutoApproves(t *testing.T) {
 	handler := chat.CreateTUIPermissionHandler(eventChan, chatModeRef)
 
 	result, err := handler(
-		copilot.PermissionRequest{
-			Kind:            copilot.PermissionRequestKindShell,
-			FullCommandText: new("rm -rf /"),
+		&copilot.PermissionRequestShell{
+			FullCommandText: "rm -rf /",
 		},
 		copilot.PermissionInvocation{},
 	)
@@ -192,8 +192,8 @@ func TestPermissionHandler_AutopilotAutoApproves(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if result.Kind != copilot.PermissionRequestResultKindApproved {
-		t.Errorf("expected 'approved' in Autopilot mode, got %q", result.Kind)
+	if result.Kind() != rpc.PermissionDecisionKindApproveOnce {
+		t.Errorf("expected 'approve-once' in Autopilot mode, got %q", result.Kind())
 	}
 }
 
@@ -208,14 +208,13 @@ func TestPermissionHandler_InteractiveSendsToChannel(t *testing.T) {
 	handler := chat.CreateTUIPermissionHandler(eventChan, chatModeRef)
 
 	// Run handler in goroutine since it blocks waiting for response
-	resultChan := make(chan copilot.PermissionRequestResult, 1)
+	resultChan := make(chan rpc.PermissionDecision, 1)
 
 	go func() {
 		result, _ := handler(
-			copilot.PermissionRequest{
-				Kind:            copilot.PermissionRequestKindShell,
+			&copilot.PermissionRequestShell{
 				ToolCallID:      new("test-123"),
-				FullCommandText: new("echo hello"),
+				FullCommandText: "echo hello",
 			},
 			copilot.PermissionInvocation{},
 		)
@@ -246,8 +245,8 @@ func TestPermissionHandler_InteractiveSendsToChannel(t *testing.T) {
 	// Verify the handler goroutine returns "approved"
 	select {
 	case result := <-resultChan:
-		if result.Kind != copilot.PermissionRequestResultKindApproved {
-			t.Errorf("expected 'approved', got %q", result.Kind)
+		if result.Kind() != rpc.PermissionDecisionKindApproveOnce {
+			t.Errorf("expected 'approve-once', got %q", result.Kind())
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for permission handler result")
@@ -274,13 +273,12 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	handler := chat.CreateTUIPermissionHandler(eventChan, nil)
 
 	// Run handler in goroutine since it blocks waiting for response
-	resultChan := make(chan copilot.PermissionRequestResult, 1)
+	resultChan := make(chan rpc.PermissionDecision, 1)
 
 	go func() {
 		result, _ := handler(
-			copilot.PermissionRequest{
-				Kind:            copilot.PermissionRequestKindShell,
-				FullCommandText: new("ls"),
+			&copilot.PermissionRequestShell{
+				FullCommandText: "ls",
 			},
 			copilot.PermissionInvocation{},
 		)
@@ -311,11 +309,11 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	// Verify the handler goroutine returns rejected
 	select {
 	case result := <-resultChan:
-		if result.Kind != copilot.PermissionRequestResultKindRejected {
+		if result.Kind() != rpc.PermissionDecisionKindReject {
 			t.Errorf(
 				"expected %q, got %q",
-				copilot.PermissionRequestResultKindRejected,
-				result.Kind,
+				rpc.PermissionDecisionKindReject,
+				result.Kind(),
 			)
 		}
 	case <-time.After(5 * time.Second):

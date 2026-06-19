@@ -279,10 +279,10 @@ func CreateTUIElicitationHandler(eventChan chan<- tea.Msg) copilot.ElicitationHa
 
 		eventChan <- elicitationRequestMsg{
 			Message:  ctx.Message,
-			Source:   ctx.ElicitationSource,
-			Mode:     ctx.Mode,
-			URL:      ctx.URL,
-			Schema:   ctx.RequestedSchema,
+			Source:   derefString(ctx.ElicitationSource),
+			Mode:     elicitationModeString(ctx.Mode),
+			URL:      derefString(ctx.URL),
+			Schema:   elicitationSchemaMap(ctx.RequestedSchema),
 			Response: responseChan,
 		}
 
@@ -290,6 +290,25 @@ func CreateTUIElicitationHandler(eventChan chan<- tea.Msg) copilot.ElicitationHa
 
 		return response.Result, nil
 	}
+}
+
+// elicitationModeString returns the string form of an optional elicitation mode.
+func elicitationModeString(mode *copilot.ElicitationRequestedMode) string {
+	if mode == nil {
+		return ""
+	}
+
+	return string(*mode)
+}
+
+// elicitationSchemaMap converts the SDK elicitation schema into the JSON-Schema-shaped
+// map[string]any the TUI consumes (a "properties" object), or nil when no schema is set.
+func elicitationSchemaMap(schema *copilot.ElicitationSchema) map[string]any {
+	if schema == nil {
+		return nil
+	}
+
+	return map[string]any{"properties": schema.Properties}
 }
 
 // extractFieldNames extracts field names from a JSON Schema "properties" map.

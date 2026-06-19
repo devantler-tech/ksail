@@ -23,7 +23,7 @@ func TestCreateElicitationHandler_AcceptSimple(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "accept", result.Action)
+	assert.Equal(t, copilot.ElicitationActionAccept, result.Action)
 	assert.Contains(t, writer.String(), "Input Requested")
 	assert.Contains(t, writer.String(), "Do you want to continue?")
 }
@@ -40,7 +40,7 @@ func TestCreateElicitationHandler_DeclineSimple(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "decline", result.Action)
+	assert.Equal(t, copilot.ElicitationActionDecline, result.Action)
 }
 
 func TestCreateElicitationHandler_DefaultDecline(t *testing.T) {
@@ -55,7 +55,7 @@ func TestCreateElicitationHandler_DefaultDecline(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "decline", result.Action)
+	assert.Equal(t, copilot.ElicitationActionDecline, result.Action)
 }
 
 func TestCreateElicitationHandler_EOF(t *testing.T) {
@@ -70,7 +70,7 @@ func TestCreateElicitationHandler_EOF(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "cancel", result.Action)
+	assert.Equal(t, copilot.ElicitationActionCancel, result.Action)
 }
 
 func TestCreateElicitationHandler_FormFields(t *testing.T) {
@@ -82,10 +82,10 @@ func TestCreateElicitationHandler_FormFields(t *testing.T) {
 	handler := chat.CreateElicitationHandler(reader, writer)
 
 	result, err := handler(copilot.ElicitationContext{
-		Mode:    "form",
+		Mode:    new(copilot.ElicitationRequestedModeForm),
 		Message: "Fill in the fields",
-		RequestedSchema: map[string]any{
-			"properties": map[string]any{
+		RequestedSchema: &copilot.ElicitationSchema{
+			Properties: map[string]any{
 				"name":  map[string]any{"type": "string"},
 				"value": map[string]any{"type": "string"},
 			},
@@ -93,7 +93,7 @@ func TestCreateElicitationHandler_FormFields(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "accept", result.Action)
+	assert.Equal(t, copilot.ElicitationActionAccept, result.Action)
 	// Fields are sorted alphabetically: name, value
 	assert.Equal(t, "hello", result.Content["name"])
 	assert.Equal(t, "world", result.Content["value"])
@@ -108,10 +108,10 @@ func TestCreateElicitationHandler_FormFieldDecline(t *testing.T) {
 	handler := chat.CreateElicitationHandler(reader, writer)
 
 	result, err := handler(copilot.ElicitationContext{
-		Mode:    "form",
+		Mode:    new(copilot.ElicitationRequestedModeForm),
 		Message: "Fill in the fields",
-		RequestedSchema: map[string]any{
-			"properties": map[string]any{
+		RequestedSchema: &copilot.ElicitationSchema{
+			Properties: map[string]any{
 				"alpha": map[string]any{"type": "string"},
 				"beta":  map[string]any{"type": "string"},
 			},
@@ -119,7 +119,7 @@ func TestCreateElicitationHandler_FormFieldDecline(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "decline", result.Action)
+	assert.Equal(t, copilot.ElicitationActionDecline, result.Action)
 }
 
 func TestCreateElicitationHandler_FormFieldEOF(t *testing.T) {
@@ -131,10 +131,10 @@ func TestCreateElicitationHandler_FormFieldEOF(t *testing.T) {
 	handler := chat.CreateElicitationHandler(reader, writer)
 
 	result, err := handler(copilot.ElicitationContext{
-		Mode:    "form",
+		Mode:    new(copilot.ElicitationRequestedModeForm),
 		Message: "Fill in the fields",
-		RequestedSchema: map[string]any{
-			"properties": map[string]any{
+		RequestedSchema: &copilot.ElicitationSchema{
+			Properties: map[string]any{
 				"alpha": map[string]any{"type": "string"},
 				"beta":  map[string]any{"type": "string"},
 			},
@@ -142,7 +142,7 @@ func TestCreateElicitationHandler_FormFieldEOF(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "cancel", result.Action)
+	assert.Equal(t, copilot.ElicitationActionCancel, result.Action)
 }
 
 func TestCreateElicitationHandler_URLMode(t *testing.T) {
@@ -153,13 +153,13 @@ func TestCreateElicitationHandler_URLMode(t *testing.T) {
 	handler := chat.CreateElicitationHandler(reader, writer)
 
 	result, err := handler(copilot.ElicitationContext{
-		Mode:    "url",
-		URL:     "https://example.com/auth",
+		Mode:    new(copilot.ElicitationRequestedModeURL),
+		URL:     new("https://example.com/auth"),
 		Message: "Open this URL to authenticate",
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "accept", result.Action)
+	assert.Equal(t, copilot.ElicitationActionAccept, result.Action)
 	assert.Contains(t, writer.String(), "https://example.com/auth")
 }
 
@@ -171,11 +171,11 @@ func TestCreateElicitationHandler_EmptySchema(t *testing.T) {
 	handler := chat.CreateElicitationHandler(reader, writer)
 
 	result, err := handler(copilot.ElicitationContext{
-		Mode:            "form",
+		Mode:            new(copilot.ElicitationRequestedModeForm),
 		Message:         "No fields",
-		RequestedSchema: map[string]any{},
+		RequestedSchema: &copilot.ElicitationSchema{},
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "accept", result.Action)
+	assert.Equal(t, copilot.ElicitationActionAccept, result.Action)
 }

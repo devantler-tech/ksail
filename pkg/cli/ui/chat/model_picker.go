@@ -245,8 +245,8 @@ func (m *Model) resolvedAutoModel() string {
 // Returns 0 if the model is not found or has no billing info.
 func (m *Model) findModelMultiplier(modelID string) float64 {
 	for _, model := range m.availableModels {
-		if model.ID == modelID && model.Billing != nil {
-			return model.Billing.Multiplier
+		if model.ID == modelID && model.Billing != nil && model.Billing.Multiplier != nil {
+			return *model.Billing.Multiplier
 		}
 	}
 
@@ -274,8 +274,8 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 	model := m.filteredModels[index-1]
 
 	multiplier := ""
-	if model.Billing != nil && model.Billing.Multiplier > 0 {
-		multiplier = fmt.Sprintf(" (%sx)", formatMultiplier(model.Billing.Multiplier))
+	if model.Billing != nil && model.Billing.Multiplier != nil && *model.Billing.Multiplier > 0 {
+		multiplier = fmt.Sprintf(" (%sx)", formatMultiplier(*model.Billing.Multiplier))
 	}
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)

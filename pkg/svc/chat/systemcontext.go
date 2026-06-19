@@ -158,7 +158,7 @@ func IsReadOperation(kind copilot.PermissionRequestKind) bool {
 		return true
 	case copilot.PermissionRequestKindCustomTool,
 		copilot.PermissionRequestKindShell,
-		copilot.PermissionRequestKindMcp,
+		copilot.PermissionRequestKindMCP,
 		copilot.PermissionRequestKindMemory,
 		copilot.PermissionRequestKindWrite,
 		copilot.PermissionRequestKindHook:

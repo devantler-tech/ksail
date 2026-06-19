@@ -46,32 +46,27 @@ func TestGetPermissionDescription_BasicFields(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "no typed fields set",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindWrite,
-			},
+			name:    "no typed fields set",
+			request: &copilot.PermissionRequestWrite{},
 		},
 		{
 			name: "with tool name",
-			request: copilot.PermissionRequest{
-				Kind:     copilot.PermissionRequestKindWrite,
-				ToolName: new("ksail_cluster_create"),
+			request: &copilot.PermissionRequestCustomTool{
+				ToolName: "ksail_cluster_create",
 			},
 			expected: "Tool: ksail_cluster_create",
 		},
 		{
 			name: "with path",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindWrite,
-				Path: new("/tmp/test.yaml"),
+			request: &copilot.PermissionRequestRead{
+				Path: "/tmp/test.yaml",
 			},
 			expected: "Path: /tmp/test.yaml",
 		},
 		{
 			name: "with full command text",
-			request: copilot.PermissionRequest{
-				Kind:            copilot.PermissionRequestKindShell,
-				FullCommandText: new("rm -rf /tmp/test"),
+			request: &copilot.PermissionRequestShell{
+				FullCommandText: "rm -rf /tmp/test",
 			},
 			expected: "$ rm -rf /tmp/test",
 		},
@@ -101,17 +96,15 @@ func TestGetPermissionDescription_DiffPreview(t *testing.T) {
 	}{
 		{
 			name: "short diff",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindWrite,
-				Diff: new("- old line\n+ new line"),
+			request: &copilot.PermissionRequestWrite{
+				Diff: "- old line\n+ new line",
 			},
 			expected: "Diff:\n- old line\n+ new line",
 		},
 		{
 			name: "truncated diff",
-			request: copilot.PermissionRequest{
-				Kind: copilot.PermissionRequestKindWrite,
-				Diff: new(longDiff),
+			request: &copilot.PermissionRequestWrite{
+				Diff: longDiff,
 			},
 			expected: "Diff:\n" + longDiff[:200] + "...",
 		},

@@ -169,7 +169,7 @@ func TestModelPickerAutoResolvedDisplay(t *testing.T) {
 		{
 			ID:      "gpt-4o",
 			Policy:  &copilot.ModelPolicy{State: "enabled"},
-			Billing: &copilot.ModelBilling{Multiplier: 1.0},
+			Billing: &copilot.ModelBilling{Multiplier: new(1.0)},
 		},
 	})
 	chat.ExportSetShowModelPicker(model, true)
@@ -281,7 +281,7 @@ func TestModelPickerItemMultiplierDisplay(t *testing.T) {
 				{
 					ID:      testCase.modelID,
 					Policy:  &copilot.ModelPolicy{State: "enabled"},
-					Billing: &copilot.ModelBilling{Multiplier: testCase.multiplier},
+					Billing: &copilot.ModelBilling{Multiplier: new(testCase.multiplier)},
 				},
 			})
 			chat.ExportSetShowModelPicker(model, true)
