@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
@@ -13,6 +14,16 @@ import (
 )
 
 const chartRefParts = 2
+
+// helmHTTPTimeoutMu serializes the process-global HELM_HTTP_TIMEOUT mutation in
+// locateChartFromRepo. The Helm SDK has no per-call HTTP timeout, so KSail sets
+// the env var around each repository LocateChart and restores it afterwards.
+// Without this lock, concurrent repo-based renders (e.g. rendering HelmReleases
+// across kustomizations in parallel) race on the env var, which is a data race
+// under `go test -race` and can leak one render's timeout into another.
+//
+//nolint:gochecknoglobals // package-level lock guarding a process-global env var
+var helmHTTPTimeoutMu sync.Mutex
 
 // chartLocator abstracts the common chart location capabilities shared by
 // helmv4action.Install and helmv4action.Upgrade.
@@ -132,6 +143,13 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+
+	// Hold the lock across the entire set→LocateChart→restore window so concurrent
+	// repo locates never observe each other's HELM_HTTP_TIMEOUT. Deferred restore
+	// runs before the deferred Unlock (LIFO), so the env var is restored while the
+	// lock is still held.
+	helmHTTPTimeoutMu.Lock()
+	defer helmHTTPTimeoutMu.Unlock()
 
 	originalTimeout, hadTimeout := os.LookupEnv("HELM_HTTP_TIMEOUT")
 
