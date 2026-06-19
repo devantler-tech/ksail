@@ -15,7 +15,7 @@ When the target directory is a Kustomize root, manifests are rendered before
 scanning (Kustomize build + Flux variable substitution + in-process Helm
 templating of HelmReleases), so findings reflect overlay patches and chart output
 rather than the raw files. HelmReleases that cannot be rendered offline are left
-as-is with a warning. Use --raw to scan the raw files instead.
+as-is with a warning. Use --no-render to scan the raw files instead.
 
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
@@ -34,8 +34,8 @@ Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
+      --no-render                      Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
   -o, --output string                  Output file path (stdout if empty)
-      --raw                            Scan raw manifest files instead of the Kustomize + Helm rendered output (restores the pre-rendering behavior)
       --verbose                        Show all resources in output, not just failed ones
 
 Global Flags:

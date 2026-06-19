@@ -24,7 +24,7 @@ func NewScanCmd() *cobra.Command {
 		output              string
 		complianceThreshold float32
 		verbose             bool
-		raw                 bool
+		noRender            bool
 	)
 
 	cmd := &cobra.Command{
@@ -39,7 +39,7 @@ When the target directory is a Kustomize root, manifests are rendered before
 scanning (Kustomize build + Flux variable substitution + in-process Helm
 templating of HelmReleases), so findings reflect overlay patches and chart output
 rather than the raw files. HelmReleases that cannot be rendered offline are left
-as-is with a warning. Use --raw to scan the raw files instead.
+as-is with a warning. Use --no-render to scan the raw files instead.
 
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
@@ -62,14 +62,14 @@ For more information, see https://github.com/kubescape/kubescape`,
 					output:              output,
 					complianceThreshold: complianceThreshold,
 					verbose:             verbose,
-					raw:                 raw,
+					noRender:            noRender,
 				},
 			)
 		},
 		SilenceUsage: true,
 	}
 
-	addScanFlags(cmd, &frameworks, &format, &output, &complianceThreshold, &verbose, &raw)
+	addScanFlags(cmd, &frameworks, &format, &output, &complianceThreshold, &verbose, &noRender)
 
 	return cmd
 }
@@ -81,7 +81,7 @@ type scanFlags struct {
 	output              string
 	complianceThreshold float32
 	verbose             bool
-	raw                 bool
+	noRender            bool
 }
 
 // addScanFlags registers the flags for the scan command.
@@ -90,7 +90,7 @@ func addScanFlags(
 	frameworks *[]string,
 	format, output *string,
 	complianceThreshold *float32,
-	verbose, raw *bool,
+	verbose, noRender *bool,
 ) {
 	cmd.Flags().StringSliceVar(frameworks, "framework", []string{"nsa"},
 		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss)")
@@ -102,9 +102,9 @@ func addScanFlags(
 		"Fail if compliance score is below this threshold (0-100)")
 	cmd.Flags().BoolVar(verbose, "verbose", false,
 		"Show all resources in output, not just failed ones")
-	cmd.Flags().BoolVar(raw, "raw", false,
-		"Scan raw manifest files instead of the Kustomize + Helm rendered output "+
-			"(restores the pre-rendering behavior)")
+	cmd.Flags().BoolVar(noRender, "no-render", false,
+		"Scan the raw manifest files instead of the Kustomize + Helm rendered output "+
+			"(skip rendering entirely; restores the pre-rendering behavior)")
 }
 
 func runScanCmd(
@@ -139,8 +139,8 @@ func runScanCmd(
 	}
 
 	// Scan the Kustomize + Helm rendered manifests so findings reflect overlay
-	// patches and chart output; --raw (or helmRender: false) scans raw files.
-	scanPath, cleanup, err := resolveScanInput(ctx, cmd, path, cfg, configFound, flags.raw)
+	// patches and chart output; --no-render (or helmRender: false) scans raw files.
+	scanPath, cleanup, err := resolveScanInput(ctx, cmd, path, cfg, configFound, flags.noRender)
 	if err != nil {
 		return err
 	}
@@ -196,11 +196,11 @@ func resolveScanInput(
 	cmd *cobra.Command,
 	path string,
 	cfg *v1alpha1.Cluster,
-	configFound, raw bool,
+	configFound, noRender bool,
 ) (string, func(), error) {
 	noop := func() {}
 
-	if !helmRenderEnabled(cfg, configFound, raw) || !hasKustomizationFile(path) {
+	if !helmRenderEnabled(cfg, configFound, noRender) || !hasKustomizationFile(path) {
 		return path, noop, nil
 	}
 

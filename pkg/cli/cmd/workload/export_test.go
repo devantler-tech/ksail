@@ -129,9 +129,9 @@ func ExportResolveScanInput(
 	cmd *cobra.Command,
 	path string,
 	cfg *v1alpha1.Cluster,
-	configFound, raw bool,
+	configFound, noRender bool,
 ) (string, func(), error) {
-	return resolveScanInput(ctx, cmd, path, cfg, configFound, raw)
+	return resolveScanInput(ctx, cmd, path, cfg, configFound, noRender)
 }
 
 // ExportPollInterval exposes the engine's poll interval constant for testing.

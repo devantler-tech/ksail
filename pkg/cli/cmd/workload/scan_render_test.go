@@ -54,9 +54,9 @@ func TestResolveScanInputRendersKustomization(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "cleanup should remove the temp dir")
 }
 
-// TestResolveScanInputRawSkipsRender verifies --raw scans the source path
-// directly (the pre-rendering behavior).
-func TestResolveScanInputRawSkipsRender(t *testing.T) {
+// TestResolveScanInputNoRenderSkipsRender verifies --no-render scans the source
+// path directly (the pre-rendering behavior).
+func TestResolveScanInputNoRenderSkipsRender(t *testing.T) {
 	t.Parallel()
 
 	dir := writeHelmReleaseKustomization(t, localChartURL(t, "validchart"))
@@ -68,7 +68,7 @@ func TestResolveScanInputRawSkipsRender(t *testing.T) {
 
 	defer cleanup()
 
-	assert.Equal(t, dir, scanPath, "--raw should scan the source path directly")
+	assert.Equal(t, dir, scanPath, "--no-render should scan the source path directly")
 }
 
 // TestResolveScanInputNoKustomizationSkipsRender verifies a directory without a
