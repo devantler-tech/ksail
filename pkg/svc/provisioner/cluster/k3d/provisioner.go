@@ -305,15 +305,19 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	_, copyErr := io.Copy(&outputBuf, pipeReader)
 	_ = pipeReader.Close()
 
+	// Wait for the command goroutine to finish BEFORE restoring os.Stdout. The
+	// channel receive is the happens-before edge with the goroutine's access to
+	// os.Stdout — k3d's docker client reads it via moby/term.StdStreams — so
+	// restoring earlier races that read under the race detector. (The pipe EOF that
+	// unblocked io.Copy is not a tracked synchronization edge.)
+	runErr := <-errChan
+
 	// Restore stdout and the loggers, then release the lock.
 	os.Stdout = originalStdout
 
 	restoreLogging()
 
 	listMutex.Unlock()
-
-	// Wait for command to complete and get any error
-	runErr := <-errChan
 
 	if copyErr != nil {
 		return "", fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)

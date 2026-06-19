@@ -319,13 +319,16 @@ func (k *Provisioner) listClusterNodes(
 	_, copyErr := io.Copy(&buf, pipeReader)
 	_ = pipeReader.Close()
 
-	// Restore stdout while still holding the lock
+	// Wait for the command goroutine to finish BEFORE restoring os.Stdout: the
+	// channel receive is the happens-before edge with the goroutine's read of
+	// os.Stdout (k3d's docker client reads it via moby/term.StdStreams), so
+	// restoring earlier races that read under the race detector.
+	runErr := <-errChan
+
+	// Restore stdout while still holding the lock.
 	os.Stdout = origStdout
 
 	listMutex.Unlock()
-
-	// Wait for command to complete and get any error
-	runErr := <-errChan
 
 	if copyErr != nil {
 		return nil, fmt.Errorf("failed to read node list output: %w", copyErr)
