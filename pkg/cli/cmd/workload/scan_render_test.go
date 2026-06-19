@@ -93,6 +93,28 @@ func TestResolveScanInputNoKustomizationSkipsRender(t *testing.T) {
 	assert.Equal(t, dir, scanPath, "a directory without a kustomization is scanned raw")
 }
 
+// TestResolveScanOutputEmpty verifies an empty --output resolves to "".
+func TestResolveScanOutputEmpty(t *testing.T) {
+	t.Parallel()
+
+	out, err := workload.ExportResolveScanOutput("")
+	require.NoError(t, err)
+	assert.Empty(t, out)
+}
+
+// TestResolveScanOutputCreatesDir verifies a non-empty --output has its parent
+// directory created and the path canonicalized.
+func TestResolveScanOutputCreatesDir(t *testing.T) {
+	t.Parallel()
+
+	target := filepath.Join(t.TempDir(), "reports", "scan.json")
+
+	out, err := workload.ExportResolveScanOutput(target)
+	require.NoError(t, err)
+	assert.NotEmpty(t, out)
+	assert.DirExists(t, filepath.Dir(target), "parent directory should be created")
+}
+
 // TestResolveScanInputHelmRenderDisabledByConfig verifies
 // spec.workload.validation.helmRender:false disables scan rendering.
 func TestResolveScanInputHelmRenderDisabledByConfig(t *testing.T) {

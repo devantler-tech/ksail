@@ -189,3 +189,42 @@ func TestValidateRendersConcurrentlyNoRace(t *testing.T) {
 	_, err := runValidate(t, root, "--skip-kinds", "OCIRepository")
 	require.NoError(t, err, "concurrent rendering of multiple kustomizations must succeed")
 }
+
+// TestValidateGitRepositorySourceSkipsSilently verifies a HelmRelease whose chart
+// comes from a GitRepository (not renderable offline yet) degrades *silently*:
+// the run passes (the CR is validated as-is) and no warning is emitted, so normal
+// repos that mix GitRepository charts are not spammed.
+func TestValidateGitRepositorySourceSkipsSilently(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	files := map[string]string{
+		"kustomization.yaml": `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - helmrelease.yaml
+`,
+		"helmrelease.yaml": `apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: app
+  namespace: flux-system
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: ./charts/app
+      sourceRef:
+        kind: GitRepository
+        name: repo
+`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	output, err := runValidate(t, dir)
+	require.NoError(t, err, "a GitRepository-sourced HelmRelease must degrade silently, not fail")
+	assert.NotContains(t, output, "skipped Helm render", "GitRepository sources skip silently")
+}

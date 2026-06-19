@@ -134,6 +134,12 @@ func ExportResolveScanInput(
 	return resolveScanInput(ctx, cmd, path, cfg, configFound, noRender)
 }
 
+// ExportResolveScanOutput exposes resolveScanOutput for testing the scan
+// --output directory creation and canonicalization.
+func ExportResolveScanOutput(output string) (string, error) {
+	return resolveScanOutput(output)
+}
+
 // ExportPollInterval exposes the engine's poll interval constant for testing.
 const ExportPollInterval = workloadwatch.PollInterval
 
