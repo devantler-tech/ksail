@@ -15,15 +15,30 @@ import (
 
 const chartRefParts = 2
 
-// helmHTTPTimeoutMu serializes the process-global HELM_HTTP_TIMEOUT mutation in
-// locateChartFromRepo. The Helm SDK has no per-call HTTP timeout, so KSail sets
-// the env var around each repository LocateChart and restores it afterwards.
-// Without this lock, concurrent repo-based renders (e.g. rendering HelmReleases
-// across kustomizations in parallel) race on the env var, which is a data race
-// under `go test -race` and can leak one render's timeout into another.
+// chartAcquireMu serializes the whole chart-acquisition window — locate →
+// download → load → values-file reads — across the process, together with the
+// process-global HELM_HTTP_TIMEOUT mutation in locateChartFromRepo.
 //
-//nolint:gochecknoglobals // package-level lock guarding a process-global env var
-var helmHTTPTimeoutMu sync.Mutex
+// Every Helm client built by NewTemplateOnlyClient shares the SAME process-global
+// Helm directories (HELM_REPOSITORY_CACHE, HELM_CONTENT_CACHE, the registry
+// config), because helmv4cli.New() resolves them from the environment / user home
+// rather than per-client. validate and scan render HelmReleases across
+// kustomizations concurrently (pkg/cli/cmd/workload, validationConcurrency), so
+// without serialization two renders acquire charts at once and race on those
+// shared files: one download writes a chart archive / OCI blob / repo index while
+// another reads or rewrites the same path. That silently corrupts the loaded
+// chart and yields malformed, non-deterministic render output — the
+// HelmRelease-dense overlays fail at a different place on every run
+// (devantler-tech/ksail#5362). A `-race` build does not catch it because the race
+// is on the filesystem, not Go memory (the prior env-var-only fix passed `-race`
+// yet the corruption persisted in production).
+//
+// The lock is held by loadChartAndValues for acquisition only; rendering
+// (RunWithContext, operating on the already-loaded in-memory chart) runs outside
+// it and stays parallel.
+//
+//nolint:gochecknoglobals // package-level lock guarding process-global Helm state
+var chartAcquireMu sync.Mutex
 
 // chartLocator abstracts the common chart location capabilities shared by
 // helmv4action.Install and helmv4action.Upgrade.
@@ -36,6 +51,11 @@ func (c *Client) loadChartAndValues(
 	spec *ChartSpec,
 	client any,
 ) (*chartv2.Chart, map[string]any, error) {
+	// Serialize the entire acquisition window so concurrent renders never touch the
+	// shared process-global Helm cache/config at the same time. See chartAcquireMu.
+	chartAcquireMu.Lock()
+	defer chartAcquireMu.Unlock()
+
 	chartPath, chart, err := c.locateAndLoadChart(spec, client)
 	if err != nil {
 		return nil, nil, err
@@ -144,13 +164,11 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		timeout = DefaultTimeout
 	}
 
-	// Hold the lock across the entire set→LocateChart→restore window so concurrent
-	// repo locates never observe each other's HELM_HTTP_TIMEOUT. Deferred restore
-	// runs before the deferred Unlock (LIFO), so the env var is restored while the
-	// lock is still held.
-	helmHTTPTimeoutMu.Lock()
-	defer helmHTTPTimeoutMu.Unlock()
-
+	// chartAcquireMu (held by loadChartAndValues for the whole acquisition window)
+	// already serializes this call, so the process-global HELM_HTTP_TIMEOUT
+	// mutation below is race-free. The deferred restore runs when this function
+	// returns — still within loadChartAndValues, lock held — so no other render
+	// observes the temporary timeout.
 	originalTimeout, hadTimeout := os.LookupEnv("HELM_HTTP_TIMEOUT")
 
 	err := os.Setenv("HELM_HTTP_TIMEOUT", timeout.String())
