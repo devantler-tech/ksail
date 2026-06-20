@@ -230,7 +230,14 @@ func (p *Provisioner) GetCurrentVersions(
 		return nil, fmt.Errorf("%w: %s", clustererr.ErrNoNodesFound, clusterName)
 	}
 
-	talosVersion, err := p.getRunningTalosVersion(ctx, nodes[0].IP)
+	// Reconcile from the cluster's LEAST-upgraded node rather than whichever node
+	// is first. An interrupted rolling upgrade leaves the cluster in a mixed-version
+	// state (some nodes already at the target, others still behind); reading a single
+	// node lets an already-upgraded one mask the laggards, so the reconciler reports
+	// "already at the pin" and silently stops — stranding the remaining nodes on the
+	// old version. Mirrors the Kubernetes path, which reconciles from the cluster-wide
+	// k8s.DetectLowestVersion.
+	talosVersion, err := p.getLowestRunningTalosVersion(ctx, nodes)
 	if err != nil {
 		return nil, fmt.Errorf("getting Talos version: %w", err)
 	}
@@ -255,6 +262,62 @@ func (p *Provisioner) GetCurrentVersions(
 		KubernetesVersion:   k8sVersion,
 		DistributionVersion: talosVersion,
 	}, nil
+}
+
+// getLowestRunningTalosVersion returns the lowest (least-upgraded) running Talos
+// OS version across all nodes. A rolling Talos upgrade replaces nodes one at a
+// time, so an interrupted upgrade (or one a caller starts against a partially
+// upgraded cluster) leaves nodes on different versions. The reconciler must treat
+// the cluster as being at its least-upgraded node so the nodes still behind the
+// target are rolled forward; sampling a single node instead reports whichever node
+// happens to be first (workers are listed and upgraded first), letting an already
+// upgraded node mask the laggards. This mirrors the Kubernetes path, which
+// reconciles from the cluster-wide k8s.DetectLowestVersion.
+func (p *Provisioner) getLowestRunningTalosVersion(
+	ctx context.Context,
+	nodes []nodeWithRole,
+) (string, error) {
+	tags := make([]string, 0, len(nodes))
+
+	for _, node := range nodes {
+		tag, err := p.getRunningTalosVersion(ctx, node.IP)
+		if err != nil {
+			return "", err
+		}
+
+		tags = append(tags, tag)
+	}
+
+	return lowestTalosVersion(tags)
+}
+
+// lowestTalosVersion returns the lowest tag in tags, compared as parsed semver.
+// It errors when tags is empty or any tag is not parseable semver, so an
+// undeterminable version fails the reconcile loudly rather than silently
+// under-reporting the cluster as already at the target version.
+func lowestTalosVersion(tags []string) (string, error) {
+	var (
+		lowestTag string
+		lowestVer versionresolver.Version
+	)
+
+	for _, tag := range tags {
+		ver, err := versionresolver.ParseVersion(tag)
+		if err != nil {
+			return "", fmt.Errorf("parsing running Talos version %q: %w", tag, err)
+		}
+
+		if lowestTag == "" || ver.Less(lowestVer) {
+			lowestTag, lowestVer = tag, ver
+		}
+	}
+
+	if lowestTag == "" {
+		return "", fmt.Errorf("no running Talos versions to compare: %w",
+			clustererr.ErrVersionUndetermined)
+	}
+
+	return lowestTag, nil
 }
 
 // KubernetesImageRef returns the Kubernetes apiserver image repository, which is

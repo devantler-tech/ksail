@@ -29,6 +29,16 @@ func CountNodeRolesForTest(nodes []NodeWithRoleForTest) (int32, int32) {
 	return countNodeRoles(nodes)
 }
 
+// LowestTalosVersionForTest exposes lowestTalosVersion for unit testing.
+func LowestTalosVersionForTest(tags []string) (string, error) {
+	return lowestTalosVersion(tags)
+}
+
+// RunningVersionMatchesTargetForTest exposes runningVersionMatchesTarget for unit testing.
+func RunningVersionMatchesTargetForTest(running, target string) bool {
+	return runningVersionMatchesTarget(running, target)
+}
+
 // NewNodeWithRoleForTest creates a nodeWithRole for unit testing.
 func NewNodeWithRoleForTest(ip, role string) NodeWithRoleForTest {
 	return nodeWithRole{IP: ip, Role: role}

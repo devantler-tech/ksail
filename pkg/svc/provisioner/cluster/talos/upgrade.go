@@ -44,6 +44,18 @@ func supportsLifecycleUpgradeAPI(versionTag string) bool {
 	return !parsed.Less(minVersion)
 }
 
+// runningVersionMatchesTarget reports whether a node's running Talos version is
+// already the upgrade target, compared as parsed semver so a "v"-prefix mismatch
+// does not hide an already-upgraded node. Unparseable versions return false, so an
+// undeterminable version errs toward upgrading rather than silently skipping a node
+// that may still need it.
+func runningVersionMatchesTarget(running, target string) bool {
+	runningVer, runErr := versionresolver.ParseVersion(running)
+	targetVer, tgtErr := versionresolver.ParseVersion(target)
+
+	return runErr == nil && tgtErr == nil && runningVer.Equal(targetVer)
+}
+
 // upgradeNodeTalosVersion performs a Talos OS upgrade on a single node, then
 // waits for it to come back online with the expected version. The upgrade API
 // is chosen by the node's running Talos version: nodes on Talos >= 1.13 use the
@@ -69,6 +81,20 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	runningVersion, verErr := versionTagFromClient(ctx, talosClient)
 	if verErr != nil {
 		return fmt.Errorf("determining running Talos version on %s: %w", nodeIP, verErr)
+	}
+
+	// Skip nodes already at the target. A rolling upgrade walks every node, so when
+	// resuming an interrupted or partial roll (a mixed-version cluster) it would
+	// otherwise reboot nodes that already run the desired version.
+	if runningVersionMatchesTarget(runningVersion, desiredTag) {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"    %s already at %s, skipping upgrade\n",
+			nodeIP,
+			desiredTag,
+		)
+
+		return nil
 	}
 
 	if supportsLifecycleUpgradeAPI(runningVersion) {
