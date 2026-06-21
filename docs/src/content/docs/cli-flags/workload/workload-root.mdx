@@ -20,6 +20,7 @@ Read operations:
 
 Write operations:
   apply, create, debug, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
+  cipher    - Manage SOPS-encrypted secret files (encrypt, decrypt, edit, import, rotate)
 
 GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
@@ -59,6 +60,9 @@ Dev loop:
   logs        Print container logs
   rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
+
+Secrets:
+  cipher      Manage encrypted files with SOPS
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

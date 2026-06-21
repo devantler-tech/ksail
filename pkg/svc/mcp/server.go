@@ -59,8 +59,9 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 		Instructions: "KSail — SDK for managing local Kubernetes clusters. Only Docker is required.\n\n" +
 			"Workflow: init → create → [update|info|diagnose] → delete.\n" +
 			"Tools: cluster_read (inspect), cluster_write (lifecycle), " +
-			"workload_read (get/describe/logs), workload_write (apply/create/scale/rollout), " +
-			"cipher_write (SOPS encryption), tenant_write (multi-tenancy).\n" +
+			"workload_read (get/describe/logs), " +
+			"workload_write (apply/create/scale/rollout, plus cipher SOPS secret encryption), " +
+			"tenant_write (multi-tenancy).\n" +
 			"Cluster lifecycle tools use --name and optionally --kubeconfig to target a cluster. " +
 			"Workload tools accept --context to target a kubeconfig context and --namespace for namespace scoping.",
 		Logger:    cfg.Logger,

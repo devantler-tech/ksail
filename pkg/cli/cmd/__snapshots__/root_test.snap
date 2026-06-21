@@ -14,7 +14,6 @@ Usage:
   ksail [command]
 
 Available Commands:
-  cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
@@ -40,7 +39,6 @@ Usage:
   ksail [command]
 
 Available Commands:
-  cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command

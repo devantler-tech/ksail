@@ -1,6 +1,5 @@
 
 [TestToolSurfaceSnapshot - 1]
-cipher_write
 cluster_read
 cluster_write
 tenant_write
@@ -97,90 +96,6 @@ workload_write
     },
     "required": [
       "command"
-    ],
-    "type": "object"
-  }
-}
----
-
-[TestToolSurfaceSnapshot/cipher_write - 1]
-{
-  "name": "cipher_write",
-  "title": "Cipher Write",
-  "description": "Manage encrypted files with SOPS",
-  "commandPath": "ksail cipher",
-  "requiresPermission": true,
-  "isConsolidated": true,
-  "subcommandParam": "cipher_operation",
-  "annotations": {
-    "readOnlyHint": false,
-    "destructiveHint": true,
-    "idempotentHint": false,
-    "openWorldHint": true
-  },
-  "parameters": {
-    "properties": {
-      "add-key": {
-        "description": "public key to add as a master key recipient (applies to: rotate)",
-        "type": "string"
-      },
-      "args": {
-        "description": "Positional arguments for the command",
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
-      },
-      "cipher_operation": {
-        "description": "The subcommand to execute. Options:\ndecrypt: Decrypt a file with SOPS\nedit: Edit an encrypted file with SOPS\nencrypt: Encrypt a file with SOPS\nimport: Import an age key to the system's SOPS key location\nrotate: Rotate data keys for SOPS-encrypted files",
-        "enum": [
-          "decrypt",
-          "edit",
-          "encrypt",
-          "import",
-          "rotate"
-        ],
-        "type": "string"
-      },
-      "dry-run": {
-        "description": "show which files would be rotated without making changes (applies to: rotate)",
-        "type": "boolean"
-      },
-      "editor": {
-        "description": "editor command to use (e.g., 'code --wait', 'vim', 'nano') (applies to: edit)",
-        "type": "string"
-      },
-      "extract": {
-        "description": "extract a specific key from the decrypted file (JSONPath format) (applies to: decrypt)",
-        "type": "string"
-      },
-      "force": {
-        "description": "skip confirmation prompt and rotate immediately (applies to: rotate)",
-        "type": "boolean"
-      },
-      "ignore-mac": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: decrypt, edit)",
-        "type": "boolean"
-      },
-      "output": {
-        "description": "output file path (default: stdout) (applies to: decrypt)",
-        "type": "string"
-      },
-      "recursive": {
-        "description": "scan subdirectories when target is a folder (applies to: rotate)",
-        "type": "boolean"
-      },
-      "remove-key": {
-        "description": "public key to remove from master key recipients (applies to: rotate)",
-        "type": "string"
-      },
-      "show-master-keys": {
-        "description": "show master keys in the editor (applies to: edit)",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "cipher_operation"
     ],
     "type": "object"
   }
@@ -682,6 +597,10 @@ workload_write
   },
   "parameters": {
     "properties": {
+      "add-key": {
+        "description": "public key to add as a master key recipient (applies to: cipher_rotate)",
+        "type": "string"
+      },
       "aggregation-rule": {
         "description": "An aggregation label selector for combining ClusterRoles. (applies to: create_clusterrole)",
         "type": "string"
@@ -711,7 +630,7 @@ workload_write
         "type": "boolean"
       },
       "args": {
-        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, exec, expose, import, install, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, cipher_decrypt, cipher_edit, cipher_encrypt, cipher_import, cipher_rotate, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, exec, expose, import, install, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
         "items": {
           "type": "string"
         },
@@ -868,7 +787,7 @@ workload_write
       },
       "dry-run": {
         "default": "none",
-        "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "duration": {
@@ -879,6 +798,10 @@ workload_write
       "edit": {
         "description": "Edit the API resource before creating (applies to: create)",
         "type": "boolean"
+      },
+      "editor": {
+        "description": "editor command to use (e.g., 'code --wait', 'vim', 'nano') (applies to: cipher_edit)",
+        "type": "string"
       },
       "env": {
         "description": "Environment variables to set in the container. (applies to: debug)",
@@ -903,6 +826,10 @@ workload_write
         "description": "External name of service (applies to: create_service_externalname)",
         "type": "string"
       },
+      "extract": {
+        "description": "extract a specific key from the decrypted file (JSONPath format) (applies to: cipher_decrypt)",
+        "type": "string"
+      },
       "field-manager": {
         "default": "kubectl-client-side-apply",
         "description": "Name of the manager used to track field ownership.",
@@ -920,7 +847,7 @@ workload_write
         "type": "array"
       },
       "force": {
-        "description": "If true, immediately remove resources from API and bypass graceful deletion. Note that immediate deletion of some resources may result in inconsistency or data loss and requires confirmation. (applies to: apply, delete)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, cipher_rotate, delete)",
         "type": "boolean"
       },
       "force-conflicts": {
@@ -982,6 +909,10 @@ workload_write
       "host": {
         "description": "Node name for host-level debugging (bypasses Kubernetes, targets the infrastructure node directly) (applies to: debug)",
         "type": "string"
+      },
+      "ignore-mac": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: cipher_decrypt, cipher_edit)",
+        "type": "boolean"
       },
       "ignore-not-found": {
         "description": "Treat \"resource not found\" as a successful delete. Defaults to \"true\" when --all is specified. (applies to: delete)",
@@ -1175,11 +1106,15 @@ workload_write
         "type": "string"
       },
       "recursive": {
-        "description": "Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory. (applies to: apply, apply_edit-last-applied, apply_view-last-applied, create, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, apply_edit-last-applied, apply_view-last-applied, cipher_rotate, create, delete, expose, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
         "type": "boolean"
       },
       "registry": {
         "description": "Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var (applies to: push)",
+        "type": "string"
+      },
+      "remove-key": {
+        "description": "public key to remove from master key recipients (applies to: cipher_rotate)",
         "type": "string"
       },
       "replace": {
@@ -1279,6 +1214,10 @@ workload_write
       },
       "show-managed-fields": {
         "description": "If true, keep the managedFields when printing objects in JSON or YAML format.",
+        "type": "boolean"
+      },
+      "show-master-keys": {
+        "description": "show master keys in the editor (applies to: cipher_edit)",
         "type": "boolean"
       },
       "source": {
@@ -1386,12 +1325,17 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
+        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncipher_decrypt: Decrypt a file with SOPS\ncipher_edit: Edit an encrypted file with SOPS\ncipher_encrypt: Encrypt a file with SOPS\ncipher_import: Import an age key to the system's SOPS key location\ncipher_rotate: Rotate data keys for SOPS-encrypted files\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
         "enum": [
           "apply",
           "apply_edit-last-applied",
           "apply_set-last-applied",
           "apply_view-last-applied",
+          "cipher_decrypt",
+          "cipher_edit",
+          "cipher_encrypt",
+          "cipher_import",
+          "cipher_rotate",
           "create",
           "create_clusterrole",
           "create_clusterrolebinding",

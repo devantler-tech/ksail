@@ -1,5 +1,5 @@
 ---
-title: "ksail cipher edit"
+title: "ksail workload cipher edit"
 description: "Edit an encrypted file with SOPS"
 ---
 
@@ -26,12 +26,12 @@ SOPS supports multiple key management systems:
   - HashiCorp Vault
 
 Example:
-  ksail cipher edit secrets.yaml
-  ksail cipher edit --editor "code --wait" secrets.yaml
-  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml
+  ksail workload cipher edit secrets.yaml
+  ksail workload cipher edit --editor "code --wait" secrets.yaml
+  SOPS_EDITOR="code --wait" ksail workload cipher edit secrets.yaml
 
 Usage:
-  ksail cipher edit <file> [flags]
+  ksail workload cipher edit <file> [flags]
 
 Flags:
       --editor string      editor command to use (e.g., 'code --wait', 'vim', 'nano')

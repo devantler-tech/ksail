@@ -2,6 +2,7 @@ package workload
 
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/cipher"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +19,7 @@ const (
 	groupImages    = "images"
 	groupGitOps    = "gitops"
 	groupDevLoop   = "devloop"
+	groupSecrets   = "secrets"
 )
 
 // NewWorkloadCmd creates and returns the workload command group namespace.
@@ -38,7 +40,8 @@ func NewWorkloadCmd() *cobra.Command {
 			"  wait      - Wait for a specific condition on resources\n\n" +
 			"Write operations:\n" +
 			"  apply, create, debug, delete, edit, exec, export, expose, import, install, push, " +
-			"reconcile, rollout, scale, watch\n\n" +
+			"reconcile, rollout, scale, watch\n" +
+			"  cipher    - Manage SOPS-encrypted secret files (encrypt, decrypt, edit, import, rotate)\n\n" +
 			"GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, " +
 			"ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check " +
 			"reconciliation status, health, and errors in a single call.",
@@ -60,6 +63,7 @@ func NewWorkloadCmd() *cobra.Command {
 		&cobra.Group{ID: groupImages, Title: "Images:"},
 		&cobra.Group{ID: groupGitOps, Title: "GitOps:"},
 		&cobra.Group{ID: groupDevLoop, Title: "Dev loop:"},
+		&cobra.Group{ID: groupSecrets, Title: "Secrets:"},
 	)
 
 	addWorkloadSubcommands(cmd)
@@ -99,6 +103,8 @@ func addWorkloadSubcommands(cmd *cobra.Command) {
 	addGroupedCommand(cmd, NewForwardCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewLogsCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewRolloutCmd(), groupDevLoop)
+
+	addGroupedCommand(cmd, cipher.NewCipherCmd(), groupSecrets)
 }
 
 // addGroupedCommand assigns child to the given help group and adds it to parent.

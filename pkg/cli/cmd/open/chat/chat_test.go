@@ -330,9 +330,9 @@ func confirmFlagInjectionCases() []confirmFlagInjectionCase {
 			neverInject: []string{forceFlagName},
 		},
 		{
-			name:       "cipher_write rotate keeps confirmation force",
-			toolName:   "cipher_write",
-			args:       map[string]any{"cipher_operation": "rotate"},
+			name:       "workload_write cipher rotate keeps confirmation force",
+			toolName:   "workload_write",
+			args:       map[string]any{"workload_command": "cipher_rotate"},
 			injectFlag: forceFlagName,
 		},
 	}
