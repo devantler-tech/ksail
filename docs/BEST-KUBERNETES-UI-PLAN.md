@@ -13,11 +13,11 @@ Headlamp feature parity on KSail's own stack.
 
 ## 1. Decisions taken (inputs to this plan)
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| **Extension model** | **Headlamp‑plugin compatible** | Inherit the existing Headlamp plugin ecosystem; let third‑party plugins load unmodified. |
-| **Path to parity** | **Extend KSail's own UI** (React + Tailwind + Headless UI) | Keep the lean, Go‑native, design‑consistent stack and KSail's distinct product identity — *not* embed Headlamp's frontend. |
-| **First milestone scope** | **All four pillars**: resource browser · AI‑operated UI · cluster‑first IA · plugin SDK | Ship a thin vertical slice across all four, then deepen each. |
+| Decision                  | Choice                                                                                  | Rationale                                                                                                                  |
+|---------------------------|-----------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| **Extension model**       | **Headlamp‑plugin compatible**                                                          | Inherit the existing Headlamp plugin ecosystem; let third‑party plugins load unmodified.                                   |
+| **Path to parity**        | **Extend KSail's own UI** (React + Tailwind + Headless UI)                              | Keep the lean, Go‑native, design‑consistent stack and KSail's distinct product identity — *not* embed Headlamp's frontend. |
+| **First milestone scope** | **All four pillars**: resource browser · AI‑operated UI · cluster‑first IA · plugin SDK | Ship a thin vertical slice across all four, then deepen each.                                                              |
 
 The first two decisions are in **deliberate tension** — Headlamp‑compatible plugins normally
 require Headlamp's *entire* frontend runtime (Material UI + Redux + React Router + its K8s data
@@ -30,10 +30,10 @@ layer), which is exactly what "extend KSail's own UI" says we don't want to adop
 
 **Supporting Headlamp plugins is not against any policy or license.**
 
-| | KSail | Headlamp |
-|---|---|---|
-| License | **PolyForm Shield 1.0.0** — source‑available; commercial use OK; only bars *products that compete with KSail*; **no copyleft on your own deps** ("use any license for your own project") | **Apache‑2.0** — OSI‑approved, permissive, no copyleft, includes a patent grant |
-| Governance | devantler‑tech | **CNCF Sandbox** + now hosted under **`kubernetes-sigs`** (Kubernetes SIG UI); latest **v0.43.0**, **pre‑1.0** |
+|            | KSail                                                                                                                                                                                    | Headlamp                                                                                                       |
+|------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| License    | **PolyForm Shield 1.0.0** — source‑available; commercial use OK; only bars *products that compete with KSail*; **no copyleft on your own deps** ("use any license for your own project") | **Apache‑2.0** — OSI‑approved, permissive, no copyleft, includes a patent grant                                |
+| Governance | devantler‑tech                                                                                                                                                                           | **CNCF Sandbox** + now hosted under **`kubernetes-sigs`** (Kubernetes SIG UI); latest **v0.43.0**, **pre‑1.0** |
 
 Because Apache‑2.0 is permissive and PolyForm Shield imposes no copyleft, KSail may legally:
 
@@ -84,27 +84,27 @@ notifications, dark mode/theming, i18n, OIDC + token auth, an Activities task‑
 
 ### 3.3 Feature‑parity matrix
 
-| Capability | KSail today | Headlamp | Plan phase |
-|---|---|---|---|
-| Cluster lifecycle (create/update/delete) | ✅ **(KSail‑unique)** | ❌ | exists |
-| GitOps bootstrap (Flux/ArgoCD) | ✅ CLI; ❌ UI | ❌ | P2 |
-| Multi‑tenancy (tenant onboarding) | ✅ CLI; ❌ UI | ❌ | P2 |
-| SOPS / secret cipher | ✅ CLI; ❌ UI | partial | P2 |
-| Resource browser (workloads, config, net, RBAC, CRDs) | ❌ | ✅ | P1 |
-| Events / describe | ❌ | ✅ | P1 |
-| Log streaming | ❌ | ✅ | P1 |
-| Metrics charts | ❌ | ✅ | P1 |
-| YAML view + edit/apply (Monaco) | ❌ | ✅ | P1/P2 |
-| Create / delete / scale / rollout | ❌ | ✅ | P2 |
-| Exec terminal | ❌ | ✅ | P2 |
-| Port‑forward | ❌ | ✅ | P2 |
-| Multi‑cluster switcher | ❌ | ✅ | P1 |
-| AI assistant (explain **and act**) | ❌ UI (CLI chat exists) | partial (plugin) | P3 **(KSail‑unique depth)** |
-| Plugin system | ❌ | ✅ | P4 |
-| Headlamp‑plugin compatibility | ❌ | n/a | P4 |
-| OIDC auth | ✅ | ✅ | exists |
-| i18n / theming | partial (dark mode) | ✅ | P5 |
-| Desktop app | ✅ (Wails v3) | ✅ (Electron) | P5 |
+| Capability                                            | KSail today            | Headlamp         | Plan phase                  |
+|-------------------------------------------------------|------------------------|------------------|-----------------------------|
+| Cluster lifecycle (create/update/delete)              | ✅ **(KSail‑unique)**   | ❌                | exists                      |
+| GitOps bootstrap (Flux/ArgoCD)                        | ✅ CLI; ❌ UI            | ❌                | P2                          |
+| Multi‑tenancy (tenant onboarding)                     | ✅ CLI; ❌ UI            | ❌                | P2                          |
+| SOPS / secret cipher                                  | ✅ CLI; ❌ UI            | partial          | P2                          |
+| Resource browser (workloads, config, net, RBAC, CRDs) | ❌                      | ✅                | P1                          |
+| Events / describe                                     | ❌                      | ✅                | P1                          |
+| Log streaming                                         | ❌                      | ✅                | P1                          |
+| Metrics charts                                        | ❌                      | ✅                | P1                          |
+| YAML view + edit/apply (Monaco)                       | ❌                      | ✅                | P1/P2                       |
+| Create / delete / scale / rollout                     | ❌                      | ✅                | P2                          |
+| Exec terminal                                         | ❌                      | ✅                | P2                          |
+| Port‑forward                                          | ❌                      | ✅                | P2                          |
+| Multi‑cluster switcher                                | ❌                      | ✅                | P1                          |
+| AI assistant (explain **and act**)                    | ❌ UI (CLI chat exists) | partial (plugin) | P3 **(KSail‑unique depth)** |
+| Plugin system                                         | ❌                      | ✅                | P4                          |
+| Headlamp‑plugin compatibility                         | ❌                      | n/a              | P4                          |
+| OIDC auth                                             | ✅                      | ✅                | exists                      |
+| i18n / theming                                        | partial (dark mode)    | ✅                | P5                          |
+| Desktop app                                           | ✅ (Wails v3)           | ✅ (Electron)     | P5                          |
 
 **Takeaway:** KSail already owns the layer *above* Headlamp (lifecycle, GitOps, tenancy, AI tool
 surface). The gap is essentially "build a tasteful in‑cluster resource browser," plus the plugin
@@ -226,6 +226,7 @@ Each phase is independently shippable. Phase 0 is a thin vertical slice that de�
 pillars at once (per the "first milestone = all four" decision); later phases deepen each.
 
 ### Phase 0 — Foundation / vertical slice (de‑risk the architecture)
+
 - Backend: generic **read‑only** K8s proxy + discovery for one cluster; reuse `pkg/client`.
 - Frontend: introduce the **router** + cluster‑first shell; one resource **list (Pods)** + detail +
   YAML view; a **stub AI panel** (read‑only chat over SSE); a **stub native registry** with one
@@ -233,17 +234,20 @@ pillars at once (per the "first milestone = all four" decision); later phases de
 - Outcome: every pillar proven end‑to‑end; architecture validated before scale‑out.
 
 ### Phase 1 — Read‑only resource browser parity
+
 - Full resource coverage (workloads, config, storage, networking, RBAC, nodes, **CRDs**), events,
   describe; **log streaming**; **metrics** charts; search/label‑search; namespace selector;
   **multi‑cluster switcher**; the watch multiplexer (SSE for native; lay groundwork for WS).
 
 ### Phase 2 — Write operations + cluster‑first depth (KSail's differentiation surfaces)
+
 - YAML **edit/apply**, create/delete/**scale/rollout**, **exec** terminal, **port‑forward**;
   RBAC‑aware action gating.
 - **Overview** cluster‑home; **GitOps** views (Flux/ArgoCD — reuse `pkg/svc/detector/gitops`);
   **Tenant** onboarding + **Cipher/SOPS** views; surface **lifecycle** actions (create/update/delete).
 
 ### Phase 3 — AI‑operated UI (deepen the differentiator)
+
 - Full assistant: act‑with‑confirm, context seeding from any resource, diff previews, the
   toolgen write‑tool bridge; "diagnose"/"explain" inline actions.
 
@@ -265,6 +269,7 @@ pillars at once (per the "first milestone = all four" decision); later phases de
   signature verification staged) + a compatibility matrix of known‑working Headlamp plugins.
 
 ### Phase 5 — Hardening & distribution
+
 - **Desktop** (Wails v3) parity; multi‑cluster polish; **i18n**; theming; plugin **catalog UI**;
   sandbox exploration; docs + generated‑artifact updates.
 
@@ -272,16 +277,16 @@ pillars at once (per the "first milestone = all four" decision); later phases de
 
 ## 6. Risks & mitigations
 
-| # | Risk | Impact | Mitigation |
-|---|---|---|---|
-| 1 | **React version skew** — KSail is on React **19**; Headlamp targets **18.x**. Plugins need a *single shared* React instance. | Plugins crash / hooks break. | Pin the **plugin‑host** React to Headlamp's major (isolated from KSail's own UI), or validate 19↔plugin interop early in P4. Resolve before 4b. |
-| 2 | **Pre‑1.0 moving plugin API** — `register*`/`pluginLib`/`K8s` surface shifts across 0.x. | Compat rot. | Pin a **target Headlamp version**, maintain a compat matrix, treat the surface as a versioned contract; CI test against pinned plugins. |
-| 3 | **`K8s`/`ApiProxy` reimplementation** is large/underspecified. | P4 slips. | Treat as the critical path; spike it in P0 (read‑only) and grow; consider *vendoring* Headlamp's `frontend/src/lib/k8s` (Apache‑2.0 allows) to bootstrap. |
-| 4 | **WebSocket multiplexer protocol** — plugins expect Headlamp's WS, KSail uses SSE. | Plugins can't watch. | Add a Headlamp‑protocol WS multiplexer alongside SSE in 4c. |
-| 5 | **Unsandboxed plugins** = full cluster‑cred access. | Supply‑chain risk. | Trust gate + checksum verify + optional iframe/worker sandbox (§4.4) — ship *safer* than Headlamp. |
-| 6 | **MUI/Redux bundle weight** could bloat KSail's lean UI. | Perf/identity. | Load the compat runtime **lazily, only when a plugin is present**; KSail's own UI never imports MUI. |
-| 7 | **Multi‑user RBAC** — operator acts with its own identity today. | AuthZ gap in‑cluster. | Token passthrough / impersonation in the data plane for the operator deployment. |
-| 8 | **Maintainer philosophy** (Go‑native, avoid Node/Electron heaviness). | Scope/values drift. | Backend stays Go (`pkg/client` in‑process); JS heaviness is **contained to the plugin boundary**; desktop stays Wails. |
+| # | Risk                                                                                                                         | Impact                       | Mitigation                                                                                                                                                |
+|---|------------------------------------------------------------------------------------------------------------------------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | **React version skew** — KSail is on React **19**; Headlamp targets **18.x**. Plugins need a *single shared* React instance. | Plugins crash / hooks break. | Pin the **plugin‑host** React to Headlamp's major (isolated from KSail's own UI), or validate 19↔plugin interop early in P4. Resolve before 4b.           |
+| 2 | **Pre‑1.0 moving plugin API** — `register*`/`pluginLib`/`K8s` surface shifts across 0.x.                                     | Compat rot.                  | Pin a **target Headlamp version**, maintain a compat matrix, treat the surface as a versioned contract; CI test against pinned plugins.                   |
+| 3 | **`K8s`/`ApiProxy` reimplementation** is large/underspecified.                                                               | P4 slips.                    | Treat as the critical path; spike it in P0 (read‑only) and grow; consider *vendoring* Headlamp's `frontend/src/lib/k8s` (Apache‑2.0 allows) to bootstrap. |
+| 4 | **WebSocket multiplexer protocol** — plugins expect Headlamp's WS, KSail uses SSE.                                           | Plugins can't watch.         | Add a Headlamp‑protocol WS multiplexer alongside SSE in 4c.                                                                                               |
+| 5 | **Unsandboxed plugins** = full cluster‑cred access.                                                                          | Supply‑chain risk.           | Trust gate + checksum verify + optional iframe/worker sandbox (§4.4) — ship *safer* than Headlamp.                                                        |
+| 6 | **MUI/Redux bundle weight** could bloat KSail's lean UI.                                                                     | Perf/identity.               | Load the compat runtime **lazily, only when a plugin is present**; KSail's own UI never imports MUI.                                                      |
+| 7 | **Multi‑user RBAC** — operator acts with its own identity today.                                                             | AuthZ gap in‑cluster.        | Token passthrough / impersonation in the data plane for the operator deployment.                                                                          |
+| 8 | **Maintainer philosophy** (Go‑native, avoid Node/Electron heaviness).                                                        | Scope/values drift.          | Backend stays Go (`pkg/client` in‑process); JS heaviness is **contained to the plugin boundary**; desktop stays Wails.                                    |
 
 ---
 
@@ -306,6 +311,7 @@ distributed as `.tar.gz` indexed on Artifact Hub; **unsandboxed**, **frontend‑
 (Gorilla), proxy + WebSocket multiplexer, serves `/plugins`.
 
 **KSail current‑state map**:
+
 - Frontend SPA — `web/ui/src/` (`App.tsx`, `api.ts`, `components/`, `hooks/`, `lib/`, `generated/`)
 - Backend API — `pkg/operator/api/server.go` (handlers/middleware/OIDC), `service.go`
   (`ClusterService`), `cr_service.go`, `pkg/cli/clusterapi/local_service.go`,
