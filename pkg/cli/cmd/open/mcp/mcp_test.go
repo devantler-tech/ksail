@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	mcpcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
+	mcpcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open/mcp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
@@ -67,7 +67,7 @@ func TestNewMCPCmd_LongDescription(t *testing.T) {
 		"MCP server",
 		"stdio",
 		"tools",
-		"ksail mcp",
+		"ksail open mcp",
 	}
 
 	for _, substr := range expectedSubstrings {
@@ -265,7 +265,7 @@ func TestNewMCPCmd_ExampleUsage(t *testing.T) {
 	// Verify command documentation includes example usage
 	cmd := mcpcmd.NewMCPCmd()
 
-	assert.Contains(t, cmd.Long, "ksail mcp",
+	assert.Contains(t, cmd.Long, "ksail open mcp",
 		"Documentation should include example command usage")
 }
 

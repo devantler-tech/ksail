@@ -120,7 +120,7 @@ func buildDistributionConfig(
 			EKS: &clusterprovisioner.EKSConfig{Name: name, Region: awsRegion(cluster)},
 		}, nil
 	default:
-		// K3s, VCluster, KWOK need only the name (shared with the local `ksail ui` backend).
+		// K3s, VCluster, KWOK need only the name (shared with the local `ksail open web` backend).
 		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
 		if config != nil {
 			return config, nil

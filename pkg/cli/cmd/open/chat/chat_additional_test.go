@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"

@@ -99,7 +99,7 @@ homebrew_casks:
       depends_on macos: :big_sur
       app "KSail.app"
     # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
-    # so `ksail-desktop` is on PATH and `ksail desktop` finds it. Without this, GoReleaser would
+    # so `ksail-desktop` is on PATH and `ksail open desktop` finds it. Without this, GoReleaser would
     # default the symlink to the bare basename, which does not exist at the archive root.
     binaries:
       - "#{appdir}/KSail.app/Contents/MacOS/ksail-desktop"

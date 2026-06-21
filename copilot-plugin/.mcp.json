@@ -2,7 +2,7 @@
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }

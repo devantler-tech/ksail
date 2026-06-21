@@ -14,16 +14,13 @@ Usage:
   ksail [command]
 
 Available Commands:
-  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
-  desktop     Open the KSail desktop application
   help        Help about any command
-  mcp         Start an MCP server
   oidc        OIDC authentication utilities
+  open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
   tenant      Manage tenant lifecycle
-  ui          Open the KSail web UI to manage local clusters
   workload    Manage workload operations
 
 Flags:
@@ -44,16 +41,13 @@ Usage:
   ksail [command]
 
 Available Commands:
-  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
-  desktop     Open the KSail desktop application
   help        Help about any command
-  mcp         Start an MCP server
   oidc        OIDC authentication utilities
+  open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
   tenant      Manage tenant lifecycle
-  ui          Open the KSail web UI to manage local clusters
   workload    Manage workload operations
 
 Flags:

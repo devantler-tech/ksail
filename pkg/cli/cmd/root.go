@@ -3,15 +3,12 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
 	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/desktop"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/oidc"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/ui"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
@@ -60,13 +57,16 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd())
 	cmd.AddCommand(workload.NewWorkloadCmd())
 	cmd.AddCommand(cipher.NewCipherCmd())
-	cmd.AddCommand(chat.NewChatCmd())
-	cmd.AddCommand(mcp.NewMCPCmd())
 	cmd.AddCommand(operator.NewOperatorCmd())
 	cmd.AddCommand(tenant.NewTenantCmd())
 	cmd.AddCommand(oidc.NewOIDCCmd())
-	cmd.AddCommand(ui.NewUICmd())
-	cmd.AddCommand(desktop.NewDesktopCmd())
+	cmd.AddCommand(open.NewOpenCmd())
+
+	// Backward-compatible, hidden, deprecated aliases for the commands that moved under `open`
+	// (ui→open web, desktop→open desktop, chat→open chat, mcp→open mcp).
+	for _, alias := range open.NewDeprecatedAliases() {
+		cmd.AddCommand(alias)
+	}
 
 	return cmd
 }

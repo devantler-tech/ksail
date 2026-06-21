@@ -194,6 +194,11 @@ func excludedCommandNames(root *cobra.Command) []string {
 	}
 
 	for _, sub := range root.Commands() {
+		// Deprecated aliases are backward-compat shims, not part of the documented surface.
+		if sub.Deprecated != "" {
+			continue
+		}
+
 		if sub.Annotations[annotations.AnnotationExclude] == "true" {
 			excluded[sub.Name()] = true
 		}

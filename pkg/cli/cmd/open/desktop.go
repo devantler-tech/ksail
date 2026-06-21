@@ -1,7 +1,4 @@
-// Package desktop implements the `ksail desktop` command, which opens the KSail desktop application
-// (a native window built from the same web UI). The desktop app is a separate binary; this command
-// locates and launches it.
-package desktop
+package open
 
 import (
 	"context"
@@ -36,7 +33,7 @@ manage clusters without a browser. It ships as a separate download (or build it 
 This command launches the desktop app from, in order: a "ksail-desktop" binary next to the ksail
 executable, the same binary on your PATH, or (on macOS) an installed "KSail" app.`
 
-// NewDesktopCmd creates the `ksail desktop` command.
+// NewDesktopCmd creates the `ksail open desktop` command.
 func NewDesktopCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "desktop",
@@ -46,7 +43,7 @@ func NewDesktopCmd() *cobra.Command {
 		SilenceUsage: true,
 		// Exclude from AI tool generation: this launches an interactive desktop app.
 		Annotations: map[string]string{
-			annotations.AnnotationExclude: "true",
+			annotations.AnnotationExclude: annotations.AnnotationValueTrue,
 		},
 	}
 

@@ -164,7 +164,7 @@ go run main.go --help
 │   ├── runner/             # Cobra command execution helpers
 │   ├── strutil/            # String utilities
 │   ├── timer/              # Command timing and performance tracking
-│   ├── webui/              # Embedded web UI assets (built from web/ui, served by `ksail ui` and the operator)
+│   ├── webui/              # Embedded web UI assets (built from web/ui, served by `ksail open web` and the operator)
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
@@ -215,11 +215,8 @@ source of truth for the full command and flag inventory. Top-level command group
 - `ksail cipher` — secret management with SOPS; see `ksail cipher --help`
 - `ksail tenant` — multi-tenancy onboarding (RBAC isolation, GitOps sync resources, tenant repo scaffolding); see `ksail tenant --help`
 - `ksail oidc` — OIDC authentication utilities (kubeconfig exec credential plugin); see `ksail oidc --help`
-- `ksail ui` — open the local web UI (local web server + browser); see `ksail ui --help`
-- `ksail desktop` — open the native desktop app; see `ksail desktop --help`
+- `ksail open` — open a KSail interface: `ksail open web` (local web server + browser), `ksail open desktop` (native desktop app), `ksail open chat` (AI chat powered by GitHub Copilot), and `ksail open mcp` (MCP server for AI assistants); see `ksail open --help`
 - `ksail operator` — run the Kubernetes operator (normally deployed via the Helm chart); see `ksail operator --help`
-- `ksail chat` — AI chat powered by GitHub Copilot
-- `ksail mcp` — start the MCP server for AI assistants
 
 ### Init Command Options
 

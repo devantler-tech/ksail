@@ -15,7 +15,7 @@ The AI Chat Assistant provides an interactive interface for cluster configuratio
 ## Starting a Chat Session
 
 ``````bash
-ksail chat
+ksail open chat
 ``````
 
 This opens an interactive TUI (Terminal User Interface) with markdown rendering, syntax highlighting, and conversation history.
@@ -34,10 +34,10 @@ This opens an interactive TUI (Terminal User Interface) with markdown rendering,
 
 ``````bash
 # Use a specific model with high reasoning effort
-ksail chat --model gpt-5 --reasoning-effort high
+ksail open chat --model gpt-5 --reasoning-effort high
 
 # Use auto model selection (let Copilot choose the model)
-ksail chat --model auto --timeout 10m
+ksail open chat --model auto --timeout 10m
 ``````
 
 ## Authentication

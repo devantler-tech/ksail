@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open/chat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

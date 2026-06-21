@@ -36,7 +36,7 @@ export const COMPONENT_LABELS: Record<string, string> = {
 };
 
 // preferredProvider picks the provider to pre-select for a distribution in the create form. Which
-// provider is the zero-config choice depends on the surface: the local `ksail ui`/desktop backend
+// provider is the zero-config choice depends on the surface: the local `ksail open web`/desktop backend
 // (recognizable by its per-provider availability report) is Docker-first — Docker is KSail's only
 // required local dependency — while the operator (no gating report) runs in-cluster, so the
 // Kubernetes (nested) provider is its zero-config choice. Falls back to the first provider the

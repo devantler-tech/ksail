@@ -26,7 +26,7 @@ const (
 
 // ToolOptions configures tool generation behavior.
 type ToolOptions struct {
-	// ExcludeCommands is a list of command paths to exclude (e.g., "ksail chat").
+	// ExcludeCommands is a list of command paths to exclude (e.g., "ksail open chat").
 	ExcludeCommands []string
 	// ExcludeFlags is a list of flag names to exclude from tool schemas.
 	// These flags still work at runtime — they're just hidden from the AI schema
@@ -106,8 +106,8 @@ func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{
 			// Meta commands - not useful as tools
-			"ksail chat",       // Chat interface, not a tool
-			"ksail mcp",        // MCP server itself, not a tool
+			"ksail open chat",  // Chat interface, not a tool
+			"ksail open mcp",   // MCP server itself, not a tool
 			"ksail operator",   // Long-running operator server, not a tool
 			"ksail completion", // Shell completion generator
 			"ksail help",       // Help command, not a tool

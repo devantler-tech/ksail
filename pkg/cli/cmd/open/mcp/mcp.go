@@ -22,14 +22,14 @@ consumed by MCP clients such as AI assistants and automation tools.
 
 Example usage with an MCP client:
   claude desktop or other MCP-compatible client can connect to:
-  ksail mcp
+  ksail open mcp
 
 The server will run until the client disconnects or the process is terminated.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPServer(cmd)
 		},
 		Annotations: map[string]string{
-			annotations.AnnotationExclude: "true",
+			annotations.AnnotationExclude: annotations.AnnotationValueTrue,
 		},
 	}
 
