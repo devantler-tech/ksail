@@ -165,6 +165,11 @@ type Capabilities struct {
 	// turn can actually run (e.g. GitHub Copilot is configured). The local `ksail ui`/desktop backend
 	// powers it over Copilot; the operator leaves it false.
 	AIChat bool `json:"aiChat"`
+	// KubeProxy reports whether the backend proxies read-only requests to a cluster's kube-apiserver
+	// (KubeProxy) — true exactly when the serving ClusterService implements it. It powers reads of
+	// resource kinds beyond the curated allowlist (and the Headlamp-compatible plugins' ApiProxy data
+	// layer). The local `ksail ui`/desktop backend implements it; the operator leaves it false.
+	KubeProxy bool `json:"kubeProxy"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

@@ -333,14 +333,14 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/stop", s.handleStopCluster)
 	}
 
-	// Extension surfaces (web-UI plugins, AI assistant) register together, keeping
+	// Extension surfaces (web-UI plugins, AI assistant, kube-apiserver proxy) register together, keeping
 	// registerCapabilityRoutes within its complexity budget as the capability set grows.
 	s.registerExtensionRoutes(mux)
 }
 
 // registerExtensionRoutes wires the optional UI-extension endpoints — Headlamp-compatible plugin
-// serving and the AI assistant — each gated on the backend implementing the matching interface, so the
-// operator's API-only surface is unchanged.
+// serving, the AI assistant, and the read-only kube-apiserver proxy — each gated on the backend
+// implementing the matching interface, so the operator's API-only surface is unchanged.
 func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// Web UI plugins (PluginService): list installed plugins and serve their static bundles so the SPA
 	// can load Headlamp-compatible extensions. Both are GETs (reads), so the read-only guard does not
@@ -357,6 +357,13 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// tools, so a read-only deployment locks it down with the other mutating surfaces.
 	if _, ok := s.Service.(ChatService); ok {
 		mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+	}
+
+	// Read-only kube-apiserver proxy (KubeProxy): GET passthrough so the SPA and Headlamp-compatible
+	// plugins can read arbitrary resource kinds beyond the curated /resources allowlist. GET-only
+	// (reads), so the read-only guard does not apply. Implemented only on the loopback local backend.
+	if _, ok := s.Service.(KubeProxy); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/proxy/{path...}", s.handleKubeProxy)
 	}
 }
 
@@ -523,6 +530,9 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	if chat, ok := s.Service.(ChatService); ok {
 		capabilities.AIChat = chat.ChatAvailable(request.Context())
 	}
+	// kubeProxy is true exactly when the backend can proxy read-only apiserver requests (KubeProxy),
+	// so plugins' ApiProxy data layer is only attempted against a backend that can serve it.
+	_, capabilities.KubeProxy = s.Service.(KubeProxy)
 	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
 	// marker yet report false during a transitional period), so the create form's gate cannot diverge
 	// from whether components are actually installed.
