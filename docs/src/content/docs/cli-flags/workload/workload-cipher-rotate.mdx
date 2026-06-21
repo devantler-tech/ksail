@@ -1,5 +1,5 @@
 ---
-title: "ksail cipher rotate"
+title: "ksail workload cipher rotate"
 description: "Rotate data keys for SOPS-encrypted files"
 ---
 
@@ -31,31 +31,31 @@ Key type is auto-detected from the key format:
 
 Examples:
   # Rotate all encrypted files in a folder (with confirmation)
-  ksail cipher rotate ./k8s
+  ksail workload cipher rotate ./k8s
 
   # Rotate without confirmation prompt
-  ksail cipher rotate ./k8s --force
+  ksail workload cipher rotate ./k8s --force
 
   # Rotate recursively through subdirectories
-  ksail cipher rotate ./k8s --recursive
+  ksail workload cipher rotate ./k8s --recursive
 
   # Rotate a single file
-  ksail cipher rotate secrets.yaml
+  ksail workload cipher rotate secrets.yaml
 
   # Add a new age recipient during rotation
-  ksail cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+  ksail workload cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
   # Remove an old age recipient during rotation
-  ksail cipher rotate ./k8s --remove-key age1oldkey...
+  ksail workload cipher rotate ./k8s --remove-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
+  ksail workload cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
   # Preview which files would be rotated without making changes
-  ksail cipher rotate ./k8s --dry-run
+  ksail workload cipher rotate ./k8s --dry-run
 
 Usage:
-  ksail cipher rotate <file/folder> [flags]
+  ksail workload cipher rotate <file/folder> [flags]
 
 Flags:
       --add-key string      public key to add as a master key recipient
