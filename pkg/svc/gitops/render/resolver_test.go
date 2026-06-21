@@ -3,7 +3,9 @@ package render_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
@@ -260,4 +262,74 @@ func TestReleaseNameMappedToChartSpec(t *testing.T) {
 	assert.Equal(t, "custom-release", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
 	assert.True(t, strings.HasPrefix(spec.ChartName, "oci://"))
+}
+
+// serialProbeClient embeds helm.Interface and records the peak number of
+// TemplateChart calls running concurrently, so a test can assert that the
+// in-process Helm render step is serialized. Other interface methods are unused.
+type serialProbeClient struct {
+	helm.Interface
+
+	mu       sync.Mutex
+	inFlight int
+	maxSeen  int
+}
+
+func (c *serialProbeClient) TemplateChart(_ context.Context, _ *helm.ChartSpec) (string, error) {
+	c.mu.Lock()
+
+	c.inFlight++
+	if c.inFlight > c.maxSeen {
+		c.maxSeen = c.inFlight
+	}
+	c.mu.Unlock()
+
+	// Widen the overlap window so an unserialized render is observed as
+	// inFlight > 1 well within scheduler jitter, making the assertion reliable.
+	time.Sleep(time.Millisecond)
+
+	c.mu.Lock()
+	c.inFlight--
+	c.mu.Unlock()
+
+	return "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rendered", nil
+}
+
+// TestRenderSerializesConcurrentHelmTemplating guards the #5362 fix. validate and
+// scan render kustomizations in parallel, each with its own HelmChartResolver, but
+// the Helm template step shares Helm's process-global on-disk caches and must be
+// serialized; without the package-level lock, concurrent renders interleaved into
+// each other's manifest stream. The probe fails if two TemplateChart calls overlap.
+func TestRenderSerializesConcurrentHelmTemplating(t *testing.T) {
+	t.Parallel()
+
+	probe := &serialProbeClient{}
+
+	const goroutines = 12
+
+	var waitGroup sync.WaitGroup
+
+	waitGroup.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer waitGroup.Done()
+
+			// A fresh resolver and inputs per goroutine mirror how validate
+			// constructs a client per kustomization; the package-level lock must
+			// serialize across independent resolvers.
+			resolver := render.NewHelmChartResolver(probe)
+
+			_, _ = resolver.Render(
+				context.Background(),
+				chartRefRelease(),
+				ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"}),
+			)
+		}()
+	}
+
+	waitGroup.Wait()
+
+	assert.Equal(t, 1, probe.maxSeen,
+		"concurrent in-process Helm renders must be serialized (issue #5362)")
 }

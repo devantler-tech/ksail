@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -12,6 +13,22 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"sigs.k8s.io/yaml"
 )
+
+// helmRenderMu serializes the in-process Helm template step across concurrent
+// renders. Helm's chart download + render path mutates process-global on-disk
+// caches (HELM_REPOSITORY_CACHE / HELM_CONTENT_CACHE, read from shared defaults
+// by every helm.NewTemplateOnlyClient) and other shared SDK state that is not
+// safe for concurrent use. validate (and scan) render kustomizations in
+// parallel, and unserialized renders intermittently interleaved into each
+// other's manifest stream — producing malformed YAML at a random offset that
+// failed a different kustomization on each run (issue #5362). Constructing a
+// fresh client per render is not enough because the shared state lives on disk,
+// below the client. Serializing only the template step keeps the expensive
+// parallel work (kustomize build, kubeconform validation) unaffected, and keeps
+// the shared chart cache warm so each chart is downloaded at most once.
+//
+//nolint:gochecknoglobals // package-level lock guarding Helm's process-global render state
+var helmRenderMu sync.Mutex
 
 var (
 	// ErrSourceNotFound is returned when a HelmRelease references a source object
@@ -61,6 +78,12 @@ func NewHelmChartResolver(client helm.Interface) *HelmChartResolver {
 }
 
 // Render resolves the chart source for helmRelease and templates it in-process.
+//
+// buildChartSpec is pure (in-memory) and runs concurrently; the Helm template
+// call is then serialized by helmRenderMu (see its doc) because it touches
+// Helm's process-global on-disk caches, which concurrent renders corrupted
+// (issue #5362). The deferred Unlock holds the lock only across that call plus a
+// trivial error-wrap, and stays correct even if TemplateChart panics.
 func (r *HelmChartResolver) Render(
 	ctx context.Context,
 	helmRelease *helmv2.HelmRelease,
@@ -70,6 +93,9 @@ func (r *HelmChartResolver) Render(
 	if err != nil {
 		return "", err
 	}
+
+	helmRenderMu.Lock()
+	defer helmRenderMu.Unlock()
 
 	manifest, err := r.helm.TemplateChart(ctx, spec)
 	if err != nil {
