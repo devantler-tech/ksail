@@ -64,29 +64,6 @@ func TestOpenCmd_Help(t *testing.T) {
 	}
 }
 
-func TestNewDeprecatedAliases(t *testing.T) {
-	t.Parallel()
-
-	want := map[string]string{
-		"ui":      "ksail open web",
-		"desktop": "ksail open desktop",
-		"chat":    "ksail open chat",
-		"mcp":     "ksail open mcp",
-	}
-
-	aliases := open.NewDeprecatedAliases()
-	require.Len(t, aliases, len(want))
-
-	for _, cmd := range aliases {
-		replacement, ok := want[cmd.Name()]
-		require.True(t, ok, "unexpected alias %q", cmd.Name())
-		assert.True(t, cmd.Hidden, "alias %q must be hidden", cmd.Name())
-		assert.Contains(t, cmd.Deprecated, replacement,
-			"alias %q must point at its replacement", cmd.Name())
-		assert.NotNil(t, cmd.RunE, "alias %q must still be runnable", cmd.Name())
-	}
-}
-
 // findSubcommand searches for a subcommand by name.
 func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, sub := range parent.Commands() {

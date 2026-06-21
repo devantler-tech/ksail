@@ -18,8 +18,7 @@ func countCommands(c *cobra.Command) int {
 	subs := make([]*cobra.Command, 0, len(c.Commands()))
 
 	for _, sub := range c.Commands() {
-		// Mirror generateCommandDocs: helper commands and deprecated aliases get no page.
-		if sub.Deprecated != "" || sub.Name() == "help" || sub.Name() == "completion" {
+		if sub.Name() == "help" || sub.Name() == "completion" {
 			continue
 		}
 

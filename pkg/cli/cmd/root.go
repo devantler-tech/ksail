@@ -62,12 +62,6 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(oidc.NewOIDCCmd())
 	cmd.AddCommand(open.NewOpenCmd())
 
-	// Backward-compatible, hidden, deprecated aliases for the commands that moved under `open`
-	// (ui→open web, desktop→open desktop, chat→open chat, mcp→open mcp).
-	for _, alias := range open.NewDeprecatedAliases() {
-		cmd.AddCommand(alias)
-	}
-
 	return cmd
 }
 
