@@ -72,6 +72,7 @@ var (
 	_ api.ClusterLifecycleController = (*Service)(nil)
 	_ api.ComponentInstaller         = (*Service)(nil)
 	_ api.PluginService              = (*Service)(nil)
+	_ api.ChatService                = (*Service)(nil)
 )
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
@@ -120,6 +121,10 @@ type Service struct {
 	// api.PluginService so `ksail ui` can load Headlamp-compatible extensions. Its dir seam is
 	// injectable for tests.
 	plugins pluginStore
+
+	// chat powers the web UI's AI assistant (api.ChatService). It is wired in by the `ksail ui` command
+	// (UseChat) so the Copilot dependency stays out of the core service; nil means unavailable.
+	chat chatRunner
 
 	mu   sync.Mutex
 	jobs map[string]*job

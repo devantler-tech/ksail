@@ -341,6 +341,14 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/v1/plugins", s.handleListPlugins)
 		mux.HandleFunc("GET /api/v1/plugins/{name}/{file...}", s.handlePluginAsset)
 	}
+
+	// AI assistant (ChatService) over SSE: POST carries the prompt + history; the handler streams the
+	// reply as chat events. Registered when the backend implements ChatService; the capability (and the
+	// SPA panel) follow ChatAvailable. POST is subject to the read-only guard — the assistant can invoke
+	// tools, so a read-only deployment locks it down with the other mutating surfaces.
+	if _, ok := s.Service.(ChatService); ok {
+		mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -501,6 +509,11 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// plugins is true exactly when the backend serves web-UI plugins (PluginService), so the SPA loads
 	// and shows the Plugins surface only against a backend that can actually list/serve them.
 	_, capabilities.Plugins = s.Service.(PluginService)
+	// aiChat follows ChatAvailable (not just the interface), so the assistant panel appears only when
+	// the backend can actually run a turn (e.g. Copilot is configured), not merely when it could.
+	if chat, ok := s.Service.(ChatService); ok {
+		capabilities.AIChat = chat.ChatAvailable(request.Context())
+	}
 	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
 	// marker yet report false during a transitional period), so the create form's gate cannot diverge
 	// from whether components are actually installed.

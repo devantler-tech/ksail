@@ -160,6 +160,9 @@ export interface Capabilities {
   // SPA to load. The SPA loads installed plugins and shows the Plugins surface only then. The local
   // `ksail ui`/desktop backend serves plugins from a local directory; the operator leaves it false.
   plugins: boolean;
+  // aiChat is true when the backend can run the AI assistant (e.g. GitHub Copilot is configured). The
+  // SPA shows the Assistant panel only then; the local backend powers it over Copilot.
+  aiChat: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -182,6 +185,9 @@ export const fullCapabilities: Capabilities = {
   // plugins defaults false: an older backend that omits the flag has no plugin endpoints, so the SPA
   // must not attempt to load plugins or show the Plugins surface there.
   plugins: false,
+  // aiChat defaults false: an older backend that omits the flag has no chat endpoint, so the SPA must
+  // not show the Assistant panel there.
+  aiChat: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -640,4 +646,99 @@ export function listPlugins(): Promise<{ plugins: PluginInfo[] }> {
 // sub-path assets (the backend enforces the file stays within the plugin directory).
 export function pluginAssetURL(name: string, file: string): string {
   return `/api/v1/plugins/${encodeURIComponent(name)}/${file}`;
+}
+
+// ChatMessage is one prior turn sent as history so the assistant has conversation context.
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// ChatRequestBody is one chat turn the SPA POSTs: the new message, the prior history, and the active
+// cluster context the assistant should reason about.
+export interface ChatRequestBody {
+  message: string;
+  history?: ChatMessage[];
+  cluster?: string;
+  namespace?: string;
+}
+
+// ChatEventType classifies a streamed chat event (mirrors the backend's ChatEventType).
+export type ChatEventType = "delta" | "tool" | "error" | "done";
+
+// ChatEvent is one streamed event of a chat turn.
+export interface ChatEvent {
+  type: ChatEventType;
+  text?: string;
+}
+
+// parseSSEData extracts the concatenated `data:` payload from one SSE frame, or null when the frame
+// carries none (e.g. a heartbeat comment). The backend writes "data: <json>" lines (one per data line).
+function parseSSEData(frame: string): string | null {
+  const data = frame
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).replace(/^ /, ""))
+    .join("\n");
+
+  return data === "" ? null : data;
+}
+
+// streamChat POSTs a chat turn and invokes onEvent for each streamed ChatEvent until the turn ends (a
+// "done" event) or the stream closes. The response is an SSE stream read from the fetch body; signal
+// aborts an in-flight turn. A non-OK response (e.g. 501 when the assistant is unavailable) throws an
+// ApiError before streaming starts.
+export async function streamChat(
+  body: ChatRequestBody,
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = (await response.text()).trim();
+    const { message } = detailFromBody(text);
+    const suffix = message === "" ? "" : `: ${message}`;
+    throw new ApiError(`POST /api/v1/chat (${response.status})${suffix}`, response.status);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new ApiError("chat stream unavailable", 500);
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE frames are separated by a blank line; process every complete frame in the buffer.
+    let separator = buffer.indexOf("\n\n");
+    while (separator !== -1) {
+      const frame = buffer.slice(0, separator);
+      buffer = buffer.slice(separator + 2);
+
+      const data = parseSSEData(frame);
+      if (data !== null) {
+        try {
+          onEvent(JSON.parse(data) as ChatEvent);
+        } catch {
+          // Ignore a malformed frame rather than aborting the whole turn.
+        }
+      }
+
+      separator = buffer.indexOf("\n\n");
+    }
+  }
 }

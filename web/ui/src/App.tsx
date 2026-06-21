@@ -29,6 +29,7 @@ import { EventsView } from "./components/EventsView.tsx";
 import { CommandPalette, type Command } from "./components/CommandPalette.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
 import { PluginsView } from "./components/PluginsView.tsx";
+import { AIAssistant } from "./components/AIAssistant.tsx";
 import { PluginRouteHost } from "./lib/plugins/PluginSlots.tsx";
 import { registry } from "./lib/plugins/registry.ts";
 import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
@@ -128,6 +129,8 @@ export function App() {
   const settingsEnabled = config?.settingsEnabled ?? false;
   // canPlugins gates the Plugins view and plugin loading on the backend serving UI plugins.
   const canPlugins = capability(config, "plugins");
+  // canAIChat gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
+  const canAIChat = capability(config, "aiChat");
   const mode = config?.mode;
 
   // getCluster resolves the active cluster's namespace/name for plugins' Kubernetes data shim (read
@@ -475,6 +478,7 @@ export function App() {
     secretsEnabled: canCipher,
     settingsEnabled,
     pluginsEnabled: canPlugins,
+    aiChatEnabled: canAIChat,
   };
 
   // navCommands derives the palette's "Go to <view>" entries from the same view registry the sidebar
@@ -548,6 +552,7 @@ export function App() {
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
         pluginsEnabled={canPlugins}
+        aiChatEnabled={canAIChat}
         surfaceLabel={surfaceLabel(mode)}
         onOpenCommandPalette={() => setPaletteOpen(true)}
         headerActions={headerActions}
@@ -565,6 +570,11 @@ export function App() {
             loading={pluginLoader.loading}
             error={pluginLoader.error}
             onReload={pluginLoader.reload}
+          />
+        ) : view === "assistant" ? (
+          <AIAssistant
+            clusterName={activeCluster?.metadata.name ?? null}
+            namespace={activeCluster?.metadata.namespace ?? null}
           />
         ) : view === "secrets" ? (
           <SecretsView />

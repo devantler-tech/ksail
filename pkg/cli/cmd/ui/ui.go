@@ -74,6 +74,11 @@ func runUICmd(cmd *cobra.Command, port int, noBrowser bool) error {
 
 	server := uiserver.NewServer()
 
+	// Wire the Copilot-backed AI assistant (read-only) so the web UI's assistant panel works when
+	// Copilot is configured; its subprocess is stopped on shutdown. The panel stays hidden otherwise.
+	chatRunner := uiserver.AttachChat(server, cmd.Root())
+	defer chatRunner.Close()
+
 	// Print a machine-parseable line first so wrappers can discover the URL, then a friendly message.
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "KSAIL_UI_URL=%s\n", url)
 	_, _ = fmt.Fprintf(

@@ -160,6 +160,11 @@ type Capabilities struct {
 	// backend serves plugins from a local directory; the operator leaves it false (in-cluster plugin
 	// serving is deferred), so the routes are not registered and the Plugins surface stays hidden.
 	Plugins bool `json:"plugins"`
+	// AIChat reports whether the web UI's AI assistant can run — true when the serving ClusterService
+	// implements ChatService AND reports it available (ChatAvailable), so the panel appears only when a
+	// turn can actually run (e.g. GitHub Copilot is configured). The local `ksail ui`/desktop backend
+	// powers it over Copilot; the operator leaves it false.
+	AIChat bool `json:"aiChat"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

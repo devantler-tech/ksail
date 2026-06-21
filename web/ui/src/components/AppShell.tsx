@@ -81,6 +81,7 @@ export function AppShell({
   workloadEnabled,
   secretsEnabled,
   pluginsEnabled,
+  aiChatEnabled,
   surfaceLabel,
   onOpenCommandPalette,
   headerActions,
@@ -104,6 +105,7 @@ export function AppShell({
   workloadEnabled: boolean;
   secretsEnabled: boolean;
   pluginsEnabled: boolean;
+  aiChatEnabled: boolean;
   surfaceLabel: string;
   onOpenCommandPalette?: () => void;
   headerActions?: ReactNode;
@@ -124,6 +126,7 @@ export function AppShell({
     secretsEnabled,
     settingsEnabled,
     pluginsEnabled,
+    aiChatEnabled,
   };
 
   // headerTitle shows the active plugin route's label when one is open, else the current view's title.
