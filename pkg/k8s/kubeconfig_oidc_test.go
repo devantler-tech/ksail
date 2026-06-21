@@ -75,7 +75,7 @@ func TestAddOIDCKubeconfigEntries( //nolint:funlen // table-driven test with mul
 			wantContext: "oidc@local",
 			wantCluster: "kind-local",
 			wantArgsSubset: []string{
-				"oidc", "get-token",
+				"cluster", "oidc", "get-token",
 				"--issuer-url=https://dex.example.com",
 				"--client-id=kubectl",
 			},

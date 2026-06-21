@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
 	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/oidc"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
@@ -59,7 +58,6 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cipher.NewCipherCmd())
 	cmd.AddCommand(operator.NewOperatorCmd())
 	cmd.AddCommand(tenant.NewTenantCmd())
-	cmd.AddCommand(oidc.NewOIDCCmd())
 	cmd.AddCommand(open.NewOpenCmd())
 
 	return cmd

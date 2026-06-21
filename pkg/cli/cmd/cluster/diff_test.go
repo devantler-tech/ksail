@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,16 +77,7 @@ func TestClusterCmd_RegistersDiffSubcommand(t *testing.T) {
 	clusterCmd := cluster.NewClusterCmd()
 	require.NotNil(t, clusterCmd)
 
-	var diffCmd *cobra.Command
-
-	for _, sub := range clusterCmd.Commands() {
-		if sub.Name() == "diff" {
-			diffCmd = sub
-
-			break
-		}
-	}
-
+	diffCmd := findClusterSubcommand(clusterCmd, "diff")
 	require.NotNil(t, diffCmd, "expected 'diff' subcommand to be registered")
 }
 

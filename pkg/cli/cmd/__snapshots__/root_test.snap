@@ -18,7 +18,6 @@ Available Commands:
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
-  oidc        OIDC authentication utilities
   open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
@@ -45,7 +44,6 @@ Available Commands:
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
-  oidc        OIDC authentication utilities
   open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
