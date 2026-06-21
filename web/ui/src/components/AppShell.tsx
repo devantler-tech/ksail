@@ -4,6 +4,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
 import { clusterViews, globalViews, viewTitle, type RegisteredView, type View, type ViewGates } from "../lib/views.tsx";
+import { PluginAppBarActions } from "../lib/plugins/PluginSlots.tsx";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
 import { IconButton } from "./ui.tsx";
@@ -282,6 +283,8 @@ export function AppShell({
                 </kbd>
               </button>
             ) : null}
+            {/* Plugin-contributed app-bar actions (Headlamp registerAppBarAction); renders nothing until a plugin adds one. */}
+            <PluginAppBarActions />
             {headerActions}
             <IconButton
               label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}

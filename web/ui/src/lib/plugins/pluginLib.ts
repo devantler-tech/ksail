@@ -5,16 +5,18 @@
 // surface plus a Kubernetes data shim — so an existing Headlamp plugin's register*() calls land in
 // KSail's native extension registry (see registry.ts) without modifying the plugin.
 //
-// Scope (honest): the React + register* + a real, minimal K8s.useResourceList surface are implemented.
-// The heavier Headlamp externals — Material UI, Redux, React Router, Monaco, Recharts — and the full
-// K8s/ApiProxy data layer (raw apiserver proxy, ResourceClasses, useApiGet) are STAGED, pending the
-// MUI-in-pluginLib bundle and KSail's generic cluster proxy. A plugin that uses only React + register*
-// (+ K8s.useResourceList for live data) works today; one that imports MUI/Redux/Router does not yet.
+// Scope (honest): React + register* + the K8s data layer (useResourceList, the kube-proxy-backed
+// ApiProxy, and the ResourceClasses.<Kind>.useList() class hierarchy) + CommonComponents are
+// implemented, so a Headlamp plugin that lists and renders cluster resources works unmodified. The
+// heavier UI externals — Material UI, Redux, React Router, Monaco, Recharts — are still STAGED, pending
+// the lazily-loaded MUI-in-pluginLib bundle; a plugin that imports those does not run yet.
 // See docs/BEST-KUBERNETES-UI-PLAN.md §4.3.
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { listResources } from "../../api.ts";
+import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
+import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
 import { registry, type PluginResource, type RouteProps } from "./registry.ts";
 
 // ClusterRef identifies the active cluster the K8s shim scopes reads to (KSail's resource API is
@@ -52,7 +54,7 @@ export interface PluginLib {
   registerSidebarEntry: (entry: HeadlampSidebarEntry) => void;
   registerRoute: (route: HeadlampRoute) => void;
   registerDetailsViewSection: (section: DetailsSectionComponent) => void;
-  registerAppBarAction: (render: () => React.ReactNode) => void;
+  registerAppBarAction: (action: React.ReactNode | React.ComponentType) => void;
   registerResourceTableColumnsProcessor: (id: string, process: (columns: unknown[]) => unknown[]) => void;
   Registry: {
     registerSidebarEntry: (entry: HeadlampSidebarEntry) => void;
@@ -61,11 +63,13 @@ export interface PluginLib {
   };
   K8s: K8sShim;
   ApiProxy: ApiProxyShim;
+  CommonComponents: CommonComponentsShape;
   Notification: (message: string, ...rest: unknown[]) => void;
 }
 
 interface K8sShim {
   useResourceList: (kind: string, namespace?: string) => [PluginResource[], Error | null];
+  ResourceClasses: ResourceClasses;
 }
 
 interface ApiProxyShim {
@@ -118,7 +122,13 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
     registerSidebarEntry,
     registerRoute,
     registerDetailsViewSection,
-    registerAppBarAction: (render) => {
+    registerAppBarAction: (action) => {
+      // Headlamp's registerAppBarAction takes a bare ReactNode (e.g. registerAppBarAction(<span>Hi</span>))
+      // or a component; normalize both to the registry's render() thunk so either form renders.
+      const render =
+        typeof action === "function"
+          ? (): React.ReactNode => React.createElement(action as React.ComponentType)
+          : (): React.ReactNode => action;
       registry.registerAppBarAction({ id: nextId("appbar"), render });
     },
     registerResourceTableColumnsProcessor: (id, process) => {
@@ -145,6 +155,7 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
         return response.json();
       },
     },
+    CommonComponents,
     Notification: (message, ...rest) => {
       // Surface plugin notifications via a DOM event the SPA can later route to toasts; log meanwhile.
       window.dispatchEvent(new CustomEvent("ksail:plugin-notification", { detail: { message, rest } }));
@@ -198,5 +209,6 @@ function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
 
       return [items, error];
     },
+    ResourceClasses: makeResourceClasses(getCluster),
   };
 }
