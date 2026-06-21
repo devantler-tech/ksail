@@ -210,10 +210,9 @@ go run main.go --help
 Use `ksail --help` and the generated CLI reference (`docs/src/content/docs/cli-flags/`) as the
 source of truth for the full command and flag inventory. Top-level command groups:
 
-- `ksail cluster` — cluster lifecycle and operations (init, create, update, delete, diagnose, backup/restore, …); see `ksail cluster --help`
+- `ksail cluster` — cluster lifecycle and operations (init, create, update, delete, diagnose, backup/restore, oidc, …); see `ksail cluster --help`. Includes `ksail cluster oidc` — OIDC authentication utilities (kubeconfig exec credential plugin)
 - `ksail workload` — workload operations against a cluster (apply, get, logs, gen, push, reconcile, …), including `ksail workload cipher` for SOPS secret management; see `ksail workload --help`
 - `ksail tenant` — multi-tenancy onboarding (RBAC isolation, GitOps sync resources, tenant repo scaffolding); see `ksail tenant --help`
-- `ksail oidc` — OIDC authentication utilities (kubeconfig exec credential plugin); see `ksail oidc --help`
 - `ksail ui` — open the local web UI (local web server + browser); see `ksail ui --help`
 - `ksail desktop` — open the native desktop app; see `ksail desktop --help`
 - `ksail operator` — run the Kubernetes operator (normally deployed via the Helm chart); see `ksail operator --help`

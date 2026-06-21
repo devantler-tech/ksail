@@ -7,7 +7,6 @@ import (
 	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/desktop"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/oidc"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/ui"
@@ -62,7 +61,6 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(mcp.NewMCPCmd())
 	cmd.AddCommand(operator.NewOperatorCmd())
 	cmd.AddCommand(tenant.NewTenantCmd())
-	cmd.AddCommand(oidc.NewOIDCCmd())
 	cmd.AddCommand(ui.NewUICmd())
 	cmd.AddCommand(desktop.NewDesktopCmd())
 

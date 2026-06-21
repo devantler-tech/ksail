@@ -21,7 +21,7 @@ var (
 	errTokenExpired  = errors.New("token expired and no refresh token")
 )
 
-// newGetTokenCmd creates the 'oidc get-token' subcommand.
+// newGetTokenCmd creates the 'cluster oidc get-token' subcommand.
 // This command implements the Kubernetes exec credential plugin protocol.
 func newGetTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
