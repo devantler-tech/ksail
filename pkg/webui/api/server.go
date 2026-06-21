@@ -333,6 +333,15 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/stop", s.handleStopCluster)
 	}
 
+	// Extension surfaces (web-UI plugins, AI assistant) register together, keeping
+	// registerCapabilityRoutes within its complexity budget as the capability set grows.
+	s.registerExtensionRoutes(mux)
+}
+
+// registerExtensionRoutes wires the optional UI-extension endpoints — Headlamp-compatible plugin
+// serving and the AI assistant — each gated on the backend implementing the matching interface, so the
+// operator's API-only surface is unchanged.
+func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// Web UI plugins (PluginService): list installed plugins and serve their static bundles so the SPA
 	// can load Headlamp-compatible extensions. Both are GETs (reads), so the read-only guard does not
 	// apply — plugins extend the UI surface, they do not mutate the cluster. The {file...} wildcard
