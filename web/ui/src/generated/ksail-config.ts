@@ -776,6 +776,23 @@ export interface KSailClusterConfiguration {
          */
         helmRender?: boolean;
       };
+      /**
+       * Configuration for the workload scan command (security frameworks, a Kubescape exceptions file, and a compliance threshold), so 'ksail workload scan' (no args) can act as a turnkey CI gate.
+       */
+      scan?: {
+        /**
+         * Security frameworks for 'ksail workload scan' (e.g. nsa, mitre, cis, pss). Supplies the default for --framework; an explicit --framework flag overrides it.
+         */
+        frameworks?: string[];
+        /**
+         * Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls (e.g. Kyverno-injected securityContext, VPA-managed resources, CiliumNetworkPolicy) a static scan cannot see. Resolved relative to the current directory. Supplies the default for --exceptions; an explicit --exceptions flag overrides it.
+         */
+        exceptions?: string;
+        /**
+         * Fail 'ksail workload scan' if the compliance score is below this whole-percentage value (0-100). Supplies the default for --compliance-threshold; an explicit flag overrides it. With a checked-in exceptions file, set to 100 to gate CI on genuinely-new findings only.
+         */
+        complianceThreshold?: number;
+      };
     };
     /**
      * Chat configures the KSail AI chat assistant.

@@ -96,6 +96,25 @@ func TestBuildScanInfoComplianceThreshold(t *testing.T) {
 	}
 }
 
+// TestBuildScanInfoExceptions asserts a non-empty Exceptions path is forwarded
+// to ScanInfo.UseExceptions and that an empty path leaves the field untouched
+// (guarded by `!= ""`), preserving Kubescape's default exceptions behavior.
+func TestBuildScanInfoExceptions(t *testing.T) {
+	t.Parallel()
+
+	const exceptionsPath = ".kubescape/exceptions.json"
+
+	info := kubescape.BuildScanInfo(testPath, &kubescape.ScanOptions{Exceptions: exceptionsPath})
+	if info.UseExceptions != exceptionsPath {
+		t.Errorf("expected UseExceptions %q, got %q", exceptionsPath, info.UseExceptions)
+	}
+
+	empty := kubescape.BuildScanInfo(testPath, &kubescape.ScanOptions{Exceptions: ""})
+	if empty.UseExceptions != "" {
+		t.Errorf("expected empty UseExceptions, got %q", empty.UseExceptions)
+	}
+}
+
 // TestBuildScanInfoFrameworks asserts frameworks enable a framework scan and are
 // registered as Framework-kind policy identifiers preserving order.
 func TestBuildScanInfoFrameworks(t *testing.T) {

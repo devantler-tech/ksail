@@ -1016,6 +1016,28 @@
               "additionalProperties": false,
               "type": "object",
               "description": "Configuration for the workload validate command (additional kinds to skip, etc.)."
+            },
+            "scan": {
+              "properties": {
+                "frameworks": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Security frameworks for 'ksail workload scan' (e.g. nsa, mitre, cis, pss). Supplies the default for --framework; an explicit --framework flag overrides it."
+                },
+                "exceptions": {
+                  "type": "string",
+                  "description": "Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls (e.g. Kyverno-injected securityContext, VPA-managed resources, CiliumNetworkPolicy) a static scan cannot see. Resolved relative to the current directory. Supplies the default for --exceptions; an explicit --exceptions flag overrides it."
+                },
+                "complianceThreshold": {
+                  "type": "integer",
+                  "description": "Fail 'ksail workload scan' if the compliance score is below this whole-percentage value (0-100). Supplies the default for --compliance-threshold; an explicit flag overrides it. With a checked-in exceptions file, set to 100 to gate CI on genuinely-new findings only."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Configuration for the workload scan command (security frameworks, a Kubescape exceptions file, and a compliance threshold), so 'ksail workload scan' (no args) can act as a turnkey CI gate."
             }
           },
           "additionalProperties": false,

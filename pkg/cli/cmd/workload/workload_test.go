@@ -2787,6 +2787,10 @@ func TestNewScanCmdHasCorrectDefaults(t *testing.T) {
 	verboseFlag := cmd.Flags().Lookup("verbose")
 	require.NotNil(t, verboseFlag, "expected --verbose flag to exist")
 	require.Equal(t, "false", verboseFlag.DefValue)
+
+	exceptionsFlag := cmd.Flags().Lookup("exceptions")
+	require.NotNil(t, exceptionsFlag, "expected --exceptions flag to exist")
+	require.Empty(t, exceptionsFlag.DefValue)
 }
 
 func TestScanCmdShowsHelp(t *testing.T) {
@@ -2854,6 +2858,156 @@ func TestScanCmdRejectsInvalidThreshold(t *testing.T) {
 			require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
 		})
 	}
+}
+
+// errScanConfigUnreadable is a static sentinel for the unreadable-config case in
+// TestScanConfigPrecedence (avoids a dynamic errors.New at the call site).
+var errScanConfigUnreadable = errors.New("unreadable ksail.yaml")
+
+// TestScanConfigPrecedence asserts that spec.workload.scan supplies defaults for
+// the scan flags when they are not explicitly set, that an explicitly-set flag
+// always wins, that a missing config file leaves the flags untouched, and that
+// an unreadable config file emits a warning without overriding the flags.
+//
+//nolint:funlen // Table-driven test with comprehensive precedence cases
+func TestScanConfigPrecedence(t *testing.T) {
+	t.Parallel()
+
+	cfg := &v1alpha1.Cluster{}
+	cfg.Spec.Workload.Scan = v1alpha1.ScanConfig{
+		Frameworks:          []string{"cis"},
+		Exceptions:          "config-exceptions.json",
+		ComplianceThreshold: 90,
+	}
+
+	tests := []struct {
+		name           string
+		parseArgs      []string
+		inFrameworks   []string
+		inExceptions   string
+		inThreshold    float32
+		cfg            *v1alpha1.Cluster
+		configFound    bool
+		loadErr        error
+		wantFrameworks []string
+		wantExceptions string
+		wantThreshold  float32
+		wantWarning    bool
+	}{
+		{
+			name:           "config fills unset flags",
+			inFrameworks:   []string{"nsa"},
+			cfg:            cfg,
+			configFound:    true,
+			wantFrameworks: []string{"cis"},
+			wantExceptions: "config-exceptions.json",
+			wantThreshold:  90,
+		},
+		{
+			name: "explicit flags win over config",
+			parseArgs: []string{
+				"--framework", "mitre",
+				"--exceptions", "flag-exceptions.json",
+				"--compliance-threshold", "100",
+			},
+			inFrameworks:   []string{"mitre"},
+			inExceptions:   "flag-exceptions.json",
+			inThreshold:    100,
+			cfg:            cfg,
+			configFound:    true,
+			wantFrameworks: []string{"mitre"},
+			wantExceptions: "flag-exceptions.json",
+			wantThreshold:  100,
+		},
+		{
+			name:           "no config file leaves flags untouched",
+			inFrameworks:   []string{"nsa"},
+			cfg:            cfg,
+			configFound:    false,
+			wantFrameworks: []string{"nsa"},
+		},
+		{
+			name:           "unreadable config warns and leaves flags untouched",
+			inFrameworks:   []string{"nsa"},
+			cfg:            nil,
+			configFound:    true,
+			loadErr:        errScanConfigUnreadable,
+			wantFrameworks: []string{"nsa"},
+			wantWarning:    true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := workload.NewScanCmd()
+			require.NoError(t, cmd.ParseFlags(testCase.parseArgs))
+
+			var errOut bytes.Buffer
+
+			cmd.SetErr(&errOut)
+
+			frameworks, exceptions, threshold := workload.ExportApplyScanConfig(
+				cmd,
+				testCase.inFrameworks, testCase.inExceptions, testCase.inThreshold,
+				testCase.cfg, testCase.configFound, testCase.loadErr,
+			)
+
+			require.Equal(t, testCase.wantFrameworks, frameworks)
+			require.Equal(t, testCase.wantExceptions, exceptions)
+
+			if testCase.wantThreshold > 0 {
+				require.InEpsilon(t, testCase.wantThreshold, threshold, 0.0001)
+			} else {
+				require.Zero(t, threshold)
+			}
+
+			if testCase.wantWarning {
+				require.Contains(t, errOut.String(), "spec.workload.scan")
+			} else {
+				require.Empty(t, errOut.String())
+			}
+		})
+	}
+}
+
+// TestScanCmdHonorsConfigComplianceThreshold asserts runScanCmd applies
+// spec.workload.scan before validating the threshold: a config-supplied
+// out-of-range threshold (with no flag) is rejected, proving the config value
+// flows into the scan command's validation. Network-free — it fails at
+// threshold validation before any scan runs.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestScanCmdHonorsConfigComplianceThreshold(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: test
+spec:
+  workload:
+    scan:
+      complianceThreshold: 150
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte(ksailYAML), 0o600)
+	require.NoError(t, err)
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewScanCmd()
+	cmd.SetArgs([]string{"k8s"})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	require.Error(t, err, "expected config-supplied out-of-range threshold to be rejected")
+	require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
 }
 
 func TestPollInterval(t *testing.T) {

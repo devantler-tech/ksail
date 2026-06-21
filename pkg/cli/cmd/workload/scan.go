@@ -10,27 +10,15 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/spf13/cobra"
 )
 
 // ErrInvalidComplianceThreshold is returned when --compliance-threshold is outside the valid 0-100 range.
 var ErrInvalidComplianceThreshold = errors.New("--compliance-threshold must be between 0 and 100")
 
-// NewScanCmd creates the workload scan command.
-func NewScanCmd() *cobra.Command {
-	var (
-		frameworks          []string
-		format              string
-		output              string
-		complianceThreshold float32
-		verbose             bool
-		noRender            bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "scan [PATH]",
-		Short: "Run security scans on Kubernetes manifests",
-		Long: `Run security scans on Kubernetes manifests using Kubescape.
+// scanLongDescription is the long help text for the workload scan command.
+const scanLongDescription = `Run security scans on Kubernetes manifests using Kubescape.
 
 This command scans manifests in the specified path against security frameworks
 such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
@@ -49,8 +37,25 @@ If no path is provided, the path is resolved in order:
 Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
 Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
 
-For more information, see https://github.com/kubescape/kubescape`,
-		Args: cobra.MaximumNArgs(1),
+For more information, see https://github.com/kubescape/kubescape`
+
+// NewScanCmd creates the workload scan command.
+func NewScanCmd() *cobra.Command {
+	var (
+		frameworks          []string
+		format              string
+		output              string
+		complianceThreshold float32
+		verbose             bool
+		noRender            bool
+		exceptions          string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "scan [PATH]",
+		Short: "Run security scans on Kubernetes manifests",
+		Long:  scanLongDescription,
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runScanCmd(
 				cmd.Context(),
@@ -63,13 +68,23 @@ For more information, see https://github.com/kubescape/kubescape`,
 					complianceThreshold: complianceThreshold,
 					verbose:             verbose,
 					noRender:            noRender,
+					exceptions:          exceptions,
 				},
 			)
 		},
 		SilenceUsage: true,
 	}
 
-	addScanFlags(cmd, &frameworks, &format, &output, &complianceThreshold, &verbose, &noRender)
+	addScanFlags(
+		cmd,
+		&frameworks,
+		&format,
+		&output,
+		&complianceThreshold,
+		&verbose,
+		&noRender,
+		&exceptions,
+	)
 
 	return cmd
 }
@@ -82,6 +97,7 @@ type scanFlags struct {
 	complianceThreshold float32
 	verbose             bool
 	noRender            bool
+	exceptions          string
 }
 
 // addScanFlags registers the flags for the scan command.
@@ -91,6 +107,7 @@ func addScanFlags(
 	format, output *string,
 	complianceThreshold *float32,
 	verbose, noRender *bool,
+	exceptions *string,
 ) {
 	cmd.Flags().StringSliceVar(frameworks, "framework", []string{"nsa"},
 		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss)")
@@ -105,6 +122,9 @@ func addScanFlags(
 	cmd.Flags().BoolVar(noRender, "no-render", false,
 		"Scan the raw manifest files instead of the Kustomize + Helm rendered output "+
 			"(skip rendering entirely; restores the pre-rendering behavior)")
+	cmd.Flags().StringVar(exceptions, "exceptions", "",
+		"Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) "+
+			"to suppress justified findings for runtime-enforced controls a static scan cannot see")
 }
 
 func runScanCmd(
@@ -113,13 +133,18 @@ func runScanCmd(
 	args []string,
 	flags scanFlags,
 ) error {
+	// Load ksail.yaml once so the source path, the Helm-render setting, and the
+	// scan defaults are derived from a single read (mirrors the validate command).
+	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
+
+	// spec.workload.scan supplies defaults for frameworks/exceptions/threshold so
+	// `ksail workload scan` (no args) can act as a turnkey CI gate; an explicitly
+	// set flag wins.
+	flags = applyScanConfig(cmd, flags, cfg, configFound, loadErr)
+
 	if flags.complianceThreshold < 0 || flags.complianceThreshold > 100 {
 		return fmt.Errorf("%w, got %.2f", ErrInvalidComplianceThreshold, flags.complianceThreshold)
 	}
-
-	// Load ksail.yaml once so the source path and the Helm-render setting are
-	// derived from a single read (mirrors the validate command).
-	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
 
 	path, err := resolveValidatePath(args, cfg, configFound, loadErr)
 	if err != nil {
@@ -155,6 +180,7 @@ func runScanCmd(
 		Output:              output,
 		ComplianceThreshold: flags.complianceThreshold,
 		Verbose:             flags.verbose,
+		Exceptions:          flags.exceptions,
 	}
 
 	err = kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
@@ -163,6 +189,51 @@ func runScanCmd(
 	}
 
 	return nil
+}
+
+// applyScanConfig overlays spec.workload.scan from the single config load onto
+// the resolved flags so `ksail workload scan` (no args) honors the configured
+// frameworks, exceptions file, and compliance threshold. An explicitly-set flag
+// always wins (checked via cmd.Flags().Changed). A config file that exists but
+// failed to load does not fail the scan (the flag defaults still apply) but
+// emits a warning so an unreadable ksail.yaml does not silently drop the gate.
+func applyScanConfig(
+	cmd *cobra.Command,
+	flags scanFlags,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) scanFlags {
+	if loadErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "could not read spec.workload.scan from ksail.yaml: %v",
+			Args:    []any{loadErr},
+			Writer:  cmd.ErrOrStderr(),
+		})
+
+		return flags
+	}
+
+	if !configFound || cfg == nil {
+		return flags
+	}
+
+	scan := cfg.Spec.Workload.Scan
+
+	if !cmd.Flags().Changed("framework") && len(scan.Frameworks) > 0 {
+		flags.frameworks = scan.Frameworks
+	}
+
+	if !cmd.Flags().Changed("exceptions") && scan.Exceptions != "" {
+		flags.exceptions = scan.Exceptions
+	}
+
+	if !cmd.Flags().Changed("compliance-threshold") && scan.ComplianceThreshold > 0 {
+		flags.complianceThreshold = float32(scan.ComplianceThreshold)
+	}
+
+	return flags
 }
 
 // resolveScanOutput canonicalizes the output file path (creating its parent

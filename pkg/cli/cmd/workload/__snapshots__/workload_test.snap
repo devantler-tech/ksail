@@ -179,6 +179,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
+      --exceptions string              Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls a static scan cannot see
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
   -h, --help                           help for scan
@@ -3152,6 +3153,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
+      --exceptions string              Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls a static scan cannot see
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
   -h, --help                           help for scan

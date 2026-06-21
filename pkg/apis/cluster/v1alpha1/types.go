@@ -200,6 +200,34 @@ type WorkloadSpec struct {
 	Flux              FluxConfig       `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                   //nolint:lll
 	Watch             WatchConfig      `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
 	Validation        ValidationConfig `                json:"validation,omitzero"        jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                          //nolint:lll
+	Scan              ScanConfig       `                json:"scan,omitzero"              jsonschema_description:"Configuration for the workload scan command (security frameworks, a Kubescape exceptions file, and a compliance threshold), so 'ksail workload scan' (no args) can act as a turnkey CI gate."`                                                               //nolint:lll
+}
+
+// ScanConfig defines configuration for the workload scan command so that
+// `ksail workload scan` (no args) can act as a turnkey CI gate. Each field
+// supplies the default for the matching flag; an explicitly-set flag wins.
+type ScanConfig struct {
+	// Frameworks lists the security frameworks to scan against (e.g. "nsa",
+	// "mitre", "cis", "pss"). Supplies the default for --framework; an
+	// explicit --framework flag overrides it.
+	Frameworks []string `json:"frameworks,omitzero" jsonschema_description:"Security frameworks for 'ksail workload scan' (e.g. nsa, mitre, cis, pss). Supplies the default for --framework; an explicit --framework flag overrides it."` //nolint:lll
+
+	// Exceptions is the path to a Kubescape exceptions file used to suppress
+	// justified findings (e.g. runtime-enforced controls such as Kyverno-injected
+	// securityContext, VPA-managed resources, or CiliumNetworkPolicy) that a
+	// static manifest scan cannot see. Forwarded to Kubescape's --exceptions.
+	// Resolved relative to the current directory.
+	Exceptions string `json:"exceptions,omitzero" jsonschema_description:"Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls (e.g. Kyverno-injected securityContext, VPA-managed resources, CiliumNetworkPolicy) a static scan cannot see. Resolved relative to the current directory. Supplies the default for --exceptions; an explicit --exceptions flag overrides it."` //nolint:lll
+
+	// ComplianceThreshold fails the scan when the compliance score is below this
+	// value (a whole percentage, 0-100). Supplies the default for
+	// --compliance-threshold; an explicit flag overrides it. With a checked-in
+	// exceptions file, set this to 100 to gate CI on genuinely-new findings only.
+	// An integer (not the flag's float) so it stays a portable CRD type; the flag
+	// still accepts fractional values for ad-hoc runs.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	ComplianceThreshold int32 `json:"complianceThreshold,omitzero" jsonschema_description:"Fail 'ksail workload scan' if the compliance score is below this whole-percentage value (0-100). Supplies the default for --compliance-threshold; an explicit flag overrides it. With a checked-in exceptions file, set to 100 to gate CI on genuinely-new findings only."` //nolint:lll
 }
 
 // ValidationConfig defines configuration for the workload validate command.

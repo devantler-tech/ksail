@@ -928,6 +928,41 @@ spec:
                     type: object
                   kustomizationFile:
                     type: string
+                  scan:
+                    description: |-
+                      ScanConfig defines configuration for the workload scan command so that
+                      `ksail workload scan` (no args) can act as a turnkey CI gate. Each field
+                      supplies the default for the matching flag; an explicitly-set flag wins.
+                    properties:
+                      complianceThreshold:
+                        description: |-
+                          ComplianceThreshold fails the scan when the compliance score is below this
+                          value (a whole percentage, 0-100). Supplies the default for
+                          --compliance-threshold; an explicit flag overrides it. With a checked-in
+                          exceptions file, set this to 100 to gate CI on genuinely-new findings only.
+                          An integer (not the flag's float) so it stays a portable CRD type; the flag
+                          still accepts fractional values for ad-hoc runs.
+                        format: int32
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                      exceptions:
+                        description: |-
+                          Exceptions is the path to a Kubescape exceptions file used to suppress
+                          justified findings (e.g. runtime-enforced controls such as Kyverno-injected
+                          securityContext, VPA-managed resources, or CiliumNetworkPolicy) that a
+                          static manifest scan cannot see. Forwarded to Kubescape's --exceptions.
+                          Resolved relative to the current directory.
+                        type: string
+                      frameworks:
+                        description: |-
+                          Frameworks lists the security frameworks to scan against (e.g. "nsa",
+                          "mitre", "cis", "pss"). Supplies the default for --framework; an
+                          explicit --framework flag overrides it.
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   sourceDirectory:
                     type: string
                   tag:

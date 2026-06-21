@@ -311,3 +311,26 @@ func ExportRunHooks(ctx context.Context, cmd *cobra.Command, hooks []string) err
 
 // ErrHookFailed exposes the errHookFailed sentinel for test assertions.
 var ErrHookFailed = errHookFailed
+
+// ExportApplyScanConfig exposes applyScanConfig for scan config-precedence
+// tests. cmd must already have the scan flags registered (via NewScanCmd) and
+// parsed so cmd.Flags().Changed reflects which flags were explicitly set. The
+// frameworks/exceptions/threshold params are the resolved flag values; the
+// returned tuple is the effective values after overlaying spec.workload.scan.
+func ExportApplyScanConfig(
+	cmd *cobra.Command,
+	frameworks []string,
+	exceptions string,
+	threshold float32,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) ([]string, string, float32) {
+	resolved := applyScanConfig(cmd, scanFlags{
+		frameworks:          frameworks,
+		exceptions:          exceptions,
+		complianceThreshold: threshold,
+	}, cfg, configFound, loadErr)
+
+	return resolved.frameworks, resolved.exceptions, resolved.complianceThreshold
+}

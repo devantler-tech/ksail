@@ -535,6 +535,7 @@ KubernetesPersistence defines storage persistence configuration for the Kubernet
 | `flux` | FluxConfig | – | Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner. |
 | `watch` | WatchConfig | – | Configuration for the workload watch command (pre-apply hooks, etc.) |
 | `validation` | ValidationConfig | – | Configuration for the workload validate command (additional kinds to skip, etc.). |
+| `scan` | ScanConfig | – | Configuration for the workload scan command (security frameworks, a Kubescape exceptions file, and a compliance threshold), so 'ksail workload scan' (no args) can act as a turnkey CI gate. |
 
 
 ### spec.chat (ChatSpec)
