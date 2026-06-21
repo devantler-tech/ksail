@@ -29,7 +29,7 @@ var (
 	)
 )
 
-// errClusterUpdateNotSupported is the 501 a backend without ClusterUpdater (the local `ksail ui`
+// errClusterUpdateNotSupported is the 501 a backend without ClusterUpdater (the local `ksail open web`
 // backend) returns from PUT /api/v1/clusters/{namespace}/{name}. It preserves the message detail the
 // former local Update stub carried, wrapping ErrNotSupported so clientErrorStatus maps it to 501.
 var errClusterUpdateNotSupported = fmt.Errorf(
@@ -42,7 +42,7 @@ var errClusterUpdateNotSupported = fmt.Errorf(
 // so a single HTTP layer can be served by two implementations: the operator's controller-runtime
 // backend (pkg/operator's CR-backed service, via NewCRClusterService) which CRUDs Cluster custom
 // resources, and the CLI's local backend (pkg/cli/clusterapi) which drives the provider/provisioner
-// lifecycle for `ksail ui`.
+// lifecycle for `ksail open web`.
 //
 // Implementations may return the sentinel errors below; clientErrorStatus maps them (and Kubernetes
 // apierrors) to HTTP status codes. Returning any other error yields HTTP 500.
@@ -62,7 +62,7 @@ type ClusterService interface {
 // existing cluster (PUT /api/v1/clusters/{namespace}/{name}). It mirrors the other optional
 // capability interfaces (ResourceService, ApplyService, …): a backend that implements it advertises
 // capabilities.clusterUpdate=true and the PUT route succeeds; a backend that does not (the local
-// `ksail ui` backend, which manages cluster configuration via files and `ksail cluster update`)
+// `ksail open web` backend, which manages cluster configuration via files and `ksail cluster update`)
 // leaves the capability false and the PUT returns 501, so the SPA hides the edit affordance rather
 // than offering an action that fails.
 type ClusterUpdater interface {
@@ -79,7 +79,7 @@ type ClusterUpdater interface {
 // that implements it advertises capabilities.clusterStartStop=true and the routes are registered; a
 // backend that does not (the operator, whose clusters are reconciled, not power-cycled) leaves the
 // capability false and the routes unregistered, so the SPA hides the start/stop affordances. The local
-// `ksail ui`/desktop backend implements it over the provisioner's Start/Stop for Docker clusters.
+// `ksail open web`/desktop backend implements it over the provisioner's Start/Stop for Docker clusters.
 type ClusterLifecycleController interface {
 	// Start brings a stopped cluster's nodes back up.
 	Start(ctx context.Context, namespace, name string) error
@@ -91,7 +91,7 @@ type ClusterLifecycleController interface {
 // it installs the cluster components (CNI, CSI, metrics-server, …) declared in the create form
 // (capabilities.componentsInstall=true). The SPA gates the create form's component selectors on it so
 // it does not offer options a backend silently drops. The operator backend installs components via its
-// reconciler and implements it; the local `ksail ui` backend only provisions the cluster (it does not
+// reconciler and implements it; the local `ksail open web` backend only provisions the cluster (it does not
 // yet run the component pipeline), so it leaves the capability false until that reuse lands.
 type ComponentInstaller interface {
 	// InstallsComponents reports whether this backend installs declared cluster components. It exists

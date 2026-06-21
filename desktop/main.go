@@ -1,11 +1,11 @@
 // Command ksail-desktop runs the KSail web UI in a native desktop window using Wails v3.
 //
-// It reuses the same in-process server as `ksail ui` (pkg/cli/uiserver): NewServer().Handler() is an
+// It reuses the same in-process server as `ksail open web` (pkg/cli/uiserver): NewServer().Handler() is an
 // http.Handler that serves the embedded SPA plus the REST API + SSE backed by the local cluster
 // lifecycle. That handler is given to the Wails webview as its AssetServer handler, so the SPA, the
 // REST endpoints, and the Server-Sent Events stream are all served same-origin (at the wails://wails
 // production origin) with no loopback TCP port, no CORS, and no SPA changes — the same SPA the
-// operator and `ksail ui` serve in a browser.
+// operator and `ksail open web` serve in a browser.
 //
 // This is a separate Go module so its CGO/webview dependency stays out of the main, statically linked
 // `ksail` binary.
@@ -65,7 +65,7 @@ func run() error {
 	// NewServer() builds the credential manager.
 	hydrateLoginShellEnv()
 
-	// The same configured server `ksail ui` uses (local cluster lifecycle, embedded SPA, credential
+	// The same configured server `ksail open web` uses (local cluster lifecycle, embedded SPA, credential
 	// settings). Its Handler() is handed to the Wails AssetServer; we never bind a TCP listener.
 	server := uiserver.NewServer()
 

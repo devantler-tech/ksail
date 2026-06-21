@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assemble a macOS .app bundle around the ksail-desktop binary so it behaves as a proper
 # application: double-clickable, shown in the Dock, and launchable via `open -a KSail` (which the
-# `ksail desktop` command uses as its macOS fallback).
+# `ksail open desktop` command uses as its macOS fallback).
 #
 # Usage: make-macos-app.sh <binary-path> <output-app-path> <version>
 set -euo pipefail

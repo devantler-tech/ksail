@@ -1,4 +1,4 @@
-// Package uiserver builds and binds the local KSail web UI server shared by the `ksail ui` command
+// Package uiserver builds and binds the local KSail web UI server shared by the `ksail open web` command
 // and the KSail desktop app. It serves the embedded SPA together with a REST API backed by the local
 // cluster lifecycle, bound to loopback only.
 package uiserver

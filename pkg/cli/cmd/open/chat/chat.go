@@ -78,7 +78,7 @@ Prerequisites:
 Write operations require explicit confirmation before execution.`,
 		SilenceUsage: true,
 		Annotations: map[string]string{
-			annotations.AnnotationExclude: "true",
+			annotations.AnnotationExclude: annotations.AnnotationValueTrue,
 		},
 	}
 

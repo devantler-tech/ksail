@@ -1,4 +1,4 @@
-package desktop_test
+package open_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/desktop"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +45,7 @@ func fixedExecutable() func() (string, error) {
 func TestNewDesktopCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := desktop.NewDesktopCmd()
+	cmd := open.NewDesktopCmd()
 
 	assert.Equal(t, "desktop", cmd.Name())
 	assert.Equal(t, "true", cmd.Annotations[annotations.AnnotationExclude])
@@ -57,7 +57,7 @@ func TestLaunchUsesBinaryNextToExecutable(t *testing.T) {
 	rec := &capture{}
 	wantPath := filepath.Join("/opt/ksail", "ksail-desktop")
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		io.Discard,
 		"linux",
@@ -78,7 +78,7 @@ func TestLaunchFallsBackToPath(t *testing.T) {
 
 	rec := &capture{}
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		io.Discard,
 		"linux",
@@ -103,7 +103,7 @@ func TestLaunchLooksForExeSuffixOnWindows(t *testing.T) {
 
 	rec := &capture{}
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		io.Discard,
 		"windows",
@@ -128,7 +128,7 @@ func TestLaunchUsesMacAppWhenNoBinary(t *testing.T) {
 	rec := &capture{}
 	output := &strings.Builder{}
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		output,
 		"darwin",
@@ -150,7 +150,7 @@ func TestLaunchReturnsNotFoundWhenMissing(t *testing.T) {
 
 	rec := &capture{}
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		io.Discard,
 		"linux",
@@ -161,7 +161,7 @@ func TestLaunchReturnsNotFoundWhenMissing(t *testing.T) {
 		rec.run,
 	)
 
-	require.ErrorIs(t, err, desktop.ErrDesktopAppNotFound)
+	require.ErrorIs(t, err, open.ErrDesktopAppNotFound)
 	assert.Empty(t, rec.startedPath)
 	assert.Nil(t, rec.ranArgs)
 }
@@ -171,7 +171,7 @@ func TestLaunchReturnsNotFoundWhenMacAppFails(t *testing.T) {
 
 	rec := &capture{}
 
-	err := desktop.LaunchForTest(
+	err := open.LaunchForTest(
 		context.Background(),
 		io.Discard,
 		"darwin",
@@ -182,5 +182,5 @@ func TestLaunchReturnsNotFoundWhenMacAppFails(t *testing.T) {
 		func(*exec.Cmd) error { return errLookPathMiss },
 	)
 
-	require.ErrorIs(t, err, desktop.ErrDesktopAppNotFound)
+	require.ErrorIs(t, err, open.ErrDesktopAppNotFound)
 }

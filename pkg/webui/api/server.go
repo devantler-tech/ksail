@@ -2,7 +2,7 @@
 // pkg/webui). It serves the same HTTP surface — clusters, resources, logs, exec, settings, cipher,
 // SSE events, and OIDC auth — across both deployment surfaces: the in-cluster operator (whose
 // controller-runtime-backed ClusterService CRUDs Cluster custom resources and is registered as a
-// manager Runnable) and the local `ksail ui`/desktop backend (whose CLI-lifecycle-backed
+// manager Runnable) and the local `ksail open web`/desktop backend (whose CLI-lifecycle-backed
 // ClusterService runs against the local toolchain). Backends plug in through the ClusterService
 // interface and its optional capability interfaces; the Server itself is backend-agnostic. When
 // read-only mode is enabled, all mutating verbs are rejected server-side so the web UI cannot
@@ -49,7 +49,7 @@ const errorJSONKey = "error"
 // The operator always acts with its own RBAC; OIDC provides authentication, not per-user authz.
 type Server struct {
 	// Service is the backend the cluster handlers delegate to (controller-runtime-backed in the
-	// operator, CLI-lifecycle-backed for `ksail ui`).
+	// operator, CLI-lifecycle-backed for `ksail open web`).
 	Service ClusterService
 	// ReadOnly rejects all mutating requests with HTTP 403 when true.
 	ReadOnly bool
@@ -75,7 +75,7 @@ type Server struct {
 
 	// StaticFS, when non-nil, serves the embedded web UI (SPA) for any route the API does not handle,
 	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
-	// the UI separately); `ksail ui` sets it to the embedded assets.
+	// the UI separately); `ksail open web` sets it to the embedded assets.
 	StaticFS fs.FS
 
 	// EventsInterval is how often the SSE events stream (GET /api/v1/events) re-checks the backend for
@@ -83,7 +83,7 @@ type Server struct {
 	EventsInterval time.Duration
 
 	// Mode labels the deployment surface for the SPA's branding: ModeOperator (in-cluster operator) or
-	// ModeLocal (the local `ksail ui` backend). Empty is treated as the operator by the SPA. The
+	// ModeLocal (the local `ksail open web` backend). Empty is treated as the operator by the SPA. The
 	// desktop shell overrides the label client-side when served from the wails:// origin.
 	Mode string
 
@@ -102,7 +102,7 @@ type Server struct {
 const (
 	// ModeOperator is reported by the in-cluster operator backend.
 	ModeOperator = "operator"
-	// ModeLocal is reported by the local `ksail ui` / desktop backend.
+	// ModeLocal is reported by the local `ksail open web` / desktop backend.
 	ModeLocal = "local"
 )
 
@@ -179,7 +179,7 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // Serve runs the HTTP server on the supplied listener until the context is cancelled. Binding the
-// listener separately lets callers (e.g. `ksail ui`) discover the chosen port before serving
+// listener separately lets callers (e.g. `ksail open web`) discover the chosen port before serving
 // when port 0 is requested.
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 	if s.OIDC.Enabled() && s.auth == nil {
@@ -305,7 +305,7 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 	// SOPS secret cipher with local age keys (CipherService). Cluster-independent local crypto.
 	// encrypt/decrypt are POST, so the read-only guard rejects them in read-only mode. This is
 	// intentional: a read-only deployment locks down secret operations entirely — including decrypt,
-	// which would otherwise reveal plaintext. The local `ksail ui`/desktop backend runs writable, so
+	// which would otherwise reveal plaintext. The local `ksail open web`/desktop backend runs writable, so
 	// this only bites a deliberately read-only deployment that also opts into the cipher service.
 	if _, ok := s.Service.(CipherService); ok {
 		mux.HandleFunc("GET /api/v1/secrets/recipients", s.handleCipherRecipients)
@@ -570,7 +570,7 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
 	updater, ok := s.Service.(ClusterUpdater)
 	if !ok {
-		// A backend without in-place update (the local `ksail ui` backend) returns 501, preserving the
+		// A backend without in-place update (the local `ksail open web` backend) returns 501, preserving the
 		// message detail the deleted local stub carried so the SPA's error matches the prior behaviour.
 		writeClientError(writer, errClusterUpdateNotSupported)
 

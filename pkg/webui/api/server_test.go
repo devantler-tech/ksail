@@ -559,7 +559,7 @@ func TestStartStopRejectedInReadOnly(t *testing.T) {
 func TestConfigReportsMode(t *testing.T) {
 	t.Parallel()
 
-	// The serving surface (operator vs. local `ksail ui`) is reported so the SPA can label the UI
+	// The serving surface (operator vs. local `ksail open web`) is reported so the SPA can label the UI
 	// accurately; it is omitted when unset.
 	server := &api.Server{
 		Service: operator.NewCRClusterService(newClient(t)),

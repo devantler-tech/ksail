@@ -14,7 +14,7 @@ import (
 // SimpleDistributionConfig returns a DistributionConfig for the distributions whose configuration is
 // fully determined by the cluster name (K3s, VCluster, KWOK). It returns nil for distributions that
 // need caller-specific construction (Vanilla, Talos, EKS), letting callers handle those themselves.
-// This is shared by the operator and the local `ksail ui` backend so the name-only mappings live in
+// This is shared by the operator and the local `ksail open web` backend so the name-only mappings live in
 // one place.
 func SimpleDistributionConfig(
 	distribution v1alpha1.Distribution,
@@ -35,7 +35,7 @@ func SimpleDistributionConfig(
 
 // BuildDistributionConfig builds the in-memory distribution config the factory needs for every
 // distribution EXCEPT EKS, harmonizing the operator's `buildDistributionConfig` and the local
-// `ksail ui` backend's distribution-config builder onto one implementation with the operator's
+// `ksail open web` backend's distribution-config builder onto one implementation with the operator's
 // stricter semantics:
 //
 //   - Vanilla (Kind): a Kind cluster named after the provisioned cluster, with the control-plane

@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 # The web UI is embedded into the binary (go:embed via pkg/webui) and served by the operator and
-# `ksail ui`/`desktop` themselves — there is no separate UI container image. This workflow is the fast
+# `ksail open web`/`ksail open desktop` themselves — there is no separate UI container image. This workflow is the fast
 # type-check/build gate for UI changes; the embedded bundle is produced during the operator image
 # build (see .goreleaser.yaml and .github/actions/operator-chart-e2e).
 jobs:

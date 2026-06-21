@@ -176,7 +176,7 @@ function valuesFromCluster(cluster: Cluster, meta: ClusterMeta, distributions: s
 
 // dialogDescription returns the modal's sub-title, worded for the serving surface: the operator
 // reconciles a Cluster custom resource, while the local backend provisions the cluster directly. The
-// previous copy hardcoded the operator wording even on the local `ksail ui`/desktop surface.
+// previous copy hardcoded the operator wording even on the local `ksail open web`/desktop surface.
 function dialogDescription(isEdit: boolean, isOperator: boolean): string {
   if (isEdit) {
     return isOperator

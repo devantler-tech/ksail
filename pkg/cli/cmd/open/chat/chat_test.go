@@ -12,7 +12,7 @@ import (
 	"time"
 
 	clicmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open/chat"
 	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"

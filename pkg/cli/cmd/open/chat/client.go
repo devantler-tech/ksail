@@ -28,7 +28,7 @@ const (
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
 	authRetryMaxWait = 4 * time.Second
 	// diagnoseTimeout is the timeout for the post-failure diagnostic subprocess.
-	// Kept intentionally short: ksail chat is interactive, so a brief wait on
+	// Kept intentionally short: ksail open chat is interactive, so a brief wait on
 	// failure to surface the real root cause is an acceptable trade-off.
 	diagnoseTimeout = 3 * time.Second
 	// copilotExecMaxRetries bounds re-attempts when launching the Copilot CLI

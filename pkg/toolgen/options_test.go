@@ -111,8 +111,8 @@ func TestDefaultOptions(t *testing.T) {
 
 	opts := toolgen.DefaultOptions()
 
-	assert.Contains(t, opts.ExcludeCommands, "ksail chat")
-	assert.Contains(t, opts.ExcludeCommands, "ksail mcp")
+	assert.Contains(t, opts.ExcludeCommands, "ksail open chat")
+	assert.Contains(t, opts.ExcludeCommands, "ksail open mcp")
 	assert.Contains(t, opts.ExcludeCommands, "ksail completion")
 	assert.Contains(t, opts.ExcludeCommands, "ksail help")
 	assert.Contains(t, opts.ExcludeCommands, "ksail")

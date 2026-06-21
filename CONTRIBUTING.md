@@ -252,7 +252,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **client/** - Tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kubescape, kustomize, oci, netretry, sops, klogutil; eksctl shells out to an external binary); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
 - **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - **operator/** - Kubernetes operator manager and REST API server (reconcilers live in `internal/controller/`)
-- **webui/** - Embedded web UI assets (built from `web/ui/`, served by `ksail ui` and the operator)
+- **webui/** - Embedded web UI assets (built from `web/ui/`, served by `ksail open web` and the operator)
 - **svc/detector/** - Detects installed Kubernetes components (Helm releases and Kubernetes API); used by the update command to build accurate baseline cluster state
 - **svc/diff/** - Computes configuration differences between ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
 - **svc/image/** - Container image export/import services for Vanilla and K3s distributions

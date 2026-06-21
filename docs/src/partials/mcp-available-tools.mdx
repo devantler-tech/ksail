@@ -10,7 +10,7 @@ The MCP server generates tools from the KSail command tree, consolidating comman
 | `workload_read` | Read-only | Manage workload operations | `workload_command` |
 | `workload_write` | Write | Manage workload operations | `workload_command` |
 
-These commands are not exposed as tools (interactive or long-running commands and shell helpers): `chat`, `completion`, `desktop`, `help`, `mcp`, `operator`, `ui`.
+These commands are not exposed as tools (interactive or long-running commands and shell helpers): `completion`, `help`, `open`, `operator`.
 
 Each tool takes a **subcommand parameter** selecting the operation, plus the merged flags of its subcommands. Subcommands marked below also accept positional arguments via the `args` parameter.
 

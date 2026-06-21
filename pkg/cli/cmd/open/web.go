@@ -1,6 +1,4 @@
-// Package ui implements the `ksail ui` command, which serves the KSail web UI and a local REST API
-// (backed by the local cluster lifecycle) and opens it in the browser.
-package ui
+package open
 
 import (
 	"fmt"
@@ -16,10 +14,10 @@ import (
 
 // openBrowser is the browser launcher, overridable so command tests run without a real browser.
 //
-//nolint:gochecknoglobals // Injected for testability (see ui_test.go).
+//nolint:gochecknoglobals // Injected for testability (see export_test.go).
 var openBrowser = browser.Open
 
-const uiLongDesc = `Open the KSail web UI to provision and manage clusters on your machine.
+const webLongDesc = `Open the KSail web UI to provision and manage clusters on your machine.
 
 This starts a small local web server (bound to 127.0.0.1 only) that serves the KSail web UI and a
 REST API backed by your local cluster lifecycle, then opens it in your browser. It is the same UI
@@ -28,32 +26,32 @@ the KSail operator serves in a cluster, but here it manages clusters locally via
 The server runs until you press Ctrl+C.
 
 Examples:
-  ksail ui
-  ksail ui --port 8080
-  ksail ui --no-browser`
+  ksail open web
+  ksail open web --port 8080
+  ksail open web --no-browser`
 
-// NewUICmd creates the `ksail ui` command.
-func NewUICmd() *cobra.Command {
+// NewWebCmd creates the `ksail open web` command.
+func NewWebCmd() *cobra.Command {
 	var (
 		portFlag  int
 		noBrowser bool
 	)
 
 	cmd := &cobra.Command{
-		Use:          "ui",
+		Use:          "web",
 		Short:        "Open the KSail web UI to manage local clusters",
-		Long:         uiLongDesc,
+		Long:         webLongDesc,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		// Exclude from AI tool generation: this is a long-running, blocking server + browser command,
 		// like `chat` and `mcp`.
 		Annotations: map[string]string{
-			annotations.AnnotationExclude: "true",
+			annotations.AnnotationExclude: annotations.AnnotationValueTrue,
 		},
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runUICmd(cmd, portFlag, noBrowser)
+		return runWebCmd(cmd, portFlag, noBrowser)
 	}
 
 	cmd.Flags().IntVar(&portFlag, "port", 0, "Port to serve the UI on (0 picks a free port)")
@@ -62,7 +60,7 @@ func NewUICmd() *cobra.Command {
 	return cmd
 }
 
-func runUICmd(cmd *cobra.Command, port int, noBrowser bool) error {
+func runWebCmd(cmd *cobra.Command, port int, noBrowser bool) error {
 	// Cancel the context on Ctrl+C / SIGTERM so the server shuts down gracefully.
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -1,4 +1,4 @@
-package ui_test
+package open_test
 
 import (
 	"bytes"
@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/ui"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const uiShutdownTimeout = 5 * time.Second
+const webShutdownTimeout = 5 * time.Second
 
 // syncBuffer is a goroutine-safe buffer so a test can read command output while the command writes
 // it from another goroutine.
@@ -39,12 +39,12 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-func TestNewUICmdFlagsAndAnnotations(t *testing.T) {
+func TestNewWebCmdFlagsAndAnnotations(t *testing.T) {
 	t.Parallel()
 
-	cmd := ui.NewUICmd()
+	cmd := open.NewWebCmd()
 
-	assert.Equal(t, "ui", cmd.Name())
+	assert.Equal(t, "web", cmd.Name())
 	assert.Equal(t, "true", cmd.Annotations[annotations.AnnotationExclude])
 
 	portFlag := cmd.Flags().Lookup("port")
@@ -57,9 +57,9 @@ func TestNewUICmdFlagsAndAnnotations(t *testing.T) {
 }
 
 //nolint:paralleltest // mutates the package-level browser launcher; must run serially.
-func TestUICmdServesOpensBrowserAndShutsDown(t *testing.T) {
+func TestWebCmdServesOpensBrowserAndShutsDown(t *testing.T) {
 	openedURL := make(chan string, 1)
-	restore := ui.SetOpenBrowser(func(_ context.Context, url string) error {
+	restore := open.SetOpenBrowser(func(_ context.Context, url string) error {
 		openedURL <- url
 
 		return nil
@@ -67,7 +67,7 @@ func TestUICmdServesOpensBrowserAndShutsDown(t *testing.T) {
 
 	defer restore()
 
-	cmd := ui.NewUICmd()
+	cmd := open.NewWebCmd()
 
 	output := &syncBuffer{}
 	cmd.SetOut(output)
@@ -91,7 +91,7 @@ func TestUICmdServesOpensBrowserAndShutsDown(t *testing.T) {
 			"browser should open a loopback URL, got %q",
 			url,
 		)
-	case <-time.After(uiShutdownTimeout):
+	case <-time.After(webShutdownTimeout):
 		cancel()
 		t.Fatal("browser was not opened")
 	}
@@ -104,10 +104,10 @@ func TestUICmdServesOpensBrowserAndShutsDown(t *testing.T) {
 }
 
 //nolint:paralleltest // mutates the package-level browser launcher; must run serially.
-func TestUICmdNoBrowserSkipsOpen(t *testing.T) {
+func TestWebCmdNoBrowserSkipsOpen(t *testing.T) {
 	var opened atomic.Bool
 
-	restore := ui.SetOpenBrowser(func(_ context.Context, _ string) error {
+	restore := open.SetOpenBrowser(func(_ context.Context, _ string) error {
 		opened.Store(true)
 
 		return nil
@@ -115,7 +115,7 @@ func TestUICmdNoBrowserSkipsOpen(t *testing.T) {
 
 	defer restore()
 
-	cmd := ui.NewUICmd()
+	cmd := open.NewWebCmd()
 
 	output := &syncBuffer{}
 	cmd.SetOut(output)
@@ -133,7 +133,7 @@ func TestUICmdNoBrowserSkipsOpen(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return strings.Contains(output.String(), "KSAIL_UI_URL=")
-	}, uiShutdownTimeout, 10*time.Millisecond)
+	}, webShutdownTimeout, 10*time.Millisecond)
 
 	cancel()
 
@@ -149,7 +149,7 @@ func requireCommandExit(t *testing.T, done <-chan error) {
 	select {
 	case err := <-done:
 		require.NoError(t, err)
-	case <-time.After(uiShutdownTimeout):
+	case <-time.After(webShutdownTimeout):
 		t.Fatal("command did not shut down after context cancellation")
 	}
 }
