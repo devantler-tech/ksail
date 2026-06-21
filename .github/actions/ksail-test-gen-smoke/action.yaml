@@ -88,10 +88,10 @@ runs:
     - name: 🧪 smoke test — chat and mcp commands
       shell: bash
       run: |
-        echo "=== Testing chat --help ==="
-        ksail chat --help
-        echo "✅ chat --help passed"
+        echo "=== Testing open chat --help ==="
+        ksail open chat --help
+        echo "✅ open chat --help passed"
 
-        echo "=== Testing mcp --help ==="
-        ksail mcp --help
-        echo "✅ mcp --help passed"
+        echo "=== Testing open mcp --help ==="
+        ksail open mcp --help
+        echo "✅ open mcp --help passed"

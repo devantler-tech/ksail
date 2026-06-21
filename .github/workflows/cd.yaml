@@ -83,7 +83,7 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
   # The web UI is embedded into the binary (go:embed via pkg/webui, staged by the GoReleaser
-  # before-hook) and served by the operator and `ksail ui`/`desktop` themselves — no separate UI image.
+  # before-hook) and served by the operator and `ksail open web`/`ksail open desktop` themselves — no separate UI image.
 
   vscode-extension:
     name: 🧩 Release VSCode Extension
@@ -232,7 +232,7 @@ jobs:
         shell: bash
         run: cd desktop && go build -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
 
-      # Package so the artifact extracts to the name the `ksail desktop` launcher looks for: a
+      # Package so the artifact extracts to the name the `ksail open desktop` launcher looks for: a
       # ksail-desktop binary the user puts on their PATH. Naming mirrors the main GoReleaser archives.
       - name: 📦 Package desktop app
         id: package

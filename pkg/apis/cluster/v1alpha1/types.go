@@ -200,6 +200,7 @@ type WorkloadSpec struct {
 	Flux              FluxConfig       `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                   //nolint:lll
 	Watch             WatchConfig      `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
 	Validation        ValidationConfig `                json:"validation,omitzero"        jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                          //nolint:lll
+	Scan              ScanConfig       `                json:"scan,omitzero"              jsonschema_description:"Configuration for the workload scan command (Kubescape exceptions, frameworks, compliance threshold) so 'ksail workload scan' (no args) can act as a turnkey CI gate."`                                                                                      //nolint:lll
 }
 
 // ValidationConfig defines configuration for the workload validate command.
@@ -213,6 +214,30 @@ type ValidationConfig struct {
 
 	// HelmRender controls whether HelmReleases are rendered before validation.
 	HelmRender *bool `json:"helmRender,omitzero" jsonschema_description:"Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."` //nolint:lll
+}
+
+// ScanConfig defines configuration for the workload scan command, letting
+// 'ksail workload scan' (no args) act as a turnkey CI gate the same way
+// spec.workload.validation configures 'ksail workload validate'.
+type ScanConfig struct {
+	// Exceptions is the path to a Kubescape exceptions file forwarded to
+	// Kubescape's --exceptions. It uses Kubescape's native exceptions format (a
+	// JSON array of PostureExceptionPolicy objects) so a repo can suppress
+	// justified, runtime-enforced findings (Kyverno admission mutation, Cilium
+	// network policies, VPA-managed resources) that a static scan cannot see, and
+	// thus gate at complianceThreshold 100. A relative path is resolved against
+	// the ksail.yaml directory.
+	Exceptions string `json:"exceptions,omitzero" jsonschema_description:"Path to a Kubescape exceptions file forwarded to 'kubescape --exceptions'. Uses Kubescape's native exceptions format (a JSON array of PostureExceptionPolicy objects) to suppress justified, runtime-enforced findings (e.g. Kyverno admission mutation, Cilium network policies, VPA-managed resources) so 'ksail workload scan' can gate at complianceThreshold 100. A relative path resolves against the ksail.yaml directory. Override per-run with --exceptions."` //nolint:lll
+
+	// Frameworks lists the security frameworks to scan against (e.g. nsa, mitre,
+	// cis, pss). Defaults to nsa when unset.
+	Frameworks []string `json:"frameworks,omitzero" jsonschema_description:"Security frameworks 'ksail workload scan' (no args) scans against (e.g. nsa, mitre, cis, pss). Defaults to nsa when unset. Override per-run with --framework."` //nolint:lll
+
+	// ComplianceThreshold fails the scan when the compliance score is below this
+	// whole-percentage value (0-100). Unset (nil) means no threshold gate. The
+	// --compliance-threshold flag accepts fractional values; this config field is
+	// an integer percentage (the common CI-gate case).
+	ComplianceThreshold *int32 `json:"complianceThreshold,omitzero" jsonschema_description:"Minimum Kubescape compliance score (whole percentage, 0-100) required for 'ksail workload scan' (no args) to pass; the scan fails below it. Unset means no threshold gate. Override per-run with --compliance-threshold (which also accepts fractional values)."` //nolint:lll
 }
 
 // WatchConfig defines configuration for the workload watch command.

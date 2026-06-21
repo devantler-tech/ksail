@@ -1,5 +1,5 @@
 // Package browser opens a URL in the user's default browser. It is a tiny, dependency-free
-// cross-platform helper used by `ksail ui` to launch the local web UI.
+// cross-platform helper used by `ksail open web` to launch the local web UI.
 package browser
 
 import (

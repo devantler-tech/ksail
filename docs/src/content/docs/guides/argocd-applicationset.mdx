@@ -272,7 +272,7 @@ spec:
 ### Encrypting Secrets
 
 ```bash
-ksail cipher encrypt k8s/apps/backend/secret.yaml
+ksail workload cipher encrypt k8s/apps/backend/secret.yaml
 ```
 
 When the ApplicationSet syncs the `backend` Application, the CMP sidecar detects the `sops:` metadata block and decrypts the file before applying it to the cluster.

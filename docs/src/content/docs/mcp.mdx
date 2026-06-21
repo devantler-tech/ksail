@@ -21,7 +21,7 @@ KSail can be found in the [GitHub MCP Registry](https://github.com/mcp) — sear
 The MCP server runs over stdio and is invoked by MCP clients:
 
 ````bash
-ksail mcp
+ksail open mcp
 ````
 
 The server listens on stdin, exposes supported KSail commands as MCP tools, and exits when the client disconnects. See [Integration Examples](#integration-examples) for typical usage patterns.
@@ -92,7 +92,7 @@ Many MCP clients, including Claude Desktop, Cursor, and Windsurf, use the follow
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -109,7 +109,7 @@ import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as (read, write):
+async with stdio_client(StdioServerParameters(command="ksail", args=["open", "mcp"])) as (read, write):
     async with ClientSession(read, write) as session:
         await session.initialize()
         tools = await session.list_tools()
@@ -128,7 +128,7 @@ See [Tool Responses](#tool-responses) for the full JSON envelope format.
 
 The server uses **stdio** for communication, runs commands in the **current working directory** (set by the client), keeps the connection alive for **30 seconds** after the last request, and returns results in **pages of 100 items** for large lists.
 
-**Security Note:** Only run the MCP server with trusted MCP clients; any connected client can invoke KSail tools that execute commands with the full permissions of the user running `ksail mcp`, so a compromised or misconfigured client could perform arbitrary cluster or filesystem operations on your behalf.
+**Security Note:** Only run the MCP server with trusted MCP clients; any connected client can invoke KSail tools that execute commands with the full permissions of the user running `ksail open mcp`, so a compromised or misconfigured client could perform arbitrary cluster or filesystem operations on your behalf.
 
 ## Troubleshooting
 
@@ -175,12 +175,12 @@ The VSCode extension automatically sets the working directory to the workspace r
 
 The MCP server is complementary to the [AI Chat](/ai-chat/) feature:
 
-- **Use `ksail chat`** for interactive, conversational workflows with a rich TUI
-- **Use `ksail mcp`** to expose KSail to external AI assistants like Claude Desktop
+- **Use `ksail open chat`** for interactive, conversational workflows with a rich TUI
+- **Use `ksail open mcp`** to expose KSail to external AI assistants like Claude Desktop
 
 You can use both simultaneously — the chat command is excluded from MCP tools to avoid conflicts.
 
 ### Automation Scripts
 
-Use MCP tool calls in automation frameworks to orchestrate sequences of KSail operations — for example, `cluster_write` (init → create) → `workload_write` (apply) → `cipher_write` (encrypt). Use the same connection pattern shown in [Custom MCP Client](#custom-mcp-client).
+Use MCP tool calls in automation frameworks to orchestrate sequences of KSail operations — for example, `cluster_write` (init → create) → `workload_write` (apply, then cipher_encrypt). Use the same connection pattern shown in [Custom MCP Client](#custom-mcp-client).
 

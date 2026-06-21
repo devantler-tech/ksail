@@ -10,7 +10,7 @@ import (
 )
 
 // TestSimpleDistributionConfig pins the name-only distribution mappings shared by the operator and
-// the local `ksail ui` backend: K3s, VCluster, and KWOK are fully determined by the cluster name,
+// the local `ksail open web` backend: K3s, VCluster, and KWOK are fully determined by the cluster name,
 // while Vanilla, Talos, and EKS need caller-specific construction and must return nil.
 //
 //nolint:funlen // table-driven test with multiple test cases

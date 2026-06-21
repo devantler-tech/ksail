@@ -53,7 +53,7 @@ import { useToast } from "./components/Toast.tsx";
 
 // DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
 // its supported set via config.distributions. The operator omits it (it only provisions VCluster
-// in-cluster); the local `ksail ui` backend advertises everything it can create locally. The
+// in-cluster); the local `ksail open web` backend advertises everything it can create locally. The
 // provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 

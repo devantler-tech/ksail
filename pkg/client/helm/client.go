@@ -200,7 +200,7 @@ func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, er
 		client.Version = spec.Version
 	}
 
-	chart, vals, err := c.loadChartAndValues(spec, client)
+	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
 		return "", fmt.Errorf("load chart and values: %w", err)
 	}
@@ -535,7 +535,7 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 
 	// Note: Atomic is not supported in Helm v4 Install action
 
-	chart, vals, err := c.loadChartAndValues(spec, client)
+	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +556,7 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	// Note: Atomic is not supported in Helm v4 Upgrade action
 	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
-	chart, vals, err := c.loadChartAndValues(spec, client)
+	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
 		return nil, err
 	}

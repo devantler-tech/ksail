@@ -2787,6 +2787,10 @@ func TestNewScanCmdHasCorrectDefaults(t *testing.T) {
 	verboseFlag := cmd.Flags().Lookup("verbose")
 	require.NotNil(t, verboseFlag, "expected --verbose flag to exist")
 	require.Equal(t, "false", verboseFlag.DefValue)
+
+	exceptionsFlag := cmd.Flags().Lookup("exceptions")
+	require.NotNil(t, exceptionsFlag, "expected --exceptions flag to exist")
+	require.Empty(t, exceptionsFlag.DefValue)
 }
 
 func TestScanCmdShowsHelp(t *testing.T) {
@@ -2854,6 +2858,138 @@ func TestScanCmdRejectsInvalidThreshold(t *testing.T) {
 			require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
 		})
 	}
+}
+
+// scanConfigCluster builds a Cluster carrying the given spec.workload.scan
+// settings for the scan settings-merge tests.
+func scanConfigCluster(frameworks []string, threshold *int32, exceptions string) *v1alpha1.Cluster {
+	return &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Workload: v1alpha1.WorkloadSpec{
+				Scan: v1alpha1.ScanConfig{
+					Frameworks:          frameworks,
+					ComplianceThreshold: threshold,
+					Exceptions:          exceptions,
+				},
+			},
+		},
+	}
+}
+
+// TestScanSettingsConfigUsedWhenNoFlags asserts spec.workload.scan supplies the
+// frameworks and compliance threshold for a turnkey 'ksail workload scan' (no
+// flags), so the config alone can gate at 100.
+func TestScanSettingsConfigUsedWhenNoFlags(t *testing.T) {
+	t.Parallel()
+
+	threshold := int32(100)
+	cfg := scanConfigCluster([]string{"mitre"}, &threshold, "")
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags(nil))
+
+	got, err := workload.ExportResolveScanSettings(scanCmd, cfg, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"mitre"}, got.Frameworks)
+	require.InDelta(t, float32(100), got.ComplianceThreshold, 0)
+	require.Empty(t, got.Exceptions)
+}
+
+// TestScanSettingsFlagsOverrideConfig asserts an explicit flag wins over the
+// configured value (flag > config precedence).
+func TestScanSettingsFlagsOverrideConfig(t *testing.T) {
+	t.Parallel()
+
+	threshold := int32(100)
+	cfg := scanConfigCluster([]string{"mitre"}, &threshold, "")
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags(
+		[]string{"--framework", "cis", "--compliance-threshold", "50"},
+	))
+
+	got, err := workload.ExportResolveScanSettings(scanCmd, cfg, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"cis"}, got.Frameworks)
+	require.InDelta(t, float32(50), got.ComplianceThreshold, 0)
+}
+
+// TestScanSettingsDefaultsWhenNoConfig asserts the flag defaults apply when no
+// config file is found (frameworks default to nsa, threshold to 0).
+func TestScanSettingsDefaultsWhenNoConfig(t *testing.T) {
+	t.Parallel()
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags(nil))
+
+	got, err := workload.ExportResolveScanSettings(scanCmd, nil, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"nsa"}, got.Frameworks)
+	require.InDelta(t, float32(0), got.ComplianceThreshold, 0)
+	require.Empty(t, got.Exceptions)
+}
+
+// TestScanSettingsRejectsInvalidConfigThreshold asserts an out-of-range
+// complianceThreshold from config is rejected (not just the flag).
+func TestScanSettingsRejectsInvalidConfigThreshold(t *testing.T) {
+	t.Parallel()
+
+	threshold := int32(150)
+	cfg := scanConfigCluster(nil, &threshold, "")
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags(nil))
+
+	_, err := workload.ExportResolveScanSettings(scanCmd, cfg, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
+}
+
+// TestScanSettingsExceptionsFromConfigCanonicalized asserts a configured
+// exceptions path is canonicalized (symlink-resolved) before being forwarded.
+func TestScanSettingsExceptionsFromConfigCanonicalized(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	exceptionsFile := filepath.Join(tempDir, "exceptions.json")
+	require.NoError(t, os.WriteFile(exceptionsFile, []byte("[]"), 0o600))
+
+	cfg := scanConfigCluster(nil, nil, exceptionsFile)
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags(nil))
+
+	got, err := workload.ExportResolveScanSettings(scanCmd, cfg, true)
+	require.NoError(t, err)
+
+	canon, err := filepath.EvalSymlinks(exceptionsFile)
+	require.NoError(t, err)
+	require.Equal(t, canon, got.Exceptions)
+}
+
+// TestScanSettingsExceptionsFlagOverridesConfig asserts the --exceptions flag
+// wins over a configured exceptions path.
+func TestScanSettingsExceptionsFlagOverridesConfig(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	flagFile := filepath.Join(tempDir, "flag-exceptions.json")
+	require.NoError(t, os.WriteFile(flagFile, []byte("[]"), 0o600))
+
+	configFile := filepath.Join(tempDir, "config-exceptions.json")
+	require.NoError(t, os.WriteFile(configFile, []byte("[]"), 0o600))
+
+	cfg := scanConfigCluster(nil, nil, configFile)
+
+	scanCmd := workload.NewScanCmd()
+	require.NoError(t, scanCmd.ParseFlags([]string{"--exceptions", flagFile}))
+
+	got, err := workload.ExportResolveScanSettings(scanCmd, cfg, true)
+	require.NoError(t, err)
+
+	canon, err := filepath.EvalSymlinks(flagFile)
+	require.NoError(t, err)
+	require.Equal(t, canon, got.Exceptions)
 }
 
 func TestPollInterval(t *testing.T) {

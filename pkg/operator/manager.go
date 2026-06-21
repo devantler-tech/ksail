@@ -142,7 +142,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 func setupAPIServer(mgr ctrl.Manager, opts Options) error {
 	hub := mgr.GetClient()
 	// Resolve a dynamic client for a cluster's managed (vcluster) child cluster, so the dashboard's
-	// resource browser works against the operator backend too — not just the local `ksail ui`. The
+	// resource browser works against the operator backend too — not just the local `ksail open web`. The
 	// self-registered host cluster is browsed through the operator's own credentials instead of a
 	// published kubeconfig Secret.
 	newChildClient := func(ctx context.Context, cluster *v1alpha1.Cluster) (dynamic.Interface, error) {

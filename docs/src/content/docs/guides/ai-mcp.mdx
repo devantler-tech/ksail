@@ -22,7 +22,7 @@ KSail's MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server 
 Verify KSail is reachable from your shell:
 
 ```bash
-ksail mcp --help
+ksail open mcp --help
 ```
 
 ## Client Setup
@@ -47,7 +47,7 @@ Edit (or create) the config file and add the `ksail` entry to `mcpServers`:
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -63,7 +63,7 @@ After saving, **restart Claude Desktop**. The KSail tools will appear in Claude'
   "mcpServers": {
     "ksail": {
       "command": "/opt/homebrew/bin/ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -83,7 +83,7 @@ Create or edit `.cursor/mcp.json` in your project root:
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -98,7 +98,7 @@ Edit `~/.cursor/mcp.json`:
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -121,7 +121,7 @@ Open **Windsurf Settings** (`Cmd+,` on macOS / `Ctrl+,` on Windows/Linux) and na
   "mcpServers": {
     "ksail": {
       "command": "ksail",
-      "args": ["mcp"]
+      "args": ["open", "mcp"]
     }
   }
 }
@@ -149,7 +149,7 @@ For manual configuration or if you prefer not to use the extension, add KSail to
     "servers": {
       "ksail": {
         "command": "ksail",
-        "args": ["mcp"]
+        "args": ["open", "mcp"]
       }
     }
   }
@@ -188,8 +188,8 @@ Once connected, you can manage Kubernetes clusters with natural language. Here a
 
 | Prompt | Tool invoked |
 |--------|-------------|
-| "Encrypt the secrets.yaml file with SOPS" | `cipher_write` (encrypt) |
-| "Import my SOPS age key from the key file" | `cipher_write` (import) |
+| "Encrypt the secrets.yaml file with SOPS" | `workload_write` (cipher_encrypt) |
+| "Import my SOPS age key from the key file" | `workload_write` (cipher_import) |
 
 ## Tips
 

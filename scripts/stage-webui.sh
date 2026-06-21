@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the web UI (web/ui) and stage it into pkg/webui/dist so `go build` embeds it via
-# pkg/webui/embed.go — served by the operator, `ksail ui`, and the desktop app on the same
+# pkg/webui/embed.go — served by the operator, `ksail open web`, and the desktop app on the same
 # origin as /api (no reverse proxy). Built assets are gitignored; the .gitkeep keeps the
 # embed directory present so the go:embed directive always resolves.
 #

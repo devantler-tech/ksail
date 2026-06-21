@@ -8,7 +8,7 @@ import (
 )
 
 // SettingsService backs the credential-settings endpoints. It is optional: only the local UI
-// backend (`ksail ui` / the desktop app) provides one, since it resolves cloud credentials from the
+// backend (`ksail open web` / the desktop app) provides one, since it resolves cloud credentials from the
 // environment and an OS secure store. The operator manages credentials in-cluster and leaves it
 // nil, in which case the settings routes are not registered and the SPA hides the Settings page.
 type SettingsService interface {

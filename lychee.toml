@@ -43,9 +43,14 @@ exclude_path = [
 #     HTTP 500 in CI environments; content is stable, link is not broken.
 #   - starlight.astro.build: intermittently returns HTTP 500 in CI through all
 #     retries; verified reachable (200) outside CI, link is not broken.
+#   - git.k8s.io: the Kubernetes vanity redirector embedded by controller-gen in
+#     generated CRD field descriptions (the sig-architecture api-conventions
+#     links). It returns HTTP 500 for GitHub Actions runner IP ranges through all
+#     retries, while resolving (302 → 200) outside CI; the links are stable
+#     upstream references, not broken. Re-appears on every CRD, so exclude the host.
 #   - localhost / 127.0.0.1: loopback addresses used as port-forward targets in
 #     the operator chart E2E (http://127.0.0.1:18080/readyz, …); never reachable
 #     from the lychee runner.
 #   - ksail.local: placeholder OIDC redirect/ingress host in chart template
 #     permutations; an unresolvable .local address, not a real link.
-exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0']
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'git\.k8s\.io', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0']

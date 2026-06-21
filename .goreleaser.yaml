@@ -4,7 +4,7 @@ before:
   hooks:
     - go mod tidy
     # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
-    # (see pkg/webui/embed.go) and served by both the operator and `ksail ui`/`desktop` — same origin
+    # (see pkg/webui/embed.go) and served by both the operator and `ksail open web`/`ksail open desktop` — same origin
     # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
     - bash scripts/stage-webui.sh
 
