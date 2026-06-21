@@ -140,6 +140,39 @@ func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
 }
 
+// ExportScanSettings mirrors the resolved scan settings for external tests.
+type ExportScanSettings struct {
+	Frameworks          []string
+	ComplianceThreshold float32
+	Exceptions          string
+}
+
+// ExportResolveScanSettings reads the scan flags off cmd (which must be a
+// NewScanCmd() whose flags have been parsed) and merges them with
+// spec.workload.scan, returning the resolved settings. It lets external tests
+// exercise the flag > config > default precedence without invoking kubescape.
+func ExportResolveScanSettings(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+) (ExportScanSettings, error) {
+	frameworks, _ := cmd.Flags().GetStringSlice("framework")
+	threshold, _ := cmd.Flags().GetFloat32("compliance-threshold")
+	exceptions, _ := cmd.Flags().GetString("exceptions")
+
+	settings, err := resolveScanSettings(cmd, scanFlags{
+		frameworks:          frameworks,
+		complianceThreshold: threshold,
+		exceptions:          exceptions,
+	}, cfg, configFound)
+
+	return ExportScanSettings{
+		Frameworks:          settings.frameworks,
+		ComplianceThreshold: settings.complianceThreshold,
+		Exceptions:          settings.exceptions,
+	}, err
+}
+
 // ExportPollInterval exposes the engine's poll interval constant for testing.
 const ExportPollInterval = workloadwatch.PollInterval
 
