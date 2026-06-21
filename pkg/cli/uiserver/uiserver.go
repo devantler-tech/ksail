@@ -11,10 +11,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/webchat"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
-	"github.com/spf13/cobra"
 )
 
 // Host is the loopback address the UI binds to. Binding only to localhost is the security boundary:
@@ -53,22 +51,6 @@ func NewServer() *api.Server {
 	}
 
 	return server
-}
-
-// AttachChat wires the Copilot-backed AI assistant onto the local server's backend, generating the
-// assistant's tools from rootCmd's command tree. It is a no-op when the backend is not the local
-// service (so callers may attach unconditionally), and returns the Runner so the caller can defer
-// Close to stop the Copilot subprocess on shutdown. The assistant reports unavailable — and the SPA
-// hides its panel — unless a Copilot token is configured (see pkg/svc/webchat).
-func AttachChat(server *api.Server, rootCmd *cobra.Command) *webchat.Runner {
-	runner := webchat.New(rootCmd)
-
-	service, ok := server.Service.(*clusterapi.Service)
-	if ok {
-		service.UseChat(runner)
-	}
-
-	return runner
 }
 
 // toProviderInfos maps the discovery availability report onto the API's wire type.
