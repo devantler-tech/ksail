@@ -25,6 +25,10 @@ var (
 	errRotationCancelled = errors.New("rotation cancelled")
 )
 
+// permissionWrite is the annotations.AnnotationPermission value that marks a
+// command as state-modifying (and therefore requiring user confirmation).
+const permissionWrite = "write"
+
 // NewCipherCmd creates the cipher command that integrates with SOPS.
 func NewCipherCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -41,12 +45,6 @@ SOPS supports multiple key management systems:
   - Azure Key Vault
   - HashiCorp Vault`,
 		SilenceUsage: true,
-		Annotations: map[string]string{
-			// Consolidate cipher subcommands (encrypt, decrypt, edit, import)
-			// into a single cipher_write tool (all operations modify state or reveal secrets).
-			// The "cipher_operation" parameter will select which operation to perform.
-			annotations.AnnotationConsolidate: "cipher_operation",
-		},
 	}
 
 	// Add subcommands
@@ -83,18 +81,18 @@ SOPS supports multiple key management systems:
   - HashiCorp Vault
 
 Example:
-  ksail cipher decrypt secrets.yaml
-  ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
-  ksail cipher decrypt secrets.yaml --output plaintext.yaml
-  ksail cipher decrypt secrets.yaml --ignore-mac
-  cat secrets.enc.yaml | ksail cipher decrypt`,
+  ksail workload cipher decrypt secrets.yaml
+  ksail workload cipher decrypt secrets.yaml --extract '["data"]["password"]'
+  ksail workload cipher decrypt secrets.yaml --output plaintext.yaml
+  ksail workload cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.enc.yaml | ksail workload cipher decrypt`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return handleDecryptRunE(cmd, args, extract, ignoreMac, output)
 		},
 		Annotations: map[string]string{
-			annotations.AnnotationPermission: "write",
+			annotations.AnnotationPermission: permissionWrite,
 		},
 	}
 
@@ -226,7 +224,7 @@ func NewEditCmd() *cobra.Command {
 	configureEditFlags(cmd, &ignoreMac, &showMasterKeys, &editorStr)
 
 	cmd.Annotations = map[string]string{
-		annotations.AnnotationPermission: "write",
+		annotations.AnnotationPermission: permissionWrite,
 	}
 
 	return cmd
@@ -314,9 +312,9 @@ SOPS supports multiple key management systems:
   - HashiCorp Vault
 
 Example:
-  ksail cipher edit secrets.yaml
-  ksail cipher edit --editor "code --wait" secrets.yaml
-  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml`
+  ksail workload cipher edit secrets.yaml
+  ksail workload cipher edit --editor "code --wait" secrets.yaml
+  SOPS_EDITOR="code --wait" ksail workload cipher edit secrets.yaml`
 }
 
 // configureEditFlags configures flags for the edit command.
@@ -357,12 +355,12 @@ SOPS supports multiple key management systems:
   - HashiCorp Vault
 
 Example:
-  ksail cipher encrypt secrets.yaml`,
+  ksail workload cipher encrypt secrets.yaml`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE:         handleEncryptRunE,
 		Annotations: map[string]string{
-			annotations.AnnotationPermission: "write",
+			annotations.AnnotationPermission: permissionWrite,
 		},
 	}
 
@@ -437,14 +435,14 @@ The private key must be in age format (starting with "AGE-SECRET-KEY-").
 
 Examples:
   # Import a private key (public key will be derived automatically)
-  ksail cipher import AGE-SECRET-KEY-1ABCDEF...`,
+  ksail workload cipher import AGE-SECRET-KEY-1ABCDEF...`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return handleImportRunE(cmd, args[0])
 		},
 		Annotations: map[string]string{
-			annotations.AnnotationPermission: "write",
+			annotations.AnnotationPermission: permissionWrite,
 		},
 	}
 
@@ -498,28 +496,28 @@ Key type is auto-detected from the key format:
 
 Examples:
   # Rotate all encrypted files in a folder (with confirmation)
-  ksail cipher rotate ./k8s
+  ksail workload cipher rotate ./k8s
 
   # Rotate without confirmation prompt
-  ksail cipher rotate ./k8s --force
+  ksail workload cipher rotate ./k8s --force
 
   # Rotate recursively through subdirectories
-  ksail cipher rotate ./k8s --recursive
+  ksail workload cipher rotate ./k8s --recursive
 
   # Rotate a single file
-  ksail cipher rotate secrets.yaml
+  ksail workload cipher rotate secrets.yaml
 
   # Add a new age recipient during rotation
-  ksail cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+  ksail workload cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
   # Remove an old age recipient during rotation
-  ksail cipher rotate ./k8s --remove-key age1oldkey...
+  ksail workload cipher rotate ./k8s --remove-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
+  ksail workload cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
   # Preview which files would be rotated without making changes
-  ksail cipher rotate ./k8s --dry-run`
+  ksail workload cipher rotate ./k8s --dry-run`
 
 // NewRotateCmd creates and returns the rotate command.
 func NewRotateCmd() *cobra.Command {
@@ -541,7 +539,7 @@ func NewRotateCmd() *cobra.Command {
 			return handleRotateRunE(cmd, args[0], addKey, removeKey, recursive, force, dryRun)
 		},
 		Annotations: map[string]string{
-			annotations.AnnotationPermission: "write",
+			annotations.AnnotationPermission: permissionWrite,
 		},
 	}
 

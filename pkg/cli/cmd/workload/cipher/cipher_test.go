@@ -10,7 +10,7 @@ import (
 
 	"filippo.io/age"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/cipher"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

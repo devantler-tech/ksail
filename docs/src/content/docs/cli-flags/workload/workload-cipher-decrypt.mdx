@@ -1,5 +1,5 @@
 ---
-title: "ksail cipher decrypt"
+title: "ksail workload cipher decrypt"
 description: "Decrypt a file with SOPS"
 ---
 
@@ -19,14 +19,14 @@ SOPS supports multiple key management systems:
   - HashiCorp Vault
 
 Example:
-  ksail cipher decrypt secrets.yaml
-  ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
-  ksail cipher decrypt secrets.yaml --output plaintext.yaml
-  ksail cipher decrypt secrets.yaml --ignore-mac
-  cat secrets.enc.yaml | ksail cipher decrypt
+  ksail workload cipher decrypt secrets.yaml
+  ksail workload cipher decrypt secrets.yaml --extract '["data"]["password"]'
+  ksail workload cipher decrypt secrets.yaml --output plaintext.yaml
+  ksail workload cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.enc.yaml | ksail workload cipher decrypt
 
 Usage:
-  ksail cipher decrypt [file] [flags]
+  ksail workload cipher decrypt [file] [flags]
 
 Flags:
   -e, --extract string   extract a specific key from the decrypted file (JSONPath format)

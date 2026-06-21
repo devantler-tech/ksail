@@ -325,7 +325,7 @@ The `gen-smoke-test` job runs on every PR that has Go source changes (`needs.cha
 
 These tests do not require Docker or a cluster and complete in under a minute.
 
-Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests and benchmarks in `pkg/cli/cmd/cipher/`.
+Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests and benchmarks in `pkg/cli/cmd/workload/cipher/`.
 
 **What the system test covers:**
 

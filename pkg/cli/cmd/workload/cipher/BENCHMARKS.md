@@ -12,7 +12,7 @@ KSail uses [SOPS (Secrets OPerationS)](https://github.com/getsops/sops) for encr
 
 ```bash
 # Run all cipher benchmarks with memory profiling
-cd pkg/cli/cmd/cipher
+cd pkg/cli/cmd/workload/cipher
 go test -bench=. -benchmem -benchtime=10s
 
 # Save results for comparison
@@ -217,7 +217,7 @@ To track performance over time:
 # .github/workflows/benchmarks.yaml
 - name: Run SOPS Benchmarks
   run: |
-    cd pkg/cli/cmd/cipher
+    cd pkg/cli/cmd/workload/cipher
     go test -bench=. -benchmem > new-results.txt
 
 - name: Compare with Baseline

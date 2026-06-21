@@ -1,5 +1,5 @@
 ---
-title: "ksail cipher import"
+title: "ksail workload cipher import"
 description: "Import an age key to the system's SOPS key location"
 ---
 
@@ -29,10 +29,10 @@ The private key must be in age format (starting with "AGE-SECRET-KEY-").
 
 Examples:
   # Import a private key (public key will be derived automatically)
-  ksail cipher import AGE-SECRET-KEY-1ABCDEF...
+  ksail workload cipher import AGE-SECRET-KEY-1ABCDEF...
 
 Usage:
-  ksail cipher import PRIVATE_KEY [flags]
+  ksail workload cipher import PRIVATE_KEY [flags]
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
