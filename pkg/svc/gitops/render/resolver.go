@@ -79,9 +79,11 @@ func NewHelmChartResolver(client helm.Interface) *HelmChartResolver {
 
 // Render resolves the chart source for helmRelease and templates it in-process.
 //
-// buildChartSpec is pure (in-memory) and runs concurrently, but the actual Helm
-// template call is serialized by helmRenderMu: it touches Helm's process-global
-// on-disk caches and SDK state, which concurrent renders corrupted (issue #5362).
+// buildChartSpec is pure (in-memory) and runs concurrently; the Helm template
+// call is then serialized by helmRenderMu (see its doc) because it touches
+// Helm's process-global on-disk caches, which concurrent renders corrupted
+// (issue #5362). The deferred Unlock holds the lock only across that call plus a
+// trivial error-wrap, and stays correct even if TemplateChart panics.
 func (r *HelmChartResolver) Render(
 	ctx context.Context,
 	helmRelease *helmv2.HelmRelease,
@@ -92,7 +94,10 @@ func (r *HelmChartResolver) Render(
 		return "", err
 	}
 
-	manifest, err := r.templateChart(ctx, spec)
+	helmRenderMu.Lock()
+	defer helmRenderMu.Unlock()
+
+	manifest, err := r.helm.TemplateChart(ctx, spec)
 	if err != nil {
 		return "", fmt.Errorf(
 			"template chart for HelmRelease %s/%s: %w",
@@ -101,21 +106,6 @@ func (r *HelmChartResolver) Render(
 	}
 
 	return manifest, nil
-}
-
-// templateChart performs the in-process Helm template call under helmRenderMu so
-// that concurrent renders never touch Helm's process-global on-disk caches at the
-// same time (issue #5362). The lock is held only across the cache-touching call;
-// the deferred Unlock keeps it correct even if TemplateChart panics.
-func (r *HelmChartResolver) templateChart(
-	ctx context.Context,
-	spec *helm.ChartSpec,
-) (string, error) {
-	helmRenderMu.Lock()
-	defer helmRenderMu.Unlock()
-
-	//nolint:wrapcheck // the sole caller, Render, wraps this with HelmRelease context
-	return r.helm.TemplateChart(ctx, spec)
 }
 
 // buildChartSpec maps a HelmRelease and the in-stream source objects to a
