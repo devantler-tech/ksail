@@ -404,6 +404,11 @@ func (m *ConfigManager) resolvePathDefaults(ignoreConfigFile bool) error {
 		return fmt.Errorf("failed to resolve source directory path: %w", err)
 	}
 
+	err = m.makeScanExceptionsAbsolute()
+	if err != nil {
+		return fmt.Errorf("failed to resolve scan exceptions path: %w", err)
+	}
+
 	return nil
 }
 
@@ -469,6 +474,23 @@ func (m *ConfigManager) makeSourceDirectoryAbsolute() error {
 	}
 
 	m.Config.Spec.Workload.SourceDirectory = absPath
+
+	return nil
+}
+
+// makeScanExceptionsAbsolute converts the workload scan exceptions path to an
+// absolute path relative to the config file's directory (or the working
+// directory when no config file was used), mirroring makeSourceDirectoryAbsolute.
+// A relative spec.workload.scan.exceptions (e.g. ".kubescape/exceptions.json")
+// then resolves against the ksail.yaml directory regardless of where the command
+// is run from. Empty, absolute, and ~/ paths are returned unchanged.
+func (m *ConfigManager) makeScanExceptionsAbsolute() error {
+	absPath, err := m.makePathAbsolute(m.Config.Spec.Workload.Scan.Exceptions)
+	if err != nil {
+		return err
+	}
+
+	m.Config.Spec.Workload.Scan.Exceptions = absPath
 
 	return nil
 }

@@ -928,6 +928,38 @@ spec:
                     type: object
                   kustomizationFile:
                     type: string
+                  scan:
+                    description: |-
+                      ScanConfig defines configuration for the workload scan command, letting
+                      'ksail workload scan' (no args) act as a turnkey CI gate the same way
+                      spec.workload.validation configures 'ksail workload validate'.
+                    properties:
+                      complianceThreshold:
+                        description: |-
+                          ComplianceThreshold fails the scan when the compliance score is below this
+                          whole-percentage value (0-100). Unset (nil) means no threshold gate. The
+                          --compliance-threshold flag accepts fractional values; this config field is
+                          an integer percentage (the common CI-gate case).
+                        format: int32
+                        type: integer
+                      exceptions:
+                        description: |-
+                          Exceptions is the path to a Kubescape exceptions file forwarded to
+                          Kubescape's --exceptions. It uses Kubescape's native exceptions format (a
+                          JSON array of PostureExceptionPolicy objects) so a repo can suppress
+                          justified, runtime-enforced findings (Kyverno admission mutation, Cilium
+                          network policies, VPA-managed resources) that a static scan cannot see, and
+                          thus gate at complianceThreshold 100. A relative path is resolved against
+                          the ksail.yaml directory.
+                        type: string
+                      frameworks:
+                        description: |-
+                          Frameworks lists the security frameworks to scan against (e.g. nsa, mitre,
+                          cis, pss). Defaults to nsa when unset.
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   sourceDirectory:
                     type: string
                   tag:

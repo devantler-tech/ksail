@@ -25,6 +25,11 @@ type ScanOptions struct {
 	ComplianceThreshold float32
 	// Verbose shows all resources in the output, not just failed ones.
 	Verbose bool
+	// Exceptions is the path to a Kubescape exceptions file (a JSON array of
+	// PostureExceptionPolicy objects). Forwarded to Kubescape's --exceptions to
+	// suppress justified findings. Empty means no exceptions. Loaded from the
+	// local file with no cloud account; the scan stays fully offline.
+	Exceptions string
 }
 
 // Client provides Kubescape security scanning functionality.
@@ -54,6 +59,13 @@ func buildScanInfo(path string, opts *ScanOptions) *cautils.ScanInfo {
 
 	if opts.ComplianceThreshold > 0 {
 		scanInfo.ComplianceThreshold = opts.ComplianceThreshold
+	}
+
+	if opts.Exceptions != "" {
+		// UseExceptions is the field Kubescape's --exceptions flag sets; the
+		// embedded runner loads exceptions from this local file (NewLoadPolicy)
+		// and keeps the scan air-gapped.
+		scanInfo.UseExceptions = opts.Exceptions
 	}
 
 	if len(opts.Frameworks) > 0 {

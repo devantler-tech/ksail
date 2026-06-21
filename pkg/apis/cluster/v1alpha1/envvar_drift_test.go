@@ -39,6 +39,7 @@ func expandedSpecStringFields() []string {
 		"Workload.SourceDirectory",
 		"Workload.Tag",
 		"Workload.KustomizationFile",
+		"Workload.Scan.Exceptions",
 		"Chat.Model",
 	}
 }
@@ -143,6 +144,7 @@ func skippedClusterWorkloadConfigFields() []string {
 		"Workload.Flux.Verify.MatchOIDCIdentity[].Subject",
 		"Workload.Flux.Verify.Provider",
 		"Workload.Flux.Verify.SecretRef.Name",
+		"Workload.Scan.Frameworks[]",
 		"Workload.Validation.SkipKinds[]",
 		"Workload.Watch.Hooks[]",
 	}
