@@ -156,6 +156,10 @@ export interface Capabilities {
   // offer options a backend silently drops. The operator installs components; the local backend does
   // not yet, so it reports false and the component selectors are hidden there.
   componentsInstall: boolean;
+  // plugins is true when the backend serves web-UI plugins (Headlamp-compatible JS bundles) for the
+  // SPA to load. The SPA loads installed plugins and shows the Plugins surface only then. The local
+  // `ksail ui`/desktop backend serves plugins from a local directory; the operator leaves it false.
+  plugins: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -175,6 +179,9 @@ export const fullCapabilities: Capabilities = {
   workloadExec: false,
   clusterStartStop: false,
   componentsInstall: true,
+  // plugins defaults false: an older backend that omits the flag has no plugin endpoints, so the SPA
+  // must not attempt to load plugins or show the Plugins surface there.
+  plugins: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -604,4 +611,33 @@ export function execWebSocketURL(
   }
 
   return `${protocol}//${window.location.host}/api/v1/clusters/${namespace}/${name}/exec?${params.toString()}`;
+}
+
+// PluginInfo describes one installed web-UI plugin the backend serves (see pkg/webui/api/plugins.go).
+// The shape mirrors a Headlamp plugin's package.json metadata plus the entry bundle to load. `name`
+// is the plugin's addressable id (its install-directory segment), used to build asset URLs; `title`
+// is the human-readable display name (falls back to `name`).
+export interface PluginInfo {
+  name: string;
+  title?: string;
+  version?: string;
+  description?: string;
+  homepage?: string;
+  // main is the entry bundle, served at /api/v1/plugins/{name}/{main} (defaults to "main.js").
+  main: string;
+}
+
+// listPlugins fetches the installed web-UI plugins from the backend. Only call it when the backend
+// advertises capabilities.plugins; against a backend without the capability the route is unregistered.
+export function listPlugins(): Promise<{ plugins: PluginInfo[] }> {
+  return request<{ plugins: PluginInfo[] }>("/api/v1/plugins");
+}
+
+// pluginAssetURL builds the same-origin URL a plugin's asset (its entry bundle or a sibling file) is
+// served from. The plugin loader injects the entry bundle as a classic <script src> pointing here —
+// same-origin, so it loads under the strict CSP without 'unsafe-eval' (unlike Headlamp's Function
+// loader). The plugin id is URL-encoded; the file path is left intact so a plugin can reference
+// sub-path assets (the backend enforces the file stays within the plugin directory).
+export function pluginAssetURL(name: string, file: string): string {
+  return `/api/v1/plugins/${encodeURIComponent(name)}/${file}`;
 }

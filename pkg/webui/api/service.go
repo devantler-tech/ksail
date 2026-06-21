@@ -154,6 +154,12 @@ type Capabilities struct {
 	// options a backend silently drops. The operator installs components via its reconciler; the local
 	// backend does not yet, so it leaves this false (the form then hides the component selectors).
 	ComponentsInstall bool `json:"componentsInstall"`
+	// Plugins reports whether the backend serves web-UI plugins (Headlamp-compatible JS bundles) for
+	// the SPA to load — true exactly when the serving ClusterService implements PluginService. The SPA
+	// loads installed plugins and shows the Plugins surface only then. The local `ksail ui`/desktop
+	// backend serves plugins from a local directory; the operator leaves it false (in-cluster plugin
+	// serving is deferred), so the routes are not registered and the Plugins surface stays hidden.
+	Plugins bool `json:"plugins"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

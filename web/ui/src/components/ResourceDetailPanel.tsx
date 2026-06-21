@@ -8,6 +8,7 @@ import {
   type ResourceAction,
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
+import { PluginDetailSections } from "../lib/plugins/PluginSlots.tsx";
 import type { ResourceKindLists } from "../lib/meta.ts";
 import { buildResourceTarget, objectConditions, toYaml } from "../lib/resources.ts";
 import type { EventFields } from "../lib/k8s.ts";
@@ -241,6 +242,9 @@ export function ResourceDetailPanel({
           ) : null}
           <ConditionsTable obj={selected} />
           <RelatedEvents events={relatedEvents} />
+          {/* Plugin-contributed detail sections (Headlamp registerDetailsViewSection). Renders nothing
+              until a plugin registers a section, so this is zero-cost by default. */}
+          <PluginDetailSections resource={selected} />
           <section>
             <div className="mb-2 flex items-center justify-between">
               <SegmentedControl

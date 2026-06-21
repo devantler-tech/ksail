@@ -1,5 +1,5 @@
 import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
-import { Lock, LogOut, Menu as MenuIcon, Moon, Search, Sun } from "lucide-react";
+import { Lock, LogOut, Menu as MenuIcon, Moon, Puzzle, Search, Sun } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
@@ -7,6 +7,15 @@ import { clusterViews, globalViews, viewTitle, type RegisteredView, type View, t
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
 import { IconButton } from "./ui.tsx";
+
+// PluginNavEntry is a plugin-contributed sidebar item (rendered in the Plugins nav zone). It carries
+// the route the entry navigates to and a stable id/label; the icon is uniform (a puzzle piece) so the
+// zone reads as plugin-provided.
+export interface PluginNavEntry {
+  id: string;
+  label: string;
+  route: string;
+}
 
 // isMacLike picks the platform-appropriate shortcut hint for the search button (the handler accepts
 // both ⌘K and Ctrl+K regardless; this only affects the displayed kbd).
@@ -71,9 +80,13 @@ export function AppShell({
   settingsEnabled,
   workloadEnabled,
   secretsEnabled,
+  pluginsEnabled,
   surfaceLabel,
   onOpenCommandPalette,
   headerActions,
+  pluginEntries,
+  activePluginRoute,
+  onSelectPlugin,
   children,
 }: {
   theme: Theme;
@@ -90,16 +103,34 @@ export function AppShell({
   settingsEnabled: boolean;
   workloadEnabled: boolean;
   secretsEnabled: boolean;
+  pluginsEnabled: boolean;
   surfaceLabel: string;
   onOpenCommandPalette?: () => void;
   headerActions?: ReactNode;
+  // pluginEntries are plugin-contributed sidebar items; activePluginRoute marks which one (if any) is
+  // open so its content renders in place of a view; onSelectPlugin navigates to a plugin route.
+  pluginEntries?: PluginNavEntry[];
+  activePluginRoute?: string | null;
+  onSelectPlugin?: (route: string) => void;
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // gates feed the registry's per-view availability predicates. AppShell only ever shows the cluster
   // zone when a cluster is active (see navContent), so the cluster-scope gate is always satisfied here.
-  const gates: ViewGates = { activeCluster: true, workloadEnabled, secretsEnabled, settingsEnabled };
+  const gates: ViewGates = {
+    activeCluster: true,
+    workloadEnabled,
+    secretsEnabled,
+    settingsEnabled,
+    pluginsEnabled,
+  };
+
+  // headerTitle shows the active plugin route's label when one is open, else the current view's title.
+  const activePluginLabel = activePluginRoute
+    ? pluginEntries?.find((entry) => entry.route === activePluginRoute)?.label
+    : undefined;
+  const headerTitle = activePluginLabel ?? viewTitle(view);
 
   // renderNav renders the enabled views from one registry partition (cluster or global), in registry
   // order. Overview is always enabled for an active cluster (its spec/status/conditions come from the
@@ -123,7 +154,7 @@ export function AppShell({
 
   // navContent renders the two zones — the cluster workspace (switcher + scoped nav, only when a
   // cluster is active) above the always-present global zone. onPick lets the drawer close on navigate.
-  const navContent = (onPick: (next: View) => void) => (
+  const navContent = (onPick: (next: View) => void, onPickPlugin: (route: string) => void) => (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-3">
       {activeClusterKey ? (
         <>
@@ -136,6 +167,21 @@ export function AppShell({
         </>
       ) : null}
       {renderNav(globalViews, onPick)}
+      {pluginEntries && pluginEntries.length > 0 ? (
+        <>
+          <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
+          <SectionLabel>Plugins</SectionLabel>
+          {pluginEntries.map((entry) => (
+            <NavItem
+              key={entry.id}
+              icon={<Puzzle className="size-4" aria-hidden />}
+              label={entry.label}
+              active={activePluginRoute === entry.route}
+              onClick={() => onPickPlugin(entry.route)}
+            />
+          ))}
+        </>
+      ) : null}
     </nav>
   );
 
@@ -155,7 +201,7 @@ export function AppShell({
       {/* Persistent sidebar at md+; replaced by the drawer below md. */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-slate-800 dark:bg-slate-900">
         <Brand />
-        {navContent(onNavigate)}
+        {navContent(onNavigate, (route) => onSelectPlugin?.(route))}
         {footer}
       </aside>
 
@@ -185,10 +231,16 @@ export function AppShell({
             >
               <DialogPanel className="flex w-72 max-w-[85%] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <Brand />
-                {navContent((next) => {
-                  onNavigate(next);
-                  setDrawerOpen(false);
-                })}
+                {navContent(
+                  (next) => {
+                    onNavigate(next);
+                    setDrawerOpen(false);
+                  },
+                  (route) => {
+                    onSelectPlugin?.(route);
+                    setDrawerOpen(false);
+                  },
+                )}
                 {footer}
               </DialogPanel>
             </TransitionChild>
@@ -203,7 +255,7 @@ export function AppShell({
               <MenuIcon className="size-5" />
             </IconButton>
             <h1 className="truncate text-sm font-semibold text-slate-900 md:text-base dark:text-white">
-              {viewTitle(view)}
+              {headerTitle}
             </h1>
             {readOnly ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30">
