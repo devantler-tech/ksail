@@ -22,6 +22,17 @@ If no path is provided, the path is resolved in order:
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
   3. The current directory (fallback when no ksail.yaml config file is found)
 
+Exceptions: pass --exceptions <file> to forward a Kubescape exceptions file (a JSON
+array of PostureExceptionPolicy objects) so justified, runtime-enforced findings
+(e.g. Kyverno admission mutation, Cilium network policies, VPA-managed resources) are
+suppressed and --compliance-threshold 100 can gate CI. The file loads locally with no
+cloud account and the scan stays offline.
+
+The frameworks, exceptions file, and compliance threshold can also be set under
+spec.workload.scan in ksail.yaml so 'ksail workload scan' (no args) is a turnkey CI
+gate; a relative exceptions path resolves against the ksail.yaml directory and CLI
+flags override the config.
+
 Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
 Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
 
@@ -31,9 +42,10 @@ Usage:
   ksail workload scan [PATH] [flags]
 
 Flags:
-      --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
+      --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
+      --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
-      --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
+      --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
       --no-render                      Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
   -o, --output string                  Output file path (stdout if empty)
       --verbose                        Show all resources in output, not just failed ones

@@ -128,6 +128,25 @@ func TestBuildScanInfoFrameworks(t *testing.T) {
 	}
 }
 
+// TestBuildScanInfoExceptions asserts a non-empty Exceptions path is forwarded to
+// UseExceptions (the field Kubescape's --exceptions flag sets) and that an empty
+// Exceptions leaves UseExceptions untouched.
+func TestBuildScanInfoExceptions(t *testing.T) {
+	t.Parallel()
+
+	const exceptionsPath = "/tmp/exceptions.json"
+
+	info := kubescape.BuildScanInfo(testPath, &kubescape.ScanOptions{Exceptions: exceptionsPath})
+	if info.UseExceptions != exceptionsPath {
+		t.Errorf("expected UseExceptions %q, got %q", exceptionsPath, info.UseExceptions)
+	}
+
+	empty := kubescape.BuildScanInfo(testPath, &kubescape.ScanOptions{})
+	if empty.UseExceptions != "" {
+		t.Errorf("expected empty UseExceptions, got %q", empty.UseExceptions)
+	}
+}
+
 // TestScanDirectoryNilOptionsCancelledContext asserts that nil options are
 // tolerated (defaulted) and that a cancelled context short-circuits the scan
 // with a wrapped context error before any kubescape runner is constructed.

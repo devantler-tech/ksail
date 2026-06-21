@@ -1572,7 +1572,7 @@ workload_write
       },
       "compliance-threshold": {
         "default": 0,
-        "description": "Fail if compliance score is below this threshold (0-100) (applies to: scan)",
+        "description": "Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml) (applies to: scan)",
         "type": "number"
       },
       "container": {
@@ -1636,6 +1636,10 @@ workload_write
         "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
         "type": "string"
       },
+      "exceptions": {
+        "description": "Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml) (applies to: scan)",
+        "type": "string"
+      },
       "export": {
         "description": "export in YAML format to stdout (applies to: gen_helmrelease)",
         "type": "boolean"
@@ -1680,7 +1684,7 @@ workload_write
         "default": [
           "nsa"
         ],
-        "description": "Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (applies to: scan)",
+        "description": "Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (applies to: scan)",
         "items": {
           "type": "string"
         },

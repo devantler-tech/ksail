@@ -1047,6 +1047,43 @@ spec:
 }
 
 //nolint:paralleltest // Cannot use t.Parallel() because test changes directories using t.Chdir()
+func TestManager_readConfigurationFile_ScanExceptionsAbsolute(t *testing.T) {
+	// Cannot use t.Parallel() because test changes directories using t.Chdir()
+
+	// A relative spec.workload.scan.exceptions must be made absolute relative to
+	// the config file's directory (mirroring sourceDirectory) so the path works
+	// regardless of where 'ksail workload scan' is run from.
+	configContent := `
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+  workload:
+    scan:
+      exceptions: .kubescape/exceptions.json
+`
+
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "ksail.yaml")
+
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	fieldSelectors := createFieldSelectorsWithName()
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
+
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, cluster)
+
+	expectedExceptions := filepath.Join(tempDir, ".kubescape", "exceptions.json")
+	assert.Equal(t, expectedExceptions, cluster.Spec.Workload.Scan.Exceptions)
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() because test changes directories using t.Chdir()
 func TestLoadConfig_ValidationFailureOutputs(t *testing.T) {
 	// Cannot use t.Parallel() because test changes directories using t.Chdir()
 	tempDir := t.TempDir()
