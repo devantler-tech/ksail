@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/oidc"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster/oidc"
 	oidcsvc "github.com/devantler-tech/ksail/v7/pkg/svc/oidc"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -96,7 +96,7 @@ func TestTryFromCache_ExpiredWithoutRefresh(t *testing.T) {
 }
 
 // TestGetTokenCmd_CachedValidTokenOutputsExecCredential drives the full
-// `oidc get-token` command through its cache-hit happy path and asserts it emits
+// `cluster oidc get-token` command through its cache-hit happy path and asserts it emits
 // a valid client.authentication.k8s.io/v1 ExecCredential on stdout — the exact
 // contract kubectl relies on. It is deterministic and network-free because the
 // cached token is unexpired. Not parallel: it isolates HOME and captures the

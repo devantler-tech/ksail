@@ -42,16 +42,16 @@ func configureOIDCKubeconfig(
 		clusterEntryName = contextName
 	}
 
-	oidc := &clusterCfg.Spec.Cluster.OIDC
+	oidcCfg := &clusterCfg.Spec.Cluster.OIDC
 
 	err = k8s.AddOIDCKubeconfigEntries(&k8s.OIDCExecConfig{
 		KubeconfigPath:   kubeconfigPath,
 		ClusterEntryName: clusterEntryName,
 		DisplayName:      displayName,
-		IssuerURL:        oidc.IssuerURL,
-		ClientID:         oidc.ClientID,
-		ExtraScopes:      oidc.ExtraScopes,
-		CAFile:           oidc.CAFile,
+		IssuerURL:        oidcCfg.IssuerURL,
+		ClientID:         oidcCfg.ClientID,
+		ExtraScopes:      oidcCfg.ExtraScopes,
+		CAFile:           oidcCfg.CAFile,
 	}, cmd.OutOrStdout())
 	if err != nil {
 		return fmt.Errorf("failed to add OIDC kubeconfig entries: %w", err)
