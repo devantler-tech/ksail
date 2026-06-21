@@ -9,7 +9,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -153,16 +152,7 @@ func TestClusterCmd_RegistersDiagnoseSubcommand(t *testing.T) {
 	clusterCmd := cluster.NewClusterCmd()
 	require.NotNil(t, clusterCmd)
 
-	var diagnoseCmd *cobra.Command
-
-	for _, sub := range clusterCmd.Commands() {
-		if sub.Name() == "diagnose" {
-			diagnoseCmd = sub
-
-			break
-		}
-	}
-
+	diagnoseCmd := findClusterSubcommand(clusterCmd, "diagnose")
 	require.NotNil(t, diagnoseCmd, "expected 'diagnose' subcommand to be registered")
 }
 
