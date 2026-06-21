@@ -153,9 +153,14 @@ function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
       const [items, setItems] = React.useState<PluginResource[]>([]);
       const [error, setError] = React.useState<Error | null>(null);
 
+      // Read the active cluster during render and key the effect on it, so the list re-fetches when the
+      // user switches clusters — not only when the kind/namespace arguments change.
+      const cluster = getCluster();
+      const clusterName = cluster?.name ?? null;
+      const clusterNamespace = cluster?.namespace ?? null;
+
       React.useEffect(() => {
-        const cluster = getCluster();
-        if (!cluster) {
+        if (clusterName === null || clusterNamespace === null) {
           setItems([]);
 
           return undefined;
@@ -163,7 +168,7 @@ function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
 
         let active = true;
 
-        listResources(cluster.namespace, cluster.name, kind, namespace)
+        listResources(clusterNamespace, clusterName, kind, namespace)
           .then((list) => {
             if (active) {
               setItems(list.items ?? []);
@@ -178,7 +183,7 @@ function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
         return () => {
           active = false;
         };
-      }, [kind, namespace]);
+      }, [kind, namespace, clusterName, clusterNamespace]);
 
       return [items, error];
     },

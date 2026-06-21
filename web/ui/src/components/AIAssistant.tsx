@@ -148,7 +148,8 @@ function applyChatEvent(
   }
 
   if (event.type === "tool" && event.text) {
-    appendToAssistant(setMessages, `\n\n_Running ${event.text}…_\n\n`);
+    // Messages render as plain text, so use a plain marker (not markdown italics) for the tool notice.
+    appendToAssistant(setMessages, `\n\n→ Running ${event.text}…\n\n`);
   }
 }
 

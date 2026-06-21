@@ -33,6 +33,7 @@ export async function loadPlugins(getCluster: () => ClusterRef | null): Promise<
   }
 
   registry.reset();
+  removePriorPluginScripts();
 
   const { plugins } = await listPlugins();
   const results: LoadedPlugin[] = [];
@@ -54,6 +55,15 @@ export async function loadPlugins(getCluster: () => ClusterRef | null): Promise<
   }
 
   return results;
+}
+
+// removePriorPluginScripts removes the <script> elements a previous load injected, so reloading does
+// not accumulate dead script tags. The prior bundles already executed; their registrations were just
+// cleared by registry.reset, and the fresh load re-injects current scripts below.
+function removePriorPluginScripts(): void {
+  document.querySelectorAll('script[data-ksail-plugin="true"]').forEach((element) => {
+    element.remove();
+  });
 }
 
 // loadScript injects a same-origin classic <script src> and resolves when it has loaded and executed

@@ -185,12 +185,14 @@ func streamTurn(
 		return errTurnTimeout
 	}
 
-	emit(api.ChatEvent{Type: api.ChatEventDone})
-
+	// Surface a session error instead of a normal completion; emit done only on a clean turn so the
+	// client never sees a done frame immediately followed by an error frame.
 	select {
 	case turnErr := <-errCh:
 		return turnErr
 	default:
+		emit(api.ChatEvent{Type: api.ChatEventDone})
+
 		return nil
 	}
 }
