@@ -28,6 +28,11 @@ import { OverviewView } from "./components/OverviewView.tsx";
 import { EventsView } from "./components/EventsView.tsx";
 import { CommandPalette, type Command } from "./components/CommandPalette.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
+import { PluginsView } from "./components/PluginsView.tsx";
+import { AIAssistant } from "./components/AIAssistant.tsx";
+import { PluginRouteHost } from "./lib/plugins/PluginSlots.tsx";
+import { registry } from "./lib/plugins/registry.ts";
+import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
 import {
   ClusterFormDialog,
   specFromValues,
@@ -74,6 +79,8 @@ export function App() {
   const [view, setView] = useState<View>("clusters");
   // paletteOpen controls the ⌘K command palette overlay.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // activePluginRoute is the plugin route currently open; its content replaces the view's. null = none.
+  const [activePluginRoute, setActivePluginRoute] = useState<string | null>(null);
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,11 +127,35 @@ export function App() {
   // providerStatus gates the create form's provider options. null = backend does not gate (operator).
   const providerStatus = config?.providers ?? null;
   const settingsEnabled = config?.settingsEnabled ?? false;
+  // canPlugins gates the Plugins view and plugin loading on the backend serving UI plugins.
+  const canPlugins = capability(config, "plugins");
+  // canAIChat gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
+  const canAIChat = capability(config, "aiChat");
   const mode = config?.mode;
+
+  // getCluster resolves the active cluster's namespace/name for plugins' Kubernetes data shim (read
+  // live by the shim on each fetch), or null when no cluster is drilled into.
+  const getCluster = useCallback(
+    () =>
+      activeCluster
+        ? { namespace: activeCluster.metadata.namespace ?? "default", name: activeCluster.metadata.name }
+        : null,
+    [activeCluster],
+  );
+  // Subscribe to extension-registry changes so the sidebar reflects plugin-registered entries, and load
+  // installed plugins once the backend advertises the capability.
+  usePluginRegistry();
+  const pluginLoader = usePluginLoader(canPlugins, getCluster);
+  const pluginEntries = registry.getSidebarEntries().map((entry) => ({
+    id: entry.id,
+    label: entry.label,
+    route: entry.route,
+  }));
 
   // enterCluster drills into a cluster's workspace, landing on its Overview. Used by the Clusters list,
   // deep links, and the command palette.
   const enterCluster = useCallback((key: string) => {
+    setActivePluginRoute(null);
     setActiveClusterKey(key);
     setView("overview");
   }, []);
@@ -133,8 +164,21 @@ export function App() {
   // cluster-scoped view (so switching while on Resources stays on Resources); otherwise lands on
   // Overview.
   const selectCluster = useCallback((key: string) => {
+    setActivePluginRoute(null);
     setActiveClusterKey(key);
     setView((current) => (CLUSTER_VIEW_IDS.includes(current) ? current : "overview"));
+  }, []);
+
+  // navigateView switches the top-level view, clearing any open plugin route so the view's content
+  // shows (a plugin route otherwise renders in place of the view).
+  const navigateView = useCallback((next: View) => {
+    setActivePluginRoute(null);
+    setView(next);
+  }, []);
+
+  // selectPlugin opens a plugin route; its content replaces the current view until a view is chosen.
+  const selectPlugin = useCallback((route: string) => {
+    setActivePluginRoute(route);
   }, []);
 
   // Clear the cluster context when the active cluster disappears from the live list (e.g. deleted),
@@ -433,6 +477,8 @@ export function App() {
     workloadEnabled: canBrowse,
     secretsEnabled: canCipher,
     settingsEnabled,
+    pluginsEnabled: canPlugins,
+    aiChatEnabled: canAIChat,
   };
 
   // navCommands derives the palette's "Go to <view>" entries from the same view registry the sidebar
@@ -446,7 +492,7 @@ export function App() {
       label: `Go to ${entry.title}`,
       hint: "Navigate",
       icon: <Icon className="size-4" aria-hidden />,
-      run: () => setView(entry.id),
+      run: () => navigateView(entry.id),
     };
   });
 
@@ -461,7 +507,7 @@ export function App() {
       hint: "Action",
       icon: <RotateCw className="size-4" aria-hidden />,
       run: () => {
-        setView("clusters");
+        navigateView("clusters");
         void refresh();
       },
     },
@@ -498,19 +544,38 @@ export function App() {
         onLogout={() => void logout().finally(() => setNeedsLogin(true))}
         readOnly={readOnly}
         view={view}
-        onNavigate={setView}
+        onNavigate={navigateView}
         clusters={clusters}
         activeClusterKey={activeClusterKey}
         onSelectCluster={selectCluster}
         settingsEnabled={settingsEnabled}
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
+        pluginsEnabled={canPlugins}
+        aiChatEnabled={canAIChat}
         surfaceLabel={surfaceLabel(mode)}
         onOpenCommandPalette={() => setPaletteOpen(true)}
         headerActions={headerActions}
+        pluginEntries={pluginEntries}
+        activePluginRoute={activePluginRoute}
+        onSelectPlugin={selectPlugin}
       >
-        {view === "settings" ? (
+        {activePluginRoute ? (
+          <PluginRouteHost path={activePluginRoute} clusterName={activeCluster?.metadata.name ?? null} />
+        ) : view === "settings" ? (
           <SettingsPage onSaved={() => void reloadConfig()} />
+        ) : view === "plugins" ? (
+          <PluginsView
+            plugins={pluginLoader.plugins}
+            loading={pluginLoader.loading}
+            error={pluginLoader.error}
+            onReload={pluginLoader.reload}
+          />
+        ) : view === "assistant" ? (
+          <AIAssistant
+            clusterName={activeCluster?.metadata.name ?? null}
+            namespace={activeCluster?.metadata.namespace ?? null}
+          />
         ) : view === "secrets" ? (
           <SecretsView />
         ) : view === "overview" ? (

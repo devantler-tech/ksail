@@ -71,6 +71,8 @@ var (
 	_ api.ClusterService             = (*Service)(nil)
 	_ api.ClusterLifecycleController = (*Service)(nil)
 	_ api.ComponentInstaller         = (*Service)(nil)
+	_ api.PluginService              = (*Service)(nil)
+	_ api.ChatService                = (*Service)(nil)
 )
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
@@ -115,6 +117,15 @@ type Service struct {
 	// kubeconfig instead of the user's real one.
 	kubeconfigPath func() string
 
+	// plugins serves web-UI plugins from a local directory (~/.ksail/plugins), satisfying
+	// api.PluginService so `ksail ui` can load Headlamp-compatible extensions. Its dir seam is
+	// injectable for tests.
+	plugins pluginStore
+
+	// chat powers the web UI's AI assistant (api.ChatService). It is wired in by the `ksail ui` command
+	// (UseChat) so the Copilot dependency stays out of the core service; nil means unavailable.
+	chat chatRunner
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
@@ -125,6 +136,7 @@ func NewService() *Service {
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
+		plugins:           pluginStore{dir: defaultPluginsDir},
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{

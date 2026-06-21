@@ -1,0 +1,178 @@
+// The extension registry is KSail's native home for UI extensions. Both KSail-native extensions and
+// (via the Headlamp-compat pluginLib) third-party Headlamp plugins register into this one registry, so
+// the rest of the SPA renders extensions without knowing their origin. This is the "native registry +
+// Headlamp-compat facade" design from docs/BEST-KUBERNETES-UI-PLAN.md: pluginLib.ts adapts Headlamp's
+// register*() call shapes onto the methods here.
+//
+// Rendering status today: sidebar entries, routes, and details-view sections are rendered by the SPA;
+// app-bar actions and table-column processors are accepted (so a plugin calling them does not crash)
+// but not yet rendered — see PluginsView's staged notice. Holding them here means wiring them later
+// needs no plugin change.
+
+import type { ComponentType, ReactNode } from "react";
+
+// SidebarEntry is a plugin-contributed nav item shown in the AppShell's Plugins zone. Clicking it
+// navigates to its route (a registerRoute with the same `route` path renders the content).
+export interface SidebarEntry {
+  // id is the entry's stable identity (Headlamp's sidebar `name`).
+  id: string;
+  label: string;
+  // route is the path the entry navigates to (Headlamp's `url`); a matching PluginRoute renders it.
+  route: string;
+  // icon is an optional React node (an inline <svg> or an icon element); a default is shown if absent.
+  icon?: ReactNode;
+  // pluginName attributes the entry to the plugin that registered it (set by the loader).
+  pluginName?: string;
+}
+
+// RouteProps are passed to a plugin route's component so it can scope its data to the active cluster.
+export interface RouteProps {
+  // clusterName is the active cluster's name, or null on a global route (no cluster drilled into).
+  clusterName: string | null;
+}
+
+// PluginRoute renders a component for a sidebar entry's `route` path.
+export interface PluginRoute {
+  path: string;
+  component: ComponentType<RouteProps>;
+  pluginName?: string;
+}
+
+// PluginResource is a loose view of a Kubernetes object handed to a details-view section. Plugins read
+// whatever fields they need; the rest is passthrough.
+export interface PluginResource {
+  apiVersion?: string;
+  kind?: string;
+  metadata?: { name?: string; namespace?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+// DetailsViewSection renders extra content appended to a resource's detail panel (Headlamp's
+// registerDetailsViewSection). `render` returns a node for the resource, or null to contribute nothing
+// (e.g. a section that only applies to Pods).
+export interface DetailsViewSection {
+  id: string;
+  render: (resource: PluginResource) => ReactNode;
+  pluginName?: string;
+}
+
+// AppBarAction and ResourceTableColumnProcessor are registered for Headlamp API completeness (so a
+// plugin calling them does not crash) but are not yet rendered by the SPA. They are retained so wiring
+// them later needs no plugin change.
+export interface AppBarAction {
+  id: string;
+  render: () => ReactNode;
+  pluginName?: string;
+}
+
+export interface ResourceTableColumnProcessor {
+  id: string;
+  // process may transform the column set (Headlamp parity). Columns are opaque until rendering lands.
+  process: (info: { columns: unknown[] }) => unknown[];
+  pluginName?: string;
+}
+
+type Listener = () => void;
+
+// ExtensionRegistry holds all registered extensions and notifies subscribers (via a monotonic version)
+// when the set changes, so React surfaces re-render through useSyncExternalStore without snapshot churn.
+class ExtensionRegistry {
+  private sidebarEntries: SidebarEntry[] = [];
+  private routes = new Map<string, PluginRoute>();
+  private detailsSections: DetailsViewSection[] = [];
+  private appBarActions: AppBarAction[] = [];
+  private columnProcessors: ResourceTableColumnProcessor[] = [];
+  private listeners = new Set<Listener>();
+  private version = 0;
+  // pluginContext is the plugin currently loading, so register*() calls attribute entries to it.
+  private pluginContext: string | undefined;
+
+  // setPluginContext marks which plugin's bundle is executing, so registrations made during its load
+  // are attributed to it. The loader sets it before injecting a plugin's script and clears it after.
+  setPluginContext(name: string | undefined): void {
+    this.pluginContext = name;
+  }
+
+  registerSidebarEntry(entry: SidebarEntry): void {
+    const next = { ...entry, pluginName: entry.pluginName ?? this.pluginContext };
+    this.sidebarEntries = [...this.sidebarEntries.filter((existing) => existing.id !== entry.id), next];
+    this.bump();
+  }
+
+  registerRoute(route: PluginRoute): void {
+    this.routes.set(route.path, { ...route, pluginName: route.pluginName ?? this.pluginContext });
+    this.bump();
+  }
+
+  registerDetailsViewSection(section: DetailsViewSection): void {
+    const next = { ...section, pluginName: section.pluginName ?? this.pluginContext };
+    this.detailsSections = [...this.detailsSections.filter((existing) => existing.id !== section.id), next];
+    this.bump();
+  }
+
+  registerAppBarAction(action: AppBarAction): void {
+    const next = { ...action, pluginName: action.pluginName ?? this.pluginContext };
+    this.appBarActions = [...this.appBarActions.filter((existing) => existing.id !== action.id), next];
+    this.bump();
+  }
+
+  registerResourceTableColumnsProcessor(processor: ResourceTableColumnProcessor): void {
+    const next = { ...processor, pluginName: processor.pluginName ?? this.pluginContext };
+    this.columnProcessors = [
+      ...this.columnProcessors.filter((existing) => existing.id !== processor.id),
+      next,
+    ];
+    this.bump();
+  }
+
+  getSidebarEntries(): readonly SidebarEntry[] {
+    return this.sidebarEntries;
+  }
+
+  getRoute(path: string): PluginRoute | undefined {
+    return this.routes.get(path);
+  }
+
+  getDetailsSections(): readonly DetailsViewSection[] {
+    return this.detailsSections;
+  }
+
+  getAppBarActions(): readonly AppBarAction[] {
+    return this.appBarActions;
+  }
+
+  // getVersion is the useSyncExternalStore snapshot: a primitive that changes on every mutation, so
+  // subscribers re-render while reading the (mutable) getters above directly in render.
+  getVersion(): number {
+    return this.version;
+  }
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  // reset clears every registration. The loader calls it before a fresh load so reloading reflects the
+  // current installed set rather than accumulating duplicates across reloads.
+  reset(): void {
+    this.sidebarEntries = [];
+    this.routes = new Map();
+    this.detailsSections = [];
+    this.appBarActions = [];
+    this.columnProcessors = [];
+    this.bump();
+  }
+
+  private bump(): void {
+    this.version += 1;
+    this.listeners.forEach((listener) => {
+      listener();
+    });
+  }
+}
+
+// registry is the single app-wide extension registry instance.
+export const registry = new ExtensionRegistry();

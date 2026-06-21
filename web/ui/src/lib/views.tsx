@@ -1,4 +1,14 @@
-import { Activity, KeyRound, Layers, LayoutDashboard, Server, Settings, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  KeyRound,
+  Layers,
+  LayoutDashboard,
+  Puzzle,
+  Server,
+  Settings,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 
 // The view registry is the single source of truth for the SPA's top-level sections: their title,
 // nav/palette icon, scope, and availability gate. AppShell's sidebar nav, the command palette, the
@@ -22,6 +32,10 @@ export interface ViewGates {
   secretsEnabled: boolean;
   // settingsEnabled gates the Settings view on the backend's credential-settings endpoints.
   settingsEnabled: boolean;
+  // pluginsEnabled gates the Plugins view on the backend's plugins capability (it serves UI plugins).
+  pluginsEnabled: boolean;
+  // aiChatEnabled gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
+  aiChatEnabled: boolean;
 }
 
 // ViewDef is one registry entry. `enabled` encodes only the view's capability gate; the cluster-scope
@@ -44,6 +58,8 @@ export const VIEWS = [
   { id: "resources", title: "Resources", icon: Layers, scope: "cluster", enabled: (g) => g.workloadEnabled },
   { id: "events", title: "Events", icon: Activity, scope: "cluster", enabled: (g) => g.workloadEnabled },
   { id: "secrets", title: "Secrets", icon: KeyRound, scope: "global", enabled: (g) => g.secretsEnabled },
+  { id: "assistant", title: "Assistant", icon: Sparkles, scope: "global", enabled: (g) => g.aiChatEnabled },
+  { id: "plugins", title: "Plugins", icon: Puzzle, scope: "global", enabled: (g) => g.pluginsEnabled },
   { id: "settings", title: "Settings", icon: Settings, scope: "global", enabled: (g) => g.settingsEnabled },
 ] as const satisfies readonly ViewDef[];
 
