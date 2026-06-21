@@ -20,11 +20,11 @@ const (
 
 // hydrateLoginShellEnv imports environment variables from the user's interactive login shell when
 // the app is launched from the macOS GUI (Finder, Dock, Spotlight, or `open -a KSail`, which is how
-// the `ksail desktop` command starts it). Such launches go through LaunchServices/launchd, which do
+// the `ksail open desktop` command starts it). Such launches go through LaunchServices/launchd, which do
 // not source the user's shell profile, so variables exported there — HCLOUD_TOKEN,
 // OMNI_SERVICE_ACCOUNT_KEY, KUBECONFIG, PATH additions, … — are missing. The cluster providers that
 // depend on them then silently report nothing (e.g. Hetzner clusters never appear), even though
-// `ksail ui` from a terminal works because the shell already exported them.
+// `ksail open web` from a terminal works because the shell already exported them.
 //
 // Variables already present are never overwritten (PATH is merged), so it is effectively a no-op
 // when the environment is already populated. It is skipped entirely unless the process was launched

@@ -186,7 +186,7 @@ Alternatively, use environment variable placeholders in a shared `ksail.yaml`. F
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption via `ksail cipher <file>` (age, PGP, cloud KMS). See [Secret Management](/features/secret-management/).
+KSail includes **SOPS** for secret encryption via `ksail workload cipher <file>` (age, PGP, cloud KMS). See [Secret Management](/features/secret-management/).
 
 ### Are my credentials stored securely?
 

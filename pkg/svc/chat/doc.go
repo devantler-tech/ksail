@@ -8,8 +8,9 @@
 //     instructions into system prompt sections for the AI assistant.
 //   - Tool generation: Exposes the CLI command tree as Copilot tools via
 //     pkg/toolgen, which consolidates commands into permission-split tools
-//     (cluster_read, cluster_write, workload_read, workload_write,
-//     tenant_write, and cipher_write).
+//     (cluster_read, cluster_write, workload_read, workload_write, and
+//     tenant_write). The cipher subcommands are nested under workload, so
+//     they fold into workload_write.
 //   - Interaction handlers: Permission and elicitation handlers for the
 //     non-TUI chat frontend, auto-approving reads and prompting the user
 //     before write operations.

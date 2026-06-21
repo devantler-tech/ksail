@@ -121,7 +121,7 @@ export interface ProviderInfo {
 }
 
 // Capabilities reports which optional operations the serving backend supports so the SPA can gate
-// affordances it cannot fulfill. The local `ksail ui`/desktop backend manages cluster configuration
+// affordances it cannot fulfill. The local `ksail open web`/desktop backend manages cluster configuration
 // via files and reports clusterUpdate=false (the SPA then hides the edit affordance); the operator
 // patches the Cluster CR and reports true. New flags are added here as the UI surface grows.
 export interface Capabilities {

@@ -60,7 +60,7 @@ function FormatSelect({ value, onChange }: { value: string; onChange: (value: st
 
 // SecretsView is a local SOPS tool: encrypt a plaintext document for an age recipient, and decrypt a
 // SOPS document with the local age keys. Shown only when the backend advertises secretsCipher (the
-// local `ksail ui`/desktop backend); the operator has no local keys.
+// local `ksail open web`/desktop backend); the operator has no local keys.
 export function SecretsView() {
   const toast = useToast();
   const [recipients, setRecipients] = useState<string[]>([]);

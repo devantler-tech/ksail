@@ -63,7 +63,7 @@ export function ClustersTable({
   clusters: Cluster[];
   readOnly: boolean;
   // canEdit gates the per-row edit button independently of delete: a backend may allow delete but
-  // not in-place update (the local `ksail ui`/desktop backend), so edit is hidden while delete stays.
+  // not in-place update (the local `ksail open web`/desktop backend), so edit is hidden while delete stays.
   canEdit: boolean;
   onSelect: (cluster: Cluster) => void;
   onEdit: (cluster: Cluster) => void;

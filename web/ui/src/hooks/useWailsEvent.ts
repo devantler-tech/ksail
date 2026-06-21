@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 // WAILS_RUNTIME_PATH is the Wails v3 runtime served by the desktop AssetServer. Held in a variable (not
 // a literal) so the bundler treats it as a runtime-only dynamic import — it does not exist on the
-// browser surfaces (operator / `ksail ui`) and resolves only inside the Wails webview.
+// browser surfaces (operator / `ksail open web`) and resolves only inside the Wails webview.
 const WAILS_RUNTIME_PATH = "/wails/runtime.js";
 
 type WailsRuntimeEvent = { data: unknown };

@@ -26,7 +26,7 @@ const (
 
 // ToolOptions configures tool generation behavior.
 type ToolOptions struct {
-	// ExcludeCommands is a list of command paths to exclude (e.g., "ksail chat").
+	// ExcludeCommands is a list of command paths to exclude (e.g., "ksail open chat").
 	ExcludeCommands []string
 	// ExcludeFlags is a list of flag names to exclude from tool schemas.
 	// These flags still work at runtime — they're just hidden from the AI schema
@@ -99,15 +99,16 @@ type OutputChunk struct {
 
 // DefaultOptions returns sensible default options for tool generation.
 // With permission-based consolidation, commands are grouped by their permission
-// annotations (read vs write) and scope (cluster, workload, tenant, cipher) so that
-// many individual commands collapse into 6 consolidated tools: cluster_read,
-// cluster_write, workload_read, workload_write, tenant_write, and cipher_write.
+// annotations (read vs write) and scope (cluster, workload, tenant) so that
+// many individual commands collapse into 5 consolidated tools: cluster_read,
+// cluster_write, workload_read, workload_write, and tenant_write. The cipher
+// subcommands are nested under workload, so they fold into workload_write.
 func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{
 			// Meta commands - not useful as tools
-			"ksail chat",       // Chat interface, not a tool
-			"ksail mcp",        // MCP server itself, not a tool
+			"ksail open chat",  // Chat interface, not a tool
+			"ksail open mcp",   // MCP server itself, not a tool
 			"ksail operator",   // Long-running operator server, not a tool
 			"ksail completion", // Shell completion generator
 			"ksail help",       // Help command, not a tool

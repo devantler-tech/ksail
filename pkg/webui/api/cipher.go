@@ -25,7 +25,7 @@ type SecretDecryptRequest struct {
 // with SOPS using the local age keys (cluster-independent). When the serving ClusterService
 // implements it, the server registers the /api/v1/secrets/* routes and advertises
 // capabilities.secretsCipher=true. The operator does not implement it (no local keys); only the
-// local `ksail ui`/desktop backend does.
+// local `ksail open web`/desktop backend does.
 type CipherService interface {
 	// EncryptSecret encrypts plaintext (YAML/JSON per format) for the given age recipient, or the
 	// backend's default recipient when recipient is empty.

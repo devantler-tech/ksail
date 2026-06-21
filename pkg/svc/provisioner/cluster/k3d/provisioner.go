@@ -28,7 +28,7 @@ import (
 // runtime (the Docker daemon) is unavailable. k3d's embedded cobra commands react
 // to an unreachable runtime by calling logrus Fatal on their own logger, which by
 // default calls os.Exit(1) and would terminate the whole host process — fatal for
-// a long-lived host such as the desktop app or `ksail ui`, which must keep running
+// a long-lived host such as the desktop app or `ksail open web`, which must keep running
 // when Docker Desktop is not started. NewProvisioner permanently rewires k3d's
 // logger to raise this sentinel via panic instead, and every site that runs a k3d
 // command routes through runK3dSafely, which recovers it into this error — so a
@@ -98,7 +98,7 @@ func NewProvisioner(
 		// the runtime (Docker) is unreachable — Create alone has 19 such calls. logrus
 		// Fatal invokes ExitFunc, which defaults to os.Exit(1) and would terminate the
 		// whole host process: fatal for a long-lived host such as the desktop app or
-		// `ksail ui`, where running create/delete/start/stop (or background discovery)
+		// `ksail open web`, where running create/delete/start/stop (or background discovery)
 		// with Docker stopped must yield an error, not a crash. Permanently replace
 		// ExitFunc with one that panics ErrK3dRuntimeUnavailable; every site that runs a
 		// k3d command routes through runK3dSafely, which recovers it into an ordinary

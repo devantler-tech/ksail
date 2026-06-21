@@ -32,7 +32,6 @@ func TestGenerateTools(t *testing.T) {
 		"cluster_write":  false,
 		"workload_read":  false,
 		"workload_write": false,
-		"cipher_write":   false,
 	}
 
 	for _, tool := range tools {
@@ -558,26 +557,24 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 	t.Run("workload_write", func(t *testing.T) {
 		t.Parallel()
 
+		// cipher is nested under workload, so its write subcommands fold into
+		// workload_write with a "cipher_" prefix (e.g. cipher_encrypt).
 		assertToolContainsSubcommands(t, toolMap, "workload_write",
 			"apply", "reconcile",
+			"cipher_encrypt", "cipher_decrypt", "cipher_edit", "cipher_import", "cipher_rotate",
 		)
 	})
 
-	t.Run("cipher_write", func(t *testing.T) {
+	t.Run("cipher_not_generated_as_standalone_tool", func(t *testing.T) {
 		t.Parallel()
 
-		assertToolContainsSubcommands(t, toolMap, "cipher_write",
-			"encrypt", "decrypt", "edit", "import",
-		)
-	})
-
-	t.Run("cipher_read_not_generated", func(t *testing.T) {
-		t.Parallel()
-
-		if _, exists := toolMap["cipher_read"]; exists {
-			t.Error(
-				"cipher_read should not be generated — all cipher subcommands are write operations",
-			)
+		// cipher lives under the consolidated workload command, so it never
+		// produces its own tool — all cipher operations are exposed via
+		// workload_write (there is no cipher_read; every cipher op is a write).
+		for _, name := range []string{"cipher_write", "cipher_read"} {
+			if _, exists := toolMap[name]; exists {
+				t.Errorf("%s should not be generated — cipher folds into workload_write", name)
+			}
 		}
 	})
 }

@@ -484,7 +484,7 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 
 func buildOIDCExecArgs(cfg *OIDCExecConfig) ([]string, error) {
 	args := []string{
-		"oidc", "get-token",
+		"cluster", "oidc", "get-token",
 		"--issuer-url=" + cfg.IssuerURL,
 		"--client-id=" + cfg.ClientID,
 	}

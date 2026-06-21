@@ -25,18 +25,15 @@ Invoke when the user asks to:
 - Back up or restore cluster resources
 - Apply, generate, validate, or watch Kubernetes workloads
 - Export/import container images for air-gapped clusters
-- Manage SOPS-encrypted secrets via `ksail cipher`
+- Manage SOPS-encrypted secrets via `ksail workload cipher`
 - Work with the ksail MCP server or AI chat TUI
 
 ## Command groups (source of truth: `ksail --help`)
 
-- `ksail cluster …` — lifecycle: `init`, `create`, `update`, `diff`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`
-- `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `scan`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`
-- `ksail cipher …` — SOPS-based secret management
+- `ksail cluster …` — lifecycle: `init`, `create`, `update`, `diff`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`, `oidc` (OIDC authentication: `get-token`)
+- `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `scan`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`, and `cipher` (SOPS-based secret management: `encrypt`, `decrypt`, `edit`, `import`, `rotate`)
 - `ksail tenant …` — multi-tenancy: `create`, `delete`
-- `ksail oidc …` — OIDC authentication: `get-token`
-- `ksail chat` — AI chat TUI powered by GitHub Copilot
-- `ksail mcp` — MCP server (already auto-registered by this plugin)
+- `ksail open …` — interfaces: `web` (browser UI), `desktop` (native app), `chat` (AI chat TUI powered by GitHub Copilot), `mcp` (MCP server — already auto-registered by this plugin)
 
 Flag-level docs live under <https://ksail.devantler.tech/cli-flags/>. Reference that page for any non-trivial flag question instead of answering from memory.
 
@@ -54,10 +51,10 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 ## MCP server
 
-This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [mcp]`). All `ksail cluster`, `ksail workload`, and `ksail cipher` commands are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
+This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [mcp]`). All `ksail cluster` and `ksail workload` commands (including the nested `ksail workload cipher` SOPS operations) are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
 
 ## Safety
 
 - `ksail cluster delete` destroys clusters and (with `--delete-storage`) local volumes. Confirm intent before running non-interactively.
 - `ksail cluster update` may recreate clusters when immutable fields change; use `--dry-run` first.
-- `ksail cipher encrypt`/`rotate` mutate files in-place; ensure they are committed before rotation.
+- `ksail workload cipher encrypt`/`rotate` mutate files in-place; ensure they are committed before rotation.
