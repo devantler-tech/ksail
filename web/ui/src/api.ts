@@ -163,6 +163,9 @@ export interface Capabilities {
   // aiChat is true when the backend can run the AI assistant (e.g. GitHub Copilot is configured). The
   // SPA shows the Assistant panel only then; the local backend powers it over Copilot.
   aiChat: boolean;
+  // kubeProxy is true when the backend proxies read-only apiserver requests, powering reads beyond the
+  // curated allowlist (and Headlamp-compatible plugins' ApiProxy data layer). Local backend only.
+  kubeProxy: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -188,6 +191,8 @@ export const fullCapabilities: Capabilities = {
   // aiChat defaults false: an older backend that omits the flag has no chat endpoint, so the SPA must
   // not show the Assistant panel there.
   aiChat: false,
+  // kubeProxy defaults false: an older backend that omits the flag has no proxy endpoint.
+  kubeProxy: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource

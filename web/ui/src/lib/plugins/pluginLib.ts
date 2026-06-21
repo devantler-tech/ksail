@@ -69,7 +69,7 @@ interface K8sShim {
 }
 
 interface ApiProxyShim {
-  request: (path: string) => Promise<never>;
+  request: (path: string) => Promise<unknown>;
 }
 
 declare global {
@@ -127,12 +127,23 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
     Registry: { registerSidebarEntry, registerRoute, registerDetailsViewSection },
     K8s: makeK8sShim(getCluster),
     ApiProxy: {
-      // Raw apiserver proxying is staged; reject explicitly so a plugin sees a clear, debuggable error
-      // rather than a silent wrong result. Use K8s.useResourceList for live data today.
-      request: (path) =>
-        Promise.reject(
-          new Error(`pluginLib.ApiProxy.request("${path}") is not yet supported in KSail; use K8s.useResourceList`),
-        ),
+      // Proxy a read-only apiserver GET for the active cluster (via the backend KubeProxy) and return the
+      // parsed JSON — the read subset of Headlamp's ApiProxy.request the data layer needs. Mutating verbs
+      // and the full ResourceClasses/useApiGet surface remain staged (see this module's header).
+      request: async (path: string): Promise<unknown> => {
+        const cluster = getCluster();
+        if (!cluster) {
+          throw new Error("pluginLib.ApiProxy.request: no active cluster");
+        }
+
+        const base = `/api/v1/clusters/${encodeURIComponent(cluster.namespace)}/${encodeURIComponent(cluster.name)}`;
+        const response = await fetch(`${base}/proxy/${path.replace(/^\//, "")}`);
+        if (!response.ok) {
+          throw new Error(`pluginLib.ApiProxy.request("${path}") failed: ${response.status}`);
+        }
+
+        return response.json();
+      },
     },
     Notification: (message, ...rest) => {
       // Surface plugin notifications via a DOM event the SPA can later route to toasts; log meanwhile.
