@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components";
 KSail provides native OIDC (OpenID Connect) authentication support. When configured, KSail:
 
 1. **Injects OIDC flags** into the Kubernetes API server at cluster creation time (per-distribution).
-2. **Acts as an exec credential plugin** (`ksail oidc get-token`) — replacing the need for [kubelogin](https://github.com/int128/kubelogin).
+2. **Acts as an exec credential plugin** (`ksail cluster oidc get-token`) — replacing the need for [kubelogin](https://github.com/int128/kubelogin).
 3. **Auto-configures kubeconfig** with an OIDC user and context after cluster creation.
 
 > [!NOTE]
@@ -55,7 +55,7 @@ KSail provides native OIDC (OpenID Connect) authentication support. When configu
 
    KSail automatically:
    - Configures the API server with `--oidc-*` flags
-   - Adds an `oidc-<cluster-name>` user to your kubeconfig (exec-based, pointing to `ksail oidc get-token`)
+   - Adds an `oidc-<cluster-name>` user to your kubeconfig (exec-based, pointing to `ksail cluster oidc get-token`)
    - Adds an `oidc@<cluster-name>` context
 
 3. **Deploy your OIDC provider**
@@ -66,7 +66,7 @@ KSail provides native OIDC (OpenID Connect) authentication support. When configu
    kubectl --context oidc@<cluster-name> get pods
    ```
 
-   On first use, `ksail oidc get-token` opens your browser for authentication.
+   On first use, `ksail cluster oidc get-token` opens your browser for authentication.
 
 </Steps>
 
@@ -127,7 +127,7 @@ Each distribution handles this differently:
 
 ### Exec Credential Plugin
 
-`ksail oidc get-token` implements the [Kubernetes exec credential plugin protocol](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins). The authentication flow:
+`ksail cluster oidc get-token` implements the [Kubernetes exec credential plugin protocol](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins). The authentication flow:
 
 1. Check token cache (`~/.ksail/oidc/cache/`) — return if still valid
 2. If expired, attempt token refresh using the stored refresh token
@@ -157,6 +157,7 @@ users:
       apiVersion: client.authentication.k8s.io/v1
       command: ksail
       args:
+        - cluster
         - oidc
         - get-token
         - --issuer-url=https://dex.example.com
@@ -217,7 +218,7 @@ The `caFile` field specifies a **host path** to the CA certificate. KSail automa
 - **Talos**: CA content is embedded via `machine.files` onto the node filesystem at `/etc/kubernetes/pki/oidc-ca.crt`
 - **VCluster**: Mounted via a `hostPath` volume from the host Kubernetes node into the VCluster control plane pod
 
-The CA file path is also passed to `ksail oidc get-token` via kubeconfig exec args for client-side token verification.
+The CA file path is also passed to `ksail cluster oidc get-token` via kubeconfig exec args for client-side token verification.
 
 ## RBAC Integration
 

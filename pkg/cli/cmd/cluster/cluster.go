@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster/oidc"
 	"github.com/spf13/cobra"
 )
 
@@ -99,6 +100,7 @@ func NewClusterCmd() *cobra.Command {
 	cmd.AddCommand(NewRestoreCmd())
 	cmd.AddCommand(NewSwitchCmd())
 	cmd.AddCommand(NewRepairCmd(nil))
+	cmd.AddCommand(oidc.NewOIDCCmd())
 
 	return cmd
 }
