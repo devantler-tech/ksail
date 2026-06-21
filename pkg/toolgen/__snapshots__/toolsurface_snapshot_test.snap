@@ -1636,6 +1636,10 @@ workload_write
         "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
         "type": "string"
       },
+      "exceptions": {
+        "description": "Path to a Kubescape exceptions file (forwarded to Kubescape's --exceptions) to suppress justified findings for runtime-enforced controls a static scan cannot see (applies to: scan)",
+        "type": "string"
+      },
       "export": {
         "description": "export in YAML format to stdout (applies to: gen_helmrelease)",
         "type": "boolean"
