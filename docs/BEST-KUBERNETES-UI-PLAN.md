@@ -117,7 +117,7 @@ host. That gap is large but well‑understood.
 The design reconciles "Headlamp‑compatible plugins" with "our own UI" by treating them as **two
 layers that converge on one native registry**, rather than adopting Headlamp's app.
 
-```
+```text
 KSail Web UI (own stack: React + Tailwind + Headless UI)
   ├─ Cluster-first IA · Resource browser · AI assistant · GitOps/Tenant/Cipher views
   ▼ reads

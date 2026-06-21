@@ -10,7 +10,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/browser"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/webchat"
 	"github.com/spf13/cobra"
 )
 
@@ -74,9 +76,15 @@ func runUICmd(cmd *cobra.Command, port int, noBrowser bool) error {
 
 	server := uiserver.NewServer()
 
-	// Wire the Copilot-backed AI assistant (read-only) so the web UI's assistant panel works when
-	// Copilot is configured; its subprocess is stopped on shutdown. The panel stays hidden otherwise.
-	chatRunner := uiserver.AttachChat(server, cmd.Root())
+	// Wire the Copilot-backed AI assistant (read-only) onto the local backend, using the root command for
+	// tool generation. Kept in the command layer (not the shared uiserver) so the Copilot SDK stays out
+	// of the desktop app, which reuses uiserver without the assistant. The panel stays hidden unless
+	// Copilot is configured; the subprocess is stopped on shutdown.
+	chatRunner := webchat.New(cmd.Root())
+	if service, ok := server.Service.(*clusterapi.Service); ok {
+		service.UseChat(chatRunner)
+	}
+
 	defer chatRunner.Close()
 
 	// Print a machine-parseable line first so wrappers can discover the URL, then a friendly message.
