@@ -25,6 +25,7 @@ var (
 	ReleaseToInfo            = releaseToInfo
 	ExecuteAndExtractRelease = executeAndExtractRelease
 	ApplyCommonActionConfig  = applyCommonActionConfig
+	LocateChartWithRetry     = locateChartWithRetry
 )
 
 // Expose unexported error sentinels and repository helpers for test assertions.

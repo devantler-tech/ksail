@@ -1,11 +1,14 @@
 package helm
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
@@ -14,6 +17,62 @@ import (
 )
 
 const chartRefParts = 2
+
+const (
+	// Retry configuration for chart acquisition on the render/template path.
+	//
+	// LocateChart downloads the repo index + chart archive (HTTP repos) or pulls
+	// the OCI blob, populating the shared Helm cache. When the cache is cold a
+	// transient 429/5xx/connection blip otherwise fails the locate outright, which
+	// leaves the HelmRelease un-rendered (a render Degradation): its children are
+	// dropped from the manifest stream, so `workload scan`/`validate` produce a
+	// different resource set — and thus a different compliance score — than a run
+	// against a warm cache (devantler-tech/ksail#5371). The install path already
+	// retries acquisition via InstallChartWithRetry; the render path did not, so
+	// mirror that here with the same transient-error policy.
+	chartLocateMaxRetries    = 5
+	chartLocateRetryBaseWait = 3 * time.Second
+	chartLocateRetryMaxWait  = 30 * time.Second
+)
+
+// locateChartWithRetry runs a chart-locate operation, retrying on transient
+// network errors (429/5xx, connection resets, timeouts, unexpected EOF) with
+// capped exponential backoff. It mirrors InstallChartWithRetry for the
+// render/template path so a cold-cache fetch blip does not silently degrade a
+// render and make scan/validate output non-deterministic (ksail#5371).
+//
+// The retry runs while chartAcquireMu is held (see loadChartAndValues): the
+// locate mutates the shared on-disk cache and must stay serialized, so the rare
+// backoff briefly delays other parallel renders rather than letting them race a
+// half-written cache. attempts/baseWait/maxWait are parameters so tests can
+// drive the retry with millisecond waits.
+func locateChartWithRetry(
+	ctx context.Context,
+	attempts int,
+	baseWait, maxWait time.Duration,
+	locate func() (string, error),
+) (string, error) {
+	var chartPath string
+
+	err := netretry.Do(
+		ctx,
+		attempts,
+		baseWait,
+		maxWait,
+		func() error {
+			var locErr error
+
+			chartPath, locErr = locate()
+
+			return locErr
+		},
+	)
+	if err != nil {
+		return "", err //nolint:wrapcheck // caller wraps with chart-specific context
+	}
+
+	return chartPath, nil
+}
 
 // chartAcquireMu serializes the whole chart-acquisition window — locate →
 // download → load → values-file reads — across the process, together with the
@@ -48,6 +107,7 @@ type chartLocator interface {
 }
 
 func (c *Client) loadChartAndValues(
+	ctx context.Context,
 	spec *ChartSpec,
 	client any,
 ) (*chartv2.Chart, map[string]any, error) {
@@ -56,7 +116,7 @@ func (c *Client) loadChartAndValues(
 	chartAcquireMu.Lock()
 	defer chartAcquireMu.Unlock()
 
-	chartPath, chart, err := c.locateAndLoadChart(spec, client)
+	chartPath, chart, err := c.locateAndLoadChart(ctx, spec, client)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,6 +130,7 @@ func (c *Client) loadChartAndValues(
 }
 
 func (c *Client) locateAndLoadChart(
+	ctx context.Context,
 	spec *ChartSpec,
 	client any,
 ) (string, *chartv2.Chart, error) {
@@ -79,9 +140,9 @@ func (c *Client) locateAndLoadChart(
 
 	switch {
 	case spec.RepoURL != "":
-		chartPath, err = c.locateChartFromRepo(spec, client)
+		chartPath, err = c.locateChartFromRepo(ctx, spec, client)
 	case helmv4registry.IsOCI(spec.ChartName):
-		chartPath, err = c.locateOCIChart(spec, client)
+		chartPath, err = c.locateOCIChart(ctx, spec, client)
 	default:
 		chartPath = spec.ChartName
 	}
@@ -128,7 +189,7 @@ func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
 	}
 }
 
-func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
+func (c *Client) locateOCIChart(ctx context.Context, spec *ChartSpec, client any) (string, error) {
 	registryClient, err := helmv4registry.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create registry client: %w", err)
@@ -143,7 +204,13 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 
 	locator.SetRegistryClient(registryClient)
 
-	chartPath, err := locator.LocateChart(spec.ChartName, c.settings)
+	chartPath, err := locateChartWithRetry(
+		ctx,
+		chartLocateMaxRetries,
+		chartLocateRetryBaseWait,
+		chartLocateRetryMaxWait,
+		func() (string, error) { return locator.LocateChart(spec.ChartName, c.settings) },
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
 	}
@@ -151,7 +218,11 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 	return chartPath, nil
 }
 
-func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
+func (c *Client) locateChartFromRepo(
+	ctx context.Context,
+	spec *ChartSpec,
+	client any,
+) (string, error) {
 	_, chartName := parseChartRef(spec.ChartName)
 	if chartName == "" {
 		chartName = spec.ChartName
@@ -187,8 +258,16 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 	opts := buildChartPathOptions(spec, spec.RepoURL)
 	applyChartPathOptions(client, opts)
 
-	// Use LocateChart to download the chart to cache and return the local path
-	chartPath, err := opts.LocateChart(chartName, c.settings)
+	// Use LocateChart to download the chart to cache and return the local path,
+	// retrying transient network failures so a cold-cache blip does not silently
+	// degrade the render (ksail#5371).
+	chartPath, err := locateChartWithRetry(
+		ctx,
+		chartLocateMaxRetries,
+		chartLocateRetryBaseWait,
+		chartLocateRetryMaxWait,
+		func() (string, error) { return opts.LocateChart(chartName, c.settings) },
+	)
 	if err != nil {
 		return "", fmt.Errorf(
 			"failed to locate chart %q in repository %s: %w",
