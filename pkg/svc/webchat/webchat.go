@@ -3,20 +3,25 @@
 // them to the web transport's streaming contract (api.ChatService, via the local backend's runner
 // seam): one turn per request, streamed as api.ChatEvent values.
 //
-// The assistant is READ-ONLY here: any tool that requires write permission is denied (a web request
-// has no interactive consent channel, unlike the CLI). Availability requires a non-interactive Copilot
-// token (KSAIL_COPILOT_TOKEN / COPILOT_TOKEN), since a server cannot drive the interactive device
-// login.
+// Write operations are gated by per-action confirmation: a tool that requires write permission is not
+// auto-approved (a web request has no interactive consent channel like the CLI's TUI). Instead the
+// handler emits a tool-confirm event carrying a unique confirmId and blocks until the SPA posts a
+// decision back (POST /api/v1/chat/confirm → ConfirmTool), then approves or denies accordingly. Read
+// operations are still auto-approved so the assistant can inspect the cluster without prompting.
+// Availability requires a non-interactive Copilot token (KSAIL_COPILOT_TOKEN / COPILOT_TOKEN), since a
+// server cannot drive the interactive device login.
 //
 // Runtime verification note: the live path spawns the Copilot CLI subprocess and streams from it, so it
 // can only be exercised in a Copilot-configured environment — it is gated off (Available == false) when
 // no token is present, which is the case in CI. Tests cover the non-Copilot logic (availability, prompt
-// building); the streaming integration is verified manually with Copilot configured. This mirrors how
-// the repo treats other CI-unverifiable integrations (cloud providers) — gated behind availability.
+// building, confirm routing); the streaming integration is verified manually with Copilot configured.
+// This mirrors how the repo treats other CI-unverifiable integrations (cloud providers) — gated behind
+// availability.
 package webchat
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -49,17 +54,28 @@ var (
 // Runner powers the web UI's AI assistant. The Copilot client is started lazily on the first turn and
 // reused across turns (starting it spawns a subprocess and authenticates, which is too slow per-turn);
 // Close stops it. A fresh session is created per turn, so prior turns are replayed via the prompt.
+//
+// Write tools are gated by per-action confirmation: pending tool-confirm prompts are tracked in the
+// confirms registry, keyed by a unique confirmId, so a later ConfirmTool call (driven by the SPA's
+// Approve/Deny) can route the decision back to the blocked permission handler.
 type Runner struct {
 	rootCmd *cobra.Command
 
 	mu     sync.Mutex
 	client *copilot.Client
+
+	// confirmMu guards confirms. It is separate from mu (which guards the long-lived client) so a
+	// confirm decision never contends with client startup.
+	confirmMu sync.Mutex
+	// confirms maps a pending confirmId to the channel its blocked permission handler waits on. An entry
+	// exists only while a write tool awaits a decision; ConfirmTool sends on and removes it.
+	confirms map[string]chan bool
 }
 
 // New builds a Runner that generates its tools from rootCmd's command tree (the same source the CLI
 // chat uses), so the assistant can run the same read operations.
 func New(rootCmd *cobra.Command) *Runner {
-	return &Runner{rootCmd: rootCmd}
+	return &Runner{rootCmd: rootCmd, confirms: make(map[string]chan bool)}
 }
 
 // Available reports whether the assistant can run: a Copilot token must be present. A server cannot
@@ -80,7 +96,8 @@ func (r *Runner) Close() {
 }
 
 // Run runs one chat turn for req, streaming the assistant's reply to emit and ending with a done event
-// on normal completion. It is read-only: tools requiring write permission are denied.
+// on normal completion. Read tools are auto-approved; write tools are gated behind a per-action
+// confirmation streamed to emit and resolved by ConfirmTool.
 func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.ChatEvent)) error {
 	client, err := r.ensureClient(ctx)
 	if err != nil {
@@ -97,7 +114,7 @@ func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.Cha
 			Sections: chatsvc.BuildSystemSections(r.rootCmd),
 		},
 		Tools:               tools,
-		OnPermissionRequest: readOnlyPermissionHandler(),
+		OnPermissionRequest: r.confirmPermissionHandler(ctx, emit),
 	})
 	if err != nil {
 		return fmt.Errorf("create chat session: %w", err)
@@ -106,6 +123,26 @@ func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.Cha
 	defer func() { _ = session.Disconnect() }()
 
 	return streamTurn(ctx, session, buildPrompt(req), emit)
+}
+
+// ConfirmTool resolves a pending write-tool confirmation: it routes approved to the blocked permission
+// handler waiting on confirmID. An unknown confirmId (already resolved, timed out, or never issued) is
+// a no-op, so a duplicate or late decision is harmless.
+func (r *Runner) ConfirmTool(confirmID string, approved bool) {
+	r.confirmMu.Lock()
+	decision, ok := r.confirms[confirmID]
+	r.confirmMu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	// Non-blocking: the channel is buffered (capacity 1) and read at most once, so a duplicate decision
+	// for the same confirmId cannot block here.
+	select {
+	case decision <- approved:
+	default:
+	}
 }
 
 // ensureClient starts the Copilot client once and returns the shared instance.
@@ -230,9 +267,14 @@ func relaySessionEvent(
 	}
 }
 
-// readOnlyPermissionHandler auto-approves read operations and denies everything else, so the web
-// assistant can inspect the cluster but never mutate it (a web request has no interactive consent).
-func readOnlyPermissionHandler() copilot.PermissionHandlerFunc {
+// confirmPermissionHandler auto-approves read operations and gates writes behind an explicit
+// per-action confirmation: for a write tool it emits a tool-confirm event (a unique confirmId plus the
+// tool name and a short args summary) and blocks until the SPA posts a decision (ConfirmTool) or ctx is
+// cancelled, then approves or rejects accordingly. This lets the web assistant perform writes only with
+// the user's per-action consent, unlike the CLI's interactive TUI.
+func (r *Runner) confirmPermissionHandler(
+	ctx context.Context, emit func(api.ChatEvent),
+) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
 	) (rpc.PermissionDecision, error) {
@@ -240,8 +282,86 @@ func readOnlyPermissionHandler() copilot.PermissionHandlerFunc {
 			return &rpc.PermissionDecisionApproveOnce{}, nil
 		}
 
+		approved := r.awaitConfirmation(ctx, request, emit)
+		if approved {
+			return &rpc.PermissionDecisionApproveOnce{}, nil
+		}
+
 		return &rpc.PermissionDecisionReject{}, nil
 	}
+}
+
+// awaitConfirmation emits a tool-confirm event for a write request and blocks until the matching
+// ConfirmTool decision arrives or ctx is cancelled (treated as a denial). It always cleans up the
+// pending entry so a cancelled turn never leaks a channel.
+func (r *Runner) awaitConfirmation(
+	ctx context.Context, request copilot.PermissionRequest, emit func(api.ChatEvent),
+) bool {
+	confirmID := newConfirmID()
+	decision := r.registerConfirm(confirmID)
+
+	defer r.clearConfirm(confirmID)
+
+	emit(api.ChatEvent{
+		Type:      api.ChatEventToolConfirm,
+		ConfirmID: confirmID,
+		Text:      writeToolName(request),
+		Summary:   writeToolSummary(request),
+	})
+
+	select {
+	case approved := <-decision:
+		return approved
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// registerConfirm allocates and stores the decision channel for confirmID, returning it for the
+// handler to wait on. The channel is buffered so ConfirmTool never blocks on a slow reader.
+func (r *Runner) registerConfirm(confirmID string) chan bool {
+	decision := make(chan bool, 1)
+
+	r.confirmMu.Lock()
+	r.confirms[confirmID] = decision
+	r.confirmMu.Unlock()
+
+	return decision
+}
+
+// clearConfirm removes the pending entry for confirmID (idempotent).
+func (r *Runner) clearConfirm(confirmID string) {
+	r.confirmMu.Lock()
+	delete(r.confirms, confirmID)
+	r.confirmMu.Unlock()
+}
+
+// newConfirmID returns a unique, unguessable id for one pending confirmation, so a decision can only
+// resolve the request it was issued for.
+func newConfirmID() string {
+	return rand.Text()
+}
+
+// writeToolName extracts a human-readable tool name from a write permission request. The KSail CLI
+// tools surface as custom tools; other write kinds fall back to a generic label so the user always
+// sees what is being confirmed.
+func writeToolName(request copilot.PermissionRequest) string {
+	if tool, ok := request.(rpc.PermissionRequestCustomTool); ok {
+		return tool.ToolName
+	}
+
+	return string(request.Kind())
+}
+
+// writeToolSummary builds a short, display-only summary of what the write tool will do. For a custom
+// tool it prefers the tool's own description; it never serializes raw args (they may be large or carry
+// secrets), so the summary stays a safe one-liner.
+func writeToolSummary(request copilot.PermissionRequest) string {
+	if tool, ok := request.(rpc.PermissionRequestCustomTool); ok {
+		return tool.ToolDescription
+	}
+
+	return ""
 }
 
 // buildPrompt assembles the turn's prompt: the active-cluster context (so the assistant scopes its

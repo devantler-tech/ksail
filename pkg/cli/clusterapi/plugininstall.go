@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -34,6 +36,10 @@ const (
 	// pluginDirMode / pluginFileMode are the permissions for installed plugin directories and files.
 	pluginDirMode  = 0o755
 	pluginFileMode = 0o644
+	// envPluginSigningPubKey names the env var holding the trusted ed25519 public key (hex or base64)
+	// used to verify an optional plugin signature. Unset ⇒ signing disabled (behaviour unchanged). The
+	// value is a PUBLIC key, not a credential.
+	envPluginSigningPubKey = "KSAIL_PLUGIN_SIGNING_PUBKEY"
 )
 
 // ErrPluginInstall wraps every install failure (bad URL, download, checksum, unsafe archive, bad
@@ -44,13 +50,32 @@ var ErrPluginInstall = errors.New("plugin install failed")
 var _ api.PluginInstaller = (*Service)(nil)
 
 // InstallPlugin downloads a Headlamp-format plugin tarball (.tar.gz) from req.URL, optionally verifies
-// its SHA-256, safely extracts it (rejecting path traversal, symlinks and decompression bombs), locates
-// the plugin (a package.json plus its entry bundle), and installs it under ~/.ksail/plugins/<name>,
-// replacing any existing install of the same name. It returns the installed plugin's metadata.
+// its SHA-256 (integrity) and ed25519 signature (authenticity), safely extracts it (rejecting path
+// traversal, symlinks and decompression bombs), locates the plugin (a package.json plus its entry
+// bundle), and installs it under ~/.ksail/plugins/<name>, replacing any existing install of the same
+// name. It returns the installed plugin's metadata.
 //
-// SECURITY: an installed plugin runs UNSANDBOXED in the web UI with the user's cluster credentials. The
-// SPA gates this behind explicit consent (surfacing that risk); this method assumes that consent and so
-// is registered only on the local loopback backend and behind the read-only guard.
+// TRUST MODEL (layered, each optional and additive):
+//
+//  1. Transport: the tarball is fetched over the request's HTTPS-capable client, so an https:// source
+//     authenticates the server and protects the bytes in transit.
+//  2. Integrity (optional): when req.SHA256 is set, the downloaded bytes must match that hex digest, so
+//     a tampered or truncated download is rejected before extraction.
+//  3. Authenticity (optional): when req.Signature is set, the downloaded bytes must verify against the
+//     trusted ed25519 public key configured out-of-band in KSAIL_PLUGIN_SIGNING_PUBKEY. A claimed
+//     signature with no trusted key configured is rejected (never silently ignored); with no key and no
+//     signature, signing is simply disabled and behaviour is unchanged.
+//  4. Consent: an installed plugin runs UNSANDBOXED in the web UI with the user's cluster credentials,
+//     so the SPA gates the install behind an explicit consent checkbox surfacing that risk.
+//
+// The ed25519 scheme is deliberately dependency-free (Go stdlib only) to keep the binary, the separate
+// desktop/ module, and the release lean. A heavier, more capable authenticity story — sigstore/cosign
+// with keyless signing (Fulcio) and a transparency log (Rekor), and/or OCI-distributed signed plugins —
+// is the intended future and would supersede this minimal key-pinned check; it is omitted today because
+// its dependency tree would significantly bloat all three artifacts.
+//
+// SECURITY: this method assumes the SPA's consent gate and so is registered only on the local loopback
+// backend and behind the read-only guard.
 func (s *Service) InstallPlugin(
 	ctx context.Context,
 	req api.PluginInstallRequest,
@@ -105,7 +130,7 @@ func (p pluginStore) stagePlugin(
 	dir string,
 	req api.PluginInstallRequest,
 ) (string, string, error) {
-	archive, err := downloadPluginArchive(ctx, req.URL, req.SHA256)
+	archive, err := downloadPluginArchive(ctx, req.URL, req.SHA256, req.Signature)
 	if err != nil {
 		return "", "", err
 	}
@@ -207,9 +232,88 @@ func verifyChecksum(data []byte, wantSHA string) error {
 	return nil
 }
 
-// downloadPluginArchive fetches the tarball over http(s) with a size cap and timeout, and verifies the
-// optional SHA-256. It returns the raw (still compressed) bytes.
-func downloadPluginArchive(ctx context.Context, rawURL, wantSHA string) ([]byte, error) {
+// verifySignature checks data against the optional base64 ed25519 detached signature, using the trusted
+// public key in rawPubKey (hex or base64). It is a no-op when no signature is supplied (behaviour
+// unchanged). A supplied signature with no trusted key configured is rejected — a claimed signature is
+// never silently ignored — as is an unparseable signature/key or a verification failure.
+func verifySignature(data []byte, signature, rawPubKey string) error {
+	signature = strings.TrimSpace(signature)
+	if signature == "" {
+		return nil
+	}
+
+	if strings.TrimSpace(rawPubKey) == "" {
+		return fmt.Errorf(
+			"%w: a signature was supplied but no trusted signing key is configured (set %s)",
+			ErrPluginInstall,
+			envPluginSigningPubKey,
+		)
+	}
+
+	pubKey, err := parseSigningPubKey(rawPubKey)
+	if err != nil {
+		return err
+	}
+
+	sig, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("%w: signature is not valid base64: %w", ErrPluginInstall, err)
+	}
+
+	if !ed25519.Verify(pubKey, data, sig) {
+		return fmt.Errorf("%w: signature verification failed", ErrPluginInstall)
+	}
+
+	return nil
+}
+
+// parseSigningPubKey decodes a trusted ed25519 public key from hex or base64 and validates its length.
+func parseSigningPubKey(rawPubKey string) (ed25519.PublicKey, error) {
+	rawPubKey = strings.TrimSpace(rawPubKey)
+
+	key, err := decodeKeyBytes(rawPubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(key) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf(
+			"%w: signing key must be %d bytes (got %d)",
+			ErrPluginInstall,
+			ed25519.PublicKeySize,
+			len(key),
+		)
+	}
+
+	return ed25519.PublicKey(key), nil
+}
+
+// decodeKeyBytes decodes rawPubKey as hex first, then base64 (standard, then URL-safe), returning the
+// first that parses. It errors only when none do.
+func decodeKeyBytes(rawPubKey string) ([]byte, error) {
+	decoders := []func(string) ([]byte, error){
+		hex.DecodeString,
+		base64.StdEncoding.DecodeString,
+		base64.RawURLEncoding.DecodeString,
+	}
+
+	for _, decode := range decoders {
+		key, err := decode(rawPubKey)
+		if err == nil {
+			return key, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: signing key is not valid hex or base64", ErrPluginInstall)
+}
+
+// downloadPluginArchive fetches the tarball over http(s) with a size cap and timeout, then verifies the
+// optional SHA-256 (integrity) and ed25519 signature (authenticity). It returns the raw (still
+// compressed) bytes.
+func downloadPluginArchive(
+	ctx context.Context,
+	rawURL, wantSHA, signature string,
+) ([]byte, error) {
 	parsed, err := validatePluginURL(rawURL)
 	if err != nil {
 		return nil, err
@@ -252,6 +356,11 @@ func downloadPluginArchive(ctx context.Context, rawURL, wantSHA string) ([]byte,
 	}
 
 	err = verifyChecksum(data, wantSHA)
+	if err != nil {
+		return nil, err
+	}
+
+	err = verifySignature(data, signature, os.Getenv(envPluginSigningPubKey))
 	if err != nil {
 		return nil, err
 	}

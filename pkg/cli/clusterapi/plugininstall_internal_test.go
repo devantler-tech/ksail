@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -141,5 +144,154 @@ func TestPluginStoreInstallRejectsChecksumMismatch(t *testing.T) {
 	)
 	if !errors.Is(err, ErrPluginInstall) {
 		t.Errorf("install error = %v, want ErrPluginInstall for a checksum mismatch", err)
+	}
+}
+
+// signedPluginArchive builds a valid plugin tarball and signs its bytes with a freshly generated
+// ed25519 key, returning the archive plus the keypair so a test can configure the trusted public key.
+func signedPluginArchive(
+	t *testing.T,
+) ([]byte, ed25519.PublicKey, ed25519.PrivateKey) {
+	t.Helper()
+
+	pub, priv, genErr := ed25519.GenerateKey(nil)
+	if genErr != nil {
+		t.Fatalf("generate key: %v", genErr)
+	}
+
+	archive := makeTarGz(t, map[string]string{
+		"signed-plugin/package.json": `{"name":"signed-plugin","version":"1.0.0","main":"main.js"}`,
+		"signed-plugin/main.js":      `console.log("signed")`,
+	})
+
+	return archive, pub, priv
+}
+
+func TestPluginStoreInstallAcceptsValidSignature(t *testing.T) {
+	archive, pub, priv := signedPluginArchive(t)
+	t.Setenv(envPluginSigningPubKey, hex.EncodeToString(pub))
+
+	store, _ := newTempStore(t)
+	server := serveBytes(t, archive)
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, archive))
+
+	info, err := store.install(
+		context.Background(),
+		api.PluginInstallRequest{URL: server.URL, Signature: signature},
+	)
+	if err != nil {
+		t.Fatalf("install with valid signature: %v", err)
+	}
+
+	if info.Name != "signed-plugin" {
+		t.Errorf("info.Name = %q, want signed-plugin", info.Name)
+	}
+}
+
+func TestPluginStoreInstallAcceptsBase64SigningKey(t *testing.T) {
+	archive, pub, priv := signedPluginArchive(t)
+	// The trusted key may be supplied as base64 (not only hex).
+	t.Setenv(envPluginSigningPubKey, base64.StdEncoding.EncodeToString(pub))
+
+	store, _ := newTempStore(t)
+	server := serveBytes(t, archive)
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, archive))
+
+	_, err := store.install(
+		context.Background(),
+		api.PluginInstallRequest{URL: server.URL, Signature: signature},
+	)
+	if err != nil {
+		t.Fatalf("install with base64 signing key: %v", err)
+	}
+}
+
+func TestPluginStoreInstallRejectsTamperedSignature(t *testing.T) {
+	archive, pub, priv := signedPluginArchive(t)
+	t.Setenv(envPluginSigningPubKey, hex.EncodeToString(pub))
+
+	store, _ := newTempStore(t)
+	// Sign the original bytes, then serve a different archive — the signature must no longer verify.
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, archive))
+	tampered := makeTarGz(t, map[string]string{
+		"signed-plugin/package.json": `{"name":"signed-plugin","version":"1.0.0","main":"main.js"}`,
+		"signed-plugin/main.js":      `console.log("tampered")`,
+	})
+	server := serveBytes(t, tampered)
+
+	_, err := store.install(
+		context.Background(),
+		api.PluginInstallRequest{URL: server.URL, Signature: signature},
+	)
+	if !errors.Is(err, ErrPluginInstall) {
+		t.Errorf("install error = %v, want ErrPluginInstall for a tampered payload", err)
+	}
+}
+
+func TestPluginStoreInstallRejectsWrongKeySignature(t *testing.T) {
+	archive, _, priv := signedPluginArchive(t)
+	// Configure a DIFFERENT trusted key than the one that signed the archive.
+	otherPub, _, genErr := ed25519.GenerateKey(nil)
+	if genErr != nil {
+		t.Fatalf("generate other key: %v", genErr)
+	}
+
+	t.Setenv(envPluginSigningPubKey, hex.EncodeToString(otherPub))
+
+	store, _ := newTempStore(t)
+	server := serveBytes(t, archive)
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, archive))
+
+	_, err := store.install(
+		context.Background(),
+		api.PluginInstallRequest{URL: server.URL, Signature: signature},
+	)
+	if !errors.Is(err, ErrPluginInstall) {
+		t.Errorf("install error = %v, want ErrPluginInstall for a wrong-key signature", err)
+	}
+}
+
+func TestPluginStoreInstallRejectsSignatureWithoutTrustedKey(t *testing.T) {
+	archive, _, priv := signedPluginArchive(t)
+	// No KSAIL_PLUGIN_SIGNING_PUBKEY configured: a claimed signature must be rejected, not ignored.
+	t.Setenv(envPluginSigningPubKey, "")
+
+	store, _ := newTempStore(t)
+	server := serveBytes(t, archive)
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, archive))
+
+	_, err := store.install(
+		context.Background(),
+		api.PluginInstallRequest{URL: server.URL, Signature: signature},
+	)
+	if !errors.Is(err, ErrPluginInstall) {
+		t.Errorf("install error = %v, want ErrPluginInstall when no trusted key is configured", err)
+	}
+}
+
+func TestPluginStoreInstallIgnoresSignatureEnvWithoutSignature(t *testing.T) {
+	// A trusted key is configured but the request carries no signature: install behaves as today
+	// (checksum + consent only), so an unsigned-but-otherwise-valid plugin still installs.
+	pub, _, genErr := ed25519.GenerateKey(nil)
+	if genErr != nil {
+		t.Fatalf("generate key: %v", genErr)
+	}
+
+	t.Setenv(envPluginSigningPubKey, hex.EncodeToString(pub))
+
+	store, _ := newTempStore(t)
+	archive := makeTarGz(t, map[string]string{
+		"unsigned/package.json": `{"name":"unsigned","version":"1.0.0","main":"main.js"}`,
+		"unsigned/main.js":      `console.log("unsigned")`,
+	})
+	server := serveBytes(t, archive)
+
+	info, err := store.install(context.Background(), api.PluginInstallRequest{URL: server.URL})
+	if err != nil {
+		t.Fatalf("install unsigned plugin with key configured: %v", err)
+	}
+
+	if info.Name != "unsigned" {
+		t.Errorf("info.Name = %q, want unsigned", info.Name)
 	}
 }

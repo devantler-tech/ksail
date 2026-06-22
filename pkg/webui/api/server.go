@@ -354,9 +354,11 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// AI assistant (ChatService) over SSE: POST carries the prompt + history; the handler streams the
 	// reply as chat events. Registered when the backend implements ChatService; the capability (and the
 	// SPA panel) follow ChatAvailable. POST is subject to the read-only guard — the assistant can invoke
-	// tools, so a read-only deployment locks it down with the other mutating surfaces.
+	// tools, so a read-only deployment locks it down with the other mutating surfaces. The companion
+	// /chat/confirm route resolves a write tool's per-action confirmation (also POST → already guarded).
 	if _, ok := s.Service.(ChatService); ok {
 		mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+		mux.HandleFunc("POST /api/v1/chat/confirm", s.handleConfirm)
 	}
 
 	// Read-only kube-apiserver proxy (KubeProxy): GET passthrough so the SPA and Headlamp-compatible
@@ -372,6 +374,14 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	if _, ok := s.Service.(PluginInstaller); ok {
 		mux.HandleFunc("POST /api/v1/plugins", s.handleInstallPlugin)
 		mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.handleUninstallPlugin)
+	}
+
+	// Plugin catalog (PluginCatalog): GET searches a remote catalog of installable plugins (Artifact Hub
+	// Headlamp plugins on the local backend). A read, so the read-only guard does not apply — the install
+	// each result feeds is gated by PluginInstaller separately. Registered only when the backend implements
+	// catalog browsing (the local one).
+	if _, ok := s.Service.(PluginCatalog); ok {
+		mux.HandleFunc("GET /api/v1/plugins/catalog", s.handlePluginCatalog)
 	}
 }
 
@@ -535,8 +545,12 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.Plugins = s.Service.(PluginService)
 	// aiChat follows ChatAvailable (not just the interface), so the assistant panel appears only when
 	// the backend can actually run a turn (e.g. Copilot is configured), not merely when it could.
+	// aiChatWrite additionally requires the deployment not be read-only — a read-only UI rejects the
+	// assistant's write tools server-side (the chat POST is guarded), so the SPA must not offer to
+	// approve actions that cannot run.
 	if chat, ok := s.Service.(ChatService); ok {
 		capabilities.AIChat = chat.ChatAvailable(request.Context())
+		capabilities.AIChatWrite = capabilities.AIChat && !s.ReadOnly
 	}
 	// kubeProxy is true exactly when the backend can proxy read-only apiserver requests (KubeProxy),
 	// so plugins' ApiProxy data layer is only attempted against a backend that can serve it.
@@ -545,6 +559,10 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// read-only, so the SPA offers the install surface only when an install would actually be accepted.
 	_, pluginInstallable := s.Service.(PluginInstaller)
 	capabilities.PluginInstall = pluginInstallable && !s.ReadOnly
+	// pluginCatalog is true exactly when the backend can browse a remote plugin catalog (PluginCatalog),
+	// so the SPA offers the catalog search box only when results can actually be fetched. Browsing is a
+	// read, so it is not gated on !readOnly (the install each result feeds is gated separately).
+	_, capabilities.PluginCatalog = s.Service.(PluginCatalog)
 	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
 	// marker yet report false during a transitional period), so the create form's gate cannot diverge
 	// from whether components are actually installed.

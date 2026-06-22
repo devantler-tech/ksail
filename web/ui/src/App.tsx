@@ -571,11 +571,13 @@ export function App() {
             error={pluginLoader.error}
             onReload={pluginLoader.reload}
             canInstall={capability(config, "pluginInstall")}
+            canBrowseCatalog={capability(config, "pluginCatalog")}
           />
         ) : view === "assistant" ? (
           <AIAssistant
             clusterName={activeCluster?.metadata.name ?? null}
             namespace={activeCluster?.metadata.namespace ?? null}
+            allowWrite={capability(config, "aiChatWrite")}
           />
         ) : view === "secrets" ? (
           <SecretsView />
