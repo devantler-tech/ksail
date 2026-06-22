@@ -49,30 +49,36 @@ var ErrPluginInstall = errors.New("plugin install failed")
 // Ensure the local backend exposes plugin install/uninstall.
 var _ api.PluginInstaller = (*Service)(nil)
 
-// InstallPlugin downloads a Headlamp-format plugin tarball (.tar.gz) from req.URL, optionally verifies
-// its SHA-256 (integrity) and ed25519 signature (authenticity), safely extracts it (rejecting path
-// traversal, symlinks and decompression bombs), locates the plugin (a package.json plus its entry
-// bundle), and installs it under ~/.ksail/plugins/<name>, replacing any existing install of the same
-// name. It returns the installed plugin's metadata.
+// InstallPlugin downloads a Headlamp-format plugin tarball (.tar.gz) from req.URL, verifies it against
+// whichever authenticity material the request carries, safely extracts it (rejecting path traversal,
+// symlinks and decompression bombs), locates the plugin (a package.json plus its entry bundle), and
+// installs it under ~/.ksail/plugins/<name>, replacing any existing install of the same name. It
+// returns the installed plugin's metadata.
 //
-// TRUST MODEL (layered, each optional and additive):
+// TRUST MODEL (layered, strongest first; each tier is optional and additive):
 //
 //  1. Transport: the tarball is fetched over the request's HTTPS-capable client, so an https:// source
 //     authenticates the server and protects the bytes in transit.
-//  2. Integrity (optional): when req.SHA256 is set, the downloaded bytes must match that hex digest, so
+//  2. Cosign / sigstore (STRONGEST authenticity, optional): when req.Cosign is non-empty, the downloaded
+//     bytes are verified with sigstore-go — keyless (a sigstore bundle: Fulcio cert + Rekor transparency
+//     entry + signature, verified against the public-good trust root and an expected certificate
+//     identity: SAN/subject pattern + OIDC issuer) or key-based (against a cosign ECDSA public key). A
+//     verification failure rejects the install; cosign material with no verifier wired is rejected too
+//     (never silently downgraded). This is the cryptographically strongest tier — the ed25519 and
+//     SHA-256 tiers below are lighter fallbacks.
+//  3. Integrity (optional): when req.SHA256 is set, the downloaded bytes must match that hex digest, so
 //     a tampered or truncated download is rejected before extraction.
-//  3. Authenticity (optional): when req.Signature is set, the downloaded bytes must verify against the
-//     trusted ed25519 public key configured out-of-band in KSAIL_PLUGIN_SIGNING_PUBKEY. A claimed
-//     signature with no trusted key configured is rejected (never silently ignored); with no key and no
-//     signature, signing is simply disabled and behaviour is unchanged.
-//  4. Consent: an installed plugin runs UNSANDBOXED in the web UI with the user's cluster credentials,
+//  4. Authenticity, ed25519 (optional, lighter than cosign): when req.Signature is set, the downloaded
+//     bytes must verify against the trusted ed25519 public key configured out-of-band in
+//     KSAIL_PLUGIN_SIGNING_PUBKEY. A claimed signature with no trusted key configured is rejected (never
+//     silently ignored); with no key and no signature, ed25519 signing is simply disabled.
+//  5. Consent: an installed plugin runs UNSANDBOXED in the web UI with the user's cluster credentials,
 //     so the SPA gates the install behind an explicit consent checkbox surfacing that risk.
 //
-// The ed25519 scheme is deliberately dependency-free (Go stdlib only) to keep the binary, the separate
-// desktop/ module, and the release lean. A heavier, more capable authenticity story — sigstore/cosign
-// with keyless signing (Fulcio) and a transparency log (Rekor), and/or OCI-distributed signed plugins —
-// is the intended future and would supersede this minimal key-pinned check; it is omitted today because
-// its dependency tree would significantly bloat all three artifacts.
+// The cosign verifier lives behind a seam (cosignVerifier) wired in at the `ksail open web` command
+// layer (UseCosignVerifier), so the heavy sigstore-go dependency tree stays out of this package and the
+// separate desktop/ module that reuses it. The ed25519 and SHA-256 tiers remain dependency-free (Go
+// stdlib only) so they work on every backend, cosign-wired or not.
 //
 // SECURITY: this method assumes the SPA's consent gate and so is registered only on the local loopback
 // backend and behind the read-only guard.
@@ -130,7 +136,7 @@ func (p pluginStore) stagePlugin(
 	dir string,
 	req api.PluginInstallRequest,
 ) (string, string, error) {
-	archive, err := downloadPluginArchive(ctx, req.URL, req.SHA256, req.Signature)
+	archive, err := downloadPluginArchive(ctx, req, p.cosign)
 	if err != nil {
 		return "", "", err
 	}
@@ -307,20 +313,38 @@ func decodeKeyBytes(rawPubKey string) ([]byte, error) {
 	return nil, fmt.Errorf("%w: signing key is not valid hex or base64", ErrPluginInstall)
 }
 
-// downloadPluginArchive fetches the tarball over http(s) with a size cap and timeout, then verifies the
-// optional SHA-256 (integrity) and ed25519 signature (authenticity). It returns the raw (still
-// compressed) bytes.
+// downloadPluginArchive fetches the tarball over http(s) with a size cap and timeout, then verifies it
+// against whatever authenticity material the request carries: cosign/sigstore (strongest, via the wired
+// verifier), the SHA-256 digest (integrity), and the ed25519 signature (lighter authenticity). It
+// returns the raw (still compressed) bytes.
 func downloadPluginArchive(
 	ctx context.Context,
-	rawURL, wantSHA, signature string,
+	req api.PluginInstallRequest,
+	cosign cosignVerifier,
 ) ([]byte, error) {
-	parsed, err := validatePluginURL(rawURL)
+	ctx, cancel := context.WithTimeout(ctx, pluginDownloadTimeout)
+	defer cancel()
+
+	data, err := fetchPluginBytes(ctx, req.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, pluginDownloadTimeout)
-	defer cancel()
+	err = verifyPluginArchive(ctx, data, req, cosign)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+// fetchPluginBytes downloads the tarball from rawURL (validated as http(s)) with a size cap, returning
+// the raw bytes. The caller bounds the timeout via ctx.
+func fetchPluginBytes(ctx context.Context, rawURL string) ([]byte, error) {
+	parsed, err := validatePluginURL(rawURL)
+	if err != nil {
+		return nil, err
+	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
@@ -355,17 +379,57 @@ func downloadPluginArchive(
 		)
 	}
 
-	err = verifyChecksum(data, wantSHA)
-	if err != nil {
-		return nil, err
-	}
-
-	err = verifySignature(data, signature, os.Getenv(envPluginSigningPubKey))
-	if err != nil {
-		return nil, err
-	}
-
 	return data, nil
+}
+
+// verifyPluginArchive runs the authenticity tiers over the downloaded bytes, strongest first: cosign,
+// then the SHA-256 digest, then the ed25519 signature. The first failing tier returns its error.
+func verifyPluginArchive(
+	ctx context.Context,
+	data []byte,
+	req api.PluginInstallRequest,
+	cosign cosignVerifier,
+) error {
+	err := verifyCosign(ctx, data, req.Cosign, cosign)
+	if err != nil {
+		return err
+	}
+
+	err = verifyChecksum(data, req.SHA256)
+	if err != nil {
+		return err
+	}
+
+	return verifySignature(data, req.Signature, os.Getenv(envPluginSigningPubKey))
+}
+
+// verifyCosign runs the strongest authenticity tier: when the request carries cosign material, the
+// download must verify against it via the wired verifier. Cosign material with no verifier wired is
+// rejected (never silently downgraded to a weaker tier), mirroring how a claimed ed25519 signature is
+// rejected without a trusted key. No cosign material is a no-op, so the lighter tiers apply.
+func verifyCosign(
+	ctx context.Context,
+	data []byte,
+	material *api.PluginCosign,
+	verifier cosignVerifier,
+) error {
+	if material.IsEmpty() {
+		return nil
+	}
+
+	if verifier == nil {
+		return fmt.Errorf(
+			"%w: cosign verification material was supplied but cosign verification is not configured",
+			ErrPluginInstall,
+		)
+	}
+
+	err := verifier.VerifyPlugin(ctx, data, material)
+	if err != nil {
+		return fmt.Errorf("%w: cosign verification failed: %w", ErrPluginInstall, err)
+	}
+
+	return nil
 }
 
 // extractTarGz safely extracts a gzip-compressed tar into dest. It rejects path traversal (entries that

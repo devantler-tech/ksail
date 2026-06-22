@@ -80,6 +80,8 @@ require (
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
 	github.com/siderolabs/omni/client v1.8.2
+	github.com/sigstore/sigstore v1.10.7
+	github.com/sigstore/sigstore-go v1.1.4
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.38.0
@@ -777,8 +779,6 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.1 // indirect
 	github.com/sigstore/rekor v1.5.2 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.2.1 // indirect
-	github.com/sigstore/sigstore v1.10.7 // indirect
-	github.com/sigstore/sigstore-go v1.1.4 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.0.6 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
