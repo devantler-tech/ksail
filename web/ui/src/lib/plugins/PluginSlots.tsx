@@ -22,7 +22,7 @@ const pluginStore = {
 // Provider (so useSelector/useDispatch work). Both come from the lazily-loaded externals on
 // window.pluginLib, present once a plugin has loaded; when one is absent the children render unwrapped.
 function PluginRuntimeProviders({ children }: { children: ReactNode }): ReactNode {
-  const lib = typeof window === "undefined" ? undefined : window.pluginLib;
+  const lib = window.pluginLib;
   const router = lib?.ReactRouter as { MemoryRouter?: ComponentType<{ children: ReactNode }> } | undefined;
   const redux = lib?.ReactRedux as
     | { Provider?: ComponentType<{ store: unknown; children: ReactNode }> }

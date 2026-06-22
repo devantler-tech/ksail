@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
@@ -79,6 +80,12 @@ func (p pluginStore) ListPlugins(_ context.Context) ([]api.PluginInfo, error) {
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+
+		// Skip hidden directories (e.g. the .staging-* directory an in-progress install uses) so a
+		// partial or leaked install is never advertised as a loadable plugin.
+		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 

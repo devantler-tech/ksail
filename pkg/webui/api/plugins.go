@@ -86,6 +86,12 @@ func (s *Server) pluginService() (PluginService, bool) {
 	return svc, ok
 }
 
+// isValidPluginID reports whether name is a usable plugin id: a non-empty single path element (no
+// directory separators or relative components), so a crafted id can never reach outside the plugins dir.
+func isValidPluginID(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
 func (s *Server) handleListPlugins(writer http.ResponseWriter, request *http.Request) {
 	svc, ok := s.pluginService()
 	if !ok {
@@ -119,7 +125,7 @@ func (s *Server) handlePluginAsset(writer http.ResponseWriter, request *http.Req
 	name := request.PathValue("name")
 	// Reject a plugin id that is empty or a relative path element; the service's PluginAsset also
 	// enforces containment, but rejecting these here keeps a crafted id from ever reaching the store.
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	if !isValidPluginID(name) {
 		writeClientError(writer, ErrNotFound)
 
 		return
@@ -180,7 +186,7 @@ func (s *Server) handleUninstallPlugin(writer http.ResponseWriter, request *http
 	}
 
 	name := request.PathValue("name")
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	if !isValidPluginID(name) {
 		writeClientError(writer, ErrNotFound)
 
 		return
