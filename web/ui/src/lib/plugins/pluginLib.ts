@@ -14,6 +14,7 @@
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
+import * as ReactJSX from "react/jsx-runtime";
 import { listResources } from "../../api.ts";
 import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
 import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
@@ -51,6 +52,11 @@ type DetailsSectionComponent = React.ComponentType<{ resource: PluginResource }>
 export interface PluginLib {
   React: typeof React;
   ReactDOM: typeof ReactDOM;
+  // ReactJSX is react/jsx-runtime. Real toolchain-built Headlamp bundles compile JSX to the automatic
+  // runtime (ReactJSX.jsx(...)) and map react/jsx-runtime → pluginLib.ReactJSX, so the facade must expose
+  // it or every JSX-using plugin bundle throws on load (our hand-written tests used React.createElement
+  // and never hit this — a real bundle did).
+  ReactJSX: typeof ReactJSX;
   registerSidebarEntry: (entry: HeadlampSidebarEntry) => void;
   registerRoute: (route: HeadlampRoute) => void;
   registerDetailsViewSection: (section: DetailsSectionComponent) => void;
@@ -128,6 +134,7 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
   const lib: PluginLib = {
     React,
     ReactDOM,
+    ReactJSX,
     registerSidebarEntry,
     registerRoute,
     registerDetailsViewSection,
