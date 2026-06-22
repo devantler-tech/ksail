@@ -1,50 +1,104 @@
 // useAsyncList is the shared list-with-live-updates hook behind the plugin K8s data layer. Both
 // Headlamp surfaces KSail reproduces — K8s.ResourceClasses.<Kind>.useList() (k8s.ts) and the
 // K8s.useResourceList() shim (pluginLib.ts) — were independently doing the same one-shot fetch in a
-// useEffect; this consolidates that into one hook and adds polling so the lists stay current. It is a
-// tractable substitute for Headlamp's WebSocket watch multiplexer: instead of streaming, the hook
-// re-runs the caller's fetcher on a fixed interval (and immediately when the tab becomes visible
-// again), which keeps plugin resource tables fresh without any backend changes.
+// useEffect; this consolidates that into one hook so the lists stay current.
+//
+// Live updates come from one of two sources, transparently to the caller:
+//   - When the backend advertises the kubeWatch capability AND the caller supplies a `watch` binding
+//     (the proxy-backed k8s.ts path can), the hook opens an apiserver WATCH over SSE (watchStream.ts)
+//     after the initial fetch and applies incremental events — the faithful substitute for Headlamp's
+//     WebSocket watch multiplexer.
+//   - Otherwise (no capability, no binding, or the watch errors/closes) it falls back to re-running the
+//     fetcher on a fixed interval, pausing while the tab is hidden and refetching when it returns.
+// Either way the caller observes a live-updating [items, error] — its public signature is unchanged.
 
 import * as React from "react";
+import {
+  isKubeWatchAvailable,
+  kubeObjectKey,
+  openWatchStream,
+  type RawKubeObject,
+  type WatchEvent,
+} from "./watchStream.ts";
 
-// PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs the fetcher after the initial load. Five
-// seconds mirrors a typical Headlamp/Kubernetes dashboard refresh cadence — frequent enough to feel
+// PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs the fetcher when polling (no live watch).
+// Five seconds mirrors a typical Headlamp/Kubernetes dashboard refresh cadence — frequent enough to feel
 // live, infrequent enough not to hammer the read-only kube-proxy.
 export const PLUGIN_LIST_POLL_INTERVAL_MS = 5000;
 
-// useAsyncList fetches a list via the caller-supplied fetcher and keeps it current by polling.
-//
-//   - It holds [items, error] state and runs `fetcher` in a useEffect keyed on `deps` (the caller
-//     passes the cluster/kind/namespace primitives so a change re-fetches from scratch).
-//   - An `active` guard discards results from a fetch that was superseded by a deps change or unmount.
-//   - `error` is cleared on a successful fetch (not before each attempt), so a transient failure clears
-//     once a later poll succeeds without flickering during a sustained outage; an in-flight guard keeps
-//     overlapping poll/visibility refetches from racing each other.
-//   - After the initial fetch it polls every PLUGIN_LIST_POLL_INTERVAL_MS; the interval is cleared on
-//     cleanup.
-//   - Polling pauses while the tab is hidden (document.visibilityState === "hidden") and fires an
-//     immediate refetch when the tab becomes visible again, so a backgrounded UI does not poll
-//     needlessly yet is up to date the moment it is looked at.
+// WatchBinding tells useAsyncList how to keep a list live via an apiserver WATCH. It is optional: a
+// caller whose endpoint has no watch analogue (e.g. pluginLib's allowlisted /resources reader) omits it
+// and the hook polls. The binding maps raw watch objects to the caller's item type and derives a stable
+// key so an incremental event updates the right row.
+export interface WatchBinding<T> {
+  // url is the SSE watch endpoint to open (built by the caller from the same cluster/path context as the
+  // fetcher, via watchStream.watchStreamURL). An empty string disables the watch (e.g. no active
+  // cluster), so the hook polls.
+  url: string;
+  // toItem wraps a raw apiserver object (a watch event's `object`) into the caller's item type, mirroring
+  // how the fetcher wraps listed objects (e.g. new KubeObject(raw)), so watched and listed items match.
+  toItem: (raw: RawKubeObject) => T;
+  // keyOf derives the stable identity (uid, fallback namespace/name) an upsert/remove matches on. The
+  // fetcher's items and watched items must key identically so a MODIFIED replaces the listed row.
+  keyOf: (item: T) => string;
+}
+
+// applyWatchEvent returns the next items array after applying one watch event: ADDED/MODIFIED upsert the
+// object by key (replace in place, else append), DELETED removes it, and other verbs (BOOKMARK/ERROR)
+// leave the list unchanged. Pure so it composes inside a setItems updater.
+function applyWatchEvent<T>(items: T[], event: WatchEvent, binding: WatchBinding<T>): T[] {
+  const key = kubeObjectKey(event.object);
+
+  if (event.type === "DELETED") {
+    return items.filter((item) => binding.keyOf(item) !== key);
+  }
+
+  if (event.type !== "ADDED" && event.type !== "MODIFIED") {
+    return items;
+  }
+
+  const next = binding.toItem(event.object);
+  const index = items.findIndex((item) => binding.keyOf(item) === key);
+
+  if (index === -1) {
+    return [...items, next];
+  }
+
+  const copy = items.slice();
+  copy[index] = next;
+
+  return copy;
+}
+
+// useAsyncList fetches a list via the caller-supplied fetcher and keeps it current — by an apiserver
+// WATCH when available (see WatchBinding), otherwise by polling. It holds [items, error] state and re-
+// runs from scratch when `deps` change (the caller passes the cluster/kind/namespace primitives). An
+// `active` guard discards results from a fetch superseded by a deps change or unmount; `error` clears
+// only on a successful fetch so a transient failure does not flicker.
 export function useAsyncList<T>(
   fetcher: () => Promise<T[]>,
   deps: ReadonlyArray<unknown>,
+  watch?: WatchBinding<T>,
 ): [T[], Error | null] {
   const [items, setItems] = React.useState<T[]>([]);
   const [error, setError] = React.useState<Error | null>(null);
 
-  // Keep the latest fetcher in a ref so the polling effect can call it without listing `fetcher` in its
-  // deps (callers pass a fresh closure each render; we deliberately re-run only when `deps` change).
+  // Keep the latest fetcher/watch in refs so the effect can use them without listing them in its deps
+  // (callers pass fresh closures each render; we deliberately re-run only when `deps` change).
   const fetcherRef = React.useRef(fetcher);
   fetcherRef.current = fetcher;
+  const watchRef = React.useRef(watch);
+  watchRef.current = watch;
 
   React.useEffect(() => {
     let active = true;
     let inFlight = false;
+    let closeWatch: (() => void) | null = null;
+    let interval: number | undefined;
 
+    // load runs a full fetch (initial load, poll tick, or watch-error resync). The in-flight guard keeps
+    // an overlapping poll/visibility refetch from resolving out of order and overwriting newer data.
     const load = (): void => {
-      // Skip if a fetch is already in flight, so an overlapping poll or visibility refetch cannot resolve
-      // out of order and overwrite newer data with an older response.
       if (inFlight) {
         return;
       }
@@ -71,14 +125,59 @@ export function useAsyncList<T>(
         });
     };
 
-    load();
-
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== "hidden") {
-        load();
+    // startPolling installs the interval + visibility refetch that keep the list current without a watch.
+    // It is the live source when no watch runs, and the fallback when a watch errors.
+    const startPolling = (): void => {
+      if (interval !== undefined) {
+        return;
       }
-    }, PLUGIN_LIST_POLL_INTERVAL_MS);
 
+      interval = window.setInterval(() => {
+        if (document.visibilityState !== "hidden") {
+          load();
+        }
+      }, PLUGIN_LIST_POLL_INTERVAL_MS);
+    };
+
+    // tryWatch opens the apiserver WATCH after the initial fetch when the capability and a binding with a
+    // URL are present. Incremental events update items in place; a connection error closes the watch and
+    // falls back to polling, so the list never goes stale even if the stream drops.
+    const tryWatch = (): boolean => {
+      const binding = watchRef.current;
+      if (!binding || binding.url === "" || !isKubeWatchAvailable()) {
+        return false;
+      }
+
+      closeWatch = openWatchStream(binding.url, {
+        onEvent: (event) => {
+          if (active) {
+            setItems((current) => applyWatchEvent(current, event, binding));
+          }
+        },
+        onError: () => {
+          if (closeWatch) {
+            closeWatch();
+            closeWatch = null;
+          }
+          // The watch dropped; resync once and resume polling so the list stays live.
+          if (active) {
+            load();
+            startPolling();
+          }
+        },
+      });
+
+      return closeWatch !== null;
+    };
+
+    // Initial fetch, then prefer a live watch; only poll when a watch is not running.
+    load();
+    if (!tryWatch()) {
+      startPolling();
+    }
+
+    // A visibility return refetches immediately (a backgrounded UI may have missed watch events or poll
+    // ticks), so the list is up to date the moment it is looked at — whether watching or polling.
     const onVisibilityChange = (): void => {
       if (document.visibilityState !== "hidden") {
         load();
@@ -89,11 +188,16 @@ export function useAsyncList<T>(
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (interval !== undefined) {
+        window.clearInterval(interval);
+      }
+      if (closeWatch) {
+        closeWatch();
+      }
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-    // The caller owns the dependency list; the fetcher is read from a ref (above) so passing a fresh
-    // closure each render does not restart polling — only a change in `deps` re-fetches.
+    // The caller owns the dependency list; the fetcher/watch are read from refs (above) so passing fresh
+    // closures each render does not restart the effect — only a change in `deps` re-fetches.
   }, deps);
 
   return [items, error];

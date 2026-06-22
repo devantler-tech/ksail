@@ -33,6 +33,7 @@ import { AIAssistant } from "./components/AIAssistant.tsx";
 import { PluginRouteHost } from "./lib/plugins/PluginSlots.tsx";
 import { registry } from "./lib/plugins/registry.ts";
 import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
+import { setKubeWatchAvailable } from "./lib/plugins/watchStream.ts";
 import {
   ClusterFormDialog,
   specFromValues,
@@ -131,7 +132,17 @@ export function App() {
   const canPlugins = capability(config, "plugins");
   // canAIChat gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
   const canAIChat = capability(config, "aiChat");
+  // canKubeWatch reports whether the backend streams apiserver watches; the plugin K8s data layer reads
+  // it through a module flag (set below) to keep its lists live via SSE instead of polling.
+  const canKubeWatch = capability(config, "kubeWatch");
   const mode = config?.mode;
+
+  // Mirror the kubeWatch capability into the plugin watch-stream module so useAsyncList (which has no
+  // access to the config state) opens a live apiserver watch only against a backend that serves it,
+  // falling back to polling otherwise. Re-runs whenever config changes (e.g. after a settings reload).
+  useEffect(() => {
+    setKubeWatchAvailable(canKubeWatch);
+  }, [canKubeWatch]);
 
   // getCluster resolves the active cluster's namespace/name for plugins' Kubernetes data shim (read
   // live by the shim on each fetch), or null when no cluster is drilled into.

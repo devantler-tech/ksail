@@ -173,6 +173,11 @@ type Capabilities struct {
 	// PluginInstall reports whether the backend can install/uninstall web-UI plugins (PluginInstaller)
 	// and is not read-only. The SPA shows the plugin install/uninstall surface only then.
 	PluginInstall bool `json:"pluginInstall"`
+	// KubeWatch reports whether the backend streams read-only kube-apiserver watches (KubeWatch) — true
+	// exactly when the serving ClusterService implements it. It powers live incremental updates
+	// (ADDED/MODIFIED/DELETED) for the plugin K8s data layer; when false the SPA falls back to polling.
+	// The local `ksail open web`/desktop backend implements it; the operator leaves it false.
+	KubeWatch bool `json:"kubeWatch"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

@@ -7,7 +7,8 @@
 // intentionally out of scope here — this covers the common list-and-render path.
 
 import type { ClusterRef } from "./pluginLib.ts";
-import { useAsyncList } from "./useAsyncList.ts";
+import { useAsyncList, type WatchBinding } from "./useAsyncList.ts";
+import { kubeObjectKey, watchStreamURL, type RawKubeObject } from "./watchStream.ts";
 
 // KubeObject wraps a raw Kubernetes resource as Headlamp plugins expect: `jsonData` holds the raw
 // object and the metadata/spec/status accessors plus getName/getNamespace mirror Headlamp's KubeObject
@@ -95,8 +96,10 @@ async function proxyList(cluster: ClusterRef, listPath: string): Promise<KubeObj
 
 // makeResourceClass builds one ResourceClass whose useList hook fetches via the proxy and re-fetches
 // when the active cluster changes (keyed on the cluster's primitive name/namespace, mirroring the
-// useResourceList shim so a cluster switch reloads the data). Live updates come from useAsyncList,
-// which polls the fetcher on an interval; an absent cluster yields an empty list.
+// useResourceList shim so a cluster switch reloads the data). Live updates come from useAsyncList: an
+// apiserver WATCH on the same collection when the backend supports it (the watch binding below),
+// otherwise interval polling. An absent cluster yields an empty list (and an empty watch URL, disabling
+// the watch).
 function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null): ResourceClass {
   return {
     useList(): [KubeObject[], Error | null] {
@@ -104,13 +107,29 @@ function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null
       const clusterName = cluster?.name ?? null;
       const clusterNamespace = cluster?.namespace ?? null;
 
-      return useAsyncList<KubeObject>(() => {
-        if (clusterName === null || clusterNamespace === null) {
-          return Promise.resolve([]);
-        }
+      // The watch observes the same collection the fetcher lists, with watched objects wrapped as
+      // KubeObjects keyed identically (uid, fallback namespace/name) so an incremental event updates the
+      // right row. An absent cluster yields an empty URL, which disables the watch (the hook polls).
+      const watch: WatchBinding<KubeObject> = {
+        url:
+          clusterName === null || clusterNamespace === null
+            ? ""
+            : watchStreamURL(clusterNamespace, clusterName, def.listPath),
+        toItem: (raw: RawKubeObject) => new KubeObject(raw as Record<string, unknown>),
+        keyOf: (item: KubeObject) => kubeObjectKey(item.jsonData as RawKubeObject),
+      };
 
-        return proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath);
-      }, [clusterName, clusterNamespace]);
+      return useAsyncList<KubeObject>(
+        () => {
+          if (clusterName === null || clusterNamespace === null) {
+            return Promise.resolve([]);
+          }
+
+          return proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath);
+        },
+        [clusterName, clusterNamespace],
+        watch,
+      );
     },
   };
 }

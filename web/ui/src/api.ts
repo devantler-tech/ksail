@@ -169,6 +169,10 @@ export interface Capabilities {
   // pluginInstall is true when the backend can install/uninstall web-UI plugins (PluginInstaller) and
   // is not read-only. The SPA shows the plugin install/uninstall surface only then.
   pluginInstall: boolean;
+  // kubeWatch is true when the backend streams read-only apiserver watches, powering live incremental
+  // updates for the Headlamp-compatible plugins' K8s data layer. When false the SPA falls back to
+  // polling. Local backend only.
+  kubeWatch: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -198,6 +202,9 @@ export const fullCapabilities: Capabilities = {
   kubeProxy: false,
   // pluginInstall defaults false: an older backend that omits the flag has no install endpoint.
   pluginInstall: false,
+  // kubeWatch defaults false: an older backend that omits the flag has no watch endpoint, so the SPA
+  // must keep polling rather than open a watch that 404s.
+  kubeWatch: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource

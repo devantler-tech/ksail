@@ -73,7 +73,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
 			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
-			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}}`,
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false,"kubeWatch":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -378,7 +378,7 @@ func TestConfigDefaultsWritable(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
 			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
-			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}}`,
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false,"kubeWatch":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -401,7 +401,7 @@ func TestConfigReportsNoClusterUpdateWithoutUpdater(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
 			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,`+
-			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false,"kubeWatch":false}`,
 	)
 }
 
@@ -422,7 +422,7 @@ func TestConfigReportsClusterUpdateWithUpdater(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
 			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,`+
-			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false,"kubeWatch":false}`,
 	)
 }
 
@@ -443,7 +443,7 @@ func TestConfigReportsClusterUpdateForOperatorBackend(t *testing.T) {
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
 			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
-			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false,"kubeWatch":false}`,
 	)
 }
 
