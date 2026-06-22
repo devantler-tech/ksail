@@ -1,28 +1,45 @@
-import { Bot, Send, Sparkles, User, Wrench } from "lucide-react";
+import { Bot, Check, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage, streamChat, type ChatEvent, type ChatMessage } from "../api.ts";
+import { confirmChatTool, errorMessage, streamChat, type ChatEvent, type ChatMessage } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { Button } from "./ui.tsx";
 
-// suggestions seed an empty conversation with useful, read-only starting prompts.
+// suggestions seed an empty conversation with useful starting prompts.
 const SUGGESTIONS = [
   "What's running in this cluster?",
   "Are any pods failing, and why?",
   "Explain this cluster's GitOps setup.",
 ];
 
+// ConfirmStatus tracks where a write-tool confirmation is in its lifecycle: awaiting the user's
+// decision, or resolved (approved/denied) — once resolved the buttons are replaced by the outcome.
+type ConfirmStatus = "pending" | "approved" | "denied";
+
+// PendingConfirm is one write tool the assistant asked to run, surfaced as an inline confirmation card.
+// id is the backend's confirmId (echoed back to resolve it); tool/summary describe the action.
+interface PendingConfirm {
+  id: string;
+  tool: string;
+  summary?: string;
+  status: ConfirmStatus;
+}
+
 // AIAssistant is the web UI's AI chat panel, streaming the assistant's reply from the backend's chat
-// endpoint (GitHub Copilot, read-only). It is cluster-aware: the active cluster is sent as context so
-// the assistant scopes its answers. App renders it only when the backend advertises the aiChat
-// capability.
+// endpoint (GitHub Copilot). It is cluster-aware: the active cluster is sent as context so the
+// assistant scopes its answers. When allowWrite is set the assistant may request write actions, each
+// gated behind an inline Approve/Deny confirmation; otherwise it stays read-only. App renders it only
+// when the backend advertises the aiChat capability.
 export function AIAssistant({
   clusterName,
   namespace,
+  allowWrite,
 }: {
   clusterName: string | null;
   namespace: string | null;
+  allowWrite: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [confirms, setConfirms] = useState<PendingConfirm[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +52,23 @@ export function AIAssistant({
   // Keep the latest message in view as the reply streams in.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  }, [messages, confirms]);
+
+  // resolveConfirm posts the user's Approve/Deny decision for a pending write tool and marks the card
+  // resolved, so the blocked turn proceeds (or rejects) and the buttons are replaced by the outcome.
+  const resolveConfirm = useCallback(async (id: string, approved: boolean) => {
+    setConfirms((prev) =>
+      prev.map((confirm) =>
+        confirm.id === id ? { ...confirm, status: approved ? "approved" : "denied" } : confirm,
+      ),
+    );
+
+    try {
+      await confirmChatTool(id, approved);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
 
   const send = useCallback(
     async (text: string) => {
@@ -46,6 +79,7 @@ export function AIAssistant({
 
       setError(null);
       setInput("");
+      setConfirms([]);
 
       // Snapshot the history before appending the new turn; the backend replays it for context.
       const history = messages;
@@ -63,7 +97,7 @@ export function AIAssistant({
             cluster: clusterName ?? undefined,
             namespace: namespace ?? undefined,
           },
-          (event) => applyChatEvent(event, setMessages, setError),
+          (event) => applyChatEvent(event, setMessages, setConfirms, setError),
           controller.signal,
         );
       } catch (err) {
@@ -86,10 +120,18 @@ export function AIAssistant({
         className="flex-1 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
       >
         {messages.length === 0 ? (
-          <EmptyConversation onPick={(text) => void send(text)} disabled={streaming} />
+          <EmptyConversation onPick={(text) => void send(text)} disabled={streaming} allowWrite={allowWrite} />
         ) : (
           messages.map((message, index) => <MessageBubble key={index} message={message} />)
         )}
+        {confirms.map((confirm) => (
+          <ConfirmCard
+            key={confirm.id}
+            confirm={confirm}
+            onApprove={() => void resolveConfirm(confirm.id, true)}
+            onDeny={() => void resolveConfirm(confirm.id, false)}
+          />
+        ))}
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
             {error}
@@ -127,12 +169,14 @@ export function AIAssistant({
   );
 }
 
-// applyChatEvent folds one streamed event into the message list: deltas append to the in-progress
-// assistant message, tool notices are appended as a subtle marker, and an error event surfaces the
-// message. A "done" event needs no state change (the assistant message is already complete).
+// applyChatEvent folds one streamed event into the panel state: deltas append to the in-progress
+// assistant message, tool notices are appended as a subtle marker, a tool-confirm spawns an inline
+// confirmation card, and an error event surfaces the message. A "done" event needs no state change
+// (the assistant message is already complete).
 function applyChatEvent(
   event: ChatEvent,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
+  setConfirms: React.Dispatch<React.SetStateAction<PendingConfirm[]>>,
   setError: (message: string) => void,
 ) {
   if (event.type === "error") {
@@ -143,6 +187,16 @@ function applyChatEvent(
 
   if (event.type === "delta" && event.text) {
     appendToAssistant(setMessages, event.text);
+
+    return;
+  }
+
+  if (event.type === "tool-confirm" && event.confirmId) {
+    const id = event.confirmId;
+    setConfirms((prev) => [
+      ...prev,
+      { id, tool: event.text ?? "an action", summary: event.summary, status: "pending" },
+    ]);
 
     return;
   }
@@ -167,6 +221,64 @@ function appendToAssistant(
 
     return next;
   });
+}
+
+// ConfirmCard renders one write-tool confirmation inline: the tool name, its summary, and Approve/Deny
+// buttons while pending; once resolved the buttons are replaced by the recorded outcome so the user can
+// see what they decided.
+function ConfirmCard({
+  confirm,
+  onApprove,
+  onDeny,
+}: {
+  confirm: PendingConfirm;
+  onApprove: () => void;
+  onDeny: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+      <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+        <Wrench className="size-4" aria-hidden />
+        Approve write action: <code className="font-mono">{confirm.tool}</code>
+      </div>
+      {confirm.summary ? (
+        <p className="mt-1 text-amber-800 dark:text-amber-300/90">{confirm.summary}</p>
+      ) : null}
+      {confirm.status === "pending" ? (
+        <div className="mt-3 flex gap-2">
+          <Button type="button" onClick={onApprove}>
+            <Check className="size-4" aria-hidden />
+            Approve
+          </Button>
+          <Button type="button" variant="secondary" onClick={onDeny}>
+            <X className="size-4" aria-hidden />
+            Deny
+          </Button>
+        </div>
+      ) : (
+        <p
+          className={cx(
+            "mt-2 inline-flex items-center gap-1.5 font-medium",
+            confirm.status === "approved"
+              ? "text-green-700 dark:text-green-400"
+              : "text-slate-500 dark:text-slate-400",
+          )}
+        >
+          {confirm.status === "approved" ? (
+            <>
+              <Check className="size-3.5" aria-hidden />
+              Approved
+            </>
+          ) : (
+            <>
+              <X className="size-3.5" aria-hidden />
+              Denied
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // MessageBubble renders one chat message, styled by role.
@@ -206,8 +318,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-// EmptyConversation is the starting state: a short intro plus clickable read-only prompt suggestions.
-function EmptyConversation({ onPick, disabled }: { onPick: (text: string) => void; disabled: boolean }) {
+// EmptyConversation is the starting state: a short intro plus clickable prompt suggestions. The intro
+// reflects whether the assistant may make changes (allowWrite) so the user knows what to expect.
+function EmptyConversation({
+  onPick,
+  disabled,
+  allowWrite,
+}: {
+  onPick: (text: string) => void;
+  disabled: boolean;
+  allowWrite: boolean;
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
       <div className="flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
@@ -216,8 +337,9 @@ function EmptyConversation({ onPick, disabled }: { onPick: (text: string) => voi
       <div>
         <p className="font-medium text-slate-900 dark:text-white">KSail Assistant</p>
         <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
-          Ask about your clusters, workloads, and KSail. The assistant is read-only — it can inspect, but
-          will not change anything.
+          {allowWrite
+            ? "Ask about your clusters, workloads, and KSail. It can inspect freely; any change is paused for your approval first."
+            : "Ask about your clusters, workloads, and KSail. The assistant is read-only — it can inspect, but will not change anything."}
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">

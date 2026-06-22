@@ -169,6 +169,15 @@ export interface Capabilities {
   // pluginInstall is true when the backend can install/uninstall web-UI plugins (PluginInstaller) and
   // is not read-only. The SPA shows the plugin install/uninstall surface only then.
   pluginInstall: boolean;
+  // aiChatWrite is true when the assistant may perform write operations — aiChat available AND the
+  // deployment is not read-only. The assistant's write tools are gated behind a per-action
+  // confirmation card; a read-only deployment rejects them server-side, so the SPA gates the
+  // confirmation affordance on this flag.
+  aiChatWrite: boolean;
+  // pluginCatalog is true when the backend can browse a remote catalog of installable plugins
+  // (PluginCatalog) — the local backend searches Artifact Hub for Headlamp plugins. The SPA shows the
+  // catalog search box only then; each result installs via the existing install flow.
+  pluginCatalog: boolean;
   // kubeWatch is true when the backend streams read-only apiserver watches, powering live incremental
   // updates for the Headlamp-compatible plugins' K8s data layer. When false the SPA falls back to
   // polling. Local backend only.
@@ -202,6 +211,11 @@ export const fullCapabilities: Capabilities = {
   kubeProxy: false,
   // pluginInstall defaults false: an older backend that omits the flag has no install endpoint.
   pluginInstall: false,
+  // aiChatWrite defaults false: an older backend that omits the flag predates the write-confirm flow,
+  // so the SPA keeps the assistant read-only there.
+  aiChatWrite: false,
+  // pluginCatalog defaults false: an older backend that omits the flag has no catalog endpoint.
+  pluginCatalog: false,
   // kubeWatch defaults false: an older backend that omits the flag has no watch endpoint, so the SPA
   // must keep polling rather than open a watch that 404s.
   kubeWatch: false,
@@ -666,10 +680,14 @@ export function pluginAssetURL(name: string, file: string): string {
 }
 
 // PluginInstallRequest installs a Headlamp-format plugin tarball from a URL (POST /api/v1/plugins).
-// sha256 (hex, optional) pins the download; name (optional) overrides the install id.
+// sha256 (hex, optional) pins the download (integrity); signature (base64 ed25519 detached signature
+// over the tarball bytes, optional) authenticates it against the backend's trusted public key
+// (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured;
+// name (optional) overrides the install id.
 export interface PluginInstallRequest {
   url: string;
   sha256?: string;
+  signature?: string;
   name?: string;
 }
 
@@ -688,6 +706,33 @@ export function uninstallPlugin(name: string): Promise<void> {
   return request<void>(`/api/v1/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
+// CatalogEntry describes one installable plugin from the remote catalog (Artifact Hub Headlamp
+// plugins). `url` is a direct .tar.gz the existing install flow consumes, so the Install button hands
+// it straight to installPlugin (see pkg/webui/api/plugins.go CatalogEntry).
+export interface CatalogEntry {
+  name: string;
+  description?: string;
+  version?: string;
+  repository?: string;
+  url: string;
+  // checksum is the tarball's SHA-256 hex (when the catalog publishes one), forwarded to installPlugin
+  // so the backend verifies integrity before extracting.
+  checksum?: string;
+}
+
+// searchPluginCatalog searches the backend's installable-plugin catalog (the local backend queries
+// Artifact Hub for Headlamp plugins). Only call it when capabilities.pluginCatalog is true; against a
+// backend without the capability the route is unregistered. An empty query returns the default set.
+export function searchPluginCatalog(query: string): Promise<{ entries: CatalogEntry[] }> {
+  const params = new URLSearchParams();
+  if (query.trim() !== "") {
+    params.set("q", query.trim());
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+
+  return request<{ entries: CatalogEntry[] }>(`/api/v1/plugins/catalog${suffix}`);
+}
+
 // ChatMessage is one prior turn sent as history so the assistant has conversation context.
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -703,13 +748,30 @@ export interface ChatRequestBody {
   namespace?: string;
 }
 
-// ChatEventType classifies a streamed chat event (mirrors the backend's ChatEventType).
-export type ChatEventType = "delta" | "tool" | "error" | "done";
+// ChatEventType classifies a streamed chat event (mirrors the backend's ChatEventType). "tool-confirm"
+// asks the user to approve or deny a write tool before it runs.
+export type ChatEventType = "delta" | "tool" | "tool-confirm" | "error" | "done";
 
 // ChatEvent is one streamed event of a chat turn.
 export interface ChatEvent {
   type: ChatEventType;
   text?: string;
+  // confirmId identifies a pending write-tool confirmation ("tool-confirm" only); echo it back via
+  // confirmChatTool to approve or deny the action.
+  confirmId?: string;
+  // summary is a short, display-only description of the pending write tool ("tool-confirm" only).
+  summary?: string;
+}
+
+// confirmChatTool resolves a pending write-tool confirmation: it posts the user's decision for the
+// action identified by confirmId, which unblocks the in-flight turn on the chat SSE stream so the tool
+// proceeds (approved) or is rejected. Returns 204; the outcome streams back on the original turn.
+export function confirmChatTool(confirmId: string, approved: boolean): Promise<void> {
+  return request<void>("/api/v1/chat/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmId, approved }),
+  });
 }
 
 // parseSSEData extracts the concatenated `data:` payload from one SSE frame, or null when the frame

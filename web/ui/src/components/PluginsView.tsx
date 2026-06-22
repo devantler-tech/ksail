@@ -1,6 +1,6 @@
-import { AlertTriangle, CheckCircle2, Download, RotateCw, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Download, RotateCw, Search, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { installPlugin, uninstallPlugin } from "../api.ts";
+import { type CatalogEntry, errorMessage, installPlugin, searchPluginCatalog, uninstallPlugin } from "../api.ts";
 import type { LoadedPlugin } from "../lib/plugins/loader.ts";
 import { cx } from "../lib/cx.ts";
 import { EmptyState, ErrorBanner } from "./states.tsx";
@@ -16,12 +16,14 @@ export function PluginsView({
   error,
   onReload,
   canInstall,
+  canBrowseCatalog,
 }: {
   plugins: LoadedPlugin[];
   loading: boolean;
   error: string | null;
   onReload: () => void;
   canInstall: boolean;
+  canBrowseCatalog: boolean;
 }) {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -33,6 +35,10 @@ export function PluginsView({
           Plugins run with full access to this UI and your clusters. Only install plugins you trust.
         </p>
       </div>
+
+      {/* The catalog browses Artifact Hub for Headlamp plugins; installing one still runs unsandboxed,
+          so it is offered only when this backend can actually install (canInstall). */}
+      {canBrowseCatalog && canInstall ? <PluginCatalogSection onInstalled={onReload} /> : null}
 
       {canInstall ? <PluginInstallForm onInstalled={onReload} /> : null}
 
@@ -78,11 +84,15 @@ const inputClass =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
 
 // PluginInstallForm installs a plugin from a tarball URL. Installing runs the plugin's code with full
-// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate);
-// signature verification is a follow-up — an optional SHA-256 pins the download in the meantime.
+// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate). Two
+// optional integrity/authenticity inputs (under "Advanced") harden the download: a SHA-256 pins the
+// bytes, and a base64 ed25519 signature authenticates them against the backend's trusted key
+// (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured.
 function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
   const [url, setUrl] = useState("");
   const [sha256, setSha256] = useState("");
+  const [signature, setSignature] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
@@ -94,9 +104,14 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
     setInstallError(null);
 
     try {
-      await installPlugin({ url: url.trim(), sha256: sha256.trim() || undefined });
+      await installPlugin({
+        url: url.trim(),
+        sha256: sha256.trim() || undefined,
+        signature: signature.trim() || undefined,
+      });
       setUrl("");
       setSha256("");
+      setSignature("");
       setConsent(false);
       onInstalled();
     } catch (err) {
@@ -125,14 +140,43 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
           placeholder="https://…/my-plugin.tar.gz"
           className={inputClass}
         />
-        <input
-          id="plugin-install-sha"
-          type="text"
-          value={sha256}
-          onChange={(event) => setSha256(event.target.value)}
-          placeholder="SHA-256 checksum (optional)"
-          className={inputClass}
-        />
+        <button
+          type="button"
+          id="plugin-install-advanced-toggle"
+          onClick={() => setShowAdvanced((shown) => !shown)}
+          aria-expanded={showAdvanced}
+          aria-controls="plugin-install-advanced"
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          <ChevronRight className={cx("size-3.5 transition-transform", showAdvanced && "rotate-90")} aria-hidden />
+          Advanced (integrity &amp; signature)
+        </button>
+        {showAdvanced ? (
+          <div id="plugin-install-advanced" className="space-y-2">
+            <input
+              id="plugin-install-sha"
+              type="text"
+              value={sha256}
+              onChange={(event) => setSha256(event.target.value)}
+              placeholder="SHA-256 checksum (optional)"
+              className={inputClass}
+            />
+            <input
+              id="plugin-install-signature"
+              type="text"
+              value={signature}
+              onChange={(event) => setSignature(event.target.value)}
+              placeholder="ed25519 signature, base64 (optional)"
+              className={inputClass}
+            />
+            {/* Authenticity is verified against the backend's trusted key (KSAIL_PLUGIN_SIGNING_PUBKEY);
+                a signature is rejected when no key is configured. */}
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              A signature is verified against the backend's trusted key and rejected when none is
+              configured.
+            </p>
+          </div>
+        ) : null}
       </div>
       <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
         <input
@@ -157,6 +201,191 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
         Install plugin
       </Button>
     </form>
+  );
+}
+
+// PluginCatalogSection searches the backend's installable-plugin catalog (Artifact Hub Headlamp
+// plugins) and lists the results, each with an Install button that runs the existing tarball-URL
+// install flow. It owns the search query and results; onInstalled refreshes the installed list above.
+function PluginCatalogSection({ onInstalled }: { onInstalled: () => void }) {
+  const [query, setQuery] = useState("");
+  const [entries, setEntries] = useState<CatalogEntry[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
+
+  const runSearch = async (): Promise<void> => {
+    setBusy(true);
+    setSearchError(null);
+
+    try {
+      const result = await searchPluginCatalog(query);
+      setEntries(result.entries);
+    } catch (err) {
+      setSearchError(errorMessage(err));
+      setEntries(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div>
+        <h2 className="text-sm font-medium text-slate-900 dark:text-white">Browse the plugin catalog</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Search Artifact Hub for Headlamp-compatible plugins and install one directly.
+        </p>
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy) {
+            void runSearch();
+          }
+        }}
+      >
+        <input
+          id="plugin-catalog-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search plugins (e.g. flux, kubescape)…"
+          className={inputClass}
+        />
+        <Button id="plugin-catalog-search-btn" type="submit" size="sm" loading={busy}>
+          {busy ? null : <Search className="size-4" aria-hidden />}
+          Search
+        </Button>
+      </form>
+      {searchError ? (
+        <p
+          id="plugin-catalog-error"
+          className="rounded-md bg-red-50 px-2.5 py-1.5 font-mono text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300"
+        >
+          {searchError}
+        </p>
+      ) : null}
+      {entries && entries.length > 0 ? (
+        <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <input
+            id="plugin-catalog-consent"
+            type="checkbox"
+            checked={consent}
+            onChange={(event) => setConsent(event.target.checked)}
+            className="mt-0.5"
+          />
+          I understand a catalog plugin runs unsandboxed with full access to my clusters.
+        </label>
+      ) : null}
+      <PluginCatalogResults entries={entries} onInstalled={onInstalled} consented={consent} />
+    </section>
+  );
+}
+
+// PluginCatalogResults renders the catalog search outcome: nothing before the first search, an empty
+// notice when a search returns no matches, otherwise the result rows.
+function PluginCatalogResults({
+  entries,
+  onInstalled,
+  consented,
+}: {
+  entries: CatalogEntry[] | null;
+  onInstalled: () => void;
+  consented: boolean;
+}) {
+  if (entries === null) {
+    return null;
+  }
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">No plugins matched your search.</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {entries.map((entry) => (
+        <CatalogEntryRow
+          key={`${entry.repository ?? ""}/${entry.name}@${entry.version ?? ""}`}
+          entry={entry}
+          onInstalled={onInstalled}
+          consented={consented}
+        />
+      ))}
+    </ul>
+  );
+}
+
+// CatalogEntryRow renders one catalog result with an Install button that runs the existing tarball-URL
+// install flow, then refreshes the installed list. It tracks its own busy/installed/error state so a
+// failure surfaces on the row without disturbing the rest of the results.
+function CatalogEntryRow({
+  entry,
+  onInstalled,
+  consented,
+}: {
+  entry: CatalogEntry;
+  onInstalled: () => void;
+  consented: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  const install = async (): Promise<void> => {
+    setBusy(true);
+    setInstallError(null);
+
+    try {
+      // Forward the catalog's published SHA-256 (when present) so the install flow verifies integrity.
+      await installPlugin({ url: entry.url, sha256: entry.checksum });
+      setInstalled(true);
+      onInstalled();
+    } catch (err) {
+      setInstallError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-slate-900 dark:text-white">{entry.name}</span>
+            {entry.version ? (
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                v{entry.version}
+              </span>
+            ) : null}
+          </div>
+          {entry.description ? (
+            <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{entry.description}</p>
+          ) : null}
+          {entry.repository ? (
+            <p className="mt-1 font-mono text-xs text-slate-400 dark:text-slate-500">{entry.repository}</p>
+          ) : null}
+        </div>
+        <Button
+          id={`plugin-catalog-install-${entry.url}`}
+          variant="secondary"
+          size="sm"
+          onClick={() => void install()}
+          disabled={busy || installed || !consented}
+          loading={busy}
+        >
+          {busy ? null : installed ? <CheckCircle2 className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />}
+          {installed ? "Installed" : "Install"}
+        </Button>
+      </div>
+      {installError ? (
+        <p className="mt-2 rounded-md bg-red-50 px-2.5 py-1.5 font-mono text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+          {installError}
+        </p>
+      ) : null}
+    </li>
   );
 }
 

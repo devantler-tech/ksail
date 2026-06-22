@@ -122,6 +122,10 @@ type Service struct {
 	// injectable for tests.
 	plugins pluginStore
 
+	// pluginCatalog browses installable Headlamp plugins from Artifact Hub, satisfying api.PluginCatalog
+	// so the SPA can search and install plugins. Its baseURL/httpClient seams are injectable for tests.
+	pluginCatalog pluginCatalog
+
 	// chat powers the web UI's AI assistant (api.ChatService). It is wired in by the `ksail ui` command
 	// (UseChat) so the Copilot dependency stays out of the core service; nil means unavailable.
 	chat chatRunner
@@ -137,6 +141,7 @@ func NewService() *Service {
 		discoverProviders: clusterdiscovery.AllProviders(),
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		plugins:           pluginStore{dir: defaultPluginsDir},
+		pluginCatalog:     defaultPluginCatalog(),
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{

@@ -58,12 +58,18 @@ type PluginService interface {
 }
 
 // PluginInstallRequest is the body of POST /api/v1/plugins: install a Headlamp-format plugin tarball
-// from a URL. SHA256 (hex, optional) pins the download to a known digest; Name (optional) overrides the
-// install id when the package.json name is unsuitable or absent.
+// from a URL. SHA256 (hex, optional) pins the download to a known digest; Signature (base64 ed25519
+// detached signature over the tarball bytes, optional) authenticates it against the trusted public key
+// configured out-of-band; Name (optional) overrides the install id when the package.json name is
+// unsuitable or absent. See pkg/cli/clusterapi/plugininstall.go for the trust model.
 type PluginInstallRequest struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256,omitempty"`
-	Name   string `json:"name,omitempty"`
+	// Signature is an optional base64-encoded ed25519 detached signature over the downloaded tarball
+	// bytes. When set, the install verifies it against KSAIL_PLUGIN_SIGNING_PUBKEY and rejects the
+	// install when no trusted key is configured (a claimed signature is never silently ignored).
+	Signature string `json:"signature,omitempty"`
+	Name      string `json:"name,omitempty"`
 }
 
 // PluginInstaller is an optional interface a ClusterService may implement to install and uninstall
@@ -76,6 +82,35 @@ type PluginInstaller interface {
 	InstallPlugin(ctx context.Context, req PluginInstallRequest) (PluginInfo, error)
 	// UninstallPlugin removes an installed plugin by id (name).
 	UninstallPlugin(ctx context.Context, name string) error
+}
+
+// CatalogEntry describes one installable plugin offered by a PluginCatalog (e.g. a Headlamp plugin
+// published on Artifact Hub). URL is a direct .tar.gz the existing install flow consumes, so the SPA's
+// Install button can hand it straight to InstallPlugin without any further resolution.
+type CatalogEntry struct {
+	// Name is the plugin's display name (and the suggested install id).
+	Name string `json:"name"`
+	// Description, Version and Repository are catalog metadata surfaced in the search results.
+	Description string `json:"description,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Repository  string `json:"repository,omitempty"`
+	// URL is the installable tarball (.tar.gz) the install flow downloads.
+	URL string `json:"url"`
+	// Checksum is the tarball's SHA-256 hex (when the catalog publishes one), forwarded to the install
+	// flow so it verifies integrity before extracting.
+	Checksum string `json:"checksum,omitempty"`
+}
+
+// PluginCatalog is an optional interface a ClusterService may implement to browse installable web-UI
+// plugins from a remote catalog (the local backend queries Artifact Hub for Headlamp plugins). A
+// backend that implements it advertises capabilities.pluginCatalog=true; the SPA then offers a search
+// box whose results each install via the existing PluginInstaller flow. ListCatalog is a read (the
+// catalog is remote and immutable from the UI's perspective), so it is registered as a GET without the
+// read-only guard; the install it feeds is still gated by PluginInstaller (and read-only) separately.
+type PluginCatalog interface {
+	// ListCatalog returns the catalog entries matching query (an empty query lists the default set).
+	// Implementations return a non-nil slice (empty, not nil) so the JSON encodes as [] rather than null.
+	ListCatalog(ctx context.Context, query string) ([]CatalogEntry, error)
 }
 
 // pluginService returns the backend's PluginService, or false when it does not implement one (the
@@ -200,6 +235,32 @@ func (s *Server) handleUninstallPlugin(writer http.ResponseWriter, request *http
 	}
 
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+// handlePluginCatalog returns the installable-plugin catalog entries matching the `q` query parameter.
+// Registered only when the backend implements PluginCatalog; a GET (the catalog is a remote read), so
+// the read-only guard does not apply. A lookup failure (e.g. the upstream catalog is unreachable) is
+// surfaced as 422 with the message rather than a 500, matching the install handler.
+func (s *Server) handlePluginCatalog(writer http.ResponseWriter, request *http.Request) {
+	catalog, ok := s.Service.(PluginCatalog)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	entries, err := catalog.ListCatalog(request.Context(), request.URL.Query().Get("q"))
+	if err != nil {
+		writeError(writer, http.StatusUnprocessableEntity, err)
+
+		return
+	}
+
+	if entries == nil {
+		entries = []CatalogEntry{}
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"entries": entries})
 }
 
 // PluginContentType maps a plugin file's extension to the content type the asset handler sets. It is
