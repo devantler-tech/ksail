@@ -687,15 +687,39 @@ export function pluginAssetURL(name: string, file: string): string {
   return `/api/v1/plugins/${encodeURIComponent(name)}/${file}`;
 }
 
-// PluginInstallRequest installs a Headlamp-format plugin tarball from a URL (POST /api/v1/plugins).
-// sha256 (hex, optional) pins the download (integrity); signature (base64 ed25519 detached signature
-// over the tarball bytes, optional) authenticates it against the backend's trusted public key
+// PluginCosign carries cosign/sigstore verification material (the strongest install tier). Keyless:
+// provide a sigstore `bundle` (inline JSON/base64) or `bundleUrl` plus the expected certificate identity
+// (`identitySubject` + `identityIssuer`); the bundle is verified against the public-good trust root.
+// Key-based: provide a PEM `publicKey` (a cosign ECDSA key) plus a bundle. When present, a verification
+// failure rejects the install (the backend returns 422); see pkg/cli/clusterapi/plugininstall.go.
+export interface PluginCosign {
+  // bundle is the sigstore bundle JSON, inline (raw or base64-encoded). Either this or bundleUrl.
+  bundle?: string;
+  // bundleUrl fetches the sigstore bundle JSON from an http(s) URL (size-capped). Either this or bundle.
+  bundleUrl?: string;
+  // publicKey is a PEM-encoded cosign ECDSA public key for key-based verification (keyless otherwise).
+  publicKey?: string;
+  // identitySubject is the expected keyless signing-certificate SAN; treated as a regex when
+  // identitySubjectRegex is set, otherwise matched exactly.
+  identitySubject?: string;
+  identitySubjectRegex?: boolean;
+  // identityIssuer is the expected keyless OIDC issuer; treated as a regex when identityIssuerRegex is
+  // set, otherwise matched exactly.
+  identityIssuer?: string;
+  identityIssuerRegex?: boolean;
+}
+
+// PluginInstallRequest installs a Headlamp-format plugin tarball from a URL (POST /api/v1/plugins). The
+// authenticity tiers are layered strongest-first: cosign (sigstore bundle, keyless or key-based) is the
+// strongest; sha256 (hex, optional) pins the download (integrity); signature (base64 ed25519 detached
+// signature over the tarball bytes, optional) authenticates against the backend's trusted public key
 // (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured;
 // name (optional) overrides the install id.
 export interface PluginInstallRequest {
   url: string;
   sha256?: string;
   signature?: string;
+  cosign?: PluginCosign;
   name?: string;
 }
 

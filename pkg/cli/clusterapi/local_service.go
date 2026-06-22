@@ -130,6 +130,12 @@ type Service struct {
 	// (UseChat) so the Copilot dependency stays out of the core service; nil means unavailable.
 	chat chatRunner
 
+	// cosign verifies plugin downloads against cosign/sigstore material (the strongest install
+	// authenticity tier). It is wired in by the `ksail open web` command (UseCosignVerifier) so the heavy
+	// sigstore-go dependency stays out of the core service and the desktop module; nil means cosign
+	// verification is unavailable, so an install carrying cosign material is rejected.
+	cosign cosignVerifier
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }

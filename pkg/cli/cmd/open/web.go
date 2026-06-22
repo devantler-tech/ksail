@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/browser"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/pluginsig"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/webchat"
 	"github.com/spf13/cobra"
 )
@@ -81,6 +82,11 @@ func runWebCmd(cmd *cobra.Command, port int, noBrowser bool) error {
 	chatRunner := webchat.New(cmd.Root())
 	if service, ok := server.Service.(*clusterapi.Service); ok {
 		service.UseChat(chatRunner)
+		// Wire cosign/sigstore plugin verification (the strongest install authenticity tier). Kept in the
+		// command layer (not the shared uiserver/clusterapi) so the heavy sigstore-go dependency stays out
+		// of the desktop app, which reuses clusterapi without it. The CLI binary already links sigstore-go
+		// transitively, so this adds no new dependency here.
+		service.UseCosignVerifier(pluginsig.New())
 	}
 
 	defer chatRunner.Close()

@@ -149,6 +149,12 @@ linters:
             - github.com/spf13/viper
             - github.com/stretchr/testify
             - github.com/siderolabs
+            # sigstore-go (+ the sigstore signature helpers) powers cosign/sigstore plugin verification
+            # in pkg/svc/pluginsig. The CLI binary already links these transitively (via the kubescape
+            # client); they are confined to pluginsig (wired in only at the `ksail open web` command
+            # layer) so clusterapi and the desktop module stay sigstore-free. The org prefix covers both
+            # github.com/sigstore/sigstore-go and github.com/sigstore/sigstore (the signature helpers).
+            - github.com/sigstore
             - github.com/sirupsen/logrus
             - github.com/loft-sh/log
             - github.com/loft-sh/vcluster
