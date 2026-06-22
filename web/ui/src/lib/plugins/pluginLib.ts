@@ -70,6 +70,15 @@ export interface PluginLib {
   K8s: K8sShim;
   ApiProxy: ApiProxyShim;
   CommonComponents: CommonComponentsShape;
+  // useTranslation is Headlamp's i18n hook; KSail provides a passthrough returning the key (or the string
+  // default if one is passed), so untranslated plugins render their default English strings. A full
+  // i18next integration is a follow-up.
+  useTranslation: () => {
+    t: (key: string, options?: unknown) => string;
+    i18n: { language: string; changeLanguage: () => Promise<void> };
+  };
+  // Headlamp exposes the active-cluster surface plugins read (KSail owns cluster switching via its UI).
+  Headlamp: HeadlampApi;
   // Lazily-installed heavy externals (see externals.ts) — present only after a plugin loads. Typed
   // loosely: they are external module namespaces consumed by plugin JS, not by KSail's own code.
   MuiMaterial?: unknown;
@@ -89,6 +98,14 @@ interface K8sShim {
 
 interface ApiProxyShim {
   request: (path: string) => Promise<unknown>;
+}
+
+// HeadlampApi is the subset of Headlamp's `Headlamp` namespace KSail implements — reading the active
+// cluster name (KSail owns switching, so setCluster is a no-op and getClusters is empty for now).
+interface HeadlampApi {
+  getCluster: () => string | null;
+  getClusters: () => Record<string, unknown>;
+  setCluster: (name: string) => void;
 }
 
 declare global {
@@ -172,6 +189,17 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
       },
     },
     CommonComponents,
+    useTranslation: () => ({
+      t: (key, options) => (typeof options === "string" ? options : key),
+      i18n: { language: "en", changeLanguage: () => Promise.resolve() },
+    }),
+    Headlamp: {
+      getCluster: () => getCluster()?.name ?? null,
+      getClusters: () => ({}),
+      setCluster: () => {
+        // KSail owns cluster switching through its own UI; a plugin cannot change the active cluster.
+      },
+    },
     Notification: (message, ...rest) => {
       // Surface plugin notifications via a DOM event the SPA can later route to toasts; log meanwhile.
       window.dispatchEvent(new CustomEvent("ksail:plugin-notification", { detail: { message, rest } }));
