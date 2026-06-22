@@ -64,6 +64,15 @@ export interface PluginLib {
   K8s: K8sShim;
   ApiProxy: ApiProxyShim;
   CommonComponents: CommonComponentsShape;
+  // Lazily-installed heavy externals (see externals.ts) — present only after a plugin loads. Typed
+  // loosely: they are external module namespaces consumed by plugin JS, not by KSail's own code.
+  MuiMaterial?: unknown;
+  MuiIconsMaterial?: unknown;
+  MuiStyles?: unknown;
+  ReactRedux?: unknown;
+  ReactRouter?: unknown;
+  Lodash?: unknown;
+  Iconify?: unknown;
   Notification: (message: string, ...rest: unknown[]) => void;
 }
 

@@ -9,6 +9,7 @@
 // the window.pluginLib global), so plugins load with no CSP relaxation.
 
 import { listPlugins, pluginAssetURL, type PluginInfo } from "../../api.ts";
+import { installPluginExternals } from "./externals.ts";
 import { installPluginLib, type ClusterRef } from "./pluginLib.ts";
 import { registry } from "./registry.ts";
 
@@ -36,6 +37,14 @@ export async function loadPlugins(getCluster: () => ClusterRef | null): Promise<
   removePriorPluginScripts();
 
   const { plugins } = await listPlugins();
+
+  // Pull the heavy Headlamp externals (Material UI, Redux, React Router, …) onto window.pluginLib before
+  // any bundle executes, but only when a plugin is actually present — the import is a separate chunk, so
+  // KSail's own UI never loads Material UI otherwise.
+  if (plugins.length > 0) {
+    await installPluginExternals();
+  }
+
   const results: LoadedPlugin[] = [];
 
   for (const info of plugins) {
