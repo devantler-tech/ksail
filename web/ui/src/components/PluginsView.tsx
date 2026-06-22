@@ -1,6 +1,6 @@
-import { AlertTriangle, CheckCircle2, Download, RotateCw, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, RotateCw, Search, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { installPlugin, uninstallPlugin } from "../api.ts";
+import { type CatalogEntry, errorMessage, installPlugin, searchPluginCatalog, uninstallPlugin } from "../api.ts";
 import type { LoadedPlugin } from "../lib/plugins/loader.ts";
 import { cx } from "../lib/cx.ts";
 import { EmptyState, ErrorBanner } from "./states.tsx";
@@ -16,12 +16,14 @@ export function PluginsView({
   error,
   onReload,
   canInstall,
+  canBrowseCatalog,
 }: {
   plugins: LoadedPlugin[];
   loading: boolean;
   error: string | null;
   onReload: () => void;
   canInstall: boolean;
+  canBrowseCatalog: boolean;
 }) {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -33,6 +35,10 @@ export function PluginsView({
           Plugins run with full access to this UI and your clusters. Only install plugins you trust.
         </p>
       </div>
+
+      {/* The catalog browses Artifact Hub for Headlamp plugins; installing one still runs unsandboxed,
+          so it is offered only when this backend can actually install (canInstall). */}
+      {canBrowseCatalog && canInstall ? <PluginCatalogSection onInstalled={onReload} /> : null}
 
       {canInstall ? <PluginInstallForm onInstalled={onReload} /> : null}
 
@@ -157,6 +163,162 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
         Install plugin
       </Button>
     </form>
+  );
+}
+
+// PluginCatalogSection searches the backend's installable-plugin catalog (Artifact Hub Headlamp
+// plugins) and lists the results, each with an Install button that runs the existing tarball-URL
+// install flow. It owns the search query and results; onInstalled refreshes the installed list above.
+function PluginCatalogSection({ onInstalled }: { onInstalled: () => void }) {
+  const [query, setQuery] = useState("");
+  const [entries, setEntries] = useState<CatalogEntry[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const runSearch = async (): Promise<void> => {
+    setBusy(true);
+    setSearchError(null);
+
+    try {
+      const result = await searchPluginCatalog(query);
+      setEntries(result.entries);
+    } catch (err) {
+      setSearchError(errorMessage(err));
+      setEntries(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div>
+        <h2 className="text-sm font-medium text-slate-900 dark:text-white">Browse the plugin catalog</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Search Artifact Hub for Headlamp-compatible plugins and install one directly.
+        </p>
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy) {
+            void runSearch();
+          }
+        }}
+      >
+        <input
+          id="plugin-catalog-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search plugins (e.g. flux, kubescape)…"
+          className={inputClass}
+        />
+        <Button id="plugin-catalog-search-btn" type="submit" size="sm" loading={busy}>
+          {busy ? null : <Search className="size-4" aria-hidden />}
+          Search
+        </Button>
+      </form>
+      {searchError ? (
+        <p
+          id="plugin-catalog-error"
+          className="rounded-md bg-red-50 px-2.5 py-1.5 font-mono text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300"
+        >
+          {searchError}
+        </p>
+      ) : null}
+      <PluginCatalogResults entries={entries} onInstalled={onInstalled} />
+    </section>
+  );
+}
+
+// PluginCatalogResults renders the catalog search outcome: nothing before the first search, an empty
+// notice when a search returns no matches, otherwise the result rows.
+function PluginCatalogResults({
+  entries,
+  onInstalled,
+}: {
+  entries: CatalogEntry[] | null;
+  onInstalled: () => void;
+}) {
+  if (entries === null) {
+    return null;
+  }
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">No plugins matched your search.</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {entries.map((entry) => (
+        <CatalogEntryRow key={entry.url} entry={entry} onInstalled={onInstalled} />
+      ))}
+    </ul>
+  );
+}
+
+// CatalogEntryRow renders one catalog result with an Install button that runs the existing tarball-URL
+// install flow, then refreshes the installed list. It tracks its own busy/installed/error state so a
+// failure surfaces on the row without disturbing the rest of the results.
+function CatalogEntryRow({ entry, onInstalled }: { entry: CatalogEntry; onInstalled: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  const install = async (): Promise<void> => {
+    setBusy(true);
+    setInstallError(null);
+
+    try {
+      await installPlugin({ url: entry.url });
+      setInstalled(true);
+      onInstalled();
+    } catch (err) {
+      setInstallError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-slate-900 dark:text-white">{entry.name}</span>
+            {entry.version ? (
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                v{entry.version}
+              </span>
+            ) : null}
+          </div>
+          {entry.description ? (
+            <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{entry.description}</p>
+          ) : null}
+          {entry.repository ? (
+            <p className="mt-1 font-mono text-xs text-slate-400 dark:text-slate-500">{entry.repository}</p>
+          ) : null}
+        </div>
+        <Button
+          id={`plugin-catalog-install-${entry.url}`}
+          variant="secondary"
+          size="sm"
+          onClick={() => void install()}
+          disabled={busy || installed}
+          loading={busy}
+        >
+          {busy ? null : installed ? <CheckCircle2 className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />}
+          {installed ? "Installed" : "Install"}
+        </Button>
+      </div>
+      {installError ? (
+        <p className="mt-2 rounded-md bg-red-50 px-2.5 py-1.5 font-mono text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+          {installError}
+        </p>
+      ) : null}
+    </li>
   );
 }
 

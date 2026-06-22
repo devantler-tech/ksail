@@ -169,6 +169,10 @@ export interface Capabilities {
   // pluginInstall is true when the backend can install/uninstall web-UI plugins (PluginInstaller) and
   // is not read-only. The SPA shows the plugin install/uninstall surface only then.
   pluginInstall: boolean;
+  // pluginCatalog is true when the backend can browse a remote catalog of installable plugins
+  // (PluginCatalog) — the local backend searches Artifact Hub for Headlamp plugins. The SPA shows the
+  // catalog search box only then; each result installs via the existing install flow.
+  pluginCatalog: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -198,6 +202,8 @@ export const fullCapabilities: Capabilities = {
   kubeProxy: false,
   // pluginInstall defaults false: an older backend that omits the flag has no install endpoint.
   pluginInstall: false,
+  // pluginCatalog defaults false: an older backend that omits the flag has no catalog endpoint.
+  pluginCatalog: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -679,6 +685,30 @@ export function installPlugin(req: PluginInstallRequest): Promise<PluginInfo> {
 // uninstallPlugin removes an installed plugin by id (name).
 export function uninstallPlugin(name: string): Promise<void> {
   return request<void>(`/api/v1/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+// CatalogEntry describes one installable plugin from the remote catalog (Artifact Hub Headlamp
+// plugins). `url` is a direct .tar.gz the existing install flow consumes, so the Install button hands
+// it straight to installPlugin (see pkg/webui/api/plugins.go CatalogEntry).
+export interface CatalogEntry {
+  name: string;
+  description?: string;
+  version?: string;
+  repository?: string;
+  url: string;
+}
+
+// searchPluginCatalog searches the backend's installable-plugin catalog (the local backend queries
+// Artifact Hub for Headlamp plugins). Only call it when capabilities.pluginCatalog is true; against a
+// backend without the capability the route is unregistered. An empty query returns the default set.
+export function searchPluginCatalog(query: string): Promise<{ entries: CatalogEntry[] }> {
+  const params = new URLSearchParams();
+  if (query.trim() !== "") {
+    params.set("q", query.trim());
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+
+  return request<{ entries: CatalogEntry[] }>(`/api/v1/plugins/catalog${suffix}`);
 }
 
 // ChatMessage is one prior turn sent as history so the assistant has conversation context.

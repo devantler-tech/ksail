@@ -173,6 +173,11 @@ type Capabilities struct {
 	// PluginInstall reports whether the backend can install/uninstall web-UI plugins (PluginInstaller)
 	// and is not read-only. The SPA shows the plugin install/uninstall surface only then.
 	PluginInstall bool `json:"pluginInstall"`
+	// PluginCatalog reports whether the backend can browse a remote catalog of installable plugins
+	// (PluginCatalog) — the local backend searches Artifact Hub for Headlamp plugins. The SPA shows the
+	// catalog search box only then; each result installs via the existing install flow. Derived from the
+	// interface in handleConfig like the other flags, so it cannot drift from whether the route exists.
+	PluginCatalog bool `json:"pluginCatalog"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

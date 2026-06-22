@@ -373,6 +373,14 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/v1/plugins", s.handleInstallPlugin)
 		mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.handleUninstallPlugin)
 	}
+
+	// Plugin catalog (PluginCatalog): GET searches a remote catalog of installable plugins (Artifact Hub
+	// Headlamp plugins on the local backend). A read, so the read-only guard does not apply — the install
+	// each result feeds is gated by PluginInstaller separately. Registered only when the backend implements
+	// catalog browsing (the local one).
+	if _, ok := s.Service.(PluginCatalog); ok {
+		mux.HandleFunc("GET /api/v1/plugins/catalog", s.handlePluginCatalog)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -545,6 +553,10 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// read-only, so the SPA offers the install surface only when an install would actually be accepted.
 	_, pluginInstallable := s.Service.(PluginInstaller)
 	capabilities.PluginInstall = pluginInstallable && !s.ReadOnly
+	// pluginCatalog is true exactly when the backend can browse a remote plugin catalog (PluginCatalog),
+	// so the SPA offers the catalog search box only when results can actually be fetched. Browsing is a
+	// read, so it is not gated on !readOnly (the install each result feeds is gated separately).
+	_, capabilities.PluginCatalog = s.Service.(PluginCatalog)
 	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
 	// marker yet report false during a transitional period), so the create form's gate cannot diverge
 	// from whether components are actually installed.
