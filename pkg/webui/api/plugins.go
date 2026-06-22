@@ -58,12 +58,18 @@ type PluginService interface {
 }
 
 // PluginInstallRequest is the body of POST /api/v1/plugins: install a Headlamp-format plugin tarball
-// from a URL. SHA256 (hex, optional) pins the download to a known digest; Name (optional) overrides the
-// install id when the package.json name is unsuitable or absent.
+// from a URL. SHA256 (hex, optional) pins the download to a known digest; Signature (base64 ed25519
+// detached signature over the tarball bytes, optional) authenticates it against the trusted public key
+// configured out-of-band; Name (optional) overrides the install id when the package.json name is
+// unsuitable or absent. See pkg/cli/clusterapi/plugininstall.go for the trust model.
 type PluginInstallRequest struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256,omitempty"`
-	Name   string `json:"name,omitempty"`
+	// Signature is an optional base64-encoded ed25519 detached signature over the downloaded tarball
+	// bytes. When set, the install verifies it against KSAIL_PLUGIN_SIGNING_PUBKEY and rejects the
+	// install when no trusted key is configured (a claimed signature is never silently ignored).
+	Signature string `json:"signature,omitempty"`
+	Name      string `json:"name,omitempty"`
 }
 
 // PluginInstaller is an optional interface a ClusterService may implement to install and uninstall
