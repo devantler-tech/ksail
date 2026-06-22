@@ -704,6 +704,9 @@ export interface CatalogEntry {
   version?: string;
   repository?: string;
   url: string;
+  // checksum is the tarball's SHA-256 hex (when the catalog publishes one), forwarded to installPlugin
+  // so the backend verifies integrity before extracting.
+  checksum?: string;
 }
 
 // searchPluginCatalog searches the backend's installable-plugin catalog (the local backend queries

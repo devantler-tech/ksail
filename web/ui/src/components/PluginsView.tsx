@@ -174,6 +174,7 @@ function PluginCatalogSection({ onInstalled }: { onInstalled: () => void }) {
   const [entries, setEntries] = useState<CatalogEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
 
   const runSearch = async (): Promise<void> => {
     setBusy(true);
@@ -228,7 +229,19 @@ function PluginCatalogSection({ onInstalled }: { onInstalled: () => void }) {
           {searchError}
         </p>
       ) : null}
-      <PluginCatalogResults entries={entries} onInstalled={onInstalled} />
+      {entries && entries.length > 0 ? (
+        <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <input
+            id="plugin-catalog-consent"
+            type="checkbox"
+            checked={consent}
+            onChange={(event) => setConsent(event.target.checked)}
+            className="mt-0.5"
+          />
+          I understand a catalog plugin runs unsandboxed with full access to my clusters.
+        </label>
+      ) : null}
+      <PluginCatalogResults entries={entries} onInstalled={onInstalled} consented={consent} />
     </section>
   );
 }
@@ -238,9 +251,11 @@ function PluginCatalogSection({ onInstalled }: { onInstalled: () => void }) {
 function PluginCatalogResults({
   entries,
   onInstalled,
+  consented,
 }: {
   entries: CatalogEntry[] | null;
   onInstalled: () => void;
+  consented: boolean;
 }) {
   if (entries === null) {
     return null;
@@ -253,7 +268,12 @@ function PluginCatalogResults({
   return (
     <ul className="space-y-2">
       {entries.map((entry) => (
-        <CatalogEntryRow key={entry.url} entry={entry} onInstalled={onInstalled} />
+        <CatalogEntryRow
+          key={`${entry.repository ?? ""}/${entry.name}@${entry.version ?? ""}`}
+          entry={entry}
+          onInstalled={onInstalled}
+          consented={consented}
+        />
       ))}
     </ul>
   );
@@ -262,7 +282,15 @@ function PluginCatalogResults({
 // CatalogEntryRow renders one catalog result with an Install button that runs the existing tarball-URL
 // install flow, then refreshes the installed list. It tracks its own busy/installed/error state so a
 // failure surfaces on the row without disturbing the rest of the results.
-function CatalogEntryRow({ entry, onInstalled }: { entry: CatalogEntry; onInstalled: () => void }) {
+function CatalogEntryRow({
+  entry,
+  onInstalled,
+  consented,
+}: {
+  entry: CatalogEntry;
+  onInstalled: () => void;
+  consented: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
@@ -272,7 +300,8 @@ function CatalogEntryRow({ entry, onInstalled }: { entry: CatalogEntry; onInstal
     setInstallError(null);
 
     try {
-      await installPlugin({ url: entry.url });
+      // Forward the catalog's published SHA-256 (when present) so the install flow verifies integrity.
+      await installPlugin({ url: entry.url, sha256: entry.checksum });
       setInstalled(true);
       onInstalled();
     } catch (err) {
@@ -306,7 +335,7 @@ function CatalogEntryRow({ entry, onInstalled }: { entry: CatalogEntry; onInstal
           variant="secondary"
           size="sm"
           onClick={() => void install()}
-          disabled={busy || installed}
+          disabled={busy || installed || !consented}
           loading={busy}
         >
           {busy ? null : installed ? <CheckCircle2 className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />}

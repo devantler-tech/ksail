@@ -146,16 +146,21 @@ func (c pluginCatalog) resolveEntries(
 	semaphore := make(chan struct{}, catalogDetailConcurrency)
 
 	for index := range packages {
-		waitGroup.Add(1)
+		// Acquire a worker slot, but abandon the fan-out if the context is cancelled while every slot is
+		// busy — otherwise this send would block forever and the WaitGroup would never complete.
+		select {
+		case semaphore <- struct{}{}:
+		case <-ctx.Done():
+			waitGroup.Wait()
 
-		semaphore <- struct{}{}
+			return compactEntries(entries)
+		}
 
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			defer func() { <-semaphore }()
 
 			entries[index] = c.entryFor(ctx, packages[index])
-		}()
+		})
 	}
 
 	waitGroup.Wait()
@@ -163,11 +168,12 @@ func (c pluginCatalog) resolveEntries(
 	return compactEntries(entries)
 }
 
-// entryFor resolves one package's tarball URL and returns its catalog entry, or a zero entry (filtered
-// out by compactEntries) when the URL cannot be resolved.
+// entryFor resolves one package's tarball URL (and optional SHA-256 checksum) and returns its catalog
+// entry, or a zero entry (filtered out by compactEntries) when the URL cannot be resolved or is not an
+// http(s) address.
 func (c pluginCatalog) entryFor(ctx context.Context, pkg artifactHubPackage) api.CatalogEntry {
-	archiveURL, err := c.archiveURL(ctx, pkg)
-	if err != nil || archiveURL == "" {
+	archiveURL, checksum, err := c.archiveInfo(ctx, pkg)
+	if err != nil || !isHTTPArchiveURL(archiveURL) {
 		return api.CatalogEntry{}
 	}
 
@@ -177,13 +183,18 @@ func (c pluginCatalog) entryFor(ctx context.Context, pkg artifactHubPackage) api
 		Version:     pkg.Version,
 		Repository:  pkg.Repository.Name,
 		URL:         archiveURL,
+		Checksum:    checksum,
 	}
 }
 
-// archiveURL fetches a package's detail and returns its Headlamp plugin tarball URL.
-func (c pluginCatalog) archiveURL(ctx context.Context, pkg artifactHubPackage) (string, error) {
+// archiveInfo fetches a package's detail and returns its Headlamp plugin tarball URL plus the SHA-256
+// checksum hex when Artifact Hub publishes one (as "sha256:<hex>"), which the install flow then verifies.
+func (c pluginCatalog) archiveInfo(
+	ctx context.Context,
+	pkg artifactHubPackage,
+) (string, string, error) {
 	if pkg.Repository.Name == "" || pkg.Name == "" {
-		return "", nil
+		return "", "", nil
 	}
 
 	endpoint := fmt.Sprintf(
@@ -197,10 +208,32 @@ func (c pluginCatalog) archiveURL(ctx context.Context, pkg artifactHubPackage) (
 
 	err := c.getJSON(ctx, endpoint, &detail)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return detail.Data[archiveURLDataKey], nil
+	return detail.Data[archiveURLDataKey], sha256ChecksumHex(
+		detail.Data[archiveChecksumDataKey],
+	), nil
+}
+
+// isHTTPArchiveURL reports whether raw is an absolute http(s) URL. The catalog drops any entry whose
+// Artifact Hub tarball URL is not — defence-in-depth so a non-http URL from a crafted upstream entry
+// never reaches the SPA (the install flow validates the scheme too).
+func isHTTPArchiveURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
+}
+
+// sha256ChecksumHex extracts the hex digest from an Artifact Hub "sha256:<hex>" checksum, or "" for an
+// absent or non-SHA-256 checksum (the install flow only verifies SHA-256).
+func sha256ChecksumHex(checksum string) string {
+	hex, ok := strings.CutPrefix(strings.TrimSpace(checksum), "sha256:")
+	if !ok {
+		return ""
+	}
+
+	return hex
 }
 
 // getJSON performs a GET against endpoint (a fixed-host Artifact Hub URL) and decodes the size-capped

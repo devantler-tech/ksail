@@ -90,6 +90,9 @@ type CatalogEntry struct {
 	Repository  string `json:"repository,omitempty"`
 	// URL is the installable tarball (.tar.gz) the install flow downloads.
 	URL string `json:"url"`
+	// Checksum is the tarball's SHA-256 hex (when the catalog publishes one), forwarded to the install
+	// flow so it verifies integrity before extracting.
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // PluginCatalog is an optional interface a ClusterService may implement to browse installable web-UI
