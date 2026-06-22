@@ -57,6 +57,27 @@ type PluginService interface {
 	PluginAsset(ctx context.Context, name, file string) (PluginAsset, error)
 }
 
+// PluginInstallRequest is the body of POST /api/v1/plugins: install a Headlamp-format plugin tarball
+// from a URL. SHA256 (hex, optional) pins the download to a known digest; Name (optional) overrides the
+// install id when the package.json name is unsuitable or absent.
+type PluginInstallRequest struct {
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256,omitempty"`
+	Name   string `json:"name,omitempty"`
+}
+
+// PluginInstaller is an optional interface a ClusterService may implement to install and uninstall
+// web-UI plugins. A backend that implements it advertises capabilities.pluginInstall=true; the SPA then
+// offers the install/uninstall surface behind an explicit trust prompt (an installed plugin runs
+// unsandboxed with the user's cluster credentials). Both methods mutate, so they are registered behind
+// the read-only guard and only on the local loopback backend — the operator leaves them unimplemented.
+type PluginInstaller interface {
+	// InstallPlugin downloads, verifies and installs a plugin from req, returning its metadata.
+	InstallPlugin(ctx context.Context, req PluginInstallRequest) (PluginInfo, error)
+	// UninstallPlugin removes an installed plugin by id (name).
+	UninstallPlugin(ctx context.Context, name string) error
+}
+
 // pluginService returns the backend's PluginService, or false when it does not implement one (the
 // routes are only registered when it does, so this is belt-and-suspenders for the handlers).
 func (s *Server) pluginService() (PluginService, bool) {
@@ -116,6 +137,63 @@ func (s *Server) handlePluginAsset(writer http.ResponseWriter, request *http.Req
 	writer.Header().Set("Content-Type", asset.ContentType)
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = writer.Write(asset.Content)
+}
+
+// handleInstallPlugin installs a plugin from the POSTed PluginInstallRequest. Registered only when the
+// backend implements PluginInstaller and gated by the read-only guard (it mutates the plugins
+// directory). An install failure is surfaced as 422 with the explanatory message.
+func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.Request) {
+	installer, ok := s.Service.(PluginInstaller)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var req PluginInstallRequest
+
+	err := decodeJSON(writer, request, &req)
+	if err != nil {
+		return
+	}
+
+	info, err := installer.InstallPlugin(request.Context(), req)
+	if err != nil {
+		// Any install failure (bad URL, download, checksum, archive or layout) is a problem with the
+		// request rather than the server, so surface it as 422 with the message instead of a 500.
+		writeError(writer, http.StatusUnprocessableEntity, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusCreated, info)
+}
+
+// handleUninstallPlugin removes an installed plugin by id. The id is validated here (and again in the
+// store) so a crafted path can never reach the filesystem.
+func (s *Server) handleUninstallPlugin(writer http.ResponseWriter, request *http.Request) {
+	installer, ok := s.Service.(PluginInstaller)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	name := request.PathValue("name")
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		writeClientError(writer, ErrNotFound)
+
+		return
+	}
+
+	err := installer.UninstallPlugin(request.Context(), name)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 // PluginContentType maps a plugin file's extension to the content type the asset handler sets. It is

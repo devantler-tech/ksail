@@ -365,6 +365,14 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	if _, ok := s.Service.(KubeProxy); ok {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/proxy/{path...}", s.handleKubeProxy)
 	}
+
+	// Plugin install/uninstall (PluginInstaller): POST installs a Headlamp plugin tarball from a URL,
+	// DELETE removes one. Both mutate the plugins directory, so the read-only guard rejects them with 403
+	// in read-only mode. Registered only on a backend that implements installation (the local one).
+	if _, ok := s.Service.(PluginInstaller); ok {
+		mux.HandleFunc("POST /api/v1/plugins", s.handleInstallPlugin)
+		mux.HandleFunc("DELETE /api/v1/plugins/{name}", s.handleUninstallPlugin)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -533,6 +541,10 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// kubeProxy is true exactly when the backend can proxy read-only apiserver requests (KubeProxy),
 	// so plugins' ApiProxy data layer is only attempted against a backend that can serve it.
 	_, capabilities.KubeProxy = s.Service.(KubeProxy)
+	// pluginInstall is true when the backend can install/uninstall plugins (PluginInstaller) and is not
+	// read-only, so the SPA offers the install surface only when an install would actually be accepted.
+	_, pluginInstallable := s.Service.(PluginInstaller)
+	capabilities.PluginInstall = pluginInstallable && !s.ReadOnly
 	// componentsInstall is interface-derived but also asks the backend (a backend may implement the
 	// marker yet report false during a transitional period), so the create form's gate cannot diverge
 	// from whether components are actually installed.

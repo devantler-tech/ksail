@@ -170,6 +170,9 @@ type Capabilities struct {
 	// resource kinds beyond the curated allowlist (and the Headlamp-compatible plugins' ApiProxy data
 	// layer). The local `ksail ui`/desktop backend implements it; the operator leaves it false.
 	KubeProxy bool `json:"kubeProxy"`
+	// PluginInstall reports whether the backend can install/uninstall web-UI plugins (PluginInstaller)
+	// and is not read-only. The SPA shows the plugin install/uninstall surface only then.
+	PluginInstall bool `json:"pluginInstall"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,
