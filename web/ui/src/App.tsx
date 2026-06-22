@@ -577,6 +577,7 @@ export function App() {
           <AIAssistant
             clusterName={activeCluster?.metadata.name ?? null}
             namespace={activeCluster?.metadata.namespace ?? null}
+            allowWrite={capability(config, "aiChatWrite")}
           />
         ) : view === "secrets" ? (
           <SecretsView />

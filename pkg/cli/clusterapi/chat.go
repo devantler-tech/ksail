@@ -14,6 +14,8 @@ import (
 type chatRunner interface {
 	Available(ctx context.Context) bool
 	Run(ctx context.Context, req api.ChatRequest, emit func(api.ChatEvent)) error
+	// ConfirmTool resolves a pending write-tool confirmation issued during a turn (see api.ChatService).
+	ConfirmTool(confirmID string, approved bool)
 }
 
 // UseChat wires the AI assistant backend (e.g. the Copilot-backed runner from pkg/svc/webchat). Until
@@ -43,4 +45,15 @@ func (s *Service) Chat(ctx context.Context, req api.ChatRequest, emit func(api.C
 	}
 
 	return nil
+}
+
+// ConfirmTool resolves a pending write-tool confirmation (api.ChatService), delegating to the wired
+// runner. A nil runner (assistant unavailable) makes it a no-op, matching ConfirmTool's
+// unknown-confirmId semantics — a stale decision after the runner is gone is harmless.
+func (s *Service) ConfirmTool(confirmID string, approved bool) {
+	if s.chat == nil {
+		return
+	}
+
+	s.chat.ConfirmTool(confirmID, approved)
 }
