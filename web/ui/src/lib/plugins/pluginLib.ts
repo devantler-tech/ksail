@@ -207,7 +207,76 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
     },
   };
 
+  installCompatStubs(lib);
   window.pluginLib = lib;
+}
+
+// UNSUPPORTED_REGISTRATIONS are the Headlamp register*() functions KSail does not (yet) render an
+// extension point for. The full set is large (see @kinvolk/headlamp-plugin/lib's registry export); KSail
+// exposes each as a no-op so a plugin that calls one loads without crashing — the registration simply has
+// no effect rather than throwing on an undefined function. The five KSail DOES render
+// (sidebar/route/details-section/app-bar/table-columns) are wired in installPluginLib above.
+const UNSUPPORTED_REGISTRATIONS = [
+  "registerAppLogo",
+  "registerAppTheme",
+  "registerClusterChooser",
+  "registerClusterStatus",
+  "registerDetailsViewHeaderAction",
+  "registerDetailsViewHeaderActionsProcessor",
+  "registerDetailsViewSectionsProcessor",
+  "registerGetTokenFunction",
+  "registerHeadlampEventCallback",
+  "registerKindIcon",
+  "registerKubeObjectGlance",
+  "registerMapSource",
+  "registerOverviewChartsProcessor",
+  "registerPluginSettings",
+  "registerRouteFilter",
+  "registerSidebarEntryFilter",
+  "registerUIPanel",
+  "registerAddClusterProvider",
+  "registerClusterProviderDialog",
+  "registerClusterProviderMenuItem",
+  "registerCustomCreateProject",
+  "registerProjectDetailsTab",
+  "registerProjectOverviewSection",
+  "registerProjectHeaderAction",
+  "registerProjectDeleteButton",
+];
+
+// installCompatStubs fills in the rest of the Headlamp lib surface KSail does not natively render: every
+// other register*() function as a no-op, plus minimal Router/Utils/Plugin/Activity/ConfigStore namespaces
+// and the misc top-level helpers. The goal is that any real Headlamp plugin loads and runs the parts KSail
+// supports, instead of throwing on the first unknown export it touches.
+function installCompatStubs(lib: PluginLib): void {
+  const compat = lib as unknown as Record<string, unknown>;
+  const noop = (): undefined => undefined;
+
+  for (const name of UNSUPPORTED_REGISTRATIONS) {
+    compat[name] = noop;
+  }
+
+  // Router URL helpers — return a harmless hash anchor so a plugin building a link does not break.
+  compat.Router = {
+    createRouteURL: (): string => "#",
+    getRoute: (): null => null,
+    getRoutePath: (): string => "#",
+  };
+
+  // Namespaces a plugin may import (and subclass, for Plugin) even when it never exercises behaviour KSail
+  // does not implement — exposed as empty objects / base classes so the import resolves.
+  compat.Utils = {};
+  compat.Plugin = class {};
+  compat.Activity = {};
+  compat.ConfigStore = class {};
+  compat.PluginManager = {};
+
+  // Misc top-level helpers from the lib's registry export.
+  compat.clusterAction = noop;
+  compat.runCommand = noop;
+  compat.getHeadlampAPIHeaders = (): Record<string, string> => ({});
+  compat.isLocaleSupported = (): boolean => true;
+  compat.getSupportedLocales = (): Record<string, unknown> => ({});
 }
 
 // makeK8sShim builds the minimal-but-real Kubernetes data surface plugins consume. useResourceList is a
