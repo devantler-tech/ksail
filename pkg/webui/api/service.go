@@ -173,6 +173,12 @@ type Capabilities struct {
 	// PluginInstall reports whether the backend can install/uninstall web-UI plugins (PluginInstaller)
 	// and is not read-only. The SPA shows the plugin install/uninstall surface only then.
 	PluginInstall bool `json:"pluginInstall"`
+	// AIChatWrite reports whether the AI assistant may perform write operations — true when AIChat is
+	// available AND the deployment is not read-only. The assistant's write tools are gated behind a
+	// per-action confirmation in the SPA; a read-only deployment rejects them server-side (the chat POST
+	// is mutating), so the SPA gates the confirmation affordance on this flag. Always derived alongside
+	// AIChat in handleConfig, so it cannot diverge from whether a write turn can actually run.
+	AIChatWrite bool `json:"aiChatWrite"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

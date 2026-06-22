@@ -10,6 +10,15 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
 
+// confirmRecord captures the arguments of a ConfirmTool call so a test can assert the transport routed
+// the SPA's decision to the chat service. A pointer is embedded in the (value-receiver) chatStub so the
+// record survives the interface copy.
+type confirmRecord struct {
+	called    bool
+	confirmID string
+	approved  bool
+}
+
 // chatStub is a ClusterService that also implements api.ChatService, emitting canned events so the
 // chat transport, capability, and gating can be exercised without GitHub Copilot.
 type chatStub struct {
@@ -17,6 +26,7 @@ type chatStub struct {
 
 	available bool
 	events    []api.ChatEvent
+	confirm   *confirmRecord
 }
 
 func (c chatStub) ChatAvailable(_ context.Context) bool {
@@ -29,6 +39,14 @@ func (c chatStub) Chat(_ context.Context, _ api.ChatRequest, emit func(api.ChatE
 	}
 
 	return nil
+}
+
+func (c chatStub) ConfirmTool(confirmID string, approved bool) {
+	if c.confirm != nil {
+		c.confirm.called = true
+		c.confirm.confirmID = confirmID
+		c.confirm.approved = approved
+	}
 }
 
 func TestChatStreamsEventsAsSSE(t *testing.T) {
@@ -125,5 +143,107 @@ func TestChatRouteUnregisteredWithoutService(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/chat", `{"message":"hi"}`)
 	if recorder.Code != http.StatusNotFound {
 		t.Errorf("chat route status = %d, want 404 when unregistered", recorder.Code)
+	}
+}
+
+func TestChatStreamsToolConfirmEvent(t *testing.T) {
+	t.Parallel()
+
+	// A backend that needs to run a write tool streams a tool-confirm event carrying the confirmId, the
+	// tool name, and a summary; the SPA renders the confirmation card from it.
+	server := &api.Server{Service: chatStub{
+		available: true,
+		events: []api.ChatEvent{
+			{
+				Type:      api.ChatEventToolConfirm,
+				ConfirmID: "cid-123",
+				Text:      "cluster_write",
+				Summary:   "Create a cluster",
+			},
+		},
+	}}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/chat",
+		`{"message":"create a cluster"}`,
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("chat status = %d, want 200", recorder.Code)
+	}
+
+	body := recorder.Body.String()
+
+	want := `{"type":"tool-confirm","text":"cluster_write",` +
+		`"confirmId":"cid-123","summary":"Create a cluster"}`
+	if !strings.Contains(body, want) {
+		t.Errorf("stream body missing %s\n--- body ---\n%s", want, body)
+	}
+}
+
+func TestChatConfirmRoutesDecision(t *testing.T) {
+	t.Parallel()
+
+	record := &confirmRecord{}
+	server := &api.Server{Service: chatStub{available: true, confirm: record}}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/chat/confirm",
+		`{"confirmId":"cid-123","approved":true}`,
+	)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("confirm status = %d, want 204", recorder.Code)
+	}
+
+	if !record.called {
+		t.Fatal("ConfirmTool was not called")
+	}
+
+	if record.confirmID != "cid-123" || !record.approved {
+		t.Errorf(
+			"ConfirmTool got (%q, %v), want (cid-123, true)",
+			record.confirmID,
+			record.approved,
+		)
+	}
+}
+
+func TestChatConfirmRejectsEmptyConfirmID(t *testing.T) {
+	t.Parallel()
+
+	record := &confirmRecord{}
+	server := &api.Server{Service: chatStub{available: true, confirm: record}}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/chat/confirm",
+		`{"approved":true}`,
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Errorf("empty-confirmId status = %d, want 400", recorder.Code)
+	}
+
+	if record.called {
+		t.Error("ConfirmTool was called for an empty confirmId, want skipped")
+	}
+}
+
+func TestChatConfirmRouteUnregisteredWithoutService(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: stubClusterService{}}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/chat/confirm",
+		`{"confirmId":"x","approved":true}`,
+	)
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("confirm route status = %d, want 404 when unregistered", recorder.Code)
 	}
 }
