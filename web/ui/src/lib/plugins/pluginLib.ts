@@ -20,6 +20,7 @@ import { CommonComponents, type CommonComponentsShape } from "./commonComponents
 import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
 import { registry, type PluginResource, type RouteProps } from "./registry.ts";
 import { useAsyncList } from "./useAsyncList.ts";
+import { WebSocketManager } from "./wsMultiplexer.ts";
 
 // ClusterRef identifies the active cluster the K8s shim scopes reads to (KSail's resource API is
 // cluster-scoped). The loader supplies a live getter so the shim always reads the current cluster.
@@ -70,6 +71,10 @@ export interface PluginLib {
   };
   K8s: K8sShim;
   ApiProxy: ApiProxyShim;
+  // WebSocketManager is the Headlamp multiplexer client (wsMultiplexer.ts), exposed so a plugin that
+  // imports Headlamp's `WebSocketManager` to multiplex its own resource watches binds to KSail's
+  // API-compatible implementation (same subscribe/createKey surface, same /wsMultiplexer wire protocol).
+  WebSocketManager: typeof WebSocketManager;
   CommonComponents: CommonComponentsShape;
   // useTranslation is Headlamp's i18n hook; KSail provides a passthrough returning the key (or the string
   // default if one is passed), so untranslated plugins render their default English strings. A full
@@ -189,6 +194,7 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
         return response.json();
       },
     },
+    WebSocketManager,
     CommonComponents,
     useTranslation: () => ({
       t: (key, options) => (typeof options === "string" ? options : key),

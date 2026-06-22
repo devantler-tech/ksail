@@ -34,6 +34,7 @@ import { PluginRouteHost } from "./lib/plugins/PluginSlots.tsx";
 import { registry } from "./lib/plugins/registry.ts";
 import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
 import { setKubeWatchAvailable } from "./lib/plugins/watchStream.ts";
+import { setWSMultiplexerAvailable } from "./lib/plugins/wsMultiplexer.ts";
 import {
   ClusterFormDialog,
   specFromValues,
@@ -135,14 +136,19 @@ export function App() {
   // canKubeWatch reports whether the backend streams apiserver watches; the plugin K8s data layer reads
   // it through a module flag (set below) to keep its lists live via SSE instead of polling.
   const canKubeWatch = capability(config, "kubeWatch");
+  // canWSMultiplexer reports whether the backend serves the Headlamp WebSocket multiplexer; when set, the
+  // plugin K8s data layer prefers it (one socket) over the per-list SSE watch.
+  const canWSMultiplexer = capability(config, "wsMultiplexer");
   const mode = config?.mode;
 
-  // Mirror the kubeWatch capability into the plugin watch-stream module so useAsyncList (which has no
-  // access to the config state) opens a live apiserver watch only against a backend that serves it,
-  // falling back to polling otherwise. Re-runs whenever config changes (e.g. after a settings reload).
+  // Mirror the kubeWatch / wsMultiplexer capabilities into the plugin watch modules so useAsyncList (which
+  // has no access to the config state) opens a live watch only against a backend that serves it — the
+  // multiplexer when available, else the SSE watch, else polling. Re-runs whenever config changes (e.g.
+  // after a settings reload).
   useEffect(() => {
     setKubeWatchAvailable(canKubeWatch);
-  }, [canKubeWatch]);
+    setWSMultiplexerAvailable(canWSMultiplexer);
+  }, [canKubeWatch, canWSMultiplexer]);
 
   // getCluster resolves the active cluster's namespace/name for plugins' Kubernetes data shim (read
   // live by the shim on each fetch), or null when no cluster is drilled into.

@@ -371,8 +371,15 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// Read-only kube-apiserver WATCH (KubeWatch) over SSE: the streaming analogue of the proxy, so the
 	// SPA and Headlamp-compatible plugins receive live incremental updates instead of polling. GET-only
 	// (a read), so the read-only guard does not apply. Implemented only on the loopback local backend.
+	// The companion /wsMultiplexer endpoint (below) speaks Headlamp's WebSocket multiplexer wire protocol
+	// over the same KubeWatch backing, so a plugin using Headlamp's WebSocketManager works unmodified.
 	if _, ok := s.Service.(KubeWatch); ok {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/watch/{path...}", s.handleKubeWatch)
+		// Headlamp WebSocket multiplexer: one socket multiplexes many resource watches, keyed by
+		// {clusterId, path, query}. It lives at the root (not under /api/v1) because Headlamp's client
+		// connects to `${baseWsUrl}/wsMultiplexer`. A GET upgrade backing read-only watches, so the
+		// read-only guard does not apply; the auth guard still requires a session on the upgrade.
+		mux.HandleFunc("GET "+wsMultiplexerPath, s.handleWSMultiplexer)
 	}
 
 	// Plugin install/uninstall (PluginInstaller): POST installs a Headlamp plugin tarball from a URL,
@@ -484,6 +491,13 @@ func isOpenPath(path string) bool {
 		return true
 	}
 
+	// The Headlamp WebSocket multiplexer is a cluster data surface (it streams apiserver watches), so it
+	// must require a session when OIDC is enabled even though it lives at the root rather than under
+	// /api/. Without this it would be treated as an unauthenticated SPA route below.
+	if path == wsMultiplexerPath {
+		return false
+	}
+
 	// Non-API paths are SPA static assets / client-side routes; serve them unauthenticated.
 	return !strings.HasPrefix(path, "/api/")
 }
@@ -564,7 +578,10 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.KubeProxy = s.Service.(KubeProxy)
 	// kubeWatch is true exactly when the backend can stream apiserver watches (KubeWatch), so the
 	// plugin K8s data layer only opens a live watch against a backend that can serve it (else it polls).
+	// wsMultiplexer rides the same interface: the Headlamp WebSocket multiplexer is backed by the same
+	// apiserver watch, so it is advertised exactly when KubeWatch is (the route is registered together).
 	_, capabilities.KubeWatch = s.Service.(KubeWatch)
+	_, capabilities.WSMultiplexer = s.Service.(KubeWatch)
 	// pluginInstall is true when the backend can install/uninstall plugins (PluginInstaller) and is not
 	// read-only, so the SPA offers the install surface only when an install would actually be accepted.
 	_, pluginInstallable := s.Service.(PluginInstaller)

@@ -136,6 +136,7 @@ linters:
             - github.com/fsnotify/fsnotify
             - github.com/fluxcd
             - github.com/gkampitakis/go-snaps
+            - github.com/coder/websocket
             - github.com/gorilla/websocket
             - github.com/jinzhu/copier
             - github.com/k3d-io

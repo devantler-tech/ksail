@@ -2,11 +2,13 @@
 // KSail's read-only kube-apiserver WATCH endpoint (see pkg/webui/api/kubewatch.go) and delivers parsed,
 // incremental watch events (ADDED/MODIFIED/DELETED) to useAsyncList, which applies them to its list.
 //
-// This is the substitute for Headlamp's WebSocket watch multiplexer: plugins consume K8s.useList(),
-// which observes a live-updating list either way — KSail streams the apiserver watch as SSE (EventSource
-// is same-origin, GET-only, cookie-authenticated, and passes through the Wails desktop asset server,
-// unlike WebSockets), so no Headlamp WS wire protocol is reproduced. When a watch is unavailable (the
-// backend does not advertise kubeWatch) or errors, the caller falls back to interval polling.
+// This is the SSE fallback transport behind the plugin K8s data layer's live updates. The preferred
+// transport is the Headlamp WebSocket multiplexer (wsMultiplexer.ts), which reproduces Headlamp's WS wire
+// protocol so a plugin's own WebSocketManager works; useAsyncList uses this SSE watch when the backend
+// advertises kubeWatch but not wsMultiplexer (EventSource is same-origin, GET-only, cookie-authenticated,
+// and passes through the Wails desktop asset server). When neither is available, or a watch errors, the
+// caller falls back to interval polling. Plugins consume K8s.useList() and observe a live-updating list
+// regardless of which transport is active.
 
 // kubeWatchAvailable mirrors the backend's capabilities.kubeWatch flag. The app sets it once config is
 // loaded (setKubeWatchAvailable); the plugin K8s layer reads it through this module rather than prop-
