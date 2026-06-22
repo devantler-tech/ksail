@@ -18,8 +18,9 @@ export const PLUGIN_LIST_POLL_INTERVAL_MS = 5000;
 //   - It holds [items, error] state and runs `fetcher` in a useEffect keyed on `deps` (the caller
 //     passes the cluster/kind/namespace primitives so a change re-fetches from scratch).
 //   - An `active` guard discards results from a fetch that was superseded by a deps change or unmount.
-//   - `error` is reset to null at the start of every fetch, so a transient failure clears once a later
-//     poll succeeds (the old per-surface hooks never cleared it — a single blip stuck forever).
+//   - `error` is cleared on a successful fetch (not before each attempt), so a transient failure clears
+//     once a later poll succeeds without flickering during a sustained outage; an in-flight guard keeps
+//     overlapping poll/visibility refetches from racing each other.
 //   - After the initial fetch it polls every PLUGIN_LIST_POLL_INTERVAL_MS; the interval is cleared on
 //     cleanup.
 //   - Polling pauses while the tab is hidden (document.visibilityState === "hidden") and fires an
@@ -39,22 +40,34 @@ export function useAsyncList<T>(
 
   React.useEffect(() => {
     let active = true;
+    let inFlight = false;
 
     const load = (): void => {
-      // Clear any prior error before each attempt so a recovered fetch drops the stale failure.
-      setError(null);
+      // Skip if a fetch is already in flight, so an overlapping poll or visibility refetch cannot resolve
+      // out of order and overwrite newer data with an older response.
+      if (inFlight) {
+        return;
+      }
+
+      inFlight = true;
 
       fetcherRef
         .current()
         .then((list) => {
           if (active) {
             setItems(list);
+            // Clear a prior error only on success, so a sustained failure stays visible instead of
+            // flickering off and back on with each poll.
+            setError(null);
           }
         })
         .catch((err: unknown) => {
           if (active) {
             setError(err instanceof Error ? err : new Error(String(err)));
           }
+        })
+        .finally(() => {
+          inFlight = false;
         });
     };
 
