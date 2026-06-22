@@ -992,14 +992,11 @@ func TestAutoscalerTemplateDrift_IgnoresFreshlyRegeneratedPKI(t *testing.T) {
 		"independent generations must differ in PKI, else the test proves nothing",
 	)
 
-	secret := autoscalerSecretFor(t, "1", []talosprovisioner.AutoscalerPoolConfig{
-		{Name: "pool1", WorkerConfigYAML: storedYAML},
-	})
-	desired := []talosprovisioner.AutoscalerPoolConfig{
-		{Name: "pool1", WorkerConfigYAML: desiredYAML},
-	}
+	secret := autoscalerSecretFor(t, "1", singlePoolConfig(storedYAML))
 
-	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(
+		secret, singlePoolConfig(desiredYAML),
+	)
 	require.NoError(t, err)
 	assert.Empty(
 		t,
