@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -441,8 +442,31 @@ options:
 	}, nil
 }
 
+var safeClusterNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
+func validateClusterNamePathComponent(clusterName string) error {
+	if clusterName == "" || clusterName == "." || clusterName == ".." {
+		return fmt.Errorf("invalid cluster name")
+	}
+
+	if strings.Contains(clusterName, "/") || strings.Contains(clusterName, "\\") {
+		return fmt.Errorf("invalid cluster name")
+	}
+
+	if !safeClusterNamePattern.MatchString(clusterName) {
+		return fmt.Errorf("invalid cluster name")
+	}
+
+	return nil
+}
+
 // kwokStateDir returns the absolute path to kwokctl's cluster state directory.
 func kwokStateDir(clusterName string) (string, error) {
+	err := validateClusterNamePathComponent(clusterName)
+	if err != nil {
+		return "", fmt.Errorf("validate cluster name: %w", err)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
