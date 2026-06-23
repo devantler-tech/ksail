@@ -7,7 +7,7 @@
 // intentionally out of scope here — this covers the common list-and-render path.
 
 import type { ClusterRef } from "./pluginLib.ts";
-import { useAsyncList, type WatchBinding } from "./useAsyncList.ts";
+import { useClusterScopedList, type WatchBinding } from "./useClusterScopedList.ts";
 import { kubeObjectKey, watchStreamURL, type RawKubeObject } from "./watchStream.ts";
 
 // KubeObject wraps a raw Kubernetes resource as Headlamp plugins expect: `jsonData` holds the raw
@@ -96,10 +96,10 @@ async function proxyList(cluster: ClusterRef, listPath: string): Promise<KubeObj
 
 // makeResourceClass builds one ResourceClass whose useList hook fetches via the proxy and re-fetches
 // when the active cluster changes (keyed on the cluster's primitive name/namespace, mirroring the
-// useResourceList shim so a cluster switch reloads the data). Live updates come from useAsyncList: an
-// apiserver WATCH on the same collection when the backend supports it (the watch binding below),
-// otherwise interval polling. An absent cluster yields an empty list (and an empty watch URL, disabling
-// the watch).
+// useResourceList shim so a cluster switch reloads the data). The cluster-scoped fetch-on-change effect
+// is shared with useResourceList via useClusterScopedList. Live updates come from that hook's optional
+// watch binding: an apiserver WATCH on the same collection when the backend advertises kubeWatch,
+// otherwise interval polling. An absent cluster yields an empty watch URL, which disables the watch.
 function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null): ResourceClass {
   return {
     useList(): [KubeObject[], Error | null] {
@@ -119,15 +119,10 @@ function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null
         keyOf: (item: KubeObject) => kubeObjectKey(item.jsonData as RawKubeObject),
       };
 
-      return useAsyncList<KubeObject>(
-        () => {
-          if (clusterName === null || clusterNamespace === null) {
-            return Promise.resolve([]);
-          }
-
-          return proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath);
-        },
-        [clusterName, clusterNamespace],
+      return useClusterScopedList(
+        getCluster,
+        (active) => proxyList(active, def.listPath),
+        [],
         watch,
       );
     },
