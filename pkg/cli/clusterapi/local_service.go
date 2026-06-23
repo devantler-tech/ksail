@@ -13,8 +13,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +29,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+var clusterNamePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 // localNamespace is the synthetic namespace reported for local clusters. KSail has no namespace
 // concept locally, but the web UI keys rows on namespace/name and builds delete paths from it, so a
@@ -286,6 +290,16 @@ func (s *Service) Create(
 	name := cluster.Name
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
+	}
+
+	// Name is used in filesystem paths by downstream provisioners (for example ~/.kwok/clusters/<name>).
+	// Enforce a safe single-component identifier and reject traversal/separator characters.
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return nil, fmt.Errorf("%w: invalid cluster name %q", api.ErrInvalid, name)
+	}
+
+	if !clusterNamePattern.MatchString(name) {
+		return nil, fmt.Errorf("%w: invalid cluster name %q", api.ErrInvalid, name)
 	}
 
 	distribution := cluster.Spec.Cluster.Distribution
