@@ -13,8 +13,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -286,6 +288,15 @@ func (s *Service) Create(
 	name := cluster.Name
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
+	}
+
+	// Cluster name is a logical identifier, not a path. Reject path-like values
+	// to prevent path traversal when downstream code composes filesystem paths.
+	if strings.Contains(name, "/") ||
+		strings.Contains(name, "\\") ||
+		strings.Contains(name, "..") ||
+		filepath.Base(name) != name {
+		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
 	}
 
 	distribution := cluster.Spec.Cluster.Distribution
