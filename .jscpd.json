@@ -1,8 +1,6 @@
 {
   "ignore": [
     "**/node_modules/**",
-    "web/ui/**",
-    "**/web/ui/**",
     "**/.git/**",
     "**/.github/aw/logs/**",
     "**/.rbenv/**",
