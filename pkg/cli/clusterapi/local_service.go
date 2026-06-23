@@ -309,10 +309,7 @@ func (s *Service) Create(
 ) (*v1alpha1.Cluster, error) {
 	name := cluster.Name
 	if !isSafeClusterName(name) {
-		return nil, fmt.Errorf(
-			"%w: name is required and must be a safe path component",
-			api.ErrInvalid,
-		)
+		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
 	}
 
 	distribution := cluster.Spec.Cluster.Distribution
