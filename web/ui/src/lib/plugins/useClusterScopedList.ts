@@ -1,18 +1,24 @@
-// useAsyncList is the shared list-with-live-updates hook behind the plugin K8s data layer. Both
-// Headlamp surfaces KSail reproduces — K8s.ResourceClasses.<Kind>.useList() (k8s.ts) and the
-// K8s.useResourceList() shim (pluginLib.ts) — were independently doing the same one-shot fetch in a
-// useEffect; this consolidates that into one hook so the lists stay current.
+// useClusterScopedList is the shared React hook behind both Headlamp-compat list surfaces plugins
+// consume: `K8s.ResourceClasses.<Kind>.useList()` (k8s.ts) and `K8s.useResourceList()` (pluginLib.ts).
+// It fetches a list scoped to the active cluster, re-fetches when the cluster — or any caller-supplied
+// dependency (e.g. kind/namespace) — changes, and keeps the list current, returning [items, error]
+// like Headlamp's useList.
+//
+// `fetchList` receives the resolved active cluster and returns its items; `deps` are extra reactive
+// inputs appended to the cluster keys so the effect also re-runs when they change. It must be called
+// from a component render (it is a hook).
 //
 // Live updates come from one of two sources, transparently to the caller:
 //   - When the backend advertises the kubeWatch capability AND the caller supplies a `watch` binding
-//     (the proxy-backed k8s.ts path can), the hook opens an apiserver WATCH over SSE (watchStream.ts)
-//     after the initial fetch and applies incremental events — the faithful substitute for Headlamp's
-//     WebSocket watch multiplexer.
-//   - Otherwise (no capability, no binding, or the watch errors/closes) it falls back to re-running the
-//     fetcher on a fixed interval, pausing while the tab is hidden and refetching when it returns.
-// Either way the caller observes a live-updating [items, error] — its public signature is unchanged.
+//     with a non-empty URL (the proxy-backed k8s.ts path can), the hook opens an apiserver WATCH over
+//     SSE (watchStream.ts) after seeding with one fetchList and applies incremental events — the
+//     faithful substitute for Headlamp's WebSocket watch multiplexer. It does NOT poll while watching.
+//   - Otherwise (no capability, no binding/URL, or the watch errors/closes) it falls back to re-running
+//     fetchList on a fixed interval, pausing while the tab is hidden and refetching when it returns.
+// Either way the caller observes a live-updating [items, error] — the signature is unchanged.
 
 import * as React from "react";
+import type { ClusterRef } from "./pluginLib.ts";
 import {
   isKubeWatchAvailable,
   kubeObjectKey,
@@ -21,15 +27,15 @@ import {
   type WatchEvent,
 } from "./watchStream.ts";
 
-// PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs the fetcher when polling (no live watch).
+// PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs fetchList when polling (no live watch).
 // Five seconds mirrors a typical Headlamp/Kubernetes dashboard refresh cadence — frequent enough to feel
 // live, infrequent enough not to hammer the read-only kube-proxy.
 export const PLUGIN_LIST_POLL_INTERVAL_MS = 5000;
 
-// WatchBinding tells useAsyncList how to keep a list live via an apiserver WATCH. It is optional: a
-// caller whose endpoint has no watch analogue (e.g. pluginLib's allowlisted /resources reader) omits it
-// and the hook polls. The binding maps raw watch objects to the caller's item type and derives a stable
-// key so an incremental event updates the right row.
+// WatchBinding tells useClusterScopedList how to keep a list live via an apiserver WATCH. It is
+// optional: a caller whose endpoint has no watch analogue (e.g. pluginLib's allowlisted /resources
+// reader) omits it and the hook polls. The binding maps raw watch objects to the caller's item type and
+// derives a stable key so an incremental event updates the right row.
 export interface WatchBinding<T> {
   // url is the SSE watch endpoint to open (built by the caller from the same cluster/path context as the
   // fetcher, via watchStream.watchStreamURL). An empty string disables the watch (e.g. no active
@@ -70,43 +76,49 @@ function applyWatchEvent<T>(items: T[], event: WatchEvent, binding: WatchBinding
   return copy;
 }
 
-// useAsyncList fetches a list via the caller-supplied fetcher and keeps it current — by an apiserver
-// WATCH when available (see WatchBinding), otherwise by polling. It holds [items, error] state and re-
-// runs from scratch when `deps` change (the caller passes the cluster/kind/namespace primitives). An
-// `active` guard discards results from a fetch superseded by a deps change or unmount; `error` clears
-// only on a successful fetch so a transient failure does not flicker.
-export function useAsyncList<T>(
-  fetcher: () => Promise<T[]>,
-  deps: ReadonlyArray<unknown>,
+export function useClusterScopedList<T>(
+  getCluster: () => ClusterRef | null,
+  fetchList: (cluster: ClusterRef) => Promise<T[]>,
+  deps: React.DependencyList = [],
   watch?: WatchBinding<T>,
 ): [T[], Error | null] {
   const [items, setItems] = React.useState<T[]>([]);
   const [error, setError] = React.useState<Error | null>(null);
 
-  // Keep the latest fetcher/watch in refs so the effect can use them without listing them in its deps
-  // (callers pass fresh closures each render; we deliberately re-run only when `deps` change).
-  const fetcherRef = React.useRef(fetcher);
-  fetcherRef.current = fetcher;
+  // Keep the latest watch binding in a ref so the effect reads it without listing it in deps: callers
+  // pass a fresh binding object each render, but the effect must restart only on a cluster/deps change
+  // (which is also when the watch URL changes), not on every render.
   const watchRef = React.useRef(watch);
   watchRef.current = watch;
 
+  // Read the active cluster during render and key the effect on its primitive name/namespace, so the
+  // list re-fetches on a cluster switch — not only when the caller's own deps change.
+  const cluster = getCluster();
+  const clusterName = cluster?.name ?? null;
+  const clusterNamespace = cluster?.namespace ?? null;
+
   React.useEffect(() => {
+    if (clusterName === null || clusterNamespace === null) {
+      setItems([]);
+
+      return undefined;
+    }
+
     let active = true;
     let inFlight = false;
     let closeWatch: (() => void) | null = null;
     let interval: number | undefined;
 
-    // load runs a full fetch (initial load, poll tick, or watch-error resync). The in-flight guard keeps
-    // an overlapping poll/visibility refetch from resolving out of order and overwriting newer data.
     const load = (): void => {
+      // Skip if a fetch is already in flight, so an overlapping poll or visibility refetch cannot
+      // resolve out of order and overwrite newer data with an older response.
       if (inFlight) {
         return;
       }
 
       inFlight = true;
 
-      fetcherRef
-        .current()
+      fetchList({ namespace: clusterNamespace, name: clusterName })
         .then((list) => {
           if (active) {
             setItems(list);
@@ -132,6 +144,9 @@ export function useAsyncList<T>(
         return;
       }
 
+      // After the initial load, poll on an interval; pause while the tab is hidden and refetch
+      // immediately when it becomes visible again, so a backgrounded UI does not poll needlessly yet is
+      // up to date the moment it is looked at.
       interval = window.setInterval(() => {
         if (document.visibilityState !== "hidden") {
           load();
@@ -176,8 +191,6 @@ export function useAsyncList<T>(
       startPolling();
     }
 
-    // A visibility return refetches immediately (a backgrounded UI may have missed watch events or poll
-    // ticks), so the list is up to date the moment it is looked at — whether watching or polling.
     const onVisibilityChange = (): void => {
       if (document.visibilityState !== "hidden") {
         load();
@@ -196,9 +209,7 @@ export function useAsyncList<T>(
       }
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-    // The caller owns the dependency list; the fetcher/watch are read from refs (above) so passing fresh
-    // closures each render does not restart the effect — only a change in `deps` re-fetches.
-  }, deps);
+  }, [clusterName, clusterNamespace, ...deps]);
 
   return [items, error];
 }
