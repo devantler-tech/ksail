@@ -286,10 +286,6 @@ func (s *Service) Create(
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
 	name := cluster.Name
-	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
-	}
-
 	if !isSafeClusterNamePathComponent(name) {
 		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
 	}
