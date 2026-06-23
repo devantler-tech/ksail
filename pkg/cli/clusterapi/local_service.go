@@ -32,6 +32,17 @@ import (
 
 var clusterNamePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// isSafeClusterName reports whether name is safe to use as a single filesystem path component.
+// Downstream provisioners compose paths from the cluster name (for example ~/.kwok/clusters/<name>),
+// so reject traversal/separator characters and require a DNS-1123-style single-component identifier.
+func isSafeClusterName(name string) bool {
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return false
+	}
+
+	return clusterNamePattern.MatchString(name)
+}
+
 // localNamespace is the synthetic namespace reported for local clusters. KSail has no namespace
 // concept locally, but the web UI keys rows on namespace/name and builds delete paths from it, so a
 // stable value is reported and the namespace path segment is otherwise ignored.
@@ -288,17 +299,7 @@ func (s *Service) Create(
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
 	name := cluster.Name
-	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
-	}
-
-	// Name is used in filesystem paths by downstream provisioners (for example ~/.kwok/clusters/<name>).
-	// Enforce a safe single-component identifier and reject traversal/separator characters.
-	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
-		return nil, fmt.Errorf("%w: invalid cluster name %q", api.ErrInvalid, name)
-	}
-
-	if !clusterNamePattern.MatchString(name) {
+	if !isSafeClusterName(name) {
 		return nil, fmt.Errorf("%w: invalid cluster name %q", api.ErrInvalid, name)
 	}
 
