@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"io"
 	"net/http"
@@ -76,13 +75,9 @@ func (s *Server) handleKubeWatch(writer http.ResponseWriter, request *http.Reque
 
 	// Resolve the stream before writing SSE headers, so a failure (e.g. cluster not found) surfaces as a
 	// normal JSON error response instead of an empty event stream.
-	stream, err := watcher.WatchKube(
-		ctx,
-		request.PathValue("namespace"),
-		request.PathValue("name"),
-		request.PathValue("path"),
-		request.URL.Query(),
-	)
+	namespace, name, path, query := clusterProxyArgs(request)
+
+	stream, err := watcher.WatchKube(ctx, namespace, name, path, query)
 	if err != nil {
 		writeClientError(writer, err)
 
@@ -109,7 +104,7 @@ func (s *Server) streamWatchEvents(
 	flusher http.Flusher,
 	stream io.Reader,
 ) {
-	lines, done := scanWatchLines(ctx, stream)
+	lines, done := scanLinesToChannel(ctx, stream, watchMaxLineBytes)
 
 	ticker := time.NewTicker(watchSessionCheckInterval)
 	defer ticker.Stop()
@@ -147,28 +142,4 @@ func (s *Server) streamWatchEvents(
 	}
 }
 
-// scanWatchLines reads newline-delimited watch JSON from stream in a goroutine, emitting each line on
-// the returned channel and closing done when the stream ends. The goroutine exits if ctx is cancelled
-// (so a never-ending upstream cannot leak it once the client disconnects). Splitting the scan out of
-// streamWatchEvents keeps the select loop within its complexity budget.
-func scanWatchLines(ctx context.Context, stream io.Reader) (<-chan string, <-chan struct{}) {
-	lines := make(chan string)
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		scanner := bufio.NewScanner(stream)
-		scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), watchMaxLineBytes)
-
-		for scanner.Scan() {
-			select {
-			case lines <- scanner.Text():
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return lines, done
-}
+// (line scanning lives in scanLinesToChannel in sse.go, shared with the log stream handler.)

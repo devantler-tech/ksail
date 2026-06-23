@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,23 +91,7 @@ func (s *Server) streamLogLines(
 	stream io.Reader,
 ) {
 	ctx := request.Context()
-	lines := make(chan string)
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		scanner := bufio.NewScanner(stream)
-		scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), logMaxLineBytes)
-
-		for scanner.Scan() {
-			select {
-			case lines <- scanner.Text():
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	lines, done := scanLinesToChannel(ctx, stream, logMaxLineBytes)
 
 	ticker := time.NewTicker(logSessionCheckInterval)
 	defer ticker.Stop()
