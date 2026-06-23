@@ -3,9 +3,45 @@
 // component, and the extra sections appended to a resource's detail panel. Each plugin-rendered subtree
 // is wrapped in an error boundary so a buggy or hostile plugin cannot white-screen the app.
 
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { registry, type PluginResource } from "./registry.ts";
 import { usePluginRegistry } from "./usePlugins.ts";
+
+// pluginStore is a minimal no-op Redux store. KSail has no Headlamp-shaped Redux state, but a plugin that
+// calls useSelector/useDispatch must run inside a react-redux <Provider> or it throws; this satisfies the
+// store contract (getState/subscribe/dispatch) so such plugins render against an empty state instead of
+// crashing. Bridging real KSail state into this store is a follow-up.
+const pluginStore = {
+  getState: (): Record<string, unknown> => ({}),
+  subscribe: (): (() => void) => () => undefined,
+  dispatch: (action: unknown): unknown => action,
+};
+
+// PluginRuntimeProviders wraps a plugin-rendered subtree in the React context real Headlamp plugins
+// assume is present: a Router (so react-router hooks such as useNavigate/useParams work) and a Redux
+// Provider (so useSelector/useDispatch work). Both come from the lazily-loaded externals on
+// window.pluginLib, present once a plugin has loaded; when one is absent the children render unwrapped.
+function PluginRuntimeProviders({ children }: { children: ReactNode }): ReactNode {
+  const lib = typeof window === "undefined" ? undefined : window.pluginLib;
+  const router = lib?.ReactRouter as { MemoryRouter?: ComponentType<{ children: ReactNode }> } | undefined;
+  const redux = lib?.ReactRedux as
+    | { Provider?: ComponentType<{ store: unknown; children: ReactNode }> }
+    | undefined;
+
+  let tree: ReactNode = children;
+
+  if (redux?.Provider) {
+    const Provider = redux.Provider;
+    tree = <Provider store={pluginStore}>{tree}</Provider>;
+  }
+
+  if (router?.MemoryRouter) {
+    const Router = router.MemoryRouter;
+    tree = <Router>{tree}</Router>;
+  }
+
+  return tree;
+}
 
 // PluginErrorBoundary isolates a plugin's rendered subtree. A throw during render surfaces a compact
 // inline notice (attributed to the plugin) instead of crashing the surrounding KSail UI.
@@ -52,7 +88,7 @@ function renderExtensionList<T extends { id: string; pluginName?: string }>(
     <>
       {items.map((item) => (
         <PluginErrorBoundary key={item.id} name={item.pluginName}>
-          {renderItem(item)}
+          <PluginRuntimeProviders>{renderItem(item)}</PluginRuntimeProviders>
         </PluginErrorBoundary>
       ))}
     </>
@@ -106,7 +142,9 @@ export function PluginRouteHost({
 
   return (
     <PluginErrorBoundary name={route.pluginName}>
-      <RouteComponent clusterName={clusterName} />
+      <PluginRuntimeProviders>
+        <RouteComponent clusterName={clusterName} />
+      </PluginRuntimeProviders>
     </PluginErrorBoundary>
   );
 }

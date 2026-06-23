@@ -14,6 +14,7 @@
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
+import * as ReactJSX from "react/jsx-runtime";
 import { listResources } from "../../api.ts";
 import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
 import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
@@ -52,6 +53,11 @@ type DetailsSectionComponent = React.ComponentType<{ resource: PluginResource }>
 export interface PluginLib {
   React: typeof React;
   ReactDOM: typeof ReactDOM;
+  // ReactJSX is react/jsx-runtime. Real toolchain-built Headlamp bundles compile JSX to the automatic
+  // runtime (ReactJSX.jsx(...)) and map react/jsx-runtime → pluginLib.ReactJSX, so the facade must expose
+  // it or every JSX-using plugin bundle throws on load (our hand-written tests used React.createElement
+  // and never hit this — a real bundle did).
+  ReactJSX: typeof ReactJSX;
   registerSidebarEntry: (entry: HeadlampSidebarEntry) => void;
   registerRoute: (route: HeadlampRoute) => void;
   registerDetailsViewSection: (section: DetailsSectionComponent) => void;
@@ -65,6 +71,24 @@ export interface PluginLib {
   K8s: K8sShim;
   ApiProxy: ApiProxyShim;
   CommonComponents: CommonComponentsShape;
+  // useTranslation is Headlamp's i18n hook; KSail provides a passthrough returning the key (or the string
+  // default if one is passed), so untranslated plugins render their default English strings. A full
+  // i18next integration is a follow-up.
+  useTranslation: () => {
+    t: (key: string, options?: unknown) => string;
+    i18n: { language: string; changeLanguage: () => Promise<void> };
+  };
+  // Headlamp exposes the active-cluster surface plugins read (KSail owns cluster switching via its UI).
+  Headlamp: HeadlampApi;
+  // Lazily-installed heavy externals (see externals.ts) — present only after a plugin loads. Typed
+  // loosely: they are external module namespaces consumed by plugin JS, not by KSail's own code.
+  MuiMaterial?: unknown;
+  MuiIconsMaterial?: unknown;
+  MuiStyles?: unknown;
+  ReactRedux?: unknown;
+  ReactRouter?: unknown;
+  Lodash?: unknown;
+  Iconify?: unknown;
   Notification: (message: string, ...rest: unknown[]) => void;
 }
 
@@ -75,6 +99,14 @@ interface K8sShim {
 
 interface ApiProxyShim {
   request: (path: string) => Promise<unknown>;
+}
+
+// HeadlampApi is the subset of Headlamp's `Headlamp` namespace KSail implements — reading the active
+// cluster name (KSail owns switching, so setCluster is a no-op and getClusters is empty for now).
+interface HeadlampApi {
+  getCluster: () => string | null;
+  getClusters: () => Record<string, unknown>;
+  setCluster: (name: string) => void;
 }
 
 declare global {
@@ -120,6 +152,7 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
   const lib: PluginLib = {
     React,
     ReactDOM,
+    ReactJSX,
     registerSidebarEntry,
     registerRoute,
     registerDetailsViewSection,
@@ -157,6 +190,17 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
       },
     },
     CommonComponents,
+    useTranslation: () => ({
+      t: (key, options) => (typeof options === "string" ? options : key),
+      i18n: { language: "en", changeLanguage: () => Promise.resolve() },
+    }),
+    Headlamp: {
+      getCluster: () => getCluster()?.name ?? null,
+      getClusters: () => ({}),
+      setCluster: () => {
+        // KSail owns cluster switching through its own UI; a plugin cannot change the active cluster.
+      },
+    },
     Notification: (message, ...rest) => {
       // Surface plugin notifications via a DOM event the SPA can later route to toasts; log meanwhile.
       window.dispatchEvent(new CustomEvent("ksail:plugin-notification", { detail: { message, rest } }));
@@ -164,7 +208,76 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
     },
   };
 
+  installCompatStubs(lib);
   window.pluginLib = lib;
+}
+
+// UNSUPPORTED_REGISTRATIONS are the Headlamp register*() functions KSail does not (yet) render an
+// extension point for. The full set is large (see @kinvolk/headlamp-plugin/lib's registry export); KSail
+// exposes each as a no-op so a plugin that calls one loads without crashing — the registration simply has
+// no effect rather than throwing on an undefined function. The five KSail DOES render
+// (sidebar/route/details-section/app-bar/table-columns) are wired in installPluginLib above.
+const UNSUPPORTED_REGISTRATIONS = [
+  "registerAppLogo",
+  "registerAppTheme",
+  "registerClusterChooser",
+  "registerClusterStatus",
+  "registerDetailsViewHeaderAction",
+  "registerDetailsViewHeaderActionsProcessor",
+  "registerDetailsViewSectionsProcessor",
+  "registerGetTokenFunction",
+  "registerHeadlampEventCallback",
+  "registerKindIcon",
+  "registerKubeObjectGlance",
+  "registerMapSource",
+  "registerOverviewChartsProcessor",
+  "registerPluginSettings",
+  "registerRouteFilter",
+  "registerSidebarEntryFilter",
+  "registerUIPanel",
+  "registerAddClusterProvider",
+  "registerClusterProviderDialog",
+  "registerClusterProviderMenuItem",
+  "registerCustomCreateProject",
+  "registerProjectDetailsTab",
+  "registerProjectOverviewSection",
+  "registerProjectHeaderAction",
+  "registerProjectDeleteButton",
+];
+
+// installCompatStubs fills in the rest of the Headlamp lib surface KSail does not natively render: every
+// other register*() function as a no-op, plus minimal Router/Utils/Plugin/Activity/ConfigStore namespaces
+// and the misc top-level helpers. The goal is that any real Headlamp plugin loads and runs the parts KSail
+// supports, instead of throwing on the first unknown export it touches.
+function installCompatStubs(lib: PluginLib): void {
+  const compat = lib as unknown as Record<string, unknown>;
+  const noop = (): undefined => undefined;
+
+  for (const name of UNSUPPORTED_REGISTRATIONS) {
+    compat[name] = noop;
+  }
+
+  // Router URL helpers — return a harmless hash anchor so a plugin building a link does not break.
+  compat.Router = {
+    createRouteURL: (): string => "#",
+    getRoute: (): null => null,
+    getRoutePath: (): string => "#",
+  };
+
+  // Namespaces a plugin may import (and subclass, for Plugin) even when it never exercises behaviour KSail
+  // does not implement — exposed as empty objects / base classes so the import resolves.
+  compat.Utils = {};
+  compat.Plugin = class {};
+  compat.Activity = {};
+  compat.ConfigStore = class {};
+  compat.PluginManager = {};
+
+  // Misc top-level helpers from the lib's registry export.
+  compat.clusterAction = noop;
+  compat.runCommand = noop;
+  compat.getHeadlampAPIHeaders = (): Record<string, string> => ({});
+  compat.isLocaleSupported = (): boolean => true;
+  compat.getSupportedLocales = (): Record<string, unknown> => ({});
 }
 
 // makeK8sShim builds the minimal-but-real Kubernetes data surface plugins consume. useResourceList is a
