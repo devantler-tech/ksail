@@ -205,26 +205,26 @@ func validatePluginURL(rawURL string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// isTrustedPluginHost reports whether host is an allowed plugin-download source: a loopback address (so
-// a developer can serve a plugin locally), or one of the trusted public domains (GitHub, where Headlamp
-// plugins are released, and Artifact Hub, the catalog source) by exact match or subdomain.
+// isTrustedPluginHost reports whether host is an allowed plugin-download source: GitHub (where Headlamp
+// plugins are released, including its release-asset hosts), Artifact Hub (the catalog source), or a
+// loopback host (local development). It is an exact allowlist of string literals — not a suffix or
+// IP-range test — both so a look-alike host (e.g. github.com.evil.com) cannot slip through, and so it
+// reads as a request-forgery barrier confining the download to a fixed set of known hosts.
 func isTrustedPluginHost(host string) bool {
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+	switch strings.ToLower(host) {
+	case "github.com",
+		"raw.githubusercontent.com",
+		"objects.githubusercontent.com",
+		"release-assets.githubusercontent.com",
+		"codeload.github.com",
+		"artifacthub.io",
+		"localhost",
+		"127.0.0.1",
+		"::1":
 		return true
+	default:
+		return false
 	}
-
-	host = strings.ToLower(host)
-	if host == "localhost" {
-		return true
-	}
-
-	for _, domain := range []string{"github.com", "githubusercontent.com", "github.io", "artifacthub.io"} {
-		if host == domain || strings.HasSuffix(host, "."+domain) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // pluginHTTPClient returns the HTTP client used for plugin downloads. Its dialer resolves the target and
