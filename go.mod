@@ -42,7 +42,7 @@ require (
 	k8s.io/apimachinery v0.36.2
 	k8s.io/cli-runtime v0.36.2
 	k8s.io/client-go v0.36.2
-	k8s.io/kubectl v0.36.1
+	k8s.io/kubectl v0.36.2
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/kind v0.32.0
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -69,9 +69,9 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.43.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.298
+	github.com/kubescape/opa-utils v0.0.300
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.34.3
+	github.com/loft-sh/vcluster v0.34.5
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/rancher/k3k v1.1.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -948,7 +948,7 @@ require (
 	k8s.io/apiserver v0.36.2 // indirect
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
 	k8s.io/component-base v0.36.2 // indirect
-	k8s.io/component-helpers v0.36.1 // indirect
+	k8s.io/component-helpers v0.36.2 // indirect
 	k8s.io/cri-api v0.36.1 // indirect
 	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
@@ -957,7 +957,7 @@ require (
 	k8s.io/kube-scheduler v0.36.1 // indirect
 	k8s.io/kubelet v0.36.1 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.36.1 // indirect
+	k8s.io/metrics v0.36.2 // indirect
 	k8s.io/streaming v0.36.2 // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	modernc.org/libc v1.70.0 // indirect
