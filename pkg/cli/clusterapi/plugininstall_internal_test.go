@@ -61,7 +61,7 @@ func TestIsTrustedPluginHost(t *testing.T) {
 
 	allowed := []string{
 		"github.com", "objects.githubusercontent.com", "raw.githubusercontent.com",
-		"owner.github.io", "artifacthub.io", "localhost", "127.0.0.1", "::1",
+		"codeload.github.com", "artifacthub.io", "localhost", "127.0.0.1", "::1",
 	}
 	for _, host := range allowed {
 		if !isTrustedPluginHost(host) {
@@ -69,9 +69,11 @@ func TestIsTrustedPluginHost(t *testing.T) {
 		}
 	}
 
+	// Look-alikes, unlisted subdomains, internal, and cloud-metadata hosts are all rejected: the
+	// allowlist is exact, so only the enumerated hosts pass.
 	rejected := []string{
-		"", "evil.com", "github.com.evil.com", "notgithub.com",
-		"169.254.169.254", "10.0.0.5", "192.168.1.1", "metadata.google.internal",
+		"", "evil.com", "github.com.evil.com", "notgithub.com", "owner.github.io",
+		"gist.githubusercontent.com", "169.254.169.254", "10.0.0.5", "metadata.google.internal",
 	}
 	for _, host := range rejected {
 		if isTrustedPluginHost(host) {
