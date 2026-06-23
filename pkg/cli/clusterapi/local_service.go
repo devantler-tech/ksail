@@ -279,6 +279,21 @@ func (s *Service) Get(
 	return nil, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 }
 
+// isSafeClusterName reports whether name is safe to use as a single filesystem path component.
+// The cluster name is a logical identifier, not a path, yet downstream code composes filesystem
+// paths from it, so reject separators and parent-directory traversal to prevent path injection.
+func isSafeClusterName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return false
+	}
+
+	return filepath.Base(name) == name
+}
+
 // Create starts provisioning a cluster and returns immediately with the cluster in the Provisioning
 // phase. The actual provisioning runs in a background goroutine; List/Get reflect its progress.
 func (s *Service) Create(
@@ -286,16 +301,7 @@ func (s *Service) Create(
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
 	name := cluster.Name
-	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
-	}
-
-	// Cluster name is a logical identifier, not a path. Reject path-like values
-	// to prevent path traversal when downstream code composes filesystem paths.
-	if strings.Contains(name, "/") ||
-		strings.Contains(name, "\\") ||
-		strings.Contains(name, "..") ||
-		filepath.Base(name) != name {
+	if !isSafeClusterName(name) {
 		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
 	}
 
