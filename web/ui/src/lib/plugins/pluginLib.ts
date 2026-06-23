@@ -19,7 +19,7 @@ import { listResources } from "../../api.ts";
 import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
 import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
 import { registry, type PluginResource, type RouteProps } from "./registry.ts";
-import { useAsyncList } from "./useAsyncList.ts";
+import { useClusterScopedList } from "./useClusterScopedList.ts";
 import { WebSocketManager } from "./wsMultiplexer.ts";
 
 // ClusterRef identifies the active cluster the K8s shim scopes reads to (KSail's resource API is
@@ -288,27 +288,21 @@ function installCompatStubs(lib: PluginLib): void {
 
 // makeK8sShim builds the minimal-but-real Kubernetes data surface plugins consume. useResourceList is a
 // React hook over KSail's allowlisted resource endpoint, returning [items, error] like Headlamp's
-// useList for the common kinds (Pods, Deployments, …). It must be called from a component render.
-// Live updates come from useAsyncList, which polls on an interval; an absent cluster yields an empty
-// list.
+// useList for the common kinds (Pods, Deployments, …). It must be called from a component render. The
+// cluster-scoped fetch-on-change effect is shared with k8s.ts's useList via useClusterScopedList; the
+// kind/namespace arguments are passed as extra deps so the list also re-fetches when they change.
 function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
   return {
     useResourceList(kind: string, namespace?: string): [PluginResource[], Error | null] {
-      // Read the active cluster during render and key the fetch on it, so the list re-fetches when the
-      // user switches clusters — not only when the kind/namespace arguments change.
-      const cluster = getCluster();
-      const clusterName = cluster?.name ?? null;
-      const clusterNamespace = cluster?.namespace ?? null;
+      return useClusterScopedList(
+        getCluster,
+        async (cluster) => {
+          const list = await listResources(cluster.namespace, cluster.name, kind, namespace);
 
-      return useAsyncList<PluginResource>(async () => {
-        if (clusterName === null || clusterNamespace === null) {
-          return [];
-        }
-
-        const list = await listResources(clusterNamespace, clusterName, kind, namespace);
-
-        return list.items ?? [];
-      }, [kind, namespace, clusterName, clusterNamespace]);
+          return list.items ?? [];
+        },
+        [kind, namespace],
+      );
     },
     ResourceClasses: makeResourceClasses(getCluster),
   };
