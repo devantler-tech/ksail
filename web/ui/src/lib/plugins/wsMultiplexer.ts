@@ -18,7 +18,8 @@
 // Like Headlamp it multiplexes onto a single socket, debounces unsubscribes to survive React
 // StrictMode's mount/unmount churn, and resubscribes everything after a reconnect.
 
-import type { WatchEvent, WatchEventType, WatchStreamHandlers } from "./watchStream.ts";
+import { watchEventFromObject } from "./watchStream.ts";
+import type { WatchStreamHandlers } from "./watchStream.ts";
 
 // WSMultiplexerMessage is the wire frame, byte-compatible with Headlamp's WebSocketMessage and KSail's
 // backend wsMessage. The same shape is sent (REQUEST/CLOSE) and received (DATA/COMPLETE/ERROR).
@@ -422,22 +423,6 @@ export interface MuxSubscription {
   query: string;
 }
 
-// muxEventFromData coerces one DATA payload (the parsed apiserver watch object the multiplexer delivers,
-// shaped {type, object}) into a WatchEvent, returning null for anything that is not a valid watch frame
-// so a stray payload is skipped rather than crashing the list.
-function muxEventFromData(data: unknown): WatchEvent | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-
-  const record = data as { type?: unknown; object?: unknown };
-  if (typeof record.type !== "string" || typeof record.object !== "object" || record.object === null) {
-    return null;
-  }
-
-  return { type: record.type as WatchEventType, object: record.object as WatchEvent["object"] };
-}
-
 // subscribeWatchMux opens a watch through the shared multiplexer connection and forwards decoded events to
 // handlers, mirroring openWatchStream's contract so useAsyncList can use either transport interchangeably.
 // It returns a synchronous close function (the subscription is established asynchronously; the closer
@@ -448,7 +433,7 @@ export function subscribeWatchMux(sub: MuxSubscription, handlers: WatchStreamHan
   let cleanup: (() => void) | null = null;
 
   const onMessage = (data: unknown): void => {
-    const event = muxEventFromData(data);
+    const event = watchEventFromObject(data);
     if (event) {
       handlers.onEvent(event);
     }

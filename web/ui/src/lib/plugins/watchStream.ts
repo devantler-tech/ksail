@@ -104,8 +104,25 @@ export function openWatchStream(url: string, handlers: WatchStreamHandlers): (()
   };
 }
 
-// decodeWatchEvent parses one watch frame's JSON into a WatchEvent, returning null for malformed input
-// or a frame missing the verb/object so a single bad event cannot crash the stream.
+// watchEventFromObject coerces an already-parsed value into a WatchEvent, returning null for anything
+// that is not a valid {type, object} watch frame. Shared by the SSE decoder (decodeWatchEvent) and the
+// WebSocket multiplexer (wsMultiplexer.ts): both receive watch frames over different transports but
+// validate and shape them identically.
+export function watchEventFromObject(value: unknown): WatchEvent | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const record = value as { type?: unknown; object?: unknown };
+  if (typeof record.type !== "string" || typeof record.object !== "object" || record.object === null) {
+    return null;
+  }
+
+  return { type: record.type as WatchEventType, object: record.object as RawKubeObject };
+}
+
+// decodeWatchEvent parses one SSE watch frame's JSON and validates it into a WatchEvent, returning null
+// for malformed input or a frame missing the verb/object so a single bad event cannot crash the stream.
 function decodeWatchEvent(data: string): WatchEvent | null {
   let parsed: unknown;
   try {
@@ -114,14 +131,5 @@ function decodeWatchEvent(data: string): WatchEvent | null {
     return null;
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const record = parsed as { type?: unknown; object?: unknown };
-  if (typeof record.type !== "string" || typeof record.object !== "object" || record.object === null) {
-    return null;
-  }
-
-  return { type: record.type as WatchEventType, object: record.object as RawKubeObject };
+  return watchEventFromObject(parsed);
 }
