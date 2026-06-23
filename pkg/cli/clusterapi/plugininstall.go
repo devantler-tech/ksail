@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -214,7 +215,88 @@ func validatePluginURL(rawURL string) (*url.URL, error) {
 		return nil, fmt.Errorf("%w: URL must be an http(s) address", ErrPluginInstall)
 	}
 
+	// Constrain the download host to known plugin sources. This is the primary defence against a
+	// user-supplied URL being turned into a server-side request forgery against the host's internal
+	// network or cloud metadata endpoint: the fetch can only target GitHub / Artifact Hub (where
+	// Headlamp plugins are published) or a loopback address (local development).
+	if !isTrustedPluginHost(parsed.Hostname()) {
+		return nil, fmt.Errorf(
+			"%w: host %q is not an allowed plugin source (only GitHub, Artifact Hub, or localhost)",
+			ErrPluginInstall,
+			parsed.Hostname(),
+		)
+	}
+
 	return parsed, nil
+}
+
+// isTrustedPluginHost reports whether host is an allowed plugin-download source: a loopback address (so
+// a developer can serve a plugin locally), or one of the trusted public domains (GitHub, where Headlamp
+// plugins are released, and Artifact Hub, the catalog source) by exact match or subdomain.
+func isTrustedPluginHost(host string) bool {
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+
+	host = strings.ToLower(host)
+	if host == "localhost" {
+		return true
+	}
+
+	for _, domain := range []string{"github.com", "githubusercontent.com", "github.io", "artifacthub.io"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// pluginHTTPClient returns the HTTP client used for plugin downloads. Its dialer resolves the target and
+// refuses to connect to a private, link-local (the cloud metadata endpoint 169.254.169.254), or
+// unspecified address — defence-in-depth behind the host allowlist that also covers redirect hops and
+// DNS rebinding. It dials the validated IP directly so a rebinding cannot swap a public answer for a
+// private one between the check and the connection. Loopback is permitted for local development.
+func pluginHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: pluginDownloadTimeout}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(address)
+				if err != nil {
+					return nil, fmt.Errorf("%w: %w", ErrPluginInstall, err)
+				}
+
+				ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+				if err != nil {
+					return nil, fmt.Errorf("%w: resolve %q: %w", ErrPluginInstall, host, err)
+				}
+
+				for _, addr := range ips {
+					if isBlockedPluginIP(addr.IP) {
+						return nil, fmt.Errorf(
+							"%w: refusing to connect to non-public address %s",
+							ErrPluginInstall,
+							addr.IP,
+						)
+					}
+				}
+
+				return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+			},
+		},
+	}
+}
+
+// isBlockedPluginIP reports whether ip is a destination a plugin download must never reach even via a
+// redirect or DNS rebinding: a private, link-local (cloud metadata), or unspecified address. Loopback is
+// permitted for local development.
+func isBlockedPluginIP(ip net.IP) bool {
+	return ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified()
 }
 
 // verifyChecksum checks data against the optional hex SHA-256 (a no-op when wantSHA is empty).
@@ -327,7 +409,7 @@ func downloadPluginArchive(
 		return nil, fmt.Errorf("%w: build request: %w", ErrPluginInstall, err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
+	response, err := pluginHTTPClient().Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("%w: download: %w", ErrPluginInstall, err)
 	}
