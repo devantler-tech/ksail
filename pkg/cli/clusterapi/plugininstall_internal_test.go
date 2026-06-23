@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,6 +51,60 @@ func makeTarGz(t *testing.T, files map[string]string) []byte {
 	_ = gzipWriter.Close()
 
 	return buf.Bytes()
+}
+
+// TestIsTrustedPluginHost asserts the download host allowlist: GitHub / Artifact Hub (and their
+// subdomains) and loopback are allowed; arbitrary, look-alike, internal, and cloud-metadata hosts are
+// rejected, so a user-supplied URL cannot be aimed at the internal network.
+func TestIsTrustedPluginHost(t *testing.T) {
+	t.Parallel()
+
+	allowed := []string{
+		"github.com", "objects.githubusercontent.com", "raw.githubusercontent.com",
+		"owner.github.io", "artifacthub.io", "localhost", "127.0.0.1", "::1",
+	}
+	for _, host := range allowed {
+		if !isTrustedPluginHost(host) {
+			t.Errorf("isTrustedPluginHost(%q) = false, want true", host)
+		}
+	}
+
+	rejected := []string{
+		"", "evil.com", "github.com.evil.com", "notgithub.com",
+		"169.254.169.254", "10.0.0.5", "192.168.1.1", "metadata.google.internal",
+	}
+	for _, host := range rejected {
+		if isTrustedPluginHost(host) {
+			t.Errorf("isTrustedPluginHost(%q) = true, want false", host)
+		}
+	}
+}
+
+// TestIsBlockedPluginIP asserts the dialer's SSRF guard blocks private, link-local (cloud metadata), and
+// unspecified addresses while permitting public and loopback addresses (the latter for local dev).
+func TestIsBlockedPluginIP(t *testing.T) {
+	t.Parallel()
+
+	blocked := []string{
+		"169.254.169.254",
+		"10.0.0.5",
+		"172.16.0.1",
+		"192.168.1.1",
+		"0.0.0.0",
+		"fe80::1",
+	}
+	for _, addr := range blocked {
+		if !isBlockedPluginIP(net.ParseIP(addr)) {
+			t.Errorf("isBlockedPluginIP(%q) = false, want true", addr)
+		}
+	}
+
+	allowed := []string{"8.8.8.8", "140.82.112.3", "127.0.0.1", "::1"}
+	for _, addr := range allowed {
+		if isBlockedPluginIP(net.ParseIP(addr)) {
+			t.Errorf("isBlockedPluginIP(%q) = true, want false", addr)
+		}
+	}
 }
 
 // serveBytes serves data over a throwaway HTTP server, closed on test cleanup.
