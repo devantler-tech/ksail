@@ -7,7 +7,7 @@
 // intentionally out of scope here — this covers the common list-and-render path.
 
 import type { ClusterRef } from "./pluginLib.ts";
-import { useAsyncList } from "./useAsyncList.ts";
+import { useClusterScopedList } from "./useClusterScopedList.ts";
 
 // KubeObject wraps a raw Kubernetes resource as Headlamp plugins expect: `jsonData` holds the raw
 // object and the metadata/spec/status accessors plus getName/getNamespace mirror Headlamp's KubeObject
@@ -95,22 +95,12 @@ async function proxyList(cluster: ClusterRef, listPath: string): Promise<KubeObj
 
 // makeResourceClass builds one ResourceClass whose useList hook fetches via the proxy and re-fetches
 // when the active cluster changes (keyed on the cluster's primitive name/namespace, mirroring the
-// useResourceList shim so a cluster switch reloads the data). Live updates come from useAsyncList,
-// which polls the fetcher on an interval; an absent cluster yields an empty list.
+// useResourceList shim so a cluster switch reloads the data). The cluster-scoped fetch-on-change effect
+// is shared with useResourceList via useClusterScopedList.
 function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null): ResourceClass {
   return {
     useList(): [KubeObject[], Error | null] {
-      const cluster = getCluster();
-      const clusterName = cluster?.name ?? null;
-      const clusterNamespace = cluster?.namespace ?? null;
-
-      return useAsyncList<KubeObject>(() => {
-        if (clusterName === null || clusterNamespace === null) {
-          return Promise.resolve([]);
-        }
-
-        return proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath);
-      }, [clusterName, clusterNamespace]);
+      return useClusterScopedList(getCluster, (cluster) => proxyList(cluster, def.listPath));
     },
   };
 }
