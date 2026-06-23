@@ -13,8 +13,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -288,6 +290,10 @@ func (s *Service) Create(
 		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
 	}
 
+	if !isSafeClusterNamePathComponent(name) {
+		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
+	}
+
 	distribution := cluster.Spec.Cluster.Distribution
 	if distribution == "" {
 		return nil, fmt.Errorf("%w: distribution is required", api.ErrInvalid)
@@ -526,6 +532,22 @@ func (s *Service) runLifecycleAction(
 	}
 
 	delete(s.jobs, name)
+}
+
+func isSafeClusterNamePathComponent(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	if filepath.IsAbs(name) {
+		return false
+	}
+
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return false
+	}
+
+	return filepath.Base(name) == name
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
