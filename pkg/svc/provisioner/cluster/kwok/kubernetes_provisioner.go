@@ -2,6 +2,7 @@ package kwokprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -442,19 +443,22 @@ options:
 	}, nil
 }
 
-var safeClusterNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+var (
+	safeClusterNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	errInvalidClusterName  = errors.New("invalid cluster name")
+)
 
 func validateClusterNamePathComponent(clusterName string) error {
 	if clusterName == "" || clusterName == "." || clusterName == ".." {
-		return fmt.Errorf("invalid cluster name")
+		return errInvalidClusterName
 	}
 
 	if strings.Contains(clusterName, "/") || strings.Contains(clusterName, "\\") {
-		return fmt.Errorf("invalid cluster name")
+		return errInvalidClusterName
 	}
 
 	if !safeClusterNamePattern.MatchString(clusterName) {
-		return fmt.Errorf("invalid cluster name")
+		return errInvalidClusterName
 	}
 
 	return nil
