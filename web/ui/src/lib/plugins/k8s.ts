@@ -6,8 +6,8 @@
 // without modification. The full Headlamp class hierarchy (useGet, apiFactory, watch, CRD classes) is
 // intentionally out of scope here — this covers the common list-and-render path.
 
-import * as React from "react";
 import type { ClusterRef } from "./pluginLib.ts";
+import { useAsyncList } from "./useAsyncList.ts";
 
 // KubeObject wraps a raw Kubernetes resource as Headlamp plugins expect: `jsonData` holds the raw
 // object and the metadata/spec/status accessors plus getName/getNamespace mirror Headlamp's KubeObject
@@ -95,44 +95,22 @@ async function proxyList(cluster: ClusterRef, listPath: string): Promise<KubeObj
 
 // makeResourceClass builds one ResourceClass whose useList hook fetches via the proxy and re-fetches
 // when the active cluster changes (keyed on the cluster's primitive name/namespace, mirroring the
-// useResourceList shim so a cluster switch reloads the data).
+// useResourceList shim so a cluster switch reloads the data). Live updates come from useAsyncList,
+// which polls the fetcher on an interval; an absent cluster yields an empty list.
 function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null): ResourceClass {
   return {
     useList(): [KubeObject[], Error | null] {
-      const [items, setItems] = React.useState<KubeObject[]>([]);
-      const [error, setError] = React.useState<Error | null>(null);
-
       const cluster = getCluster();
       const clusterName = cluster?.name ?? null;
       const clusterNamespace = cluster?.namespace ?? null;
 
-      React.useEffect(() => {
+      return useAsyncList<KubeObject>(() => {
         if (clusterName === null || clusterNamespace === null) {
-          setItems([]);
-
-          return undefined;
+          return Promise.resolve([]);
         }
 
-        let active = true;
-
-        proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath)
-          .then((list) => {
-            if (active) {
-              setItems(list);
-            }
-          })
-          .catch((err: unknown) => {
-            if (active) {
-              setError(err instanceof Error ? err : new Error(String(err)));
-            }
-          });
-
-        return () => {
-          active = false;
-        };
+        return proxyList({ namespace: clusterNamespace, name: clusterName }, def.listPath);
       }, [clusterName, clusterNamespace]);
-
-      return [items, error];
     },
   };
 }
