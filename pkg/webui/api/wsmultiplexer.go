@@ -254,7 +254,7 @@ func (m *wsConnManager) streamSubscription(
 	defer func() { _ = stream.Close() }()
 	defer m.removeSubscription(key)
 
-	lines, done := scanWatchLines(ctx, stream)
+	lines, done := scanLinesToChannel(ctx, stream, watchMaxLineBytes)
 
 	for {
 		select {
