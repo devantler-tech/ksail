@@ -18,6 +18,7 @@ import { listResources } from "../../api.ts";
 import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
 import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
 import { registry, type PluginResource, type RouteProps } from "./registry.ts";
+import { useClusterScopedList } from "./useClusterScopedList.ts";
 
 // ClusterRef identifies the active cluster the K8s shim scopes reads to (KSail's resource API is
 // cluster-scoped). The loader supplies a live getter so the shim always reads the current cluster.
@@ -168,46 +169,21 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
 
 // makeK8sShim builds the minimal-but-real Kubernetes data surface plugins consume. useResourceList is a
 // React hook over KSail's allowlisted resource endpoint, returning [items, error] like Headlamp's
-// useList for the common kinds (Pods, Deployments, …). It must be called from a component render.
+// useList for the common kinds (Pods, Deployments, …). It must be called from a component render. The
+// cluster-scoped fetch-on-change effect is shared with k8s.ts's useList via useClusterScopedList; the
+// kind/namespace arguments are passed as extra deps so the list also re-fetches when they change.
 function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
   return {
     useResourceList(kind: string, namespace?: string): [PluginResource[], Error | null] {
-      const [items, setItems] = React.useState<PluginResource[]>([]);
-      const [error, setError] = React.useState<Error | null>(null);
+      return useClusterScopedList(
+        getCluster,
+        async (cluster) => {
+          const list = await listResources(cluster.namespace, cluster.name, kind, namespace);
 
-      // Read the active cluster during render and key the effect on it, so the list re-fetches when the
-      // user switches clusters — not only when the kind/namespace arguments change.
-      const cluster = getCluster();
-      const clusterName = cluster?.name ?? null;
-      const clusterNamespace = cluster?.namespace ?? null;
-
-      React.useEffect(() => {
-        if (clusterName === null || clusterNamespace === null) {
-          setItems([]);
-
-          return undefined;
-        }
-
-        let active = true;
-
-        listResources(clusterNamespace, clusterName, kind, namespace)
-          .then((list) => {
-            if (active) {
-              setItems(list.items ?? []);
-            }
-          })
-          .catch((err: unknown) => {
-            if (active) {
-              setError(err instanceof Error ? err : new Error(String(err)));
-            }
-          });
-
-        return () => {
-          active = false;
-        };
-      }, [kind, namespace, clusterName, clusterNamespace]);
-
-      return [items, error];
+          return list.items ?? [];
+        },
+        [kind, namespace],
+      );
     },
     ResourceClasses: makeResourceClasses(getCluster),
   };
