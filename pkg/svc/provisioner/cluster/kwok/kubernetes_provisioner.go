@@ -2,9 +2,11 @@ package kwokprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -441,8 +443,34 @@ options:
 	}, nil
 }
 
+var (
+	safeClusterNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	errInvalidClusterName  = errors.New("invalid cluster name")
+)
+
+func validateClusterNamePathComponent(clusterName string) error {
+	if clusterName == "" || clusterName == "." || clusterName == ".." {
+		return errInvalidClusterName
+	}
+
+	if strings.Contains(clusterName, "/") || strings.Contains(clusterName, "\\") {
+		return errInvalidClusterName
+	}
+
+	if !safeClusterNamePattern.MatchString(clusterName) {
+		return errInvalidClusterName
+	}
+
+	return nil
+}
+
 // kwokStateDir returns the absolute path to kwokctl's cluster state directory.
 func kwokStateDir(clusterName string) (string, error) {
+	err := validateClusterNamePathComponent(clusterName)
+	if err != nil {
+		return "", fmt.Errorf("validate cluster name: %w", err)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
