@@ -530,11 +530,22 @@ func (p *Provisioner) existsWithContext(kwokCtx context.Context, target string) 
 }
 
 func (p *Provisioner) resolveName(name string) string {
-	if name != "" {
-		return name
+	if name == "" {
+		return p.name
 	}
 
-	return p.name
+	// Defensive validation: cluster names are expected to be a single logical identifier,
+	// never a filesystem path.
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return ""
+	}
+
+	cleaned := filepath.Clean(name)
+	if cleaned == "." || cleaned == ".." || filepath.IsAbs(cleaned) {
+		return ""
+	}
+
+	return name
 }
 
 // setDefaultCluster sets config.DefaultCluster and returns a function that
