@@ -371,12 +371,17 @@ jobs:
     name: ⛵ Release Operator Chart
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Runs in parallel with the other releases. The chart is a standalone OCI artifact that only
-    # *references* the operator image (ghcr.io/devantler-tech/ksail) by tag — it neither pulls nor
-    # embeds it — so it does not wait on `goreleaser`; the matching image is pushed concurrently and
-    # exists by the time anyone installs the chart. The gated `publish-release` and `pages-deploy` jobs
-    # both list it in `needs` (just like the other publication jobs), so a chart publish failure blocks
-    # the GitHub release publish and the docs deploy.
+    # Gate on `goreleaser` (image build + cosign sign + push). The chart's appVersion is the
+    # release version and operator.image.tag defaults to it, so the chart references
+    # ghcr.io/devantler-tech/ksail:v<version>. Publishing the chart before that image exists
+    # produces an orphan chart pointing at a missing image: on the failed v7.74.1 run the
+    # `goreleaser` job failed (no image built/signed) but this job had already pushed
+    # ksail-operator:7.74.1, which downstream cosign image-verification then rejects with
+    # MANIFEST_UNKNOWN. `needs: goreleaser` keeps the chart and image release atomic — a failed
+    # or incomplete image build skips the chart publish instead of orphaning it. The gated
+    # `publish-release` and `pages-deploy` jobs both list this job in `needs`, so a chart
+    # publish failure still blocks the GitHub release publish and the docs deploy.
+    needs: [goreleaser]
     permissions:
       contents: read # checkout
       packages: write # push the chart to GHCR as an OCI artifact

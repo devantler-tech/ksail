@@ -13,9 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	x509 "github.com/siderolabs/crypto/x509"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
@@ -880,6 +882,126 @@ func TestAutoscalerTemplateDrift_IgnoresEndpointOnlyDifference(t *testing.T) {
 		t,
 		changes,
 		"an endpoint-only difference must be normalised away, not reported as drift",
+	)
+}
+
+// workerProviderWithIdentity builds a worker provider carrying cluster identity
+// material — the CA certificates and cluster ID — that syncSecretsFromCluster
+// realigns from the running cluster during apply (#4963). Talos's RedactSecrets
+// only nulls private *keys*, never the CA *certificates* or the cluster ID, and a
+// worker config carries the CA certs with empty keys (workers hold no CA private
+// key; see talos-worker-config-lacks-pki), so two providers differing only here
+// must still normalise to the same fingerprint.
+func workerProviderWithIdentity(
+	machineCACrt, clusterCACrt []byte,
+	clusterID string,
+) *taloscontainer.Container {
+	falseVal := false
+
+	return taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineInstall: &v1alpha1.InstallConfig{InstallWipe: &falseVal},
+			MachineCA:      &x509.PEMEncodedCertificateAndKey{Crt: machineCACrt},
+		},
+		ClusterConfig: &v1alpha1.ClusterConfig{
+			ClusterID: clusterID,
+			ClusterCA: &x509.PEMEncodedCertificateAndKey{Crt: clusterCACrt},
+		},
+	})
+}
+
+// The comparison must also ignore the cluster identity material — the CA
+// certificates and the cluster ID — which syncSecretsFromCluster realigns from the
+// running cluster during apply (#4963). The diff phase renders the desired template
+// from a freshly generated local secrets bundle (new CA certs and cluster ID on
+// every run) while the Secret holds the cluster's real identity. Talos's
+// RedactSecrets only nulls private keys, not the CA *certificates*, and a worker
+// config carries no CA private key to redact — so without normalisation every
+// `cluster update` falsely reports an autoscalerWorkerTemplate in-place change
+// whose NewValue digest changes each run (the on-platform symptom that never
+// converges).
+func TestAutoscalerTemplateDrift_IgnoresCAAndClusterIDOnlyDifference(t *testing.T) {
+	t.Parallel()
+
+	// The Secret was written by a prior apply from the cluster-synced bundle (the
+	// running cluster's CA certs and ID); the diff phase renders the desired
+	// template from a freshly generated local bundle with different identity.
+	stored := workerProviderWithIdentity(
+		[]byte("machine-ca-from-running-cluster"),
+		[]byte("cluster-ca-from-running-cluster"),
+		"cluster-id-running",
+	)
+	local := workerProviderWithIdentity(
+		[]byte("machine-ca-freshly-generated"),
+		[]byte("cluster-ca-freshly-generated"),
+		"cluster-id-fresh",
+	)
+
+	secret := autoscalerSecretFor(t, "1", []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", stored, nil),
+	})
+	desired := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", local, nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
+	require.NoError(t, err)
+	assert.Empty(
+		t,
+		changes,
+		"a CA-cert/cluster-ID-only difference must be normalised away, not reported as drift",
+	)
+}
+
+// Faithful end-to-end guard: two independent config generations with identical
+// patches model two `cluster update` runs, each minting fresh PKI (CA certs+keys,
+// cluster ID, tokens, bootstrap secrets) via bundle.NewBundle — exactly the
+// material syncSecretsFromCluster realigns from the running cluster on every run
+// (#4963). The stored Secret and the desired template therefore differ ONLY in
+// that regenerated identity, so drift detection must report nothing. Where the
+// hand-built CA/ID test above pins the specific fields, this one exercises the
+// whole real secrets bundle and would catch any run-specific field either misses
+// (the on-platform symptom was a NewValue digest that changed every run).
+func TestAutoscalerTemplateDrift_IgnoresFreshlyRegeneratedPKI(t *testing.T) {
+	t.Parallel()
+
+	storedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	storedYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(
+		storedConfigs.Worker(), nil, nil,
+	)
+	require.NoError(t, err)
+
+	desiredYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(
+		desiredConfigs.Worker(), nil, nil,
+	)
+	require.NoError(t, err)
+
+	// Sanity: independent generations really do differ (fresh PKI), so an
+	// empty-drift result proves the normalisation worked rather than the two inputs
+	// happening to be byte-identical.
+	require.NotEqual(
+		t,
+		storedYAML,
+		desiredYAML,
+		"independent generations must differ in PKI, else the test proves nothing",
+	)
+
+	secret := autoscalerSecretFor(t, "1", singlePoolConfig(storedYAML))
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(
+		secret, singlePoolConfig(desiredYAML),
+	)
+	require.NoError(t, err)
+	assert.Empty(
+		t,
+		changes,
+		"freshly regenerated PKI/identity must not read as autoscalerWorkerTemplate drift",
 	)
 }
 

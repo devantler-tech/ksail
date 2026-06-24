@@ -13,8 +13,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -288,6 +290,28 @@ func (s *Service) Get(
 	return nil, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 }
 
+func isSafeClusterName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	// Cluster name is used as a single filesystem path component in provisioners.
+	// Reject separators and parent/current directory components to prevent traversal.
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return false
+	}
+
+	if name == "." || name == ".." || strings.Contains(name, "..") {
+		return false
+	}
+
+	if filepath.Base(name) != name {
+		return false
+	}
+
+	return true
+}
+
 // Create starts provisioning a cluster and returns immediately with the cluster in the Provisioning
 // phase. The actual provisioning runs in a background goroutine; List/Get reflect its progress.
 func (s *Service) Create(
@@ -295,8 +319,8 @@ func (s *Service) Create(
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
 	name := cluster.Name
-	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", api.ErrInvalid)
+	if !isSafeClusterName(name) {
+		return nil, fmt.Errorf("%w: invalid name %q", api.ErrInvalid, name)
 	}
 
 	distribution := cluster.Spec.Cluster.Distribution
