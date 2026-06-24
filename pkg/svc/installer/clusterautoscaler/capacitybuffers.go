@@ -35,8 +35,14 @@ var capacityBufferCRDYAML []byte
 //     capacity-buffer-pod-injection-enabled, so the autoscaler reconciles
 //     CapacityBuffer resources and injects virtual pods for ready buffers.
 //  2. RBAC: the chart's ClusterRole only grants provisioningrequests in the
-//     autoscaling.x-k8s.io group, so CapacityBuffer access is added via the
-//     chart's rbac.additionalRules value.
+//     autoscaling.x-k8s.io group, so the buffer controller's access is added
+//     via the chart's rbac.additionalRules value. It needs three things the
+//     chart role omits: the CapacityBuffer CRs themselves, plus the Deployments
+//     and ResourceQuotas its translators run informers over (to size buffers
+//     from a workload's template and respect namespace quota). Without the
+//     latter two the controller logs a continuous "deployments.apps is
+//     forbidden ... cannot list/watch" / "resourcequotas is forbidden ..." and
+//     never reconciles a buffer, so its status stays empty.
 //  3. CRD: the chart does not ship the CapacityBuffer CRD; it is delivered via
 //     the chart's extraObjects value. NOTE: because the CRD is then part of the
 //     Helm release, `helm uninstall` removes the CRD — and with it every
@@ -45,11 +51,30 @@ func enableCapacityBuffers(vals *chartValues) error {
 	vals.ExtraArgs.CapacityBufferControllerEnabled = true
 	vals.ExtraArgs.CapacityBufferPodInjectionEnabled = true
 
-	vals.RBAC.AdditionalRules = append(vals.RBAC.AdditionalRules, chartRBACRule{
-		APIGroups: []string{"autoscaling.x-k8s.io"},
-		Resources: []string{"capacitybuffers", "capacitybuffers/status"},
-		Verbs:     []string{"get", "list", "watch", "update", "patch"},
-	})
+	// Read-only verbs shared by the buffer controller's Deployment and
+	// ResourceQuota informers (only marshaled to YAML, never mutated, so the
+	// shared slice is safe to reuse across both rules).
+	readVerbs := []string{"get", "list", "watch"}
+
+	vals.RBAC.AdditionalRules = append(vals.RBAC.AdditionalRules,
+		chartRBACRule{
+			APIGroups: []string{"autoscaling.x-k8s.io"},
+			Resources: []string{"capacitybuffers", "capacitybuffers/status"},
+			Verbs:     []string{"get", "list", "watch", "update", "patch"},
+		},
+		// Deployments and ResourceQuotas: the chart ClusterRole covers neither,
+		// but the buffer controller runs informers over both.
+		chartRBACRule{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     readVerbs,
+		},
+		chartRBACRule{
+			APIGroups: []string{""},
+			Resources: []string{"resourcequotas"},
+			Verbs:     readVerbs,
+		},
+	)
 
 	// The embedded CRD is a single YAML document; unmarshal it into a generic
 	// object for the chart's extraObjects values list (sigs.k8s.io/yaml routes
