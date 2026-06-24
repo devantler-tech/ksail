@@ -352,7 +352,7 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name, newServer string) error 
 		return fmt.Errorf("get home dir: %w", err)
 	}
 
-	kwokKubeconfig := homeDir + "/.kwok/clusters/" + target + "/kubeconfig.yaml"
+	kwokKubeconfig := filepath.Join(homeDir, ".kwok", "clusters", target, "kubeconfig.yaml")
 
 	kwokConfig, err := clientcmd.LoadFromFile(kwokKubeconfig)
 	if err != nil {
