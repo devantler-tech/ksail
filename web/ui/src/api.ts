@@ -673,10 +673,14 @@ export function pluginAssetURL(name: string, file: string): string {
 }
 
 // PluginInstallRequest installs a Headlamp-format plugin tarball from a URL (POST /api/v1/plugins).
-// sha256 (hex, optional) pins the download; name (optional) overrides the install id.
+// sha256 (hex, optional) pins the download (integrity); signature (base64 ed25519 detached signature
+// over the tarball bytes, optional) authenticates it against the backend's trusted public key
+// (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured;
+// name (optional) overrides the install id.
 export interface PluginInstallRequest {
   url: string;
   sha256?: string;
+  signature?: string;
   name?: string;
 }
 

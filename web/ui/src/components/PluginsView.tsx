@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Download, RotateCw, Search, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Download, RotateCw, Search, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { type CatalogEntry, errorMessage, installPlugin, searchPluginCatalog, uninstallPlugin } from "../api.ts";
 import type { LoadedPlugin } from "../lib/plugins/loader.ts";
@@ -84,11 +84,15 @@ const inputClass =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
 
 // PluginInstallForm installs a plugin from a tarball URL. Installing runs the plugin's code with full
-// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate);
-// signature verification is a follow-up — an optional SHA-256 pins the download in the meantime.
+// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate). Two
+// optional integrity/authenticity inputs (under "Advanced") harden the download: a SHA-256 pins the
+// bytes, and a base64 ed25519 signature authenticates them against the backend's trusted key
+// (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured.
 function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
   const [url, setUrl] = useState("");
   const [sha256, setSha256] = useState("");
+  const [signature, setSignature] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
@@ -100,9 +104,14 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
     setInstallError(null);
 
     try {
-      await installPlugin({ url: url.trim(), sha256: sha256.trim() || undefined });
+      await installPlugin({
+        url: url.trim(),
+        sha256: sha256.trim() || undefined,
+        signature: signature.trim() || undefined,
+      });
       setUrl("");
       setSha256("");
+      setSignature("");
       setConsent(false);
       onInstalled();
     } catch (err) {
@@ -131,14 +140,43 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
           placeholder="https://…/my-plugin.tar.gz"
           className={inputClass}
         />
-        <input
-          id="plugin-install-sha"
-          type="text"
-          value={sha256}
-          onChange={(event) => setSha256(event.target.value)}
-          placeholder="SHA-256 checksum (optional)"
-          className={inputClass}
-        />
+        <button
+          type="button"
+          id="plugin-install-advanced-toggle"
+          onClick={() => setShowAdvanced((shown) => !shown)}
+          aria-expanded={showAdvanced}
+          aria-controls="plugin-install-advanced"
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          <ChevronRight className={cx("size-3.5 transition-transform", showAdvanced && "rotate-90")} aria-hidden />
+          Advanced (integrity &amp; signature)
+        </button>
+        {showAdvanced ? (
+          <div id="plugin-install-advanced" className="space-y-2">
+            <input
+              id="plugin-install-sha"
+              type="text"
+              value={sha256}
+              onChange={(event) => setSha256(event.target.value)}
+              placeholder="SHA-256 checksum (optional)"
+              className={inputClass}
+            />
+            <input
+              id="plugin-install-signature"
+              type="text"
+              value={signature}
+              onChange={(event) => setSignature(event.target.value)}
+              placeholder="ed25519 signature, base64 (optional)"
+              className={inputClass}
+            />
+            {/* Authenticity is verified against the backend's trusted key (KSAIL_PLUGIN_SIGNING_PUBKEY);
+                a signature is rejected when no key is configured. */}
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              A signature is verified against the backend's trusted key and rejected when none is
+              configured.
+            </p>
+          </div>
+        ) : null}
       </div>
       <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
         <input
