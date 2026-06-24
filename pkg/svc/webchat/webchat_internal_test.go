@@ -108,6 +108,7 @@ func TestAwaitConfirmationEmitsAndApproves(t *testing.T) {
 	emit := func(event api.ChatEvent) { events <- event }
 
 	result := make(chan bool, 1)
+
 	go func() {
 		result <- runner.awaitConfirmation(context.Background(), request, emit)
 	}()
