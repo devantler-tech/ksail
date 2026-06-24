@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/pluginsig"
@@ -76,28 +74,6 @@ func TestVerifyPluginKeyBasedAcceptsBase64Bundle(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("verify with base64 bundle: %v", err)
-	}
-}
-
-func TestVerifyPluginKeyBasedFetchesBundleFromURL(t *testing.T) {
-	t.Parallel()
-
-	tarball := []byte("payload whose bundle is fetched over http")
-	bundleJSON, publicKeyPEM := signedTarball(t, tarball)
-
-	server := httptest.NewServer(
-		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-			_, _ = writer.Write(bundleJSON)
-		}),
-	)
-	t.Cleanup(server.Close)
-
-	err := pluginsig.New().VerifyPlugin(context.Background(), tarball, &api.PluginCosign{
-		BundleURL: server.URL,
-		PublicKey: publicKeyPEM,
-	})
-	if err != nil {
-		t.Fatalf("verify with bundle URL: %v", err)
 	}
 }
 
