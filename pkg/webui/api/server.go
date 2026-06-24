@@ -354,9 +354,11 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	// AI assistant (ChatService) over SSE: POST carries the prompt + history; the handler streams the
 	// reply as chat events. Registered when the backend implements ChatService; the capability (and the
 	// SPA panel) follow ChatAvailable. POST is subject to the read-only guard — the assistant can invoke
-	// tools, so a read-only deployment locks it down with the other mutating surfaces.
+	// tools, so a read-only deployment locks it down with the other mutating surfaces. The companion
+	// /chat/confirm route resolves a write tool's per-action confirmation (also POST → already guarded).
 	if _, ok := s.Service.(ChatService); ok {
 		mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+		mux.HandleFunc("POST /api/v1/chat/confirm", s.handleConfirm)
 	}
 
 	// Read-only kube-apiserver proxy (KubeProxy): GET passthrough so the SPA and Headlamp-compatible
@@ -535,8 +537,12 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.Plugins = s.Service.(PluginService)
 	// aiChat follows ChatAvailable (not just the interface), so the assistant panel appears only when
 	// the backend can actually run a turn (e.g. Copilot is configured), not merely when it could.
+	// aiChatWrite additionally requires the deployment not be read-only — a read-only UI rejects the
+	// assistant's write tools server-side (the chat POST is guarded), so the SPA must not offer to
+	// approve actions that cannot run.
 	if chat, ok := s.Service.(ChatService); ok {
 		capabilities.AIChat = chat.ChatAvailable(request.Context())
+		capabilities.AIChatWrite = capabilities.AIChat && !s.ReadOnly
 	}
 	// kubeProxy is true exactly when the backend can proxy read-only apiserver requests (KubeProxy),
 	// so plugins' ApiProxy data layer is only attempted against a backend that can serve it.

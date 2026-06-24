@@ -169,6 +169,11 @@ export interface Capabilities {
   // pluginInstall is true when the backend can install/uninstall web-UI plugins (PluginInstaller) and
   // is not read-only. The SPA shows the plugin install/uninstall surface only then.
   pluginInstall: boolean;
+  // aiChatWrite is true when the assistant may perform write operations — aiChat available AND the
+  // deployment is not read-only. The assistant's write tools are gated behind a per-action
+  // confirmation card; a read-only deployment rejects them server-side, so the SPA gates the
+  // confirmation affordance on this flag.
+  aiChatWrite: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -198,6 +203,9 @@ export const fullCapabilities: Capabilities = {
   kubeProxy: false,
   // pluginInstall defaults false: an older backend that omits the flag has no install endpoint.
   pluginInstall: false,
+  // aiChatWrite defaults false: an older backend that omits the flag predates the write-confirm flow,
+  // so the SPA keeps the assistant read-only there.
+  aiChatWrite: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -696,13 +704,30 @@ export interface ChatRequestBody {
   namespace?: string;
 }
 
-// ChatEventType classifies a streamed chat event (mirrors the backend's ChatEventType).
-export type ChatEventType = "delta" | "tool" | "error" | "done";
+// ChatEventType classifies a streamed chat event (mirrors the backend's ChatEventType). "tool-confirm"
+// asks the user to approve or deny a write tool before it runs.
+export type ChatEventType = "delta" | "tool" | "tool-confirm" | "error" | "done";
 
 // ChatEvent is one streamed event of a chat turn.
 export interface ChatEvent {
   type: ChatEventType;
   text?: string;
+  // confirmId identifies a pending write-tool confirmation ("tool-confirm" only); echo it back via
+  // confirmChatTool to approve or deny the action.
+  confirmId?: string;
+  // summary is a short, display-only description of the pending write tool ("tool-confirm" only).
+  summary?: string;
+}
+
+// confirmChatTool resolves a pending write-tool confirmation: it posts the user's decision for the
+// action identified by confirmId, which unblocks the in-flight turn on the chat SSE stream so the tool
+// proceeds (approved) or is rejected. Returns 204; the outcome streams back on the original turn.
+export function confirmChatTool(confirmId: string, approved: boolean): Promise<void> {
+  return request<void>("/api/v1/chat/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmId, approved }),
+  });
 }
 
 // parseSSEData extracts the concatenated `data:` payload from one SSE frame, or null when the frame
