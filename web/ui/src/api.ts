@@ -566,14 +566,7 @@ export type ResourceAction = {
 // scale/restart/delete, so each only differs by its path suffix and request init.
 function mutateResource(target: ResourceAction, suffix: string, init: RequestInit): Promise<void> {
   return request<void>(
-    resourcePath(
-      target.namespace,
-      target.name,
-      target.kind,
-      target.resourceName,
-      target.resourceNamespace,
-      suffix,
-    ),
+    resourcePath(target.namespace, target.name, target.kind, target.resourceName, target.resourceNamespace, suffix),
     init,
   );
 }
@@ -680,15 +673,14 @@ export function pluginAssetURL(name: string, file: string): string {
 }
 
 // PluginCosign carries cosign/sigstore verification material (the strongest install tier). Keyless:
-// provide a sigstore `bundle` (inline JSON/base64) or `bundleUrl` plus the expected certificate identity
+// provide a sigstore `bundle` (inline JSON/base64) plus the expected certificate identity
 // (`identitySubject` + `identityIssuer`); the bundle is verified against the public-good trust root.
 // Key-based: provide a PEM `publicKey` (a cosign ECDSA key) plus a bundle. When present, a verification
 // failure rejects the install (the backend returns 422); see pkg/cli/clusterapi/plugininstall.go.
 export interface PluginCosign {
-  // bundle is the sigstore bundle JSON, inline (raw or base64-encoded). Either this or bundleUrl.
+  // bundle is the sigstore bundle JSON, inline (raw or base64-encoded). The SPA supplies it directly —
+  // KSail's backend does not fetch it from a URL.
   bundle?: string;
-  // bundleUrl fetches the sigstore bundle JSON from an http(s) URL (size-capped). Either this or bundle.
-  bundleUrl?: string;
   // publicKey is a PEM-encoded cosign ECDSA public key for key-based verification (keyless otherwise).
   publicKey?: string;
   // identitySubject is the expected keyless signing-certificate SAN; treated as a regex when

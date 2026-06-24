@@ -26,9 +26,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -39,20 +36,12 @@ import (
 	"github.com/sigstore/sigstore/pkg/signature"
 )
 
-const (
-	// maxBundleBytes caps a sigstore bundle fetched from a URL (a bundle is small JSON; this bounds a
-	// hostile or runaway response).
-	maxBundleBytes = 4 << 20 // 4 MiB
-	// bundleFetchTimeout bounds fetching a bundle from a URL.
-	bundleFetchTimeout = 30 * time.Second
-)
-
 var (
 	// ErrCosignVerify is the base error for every cosign verification failure, so callers can match it
 	// while the message explains the specific cause.
 	ErrCosignVerify = errors.New("cosign verification failed")
-	// errNoBundle is returned when neither an inline bundle nor a bundle URL was supplied.
-	errNoBundle = errors.New("no sigstore bundle supplied (set cosign.bundle or cosign.bundleUrl)")
+	// errNoBundle is returned when no inline sigstore bundle was supplied.
+	errNoBundle = errors.New("no sigstore bundle supplied (set cosign.bundle)")
 	// errNoIdentity is returned for keyless verification when the expected certificate identity is
 	// incomplete (both a subject and an issuer are required).
 	errNoIdentity = errors.New(
@@ -61,13 +50,6 @@ var (
 	// errNotECDSAKey is returned when a supplied public key is not an ECDSA key (the only key type cosign
 	// blob signing uses by default).
 	errNotECDSAKey = errors.New("public key is not an ECDSA key")
-	// errBundleURLScheme is returned when a bundle URL is not an absolute http(s) address.
-	errBundleURLScheme = errors.New("bundle URL must be an http(s) address")
-	// errBundleTooLarge is returned when a fetched bundle exceeds maxBundleBytes.
-	errBundleTooLarge = errors.New("bundle exceeds size limit")
-	// errBundleFetchStatus is returned when fetching a bundle URL responds with a non-200 status; the
-	// HTTP status code is wrapped onto it.
-	errBundleFetchStatus = errors.New("fetch bundle: unexpected HTTP status")
 )
 
 // trustedRootFunc resolves the sigstore trusted root for keyless verification. It is a field on
@@ -79,19 +61,15 @@ type trustedRootFunc func() (root.TrustedMaterial, error)
 // New. It satisfies the unexported cosignVerifier seam in pkg/cli/clusterapi (structurally), so the
 // `ksail open web` command wires an instance in via Service.UseCosignVerifier.
 type Verifier struct {
-	// httpClient fetches a bundle supplied as a URL. Defaults to a timeout-bounded client; injectable for
-	// tests.
-	httpClient *http.Client
 	// trustedRoot resolves the keyless trust root. Defaults to the public-good root fetched via TUF;
 	// injectable for tests so they need no network.
 	trustedRoot trustedRootFunc
 }
 
 // New returns a Verifier that fetches the public-good sigstore trust root (via TUF, cached under
-// ~/.sigstore) for keyless verification and uses a timeout-bounded HTTP client for bundle URLs.
+// ~/.sigstore) for keyless verification.
 func New() *Verifier {
 	return &Verifier{
-		httpClient:  &http.Client{Timeout: bundleFetchTimeout},
 		trustedRoot: fetchPublicGoodRoot,
 	}
 }
@@ -114,11 +92,11 @@ func fetchPublicGoodRoot() (root.TrustedMaterial, error) {
 //
 // The caller (clusterapi) guarantees material is non-empty.
 func (v *Verifier) VerifyPlugin(
-	ctx context.Context,
+	_ context.Context,
 	tarball []byte,
 	material *api.PluginCosign,
 ) error {
-	signedBundle, err := v.resolveBundle(ctx, material)
+	signedBundle, err := resolveBundle(material)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrCosignVerify, err)
 	}
@@ -271,28 +249,16 @@ func parseECDSAPublicKey(publicKeyPEM string) (*ecdsa.PublicKey, error) {
 	return ecdsaKey, nil
 }
 
-// resolveBundle obtains the sigstore bundle: from an inline value (raw JSON or base64-encoded JSON) or by
-// fetching it from a URL (size-capped). Exactly one source is expected; inline takes precedence.
-func (v *Verifier) resolveBundle(
-	ctx context.Context,
-	material *api.PluginCosign,
-) (*bundle.Bundle, error) {
+// resolveBundle obtains the sigstore bundle from the inline value (raw JSON or base64-encoded JSON). The
+// caller (the SPA) supplies the bundle inline — KSail does not fetch it from a URL, so a user-supplied
+// value cannot be turned into a server-side request.
+func resolveBundle(material *api.PluginCosign) (*bundle.Bundle, error) {
 	inline := strings.TrimSpace(material.Bundle)
-	if inline != "" {
-		return parseBundleJSON(decodeMaybeBase64(inline))
-	}
-
-	bundleURL := strings.TrimSpace(material.BundleURL)
-	if bundleURL == "" {
+	if inline == "" {
 		return nil, errNoBundle
 	}
 
-	data, err := v.fetchBundle(ctx, bundleURL)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseBundleJSON(data)
+	return parseBundleJSON(decodeMaybeBase64(inline))
 }
 
 // parseBundleJSON unmarshals sigstore-bundle JSON into a bundle.Bundle.
@@ -317,41 +283,6 @@ func decodeMaybeBase64(value string) []byte {
 	}
 
 	return []byte(value)
-}
-
-// fetchBundle downloads a sigstore bundle from an http(s) URL with a size cap and the client's timeout.
-func (v *Verifier) fetchBundle(ctx context.Context, rawURL string) ([]byte, error) {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return nil, errBundleURLScheme
-	}
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build bundle request: %w", err)
-	}
-
-	response, err := v.httpClient.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("fetch bundle: %w", err)
-	}
-
-	defer func() { _ = response.Body.Close() }()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w %d", errBundleFetchStatus, response.StatusCode)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxBundleBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read bundle: %w", err)
-	}
-
-	if len(data) > maxBundleBytes {
-		return nil, errBundleTooLarge
-	}
-
-	return data, nil
 }
 
 // nonExpiringVerifier adapts a signature.Verifier into a root.TimeConstrainedVerifier that is always

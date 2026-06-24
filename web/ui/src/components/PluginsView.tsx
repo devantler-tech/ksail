@@ -38,9 +38,7 @@ export function PluginsView({
           boundary explicit, the way Headlamp does for its own (also unsandboxed) plugins. */}
       <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <p>
-          Plugins run with full access to this UI and your clusters. Only install plugins you trust.
-        </p>
+        <p>Plugins run with full access to this UI and your clusters. Only install plugins you trust.</p>
       </div>
 
       {/* The catalog browses Artifact Hub for Headlamp plugins; installing one still runs unsandboxed,
@@ -73,12 +71,7 @@ export function PluginsView({
       ) : (
         <ul className="space-y-2">
           {plugins.map((plugin) => (
-            <PluginCard
-              key={plugin.info.name}
-              plugin={plugin}
-              canUninstall={canInstall}
-              onUninstalled={onReload}
-            />
+            <PluginCard key={plugin.info.name} plugin={plugin} canUninstall={canInstall} onUninstalled={onReload} />
           ))}
         </ul>
       )}
@@ -184,8 +177,7 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
             {/* Authenticity is verified against the backend's trusted key (KSAIL_PLUGIN_SIGNING_PUBKEY);
                 a signature is rejected when no key is configured. */}
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              A signature is verified against the backend's trusted key and rejected when none is
-              configured.
+              A signature is verified against the backend's trusted key and rejected when none is configured.
             </p>
             <CosignFields cosign={cosign} onChange={setCosign} />
           </div>
@@ -222,14 +214,12 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
 function cleanCosign(cosign: PluginCosign): PluginCosign | undefined {
   const trimmed: PluginCosign = {
     bundle: cosign.bundle?.trim() || undefined,
-    bundleUrl: cosign.bundleUrl?.trim() || undefined,
     publicKey: cosign.publicKey?.trim() || undefined,
     identitySubject: cosign.identitySubject?.trim() || undefined,
     identityIssuer: cosign.identityIssuer?.trim() || undefined,
   };
   const hasMaterial =
     trimmed.bundle !== undefined ||
-    trimmed.bundleUrl !== undefined ||
     trimmed.publicKey !== undefined ||
     trimmed.identitySubject !== undefined ||
     trimmed.identityIssuer !== undefined;
@@ -238,37 +228,21 @@ function cleanCosign(cosign: PluginCosign): PluginCosign | undefined {
 }
 
 // CosignFields renders the cosign/sigstore inputs (the strongest verification tier): a sigstore bundle
-// (inline or a URL), and then either a cosign public key (key-based) or an expected keyless identity
+// (inline), and then either a cosign public key (key-based) or an expected keyless identity
 // (subject SAN + OIDC issuer). It is a controlled sub-form — the parent owns the cosign state and sends
 // it on install (a verification failure is reported by the backend as an install error).
-function CosignFields({
-  cosign,
-  onChange,
-}: {
-  cosign: PluginCosign;
-  onChange: (next: PluginCosign) => void;
-}) {
+function CosignFields({ cosign, onChange }: { cosign: PluginCosign; onChange: (next: PluginCosign) => void }) {
   const set = (patch: Partial<PluginCosign>): void => onChange({ ...cosign, ...patch });
 
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-2.5 dark:border-slate-700">
-      <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-        Cosign / sigstore (strongest)
-      </p>
+      <p className="text-xs font-medium text-slate-600 dark:text-slate-300">Cosign / sigstore (strongest)</p>
       <input
         id="plugin-install-cosign-bundle"
         type="text"
         value={cosign.bundle ?? ""}
         onChange={(event) => set({ bundle: event.target.value })}
         placeholder="sigstore bundle JSON or base64 (optional)"
-        className={inputClass}
-      />
-      <input
-        id="plugin-install-cosign-bundle-url"
-        type="url"
-        value={cosign.bundleUrl ?? ""}
-        onChange={(event) => set({ bundleUrl: event.target.value })}
-        placeholder="…or sigstore bundle URL"
         className={inputClass}
       />
       <input
@@ -296,8 +270,8 @@ function CosignFields({
         className={inputClass}
       />
       <p className="text-xs text-slate-400 dark:text-slate-500">
-        Provide a sigstore bundle, then a public key (key-based) or an expected identity (keyless,
-        verified against the public-good trust root). The install is rejected if verification fails.
+        Provide a sigstore bundle, then a public key (key-based) or an expected identity (keyless, verified against the
+        public-good trust root). The install is rejected if verification fails.
       </p>
     </div>
   );
@@ -475,7 +449,11 @@ function CatalogEntryRow({
           disabled={busy || installed || !consented}
           loading={busy}
         >
-          {busy ? null : installed ? <CheckCircle2 className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />}
+          {busy ? null : installed ? (
+            <CheckCircle2 className="size-4" aria-hidden />
+          ) : (
+            <Download className="size-4" aria-hidden />
+          )}
           {installed ? "Installed" : "Install"}
         </Button>
       </div>

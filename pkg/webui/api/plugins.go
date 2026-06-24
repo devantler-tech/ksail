@@ -94,15 +94,12 @@ type PluginInstallRequest struct {
 //   - Key-based: provide the cosign PublicKey (a PEM-encoded ECDSA public key) and a Bundle (or a bare
 //     signature carried in the bundle). The tarball bytes are verified against that key.
 //
-// The Bundle may be supplied inline (raw or base64-encoded sigstore-bundle JSON) via Bundle, or fetched
-// from a URL (size-capped) via BundleURL; exactly one of the two should be set.
+// The Bundle is supplied inline (raw or base64-encoded sigstore-bundle JSON) via Bundle — the SPA fetches
+// it client-side, so KSail's backend never fetches a user-supplied URL.
 type PluginCosign struct {
-	// Bundle is the sigstore bundle as JSON, supplied inline (raw JSON or base64-encoded JSON). Either
-	// this or BundleURL is required.
+	// Bundle is the sigstore bundle as JSON, supplied inline (raw JSON or base64-encoded JSON). Required
+	// for both keyless and key-based verification.
 	Bundle string `json:"bundle,omitempty"`
-	// BundleURL fetches the sigstore bundle JSON from an http(s) URL (size-capped) instead of inlining
-	// it. Either this or Bundle is required.
-	BundleURL string `json:"bundleUrl,omitempty"`
 	// PublicKey is a PEM-encoded cosign ECDSA public key for key-based verification. When set, the
 	// verifier uses key-based mode (and ignores the identity fields); when empty, keyless mode is used.
 	PublicKey string `json:"publicKey,omitempty"`
@@ -128,7 +125,6 @@ func (c *PluginCosign) IsEmpty() bool {
 	}
 
 	return strings.TrimSpace(c.Bundle) == "" &&
-		strings.TrimSpace(c.BundleURL) == "" &&
 		strings.TrimSpace(c.PublicKey) == "" &&
 		strings.TrimSpace(c.IdentitySubject) == "" &&
 		strings.TrimSpace(c.IdentityIssuer) == ""
