@@ -166,6 +166,9 @@ export interface Capabilities {
   // kubeProxy is true when the backend proxies read-only apiserver requests, powering reads beyond the
   // curated allowlist (and Headlamp-compatible plugins' ApiProxy data layer). Local backend only.
   kubeProxy: boolean;
+  // pluginInstall is true when the backend can install/uninstall web-UI plugins (PluginInstaller) and
+  // is not read-only. The SPA shows the plugin install/uninstall surface only then.
+  pluginInstall: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -193,6 +196,8 @@ export const fullCapabilities: Capabilities = {
   aiChat: false,
   // kubeProxy defaults false: an older backend that omits the flag has no proxy endpoint.
   kubeProxy: false,
+  // pluginInstall defaults false: an older backend that omits the flag has no install endpoint.
+  pluginInstall: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -651,6 +656,29 @@ export function listPlugins(): Promise<{ plugins: PluginInfo[] }> {
 // sub-path assets (the backend enforces the file stays within the plugin directory).
 export function pluginAssetURL(name: string, file: string): string {
   return `/api/v1/plugins/${encodeURIComponent(name)}/${file}`;
+}
+
+// PluginInstallRequest installs a Headlamp-format plugin tarball from a URL (POST /api/v1/plugins).
+// sha256 (hex, optional) pins the download; name (optional) overrides the install id.
+export interface PluginInstallRequest {
+  url: string;
+  sha256?: string;
+  name?: string;
+}
+
+// installPlugin installs a plugin from a tarball URL, returning the installed plugin's metadata. Only
+// available when capabilities.pluginInstall is true (the local backend, not read-only).
+export function installPlugin(req: PluginInstallRequest): Promise<PluginInfo> {
+  return request<PluginInfo>("/api/v1/plugins", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+// uninstallPlugin removes an installed plugin by id (name).
+export function uninstallPlugin(name: string): Promise<void> {
+  return request<void>(`/api/v1/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 // ChatMessage is one prior turn sent as history so the assistant has conversation context.

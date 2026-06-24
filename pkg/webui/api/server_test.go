@@ -72,7 +72,8 @@ func TestConfigReportsReadOnly(t *testing.T) {
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
-			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,"aiChat":false,"kubeProxy":false}}`,
+			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -376,7 +377,8 @@ func TestConfigDefaultsWritable(t *testing.T) {
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
-			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,"aiChat":false,"kubeProxy":false}}`,
+			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -398,7 +400,8 @@ func TestConfigReportsNoClusterUpdateWithoutUpdater(t *testing.T) {
 		`"capabilities":{"clusterUpdate":false,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
-			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,"aiChat":false,"kubeProxy":false}`,
+			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,`+
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
 	)
 }
 
@@ -418,7 +421,8 @@ func TestConfigReportsClusterUpdateWithUpdater(t *testing.T) {
 		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
-			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,"aiChat":false,"kubeProxy":false}`,
+			`"clusterStartStop":false,"componentsInstall":false,"plugins":false,`+
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
 	)
 }
 
@@ -438,7 +442,8 @@ func TestConfigReportsClusterUpdateForOperatorBackend(t *testing.T) {
 		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
 			`"workloadWrite":false,"kubeconfigDownload":false,`+
 			`"applyManifests":false,"secretsCipher":false,"workloadLogs":false,"workloadExec":false,`+
-			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,"aiChat":false,"kubeProxy":false}`,
+			`"clusterStartStop":false,"componentsInstall":true,"plugins":false,`+
+			`"aiChat":false,"kubeProxy":false,"pluginInstall":false}`,
 	)
 }
 

@@ -570,6 +570,7 @@ export function App() {
             loading={pluginLoader.loading}
             error={pluginLoader.error}
             onReload={pluginLoader.reload}
+            canInstall={capability(config, "pluginInstall")}
           />
         ) : view === "assistant" ? (
           <AIAssistant
