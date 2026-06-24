@@ -560,7 +560,15 @@ func TestCreateValidatesInput(t *testing.T) {
 	_, err := service.Create(context.Background(), clusterFor("", v1alpha1.DistributionVCluster))
 	require.ErrorIs(t, err, api.ErrInvalid)
 
-	_, err = service.Create(context.Background(), clusterFor("noDist", ""))
+	// A name that is a safe path component but not DNS-1123 (uppercase, underscore) is rejected at the
+	// trust boundary, matching `ksail cluster init` and blocking path-traversal-shaped names.
+	_, err = service.Create(
+		context.Background(),
+		clusterFor("Invalid_Name", v1alpha1.DistributionVCluster),
+	)
+	require.ErrorIs(t, err, api.ErrInvalid)
+
+	_, err = service.Create(context.Background(), clusterFor("no-dist", ""))
 	require.ErrorIs(t, err, api.ErrInvalid)
 
 	// An unknown distribution cannot be provisioned locally.
