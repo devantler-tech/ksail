@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -206,4 +207,35 @@ func errorPayload(err error) string {
 	}
 
 	return string(data)
+}
+
+// scanLinesToChannel reads newline-delimited text from reader in a goroutine, emitting each line on the
+// returned channel and closing done when the stream ends. The goroutine exits if ctx is cancelled, so a
+// never-ending upstream cannot leak it once the client disconnects. It backs both the log and watch SSE
+// handlers, whose select loops consume (lines, done) identically — keeping the scan in one place and the
+// select loops within their complexity budget.
+func scanLinesToChannel(
+	ctx context.Context,
+	reader io.Reader,
+	maxLineBytes int,
+) (<-chan string, <-chan struct{}) {
+	lines := make(chan string)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		scanner := bufio.NewScanner(reader)
+		scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxLineBytes)
+
+		for scanner.Scan() {
+			select {
+			case lines <- scanner.Text():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return lines, done
 }

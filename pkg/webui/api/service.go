@@ -184,6 +184,11 @@ type Capabilities struct {
 	// catalog search box only then; each result installs via the existing install flow. Derived from the
 	// interface in handleConfig like the other flags, so it cannot drift from whether the route exists.
 	PluginCatalog bool `json:"pluginCatalog"`
+	// KubeWatch reports whether the backend streams read-only kube-apiserver watches (KubeWatch) — true
+	// exactly when the serving ClusterService implements it. It powers live incremental updates
+	// (ADDED/MODIFIED/DELETED) for the plugin K8s data layer; when false the SPA falls back to polling.
+	// The local `ksail open web`/desktop backend implements it; the operator leaves it false.
+	KubeWatch bool `json:"kubeWatch"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

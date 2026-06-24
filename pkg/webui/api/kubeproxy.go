@@ -41,13 +41,9 @@ func (s *Server) handleKubeProxy(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	result, err := proxy.ProxyKubeGet(
-		request.Context(),
-		request.PathValue("namespace"),
-		request.PathValue("name"),
-		request.PathValue("path"),
-		request.URL.Query(),
-	)
+	namespace, name, path, query := clusterProxyArgs(request)
+
+	result, err := proxy.ProxyKubeGet(request.Context(), namespace, name, path, query)
 	if err != nil {
 		writeClientError(writer, err)
 
@@ -67,4 +63,14 @@ func (s *Server) handleKubeProxy(writer http.ResponseWriter, request *http.Reque
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.WriteHeader(result.Status)
 	_, _ = io.Copy(writer, result.Body)
+}
+
+// clusterProxyArgs returns the {namespace}/{name}/{path} route values and query string that the
+// kube-proxy and kube-watch handlers both forward to the apiserver, so each handler pulls them the same
+// way instead of repeating the PathValue/Query plumbing.
+func clusterProxyArgs(request *http.Request) (string, string, string, url.Values) {
+	return request.PathValue("namespace"),
+		request.PathValue("name"),
+		request.PathValue("path"),
+		request.URL.Query()
 }

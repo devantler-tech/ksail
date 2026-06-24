@@ -178,6 +178,10 @@ export interface Capabilities {
   // (PluginCatalog) — the local backend searches Artifact Hub for Headlamp plugins. The SPA shows the
   // catalog search box only then; each result installs via the existing install flow.
   pluginCatalog: boolean;
+  // kubeWatch is true when the backend streams read-only apiserver watches, powering live incremental
+  // updates for the Headlamp-compatible plugins' K8s data layer. When false the SPA falls back to
+  // polling. Local backend only.
+  kubeWatch: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -212,6 +216,9 @@ export const fullCapabilities: Capabilities = {
   aiChatWrite: false,
   // pluginCatalog defaults false: an older backend that omits the flag has no catalog endpoint.
   pluginCatalog: false,
+  // kubeWatch defaults false: an older backend that omits the flag has no watch endpoint, so the SPA
+  // must keep polling rather than open a watch that 404s.
+  kubeWatch: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource

@@ -368,6 +368,13 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/proxy/{path...}", s.handleKubeProxy)
 	}
 
+	// Read-only kube-apiserver WATCH (KubeWatch) over SSE: the streaming analogue of the proxy, so the
+	// SPA and Headlamp-compatible plugins receive live incremental updates instead of polling. GET-only
+	// (a read), so the read-only guard does not apply. Implemented only on the loopback local backend.
+	if _, ok := s.Service.(KubeWatch); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/watch/{path...}", s.handleKubeWatch)
+	}
+
 	// Plugin install/uninstall (PluginInstaller): POST installs a Headlamp plugin tarball from a URL,
 	// DELETE removes one. Both mutate the plugins directory, so the read-only guard rejects them with 403
 	// in read-only mode. Registered only on a backend that implements installation (the local one).
@@ -555,6 +562,9 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// kubeProxy is true exactly when the backend can proxy read-only apiserver requests (KubeProxy),
 	// so plugins' ApiProxy data layer is only attempted against a backend that can serve it.
 	_, capabilities.KubeProxy = s.Service.(KubeProxy)
+	// kubeWatch is true exactly when the backend can stream apiserver watches (KubeWatch), so the
+	// plugin K8s data layer only opens a live watch against a backend that can serve it (else it polls).
+	_, capabilities.KubeWatch = s.Service.(KubeWatch)
 	// pluginInstall is true when the backend can install/uninstall plugins (PluginInstaller) and is not
 	// read-only, so the SPA offers the install surface only when an install would actually be accepted.
 	_, pluginInstallable := s.Service.(PluginInstaller)
