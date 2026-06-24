@@ -409,6 +409,12 @@ func downloadPluginArchive(
 		return nil, fmt.Errorf("%w: build request: %w", ErrPluginInstall, err)
 	}
 
+	// Fetching a user-supplied URL is the feature here. validatePluginURL constrains the host to an exact
+	// allowlist (GitHub / Artifact Hub / loopback) and pluginHTTPClient refuses private, link-local and
+	// cloud-metadata addresses — including via redirects and DNS rebinding — so the destination cannot be
+	// steered onto the internal network. CodeQL still reports the user-derived URL; the request forgery is
+	// mitigated by construction, so the alert is suppressed here.
+	// codeql[go/request-forgery]
 	response, err := pluginHTTPClient().Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("%w: download: %w", ErrPluginInstall, err)
