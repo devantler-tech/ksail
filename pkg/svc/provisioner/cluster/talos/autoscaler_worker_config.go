@@ -18,6 +18,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	x509 "github.com/siderolabs/crypto/x509"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
@@ -541,15 +542,24 @@ func (p *Provisioner) readAutoscalerConfigSecret(
 //
 // The comparison is over each pool's normalised worker config fingerprint — not
 // the raw Secret bytes (see redactedWorkerConfigFingerprint): the cloud-init embeds
-// the full worker config, and two fields legitimately differ between the un-synced
-// local bundle the diff phase renders and the cluster-synced bundle the apply path
-// stores, because syncSecretsFromCluster realigns both during apply (#4963) — the
-// PKI (neutralised by RedactSecrets) and the cluster control-plane endpoint
-// (CIDR-derived private IP locally vs the control-plane's public IP on the cluster,
-// neutralised by normalizeEndpointForFingerprint; the endpoint is not a secret, so
-// redaction alone left it leaking a phantom in-place diff on every run). Both
-// normalisations isolate the comparison to the machine-config patches, labels, and
-// taints this bug is about, keeping idempotent re-runs at "No changes detected".
+// the full worker config, and three classes of field legitimately differ between
+// the un-synced local bundle the diff phase renders and the cluster-synced bundle
+// the apply path stores, because syncSecretsFromCluster realigns all of them during
+// apply (#4963):
+//
+//   - the PKI private keys, tokens, and cluster secret (neutralised by RedactSecrets);
+//   - the cluster control-plane endpoint (CIDR-derived private IP locally vs the
+//     control-plane's public IP on the cluster); and
+//   - the cluster identity material — the CA *certificates* and the cluster ID.
+//
+// The last two are NOT secrets RedactSecrets touches (it only nulls private keys),
+// and a worker config carries the CA certs with empty keys (workers hold no CA
+// private key), so a fresh-PKI local bundle fingerprinted differently from the
+// stored Secret on every run — the phantom in-place diff that never converged.
+// normalizeForFingerprint substitutes fixed placeholders for the endpoint and the
+// cluster identity so the comparison isolates to the machine-config patches,
+// labels, and taints this bug is about, keeping idempotent re-runs at "No changes
+// detected".
 func autoscalerTemplateDrift(
 	existing *corev1.Secret,
 	pools []AutoscalerPoolConfig,
@@ -691,16 +701,18 @@ const fingerprintEndpointPlaceholder = "https://cluster-endpoint:6443"
 
 // redactedWorkerConfigFingerprint returns a short, stable fingerprint of a worker
 // config's secrets-redacted, canonical encoding (the same normalisation
-// configFingerprint uses), with the cluster control-plane endpoint normalised to a
-// fixed placeholder, so two configs that differ only in PKI or endpoint — both
-// realigned from the running cluster during apply (#4963) — fingerprint identically.
+// configFingerprint uses), with the cluster control-plane endpoint and cluster
+// identity material (CA certificates and cluster ID) normalised to fixed
+// placeholders, so two configs that differ only in PKI, endpoint, or cluster
+// identity — all realigned from the running cluster during apply (#4963) —
+// fingerprint identically.
 func redactedWorkerConfigFingerprint(workerYAML []byte) (string, error) {
 	provider, err := configloader.NewFromBytes(workerYAML)
 	if err != nil {
 		return "", fmt.Errorf("load worker config for fingerprint: %w", err)
 	}
 
-	provider, err = normalizeEndpointForFingerprint(provider)
+	provider, err = normalizeForFingerprint(provider)
 	if err != nil {
 		return "", err
 	}
@@ -708,13 +720,21 @@ func redactedWorkerConfigFingerprint(workerYAML []byte) (string, error) {
 	return configFingerprint(provider), nil
 }
 
-// normalizeEndpointForFingerprint substitutes the cluster control-plane endpoint
-// with a fixed placeholder so two worker templates that differ only in endpoint
-// fingerprint identically. It is a no-op when the config carries no endpoint (the
-// structure is preserved otherwise, so a config that defines an endpoint and one
-// that does not still fingerprint differently — but both sides of the autoscaler
-// comparison come from the same bundle, so they always agree on its presence).
-func normalizeEndpointForFingerprint(
+// normalizeForFingerprint substitutes fixed placeholders for the parts of a worker
+// config that syncSecretsFromCluster realigns from the running cluster during apply
+// (#4963) but RedactSecrets does not neutralise: the cluster control-plane endpoint
+// (CIDR-derived private IP locally vs the control-plane's public IP on the cluster)
+// and the cluster identity material (the CA certificates and the cluster ID).
+// RedactSecrets — applied later by configFingerprint — only nulls private keys,
+// tokens, and the cluster secret, never the CA certificates or the cluster ID; and
+// a worker config carries the CA certs with empty keys (workers hold no CA private
+// key), so without this step a freshly generated local bundle fingerprints
+// differently from the cluster-synced Secret on every run, leaking a phantom
+// in-place diff that never converges. Structure is otherwise preserved, so configs
+// that do and do not define a field still fingerprint differently — but both sides
+// of the autoscaler comparison come from the same bundle shape, so they always
+// agree on each field's presence.
+func normalizeForFingerprint(
 	provider talosconfig.Provider,
 ) (talosconfig.Provider, error) {
 	placeholder, err := url.Parse(fingerprintEndpointPlaceholder)
@@ -723,21 +743,72 @@ func normalizeEndpointForFingerprint(
 	}
 
 	patched, err := provider.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
-		if cfg.ClusterConfig == nil ||
-			cfg.ClusterConfig.ControlPlane == nil ||
-			cfg.ClusterConfig.ControlPlane.Endpoint == nil {
-			return nil
-		}
-
-		cfg.ClusterConfig.ControlPlane.Endpoint = &v1alpha1.Endpoint{URL: placeholder}
+		normalizeEndpoint(cfg, placeholder)
+		normalizeClusterIdentity(cfg)
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("normalize endpoint for fingerprint: %w", err)
+		return nil, fmt.Errorf("normalize worker config for fingerprint: %w", err)
 	}
 
 	return patched, nil
+}
+
+// normalizeEndpoint substitutes the cluster control-plane endpoint with a fixed
+// placeholder. It is a no-op when the config carries no endpoint.
+func normalizeEndpoint(cfg *v1alpha1.Config, placeholder *url.URL) {
+	if cfg.ClusterConfig == nil ||
+		cfg.ClusterConfig.ControlPlane == nil ||
+		cfg.ClusterConfig.ControlPlane.Endpoint == nil {
+		return
+	}
+
+	cfg.ClusterConfig.ControlPlane.Endpoint = &v1alpha1.Endpoint{URL: placeholder}
+}
+
+// normalizeClusterIdentity substitutes the cluster identity material — the cluster
+// ID and the machine/cluster CA certificates — with fixed placeholders, since
+// syncSecretsFromCluster realigns all of it from the running cluster during apply
+// (#4963). RedactSecrets nulls the CA private keys but never the certificates, and
+// a worker config carries no CA private key, so the certificates must be
+// neutralised here for a fresh-PKI local bundle to fingerprint identically to the
+// synced Secret. Only the CA fields a worker config actually carries (machine CA,
+// cluster CA, cluster ID) are handled; the aggregator/etcd/service-account material
+// is control-plane-only and never present in the worker configs fingerprinted here.
+func normalizeClusterIdentity(cfg *v1alpha1.Config) {
+	if cfg.MachineConfig != nil {
+		neutralizeCertificate(cfg.MachineConfig.MachineCA)
+	}
+
+	if cfg.ClusterConfig == nil {
+		return
+	}
+
+	if cfg.ClusterConfig.ClusterID != "" {
+		cfg.ClusterConfig.ClusterID = redactedSecretPlaceholder
+	}
+
+	neutralizeCertificate(cfg.ClusterConfig.ClusterCA)
+}
+
+// neutralizeCertificate replaces a CA's certificate and key bytes with a fixed
+// placeholder so two configs differing only in PKI fingerprint identically. It
+// mirrors RedactSecrets' redactBytes semantics — a no-op on an absent struct or an
+// empty field — so an empty CA key (the common worker-config case) stays empty on
+// both sides of the comparison.
+func neutralizeCertificate(cert *x509.PEMEncodedCertificateAndKey) {
+	if cert == nil {
+		return
+	}
+
+	if len(cert.Crt) > 0 {
+		cert.Crt = []byte(redactedSecretPlaceholder)
+	}
+
+	if len(cert.Key) > 0 {
+		cert.Key = []byte(redactedSecretPlaceholder)
+	}
 }
 
 // autoscalerTemplateDigest renders a poolName→fingerprint map into a single short,
