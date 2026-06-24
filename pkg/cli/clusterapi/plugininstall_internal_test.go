@@ -352,3 +352,130 @@ func TestPluginStoreInstallIgnoresSignatureEnvWithoutSignature(t *testing.T) {
 		t.Errorf("info.Name = %q, want unsigned", info.Name)
 	}
 }
+
+// errStubCosign is a stub verification failure used by the fake cosign verifier in tests.
+var errStubCosign = errors.New("stub cosign failure")
+
+// fakeCosignVerifier records the bytes and material it is asked to verify and returns a fixed result,
+// so a test can assert the install routes cosign material to the wired verifier and honours its outcome.
+type fakeCosignVerifier struct {
+	err          error
+	gotTarball   []byte
+	gotMaterial  *api.PluginCosign
+	timesInvoked int
+}
+
+func (f *fakeCosignVerifier) VerifyPlugin(
+	_ context.Context,
+	tarball []byte,
+	material *api.PluginCosign,
+) error {
+	f.timesInvoked++
+	f.gotTarball = tarball
+	f.gotMaterial = material
+
+	return f.err
+}
+
+// validPluginRequest builds a store serving a valid plugin tarball plus an install request for it, with
+// the supplied cosign material attached. It returns the store, the request, and the served bytes.
+func validPluginRequest(
+	t *testing.T,
+	material *api.PluginCosign,
+) (pluginStore, api.PluginInstallRequest, []byte) {
+	t.Helper()
+
+	store, _ := newTempStore(t)
+	archive := makeTarGz(t, map[string]string{
+		"cosign-plugin/package.json": `{"name":"cosign-plugin","version":"1.0.0","main":"main.js"}`,
+		"cosign-plugin/main.js":      `console.log("cosign")`,
+	})
+	server := serveBytes(t, archive)
+
+	return store, api.PluginInstallRequest{URL: server.URL, Cosign: material}, archive
+}
+
+func TestPluginStoreInstallRejectsCosignMaterialWithoutVerifier(t *testing.T) {
+	t.Parallel()
+
+	// A request carrying cosign material but no wired verifier must be rejected, never downgraded to a
+	// weaker tier — mirroring how a claimed ed25519 signature is rejected without a trusted key.
+	store, req, _ := validPluginRequest(t, &api.PluginCosign{Bundle: `{"some":"bundle"}`})
+
+	_, err := store.install(context.Background(), req)
+	if !errors.Is(err, ErrPluginInstall) {
+		t.Errorf(
+			"install error = %v, want ErrPluginInstall when cosign material has no verifier",
+			err,
+		)
+	}
+}
+
+func TestPluginStoreInstallAcceptsWhenCosignVerifierApproves(t *testing.T) {
+	t.Parallel()
+
+	material := &api.PluginCosign{Bundle: `{"some":"bundle"}`, PublicKey: "pk"}
+	store, req, archive := validPluginRequest(t, material)
+	verifier := &fakeCosignVerifier{}
+	store.cosign = verifier
+
+	info, err := store.install(context.Background(), req)
+	if err != nil {
+		t.Fatalf("install with approving cosign verifier: %v", err)
+	}
+
+	if info.Name != "cosign-plugin" {
+		t.Errorf("info.Name = %q, want cosign-plugin", info.Name)
+	}
+
+	if verifier.timesInvoked != 1 {
+		t.Errorf("verifier invoked %d times, want 1", verifier.timesInvoked)
+	}
+
+	if !bytes.Equal(verifier.gotTarball, archive) {
+		t.Error("verifier did not receive the downloaded tarball bytes")
+	}
+
+	if verifier.gotMaterial != material {
+		t.Error("verifier did not receive the request's cosign material")
+	}
+}
+
+func TestPluginStoreInstallRejectsWhenCosignVerifierFails(t *testing.T) {
+	t.Parallel()
+
+	store, req, _ := validPluginRequest(t, &api.PluginCosign{Bundle: `{"some":"bundle"}`})
+	store.cosign = &fakeCosignVerifier{err: errStubCosign}
+
+	_, err := store.install(context.Background(), req)
+	if !errors.Is(err, ErrPluginInstall) {
+		t.Errorf("install error = %v, want ErrPluginInstall when cosign verification fails", err)
+	}
+}
+
+func TestPluginStoreInstallSkipsCosignVerifierWithoutMaterial(t *testing.T) {
+	t.Parallel()
+
+	// A wired verifier but no cosign material on the request: the verifier must not be invoked (the
+	// install falls through to the lighter tiers), so an unsigned-but-valid plugin still installs.
+	store, _ := newTempStore(t)
+	store.cosign = &fakeCosignVerifier{err: errStubCosign}
+	archive := makeTarGz(t, map[string]string{
+		"plain/package.json": `{"name":"plain","version":"1.0.0","main":"main.js"}`,
+		"plain/main.js":      `console.log("plain")`,
+	})
+	server := serveBytes(t, archive)
+
+	info, err := store.install(context.Background(), api.PluginInstallRequest{URL: server.URL})
+	if err != nil {
+		t.Fatalf("install without cosign material: %v", err)
+	}
+
+	if info.Name != "plain" {
+		t.Errorf("info.Name = %q, want plain", info.Name)
+	}
+
+	if verifier, ok := store.cosign.(*fakeCosignVerifier); ok && verifier.timesInvoked != 0 {
+		t.Errorf("verifier invoked %d times, want 0 (no cosign material)", verifier.timesInvoked)
+	}
+}

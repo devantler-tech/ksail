@@ -58,10 +58,18 @@ type PluginService interface {
 }
 
 // PluginInstallRequest is the body of POST /api/v1/plugins: install a Headlamp-format plugin tarball
-// from a URL. SHA256 (hex, optional) pins the download to a known digest; Signature (base64 ed25519
-// detached signature over the tarball bytes, optional) authenticates it against the trusted public key
-// configured out-of-band; Name (optional) overrides the install id when the package.json name is
-// unsuitable or absent. See pkg/cli/clusterapi/plugininstall.go for the trust model.
+// from a URL. The verification tiers are layered strongest-first (see pkg/cli/clusterapi/plugininstall.go
+// for the full trust model):
+//
+//   - Cosign (strongest, optional): a sigstore bundle verified against the public-good trust root
+//     (keyless: Fulcio cert + Rekor entry, enforcing an expected certificate identity) or a cosign
+//     ECDSA public key (key-based). When set, a failure rejects the install (422); when absent, the
+//     lighter tiers below apply.
+//   - SHA256 (hex, optional): pins the download to a known digest (integrity only).
+//   - Signature (base64 ed25519 detached signature, optional): authenticates the bytes against the
+//     trusted public key configured out-of-band (KSAIL_PLUGIN_SIGNING_PUBKEY).
+//
+// Name (optional) overrides the install id when the package.json name is unsuitable or absent.
 type PluginInstallRequest struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256,omitempty"`
@@ -69,7 +77,57 @@ type PluginInstallRequest struct {
 	// bytes. When set, the install verifies it against KSAIL_PLUGIN_SIGNING_PUBKEY and rejects the
 	// install when no trusted key is configured (a claimed signature is never silently ignored).
 	Signature string `json:"signature,omitempty"`
-	Name      string `json:"name,omitempty"`
+	// Cosign carries optional sigstore/cosign verification material (the strongest tier). When present
+	// and non-empty it gates the install; when nil or empty the install falls through to the SHA-256 +
+	// ed25519 tiers. A cosign verification failure rejects the install (422).
+	Cosign *PluginCosign `json:"cosign,omitempty"`
+	Name   string        `json:"name,omitempty"`
+}
+
+// PluginCosign carries cosign/sigstore verification material for a plugin install. It is set when the
+// caller wants the strongest authenticity tier; it gates the install (a failure is fatal). Exactly one
+// of the two modes is used, in this order:
+//
+//   - Keyless: provide the sigstore Bundle (the Fulcio cert + Rekor entry + signature over the tarball)
+//     plus the expected certificate Identity (IdentitySubject + IdentityIssuer). The bundle is verified
+//     against the public-good trust root and the signing certificate's identity must match.
+//   - Key-based: provide the cosign PublicKey (a PEM-encoded ECDSA public key) and a Bundle (or a bare
+//     signature carried in the bundle). The tarball bytes are verified against that key.
+//
+// The Bundle is supplied inline (raw or base64-encoded sigstore-bundle JSON) via Bundle — the SPA fetches
+// it client-side, so KSail's backend never fetches a user-supplied URL.
+type PluginCosign struct {
+	// Bundle is the sigstore bundle as JSON, supplied inline (raw JSON or base64-encoded JSON). Required
+	// for both keyless and key-based verification.
+	Bundle string `json:"bundle,omitempty"`
+	// PublicKey is a PEM-encoded cosign ECDSA public key for key-based verification. When set, the
+	// verifier uses key-based mode (and ignores the identity fields); when empty, keyless mode is used.
+	PublicKey string `json:"publicKey,omitempty"`
+	// IdentitySubject is the expected signing-certificate SAN (keyless mode). It is matched exactly
+	// unless IdentitySubjectRegex is set, in which case it is treated as a regular expression.
+	IdentitySubject string `json:"identitySubject,omitempty"`
+	// IdentitySubjectRegex, when true, treats IdentitySubject as a regular expression rather than an
+	// exact SAN match.
+	IdentitySubjectRegex bool `json:"identitySubjectRegex,omitempty"`
+	// IdentityIssuer is the expected OIDC issuer recorded in the signing certificate (keyless mode). It
+	// is matched exactly unless IdentityIssuerRegex is set.
+	IdentityIssuer string `json:"identityIssuer,omitempty"`
+	// IdentityIssuerRegex, when true, treats IdentityIssuer as a regular expression rather than an exact
+	// issuer match.
+	IdentityIssuerRegex bool `json:"identityIssuerRegex,omitempty"`
+}
+
+// IsEmpty reports whether no cosign material is present, so the install can fall through to the lighter
+// SHA-256 + ed25519 tiers. A nil receiver is empty.
+func (c *PluginCosign) IsEmpty() bool {
+	if c == nil {
+		return true
+	}
+
+	return strings.TrimSpace(c.Bundle) == "" &&
+		strings.TrimSpace(c.PublicKey) == "" &&
+		strings.TrimSpace(c.IdentitySubject) == "" &&
+		strings.TrimSpace(c.IdentityIssuer) == ""
 }
 
 // PluginInstaller is an optional interface a ClusterService may implement to install and uninstall

@@ -34,6 +34,11 @@ type pluginStore struct {
 	// dir resolves the plugins directory. Injectable so tests point at a temp dir instead of ~/.ksail,
 	// mirroring the kubeconfigPath seam on Service.
 	dir func() (string, error)
+	// cosign verifies a download against cosign/sigstore material (the strongest authenticity tier). It
+	// is wired in by the `ksail open web` command (Service.UseCosignVerifier) so the heavy sigstore-go
+	// dependency stays out of clusterapi and the desktop module; nil means cosign verification is
+	// unavailable, so a request carrying cosign material is rejected rather than downgraded.
+	cosign cosignVerifier
 }
 
 // pluginPackage is the subset of a plugin's package.json the store reads for metadata. The author and

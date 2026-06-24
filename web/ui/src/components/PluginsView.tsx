@@ -1,6 +1,13 @@
 import { AlertTriangle, CheckCircle2, ChevronRight, Download, RotateCw, Search, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { type CatalogEntry, errorMessage, installPlugin, searchPluginCatalog, uninstallPlugin } from "../api.ts";
+import {
+  type CatalogEntry,
+  errorMessage,
+  installPlugin,
+  type PluginCosign,
+  searchPluginCatalog,
+  uninstallPlugin,
+} from "../api.ts";
 import type { LoadedPlugin } from "../lib/plugins/loader.ts";
 import { cx } from "../lib/cx.ts";
 import { EmptyState, ErrorBanner } from "./states.tsx";
@@ -31,9 +38,7 @@ export function PluginsView({
           boundary explicit, the way Headlamp does for its own (also unsandboxed) plugins. */}
       <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <p>
-          Plugins run with full access to this UI and your clusters. Only install plugins you trust.
-        </p>
+        <p>Plugins run with full access to this UI and your clusters. Only install plugins you trust.</p>
       </div>
 
       {/* The catalog browses Artifact Hub for Headlamp plugins; installing one still runs unsandboxed,
@@ -66,12 +71,7 @@ export function PluginsView({
       ) : (
         <ul className="space-y-2">
           {plugins.map((plugin) => (
-            <PluginCard
-              key={plugin.info.name}
-              plugin={plugin}
-              canUninstall={canInstall}
-              onUninstalled={onReload}
-            />
+            <PluginCard key={plugin.info.name} plugin={plugin} canUninstall={canInstall} onUninstalled={onReload} />
           ))}
         </ul>
       )}
@@ -84,14 +84,17 @@ const inputClass =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
 
 // PluginInstallForm installs a plugin from a tarball URL. Installing runs the plugin's code with full
-// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate). Two
-// optional integrity/authenticity inputs (under "Advanced") harden the download: a SHA-256 pins the
-// bytes, and a base64 ed25519 signature authenticates them against the backend's trusted key
-// (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured.
+// cluster access, so the Install action is gated on an explicit consent checkbox (the trust gate). The
+// "Advanced" section exposes the verification tiers, strongest first: cosign/sigstore (the strongest —
+// a sigstore bundle verified keyless against an expected certificate identity, or key-based against a
+// cosign public key), then a SHA-256 checksum (integrity), then a base64 ed25519 signature (a lighter
+// authenticity check against the backend's trusted key, KSAIL_PLUGIN_SIGNING_PUBKEY). All are optional;
+// the backend rejects supplied material it cannot verify rather than downgrading.
 function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
   const [url, setUrl] = useState("");
   const [sha256, setSha256] = useState("");
   const [signature, setSignature] = useState("");
+  const [cosign, setCosign] = useState<PluginCosign>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -108,10 +111,12 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
         url: url.trim(),
         sha256: sha256.trim() || undefined,
         signature: signature.trim() || undefined,
+        cosign: cleanCosign(cosign),
       });
       setUrl("");
       setSha256("");
       setSignature("");
+      setCosign({});
       setConsent(false);
       onInstalled();
     } catch (err) {
@@ -172,9 +177,9 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
             {/* Authenticity is verified against the backend's trusted key (KSAIL_PLUGIN_SIGNING_PUBKEY);
                 a signature is rejected when no key is configured. */}
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              A signature is verified against the backend's trusted key and rejected when none is
-              configured.
+              A signature is verified against the backend's trusted key and rejected when none is configured.
             </p>
+            <CosignFields cosign={cosign} onChange={setCosign} />
           </div>
         ) : null}
       </div>
@@ -201,6 +206,74 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
         Install plugin
       </Button>
     </form>
+  );
+}
+
+// cleanCosign returns the cosign material to send, or undefined when every field is blank — so an
+// untouched Advanced section sends no cosign block and the install falls through to the lighter tiers.
+function cleanCosign(cosign: PluginCosign): PluginCosign | undefined {
+  const trimmed: PluginCosign = {
+    bundle: cosign.bundle?.trim() || undefined,
+    publicKey: cosign.publicKey?.trim() || undefined,
+    identitySubject: cosign.identitySubject?.trim() || undefined,
+    identityIssuer: cosign.identityIssuer?.trim() || undefined,
+  };
+  const hasMaterial =
+    trimmed.bundle !== undefined ||
+    trimmed.publicKey !== undefined ||
+    trimmed.identitySubject !== undefined ||
+    trimmed.identityIssuer !== undefined;
+
+  return hasMaterial ? trimmed : undefined;
+}
+
+// CosignFields renders the cosign/sigstore inputs (the strongest verification tier): a sigstore bundle
+// (inline), and then either a cosign public key (key-based) or an expected keyless identity
+// (subject SAN + OIDC issuer). It is a controlled sub-form — the parent owns the cosign state and sends
+// it on install (a verification failure is reported by the backend as an install error).
+function CosignFields({ cosign, onChange }: { cosign: PluginCosign; onChange: (next: PluginCosign) => void }) {
+  const set = (patch: Partial<PluginCosign>): void => onChange({ ...cosign, ...patch });
+
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-2.5 dark:border-slate-700">
+      <p className="text-xs font-medium text-slate-600 dark:text-slate-300">Cosign / sigstore (strongest)</p>
+      <input
+        id="plugin-install-cosign-bundle"
+        type="text"
+        value={cosign.bundle ?? ""}
+        onChange={(event) => set({ bundle: event.target.value })}
+        placeholder="sigstore bundle JSON or base64 (optional)"
+        className={inputClass}
+      />
+      <input
+        id="plugin-install-cosign-pubkey"
+        type="text"
+        value={cosign.publicKey ?? ""}
+        onChange={(event) => set({ publicKey: event.target.value })}
+        placeholder="cosign public key, PEM (key-based)"
+        className={inputClass}
+      />
+      <input
+        id="plugin-install-cosign-identity-subject"
+        type="text"
+        value={cosign.identitySubject ?? ""}
+        onChange={(event) => set({ identitySubject: event.target.value })}
+        placeholder="expected identity subject / SAN (keyless)"
+        className={inputClass}
+      />
+      <input
+        id="plugin-install-cosign-identity-issuer"
+        type="text"
+        value={cosign.identityIssuer ?? ""}
+        onChange={(event) => set({ identityIssuer: event.target.value })}
+        placeholder="expected OIDC issuer (keyless)"
+        className={inputClass}
+      />
+      <p className="text-xs text-slate-400 dark:text-slate-500">
+        Provide a sigstore bundle, then a public key (key-based) or an expected identity (keyless, verified against the
+        public-good trust root). The install is rejected if verification fails.
+      </p>
+    </div>
   );
 }
 
@@ -376,7 +449,11 @@ function CatalogEntryRow({
           disabled={busy || installed || !consented}
           loading={busy}
         >
-          {busy ? null : installed ? <CheckCircle2 className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />}
+          {busy ? null : installed ? (
+            <CheckCircle2 className="size-4" aria-hidden />
+          ) : (
+            <Download className="size-4" aria-hidden />
+          )}
           {installed ? "Installed" : "Install"}
         </Button>
       </div>
