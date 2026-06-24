@@ -148,6 +148,7 @@ func TestKubeWatchStopsOnClientDisconnect(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	done := make(chan struct{})
+
 	go func() {
 		defer close(done)
 
