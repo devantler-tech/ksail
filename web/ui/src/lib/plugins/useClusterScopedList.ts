@@ -76,6 +76,11 @@ function applyWatchEvent<T>(items: T[], event: WatchEvent, binding: WatchBinding
   return copy;
 }
 
+// PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs fetchList after the initial load. Five
+// seconds mirrors a typical Headlamp/Kubernetes dashboard refresh cadence — frequent enough to feel
+// live, infrequent enough not to hammer the read-only kube-proxy.
+export const PLUGIN_LIST_POLL_INTERVAL_MS = 5000;
+
 export function useClusterScopedList<T>(
   getCluster: () => ClusterRef | null,
   fetchList: (cluster: ClusterRef) => Promise<T[]>,
