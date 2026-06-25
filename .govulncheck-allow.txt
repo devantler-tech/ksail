@@ -10,9 +10,11 @@
 # Policy: the allowlist is for UNPATCHABLE findings only. The moment an
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
-# Verified with `govulncheck ./...` against ksail main (2026-06-01):
-#   "Your code is affected by 4 vulnerabilities from 2 modules" — the 4 below,
-#   each "Fixed in: N/A". Re-validate when bumping docker or k8s.io deps.
+# Verified with `govulncheck ./...` against ksail main (re-validated 2026-06-25):
+#   the 6 reachable advisories below, each "Fixed in: N/A" for the version
+#   pinned (transitively) in go.mod. Re-validate when bumping docker, k8s.io,
+#   or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT listed —
+#   it has an upstream fix (v0.43.0) and is bumped per policy, not allowlisted.
 # ---------------------------------------------------------------------------
 
 # --- github.com/docker/docker (Moby) @ v28.5.2+incompatible -----------------
@@ -28,3 +30,15 @@ GO-2026-4883  # Moby off-by-one in plugin privilege validation (daemon-side; no 
 # node-side issues not exercised by ksail. No upstream fix.
 GO-2025-3547  # kube-apiserver race condition (control-plane; no fix)
 GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; no fix)
+
+# --- github.com/containerd/containerd (v1) @ v1.7.33 ------------------------
+# Pulled transitively (docker/moby + k8s.io libraries still depend on the v1
+# module); ksail's own containerd/v2 is already v2.3.2. Both advisories below
+# are CRI checkpoint/restore code paths — a node/runtime surface ksail never
+# invokes (it provisions Kind/K3d/Talos/etc. and talks to the Docker daemon
+# API, not CRI checkpoint/restore). No fix exists for the v1 module line (only
+# containerd/v2 >= 2.1.9/2.2.5/2.3.2 is patched); ksail cannot drop v1 until
+# docker/moby + k8s.io migrate off it. Remove these entries the moment the
+# transitive v1 dependency goes away or a v1 fix ships.
+GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
+GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
