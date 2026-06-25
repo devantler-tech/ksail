@@ -198,10 +198,12 @@ export function useClusterScopedList<T>(
       };
 
       // Prefer the multiplexer when the backend serves it and the binding identifies the collection.
+      // subscribeWatchMux always returns a closer (it establishes the subscription asynchronously), so a
+      // watch is started unconditionally here.
       if (binding.mux && isWSMultiplexerAvailable()) {
         closeWatch = subscribeWatchMux(binding.mux, handlers);
 
-        return closeWatch !== null;
+        return true;
       }
 
       // Fall back to the per-list SSE watch when the apiserver-watch capability is advertised.
