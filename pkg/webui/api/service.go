@@ -189,6 +189,13 @@ type Capabilities struct {
 	// (ADDED/MODIFIED/DELETED) for the plugin K8s data layer; when false the SPA falls back to polling.
 	// The local `ksail open web`/desktop backend implements it; the operator leaves it false.
 	KubeWatch bool `json:"kubeWatch"`
+	// WSMultiplexer reports whether the backend serves the Headlamp WebSocket multiplexer endpoint
+	// (/wsMultiplexer) — true exactly when the serving ClusterService implements KubeWatch (the same
+	// apiserver-watch backing). It lets a Headlamp plugin's WebSocketManager multiplex many resource
+	// watches over one socket; the plugin K8s data layer prefers it over the per-list SSE watch when
+	// advertised, falling back to SSE then polling. The local `ksail open web`/desktop backend serves it;
+	// the operator leaves it false.
+	WSMultiplexer bool `json:"wsMultiplexer"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

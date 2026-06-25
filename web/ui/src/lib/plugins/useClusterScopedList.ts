@@ -8,12 +8,15 @@
 // inputs appended to the cluster keys so the effect also re-runs when they change. It must be called
 // from a component render (it is a hook).
 //
-// Live updates come from one of two sources, transparently to the caller:
-//   - When the backend advertises the kubeWatch capability AND the caller supplies a `watch` binding
-//     with a non-empty URL (the proxy-backed k8s.ts path can), the hook opens an apiserver WATCH over
-//     SSE (watchStream.ts) after seeding with one fetchList and applies incremental events — the
-//     faithful substitute for Headlamp's WebSocket watch multiplexer. It does NOT poll while watching.
-//   - Otherwise (no capability, no binding/URL, or the watch errors/closes) it falls back to re-running
+// Live updates come from one of three sources, transparently to the caller (the same applied watch
+// events flow through whichever transport is live). After seeding with one fetchList, the hook prefers
+// a live watch and does NOT poll while one is running:
+//   - The Headlamp WebSocket multiplexer (wsMultiplexer.ts) when the backend advertises the
+//     wsMultiplexer capability AND the binding carries a `mux` subscription — one socket multiplexes
+//     every list's watch, faithfully reproducing Headlamp's WebSocketManager. Preferred when available.
+//   - The per-list apiserver WATCH over SSE (watchStream.ts) when wsMultiplexer is unavailable but the
+//     backend advertises kubeWatch AND the binding carries a non-empty `url`.
+//   - Otherwise (no capability, no binding, or the live watch errors/closes) it falls back to re-running
 //     fetchList on a fixed interval, pausing while the tab is hidden and refetching when it returns.
 // Either way the caller observes a live-updating [items, error] — the signature is unchanged.
 
@@ -26,6 +29,11 @@ import {
   type RawKubeObject,
   type WatchEvent,
 } from "./watchStream.ts";
+import {
+  isWSMultiplexerAvailable,
+  type MuxSubscription,
+  subscribeWatchMux,
+} from "./wsMultiplexer.ts";
 
 // PLUGIN_LIST_POLL_INTERVAL_MS is how often the hook re-runs fetchList when polling (no live watch).
 // Five seconds mirrors a typical Headlamp/Kubernetes dashboard refresh cadence — frequent enough to feel
@@ -38,9 +46,14 @@ export const PLUGIN_LIST_POLL_INTERVAL_MS = 5000;
 // derives a stable key so an incremental event updates the right row.
 export interface WatchBinding<T> {
   // url is the SSE watch endpoint to open (built by the caller from the same cluster/path context as the
-  // fetcher, via watchStream.watchStreamURL). An empty string disables the watch (e.g. no active
-  // cluster), so the hook polls.
+  // fetcher, via watchStream.watchStreamURL). An empty string disables the SSE watch (e.g. no active
+  // cluster), so the hook falls through to the multiplexer (if bound) or polling.
   url: string;
+  // mux, when set, identifies the same collection to the Headlamp WebSocket multiplexer (one socket,
+  // many watches). useClusterScopedList prefers it over the per-list SSE EventSource when the backend
+  // advertises the wsMultiplexer capability, falling back to SSE (url) then polling. Omitted by callers
+  // whose endpoint has no multiplexer route (e.g. the allowlisted /resources reader), which keep polling.
+  mux?: MuxSubscription;
   // toItem wraps a raw apiserver object (a watch event's `object`) into the caller's item type, mirroring
   // how the fetcher wraps listed objects (e.g. new KubeObject(raw)), so watched and listed items match.
   toItem: (raw: RawKubeObject) => T;
@@ -154,22 +167,24 @@ export function useClusterScopedList<T>(
       }, PLUGIN_LIST_POLL_INTERVAL_MS);
     };
 
-    // tryWatch opens the apiserver WATCH after the initial fetch when the capability and a binding with a
-    // URL are present. Incremental events update items in place; a connection error closes the watch and
-    // falls back to polling, so the list never goes stale even if the stream drops.
+    // tryWatch opens a live watch after the initial fetch, preferring the Headlamp WebSocket multiplexer
+    // (one shared socket) when it is available and the binding carries a `mux` subscription, otherwise the
+    // per-list SSE EventSource. Incremental events update items in place; a connection error closes the
+    // watch and falls back to polling, so the list never goes stale even if the stream drops. Returns true
+    // when a live watch was established (so the caller does not also start polling).
     const tryWatch = (): boolean => {
       const binding = watchRef.current;
-      if (!binding || binding.url === "" || !isKubeWatchAvailable()) {
+      if (!binding) {
         return false;
       }
 
-      closeWatch = openWatchStream(binding.url, {
-        onEvent: (event) => {
+      const handlers = {
+        onEvent: (event: WatchEvent): void => {
           if (active) {
             setItems((current) => applyWatchEvent(current, event, binding));
           }
         },
-        onError: () => {
+        onError: (): void => {
           if (closeWatch) {
             closeWatch();
             closeWatch = null;
@@ -180,9 +195,25 @@ export function useClusterScopedList<T>(
             startPolling();
           }
         },
-      });
+      };
 
-      return closeWatch !== null;
+      // Prefer the multiplexer when the backend serves it and the binding identifies the collection.
+      // subscribeWatchMux always returns a closer (it establishes the subscription asynchronously), so a
+      // watch is started unconditionally here.
+      if (binding.mux && isWSMultiplexerAvailable()) {
+        closeWatch = subscribeWatchMux(binding.mux, handlers);
+
+        return true;
+      }
+
+      // Fall back to the per-list SSE watch when the apiserver-watch capability is advertised.
+      if (binding.url !== "" && isKubeWatchAvailable()) {
+        closeWatch = openWatchStream(binding.url, handlers);
+
+        return closeWatch !== null;
+      }
+
+      return false;
     };
 
     // Initial fetch, then prefer a live watch; only poll when a watch is not running.

@@ -2,11 +2,13 @@
 // KSail's read-only kube-apiserver WATCH endpoint (see pkg/webui/api/kubewatch.go) and delivers parsed,
 // incremental watch events (ADDED/MODIFIED/DELETED) to useAsyncList, which applies them to its list.
 //
-// This is the substitute for Headlamp's WebSocket watch multiplexer: plugins consume K8s.useList(),
-// which observes a live-updating list either way — KSail streams the apiserver watch as SSE (EventSource
-// is same-origin, GET-only, cookie-authenticated, and passes through the Wails desktop asset server,
-// unlike WebSockets), so no Headlamp WS wire protocol is reproduced. When a watch is unavailable (the
-// backend does not advertise kubeWatch) or errors, the caller falls back to interval polling.
+// This is the SSE fallback transport behind the plugin K8s data layer's live updates. The preferred
+// transport is the Headlamp WebSocket multiplexer (wsMultiplexer.ts), which reproduces Headlamp's WS wire
+// protocol so a plugin's own WebSocketManager works; useAsyncList uses this SSE watch when the backend
+// advertises kubeWatch but not wsMultiplexer (EventSource is same-origin, GET-only, cookie-authenticated,
+// and passes through the Wails desktop asset server). When neither is available, or a watch errors, the
+// caller falls back to interval polling. Plugins consume K8s.useList() and observe a live-updating list
+// regardless of which transport is active.
 
 // kubeWatchAvailable mirrors the backend's capabilities.kubeWatch flag. The app sets it once config is
 // loaded (setKubeWatchAvailable); the plugin K8s layer reads it through this module rather than prop-
@@ -102,8 +104,25 @@ export function openWatchStream(url: string, handlers: WatchStreamHandlers): (()
   };
 }
 
-// decodeWatchEvent parses one watch frame's JSON into a WatchEvent, returning null for malformed input
-// or a frame missing the verb/object so a single bad event cannot crash the stream.
+// watchEventFromObject coerces an already-parsed value into a WatchEvent, returning null for anything
+// that is not a valid {type, object} watch frame. Shared by the SSE decoder (decodeWatchEvent) and the
+// WebSocket multiplexer (wsMultiplexer.ts): both receive watch frames over different transports but
+// validate and shape them identically.
+export function watchEventFromObject(value: unknown): WatchEvent | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const record = value as { type?: unknown; object?: unknown };
+  if (typeof record.type !== "string" || typeof record.object !== "object" || record.object === null) {
+    return null;
+  }
+
+  return { type: record.type as WatchEventType, object: record.object as RawKubeObject };
+}
+
+// decodeWatchEvent parses one SSE watch frame's JSON and validates it into a WatchEvent, returning null
+// for malformed input or a frame missing the verb/object so a single bad event cannot crash the stream.
 function decodeWatchEvent(data: string): WatchEvent | null {
   let parsed: unknown;
   try {
@@ -112,14 +131,5 @@ function decodeWatchEvent(data: string): WatchEvent | null {
     return null;
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const record = parsed as { type?: unknown; object?: unknown };
-  if (typeof record.type !== "string" || typeof record.object !== "object" || record.object === null) {
-    return null;
-  }
-
-  return { type: record.type as WatchEventType, object: record.object as RawKubeObject };
+  return watchEventFromObject(parsed);
 }

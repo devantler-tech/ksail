@@ -98,8 +98,9 @@ async function proxyList(cluster: ClusterRef, listPath: string): Promise<KubeObj
 // when the active cluster changes (keyed on the cluster's primitive name/namespace, mirroring the
 // useResourceList shim so a cluster switch reloads the data). The cluster-scoped fetch-on-change effect
 // is shared with useResourceList via useClusterScopedList. Live updates come from that hook's optional
-// watch binding: an apiserver WATCH on the same collection when the backend advertises kubeWatch,
-// otherwise interval polling. An absent cluster yields an empty watch URL, which disables the watch.
+// watch binding: the Headlamp WebSocket multiplexer (mux) when the backend advertises wsMultiplexer,
+// else the per-list apiserver WATCH over SSE (url) when it advertises kubeWatch, else interval polling.
+// An absent cluster yields an empty URL and no mux binding, which disables the watch.
 function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null): ResourceClass {
   return {
     useList(): [KubeObject[], Error | null] {
@@ -109,12 +110,15 @@ function makeResourceClass(def: ResourceDef, getCluster: () => ClusterRef | null
 
       // The watch observes the same collection the fetcher lists, with watched objects wrapped as
       // KubeObjects keyed identically (uid, fallback namespace/name) so an incremental event updates the
-      // right row. An absent cluster yields an empty URL, which disables the watch (the hook polls).
+      // right row. An absent cluster yields an empty URL and no mux binding, which disables the watch (the
+      // hook polls). When present, useClusterScopedList prefers the WebSocket multiplexer (mux) over SSE (url).
+      const hasCluster = clusterName !== null && clusterNamespace !== null;
       const watch: WatchBinding<KubeObject> = {
-        url:
-          clusterName === null || clusterNamespace === null
-            ? ""
-            : watchStreamURL(clusterNamespace, clusterName, def.listPath),
+        url: hasCluster ? watchStreamURL(clusterNamespace, clusterName, def.listPath) : "",
+        // clusterId is the cluster name (the {name} the backend resolves to a kubeconfig context, matching
+        // the SSE watch path). path is the apiserver collection; query is empty (watch the whole list, as
+        // the SSE path does). These three are the key Headlamp's multiplexer correlates DATA frames on.
+        mux: hasCluster ? { clusterId: clusterName, path: def.listPath, query: "" } : undefined,
         toItem: (raw: RawKubeObject) => new KubeObject(raw as Record<string, unknown>),
         keyOf: (item: KubeObject) => kubeObjectKey(item.jsonData as RawKubeObject),
       };

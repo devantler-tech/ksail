@@ -182,6 +182,11 @@ export interface Capabilities {
   // updates for the Headlamp-compatible plugins' K8s data layer. When false the SPA falls back to
   // polling. Local backend only.
   kubeWatch: boolean;
+  // wsMultiplexer is true when the backend serves the Headlamp WebSocket multiplexer endpoint
+  // (/wsMultiplexer), letting a plugin's WebSocketManager multiplex many resource watches over one
+  // socket. The plugin K8s data layer prefers it over the per-list SSE watch when advertised, falling
+  // back to SSE then polling. Local backend only (rides the same apiserver-watch backing as kubeWatch).
+  wsMultiplexer: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -219,6 +224,9 @@ export const fullCapabilities: Capabilities = {
   // kubeWatch defaults false: an older backend that omits the flag has no watch endpoint, so the SPA
   // must keep polling rather than open a watch that 404s.
   kubeWatch: false,
+  // wsMultiplexer defaults false: an older backend that omits the flag has no /wsMultiplexer endpoint,
+  // so the SPA must not attempt a multiplexer connection (it falls back to the SSE watch, then polling).
+  wsMultiplexer: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
