@@ -17,7 +17,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.5.5
 	github.com/fluxcd/kustomize-controller/api v1.9.0
 	github.com/fluxcd/pkg/apis/meta v1.30.0
-	github.com/fluxcd/source-controller/api v1.8.5
+	github.com/fluxcd/source-controller/api v1.9.0
 	github.com/getsops/sops/v3 v3.13.1
 	github.com/gkampitakis/go-snaps v0.5.22
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -383,7 +383,7 @@ require (
 	github.com/firefart/nonamedreturns v1.0.6 // indirect
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.1 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.73.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
