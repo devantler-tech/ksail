@@ -596,9 +596,11 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 }
 
 // TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers verifies that
-// enabling capacityBuffers renders the two feature flags, the CapacityBuffer
-// RBAC rule, and the embedded CapacityBuffer CRD via extraObjects — and that all
-// three are omitted from the values when the feature is disabled.
+// enabling capacityBuffers renders the two feature flags, the buffer
+// controller's RBAC rules (CapacityBuffer CRs plus the Deployment and
+// ResourceQuota read access its informers require), and the embedded
+// CapacityBuffer CRD via extraObjects — and that all of them are omitted from
+// the values when the feature is disabled.
 func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 	t.Parallel()
 
@@ -616,6 +618,8 @@ func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 				"capacity-buffer-pod-injection-enabled: true",
 				"additionalRules:",
 				"capacitybuffers",
+				"- deployments",
+				"- resourcequotas",
 				"kind: CustomResourceDefinition",
 				"name: capacitybuffers.autoscaling.x-k8s.io",
 			},
@@ -627,6 +631,8 @@ func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 				"capacity-buffer-controller-enabled",
 				"capacity-buffer-pod-injection-enabled",
 				"capacitybuffers",
+				"- deployments",
+				"- resourcequotas",
 				"kind: CustomResourceDefinition",
 			},
 		},
