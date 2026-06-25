@@ -256,15 +256,16 @@ require (
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260311181619-506013b79ba0 // indirect
-	github.com/loft-sh/agentapi/v4 v4.8.2-rc.1 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260528181747-b79df92c20c5 // indirect
+	github.com/loft-sh/agentapi/v4 v4.10.0-alpha.12 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.8.2-rc.1 // indirect
-	github.com/loft-sh/apiserver v0.0.0-20260113122925-594495a02e96 // indirect
+	github.com/loft-sh/api/v4 v4.10.0-alpha.12 // indirect
+	github.com/loft-sh/apiserver v0.0.0-20260424174643-365191901530 // indirect
+	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
-	github.com/loft-sh/vcluster v0.34.5 // indirect
+	github.com/loft-sh/vcluster v0.35.0 // indirect
 	github.com/magefile/mage v1.17.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
@@ -392,12 +393,14 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
+	github.com/xiang90/probing v0.0.0-20221125231312-a49e3df8f510 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/zalando/go-keyring v0.2.8 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.11 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.11 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.11 // indirect
+	go.etcd.io/etcd/etcdutl/v3 v3.6.11 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.6.11 // indirect
 	go.etcd.io/etcd/server/v3 v3.6.11 // indirect
 	go.etcd.io/raft/v3 v3.6.0 // indirect
@@ -456,13 +459,13 @@ require (
 	k8s.io/apiserver v0.36.2 // indirect
 	k8s.io/cli-runtime v0.36.2 // indirect
 	k8s.io/client-go v0.36.2 // indirect
-	k8s.io/cluster-bootstrap v0.35.0 // indirect
+	k8s.io/cluster-bootstrap v0.36.0 // indirect
 	k8s.io/component-base v0.36.2 // indirect
 	k8s.io/component-helpers v0.36.2 // indirect
 	k8s.io/cri-api v0.36.1 // indirect
 	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-aggregator v0.35.0 // indirect
+	k8s.io/kube-aggregator v0.36.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kube-scheduler v0.36.1 // indirect
@@ -477,6 +480,7 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
 	sigs.k8s.io/controller-runtime v0.24.1 // indirect
+	sigs.k8s.io/gateway-api v1.5.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kind v0.32.0 // indirect
 	sigs.k8s.io/knftables v0.0.21 // indirect
