@@ -11,7 +11,7 @@
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
 # Verified with `govulncheck ./...` against ksail main (re-validated 2026-06-25):
-#   the 5 reachable advisories below, each "Fixed in: N/A" for the version
+#   the 6 reachable advisories below, each "Fixed in: N/A" for the version
 #   pinned (transitively) in go.mod. Re-validate when bumping docker, k8s.io,
 #   or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT listed —
 #   it has an upstream fix (v0.43.0) and is bumped per policy, not allowlisted.
@@ -33,11 +33,12 @@ GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; n
 
 # --- github.com/containerd/containerd (v1) @ v1.7.33 ------------------------
 # Pulled transitively (docker/moby + k8s.io libraries still depend on the v1
-# module); ksail's own containerd/v2 is already v2.3.2. The advisory is a CRI
-# checkpoint/restore CDI-annotation smuggling issue — a node/runtime code path
-# ksail never invokes (it provisions Kind/K3d/Talos/etc. and talks to the
-# Docker daemon API, not CRI checkpoint/restore). No fix exists for the v1
-# module line (only containerd/v2 >= 2.1.9/2.2.5/2.3.2 is patched); ksail
-# cannot drop v1 until docker/moby + k8s.io migrate off it. Remove this entry
-# the moment the transitive v1 dependency goes away or a v1 fix ships.
+# module); ksail's own containerd/v2 is already v2.3.2. Both advisories below
+# are CRI checkpoint/restore code paths — a node/runtime surface ksail never
+# invokes (it provisions Kind/K3d/Talos/etc. and talks to the Docker daemon
+# API, not CRI checkpoint/restore). No fix exists for the v1 module line (only
+# containerd/v2 >= 2.1.9/2.2.5/2.3.2 is patched); ksail cannot drop v1 until
+# docker/moby + k8s.io migrate off it. Remove these entries the moment the
+# transitive v1 dependency goes away or a v1 fix ships.
 GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
+GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
