@@ -24,6 +24,18 @@
 GO-2026-4887  # Moby AuthZ plugin bypass on oversized request bodies (daemon-side; no fix)
 GO-2026-4883  # Moby off-by-one in plugin privilege validation (daemon-side; no fix)
 
+# --- github.com/docker/docker (Moby) @ v28.5.2+incompatible — cp / archive ---
+# Published 2026-06-25; daemon-side TOCTOU / symlink-swap issues in the
+# `docker cp` and `PUT /containers/{id}/archive` code paths. ksail is a Docker
+# *client* that creates/manages local clusters via the daemon API; it never
+# invokes `docker cp` or the container-archive endpoints, so these paths are
+# unreachable in practice. No fix on the v1 docker/docker module line (only
+# moby/moby/v2 >= v2.0.0-beta.14, which ksail does not import). Remove when a
+# v1 fix ships.
+GO-2026-5617  # docker cp race -> bind-mount redirection to host path (CVE-2026-42306; no fix; path unused)
+GO-2026-5668  # docker cp symlink swap -> arbitrary empty-file creation on host (CVE-2026-41568; no fix; path unused)
+GO-2026-5746  # PUT /containers/{id}/archive executes container binaries on host (CVE-2026-41567; no fix; path unused)
+
 # --- k8s.io/kubernetes @ v1.36.0 --------------------------------------------
 # Imported for client/config types only; ksail does not run kube-apiserver,
 # the kubelet, or mount GitRepo volumes. Both advisories are control-plane /
@@ -42,3 +54,4 @@ GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; n
 # transitive v1 dependency goes away or a v1 fix ships.
 GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
 GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
+GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via symlink (CVE-2026-53489; transitive; no v1 fix; path unused)
