@@ -4,4 +4,4 @@
 # Image mappings:
 # - rancher/k3s → DefaultK3sImage in this package
 
-FROM rancher/k3s:v1.36.1-k3s1@sha256:08fdebd14db9ab7d5ea821d5bfa95d02341a6ef886842fcc8d9dfd0e9fa9e0cd
+FROM rancher/k3s:v1.36.2-k3s1@sha256:6a47cea22c4b834d4ba72c89d291696b79ebe406251f90b446e4dff03513dd87
