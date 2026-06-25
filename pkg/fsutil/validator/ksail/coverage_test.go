@@ -407,3 +407,134 @@ func TestValidate_HetznerPublicNetSkippedForNonHetzner(t *testing.T) {
 			"non-Hetzner provider must not emit public-net warnings")
 	}
 }
+
+// TestNewValidatorForKWOK verifies the KWOK constructor.
+func TestNewValidatorForKWOK(t *testing.T) {
+	t.Parallel()
+
+	kwokConfig := &clusterprovisioner.KWOKConfig{
+		Name: "my-kwok",
+	}
+
+	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
+	require.NotNil(t, v)
+}
+
+// TestValidate_KWOKContextValidation verifies that a context matching the
+// canonical "kwok-<name>" pattern produces no context-name warning.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
+func TestValidate_KWOKContextValidation(t *testing.T) {
+	t.Parallel()
+
+	kwokConfig := &clusterprovisioner.KWOKConfig{
+		Name: "my-kwok",
+	}
+
+	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "ksail.io/v1alpha1",
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKWOK,
+				DistributionConfig: "kwok.yaml",
+				Connection: v1alpha1.Connection{
+					Context: "kwok-my-kwok",
+				},
+			},
+		},
+	}
+
+	result := v.Validate(config)
+	// Context should match the expected "kwok-<name>" pattern.
+	for _, warning := range result.Warnings {
+		assert.NotEqual(t, "spec.cluster.connection.context", warning.Field,
+			"context name should match KWOK pattern")
+	}
+}
+
+// TestValidate_KWOKContextMismatch verifies that a context not matching the
+// canonical "kwok-<name>" pattern warns without failing validation.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
+func TestValidate_KWOKContextMismatch(t *testing.T) {
+	t.Parallel()
+
+	kwokConfig := &clusterprovisioner.KWOKConfig{
+		Name: "my-kwok",
+	}
+
+	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "ksail.io/v1alpha1",
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKWOK,
+				DistributionConfig: "kwok.yaml",
+				Connection: v1alpha1.Connection{
+					Context: "wrong-context-name",
+				},
+			},
+		},
+	}
+
+	result := v.Validate(config)
+
+	found := false
+
+	for _, warning := range result.Warnings {
+		if warning.Field == "spec.cluster.connection.context" {
+			found = true
+		}
+	}
+
+	assert.True(t, found, "should warn on context name mismatch for KWOK")
+	assert.True(t, result.Valid, "context name mismatch must not fail validation")
+}
+
+// TestValidate_KWOKEmptyNameSkipsContextValidation verifies that when the KWOK
+// config has no resolvable cluster name, context validation is skipped (no
+// expected context can be derived) rather than warning on every context.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
+func TestValidate_KWOKEmptyNameSkipsContextValidation(t *testing.T) {
+	t.Parallel()
+
+	kwokConfig := &clusterprovisioner.KWOKConfig{
+		Name: "",
+	}
+
+	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "ksail.io/v1alpha1",
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKWOK,
+				DistributionConfig: "kwok.yaml",
+				Connection: v1alpha1.Connection{
+					Context: "any-context-name",
+				},
+			},
+		},
+	}
+
+	result := v.Validate(config)
+	// With no resolvable name the expected context is empty, so context
+	// validation is skipped and no context-name warning is emitted.
+	for _, warning := range result.Warnings {
+		assert.NotEqual(t, "spec.cluster.connection.context", warning.Field,
+			"context validation must be skipped when the KWOK name is unknown")
+	}
+}
