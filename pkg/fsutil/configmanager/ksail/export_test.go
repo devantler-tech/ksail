@@ -69,3 +69,37 @@ const LegacyWorkerRoleLabelPatchYAMLForTest = legacyWorkerRoleLabelPatchYAML
 
 // KubeletWorkerRoleLabelPatchYAMLForTest exports the kubelet --node-labels constant for testing.
 const KubeletWorkerRoleLabelPatchYAMLForTest = kubeletWorkerRoleLabelPatchYAML
+
+// IngressFirewallPatchesForTest exposes ingressFirewallPatches for testing.
+var IngressFirewallPatchesForTest = ingressFirewallPatches
+
+// IngressFirewallPatchPathsForTest exposes ingressFirewallPatchPaths for testing.
+var IngressFirewallPatchPathsForTest = ingressFirewallPatchPaths
+
+// IngressFirewallPatchFilesExistForTest exposes ingressFirewallPatchFilesExist for testing.
+var IngressFirewallPatchFilesExistForTest = ingressFirewallPatchFilesExist
+
+// KubeletPatchFilesExistForTest exposes kubeletPatchFilesExist for testing.
+var KubeletPatchFilesExistForTest = kubeletPatchFilesExist
+
+// ReadEKSConfigMetadataForTest exposes readEKSConfigMetadata for testing.
+var ReadEKSConfigMetadataForTest = readEKSConfigMetadata
+
+// ErrIngressFirewallMissingCIDRForTest exposes errIngressFirewallMissingCIDR for testing.
+var ErrIngressFirewallMissingCIDRForTest = errIngressFirewallMissingCIDR
+
+// ErrIngressFirewallInvalidCIDRForTest exposes errIngressFirewallInvalidCIDR for testing.
+var ErrIngressFirewallInvalidCIDRForTest = errIngressFirewallInvalidCIDR
+
+// ErrIngressFirewallInvalidPortForTest exposes errIngressFirewallInvalidPort for testing.
+var ErrIngressFirewallInvalidPortForTest = errIngressFirewallInvalidPort
+
+// ResolveKWOKNameForTest exposes resolveKWOKName for testing.
+func (m *ConfigManager) ResolveKWOKNameForTest() string {
+	return m.resolveKWOKName()
+}
+
+// ResolveEKSNameFromContextForTest exposes resolveEKSNameFromContext for testing.
+func (m *ConfigManager) ResolveEKSNameFromContextForTest() string {
+	return m.resolveEKSNameFromContext()
+}
