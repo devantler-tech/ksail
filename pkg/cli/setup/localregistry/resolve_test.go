@@ -66,6 +66,23 @@ func TestResolveClusterName(t *testing.T) {
 			distribution: v1alpha1.DistributionKWOK,
 			expected:     "kwok-default",
 		},
+		{
+			name:         "EKS extracts cluster name from eksctl context",
+			distribution: v1alpha1.DistributionEKS,
+			context:      "iam-user@my-cluster.eu-west-1.eksctl.io",
+			expected:     "my-cluster",
+		},
+		{
+			name:         "EKS with unrecognised context returns eks-default",
+			distribution: v1alpha1.DistributionEKS,
+			context:      "some-other-context",
+			expected:     "eks-default",
+		},
+		{
+			name:         "EKS with no context returns eks-default",
+			distribution: v1alpha1.DistributionEKS,
+			expected:     "eks-default",
+		},
 	}
 
 	for _, tc := range tests { //nolint:varnamelen
@@ -164,6 +181,12 @@ func TestResolveNetworkName(t *testing.T) {
 			clusterName:  "",
 			expected:     "kwok-kwok-default",
 		},
+		{
+			name:         "EKS returns empty string (no local Docker network)",
+			distribution: v1alpha1.DistributionEKS,
+			clusterName:  "my-cluster",
+			expected:     "",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -179,6 +202,91 @@ func TestResolveNetworkName(t *testing.T) {
 			}
 
 			result := localregistry.ResolveNetworkNameForTest(clusterCfg, testCase.clusterName)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+// TestParseEKSContext exercises EKS kubeconfig context parsing, including the
+// eksctl "<iam-identity>@<name>.<region>.eksctl.io" form, the bare
+// "<name>.eksctl.io" form, and the non-EKS contexts that fall back to "".
+//
+//nolint:funlen // table-driven test
+func TestParseEKSContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		context  string
+		expected string
+	}{
+		{
+			name:     "empty context returns empty",
+			context:  "",
+			expected: "",
+		},
+		{
+			name:     "whitespace-only context returns empty",
+			context:  "   ",
+			expected: "",
+		},
+		{
+			name:     "full eksctl context with identity and region",
+			context:  "iam-user@my-cluster.eu-west-1.eksctl.io",
+			expected: "my-cluster",
+		},
+		{
+			name:     "eksctl context without identity prefix",
+			context:  "my-cluster.eu-west-1.eksctl.io",
+			expected: "my-cluster",
+		},
+		{
+			name:     "bare eksctl context without region",
+			context:  "my-cluster.eksctl.io",
+			expected: "my-cluster",
+		},
+		{
+			name:     "eksctl context with identity but no region",
+			context:  "iam-user@my-cluster.eksctl.io",
+			expected: "my-cluster",
+		},
+		{
+			name:     "surrounding whitespace is trimmed",
+			context:  "  iam-user@my-cluster.eu-west-1.eksctl.io  ",
+			expected: "my-cluster",
+		},
+		{
+			name:     "leading at-sign is handled",
+			context:  "@my-cluster.eksctl.io",
+			expected: "my-cluster",
+		},
+		{
+			name:     "non-eksctl context returns empty",
+			context:  "kind-foo",
+			expected: "",
+		},
+		{
+			name:     "dotted non-eksctl context returns empty",
+			context:  "some.other.context",
+			expected: "",
+		},
+		{
+			name:     "trailing at-sign is not treated as a separator",
+			context:  "my-cluster.eksctl.io@",
+			expected: "",
+		},
+		{
+			name:     "eksctl suffix with empty cluster name returns empty",
+			context:  ".eksctl.io",
+			expected: "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := localregistry.ParseEKSContextForTest(testCase.context)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
