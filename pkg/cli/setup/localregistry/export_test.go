@@ -16,6 +16,11 @@ var ResolveClusterNameForTest = resolveClusterName
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
 var ResolveNetworkNameForTest = resolveNetworkName
 
+// ParseEKSContextForTest exports parseEKSContext for testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
+var ParseEKSContextForTest = parseEKSContext
+
 // ResolveStageForTest exports resolveStage for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
