@@ -190,3 +190,83 @@ func TestToggleEnumTypesAcceptCoercedValues(t *testing.T) {
 		})
 	}
 }
+
+// TestSOPSEnabled_StringAndType pins the pflag.Value surface of SOPSEnabled:
+// String round-trips the underlying value verbatim (including the empty zero
+// value) and Type reports the stable name pflag prints in `--help`.
+func TestSOPSEnabled_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []v1alpha1.SOPSEnabled{
+		v1alpha1.SOPSEnabledDefault,
+		v1alpha1.SOPSEnabledEnabled,
+		v1alpha1.SOPSEnabledDisabled,
+		v1alpha1.SOPSEnabled(""),
+	} {
+		state := value
+		assert.Equal(t, string(value), state.String())
+	}
+
+	zero := v1alpha1.SOPSEnabled("")
+	assert.Equal(t, "SOPSEnabled", zero.Type())
+}
+
+// TestSOPSEnabled_StateClassifiers locks the tri-state predicates that stand in
+// for the field's previous *bool encoding. The empty (unset) zero value MUST
+// classify as auto-detect — it mirrors the old nil pointer, so the SOPS secret
+// boundary only requires an Age key when the user explicitly enabled it.
+func TestSOPSEnabled_StateClassifiers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		value           v1alpha1.SOPSEnabled
+		wantExplicitOn  bool
+		wantExplicitOff bool
+		wantAutoDetect  bool
+	}{
+		{"default is auto-detect", v1alpha1.SOPSEnabledDefault, false, false, true},
+		{"empty zero value is auto-detect", v1alpha1.SOPSEnabled(""), false, false, true},
+		{"enabled is explicit on", v1alpha1.SOPSEnabledEnabled, true, false, false},
+		{"disabled is explicit off", v1alpha1.SOPSEnabledDisabled, false, true, false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := testCase.value
+			assert.Equal(
+				t,
+				testCase.wantExplicitOn,
+				state.IsExplicitlyEnabled(),
+				"IsExplicitlyEnabled",
+			)
+			assert.Equal(
+				t,
+				testCase.wantExplicitOff,
+				state.IsExplicitlyDisabled(),
+				"IsExplicitlyDisabled",
+			)
+			assert.Equal(t, testCase.wantAutoDetect, state.IsAutoDetect(), "IsAutoDetect")
+		})
+	}
+}
+
+// TestNodeAutoscalerEnabled_StringAndType pins the pflag.Value surface of
+// NodeAutoscalerEnabled, mirroring TestSOPSEnabled_StringAndType.
+func TestNodeAutoscalerEnabled_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []v1alpha1.NodeAutoscalerEnabled{
+		v1alpha1.NodeAutoscalerEnabledEnabled,
+		v1alpha1.NodeAutoscalerEnabledDisabled,
+		v1alpha1.NodeAutoscalerEnabled(""),
+	} {
+		state := value
+		assert.Equal(t, string(value), state.String())
+	}
+
+	zero := v1alpha1.NodeAutoscalerEnabled("")
+	assert.Equal(t, "NodeAutoscalerEnabled", zero.Type())
+}
