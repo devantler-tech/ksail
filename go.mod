@@ -14,7 +14,7 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.7.0
 	github.com/fatih/color v1.19.0
-	github.com/fluxcd/helm-controller/api v1.5.5
+	github.com/fluxcd/helm-controller/api v1.6.0
 	github.com/fluxcd/kustomize-controller/api v1.9.0
 	github.com/fluxcd/pkg/apis/meta v1.30.0
 	github.com/fluxcd/source-controller/api v1.9.0
