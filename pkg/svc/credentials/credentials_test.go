@@ -35,6 +35,8 @@ func TestDefaultEnvVar_MatchesCanonicalSources(t *testing.T) {
 		credentials.DefaultEnvVar(credentials.AWSSecretAccessKey),
 	)
 	assert.Equal(t, "AWS_SESSION_TOKEN", credentials.DefaultEnvVar(credentials.AWSSessionToken))
+	// The Copilot token has no external canonical source; it mirrors webchat's primary token variable.
+	assert.Equal(t, "KSAIL_COPILOT_TOKEN", credentials.DefaultEnvVar(credentials.CopilotToken))
 }
 
 func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {

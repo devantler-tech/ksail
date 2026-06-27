@@ -245,10 +245,12 @@ function AssistantUnavailable() {
         <div>
           <p className="font-medium text-slate-900 dark:text-white">AI assistant not configured</p>
           <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
-            The KSail assistant runs on GitHub Copilot. Set a Copilot token in the environment KSail
-            runs in — <code className="font-mono text-xs">KSAIL_COPILOT_TOKEN</code> or{" "}
-            <code className="font-mono text-xs">COPILOT_TOKEN</code> — then restart to enable it. You
-            can pick the model and reasoning effort under Settings → Editor &amp; AI.
+            The KSail assistant runs on GitHub Copilot. Add a Copilot token under{" "}
+            <span className="font-medium text-slate-700 dark:text-slate-300">Settings → Credentials</span>{" "}
+            to enable it — it applies right away. Or set{" "}
+            <code className="font-mono text-xs">KSAIL_COPILOT_TOKEN</code> /{" "}
+            <code className="font-mono text-xs">COPILOT_TOKEN</code> in the environment before
+            starting KSail. Choose the model under Settings → Editor &amp; AI.
           </p>
         </div>
         <a

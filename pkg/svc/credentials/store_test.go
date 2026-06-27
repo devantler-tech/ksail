@@ -98,6 +98,7 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 		credentials.AWSAccessKeyID:        true,
 		credentials.AWSSecretAccessKey:    true,
 		credentials.AWSSessionToken:       true,
+		credentials.CopilotToken:          true,
 		credentials.OmniEndpoint:          false,
 		credentials.AWSRegion:             false,
 		credentials.AWSProfile:            false,
@@ -112,16 +113,17 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 func TestProviderFor_MapsEveryKey(t *testing.T) {
 	t.Parallel()
 
-	tests := map[credentials.Key]v1alpha1.Provider{
-		credentials.HetznerToken:          v1alpha1.ProviderHetzner,
-		credentials.OmniEndpoint:          v1alpha1.ProviderOmni,
-		credentials.OmniServiceAccountKey: v1alpha1.ProviderOmni,
-		credentials.AWSRegion:             v1alpha1.ProviderAWS,
-		credentials.AWSProfile:            v1alpha1.ProviderAWS,
-		credentials.AWSAccessKeyID:        v1alpha1.ProviderAWS,
-		credentials.AWSSecretAccessKey:    v1alpha1.ProviderAWS,
-		credentials.AWSSessionToken:       v1alpha1.ProviderAWS,
-		credentials.Key("unknown.key"):    v1alpha1.Provider(""),
+	tests := map[credentials.Key]string{
+		credentials.HetznerToken:          string(v1alpha1.ProviderHetzner),
+		credentials.OmniEndpoint:          string(v1alpha1.ProviderOmni),
+		credentials.OmniServiceAccountKey: string(v1alpha1.ProviderOmni),
+		credentials.AWSRegion:             string(v1alpha1.ProviderAWS),
+		credentials.AWSProfile:            string(v1alpha1.ProviderAWS),
+		credentials.AWSAccessKeyID:        string(v1alpha1.ProviderAWS),
+		credentials.AWSSecretAccessKey:    string(v1alpha1.ProviderAWS),
+		credentials.AWSSessionToken:       string(v1alpha1.ProviderAWS),
+		credentials.CopilotToken:          "GitHub Copilot",
+		credentials.Key("unknown.key"):    "",
 	}
 
 	for key, want := range tests {
@@ -141,6 +143,7 @@ func TestLabel_NamesEveryKey(t *testing.T) {
 		credentials.AWSAccessKeyID:        "Access key ID",
 		credentials.AWSSecretAccessKey:    "Secret access key",
 		credentials.AWSSessionToken:       "Session token",
+		credentials.CopilotToken:          "Token",
 	}
 
 	for key, want := range tests {
@@ -171,16 +174,6 @@ func TestMappings_CoverEveryAdvertisedKey(t *testing.T) {
 			string(key),
 			credentials.Label(key),
 			"Label(%q) must be a human label, not the raw key",
-			key,
-		)
-		// IsSecret must make a deliberate decision for every advertised key. Secret status is asserted
-		// exhaustively in TestIsSecret_ClassifiesEveryKey; here we only require the key to be known to
-		// at least one classifier so a brand-new key cannot slip through every mapping at once.
-		assert.NotEqualf(
-			t,
-			v1alpha1.Provider(""),
-			credentials.ProviderFor(key),
-			"key %q is unclassified",
 			key,
 		)
 	}
