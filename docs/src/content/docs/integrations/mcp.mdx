@@ -4,7 +4,7 @@ description: Expose KSail as an MCP server for AI assistants and automation tool
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
-import McpAvailableTools from "../../partials/mcp-available-tools.mdx";
+import McpAvailableTools from "../../../partials/mcp-available-tools.mdx";
 
 The KSail MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server exposes all KSail commands as tools for MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to create, configure, and manage Kubernetes clusters, and lets automation scripts orchestrate complex cluster operations through a universal interface.
 
@@ -83,7 +83,7 @@ All MCP tools return a structured JSON envelope, making responses easy to parse 
 
 ## Integration Examples
 
-For step-by-step setup instructions for each AI client — including PATH configuration, example prompts, and a tool reference — see [Using KSail with AI Assistants](/guides/ai-mcp/).
+For step-by-step setup instructions for each AI client — including PATH configuration, example prompts, and a tool reference — see [Using KSail with AI Assistants](/integrations/ai-mcp/).
 
 Many MCP clients, including Claude Desktop, Cursor, and Windsurf, use the following `mcpServers` configuration pattern:
 
@@ -98,7 +98,7 @@ Many MCP clients, including Claude Desktop, Cursor, and Windsurf, use the follow
 }
 ````
 
-The [KSail VSCode extension](/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
+The [KSail VSCode extension](/integrations/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
 
 ### Custom MCP Client
 
@@ -173,7 +173,7 @@ The VSCode extension automatically sets the working directory to the workspace r
 
 ### Combining with AI Chat
 
-The MCP server is complementary to the [AI Chat](/ai-chat/) feature:
+The MCP server is complementary to the [AI Chat](/integrations/ai-chat/) feature:
 
 - **Use `ksail open chat`** for interactive, conversational workflows with a rich TUI
 - **Use `ksail open mcp`** to expose KSail to external AI assistants like Claude Desktop

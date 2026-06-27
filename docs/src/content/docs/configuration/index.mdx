@@ -126,6 +126,30 @@ Environment variables use the `KSAIL_` prefix and follow the configuration path 
 | `spec.provider.omni.endpoint`    | `KSAIL_SPEC_PROVIDER_OMNI_ENDPOINT`    |
 | `spec.workload.tag`              | `KSAIL_SPEC_WORKLOAD_TAG`              |
 
+### Variable Expansion (`${VAR}`)
+
+Values in `ksail.yaml` support `${VAR}` expansion from the environment at runtime. This is distinct from the `KSAIL_`-prefixed overrides above: an override replaces a whole field, while `${VAR}` substitutes an environment value _into_ a field. It lets you keep one config in version control while values that vary per environment—or that are secret—come from the environment when KSail runs.
+
+The canonical use is keeping credentials out of Git. Reference a token like `${GHCR_TOKEN}` or `${HCLOUD_TOKEN}` instead of committing the secret:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-cluster
+spec:
+  cluster:
+    localRegistry:
+      registry: "user:${GHCR_TOKEN}@ghcr.io/org/platform/manifests"
+```
+
+This is how a single `ksail.yaml` serves many environments and stays credential-free in version control—see [Multi-Environment Workflows](/guides/multi-environment/) and the [Reference Architecture](/concepts/reference-architecture/).
+
+:::note
+This expansion applies to `ksail.yaml` values. Flux performs its own separate `${var}` post-build substitution _inside your manifests_; that is a different mechanism, covered in [Validate Workloads](/configuration/workload-validate/).
+:::
+
 ### Distribution Config
 
 Use distribution configuration files for:

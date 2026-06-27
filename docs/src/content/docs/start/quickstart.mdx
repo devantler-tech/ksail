@@ -1,0 +1,124 @@
+---
+title: Quickstart
+description: Go from zero to a running Kubernetes cluster with your first workload deployed — in about 10 minutes, with one binary.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+This is the fastest path from nothing to a running cluster with a workload on it. It uses the
+**Vanilla** distribution (upstream Kubernetes via Kind) because it is the quickest to start and needs
+only Docker. The exact same commands work for every other [distribution](/distributions/) — only the
+`--distribution` flag changes.
+
+:::note[Prerequisites]
+- **[KSail installed](/installation/)** — `ksail --version` should print a version.
+- **Docker running** — `docker ps` should succeed. KSail runs cluster nodes as Docker containers.
+:::
+
+## 1. Initialize a project
+
+<Steps>
+
+1. Scaffold a new project in an empty directory:
+
+   ```bash
+   mkdir quickstart && cd quickstart
+   ksail cluster init --name quickstart --distribution Vanilla
+   ```
+
+2. KSail writes three things you can commit to Git:
+
+   | File | What it is |
+   |------|------------|
+   | `ksail.yaml` | KSail's declarative cluster config — distribution, networking, GitOps, registries |
+   | `kind.yaml` | The native Kind config (works with `kind` directly — no lock-in) |
+   | `k8s/` | Your workload manifests, with a `kustomization.yaml` to start |
+
+</Steps>
+
+## 2. Create the cluster
+
+```bash
+ksail cluster create
+```
+
+This provisions the nodes and installs the cluster's components (CNI, metrics-server, and anything else
+your `ksail.yaml` selects), retrying transient failures automatically. First run pulls images, so give it
+a minute.
+
+Verify it is up:
+
+```bash
+ksail cluster info
+kubectl get nodes
+```
+
+## 3. Deploy your first workload
+
+Add a manifest to `k8s/` — for example `k8s/nginx.yaml`:
+
+```yaml
+# k8s/nginx.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: nginx }
+  template:
+    metadata:
+      labels: { app: nginx }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable
+```
+
+Apply it:
+
+```bash
+ksail workload apply -k ./k8s
+```
+
+:::tip[`apply` is the learning shortcut]
+`ksail workload apply` is the quickest way to push manifests at a cluster while you experiment. The
+**recommended** way to run real environments is GitOps — commit your manifests, then
+`ksail workload push` + `ksail workload reconcile`. That's the next tutorial:
+**[Deliver with GitOps](/start/deliver-with-gitops/)**.
+:::
+
+## 4. Inspect what you deployed
+
+```bash
+ksail workload get pods
+ksail workload logs deployment/nginx
+```
+
+For an interactive view, open [K9s](https://k9scli.io/) against the cluster:
+
+```bash
+ksail cluster connect
+```
+
+## 5. Clean up
+
+```bash
+ksail cluster delete
+```
+
+## What's next
+
+<Steps>
+
+1. **[Deliver with GitOps →](/start/deliver-with-gitops/)** — the recommended workflow: package your
+   manifests as an OCI artifact and let Flux or ArgoCD reconcile them.
+
+2. **[Choose your setup →](/distributions/)** — when to reach for K3s, Talos, VCluster, KWOK, or EKS, and
+   which provider runs each.
+
+3. **[Browse the guides →](/guides/)** — task-focused how-tos for registries, secrets, multi-environment
+   workflows, tenants, CI/CD, and more.
+
+</Steps>

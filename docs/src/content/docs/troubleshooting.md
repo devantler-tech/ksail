@@ -88,7 +88,7 @@ If the error mentions `connectivity check pod image pull failed` with `ImagePull
 
 ### Flux Reconciliation Fails Immediately
 
-When `ksail workload reconcile` fails, KSail automatically displays a [diagnostic report](/features/gitops-workflows/#automatic-failure-diagnostics) showing failing resources, pods, and recent warning events. Use this output as a starting point before running manual `kubectl` commands.
+When `ksail workload reconcile` fails, KSail automatically displays a [diagnostic report](/guides/gitops-workflows/#automatic-failure-diagnostics) showing failing resources, pods, and recent warning events. Use this output as a starting point before running manual `kubectl` commands.
 
 `ksail workload reconcile` automatically resets HelmReleases stuck in Failed or Stalled states before polling begins. If a HelmRelease reset does not resolve the issue, or if a Flux Kustomization encounters a permanent error, reconciliation also fails fast (without waiting for the timeout):
 

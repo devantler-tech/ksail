@@ -5,7 +5,7 @@ description: Manage KSail clusters declaratively from inside Kubernetes — the 
 
 import { Steps } from "@astrojs/starlight/components";
 
-The KSail operator brings declarative cluster management *into* Kubernetes. It reconciles `Cluster` custom resources (`ksail.io/v1alpha1`), so you can provision and manage KSail-supported distributions with `kubectl apply` — or let your GitOps engine do it for you. An optional [web UI](/features/web-ui/) and OIDC-authenticated REST API are included.
+The KSail operator brings declarative cluster management *into* Kubernetes. It reconciles `Cluster` custom resources (`ksail.io/v1alpha1`), so you can provision and manage KSail-supported distributions with `kubectl apply` — or let your GitOps engine do it for you. An optional [web UI](/guides/web-ui/) and OIDC-authenticated REST API are included.
 
 ## What the Chart Deploys
 
@@ -110,6 +110,6 @@ The full values reference — images, replicas, leader election, resources, Ingr
 
 ## Related
 
-- [Web UI & Desktop App](/features/web-ui/) — the same UI, running locally instead of in-cluster
+- [Web UI & Desktop App](/guides/web-ui/) — the same UI, running locally instead of in-cluster
 - [Kubernetes (Nested) provider](/providers/kubernetes/) — how nested clusters run as pods inside a host cluster
-- [GitOps Workflows](/features/gitops-workflows/) — drive `Cluster` resources from Git with Flux or ArgoCD
+- [GitOps Workflows](/guides/gitops-workflows/) — drive `Cluster` resources from Git with Flux or ArgoCD

@@ -5,7 +5,7 @@ description: Install the ksail plugin for GitHub Copilot CLI or Claude Code to a
 
 KSail ships a first-party plugin distributed for both [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) and [Claude Code](https://docs.claude.com/en/docs/claude-code/plugins). The plugin:
 
-- Registers the `ksail` [MCP server](/mcp/) (via `ksail open mcp`), giving the assistant direct access to consolidated `cluster_*`, `workload_*`, and `cipher_*` tools.
+- Registers the `ksail` [MCP server](/integrations/mcp/) (via `ksail open mcp`), giving the assistant direct access to consolidated `cluster_*`, `workload_*`, and `cipher_*` tools.
 - Adds a **ksail** skill so the assistant knows when to reach for ksail and links back to this documentation site instead of guessing at flag semantics.
 
 A single plugin directory (`copilot-plugin/`) is exposed through two marketplace manifests — `.github/plugin/marketplace.json` for Copilot CLI and `.claude-plugin/marketplace.json` for Claude Code — so both clients install the same skill and MCP server configuration.

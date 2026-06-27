@@ -203,7 +203,7 @@ spec:
 
 ## Combining with Tenant Management
 
-KSail's [tenant management](/features/tenant-management/) generates ArgoCD `AppProject` and `Application` resources per tenant. You can replace per-tenant Applications with a single ApplicationSet that auto-discovers tenant directories:
+KSail's [tenant management](/guides/tenant-management/) generates ArgoCD `AppProject` and `Application` resources per tenant. You can replace per-tenant Applications with a single ApplicationSet that auto-discovers tenant directories:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -250,7 +250,7 @@ When SOPS is enabled (or auto-detected) and an Age key is available, KSail autom
 1. Creates a `sops-age` Secret in the `argocd` namespace containing your Age private key
 2. Installs a [Config Management Plugin](https://argo-cd.readthedocs.io/en/stable/operator-manual/config-management-plugins/) (CMP) sidecar on the ArgoCD repo-server that decrypts SOPS-encrypted manifests before rendering
 
-Encrypted secrets in your source directory are decrypted transparently during sync — no manual plugin setup required. For key resolution details and all `spec.cluster.sops` options, see [Secret Management](/features/secret-management/).
+Encrypted secrets in your source directory are decrypted transparently during sync — no manual plugin setup required. For key resolution details and all `spec.cluster.sops` options, see [Secret Management](/guides/secret-management/).
 
 ### Enabling SOPS
 
@@ -288,5 +288,5 @@ When the ApplicationSet syncs the `backend` Application, the CMP sidecar detects
 - [ArgoCD ApplicationSet documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)
 - [ApplicationSet generators reference](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators/)
 - [ArgoCD Application specification](https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/)
-- [Tenant Management guide](/features/tenant-management/)
+- [Tenant Management guide](/guides/tenant-management/)
 - [Multi-Environment Workflows guide](/guides/multi-environment/)

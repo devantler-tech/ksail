@@ -1,0 +1,129 @@
+---
+title: Registry Management
+description: Run a local OCI registry for your images and GitOps artifacts, and pull-through mirror registries that beat rate limits and survive cluster recreation.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+KSail wires two kinds of [OCI registries](/concepts/#oci-registries) into a cluster, each solving a
+different problem. This guide shows how to configure both.
+
+| | Local registry | Mirror registries |
+|---|----------------|-------------------|
+| **Holds** | *Your* images and GitOps artifacts | Cached *upstream* images (pull-through) |
+| **Direction** | You push, the cluster pulls | The cluster pulls, the mirror caches |
+| **Why** | Fast inner-loop builds, [`workload push`](/guides/gitops-workflows/) targets | Avoid rate limits; images survive cluster recreation |
+
+:::note[Prerequisites]
+- A KSail project (`ksail cluster init`). See the [Quickstart](/start/quickstart/).
+- Docker running (for local distributions).
+:::
+
+## Push to the local registry
+
+The local registry is where your own artifacts live: application images you build during development,
+and the OCI artifact `ksail workload push` publishes for [GitOps reconciliation](/guides/gitops-workflows/).
+
+<Steps>
+
+1. **Wire a registry at init**, then create the cluster:
+
+   ```bash
+   ksail cluster init --local-registry localhost:5050
+   ksail cluster create
+   ```
+
+2. **Build and push** an image to it like any other registry:
+
+   ```bash
+   docker build -t localhost:5050/my-app .
+   docker push localhost:5050/my-app
+   ```
+
+3. **Reference it** from a manifest in your source directory — the cluster pulls `localhost:5050/my-app`
+   on the next [reconcile](/guides/gitops-workflows/).
+
+</Steps>
+
+The result: a registry that backs both your dev image builds and the GitOps artifact `workload push`
+produces — no external registry required to iterate locally.
+
+### Use an external registry
+
+`localRegistry.registry` is declarative in `ksail.yaml`, and the host can be an external registry such as
+GHCR — point `workload push` at a registry your CI and clusters already share:
+
+```yaml
+spec:
+  cluster:
+    localRegistry:
+      # Format: [user:pass@]host[:port][/path]
+      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/myorg/myrepo"
+```
+
+:::tip[Keep credentials out of Git]
+`${VAR}` placeholders are expanded by KSail from the environment, not by your shell — quote them (single
+quotes on the CLI) so they reach KSail verbatim. This keeps tokens out of version-controlled files.
+:::
+
+## Mirror upstream registries
+
+Mirror registries are pull-through caches that sit between your cluster and upstream registries. The first
+pull fetches from upstream and caches the image in a Docker volume; every later pull — from *any* KSail
+cluster on the machine — is served locally. Recreating a cluster does not empty the cache.
+
+Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster, KWOK) enable mirrors for `docker.io`,
+`ghcr.io`, `quay.io`, and `registry.k8s.io` by default. Talos on Hetzner requires explicit mirror
+configuration.
+
+```bash
+# Format: [user:pass@]host[=upstream]
+# host     — the registry the cluster's image pulls are redirected from
+# upstream — the endpoint the mirror fetches from on a cache miss
+
+# Mirror Docker Hub through its real upstream endpoint
+ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io
+
+# Authenticated mirror — higher rate limits, private images
+ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
+```
+
+:::caution[`--mirror-registry` replaces the defaults]
+Whatever you pass **completely replaces** the default mirror list (`docker.io`, `ghcr.io`, `quay.io`,
+`registry.k8s.io`) — it does not append. To customize one mirror while keeping the others, pass all of
+them on the same `ksail cluster init` invocation.
+:::
+
+What this buys you:
+
+- **No more rate limits.** Anonymous Docker Hub pulls are throttled aggressively in CI and shared
+  networks; a mirror pulls once and serves everyone.
+- **Store images once.** Multiple clusters on the same machine share one cache instead of each pulling its
+  own copy.
+- **Fast recreate loops.** `ksail cluster delete && ksail cluster create` reuses every cached image — the
+  second create is dramatically faster.
+
+:::tip[Extend the cache to CI]
+In GitHub Actions, the [`ksail-cluster` composite action](/guides/cicd-integration/) persists mirror
+registry volumes between workflow runs (`cache: "true"`), extending the same speedup to your pipeline.
+:::
+
+## Credentials
+
+For both registry kinds, you rarely pass credentials inline. KSail auto-discovers them from, in order, your
+Docker config (`~/.docker/config.json`, e.g. after `docker login ghcr.io`), environment variables (the
+`${VAR}` placeholders above), and GitOps secrets already in the cluster. A `docker login` you have already
+run is usually enough.
+
+## CLI Reference
+
+[`ksail cluster init`](/cli-flags/cluster/cluster-init/) (`--local-registry`, `--mirror-registry`)
+
+## Related
+
+- [GitOps Workflows](/guides/gitops-workflows/) — push manifests as OCI artifacts to the local registry.
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the guided first run that wires a local registry.
+- [Declarative Configuration](/configuration/declarative-configuration/#localregistry) — the `spec.cluster.localRegistry` reference.
+- [Vanilla Distribution](/distributions/vanilla/) — the default Docker-based cluster these mirrors back.
+- [CI/CD Integration](/guides/cicd-integration/) — registry caching in GitHub Actions.
+- [`ksail workload` CLI reference](/cli-flags/workload/workload-root/) — every `push` flag and subcommand.
