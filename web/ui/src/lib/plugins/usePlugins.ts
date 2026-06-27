@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { loadPlugins, type LoadedPlugin } from "./loader.ts";
+import { getPluginLocation, subscribePluginLocation } from "./pluginNavigation.ts";
 import type { ClusterRef } from "./pluginLib.ts";
 import { registry } from "./registry.ts";
 
@@ -14,6 +15,13 @@ export function usePluginRegistry(): number {
     () => registry.getVersion(),
     () => registry.getVersion(),
   );
+}
+
+// usePluginLocation subscribes a component to the current plugin-router pathname (published by
+// PluginRouterHost). KSail's sidebar/header use it to highlight the active plugin nav item and title,
+// following in-plugin navigation (e.g. a plugin <Link> to a detail page).
+export function usePluginLocation(): string {
+  return useSyncExternalStore(subscribePluginLocation, getPluginLocation, getPluginLocation);
 }
 
 // PluginLoaderState is the one-shot plugin load result surfaced by usePluginLoader.
