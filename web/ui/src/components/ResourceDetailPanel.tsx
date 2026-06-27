@@ -8,7 +8,9 @@ import {
   type ResourceAction,
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
+import { relativeAge } from "../lib/format.ts";
 import { PluginDetailSections } from "../lib/plugins/PluginSlots.tsx";
+import { openResourceDetail } from "../lib/plugins/resourceDetail.ts";
 import type { ResourceKindLists } from "../lib/meta.ts";
 import { buildResourceTarget, objectConditions, toYaml } from "../lib/resources.ts";
 import type { EventFields } from "../lib/k8s.ts";
@@ -78,6 +80,152 @@ function RelatedEvents({ events }: { events: EventFields[] }) {
   );
 }
 
+// MetadataRow is one label/value row in the MetadataOverview two-column table.
+function MetadataRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <tr className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+      <th className="w-1/3 py-1.5 pr-3 text-left align-top text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </th>
+      <td className="py-1.5 align-top text-slate-700 dark:text-slate-200">{children}</td>
+    </tr>
+  );
+}
+
+// Chips renders a key/value map (labels or annotations) as small pills, or an em dash when empty.
+function Chips({ entries }: { entries: [string, string][] }) {
+  if (entries.length === 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entries.map(([key, value]) => (
+        <span
+          key={key}
+          title={`${key}: ${value}`}
+          className="inline-block max-w-full truncate rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+        >
+          {key}: {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// MetadataOverview renders the resource's identity + metadata (name, namespace, age, labels, annotations)
+// the way Headlamp's detail pages do, so KSail's native panel reads as a full resource view rather than a
+// bare manifest dump. The namespace links into its own detail (openResourceDetail) for further drill-in.
+function MetadataOverview({ obj }: { obj: K8sObject }) {
+  const metadata = obj.metadata ?? {};
+  const labels = Object.entries((metadata.labels as Record<string, string> | undefined) ?? {});
+  const annotations = Object.entries((metadata.annotations as Record<string, string> | undefined) ?? {});
+  const namespace = metadata.namespace;
+  const created = metadata.creationTimestamp;
+
+  return (
+    <section>
+      <table className="w-full text-sm">
+        <tbody>
+          <MetadataRow label="Name">{metadata.name ?? "—"}</MetadataRow>
+          {namespace ? (
+            <MetadataRow label="Namespace">
+              <button
+                type="button"
+                onClick={() =>
+                  openResourceDetail({ apiVersion: "v1", kind: "Namespace", plural: "namespaces", name: namespace })
+                }
+                className="text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {namespace}
+              </button>
+            </MetadataRow>
+          ) : null}
+          {created ? (
+            <MetadataRow label="Created">
+              <span title={new Date(created as string).toLocaleString()}>{relativeAge(created as string)}</span>
+            </MetadataRow>
+          ) : null}
+          <MetadataRow label="Labels">
+            <Chips entries={labels} />
+          </MetadataRow>
+          <MetadataRow label="Annotations">
+            <Chips entries={annotations} />
+          </MetadataRow>
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+// ResourceDetailContent is the read-only detail body shared by the in-browser ResourceDetailPanel and the
+// host overlay that opens when a plugin links to a resource (HostResourceDetail): the metadata overview,
+// status conditions, related events, any plugin-contributed sections, and the manifest viewer. The action
+// bar (scale/restart/logs/…) is the ResourceDetailPanel wrapper's concern, so it is not rendered here.
+export function ResourceDetailContent({
+  obj,
+  relatedEvents,
+  detailFormat,
+  onDetailFormatChange,
+}: {
+  obj: K8sObject;
+  relatedEvents: EventFields[];
+  detailFormat: "yaml" | "json";
+  onDetailFormatChange: (format: "yaml" | "json") => void;
+}) {
+  const toast = useToast();
+
+  // The resource serialized for the manifest viewer, in the chosen format.
+  const manifestText = useMemo(
+    () => (detailFormat === "yaml" ? toYaml(obj) : JSON.stringify(obj, null, 2)),
+    [obj, detailFormat],
+  );
+
+  // copyManifest copies the serialized manifest to the clipboard and toasts the outcome.
+  function copyManifest() {
+    if (!navigator.clipboard) {
+      toast.error("Clipboard unavailable");
+
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(manifestText)
+      .then(() => toast.success("Copied to clipboard"))
+      .catch(() => toast.error("Copy failed"));
+  }
+
+  return (
+    <div className="space-y-3">
+      <MetadataOverview obj={obj} />
+      <ConditionsTable obj={obj} />
+      <RelatedEvents events={relatedEvents} />
+      {/* Plugin-contributed detail sections (Headlamp registerDetailsViewSection). Renders nothing until a
+          plugin registers a section, so this is zero-cost by default. */}
+      <PluginDetailSections resource={obj} />
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <SegmentedControl
+            options={[
+              { value: "yaml", label: "YAML" },
+              { value: "json", label: "JSON" },
+            ]}
+            value={detailFormat}
+            onChange={onDetailFormatChange}
+          />
+          <Button variant="ghost" size="sm" onClick={copyManifest}>
+            <Copy className="size-3.5" aria-hidden />
+            Copy
+          </Button>
+        </div>
+        <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
+          {manifestText}
+        </pre>
+      </section>
+    </div>
+  );
+}
+
 // SimpleAction is one button-shaped write action (Restart/Reconcile): a button label, the toast verb,
 // the kinds it applies to, and the API call it issues against the resource target. Scale is excluded
 // (it carries a replicas input, so it is rendered as a form below).
@@ -138,30 +286,6 @@ export function ResourceDetailPanel({
   onRequestDelete: () => void;
 }) {
   const toast = useToast();
-
-  // The selected resource serialized for the manifest viewer, in the chosen format.
-  const manifestText = useMemo(() => {
-    if (!selected) {
-      return "";
-    }
-
-    return detailFormat === "yaml" ? toYaml(selected) : JSON.stringify(selected, null, 2);
-  }, [selected, detailFormat]);
-
-  // copyManifest copies the serialized manifest to the clipboard and toasts the outcome.
-  function copyManifest() {
-    if (!navigator.clipboard) {
-      toast.error("Clipboard unavailable");
-
-      return;
-    }
-
-    navigator.clipboard
-      .writeText(manifestText)
-      .then(() => toast.success("Copied to clipboard"))
-      .catch(() => toast.error("Copy failed"));
-  }
-
   const isPod = kind === "Pod";
   const showActionBar = canWrite || ((canLogs || canExec) && isPod);
 
@@ -240,30 +364,12 @@ export function ResourceDetailPanel({
               ) : null}
             </div>
           ) : null}
-          <ConditionsTable obj={selected} />
-          <RelatedEvents events={relatedEvents} />
-          {/* Plugin-contributed detail sections (Headlamp registerDetailsViewSection). Renders nothing
-              until a plugin registers a section, so this is zero-cost by default. */}
-          <PluginDetailSections resource={selected} />
-          <section>
-            <div className="mb-2 flex items-center justify-between">
-              <SegmentedControl
-                options={[
-                  { value: "yaml", label: "YAML" },
-                  { value: "json", label: "JSON" },
-                ]}
-                value={detailFormat}
-                onChange={onDetailFormatChange}
-              />
-              <Button variant="ghost" size="sm" onClick={copyManifest}>
-                <Copy className="size-3.5" aria-hidden />
-                Copy
-              </Button>
-            </div>
-            <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
-              {manifestText}
-            </pre>
-          </section>
+          <ResourceDetailContent
+            obj={selected}
+            relatedEvents={relatedEvents}
+            detailFormat={detailFormat}
+            onDetailFormatChange={onDetailFormatChange}
+          />
         </div>
       ) : null}
     </SlideOver>

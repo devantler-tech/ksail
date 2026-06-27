@@ -6,7 +6,9 @@
 // status pills (StatusLabel), and tables (Table) all render natively in KSail.
 
 import * as React from "react";
+import type { ResourceTarget } from "./k8s.ts";
 import { pluginNavigate } from "./pluginNavigation.ts";
+import { decodeResourceDetailURL, encodeResourceDetailURL, openResourceDetail } from "./resourceDetail.ts";
 import { renderPluginIcon as renderIcon } from "./pluginIcon.ts";
 
 // ---------------------------------------------------------------------------
@@ -198,41 +200,89 @@ export function HoverInfoLabel({
 // Links
 // ---------------------------------------------------------------------------
 
-// resolvePluginUrl builds the target URL for a CommonComponents.Link: an explicit `to`, or a named route
-// resolved via window.pluginLib.Router.createRouteURL (the real registry-backed resolver from pluginLib).
-function resolvePluginUrl(to?: string, routeName?: string, params?: Record<string, string>): string {
+// targetFromKubeObject derives a resource-detail target from a Headlamp KubeObject passed to
+// `<Link kubeObject={…}>` (table name cells and inventory rows use this form). It reads the object's own
+// apiVersion/kind/metadata and the plural from the class statics (apiName, set by makeKubeObjectClass).
+// Returns null when any coordinate is missing, so the Link falls back to an inert anchor rather than
+// misnavigating.
+function targetFromKubeObject(kubeObject: unknown): ResourceTarget | null {
+  if (!kubeObject || typeof kubeObject !== "object") {
+    return null;
+  }
+
+  const holder = kubeObject as {
+    jsonData?: { apiVersion?: string; kind?: string; metadata?: { name?: string; namespace?: string } };
+    constructor?: { apiName?: string; apiVersion?: string | string[] };
+  };
+  const json = holder.jsonData ?? (kubeObject as NonNullable<typeof holder.jsonData>);
+  const staticApiVersion = Array.isArray(holder.constructor?.apiVersion)
+    ? holder.constructor?.apiVersion[0]
+    : holder.constructor?.apiVersion;
+  const apiVersion = json?.apiVersion ?? staticApiVersion;
+  const kind = json?.kind;
+  const name = json?.metadata?.name;
+  const plural = holder.constructor?.apiName;
+  if (!apiVersion || !kind || !name || !plural) {
+    return null;
+  }
+
+  return { apiVersion, kind, plural, name, namespace: json?.metadata?.namespace };
+}
+
+// resolvePluginUrl builds the target URL for a CommonComponents.Link: an explicit `to`, a named route
+// resolved via window.pluginLib.Router.createRouteURL (which returns a ksail-detail: URL for Headlamp's
+// built-in resource routes), or a kubeObject resolved straight to a ksail-detail: URL.
+function resolvePluginUrl({
+  to,
+  routeName,
+  params,
+  kubeObject,
+}: {
+  to?: string;
+  routeName?: string;
+  params?: Record<string, string>;
+  kubeObject?: unknown;
+}): string {
   if (to) {
     return to;
   }
-  if (!routeName) {
-    return "#";
+  if (routeName) {
+    const router = window.pluginLib?.Router as
+      | { createRouteURL?: (name: string, params?: Record<string, string>) => string }
+      | undefined;
+
+    return router?.createRouteURL?.(routeName, params) ?? "#";
+  }
+  if (kubeObject) {
+    const target = targetFromKubeObject(kubeObject);
+
+    return target ? encodeResourceDetailURL(target) : "#";
   }
 
-  const router = window.pluginLib?.Router as
-    | { createRouteURL?: (name: string, params?: Record<string, string>) => string }
-    | undefined;
-
-  return router?.createRouteURL?.(routeName, params) ?? "#";
+  return "#";
 }
 
-// Link is Headlamp's router link. It resolves `routeName`+`params` (or `to`) to a URL and navigates the
-// plugin router on click (via pluginNavigate, so it stays inside KSail's persistent plugin MemoryRouter).
-// An external http(s) URL renders as a normal new-tab anchor.
+// Link is Headlamp's router link. It resolves `routeName`+`params`, a `kubeObject`, or an explicit `to` to
+// a URL. A ksail-detail: URL (a built-in K8s resource) opens KSail's native resource-detail overlay
+// (openResourceDetail); a plugin-route path navigates the persistent plugin MemoryRouter (pluginNavigate);
+// an external http(s) URL renders as a normal new-tab anchor.
 export function Link({
   to,
   routeName,
   params,
+  kubeObject,
   children,
   className,
 }: {
   to?: string;
   routeName?: string;
   params?: Record<string, string>;
+  kubeObject?: unknown;
   activeCluster?: string;
   children?: React.ReactNode;
   className?: string;
 }): React.ReactElement {
-  const url = resolvePluginUrl(to, routeName, params);
+  const url = resolvePluginUrl({ to, routeName, params, kubeObject });
   const external = /^https?:\/\//.test(url) || url.startsWith("//");
   const linkClass = className ?? "text-blue-600 hover:underline dark:text-blue-400";
 
@@ -250,6 +300,12 @@ export function Link({
       className={linkClass}
       onClick={(event) => {
         event.preventDefault();
+        const target = decodeResourceDetailURL(url);
+        if (target) {
+          openResourceDetail(target);
+
+          return;
+        }
         if (url !== "#") {
           pluginNavigate(url);
         }
@@ -327,33 +383,36 @@ export function Table({
   const rows = data ?? [];
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
       <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <thead className="bg-slate-50 dark:bg-slate-800/50">
+          <tr className="border-b border-slate-200 dark:border-slate-700">
             {columns.map((column, index) => (
-              <th key={column.id ?? index} className="px-3 py-2 font-medium">
+              <th
+                key={column.id ?? index}
+                className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+              >
                 {column.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {loading ? (
             <tr>
-              <td colSpan={columns.length} className="px-3 py-6 text-center text-slate-400">
+              <td colSpan={columns.length} className="px-4 py-6 text-center text-slate-400">
                 Loading…
               </td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-3 py-6 text-center text-slate-400">
+              <td colSpan={columns.length} className="px-4 py-6 text-center text-slate-400">
                 No items
               </td>
             </tr>
           ) : (
             rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+              <tr key={rowIndex} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 {columns.map((column, colIndex) => {
                   const value = cellValue(column, row);
                   const content = column.Cell
@@ -361,7 +420,7 @@ export function Table({
                     : (value as React.ReactNode);
 
                   return (
-                    <td key={column.id ?? colIndex} className="px-3 py-2 align-top text-slate-700 dark:text-slate-200">
+                    <td key={column.id ?? colIndex} className="px-4 py-3 align-top text-slate-700 dark:text-slate-200">
                       {content}
                     </td>
                   );
@@ -456,6 +515,7 @@ function PercentageCircle({
           fill="none"
           stroke={arc.fill}
           strokeWidth={thickness}
+          strokeLinecap="round"
           strokeDasharray={`${arc.length} ${circumference - arc.length}`}
           strokeDashoffset={-arc.offset}
         />

@@ -21,6 +21,7 @@ import { renderPluginIcon } from "./pluginIcon.ts";
 import { KubeObject, makeResourceClasses, setActiveCluster, type ResourceClasses } from "./k8s.ts";
 import { apiFactory, apiFactoryWithNamespace, makeCustomResourceClass } from "./makeCustomResourceClass.ts";
 import { registry, type PluginResource, type RouteProps, type SidebarEntryFilter } from "./registry.ts";
+import { builtinRouteTarget, encodeResourceDetailURL } from "./resourceDetail.ts";
 import { useClusterScopedList } from "./useClusterScopedList.ts";
 import { WebSocketManager } from "./wsMultiplexer.ts";
 
@@ -320,23 +321,30 @@ function installCompatStubs(lib: PluginLib): void {
   // fill is the fallback. An unknown route name returns "#" so a stray link is inert rather than throwing.
   compat.Router = {
     createRouteURL: (name: string, params?: Record<string, string>): string => {
+      // A plugin-registered route wins (a plugin may define its own detail page, e.g. the Flux plugin's
+      // Kustomization view): resolve it to its in-plugin path so the persistent plugin router matches it.
       const route = registry.getRouteByName(name);
-      if (!route) {
-        return "#";
-      }
-
-      const reactRouter = window.pluginLib?.ReactRouter as
-        | { generatePath?: (path: string, params?: Record<string, string>) => string }
-        | undefined;
-      if (reactRouter?.generatePath) {
-        try {
-          return reactRouter.generatePath(route.path, params ?? {});
-        } catch {
-          // Fall through to the manual fill below.
+      if (route) {
+        const reactRouter = window.pluginLib?.ReactRouter as
+          | { generatePath?: (path: string, params?: Record<string, string>) => string }
+          | undefined;
+        if (reactRouter?.generatePath) {
+          try {
+            return reactRouter.generatePath(route.path, params ?? {});
+          } catch {
+            // Fall through to the manual fill below.
+          }
         }
+
+        return fillRouteParams(route.path, params);
       }
 
-      return fillRouteParams(route.path, params);
+      // Otherwise a Headlamp built-in resource route (namespace/pod/deployment/customresource/…). KSail
+      // has no in-plugin page for those — it renders resource detail in its native overlay — so emit a
+      // ksail-detail: URL that CommonComponents.Link opens via openResourceDetail. Unknown names stay "#".
+      const target = builtinRouteTarget(name, params);
+
+      return target ? encodeResourceDetailURL(target) : "#";
     },
     getRoute: (name: string): unknown => registry.getRouteByName(name) ?? null,
     getRoutePath: (name: string): string => registry.getRouteByName(name)?.path ?? "#",
