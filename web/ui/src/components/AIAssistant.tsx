@@ -27,15 +27,18 @@ interface PendingConfirm {
 // AIAssistant is the web UI's AI chat panel, streaming the assistant's reply from the backend's chat
 // endpoint (GitHub Copilot). It is cluster-aware: the active cluster is sent as context so the
 // assistant scopes its answers. When allowWrite is set the assistant may request write actions, each
-// gated behind an inline Approve/Deny confirmation; otherwise it stays read-only. App renders it only
-// when the backend advertises the aiChat capability.
+// gated behind an inline Approve/Deny confirmation; otherwise it stays read-only. When `available` is
+// false (no Copilot token configured) it renders a "how to enable" panel instead of the chat, so the
+// feature stays discoverable rather than the nav entry vanishing.
 export function AIAssistant({
   clusterName,
   namespace,
+  available,
   allowWrite,
 }: {
   clusterName: string | null;
   namespace: string | null;
+  available: boolean;
   allowWrite: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -112,6 +115,12 @@ export function AIAssistant({
     },
     [streaming, messages, clusterName, namespace],
   );
+
+  // No Copilot token configured on the serving backend: the chat cannot run, so explain how to enable
+  // it instead of showing a dead input. The hooks above still run unconditionally (rules of hooks).
+  if (!available) {
+    return <AssistantUnavailable />;
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-3">
@@ -221,6 +230,38 @@ function appendToAssistant(
 
     return next;
   });
+}
+
+// AssistantUnavailable is shown when the backend reports the AI assistant is not configured (no
+// Copilot token). It keeps the feature discoverable — explaining how to turn it on — instead of the
+// nav entry silently disappearing.
+function AssistantUnavailable() {
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+          <Sparkles className="size-6" aria-hidden />
+        </div>
+        <div>
+          <p className="font-medium text-slate-900 dark:text-white">AI assistant not configured</p>
+          <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
+            The KSail assistant runs on GitHub Copilot. Set a Copilot token in the environment KSail
+            runs in — <code className="font-mono text-xs">KSAIL_COPILOT_TOKEN</code> or{" "}
+            <code className="font-mono text-xs">COPILOT_TOKEN</code> — then restart to enable it. You
+            can pick the model and reasoning effort under Settings → Editor &amp; AI.
+          </p>
+        </div>
+        <a
+          href="https://ksail.devantler.tech"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-blue-600 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-slate-50 dark:text-blue-400 dark:ring-slate-700 dark:hover:bg-slate-800"
+        >
+          Documentation
+        </a>
+      </div>
+    </div>
+  );
 }
 
 // ConfirmCard renders one write-tool confirmation inline: the tool name, its summary, and Approve/Deny

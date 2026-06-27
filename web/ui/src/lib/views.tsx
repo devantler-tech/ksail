@@ -32,8 +32,6 @@ export interface ViewGates {
   secretsEnabled: boolean;
   // pluginsEnabled gates the Plugins view on the backend's plugins capability (it serves UI plugins).
   pluginsEnabled: boolean;
-  // aiChatEnabled gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
-  aiChatEnabled: boolean;
 }
 
 // ViewDef is one registry entry. `enabled` encodes only the view's capability gate; the cluster-scope
@@ -56,7 +54,9 @@ export const VIEWS = [
   { id: "resources", title: "Resources", icon: Layers, scope: "cluster", enabled: (g) => g.workloadEnabled },
   { id: "events", title: "Events", icon: Activity, scope: "cluster", enabled: (g) => g.workloadEnabled },
   { id: "secrets", title: "Secrets", icon: KeyRound, scope: "global", enabled: (g) => g.secretsEnabled },
-  { id: "assistant", title: "Assistant", icon: Sparkles, scope: "global", enabled: (g) => g.aiChatEnabled },
+  // Assistant is always available: the panel itself explains how to enable the AI assistant (set a
+  // Copilot token) when the backend reports it unavailable, rather than the entry vanishing silently.
+  { id: "assistant", title: "Assistant", icon: Sparkles, scope: "global", enabled: () => true },
   { id: "plugins", title: "Plugins", icon: Puzzle, scope: "global", enabled: (g) => g.pluginsEnabled },
   // Settings is always available: its General/Appearance/About categories are pure client-side
   // preferences (useful on every backend, including the operator). The Credentials category gates

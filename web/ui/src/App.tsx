@@ -526,7 +526,6 @@ export function App() {
     workloadEnabled: canBrowse,
     secretsEnabled: canCipher,
     pluginsEnabled: canPlugins,
-    aiChatEnabled: canAIChat,
   };
 
   // navCommands derives the palette's "Go to <view>" entries from the same view registry the sidebar
@@ -599,7 +598,6 @@ export function App() {
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
         pluginsEnabled={canPlugins}
-        aiChatEnabled={canAIChat}
         surfaceLabel={surfaceLabel(mode)}
         onOpenCommandPalette={() => setPaletteOpen(true)}
         headerActions={headerActions}
@@ -626,6 +624,7 @@ export function App() {
           <AIAssistant
             clusterName={activeCluster?.metadata.name ?? null}
             namespace={activeCluster?.metadata.namespace ?? null}
+            available={canAIChat}
             allowWrite={capability(config, "aiChatWrite")}
           />
         ) : view === "secrets" ? (
