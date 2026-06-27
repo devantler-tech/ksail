@@ -21,7 +21,7 @@ docker system prune -f
 
 ### Port Already in Use
 
-If you see `Error: Port 5000 is already allocated`, use a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
+If you see `Error: Port 5000 is already allocated`, specify a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
 
 **macOS/Linux:**
 
@@ -213,7 +213,7 @@ This means the CA certificate stored under the current context in `~/.talos/conf
 ksail cluster repair
 ```
 
-The `talosconfig-ca` repair detects a known single-byte BasicConstraints corruption pattern, fixes it in place, and writes a timestamped backup (`~/.talos/config.bak.<timestamp>`) before overwriting. The repair is idempotent and only modifies CA bytes whose corruption it recognises.
+The `talosconfig-ca` repair detects a known single-byte BasicConstraints corruption pattern, fixes it in place, and writes a timestamped backup (`~/.talos/config.bak.<timestamp>`) before overwriting. The repair is idempotent and only modifies CA bytes whose corruption it recognizes.
 
 **Verify manually** (optional):
 
