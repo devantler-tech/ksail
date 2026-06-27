@@ -44,9 +44,11 @@ func TestAPIServerFeatureGatesPatch_AppliesToTalosConfig(t *testing.T) {
 
 	extraArgs := controlPlane.Cluster().APIServer().ExtraArgs()
 
-	assert.Equal(t, []string{"MutatingAdmissionPolicy=true"}, extraArgs["feature-gates"])
-	assert.Equal(t,
-		[]string{"admissionregistration.k8s.io/v1beta1=true"},
-		extraArgs["runtime-config"],
-	)
+	// Assert the full map so the patch is verified to set exactly these two
+	// apiserver args and nothing else — a whole-map comparison catches both a
+	// wrong/missing value and any unexpected extra key the patch might leak.
+	assert.Equal(t, map[string][]string{
+		"feature-gates":  {"MutatingAdmissionPolicy=true"},
+		"runtime-config": {"admissionregistration.k8s.io/v1beta1=true"},
+	}, extraArgs)
 }
