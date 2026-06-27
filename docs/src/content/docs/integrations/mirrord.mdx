@@ -104,9 +104,9 @@ ksail cluster delete
 
 mirrord supports two traffic modes:
 
-| Mode | Behaviour | Use case |
+| Mode | Behavior | Use case |
 |------|-----------|----------|
-| `"mirror"` | Duplicate incoming traffic to both the pod and your local process | Observe and debug without affecting production behaviour |
+| `"mirror"` | Duplicate incoming traffic to both the pod and your local process | Observe and debug without affecting production behavior |
 | `"steal"` | Redirect all incoming traffic exclusively to your local process | Test responses, verify logic changes with real traffic |
 
 Switch modes by updating `feature.network.incoming` in your `.mirrord/mirrord.json`.

@@ -10,7 +10,6 @@
 // implemented, so a Headlamp plugin that lists and renders cluster resources works unmodified. The
 // heavier UI externals — Material UI, Redux, React Router, Monaco, Recharts — are still STAGED, pending
 // the lazily-loaded MUI-in-pluginLib bundle; a plugin that imports those does not run yet.
-// See docs/BEST-KUBERNETES-UI-PLAN.md §4.3.
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
