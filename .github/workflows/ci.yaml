@@ -122,7 +122,6 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      benchmark: ${{ steps.filter.outputs.benchmark }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -149,30 +148,6 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
-            benchmark:
-              # Limit to packages that contain benchmarks plus module files.
-              # Avoids paying ~30 min of benchmark cost on PRs that touch only
-              # unrelated Go code. Keep this in sync with the package discovery
-              # step in the `benchmark` job (`grep -rl '^func Benchmark'`).
-              - 'pkg/apis/cluster/v1alpha1/**/*.go'
-              - 'pkg/cli/cmd/cipher/**/*.go'
-              - 'pkg/cli/cmd/cluster/**/*.go'
-              - 'pkg/client/argocd/**/*.go'
-              - 'pkg/client/docker/**/*.go'
-              - 'pkg/client/flux/**/*.go'
-              - 'pkg/client/helm/**/*.go'
-              - 'pkg/client/kubectl/**/*.go'
-              - 'pkg/client/kustomize/**/*.go'
-              - 'pkg/fsutil/configmanager/ksail/**/*.go'
-              - 'pkg/fsutil/marshaller/**/*.go'
-              - 'pkg/k8s/readiness/**/*.go'
-              - 'pkg/notify/**/*.go'
-              - 'pkg/svc/diff/**/*.go'
-              - 'pkg/svc/image/**/*.go'
-              - 'pkg/svc/registryresolver/**/*.go'
-              - 'go.mod'
-              - 'go.sum'
-              - '.github/workflows/ci.yaml'
             system-test:
               # NOTE: Do not use negative patterns (!) here.
               # dorny/paths-filter v4 uses picomatch where negated patterns
@@ -1242,207 +1217,6 @@ jobs:
           dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
-  benchmark:
-    name: 📊 Benchmark
-    needs: [changes]
-    if: >-
-      (github.event_name == 'push' || github.event_name == 'pull_request')
-      && needs.changes.outputs.benchmark == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      pull-requests: write
-    outputs:
-      skip: ${{ steps.discover.outputs.skip }}
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-
-      - name: 🔍 Discover benchmark packages
-        id: discover
-        shell: bash
-        run: |
-          set -euo pipefail
-          pkgs=$(grep -rl '^func Benchmark' --include='*_test.go' . \
-            | xargs -I{} dirname {} \
-            | sort -u || true)
-          if [ -z "$pkgs" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo "skip=false"
-              echo "packages<<EOF"
-              echo "$pkgs"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 🏃 Run benchmarks
-        if: steps.discover.outputs.skip == 'false'
-        shell: bash
-        env:
-          PACKAGES: ${{ steps.discover.outputs.packages }}
-          # The regression gate compares only the deterministic allocation
-          # metrics (B/op, allocs/op), which are independent of sample count, so
-          # PRs run -count=1 for the fastest possible signal (wall-clock ns/op is
-          # never gated — see "Compare benchmark results"). On push to main
-          # (which feeds benchmark-store / the historical ns/op chart) keep
-          # -count=5 for higher-quality wall-clock baselines.
-          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '1' }}
-        run: |
-          set -euo pipefail
-          echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -run='^$' -count="${BENCH_COUNT}" -timeout=30m \
-            | tee "$RUNNER_TEMP/bench.txt"
-
-      - name: 🔍 Prepare benchmark regression gate input
-        if: steps.discover.outputs.skip == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Filter excluded benchmarks and average -count=N duplicate samples into
-          # a single representative value per benchmark.
-          #
-          # Excluded: BenchmarkCreateTarball_* — I/O-bound; timing is dominated by
-          # CI runner disk-cache state and can vary 4-5x between runs (see #4090).
-          # Excluded: benchmarks with ns/op < 100 — too fast for reliable measurement
-          # on shared runners with CPU clock jitter (see #3698).
-          #
-          # Averaging: go test -count=N emits N lines per benchmark. Without
-          # averaging, github-action-benchmark would compare each of the N lines
-          # individually against the single stored baseline, generating N alerts
-          # instead of one and skewing the history chart. Averaging collapses them
-          # to a single geometric-mean-like value for a clean 1:1 comparison.
-          #
-          # The original bench.txt is preserved for artifact upload and historical
-          # storage.
-          awk '
-            { lines[NR] = $0 }
-            /^Benchmark/ && /ns\/op/ {
-              if ($1 ~ /^BenchmarkCreateTarball_/) next
-              for (i = 1; i <= NF; i++) {
-                if ($(i+1) == "ns/op" && $i + 0 < 100) next
-              }
-              name = $1; count[name]++; iters[name] += $2
-              for (i = 3; i <= NF; i++) {
-                if ($i == "ns/op")     ns[name]    += $(i-1)
-                if ($i == "B/op")      bop[name]   += $(i-1)
-                if ($i == "allocs/op") alloc[name] += $(i-1)
-              }
-            }
-            END {
-              for (i = 1; i <= NR; i++) {
-                line = lines[i]
-                if (line !~ /^Benchmark/ || line !~ /ns\/op/) { print line; continue }
-                split(line, f)
-                nm = f[1]
-                if (nm ~ /^BenchmarkCreateTarball_/) continue
-                skip = 0
-                for (j = 1; j < length(f); j++) {
-                  if (f[j+1] == "ns/op" && f[j] + 0 < 100) { skip = 1; break }
-                }
-                if (skip) continue
-                if (!emitted[nm]) {
-                  emitted[nm] = 1; n = count[nm]
-                  out = nm "\t" int(iters[nm]/n) "\t" int(ns[nm]/n) " ns/op"
-                  if (nm in bop)   out = out "   " int(bop[nm]/n)   " B/op"
-                  if (nm in alloc) out = out "   " int(alloc[nm]/n) " allocs/op"
-                  print out
-                }
-              }
-            }
-          ' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
-
-          # Derive the regression-gate input by neutralizing the wall-clock
-          # metric. github-action-benchmark's "go" parser turns each
-          # "<name> <iters> <v1> <u1> <v2> <u2> ..." line into one comparable
-          # series per metric (plus a bare ns/op series). Pinning the ns/op value
-          # to a constant 1 makes both ns/op-bearing series compare as ~0x of the
-          # baseline so wall-clock jitter on shared runners can never trip the
-          # alert, while the deterministic B/op and allocs/op series keep their
-          # real values AND byte-identical names — so they still compare 1:1
-          # against the stored baseline. The unmodified bench-filtered.txt (real
-          # ns/op) still feeds the history chart via the benchmark-store job.
-          sed -E 's/[0-9]+ ns\/op/1 ns\/op/' \
-            "$RUNNER_TEMP/bench-filtered.txt" > "$RUNNER_TEMP/bench-compare.txt"
-
-      - name: 📊 Compare benchmark results
-        if: steps.discover.outputs.skip == 'false'
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          tool: go
-          # bench-compare.txt pins ns/op to 1, so only the deterministic
-          # B/op and allocs/op series carry real values here.
-          output-file-path: ${{ runner.temp }}/bench-compare.txt
-          gh-pages-branch: benchmark-data
-          benchmark-data-dir-path: dev/bench
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          alert-threshold: "150%"
-          fail-threshold: "150%"
-          # Deterministic metrics are jitter-free, so PRs block on a real
-          # allocation/byte regression (≥1.5x). Pushes to main never fail
-          # (comment-on-alert/fail-on-alert are PR-only): the benchmark-store
-          # job updates the baseline so it self-heals after an intentional
-          # increase lands, avoiding a wedged main / blocked release.
-          fail-on-alert: ${{ github.event_name == 'pull_request' }}
-          comment-on-alert: ${{ github.event_name == 'pull_request' }}
-          summary-always: true
-
-      - name: 📤 Upload benchmark results
-        if: steps.discover.outputs.skip == 'false' && github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: bench-results
-          path: |
-            ${{ runner.temp }}/bench.txt
-            ${{ runner.temp }}/bench-filtered.txt
-          retention-days: 1
-
-  benchmark-store:
-    name: 📤 Store Benchmark Data
-    needs: [changes, benchmark]
-    if: >-
-      github.event_name == 'push'
-      && needs.changes.outputs.benchmark == 'true'
-      && needs.benchmark.outputs.skip == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: 📥 Download benchmark results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: bench-results
-          path: ${{ runner.temp }}
-
-      - name: 📊 Store benchmark data
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          tool: go
-          output-file-path: ${{ runner.temp }}/bench-filtered.txt
-          gh-pages-branch: benchmark-data
-          benchmark-data-dir-path: dev/bench
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          fail-on-alert: false
-          comment-on-alert: false
-          summary-always: false
-
   verify-desktop-tidy:
     name: 🧩 Verify Desktop Module Tidy
     runs-on: ubuntu-latest
@@ -1529,7 +1303,6 @@ jobs:
         build-docs,
         vscode-extension,
         copilot-plugin,
-        benchmark,
         operator-chart-lint,
         operator-chart-e2e,
         verify-desktop-tidy,
@@ -1556,7 +1329,6 @@ jobs:
             ${{ needs.build-docs.result }}
             ${{ needs.vscode-extension.result }}
             ${{ needs.copilot-plugin.result }}
-            ${{ needs.benchmark.result }}
             ${{ needs.operator-chart-lint.result }}
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.verify-desktop-tidy.result }}

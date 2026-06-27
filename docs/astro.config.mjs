@@ -234,7 +234,6 @@ export default defineConfig({
             { label: "FAQ", link: "/faq/" },
             { label: "Troubleshooting", link: "/troubleshooting/" },
             { label: "Development Guide", link: "/development/" },
-            { label: "Benchmarks", link: "/benchmarks/" },
             { label: "Resources", link: "/resources/" },
           ],
         },
