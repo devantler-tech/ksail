@@ -5,9 +5,9 @@ description: Learn how to create and manage Talos Linux clusters with KSail for 
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. This guide shows you how to use Talos with KSail for local development (Docker provider), cloud deployments (Hetzner Cloud provider), or managed clusters through [Sidero Omni](https://www.siderolabs.com/omni/) (Omni provider).
+[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. KSail runs Talos for local development (Docker provider), cloud deployments (Hetzner Cloud provider), or managed clusters through [Sidero Omni](https://www.siderolabs.com/omni/) (Omni provider), configuring machine state through modular native Talos patches referenced by `spec.cluster.distributionConfig`.
 
-Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. It's not suitable for quick prototyping or scenarios requiring shell access—use [Vanilla](/distributions/vanilla/) or [K3s](/distributions/k3s/) instead.
+Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. It's not suitable for quick prototyping or scenarios requiring shell access—use [Vanilla](/distributions/vanilla/) or [K3s](/distributions/k3s/) instead. For help choosing between distributions, see the [distributions overview](/distributions/).
 
 ## Quick Start
 
@@ -175,9 +175,71 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
   </TabItem>
 </Tabs>
 
+## Configuration
+
+### KSail Configuration
+
+The `ksail.yaml` file controls the cluster. For Talos, `spec.cluster.distributionConfig` points at a **directory of machine-config patches** rather than a single file:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Talos
+    distributionConfig: talos   # directory of modular Talos patches (default)
+    provider: Docker            # Docker (local), Hetzner, or Omni
+```
+
+Conventionally the directory is named `talos` for production and `talos-local` for a local cluster, so a single repository can carry one patch set per environment. See [Multi-Environment Workflows](/guides/multi-environment/) and the [Reference Architecture](/concepts/reference-architecture/) for the layered, multi-cluster shape.
+
+### Modular Machine-Config Patches
+
+KSail manages Talos machine configuration as a **directory of small, native patches** split by the node role they target — not one monolithic config file. Each file is a standard Talos machine-config patch (the same format you could apply with `talosctl`), so there is no lock-in and you have access to every Talos config option. `ksail cluster init` scaffolds this directory; `ksail cluster create` and `ksail cluster update` load every patch from it, classify the impact (in-place, reboot-required, or wipe-required), and apply them with the matching Talos SDK mode.
+
+Patches live in three role-scoped subdirectories:
+
+```text
+talos/                          # spec.cluster.distributionConfig (talos-local for local)
+├── cluster/                    # applied to ALL nodes
+│   ├── disable-default-cni.yaml      #   hand CNI to KSail (e.g. Cilium)
+│   ├── oidc.yaml                     #   OIDC issuer / API server auth
+│   ├── disk-encryption.yaml          #   STATE/EPHEMERAL partition encryption
+│   ├── image-verification.yaml       #   ImageVerificationConfig (Talos 1.13+)
+│   └── sysctls.yaml                  #   machine.sysctls, install image, extensions
+├── control-planes/             # applied to control-plane nodes only
+│   └── ingress-firewall-rules.yaml   #   control-plane firewall rules
+└── workers/                    # applied to worker nodes only
+    ├── node-labels.yaml              #   machine.nodeLabels
+    └── storage.yaml                  #   disk / storage preparation
+```
+
+One concern per file keeps configuration isolated and reviewable. The filenames above are illustrative — add, rename, or remove patches to suit your cluster. For the full patch-authoring workflow and the `ksail.yaml` fields it replaces, see [Talos Native Patches](/guides/talos-native-patches/); for a worked partition-encryption example, see [Talos Disk Encryption](/guides/talos-disk-encryption/). The directory also fits the broader [Project Structure](/concepts/project-structure/) conventions.
+
+### Version Pinning
+
+Production clusters commonly pin versions for reproducibility. Set them in `ksail.yaml` (or override per run with `--kubernetes-version` / `--distribution-version`):
+
+```yaml
+# Partial snippet — add to your existing ksail.yaml
+spec:
+  cluster:
+    distribution: Talos
+    kubernetesVersion: v1.35.1   # Kubernetes version
+    talos:
+      version: v1.13.3           # Talos OS version (unset = latest supported)
+      extensions:                # Image Factory schematic (optional)
+        - siderolabs/iscsi-tools
+        - siderolabs/util-linux-tools
+        - siderolabs/qemu-guest-agent
+```
+
+`spec.cluster.talos.extensions` builds an [Image Factory](https://factory.talos.dev/) schematic so system extensions (for example `iscsi-tools` for storage, or `qemu-guest-agent` on cloud providers) are baked into the boot image. On the Hetzner provider you additionally pin an image/ISO id — see the [Hetzner Provider](/providers/hetzner/) page. See the [CLI flag reference](/cli-flags/cluster/cluster-root/) for every init/create/update flag.
+
 ## Use Cases
 
-See [Use Cases](/use-cases/) for practical workflow examples with Talos.
+See [Use Cases](/guides/) for practical workflow examples with Talos.
 
 ### Common Talos API Operations
 
@@ -232,6 +294,29 @@ spec:
     controlPlanes: 3  # HA setup
     workers: 5
 ```
+
+### Node Autoscaling (Hetzner)
+
+On the Hetzner provider, KSail can run the Kubernetes Cluster Autoscaler so worker nodes scale with demand. Configure pools under `spec.cluster.autoscaler.node`:
+
+```yaml
+# Partial snippet — add to your existing ksail.yaml (Talos + Hetzner)
+spec:
+  cluster:
+    distribution: Talos
+    autoscaler:
+      node:
+        enabled: true
+        expander: LeastWaste      # single value, or a priority list e.g. [LeastNodes, LeastWaste] (Price is not supported for Hetzner)
+        maxNodesTotal: 10         # cap across all pools
+        pools:
+          - name: workers
+            serverType: cpx21     # Hetzner server type
+            min: 1
+            max: 5
+```
+
+See the [Hetzner Provider](/providers/hetzner/) page for the autoscaler prerequisites and the [CLI flag reference](/cli-flags/cluster/cluster-root/) for the corresponding flags.
 
 ### Port Mappings (Docker Provider)
 
@@ -335,7 +420,7 @@ See the [Talos image verification docs](https://www.talos.dev/v1.13/talos-guides
 
 Talos 1.9 introduced the [`EnvironmentConfig`](https://www.talos.dev/v1.9/talos-guides/configuration/environment-variables/) resource as the preferred way to set environment variables for system services (kubelet, containerd, etc.). The legacy `.machine.env` field in `MachineConfig` is deprecated and will be removed in Talos 1.13.
 
-KSail does not generate `.machine.env` in any scaffolded patches. If you need to set environment variables (e.g. HTTP proxy settings, custom kubelet flags via env), create an `EnvironmentConfig` document in your Talos patches directory:
+KSail does not generate `.machine.env` in any scaffolded patches. If you need to set environment variables (e.g. HTTP proxy settings, custom kubelet flags via env), add an `EnvironmentConfig` document as a new patch in your machine-config directory (see [Configuration](#configuration)):
 
 ```yaml
 apiVersion: v1alpha1
@@ -346,12 +431,12 @@ environment:
   NO_PROXY: "10.0.0.0/8,192.168.0.0/16,localhost"
 ```
 
-Place the file under your `talos/` patches directory (e.g. `talos/cluster/environment.yaml`) and KSail will apply it alongside other config documents during cluster creation.
+Place the file in the `cluster/` subdirectory so it applies to all nodes (e.g. `talos/cluster/environment.yaml`); KSail loads it alongside the other patches during cluster creation.
 
 > [!NOTE]
 > Do not use `.machine.env` in custom patches — it is deprecated and will stop working in Talos 1.13+. Use `EnvironmentConfig` instead.
 
 ### GitOps Integration
 
-Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/gitops-workflows/).
+Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/guides/gitops-workflows/).
 

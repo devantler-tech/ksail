@@ -5,7 +5,7 @@ description: Provision and manage clusters visually — in your browser with ksa
 
 import { TabItem, Tabs } from "@astrojs/starlight/components";
 
-KSail ships one web UI that runs in three places: locally in your browser, as a native desktop window, or inside a cluster served by the [KSail operator](/features/operator/). All three talk to the same REST API, so the experience is identical — pick the surface that fits how you work.
+KSail ships one web UI that runs in three places: locally in your browser, as a native desktop window, or inside a cluster served by the [KSail operator](/guides/operator/). All three talk to the same REST API, so the experience is identical — pick the surface that fits how you work.
 
 ```mermaid
 flowchart LR
@@ -31,7 +31,7 @@ flowchart LR
 |---------|---------|----------|
 | Browser | `ksail open web` | Quick visual management of local clusters without installing anything extra |
 | Desktop app | `ksail open desktop` | A dedicated window outside the browser, launchable from your dock |
-| In-cluster | Helm chart with `ui.enabled=true` | Team-shared dashboards over [operator-managed clusters](/features/operator/), with optional OIDC sign-in |
+| In-cluster | Helm chart with `ui.enabled=true` | Team-shared dashboards over [operator-managed clusters](/guides/operator/), with optional OIDC sign-in |
 
 ## Running Locally
 
@@ -57,7 +57,7 @@ flowchart LR
     `ksail open desktop` launches the app from, in order: a `ksail-desktop` binary next to the `ksail` executable, the same binary on your `PATH`, or (on macOS) an installed **KSail** app.
   </TabItem>
   <TabItem label="In-cluster (operator)">
-    Enable the UI when installing the [KSail operator](/features/operator/) Helm chart:
+    Enable the UI when installing the [KSail operator](/guides/operator/) Helm chart:
 
     ```bash
     helm upgrade --install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
@@ -65,7 +65,7 @@ flowchart LR
       --set ui.enabled=true
     ```
 
-    The in-cluster UI manages `Cluster` custom resources instead of local Docker containers, and supports OIDC authentication and a server-enforced read-only mode. See [Kubernetes Operator](/features/operator/) for the full setup.
+    The in-cluster UI manages `Cluster` custom resources instead of local Docker containers, and supports OIDC authentication and a server-enforced read-only mode. See [Kubernetes Operator](/guides/operator/) for the full setup.
   </TabItem>
 </Tabs>
 
@@ -82,6 +82,6 @@ In GitOps-enforced environments the Git repository should stay the single source
 
 ## Related
 
-- [Kubernetes Operator](/features/operator/) — deploy the UI in-cluster with OIDC and read-only mode
+- [Kubernetes Operator](/guides/operator/) — deploy the UI in-cluster with OIDC and read-only mode
 - [OIDC Authentication](/guides/oidc-authentication/) — KSail's native OIDC support for cluster access
-- [VSCode Extension](/vscode-extension/) — manage clusters from your editor instead
+- [VSCode Extension](/integrations/vscode-extension/) — manage clusters from your editor instead

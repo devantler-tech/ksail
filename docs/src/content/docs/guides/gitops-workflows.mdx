@@ -1,0 +1,259 @@
+---
+title: GitOps Workflows
+description: Deploy declaratively with KSail's recommended GitOps loop — push your manifests as an OCI artifact and let built-in Flux or ArgoCD reconcile the cluster.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Deploy by changing your manifests, not by running `kubectl` against a cluster. KSail packages your
+source directory as a versioned OCI artifact and a built-in GitOps engine ([Flux](/concepts/#gitops) or
+ArgoCD) continuously reconciles the cluster to match. This is the workflow KSail is built around, and the
+same two commands carry you from laptop to production.
+
+:::note[Prerequisites]
+- A KSail project (`ksail cluster init`). See the [Quickstart](/start/quickstart/).
+- Docker running (for local distributions).
+:::
+
+## The GitOps loop
+
+```text
+edit k8s/  ──►  ksail workload push  ──►  ksail workload reconcile  ──►  Flux/ArgoCD applies
+   ▲                (compile +                   (tell the engine               │
+   └──────────────── push OCI artifact)          to pull & apply) ──────────────┘
+```
+
+- **`ksail workload push`** compiles your source directory (`spec.workload.sourceDirectory`, default
+  `k8s`) into an OCI artifact and pushes it to `spec.cluster.localRegistry.registry`.
+- **`ksail workload reconcile`** triggers the in-cluster GitOps engine to pull that artifact and apply it,
+  then waits for the rollout to converge.
+
+:::tip[`apply` is the learning shortcut]
+`ksail workload apply -k ./k8s` applies manifests straight at the cluster — handy for experimenting and
+following the [Quickstart](/start/quickstart/). For anything real, prefer `push`/`reconcile`: it keeps
+the cluster's source of truth in your repository and works the same from your laptop to CI.
+:::
+
+## Deploy with GitOps
+
+<Steps>
+
+1. **Choose the engine at init.** Pick Flux or ArgoCD when you scaffold the project:
+
+   ```bash
+   ksail cluster init --gitops-engine Flux --local-registry localhost:5050
+   ```
+
+   This wires a GitOps engine and a local OCI registry into `ksail.yaml`:
+
+   ```yaml
+   # ksail.yaml (excerpt)
+   spec:
+     cluster:
+       gitOpsEngine: Flux
+       localRegistry:
+         registry: localhost:5050
+     workload:
+       sourceDirectory: k8s
+   ```
+
+2. **Create the cluster.** `ksail cluster create` provisions the cluster, installs the engine, and
+   bootstraps it to watch your registry — no separate `flux bootstrap` step required.
+
+   ```bash
+   ksail cluster create
+   ```
+
+3. **Push and reconcile.** Edit manifests under `k8s/`, then ship them:
+
+   ```bash
+   ksail workload push        # compile k8s/ and push the OCI artifact
+   ksail workload reconcile   # tell the engine to pull and apply it
+   ```
+
+4. **Watch it converge.**
+
+   ```bash
+   ksail workload get pods -A
+   ```
+
+</Steps>
+
+Every change from now on is the same two commands — or just a `git push` once you wire `push`/`reconcile`
+into [CI/CD](/guides/cicd-integration/).
+
+## Validate before you ship
+
+`ksail workload validate` and `ksail workload scan` are **offline CI gates** — they check your manifests
+without a cluster, so they run anywhere:
+
+```bash
+ksail workload validate                                  # schema (kubeconform) + Flux ${var} substitution
+ksail workload scan --framework nsa --compliance-threshold 80   # Kubescape security posture
+```
+
+- **`validate`** runs schema validation and resolves Flux post-build (`${var}`) substitutions, catching
+  bad manifests before they reach a cluster.
+- **`scan`** runs Kubescape against a framework (e.g. `--framework nsa`) and can fail the gate below a
+  `--compliance-threshold`.
+
+See [Workload Management](/guides/workload-management/) and [CI/CD Integration](/guides/cicd-integration/)
+for the full gate.
+
+## Multiple environments
+
+One repository drives many clusters: keep a config per environment (`ksail.yaml`, `ksail.prod.yaml`, …)
+and target each command with `--config`:
+
+```bash
+ksail --config ksail.prod.yaml workload validate   # check prod's manifests offline
+ksail --config ksail.prod.yaml workload push
+ksail --config ksail.prod.yaml workload reconcile
+```
+
+`--config` is the backbone of multi-environment work — same workflow everywhere, one config per cluster.
+See the [Multi-Environment guide](/guides/multi-environment/).
+
+As a project grows, the flat `k8s/` directory becomes a layered Kustomize repository (shared `bases/` →
+provider overlays → per-cluster overlays), with each cluster's `spec.workload.kustomizationFile` pointing
+at its overlay and a Flux dependency chain reconciling `bootstrap → infrastructure-controllers →
+infrastructure → apps` in order. See [Project Structure & GitOps Layout](/concepts/project-structure/)
+for the full layout.
+
+## OCI artifact tag
+
+`spec.workload.tag` sets the OCI artifact tag used by both `workload push` and GitOps reconciliation (Flux
+OCIRepository / ArgoCD Application):
+
+```yaml
+spec:
+  workload:
+    tag: v1.2.3  # default: dev
+```
+
+The tag is resolved differently depending on the context:
+
+- **Push** (`ksail workload push`): CLI `oci://` ref > `spec.workload.tag` > registry-embedded tag > `dev`.
+- **Reconciliation** (Flux / ArgoCD): `spec.workload.tag` > registry-embedded tag > `dev`.
+
+`ksail cluster update` detects when the live GitOps sync ref (Flux OCIRepository tag or ArgoCD
+`targetRevision`) has drifted from the configured `spec.workload.tag` and reconciles it in-place — no
+manual intervention required. See [Declarative Configuration](/configuration/declarative-configuration/)
+for the full `spec.workload` reference.
+
+## Bootstrap → GitOps handoff (Flux)
+
+KSail's Flux install is a **bootstrap seed**, not a steady-state owner. Because Flux must exist before it
+can sync anything, `ksail cluster create` installs the `flux-operator` Helm chart and creates a
+`FluxInstance` CR so the operator can start reconciling your repository. Once your repository declares
+those same resources, the **repository becomes the steady-state owner** and KSail defers to it — so the
+two never flap against each other.
+
+### Seed-if-absent operator
+
+On every `cluster create`/`update`, KSail checks the `flux-operator` Helm release before installing:
+
+- If the release is already **owned by a GitOps controller** (its Helm storage Secret carries a Flux
+  `helm.toolkit.fluxcd.io/name` label, or an ArgoCD `argocd.argoproj.io/managed-by` label), KSail **skips
+  the install** and prints `flux-operator: skipping install — release "flux-operator" is managed by
+  <controller>`. This means a repo-declared `flux-operator` HelmRelease owns the version, and repeated
+  KSail runs never downgrade or flap it.
+- Otherwise KSail seeds (or upgrades to) its configured/pinned version, exactly as before.
+
+For your HelmRelease to be adopted, it must target Helm release **`flux-operator`** in namespace
+**`flux-system`** (the release KSail seeds). Flux then adopts that release on its next reconcile.
+
+### Repo-declared FluxInstance
+
+If your source directory declares a `FluxInstance` named **`flux`** in **`flux-system`** (or one labelled
+`app.kubernetes.io/managed-by: ksail`), KSail reads its `spec.distribution` block and seeds the
+FluxInstance with **that** distribution `version` (and `registry`/`artifact` when present) instead of its
+built-in default — so the seed matches what Flux will reconcile. KSail always keeps its own **computed
+`spec.sync` block** (the OCI source pointing at your registry), so GitOps sync keeps working after
+bootstrap regardless of what the repo's FluxInstance specifies for `sync`.
+
+### Pinning the seed from `ksail.yaml`
+
+If you do not want to maintain a full HelmRelease/FluxInstance in the repo, pin the seed versions
+directly (Renovate-trackable):
+
+```yaml
+spec:
+  workload:
+    flux:
+      operatorVersion: 0.50.0   # flux-operator Helm chart version to seed (empty = KSail's pinned version)
+      distributionVersion: 2.x  # FluxInstance spec.distribution.version to seed (empty = KSail's default)
+```
+
+Precedence: a repo-declared `FluxInstance` distribution version **>** `spec.workload.flux.distributionVersion`
+**>** KSail's default. For the operator, `spec.workload.flux.operatorVersion` sets the seed version, but a
+repo-owned `flux-operator` release always wins (KSail defers to it as above). `ksail cluster update`
+detects and reconciles a changed `distributionVersion` in-place. See
+[Declarative Configuration](/configuration/declarative-configuration/) for the full `spec.workload.flux`
+reference.
+
+## How `reconcile` recovers and reports
+
+`ksail workload reconcile` does more than trigger a sync — it self-heals common failures and surfaces
+diagnostics so you rarely need to reach for `kubectl`.
+
+### Automatic HelmRelease recovery
+
+Before polling Kustomizations, `reconcile` detects HelmReleases stuck in a non-recoverable state
+(Ready=False with a failure reason such as `InstallFailed`/`UpgradeFailed`, or Stalled=True) and
+suspends-then-resumes each one so the helm-controller retries — no manual `kubectl patch` workaround
+needed. HelmReleases with `DependencyNotReady` are skipped (transient, they resolve on their own), and
+individual reset failures are logged but do not abort reconciliation.
+
+### Automatic failure diagnostics
+
+When `reconcile` fails, KSail collects and displays a targeted diagnostic report instead of leaving you to
+investigate by hand:
+
+- **Failing GitOps resources** — Flux Kustomizations, HelmReleases, and OCIRepositories (or ArgoCD
+  Applications) with their condition reason and message (only non-ready resources are shown)
+- **Failing pods** — non-ready pods in the GitOps namespace
+- **Recent warning events** — all Kubernetes warning events from the GitOps namespace in the last 5 minutes
+
+Diagnostics are best-effort with a 15-second timeout. If the cluster is unreachable, the section is
+silently skipped so the original reconciliation error stays prominent.
+
+### Excluding long-running Kustomizations (Flux only)
+
+Some Flux Kustomizations are intentionally long-running and should not block command completion. Exclude
+them from progress monitoring with either an annotation or a CLI flag — they are still applied, they just
+don't block `reconcile`:
+
+```yaml
+# annotation on the Kustomization
+metadata:
+  annotations:
+    ksail.devantler.tech/reconcile-exclude: "true"
+```
+
+```bash
+# CLI flag (repeatable, comma-separated)
+ksail workload reconcile --exclude my-kustomization
+ksail workload reconcile --exclude "kust-a, kust-b"
+```
+
+This is Flux-specific and does not affect ArgoCD Application reconciliation.
+
+### Automatic retry
+
+Both `workload push` and `workload reconcile` retry on transient failures: **up to 3 attempts** with
+exponential backoff starting at 5s (capped at 30s) — so retries wait 5s after the first failure and 10s
+after the second. Retryable conditions come from the shared `netretry.IsRetryable` predicate (HTTP 429,
+5xx, connection refused, i/o timeout, unexpected EOF, no such host, TCP resets, context deadline exceeded,
+and similar), and a warning is printed on each attempt. For `reconcile`, a `--timeout` is a **per-attempt**
+bound — total runtime can reach `maxAttempts × timeout` plus backoff.
+
+## Related
+
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the guided first run of this workflow.
+- [Project Structure & GitOps Layout](/concepts/project-structure/) — how `k8s/` grows into a layered repository.
+- [Multi-Environment Workflows](/guides/multi-environment/) — driving many clusters with `--config`.
+- [CI/CD Integration](/guides/cicd-integration/) — wiring `validate`/`scan`/`push`/`reconcile` into pipelines.
+- [Secret Management](/guides/secret-management/) — encrypting secrets in your GitOps source.
+- [ArgoCD ApplicationSet](/guides/argocd-applicationset/) — multi-environment GitOps with ArgoCD.
+- [Tenant Management](/guides/tenant-management/) — onboard teams with GitOps sync resources.

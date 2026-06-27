@@ -1,0 +1,66 @@
+---
+title: Choose your setup
+description: Pick the right KSail distribution and infrastructure provider for your goal — a decision aid across Vanilla, K3s, Talos, VCluster, KWOK, and EKS.
+---
+
+KSail separates **what** Kubernetes you run (the *distribution*) from **where** its nodes run (the
+*provider*). You pick both in `ksail.yaml`; the workflow (`init` → `create` → `update` → `delete`) is
+identical regardless of choice. This page helps you choose. For the exhaustive compatibility grid, see
+the [Support Matrix](/support-matrix/).
+
+## Pick by goal
+
+| Your goal | Start with | Why |
+|-----------|-----------|-----|
+| Learn Kubernetes / general local dev | **Vanilla** (Kind) | Unmodified upstream Kubernetes, fastest to start, Docker-only |
+| Fast inner loop & CI/CD | **K3s** (K3d) | Lightweight, batteries-included, quick to create and tear down |
+| Production-grade / secure / immutable | **Talos** | API-driven immutable OS; runs on Docker, Hetzner, or Omni |
+| Isolate teams or feature branches cheaply | **VCluster** | Virtual clusters inside one host — low overhead, strong isolation |
+| Scale-test controllers or the API server | **KWOK** | Simulates thousands of nodes with near-zero resource cost |
+| Managed Kubernetes on AWS | **EKS** | Managed control plane on AWS (scaffolding today; provisioning coming) |
+
+## Distributions at a glance
+
+| Distribution | Tool | Best for | Providers |
+|--------------|------|----------|-----------|
+| [Vanilla](/distributions/vanilla/) | Kind | Upstream Kubernetes, learning, local dev | Docker, Kubernetes |
+| [K3s](/distributions/k3s/) | K3d | Lightweight dev & CI/CD | Docker, Kubernetes |
+| [Talos](/distributions/talos/) | Talos | Immutable, secure, production | Docker, Kubernetes, Hetzner, Omni |
+| [VCluster](/distributions/vcluster/) | Vind | Multi-tenancy, feature branches, CI isolation | Docker, Kubernetes |
+| [KWOK](/distributions/kwok/) | kwokctl | Simulation, scale & controller testing | Docker, Kubernetes |
+| [EKS](/distributions/eks/) | eksctl | Managed Kubernetes on AWS | AWS |
+
+## Providers at a glance
+
+The provider decides where nodes actually run. Most distributions default to **Docker** (local
+containers); **Talos** additionally runs on real or virtual cloud infrastructure.
+
+| Provider | Runs nodes as | Use it for |
+|----------|---------------|------------|
+| [Docker](/providers/docker/) | Local Docker containers | The default for all local distributions |
+| [Kubernetes (Nested)](/providers/kubernetes/) | Pods in an existing cluster | Running clusters inside a cluster — no Docker on the host |
+| [Hetzner](/providers/hetzner/) | Hetzner Cloud servers | Affordable real cloud clusters (Talos) |
+| [Omni (Sidero)](/providers/omni/) | Talos nodes via Sidero Omni | Managing Talos through the Omni SaaS |
+| [AWS](/providers/aws/) | Managed EKS | Managed Kubernetes on Amazon Web Services |
+
+## How distribution and provider combine
+
+```yaml
+# ksail.yaml — Talos on Docker locally…
+spec:
+  cluster:
+    distribution: Talos
+    provider: Docker
+```
+
+```yaml
+# …and the same distribution on Hetzner for production
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+```
+
+Keeping the distribution constant across environments (e.g. Talos locally and in production) maximizes
+fidelity. See the [Reference Architecture](/concepts/reference-architecture/) for a worked
+local-plus-production setup, and the [Support Matrix](/support-matrix/) for every supported combination.

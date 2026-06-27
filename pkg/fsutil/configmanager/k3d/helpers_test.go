@@ -1,13 +1,17 @@
 package k3d_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // assertSingleDockerIOMirror is a helper that asserts the result contains only docker.io with two specific endpoints.
@@ -408,6 +412,103 @@ func TestApplyImageVerificationVolumes(t *testing.T) {
 			"/new/host/path:"+k3d.ContainerdConfigTemplatePath,
 			k3dConfig.Volumes[0].Volume,
 		)
+	})
+}
+
+// oidcCAVolumeSpec builds the expected ":ro" OIDC-CA volume spec for a host path,
+// canonicalising it the same way ApplyOIDCCAVolume does so the assertion is
+// platform-independent (e.g. macOS /tmp → /private/tmp symlink resolution).
+func oidcCAVolumeSpec(t *testing.T, hostCAPath string) string {
+	t.Helper()
+
+	canonical, err := fsutil.EvalCanonicalPath(hostCAPath)
+	require.NoError(t, err)
+
+	return canonical + ":" + v1alpha1.OIDCCAContainerPath + ":ro"
+}
+
+// newOIDCCAFile creates a real CA file under a temp dir so EvalCanonicalPath
+// resolves it, returning the path.
+func newOIDCCAFile(t *testing.T) string {
+	t.Helper()
+
+	caPath := filepath.Join(t.TempDir(), "oidc-ca.crt")
+	require.NoError(t, os.WriteFile(caPath, []byte("ca"), 0o600))
+
+	return caPath
+}
+
+func TestApplyOIDCCAVolume_Append(t *testing.T) {
+	t.Parallel()
+	t.Run("appends_volume_mount_to_empty_config", func(t *testing.T) {
+		t.Parallel()
+
+		caPath := newOIDCCAFile(t)
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		require.NoError(t, k3d.ApplyOIDCCAVolume(k3dConfig, caPath))
+		assert.Len(t, k3dConfig.Volumes, 1)
+		assert.Equal(t, oidcCAVolumeSpec(t, caPath), k3dConfig.Volumes[0].Volume)
+		assert.Equal(t, []string{"server:*"}, k3dConfig.Volumes[0].NodeFilters)
+	})
+	t.Run("appends_without_removing_existing_volume", func(t *testing.T) {
+		t.Parallel()
+
+		caPath := newOIDCCAFile(t)
+		k3dConfig := &v1alpha5.SimpleConfig{
+			Volumes: []v1alpha5.VolumeWithNodeFilters{
+				{
+					Volume:      "/some/other/path:/other/container/path",
+					NodeFilters: []string{"server:0"},
+				},
+			},
+		}
+		require.NoError(t, k3d.ApplyOIDCCAVolume(k3dConfig, caPath))
+		assert.Len(t, k3dConfig.Volumes, 2)
+		assert.Equal(t, oidcCAVolumeSpec(t, caPath), k3dConfig.Volumes[1].Volume)
+	})
+	t.Run("idempotent_no_duplicate_when_called_twice", func(t *testing.T) {
+		t.Parallel()
+
+		caPath := newOIDCCAFile(t)
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		require.NoError(t, k3d.ApplyOIDCCAVolume(k3dConfig, caPath))
+		require.NoError(t, k3d.ApplyOIDCCAVolume(k3dConfig, caPath))
+		assert.Len(t, k3dConfig.Volumes, 1, "should not duplicate the OIDC CA volume mount")
+	})
+}
+
+func TestApplyOIDCCAVolume_UpdateAndError(t *testing.T) {
+	t.Parallel()
+	t.Run("updates_host_path_when_container_path_already_mounted", func(t *testing.T) {
+		t.Parallel()
+
+		newCAPath := newOIDCCAFile(t)
+		k3dConfig := &v1alpha5.SimpleConfig{
+			Volumes: []v1alpha5.VolumeWithNodeFilters{
+				{
+					Volume:      "/old/host/path:" + v1alpha1.OIDCCAContainerPath + ":ro",
+					NodeFilters: []string{"server:*"},
+				},
+			},
+		}
+		require.NoError(t, k3d.ApplyOIDCCAVolume(k3dConfig, newCAPath))
+		assert.Len(t, k3dConfig.Volumes, 1)
+		assert.Equal(t, oidcCAVolumeSpec(t, newCAPath), k3dConfig.Volumes[0].Volume)
+	})
+	t.Run("returns_error_when_ca_path_is_unresolvable", func(t *testing.T) {
+		t.Parallel()
+
+		// A regular file used as a path component makes EvalSymlinks fail with
+		// ENOTDIR (not IsNotExist), exercising ApplyOIDCCAVolume's error branch.
+		notADir := filepath.Join(t.TempDir(), "not-a-dir")
+		require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
+		badPath := filepath.Join(notADir, "sub", "oidc-ca.crt")
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		err := k3d.ApplyOIDCCAVolume(k3dConfig, badPath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to resolve OIDC CA file path")
+		assert.Empty(t, k3dConfig.Volumes, "config must be left unchanged on error")
 	})
 }
 

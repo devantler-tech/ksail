@@ -1,0 +1,337 @@
+---
+title: Tenant Management
+description: Onboard and offboard tenants with RBAC isolation and GitOps sync resources using ksail tenant create and ksail tenant delete.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Onboard a workload team onto a shared cluster without hand-writing RBAC. `ksail tenant create` scaffolds
+a tenant — a namespace, scoped RBAC, and the GitOps sync resources that point at the team's manifests —
+into your platform repository; `ksail tenant delete` removes it again. The generated scaffolding lives in
+the platform repo, so onboarding a tenant is a reviewable change like any other.
+
+:::note[Prerequisites]
+- A KSail project (`ksail cluster init`). See [Deliver with GitOps](/start/deliver-with-gitops/).
+- For GitOps tenants, a `gitOpsEngine` set in `ksail.yaml` ([Flux or ArgoCD](/guides/gitops-workflows/)).
+:::
+
+## The pattern
+
+The recommended real-world setup keeps platform and tenants in **separate repositories**. Each team owns
+its own repo and publishes its manifests as a versioned OCI artifact; the platform registers the team by
+pointing a GitOps source at that artifact. The scaffolding `ksail tenant create` writes is exactly that
+registration:
+
+```text
+edit platform/  ──►  ksail tenant create  ──►  GitOps source points at  ──►  tenant publishes
+   (your repo)        (namespace + RBAC +        the tenant's OCI artifact      its own artifact
+                       sync resources)                                          (their repo)
+```
+
+Isolation is layered, and the generated manifests give you each layer:
+
+- **Namespace** per tenant — the boundary everything else scopes to.
+- **RBAC** — a ServiceAccount and RoleBinding scoped to that namespace, never cluster-wide.
+- **A network floor** (opt-in, see [Production-ready tenants](#production-ready-tenants)) — a default-deny
+  NetworkPolicy with DNS and intra-namespace allow rules that the tenant extends with its own allow-lists.
+
+:::tip[Keep tenant secrets out of Git]
+Tenant secrets should come from a runtime secret store via External Secrets in the tenant's own namespace,
+not be committed alongside its manifests. See [Secret Management](/guides/secret-management/).
+:::
+
+## Tenant types
+
+| Type      | RBAC | GitOps sync resources | Requires GitOps engine |
+|-----------|------|-----------------------|------------------------|
+| `flux`    | ✓    | OCIRepository / GitRepository + Kustomization | Flux     |
+| `argocd`  | ✓    | AppProject + Application                       | ArgoCD   |
+| `kubectl` | ✓    | None                                           | No       |
+
+The `--type` flag defaults to auto-detect from `ksail.yaml` `gitOpsEngine`.
+
+## Onboard a tenant
+
+<Steps>
+
+1. **Scaffold the tenant** into your platform repo. `--type` auto-detects from `ksail.yaml`:
+
+   ```bash
+   # Auto-detect type (reads gitOpsEngine from ksail.yaml)
+   ksail tenant create my-team --output platform/tenants/
+
+   # Or pin the type, namespaces, and bound ClusterRole explicitly
+   ksail tenant create my-team --output platform/tenants/ \
+     --type flux \
+     --namespace my-team --namespace my-team-staging \
+     --cluster-role view
+   ```
+
+   Namespaces default to the tenant name; the bound ClusterRole defaults to `edit`. The command writes:
+
+   ```text
+   platform/tenants/my-team/
+   ├── kustomization.yaml
+   ├── namespace.yaml
+   ├── serviceaccount.yaml
+   ├── rolebinding.yaml
+   └── (flux or argocd sync resources if applicable)
+   ```
+
+2. **Register it** in the platform's `kustomization.yaml` so GitOps picks it up. `--register` appends the
+   tenant to the nearest `kustomization.yaml` for you:
+
+   ```bash
+   ksail tenant create my-team --output platform/tenants/ --register
+   ```
+
+3. **Apply or ship it** (see [Apply tenant manifests](#apply-tenant-manifests) for the GitOps path).
+
+</Steps>
+
+### Deliver via pull request
+
+Use `--delivery pr` to open the platform change as a pull request instead of writing it to your working
+tree. The platform repo is auto-detected from the local `git remote origin`:
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github
+```
+
+Override the repo with `--platform-repo` and the PR target with `--target-branch` (defaults to the repo's
+default branch):
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github \
+  --platform-repo my-org/platform-repo \
+  --target-branch develop
+```
+
+### Flux tenants
+
+For Flux tenants, point the sync source at the tenant's published artifact. OCI is the default and the
+recommended pattern — the tenant publishes manifests as an OCI artifact and the platform registers an
+OCIRepository against it:
+
+```bash
+# OCI source (default)
+ksail tenant create my-team --type flux \
+  --sync-source oci \
+  --registry oci://ghcr.io \
+  --tenant-repo my-org/my-team
+
+# OCI source with a path suffix (avoids tag collisions when Docker images and
+# Kubernetes manifests are published to the same registry path)
+ksail tenant create my-team --type flux \
+  --sync-source oci \
+  --registry oci://ghcr.io \
+  --tenant-repo my-org/my-team \
+  --oci-path manifests
+
+# Git source — also scaffolds a tenant Git repo when --git-provider github is set
+ksail tenant create my-team --type flux \
+  --sync-source git \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra
+```
+
+When scaffolding a tenant repo, KSail resolves the GitHub token through a fallback chain:
+
+1. `--git-token` flag (highest priority)
+2. `GH_TOKEN` or `GITHUB_TOKEN` environment variable
+3. GitHub CLI config (e.g., from `gh auth login`)
+
+If no token resolves, repo scaffolding is skipped with a warning and the command still succeeds. In CI,
+provide a non-empty token via `--git-token`, `GH_TOKEN`, or `GITHUB_TOKEN` if you want scaffolding to run.
+Only `ksail tenant delete --delete-repo` fails when no token can be resolved. Pass `--git-token` explicitly
+only to override the auto-detected token:
+
+```bash
+ksail tenant create my-team --type flux \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra \
+  --git-token "${MY_BOT_TOKEN}"
+```
+
+### ArgoCD tenants
+
+ArgoCD tenants generate RBAC isolation manifests, an AppProject, and an Application:
+
+```bash
+ksail tenant create my-team --type argocd \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra
+```
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml
+├── serviceaccount.yaml
+├── rolebinding.yaml
+├── project.yaml
+└── app.yaml
+```
+
+Add `--register` to also merge the tenant RBAC policy into the shared `argocd-rbac-cm` ConfigMap:
+
+```bash
+ksail tenant create my-team --type argocd \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra \
+  --register
+```
+
+KSail scans the kustomization directory for an `argocd-rbac-cm` ConfigMap (by content, not filename). If
+found, it merges the tenant policy; otherwise it creates `argocd-rbac-cm.yaml` in the same directory and
+registers it in `kustomization.yaml`.
+
+:::tip[Auto-discover tenants with ArgoCD]
+To register tenants automatically instead of one Application at a time, an ApplicationSet can generate one
+Application per tenant from a single template. See [ArgoCD ApplicationSet](/guides/argocd-applicationset/).
+:::
+
+### kubectl tenants
+
+kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider
+github` and `--tenant-repo` are provided, KSail also scaffolds a tenant repository without GitOps-specific
+resources — provided a GitHub token can be resolved (see the [token resolution](#flux-tenants) fallback
+chain above). If no token is available, the command still succeeds and only the local platform manifests
+are generated:
+
+```bash
+ksail tenant create my-team --type kubectl
+
+# With repo scaffolding
+ksail tenant create my-team --type kubectl \
+  --git-provider github \
+  --tenant-repo my-org/my-team-manifests
+```
+
+The scaffolded repo contains a plain kustomize setup for manual workflows:
+
+```text
+/
+├── README.md
+└── k8s/
+    └── kustomization.yaml
+```
+
+The tenant applies their manifests with `kubectl apply -k k8s/`.
+
+## Production-ready tenants
+
+By default KSail generates a minimal tenant (namespace, ServiceAccount, RoleBinding, and any GitOps sync
+resources). For shared production clusters you usually want stronger isolation. These hardening resources
+are **opt-in** — nothing below is generated unless you ask for it.
+
+Enable the recommended baseline with a single flag:
+
+```bash
+ksail tenant create my-team --production
+```
+
+`--production` turns on Pod Security Standards (`baseline`), a default-deny NetworkPolicy, a ResourceQuota,
+a LimitRange, a hardened ServiceAccount, and (for Flux tenants) a hardened sync. Any granular flag you set
+explicitly overrides the umbrella default. The resulting tenant directory adds:
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml          # + Pod Security Standards labels
+├── serviceaccount.yaml     # + automountServiceAccountToken: false
+├── rolebinding.yaml
+├── networkpolicy.yaml      # default-deny + DNS + intra-namespace
+├── resourcequota.yaml
+└── limitrange.yaml
+```
+
+### Granular flags
+
+| Flag | Effect |
+|------|--------|
+| `--pod-security <restricted\|baseline\|privileged>` | Adds `pod-security.kubernetes.io/{enforce,audit,warn}` labels to each namespace |
+| `--with-network-policy` | Default-deny NetworkPolicy plus allow rules for DNS and intra-namespace traffic |
+| `--with-quota` (`--quota-cpu`, `--quota-memory`) | ResourceQuota capping namespace `requests`/`limits` (defaults: 4 CPU, 8Gi) |
+| `--with-limit-range` (`--limit-default-cpu`, `--limit-default-memory`, `--limit-request-cpu`, `--limit-request-memory`) | LimitRange with default container requests/limits |
+| `--disable-token-automount` | Sets `automountServiceAccountToken: false` on the ServiceAccount |
+| `--image-pull-secret <name>` | Adds an `imagePullSecrets` entry (repeatable) |
+| `--cluster-role <name>` | Bind multiple ClusterRoles (repeatable; one RoleBinding per role) |
+
+For Flux tenants you can additionally harden the sync:
+
+| Flag | Effect |
+|------|--------|
+| `--flux-wait` | Sets `wait: true` and `timeout` (default `5m`) on the Flux Kustomization |
+| `--flux-timeout` | Flux Kustomization timeout; setting it implies `--flux-wait` |
+| `--flux-retry-interval` | Sets the Kustomization `retryInterval` |
+| `--flux-decryption` | Adds a SOPS `decryption` block referencing the `sops-age` secret |
+
+### Portable by default, native CRDs when available
+
+The generated manifests are portable upstream Kubernetes resources by default, so they work on any
+distribution KSail supports. When `ksail.yaml` opts into a richer control plane, KSail upgrades the output
+automatically:
+
+- If `spec.cluster.cni` is `Cilium`, `--with-network-policy` emits a `CiliumNetworkPolicy` (`cilium.io/v2`)
+  instead of an upstream `NetworkPolicy`.
+- Pod Security Standards labels remain the portable baseline even when `spec.cluster.policyEngine` is
+  `Kyverno` — Kyverno enforces additional policy server-side but does not replace NetworkPolicies.
+
+The Cilium policy is an intentionally simple starting point (default-deny, plus intra-namespace and
+kube-dns allow rules) that platform teams can extend with their own allow-lists.
+
+## Apply tenant manifests
+
+After generating manifests, apply them with the workflow that matches how the tenant was created:
+
+```bash
+# Created without --register? Apply the generated tenant directory directly
+ksail workload apply -k platform/tenants/my-team/
+
+# Created with --register (the parent kustomization already includes the tenant)?
+# Apply the parent directory
+ksail workload apply -k platform/tenants/
+```
+
+With GitOps, push and reconcile instead — the registered source then pulls each tenant's artifact:
+
+```bash
+ksail workload push
+ksail workload reconcile
+```
+
+See [GitOps Workflows](/guides/gitops-workflows/) for the full push/reconcile loop.
+
+## Offboard a tenant
+
+```bash
+# Remove manifests and unregister from kustomization.yaml (default)
+ksail tenant delete my-team
+
+# Also delete the tenant Git repository (token resolved automatically;
+# requires a valid token from the fallback chain above)
+ksail tenant delete my-team --delete-repo \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra
+
+# Keep the kustomization.yaml entry
+ksail tenant delete my-team --unregister=false
+```
+
+When deleting an ArgoCD tenant, KSail also removes the tenant's policy entries from the `argocd-rbac-cm`
+ConfigMap. It scans YAML files in the output directory for a ConfigMap named `argocd-rbac-cm` (content-based
+detection, not filename-based) and removes lines belonging to the deleted tenant. If no RBAC ConfigMap file
+is found, the step is silently skipped.
+
+## Related
+
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the workflow tenants plug into.
+- [GitOps Workflows](/guides/gitops-workflows/) — the push/reconcile loop in depth.
+- [Secret Management](/guides/secret-management/) — keep tenant secrets out of Git.
+- [ArgoCD ApplicationSet](/guides/argocd-applicationset/) — auto-discover tenants with ArgoCD.
+- [Multi-Environment Workflows](/guides/multi-environment/) — drive many clusters with `--config`.
+- [Project Structure & GitOps Layout](/concepts/project-structure/) — how the platform repo is laid out.
+- [`ksail tenant`](/cli-flags/tenant/tenant-root/) — full CLI reference for the tenant command group.
