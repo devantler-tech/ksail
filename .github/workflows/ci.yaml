@@ -133,6 +133,7 @@ jobs:
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      calico-cni: ${{ steps.filter.outputs.calico-cni }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -281,6 +282,14 @@ jobs:
               - 'desktop/**'
               - 'go.mod'
               - 'go.sum'
+              - '.github/workflows/ci.yaml'
+            calico-cni:
+              # The Calico installer derives the tigera-operator chart version
+              # from the calico/node image tag in this Dockerfile (see
+              # version.go's chartVersion()). A node-image patch can outpace the
+              # operator chart release, leaving the derived version unpublished,
+              # so guard a bump to this file with validate-calico-chart.
+              - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
 
   ci-go:
@@ -1506,6 +1515,57 @@ jobs:
             exit 1
           fi
 
+  validate-calico-chart:
+    name: 🔍 Validate Calico Chart Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    # Cheap pre-flight: a calico/node image bump (Dependabot updates the
+    # Dockerfile) can outpace the tigera-operator chart release, so the chart
+    # version version.go derives from the tag points at a chart that is not
+    # published. Without this, the bad pin only surfaces after the full ~30-min
+    # System Test matrix as an opaque "Calico not detected". Fail fast and
+    # legibly instead. See https://github.com/devantler-tech/ksail/issues/5463.
+    if: needs.changes.outputs.calico-cni == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🔍 Verify the derived tigera-operator chart version is published
+        run: |
+          set -euo pipefail
+          dockerfile="pkg/svc/installer/cni/calico/Dockerfile"
+          # Mirror version.go's chartVersion(): the chart version is the
+          # calico/node image tag (FROM docker.io/calico/node:<tag>@sha256:…).
+          version="$(sed -nE 's|.*docker\.io/calico/node:([^@[:space:]]+).*|\1|p' "$dockerfile" | head -1)"
+          if [ -z "$version" ]; then
+            echo "::error file=$dockerfile::Could not derive the calico/node tag from $dockerfile — has the FROM line format changed? Update this guard and version.go together."
+            exit 1
+          fi
+          echo "Derived Calico chart version: $version"
+
+          repo_url="https://docs.tigera.io/calico/charts"
+          helm repo add projectcalico "$repo_url" >/dev/null
+          helm repo update projectcalico >/dev/null
+
+          # The installer installs BOTH the operator chart and the CRD chart at
+          # this version (installer.go chartSpec/crdChartSpec); a bump that
+          # outpaces either chart leaves the install unresolvable.
+          status=0
+          for chart in tigera-operator projectcalico.org.v3; do
+            if helm show chart "projectcalico/$chart" --version "$version" >/dev/null 2>&1; then
+              echo "✅ projectcalico/$chart $version is published"
+            else
+              echo "::error file=$dockerfile::projectcalico/$chart has no published $version chart. The calico/node image tag was bumped ahead of the tigera-operator chart release — pin $dockerfile to a calico/node tag whose matching chart is published at $repo_url (the calico/node tag must equal the chart version)."
+              status=1
+            fi
+          done
+          exit "$status"
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1533,6 +1593,7 @@ jobs:
         operator-chart-lint,
         operator-chart-e2e,
         verify-desktop-tidy,
+        validate-calico-chart,
       ]
     if: ${{ always() }}
     steps:
@@ -1560,3 +1621,4 @@ jobs:
             ${{ needs.operator-chart-lint.result }}
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.verify-desktop-tidy.result }}
+            ${{ needs.validate-calico-chart.result }}
