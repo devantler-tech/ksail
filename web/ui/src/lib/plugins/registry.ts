@@ -1,8 +1,8 @@
 // The extension registry is KSail's native home for UI extensions. Both KSail-native extensions and
 // (via the Headlamp-compat pluginLib) third-party Headlamp plugins register into this one registry, so
 // the rest of the SPA renders extensions without knowing their origin. This is the "native registry +
-// Headlamp-compat facade" design from docs/BEST-KUBERNETES-UI-PLAN.md: pluginLib.ts adapts Headlamp's
-// register*() call shapes onto the methods here.
+// Headlamp-compat facade" design: pluginLib.ts adapts Headlamp's register*() call shapes onto the
+// methods here.
 //
 // Rendering status today: sidebar entries, routes, and details-view sections are rendered by the SPA;
 // app-bar actions and table-column processors are accepted (so a plugin calling them does not crash)
