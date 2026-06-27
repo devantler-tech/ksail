@@ -47,14 +47,22 @@ export interface WatchEvent {
 
 // kubeObjectKey derives a stable identity for a watched object: metadata.uid when present, else
 // "namespace/name" (cluster-scoped objects have no namespace, yielding "/name"). It is the key both
-// ADDED/MODIFIED upserts and DELETED removals match on, so an update replaces the right row.
-export function kubeObjectKey(object: RawKubeObject): string {
+// ADDED/MODIFIED upserts and DELETED removals match on, so an update replaces the right row. Returns
+// null for an object with neither a uid nor a name: such a frame cannot be keyed, so the caller skips
+// it rather than aliasing it to a degenerate "/" key (a single malformed frame must not corrupt the
+// list — mirroring decodeWatchEvent's skip-don't-crash contract).
+export function kubeObjectKey(object: RawKubeObject): string | null {
   const uid = object.metadata?.uid;
   if (uid) {
     return uid;
   }
 
-  return `${object.metadata?.namespace ?? ""}/${object.metadata?.name ?? ""}`;
+  const name = object.metadata?.name;
+  if (!name) {
+    return null;
+  }
+
+  return `${object.metadata?.namespace ?? ""}/${name}`;
 }
 
 // watchStreamURL builds the same-origin SSE URL for watching an apiserver collection. It mirrors
@@ -64,7 +72,10 @@ export function kubeObjectKey(object: RawKubeObject): string {
 // see kubewatch.go). Passing the same selector as the list keeps watch upserts scoped to the listed set.
 export function watchStreamURL(namespace: string, name: string, listPath: string, query = ""): string {
   const base = `/api/v1/clusters/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`;
-  const suffix = query ? `?${query}` : "";
+  // Callers pass a bare selector query without a leading '?' (see listSelectorQuery); strip one
+  // defensively so a caller that includes it cannot produce a malformed "??…" suffix.
+  const normalizedQuery = query.replace(/^\?+/, "");
+  const suffix = normalizedQuery ? `?${normalizedQuery}` : "";
 
   return `${base}/watch/${listPath.replace(/^\//, "")}${suffix}`;
 }

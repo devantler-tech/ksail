@@ -59,7 +59,9 @@ export interface WatchBinding<T> {
   toItem: (raw: RawKubeObject) => T;
   // keyOf derives the stable identity (uid, fallback namespace/name) an upsert/remove matches on. The
   // fetcher's items and watched items must key identically so a MODIFIED replaces the listed row.
-  keyOf: (item: T) => string;
+  // Returns null for an unkeyable item (no uid, no name); applyWatchEvent compares against a non-null
+  // event key, so a null-keyed row never matches and is left untouched.
+  keyOf: (item: T) => string | null;
 }
 
 // applyWatchEvent returns the next items array after applying one watch event: ADDED/MODIFIED upsert the
@@ -67,6 +69,11 @@ export interface WatchBinding<T> {
 // leave the list unchanged. Pure so it composes inside a setItems updater.
 function applyWatchEvent<T>(items: T[], event: WatchEvent, binding: WatchBinding<T>): T[] {
   const key = kubeObjectKey(event.object);
+  // An object with neither uid nor name cannot be matched to a row; skip the event rather than alias
+  // it to a degenerate key, preserving the stream's "one bad frame never corrupts the list" contract.
+  if (key === null) {
+    return items;
+  }
 
   if (event.type === "DELETED") {
     return items.filter((item) => binding.keyOf(item) !== key);
