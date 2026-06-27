@@ -336,6 +336,8 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 	}
 
 	m.mu.Lock()
+
+	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
 	m.settings.Editor = next.Editor
 
 	if next.ChatModel == "" && next.ChatReasoningEffort == "" {
@@ -348,11 +350,16 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 	}
 
 	saveErr := saveSettings(m.settings)
-	m.mu.Unlock()
-
 	if saveErr != nil {
+		// Roll back the in-memory mutation so a failed persist doesn't leave rejected values live (a
+		// later successful write would otherwise commit them).
+		m.settings.Editor, m.settings.Chat = prevEditor, prevChat
+		m.mu.Unlock()
+
 		return saveErr
 	}
+
+	m.mu.Unlock()
 
 	return m.Overlay()
 }

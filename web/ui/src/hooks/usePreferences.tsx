@@ -67,10 +67,45 @@ function readStored(): Preferences {
       return { ...DEFAULT_PREFERENCES };
     }
 
-    return { ...DEFAULT_PREFERENCES, ...parsed };
+    return normalizePreferences(parsed);
   } catch {
     return { ...DEFAULT_PREFERENCES };
   }
+}
+
+// normalizePreferences validates each persisted field, falling back to the default per-field so a stale
+// or hand-edited blob (e.g. {"rowsPerPage":"all"}) can't push an invalid value into pagination/delete
+// behavior. JSON.parse only guarantees shape, not that values match the field types.
+function normalizePreferences(parsed: Partial<Preferences>): Preferences {
+  const next = { ...DEFAULT_PREFERENCES };
+
+  if (
+    typeof parsed.rowsPerPage === "number" &&
+    Number.isInteger(parsed.rowsPerPage) &&
+    parsed.rowsPerPage >= 0
+  ) {
+    next.rowsPerPage = parsed.rowsPerPage;
+  }
+  if (parsed.timeFormat === "relative" || parsed.timeFormat === "absolute") {
+    next.timeFormat = parsed.timeFormat;
+  }
+  if (parsed.dateStyle === "locale" || parsed.dateStyle === "iso") {
+    next.dateStyle = parsed.dateStyle;
+  }
+  if (parsed.timeZone === "local" || parsed.timeZone === "utc") {
+    next.timeZone = parsed.timeZone;
+  }
+  if (typeof parsed.defaultNamespace === "string") {
+    next.defaultNamespace = parsed.defaultNamespace;
+  }
+  if (typeof parsed.confirmDestructive === "boolean") {
+    next.confirmDestructive = parsed.confirmDestructive;
+  }
+  if (parsed.detailFormat === "yaml" || parsed.detailFormat === "json") {
+    next.detailFormat = parsed.detailFormat;
+  }
+
+  return next;
 }
 
 function writeStored(prefs: Preferences): void {
