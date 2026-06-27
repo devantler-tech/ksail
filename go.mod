@@ -59,11 +59,11 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cli/go-gh/v2 v2.13.0
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/cosi-project/runtime v1.16.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/github/copilot-sdk/go v1.0.2
+	github.com/github/copilot-sdk/go v1.0.4
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/go-github/v72 v72.0.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
