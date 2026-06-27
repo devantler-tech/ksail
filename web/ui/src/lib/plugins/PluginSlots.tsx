@@ -39,17 +39,41 @@ function isDarkMode(): boolean {
   return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 }
 
-// buildPluginTheme creates an MUI theme carrying Headlamp's `chartStyles` palette augmentation, which the
-// Flux Overview (and other plugins) read via useTheme().palette.chartStyles — without it those reads
-// throw. The values mirror Headlamp's light/dark chartStyles.
+// KSAIL_FONT mirrors Tailwind's default sans stack (KSail sets no custom font), so MUI-rendered plugin
+// text matches KSail's typography instead of MUI's Roboto default.
+const KSAIL_FONT =
+  'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
+
+// buildPluginTheme creates an MUI theme matching KSail's design tokens — the Tailwind slate/blue palette,
+// an 8px radius, and KSail's font — so MUI-rendered plugin chrome (Paper/Card/Button/Typography) blends
+// into KSail's UI instead of reading as default Material. MuiPaper's dark elevation overlay is removed so
+// plugin cards stay flat like KSail's. It also carries Headlamp's `chartStyles` palette augmentation,
+// which the Flux Overview reads via useTheme().palette.chartStyles (absent it, those reads throw).
 function buildPluginTheme(muiStyles: MuiStylesShape, dark: boolean): unknown {
   return muiStyles.createTheme?.({
-    palette: {
-      mode: dark ? "dark" : "light",
-      chartStyles: dark
-        ? { defaultFillColor: "rgba(20, 20, 20, 0.1)", fillColor: "#929191", labelColor: "#fff" }
-        : { defaultFillColor: "rgba(0, 0, 0, 0.08)", labelColor: "#000" },
+    shape: { borderRadius: 8 },
+    typography: { fontFamily: KSAIL_FONT },
+    components: {
+      // Flatten Paper so MUI cards match KSail's flat surfaces (no dark-mode elevation tint).
+      MuiPaper: { styleOverrides: { root: { backgroundImage: "none" } } },
     },
+    palette: dark
+      ? {
+          mode: "dark",
+          primary: { main: "#3b82f6" }, // blue-500
+          background: { default: "#0f172a", paper: "#0f172a" }, // slate-900
+          text: { primary: "#f8fafc", secondary: "#94a3b8" }, // slate-50 / slate-400
+          divider: "#1e293b", // slate-800
+          chartStyles: { defaultFillColor: "rgba(20, 20, 20, 0.1)", fillColor: "#475569", labelColor: "#f8fafc" },
+        }
+      : {
+          mode: "light",
+          primary: { main: "#2563eb" }, // blue-600
+          background: { default: "#ffffff", paper: "#ffffff" },
+          text: { primary: "#0f172a", secondary: "#475569" }, // slate-900 / slate-600
+          divider: "#e2e8f0", // slate-200
+          chartStyles: { defaultFillColor: "rgba(0, 0, 0, 0.08)", fillColor: "#cbd5e1", labelColor: "#0f172a" },
+        },
   });
 }
 

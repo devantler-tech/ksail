@@ -59,11 +59,14 @@ export function kubeObjectKey(object: RawKubeObject): string {
 
 // watchStreamURL builds the same-origin SSE URL for watching an apiserver collection. It mirrors
 // proxyList's URL (the kube-proxy GET) with /proxy swapped for /watch, so the watch observes exactly the
-// collection the initial fetch listed. watch=true is forced server-side, so no query is needed here.
-export function watchStreamURL(namespace: string, name: string, listPath: string): string {
+// collection the initial fetch listed — including any label/field selector `query` (without a leading
+// '?'), which the watch handler relays to the apiserver (it forces watch=true while preserving selectors,
+// see kubewatch.go). Passing the same selector as the list keeps watch upserts scoped to the listed set.
+export function watchStreamURL(namespace: string, name: string, listPath: string, query = ""): string {
   const base = `/api/v1/clusters/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`;
+  const suffix = query ? `?${query}` : "";
 
-  return `${base}/watch/${listPath.replace(/^\//, "")}`;
+  return `${base}/watch/${listPath.replace(/^\//, "")}${suffix}`;
 }
 
 // WatchStreamHandlers are the callbacks watchStream invokes as events arrive. onEvent fires once per
