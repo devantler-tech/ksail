@@ -106,9 +106,9 @@ func TestModifyKubeconfigCluster_CanonicalizeError(t *testing.T) {
 	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
 	// The parent ("file") is a regular file, so resolving "file/config" fails
 	// with ENOTDIR (not IsNotExist) inside EvalCanonicalPath.
-	badPath := filepath.Join(notADir, "config")
+	pathWithFileParent := filepath.Join(notADir, "config")
 
-	err := k8s.ModifyKubeconfigCluster(badPath, "cluster-a", "https://x:6443")
+	err := k8s.ModifyKubeconfigCluster(pathWithFileParent, "cluster-a", "https://x:6443")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "canonicalize kubeconfig path")
