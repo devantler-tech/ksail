@@ -16,9 +16,11 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as ReactJSX from "react/jsx-runtime";
 import { listResources } from "../../api.ts";
-import { CommonComponents, type CommonComponentsShape } from "./commonComponents.tsx";
-import { makeResourceClasses, type ResourceClasses } from "./k8s.ts";
-import { registry, type PluginResource, type RouteProps } from "./registry.ts";
+import { CommonComponents, localeDate, timeAgo, type CommonComponentsShape } from "./commonComponents.tsx";
+import { renderPluginIcon } from "./pluginIcon.ts";
+import { KubeObject, makeResourceClasses, setActiveCluster, type ResourceClasses } from "./k8s.ts";
+import { apiFactory, apiFactoryWithNamespace, makeCustomResourceClass } from "./makeCustomResourceClass.ts";
+import { registry, type PluginResource, type RouteProps, type SidebarEntryFilter } from "./registry.ts";
 import { useClusterScopedList } from "./useClusterScopedList.ts";
 import { WebSocketManager } from "./wsMultiplexer.ts";
 
@@ -43,6 +45,8 @@ interface HeadlampRoute {
   path: string;
   component: React.ComponentType<RouteProps>;
   name?: string;
+  // sidebar is the id of the sidebar entry kept highlighted while this route is active (Headlamp parity).
+  sidebar?: string;
 }
 
 // A details-view section is the modern Headlamp shape: a component rendered with the resource as a
@@ -60,6 +64,7 @@ export interface PluginLib {
   // and never hit this — a real bundle did).
   ReactJSX: typeof ReactJSX;
   registerSidebarEntry: (entry: HeadlampSidebarEntry) => void;
+  registerSidebarEntryFilter: (filter: SidebarEntryFilter) => void;
   registerRoute: (route: HeadlampRoute) => void;
   registerDetailsViewSection: (section: DetailsSectionComponent) => void;
   registerAppBarAction: (action: React.ReactNode | React.ComponentType) => void;
@@ -94,12 +99,25 @@ export interface PluginLib {
   ReactRouter?: unknown;
   Lodash?: unknown;
   Iconify?: unknown;
+  // Router is the Headlamp routing namespace (createRouteURL/getRoute/getRoutePath), installed by
+  // installCompatStubs and read by CommonComponents.Link; typed loosely as it is a compat surface.
+  Router?: unknown;
   Notification: (message: string, ...rest: unknown[]) => void;
 }
 
 interface K8sShim {
   useResourceList: (kind: string, namespace?: string) => [PluginResource[], Error | null];
   ResourceClasses: ResourceClasses;
+  // KubeObject + the CRD factories let a plugin that does not subclass directly mint custom-resource
+  // classes (Headlamp's K8s.KubeObject / K8s.makeCustomResourceClass / K8s.apiFactory surface).
+  KubeObject: typeof KubeObject;
+  makeCustomResourceClass: typeof makeCustomResourceClass;
+  apiFactory: typeof apiFactory;
+  apiFactoryWithNamespace: typeof apiFactoryWithNamespace;
+  // cluster mirrors Headlamp's lib/k8s/cluster module: real plugins import `KubeObject` from there
+  // (`pluginLib.K8s.cluster.KubeObject`) to subclass it for their CRD types — read at plugin load, so it
+  // must exist or the bundle crashes.
+  cluster: { KubeObject: typeof KubeObject; KubeObjectClass: typeof KubeObject };
 }
 
 interface ApiProxyShim {
@@ -130,21 +148,53 @@ function nextId(prefix: string): string {
   return `${prefix}-${autoId}`;
 }
 
+// fillRouteParams substitutes :param segments in a route path from params — the createRouteURL fallback
+// for when react-router's generatePath is not yet on window.pluginLib. A param with no value is left as
+// the literal segment.
+function fillRouteParams(path: string, params?: Record<string, string>): string {
+  if (!params) {
+    return path;
+  }
+
+  return path.replace(/:([A-Za-z0-9_]+)\??/g, (whole, key: string) =>
+    params[key] === undefined ? whole : encodeURIComponent(params[key]),
+  );
+}
+
 // installPluginLib assigns window.pluginLib once, wiring the Headlamp register*() surface onto the
 // native registry and the K8s shim onto KSail's cluster-scoped resource API. getCluster is read live
 // on each data fetch so the shim follows the active cluster.
 export function installPluginLib(getCluster: () => ClusterRef | null): void {
+  // The KubeObject statics (apiList/useList) read the active cluster through a module-level getter; set
+  // it from the loader's live getter so a plugin's `Kustomization.apiList(...)` follows the active cluster.
+  setActiveCluster(getCluster);
+
   const registerSidebarEntry = (entry: HeadlampSidebarEntry): void => {
     registry.registerSidebarEntry({
       id: entry.name,
       label: entry.label,
-      route: entry.url ?? entry.name,
-      icon: entry.icon,
+      // A group header (e.g. Flux's `parent: null` "Flux" entry) carries no url — leave route undefined
+      // so it renders as a non-navigable collapsible group rather than a dead link.
+      route: entry.url,
+      // Headlamp's sidebar icon is often a plain icon-name string (e.g. "simple-icons:flux"); wrap it in
+      // the @iconify/react Icon so the sidebar shows the plugin's logo, not the literal name as text.
+      icon: renderPluginIcon(entry.icon),
+      // Headlamp passes `parent: null` for a top-level entry; normalize to undefined.
+      parent: entry.parent ?? undefined,
     });
   };
 
   const registerRoute = (route: HeadlampRoute): void => {
-    registry.registerRoute({ path: route.path, component: route.component });
+    registry.registerRoute({
+      path: route.path,
+      component: route.component,
+      sidebar: route.sidebar,
+      name: route.name,
+    });
+  };
+
+  const registerSidebarEntryFilter = (filter: SidebarEntryFilter): void => {
+    registry.registerSidebarEntryFilter(filter);
   };
 
   const registerDetailsViewSection = (section: DetailsSectionComponent): void => {
@@ -159,6 +209,7 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
     ReactDOM,
     ReactJSX,
     registerSidebarEntry,
+    registerSidebarEntryFilter,
     registerRoute,
     registerDetailsViewSection,
     registerAppBarAction: (action) => {
@@ -239,7 +290,6 @@ const UNSUPPORTED_REGISTRATIONS = [
   "registerOverviewChartsProcessor",
   "registerPluginSettings",
   "registerRouteFilter",
-  "registerSidebarEntryFilter",
   "registerUIPanel",
   "registerAddClusterProvider",
   "registerClusterProviderDialog",
@@ -263,20 +313,105 @@ function installCompatStubs(lib: PluginLib): void {
     compat[name] = noop;
   }
 
-  // Router URL helpers — return a harmless hash anchor so a plugin building a link does not break.
+  // Router URL helpers backed by the registered plugin routes. createRouteURL resolves a Headlamp route
+  // name to its URL (filling `:param` segments), so a plugin's `<Link to={Router.createRouteURL('source',
+  // {namespace, name})}>` produces a real path the persistent plugin router (PluginRouterHost) matches.
+  // generatePath is read off the lazily-loaded react-router (present once a plugin has loaded); a manual
+  // fill is the fallback. An unknown route name returns "#" so a stray link is inert rather than throwing.
   compat.Router = {
-    createRouteURL: (): string => "#",
-    getRoute: (): null => null,
-    getRoutePath: (): string => "#",
+    createRouteURL: (name: string, params?: Record<string, string>): string => {
+      const route = registry.getRouteByName(name);
+      if (!route) {
+        return "#";
+      }
+
+      const reactRouter = window.pluginLib?.ReactRouter as
+        | { generatePath?: (path: string, params?: Record<string, string>) => string }
+        | undefined;
+      if (reactRouter?.generatePath) {
+        try {
+          return reactRouter.generatePath(route.path, params ?? {});
+        } catch {
+          // Fall through to the manual fill below.
+        }
+      }
+
+      return fillRouteParams(route.path, params);
+    },
+    getRoute: (name: string): unknown => registry.getRouteByName(name) ?? null,
+    getRoutePath: (name: string): string => registry.getRouteByName(name)?.path ?? "#",
   };
 
-  // Namespaces a plugin may import (and subclass, for Plugin) even when it never exercises behaviour KSail
-  // does not implement — exposed as empty objects / base classes so the import resolves.
-  compat.Utils = {};
+  // Utils is Headlamp's lib/util surface. KSail provides the read helpers plugins commonly call:
+  // getCluster (the active cluster name), useFilterFunc (a no-op pass-through filter hook — KSail does not
+  // drive Headlamp's search/namespace filter state), and the locale/relative date formatters. Unknown
+  // filter helpers default to "keep".
+  compat.Utils = {
+    getCluster: (): string | null => lib.Headlamp.getCluster(),
+    getClusterPrefixedPath: (path?: string): string => path ?? "/",
+    useFilterFunc:
+      () =>
+      (): boolean =>
+        true,
+    localeDate: (date: unknown): string => localeDate(date),
+    timeAgo: (date: unknown): string => timeAgo(date),
+    filterResource: (): boolean => true,
+    filterGeneric: (): boolean => true,
+  };
   compat.Plugin = class {};
   compat.Activity = {};
-  compat.ConfigStore = class {};
+  // ConfigStore is Headlamp's per-plugin settings store. Real plugins construct one at load
+  // (`new ConfigStore('@headlamp-k8s/flux')`) and read it during render (`store.get()`, the
+  // `store.useConfig()()` hook), so an empty class throws "get is not a function". KSail backs it with
+  // localStorage so plugin settings persist; useConfig returns a (non-reactive) hook reading the config.
+  compat.ConfigStore = class {
+    private readonly storeKey: string;
+
+    constructor(name: string) {
+      this.storeKey = `ksail-plugin-config:${name}`;
+    }
+
+    get(): Record<string, unknown> {
+      try {
+        return JSON.parse(globalThis.localStorage?.getItem(this.storeKey) ?? "{}") as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
+
+    set(config: Record<string, unknown>): void {
+      try {
+        globalThis.localStorage?.setItem(this.storeKey, JSON.stringify(config ?? {}));
+      } catch {
+        // Storage unavailable — settings simply do not persist.
+      }
+    }
+
+    update(config: Record<string, unknown>): void {
+      this.set({ ...this.get(), ...(config ?? {}) });
+    }
+
+    useConfig(): () => Record<string, unknown> {
+      return (): Record<string, unknown> => this.get();
+    }
+  };
   compat.PluginManager = {};
+
+  // Crd is Headlamp's lib/k8s/crd module: real plugins call pluginLib.Crd.makeCustomResourceClass at load
+  // to mint their CRD classes (e.g. the Flux plugin's Kustomization/HelmRelease types), so it must exist
+  // and be wired to the real factories or the bundle crashes on load.
+  compat.Crd = { makeCustomResourceClass, apiFactory, apiFactoryWithNamespace };
+
+  // Externals KSail does not bundle but a real plugin references at load (passed to its UMD factory, so
+  // they must be defined objects, not undefined): a notistack snackbar shim (action notifications no-op
+  // instead of crashing) and empty Monaco editor stubs (a plugin's YAML-editor view renders nothing
+  // rather than crashing the whole plugin).
+  compat.Notistack = {
+    useSnackbar: () => ({ enqueueSnackbar: noop, closeSnackbar: noop }),
+    SnackbarProvider: ({ children }: { children?: unknown }) => children,
+  };
+  compat.MonacoEditor = {};
+  compat.ReactMonacoEditor = { default: (): null => null, Editor: (): null => null };
 
   // Misc top-level helpers from the lib's registry export.
   compat.clusterAction = noop;
@@ -304,6 +439,11 @@ function makeK8sShim(getCluster: () => ClusterRef | null): K8sShim {
         [kind, namespace],
       );
     },
-    ResourceClasses: makeResourceClasses(getCluster),
+    ResourceClasses: makeResourceClasses(),
+    KubeObject,
+    makeCustomResourceClass,
+    apiFactory,
+    apiFactoryWithNamespace,
+    cluster: { KubeObject, KubeObjectClass: KubeObject },
   };
 }

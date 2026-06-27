@@ -1,5 +1,5 @@
 import { Moon, Plus, RotateCw, Server, Sun } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createCluster,
@@ -30,7 +30,7 @@ import { CommandPalette, type Command } from "./components/CommandPalette.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
 import { PluginsView } from "./components/PluginsView.tsx";
 import { AIAssistant } from "./components/AIAssistant.tsx";
-import { PluginRouteHost } from "./lib/plugins/PluginSlots.tsx";
+import { pluginNavigate } from "./lib/plugins/pluginNavigation.ts";
 import { registry } from "./lib/plugins/registry.ts";
 import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
 import { setKubeWatchAvailable } from "./lib/plugins/watchStream.ts";
@@ -58,6 +58,13 @@ import { useToast } from "./components/Toast.tsx";
 // in-cluster); the local `ksail open web` backend advertises everything it can create locally. The
 // provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
+
+// PluginRouterHost is lazy-loaded so react-router (and the plugin router machinery) only download when a
+// plugin surface is opened — keeping KSail's main bundle free of react-router until a plugin needs it,
+// matching the lazy-externals approach for MUI/Redux.
+const PluginRouterHost = lazy(() =>
+  import("./lib/plugins/PluginRouterHost.tsx").then((module) => ({ default: module.PluginRouterHost })),
+);
 
 // capability reads one capability flag from a (possibly null/partial) Config, defaulting to
 // fullCapabilities — the value assumed for a backend that does not report capabilities (see api.ts).
@@ -163,11 +170,9 @@ export function App() {
   // installed plugins once the backend advertises the capability.
   usePluginRegistry();
   const pluginLoader = usePluginLoader(canPlugins, getCluster);
-  const pluginEntries = registry.getSidebarEntries().map((entry) => ({
-    id: entry.id,
-    label: entry.label,
-    route: entry.route,
-  }));
+  // The plugin sidebar is a parent→children tree (Headlamp plugins like Flux register a group + nested
+  // entries); getSidebarTree applies any registered sidebar filters and nests children under their parent.
+  const pluginEntries = registry.getSidebarTree();
 
   // enterCluster drills into a cluster's workspace, landing on its Overview. Used by the Clusters list,
   // deep links, and the command palette.
@@ -194,8 +199,12 @@ export function App() {
   }, []);
 
   // selectPlugin opens a plugin route; its content replaces the current view until a view is chosen.
+  // Marking the surface active mounts PluginRouterHost (seeding this route as its initial path); when the
+  // router is already mounted, pluginNavigate moves it there. The persistent router survives in-plugin
+  // navigation; choosing a KSail view (setActivePluginRoute(null)) leaves the surface.
   const selectPlugin = useCallback((route: string) => {
     setActivePluginRoute(route);
+    pluginNavigate(route);
   }, []);
 
   // Clear the cluster context when the active cluster disappears from the live list (e.g. deleted),
@@ -578,7 +587,9 @@ export function App() {
         onSelectPlugin={selectPlugin}
       >
         {activePluginRoute ? (
-          <PluginRouteHost path={activePluginRoute} clusterName={activeCluster?.metadata.name ?? null} />
+          <Suspense fallback={null}>
+            <PluginRouterHost initialPath={activePluginRoute} clusterName={activeCluster?.metadata.name ?? null} />
+          </Suspense>
         ) : view === "settings" ? (
           <SettingsPage onSaved={() => void reloadConfig()} />
         ) : view === "plugins" ? (

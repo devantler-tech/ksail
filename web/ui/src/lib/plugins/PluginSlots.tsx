@@ -3,41 +3,111 @@
 // component, and the extra sections appended to a resource's detail panel. Each plugin-rendered subtree
 // is wrapped in an error boundary so a buggy or hostile plugin cannot white-screen the app.
 
-import { Component, type ComponentType, type ErrorInfo, type ReactNode } from "react";
+import { Component, useMemo, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { registry, type PluginResource } from "./registry.ts";
 import { usePluginRegistry } from "./usePlugins.ts";
 
-// pluginStore is a minimal no-op Redux store. KSail has no Headlamp-shaped Redux state, but a plugin that
-// calls useSelector/useDispatch must run inside a react-redux <Provider> or it throws; this satisfies the
-// store contract (getState/subscribe/dispatch) so such plugins render against an empty state instead of
-// crashing. Bridging real KSail state into this store is a follow-up.
+// pluginState is the minimal Redux state a Headlamp plugin assumes the host provides. Notably
+// `filter.namespaces` is a JS Set (Headlamp's useNamespaces selects it); it is a stable module-level
+// instance so a plugin's useSelector does not see a new value each render (which would loop/warn). KSail
+// does not yet drive real state in — plugins read these defaults rather than crashing.
+const pluginState = {
+  filter: { namespaces: new Set<string>(), search: "" },
+  config: { settings: {} },
+  ui: {},
+};
+
+// pluginStore is a minimal Redux store satisfying the contract a plugin's react-redux <Provider> needs
+// (getState/subscribe/dispatch). dispatch is a no-op echo; bridging real KSail state is a follow-up.
 const pluginStore = {
-  getState: (): Record<string, unknown> => ({}),
+  getState: (): typeof pluginState => pluginState,
   subscribe: (): (() => void) => () => undefined,
   dispatch: (action: unknown): unknown => action,
 };
 
-// PluginRuntimeProviders wraps a plugin-rendered subtree in the React context real Headlamp plugins
-// assume is present: a Router (so react-router hooks such as useNavigate/useParams work) and a Redux
-// Provider (so useSelector/useDispatch work). Both come from the lazily-loaded externals on
-// window.pluginLib, present once a plugin has loaded; when one is absent the children render unwrapped.
-function PluginRuntimeProviders({ children }: { children: ReactNode }): ReactNode {
+// MuiStylesShape is the slice of @mui/material/styles (window.pluginLib.MuiStyles) PluginProviders uses
+// to build and provide the plugin theme.
+interface MuiStylesShape {
+  createTheme?: (options: unknown) => unknown;
+  ThemeProvider?: ComponentType<{ theme: unknown; children: ReactNode }>;
+  StyledEngineProvider?: ComponentType<{ injectFirst?: boolean; children: ReactNode }>;
+}
+
+// isDarkMode reads KSail's current theme from the documentElement `dark` class (Tailwind dark mode), so
+// the plugin MUI theme matches KSail's light/dark.
+function isDarkMode(): boolean {
+  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+}
+
+// buildPluginTheme creates an MUI theme carrying Headlamp's `chartStyles` palette augmentation, which the
+// Flux Overview (and other plugins) read via useTheme().palette.chartStyles — without it those reads
+// throw. The values mirror Headlamp's light/dark chartStyles.
+function buildPluginTheme(muiStyles: MuiStylesShape, dark: boolean): unknown {
+  return muiStyles.createTheme?.({
+    palette: {
+      mode: dark ? "dark" : "light",
+      chartStyles: dark
+        ? { defaultFillColor: "rgba(20, 20, 20, 0.1)", fillColor: "#929191", labelColor: "#fff" }
+        : { defaultFillColor: "rgba(0, 0, 0, 0.08)", labelColor: "#000" },
+    },
+  });
+}
+
+// PluginProviders wraps a plugin-rendered subtree in the non-router React context real Headlamp plugins
+// assume is present: a Redux Provider (so useSelector/useDispatch work). It comes from the lazily-loaded
+// react-redux external on window.pluginLib, present once a plugin has loaded; absent it renders children
+// unwrapped. The Router context is supplied separately — by the persistent PluginRouterHost for plugin
+// routes, and by PluginRuntimeProviders for the out-of-router slots below. (The MUI ThemeProvider with
+// Headlamp's chartStyles palette is layered in here too.)
+export function PluginProviders({ children }: { children: ReactNode }): ReactNode {
   const lib = typeof window === "undefined" ? undefined : window.pluginLib;
-  const router = lib?.ReactRouter as { MemoryRouter?: ComponentType<{ children: ReactNode }> } | undefined;
   const redux = lib?.ReactRedux as
     | { Provider?: ComponentType<{ store: unknown; children: ReactNode }> }
     | undefined;
+  const muiStyles = lib?.MuiStyles as MuiStylesShape | undefined;
+  const dark = isDarkMode();
+  const theme = useMemo(
+    () => (muiStyles?.createTheme ? buildPluginTheme(muiStyles, dark) : undefined),
+    [muiStyles, dark],
+  );
 
   let tree: ReactNode = children;
+
+  // MUI ThemeProvider (carrying Headlamp's chartStyles palette) so plugin components reading the theme
+  // work; StyledEngineProvider injectFirst keeps MUI's styles overridable.
+  if (theme && muiStyles?.ThemeProvider) {
+    const ThemeProvider = muiStyles.ThemeProvider;
+    let themed: ReactNode = <ThemeProvider theme={theme}>{tree}</ThemeProvider>;
+
+    if (muiStyles.StyledEngineProvider) {
+      const StyledEngineProvider = muiStyles.StyledEngineProvider;
+      themed = <StyledEngineProvider injectFirst>{themed}</StyledEngineProvider>;
+    }
+
+    tree = themed;
+  }
 
   if (redux?.Provider) {
     const Provider = redux.Provider;
     tree = <Provider store={pluginStore}>{tree}</Provider>;
   }
 
+  return tree;
+}
+
+// PluginRuntimeProviders wraps an out-of-router plugin slot (detail-view section, app-bar action) in a
+// throwaway Router plus PluginProviders, so a slot using react-router hooks or redux does not crash.
+// Plugin *routes* instead render under PluginRouterHost's single persistent router.
+function PluginRuntimeProviders({ children }: { children: ReactNode }): ReactNode {
+  const lib = typeof window === "undefined" ? undefined : window.pluginLib;
+  const router = lib?.ReactRouter as { MemoryRouter?: ComponentType<{ children: ReactNode }> } | undefined;
+
+  const tree: ReactNode = <PluginProviders>{children}</PluginProviders>;
+
   if (router?.MemoryRouter) {
     const Router = router.MemoryRouter;
-    tree = <Router>{tree}</Router>;
+
+    return <Router>{tree}</Router>;
   }
 
   return tree;
@@ -45,7 +115,7 @@ function PluginRuntimeProviders({ children }: { children: ReactNode }): ReactNod
 
 // PluginErrorBoundary isolates a plugin's rendered subtree. A throw during render surfaces a compact
 // inline notice (attributed to the plugin) instead of crashing the surrounding KSail UI.
-class PluginErrorBoundary extends Component<{ name?: string; children: ReactNode }, { error: Error | null }> {
+export class PluginErrorBoundary extends Component<{ name?: string; children: ReactNode }, { error: Error | null }> {
   constructor(props: { name?: string; children: ReactNode }) {
     super(props);
     this.state = { error: null };
@@ -117,34 +187,6 @@ export function PluginAppBarActions(): ReactNode {
   return renderExtensionList(registry.getAppBarActions(), (action) => action.render());
 }
 
-// PluginRouteHost renders the component registered for a plugin route path, scoped to the active
-// cluster, inside an error boundary. It shows a compact not-found notice when no route matches (e.g. a
-// sidebar entry whose plugin failed to register its route).
-export function PluginRouteHost({
-  path,
-  clusterName,
-}: {
-  path: string;
-  clusterName: string | null;
-}): ReactNode {
-  usePluginRegistry();
-
-  const route = registry.getRoute(path);
-  if (!route) {
-    return (
-      <div className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-        No plugin view is registered for <code className="font-mono">{path}</code>.
-      </div>
-    );
-  }
-
-  const RouteComponent = route.component;
-
-  return (
-    <PluginErrorBoundary name={route.pluginName}>
-      <PluginRuntimeProviders>
-        <RouteComponent clusterName={clusterName} />
-      </PluginRuntimeProviders>
-    </PluginErrorBoundary>
-  );
-}
+// Plugin *routes* render under the single persistent router in PluginRouterHost.tsx (which reuses the
+// PluginErrorBoundary + PluginProviders exported above); the per-route host that used to live here was
+// replaced so in-plugin navigation, param routes, and the route↔sidebar highlight work.

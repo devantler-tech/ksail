@@ -1,21 +1,40 @@
 import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
-import { Lock, LogOut, Menu as MenuIcon, Moon, Puzzle, Search, Sun } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, LogOut, Menu as MenuIcon, Moon, Puzzle, Search, Sun } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
 import { clusterViews, globalViews, viewTitle, type RegisteredView, type View, type ViewGates } from "../lib/views.tsx";
 import { PluginAppBarActions } from "../lib/plugins/PluginSlots.tsx";
+import { activeSidebarId } from "../lib/plugins/pluginNavigation.ts";
+import type { SidebarNode } from "../lib/plugins/registry.ts";
+import { usePluginLocation } from "../lib/plugins/usePlugins.ts";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
 import { IconButton } from "./ui.tsx";
 
-// PluginNavEntry is a plugin-contributed sidebar item (rendered in the Plugins nav zone). It carries
-// the route the entry navigates to and a stable id/label; the icon is uniform (a puzzle piece) so the
-// zone reads as plugin-provided.
-export interface PluginNavEntry {
-  id: string;
-  label: string;
-  route: string;
+// Plugin-contributed sidebar items render from the registry's SidebarNode tree (a parent group with
+// nested children, e.g. the Flux plugin's "Flux" group). The icon is uniform (a puzzle piece) so the
+// zone reads as plugin-provided. PluginNavTree/PluginNavGroup below render it.
+
+// findPluginLabel returns the label of the tree entry (root or child) with the given id, for the header
+// title when a plugin route is active.
+function findPluginLabel(entries: readonly SidebarNode[], id: string | null): string | undefined {
+  if (!id) {
+    return undefined;
+  }
+
+  for (const node of entries) {
+    if (node.id === id) {
+      return node.label;
+    }
+
+    const child = node.children.find((candidate) => candidate.id === id);
+    if (child) {
+      return child.label;
+    }
+  }
+
+  return undefined;
 }
 
 // isMacLike picks the platform-appropriate shortcut hint for the search button (the handler accepts
@@ -55,6 +74,96 @@ function SectionLabel({ children }: { children: ReactNode }) {
     <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
       {children}
     </div>
+  );
+}
+
+// PluginNavGroup renders a collapsible parent group (e.g. the Flux plugin's "Flux") with its child nav
+// items indented beneath. Expanded by default; also forced open while one of its children is active.
+function PluginNavGroup({
+  node,
+  activeId,
+  onPick,
+}: {
+  node: SidebarNode;
+  activeId: string | null;
+  onPick: (route: string) => void;
+}) {
+  const childActive = node.children.some((child) => child.id === activeId);
+  const [open, setOpen] = useState(true);
+  const expanded = open || childActive;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
+      >
+        {expanded ? (
+          <ChevronDown className="size-4 shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="size-4 shrink-0" aria-hidden />
+        )}
+        {node.icon ? (
+          <span className="flex size-4 shrink-0 items-center justify-center">{node.icon}</span>
+        ) : (
+          <Puzzle className="size-4 shrink-0" aria-hidden />
+        )}
+        <span className="truncate">{node.label}</span>
+      </button>
+      {expanded ? (
+        <div className="mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-800">
+          {node.children.map((child) =>
+            child.route === undefined ? null : (
+              <NavItem
+                key={child.id}
+                icon={<span className="size-4" aria-hidden />}
+                label={child.label}
+                active={activeId === child.id}
+                onClick={() => onPick(child.route as string)}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// PluginNavTree renders the plugin sidebar forest: a collapsible group per parent entry, and a flat
+// NavItem per top-level leaf (KSail's existing single-entry plugins keep rendering unchanged).
+function PluginNavTree({
+  entries,
+  activeId,
+  onPick,
+}: {
+  entries: readonly SidebarNode[];
+  activeId: string | null;
+  onPick: (route: string) => void;
+}) {
+  return (
+    <>
+      {entries.map((node) =>
+        node.children.length > 0 ? (
+          <PluginNavGroup key={node.id} node={node} activeId={activeId} onPick={onPick} />
+        ) : node.route === undefined ? null : (
+          <NavItem
+            key={node.id}
+            icon={
+              node.icon ? (
+                <span className="flex size-4 items-center justify-center">{node.icon}</span>
+              ) : (
+                <Puzzle className="size-4" aria-hidden />
+              )
+            }
+            label={node.label}
+            active={activeId === node.id}
+            onClick={() => onPick(node.route as string)}
+          />
+        ),
+      )}
+    </>
   );
 }
 
@@ -110,14 +219,21 @@ export function AppShell({
   surfaceLabel: string;
   onOpenCommandPalette?: () => void;
   headerActions?: ReactNode;
-  // pluginEntries are plugin-contributed sidebar items; activePluginRoute marks which one (if any) is
-  // open so its content renders in place of a view; onSelectPlugin navigates to a plugin route.
-  pluginEntries?: PluginNavEntry[];
+  // pluginEntries is the plugin sidebar tree (parent groups + children); activePluginRoute marks that the
+  // plugin surface is open (its content renders in place of a view); onSelectPlugin navigates to a leaf's
+  // route. The highlighted item + header title come from the live plugin-router location, not this prop.
+  pluginEntries?: SidebarNode[];
   activePluginRoute?: string | null;
   onSelectPlugin?: (route: string) => void;
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // The active plugin sidebar item + header title follow the live plugin-router location (so an in-plugin
+  // <Link> to a detail page still highlights the right section). activeSidebarId maps the current plugin
+  // location to a sidebar entry id via the matched route's `sidebar`; null when no plugin surface is open.
+  const pluginLocation = usePluginLocation();
+  const activePluginId = activePluginRoute ? activeSidebarId(pluginLocation) : null;
 
   // gates feed the registry's per-view availability predicates. AppShell only ever shows the cluster
   // zone when a cluster is active (see navContent), so the cluster-scope gate is always satisfied here.
@@ -130,10 +246,8 @@ export function AppShell({
     aiChatEnabled,
   };
 
-  // headerTitle shows the active plugin route's label when one is open, else the current view's title.
-  const activePluginLabel = activePluginRoute
-    ? pluginEntries?.find((entry) => entry.route === activePluginRoute)?.label
-    : undefined;
+  // headerTitle shows the active plugin entry's label when the plugin surface is open, else the view's.
+  const activePluginLabel = activePluginRoute ? findPluginLabel(pluginEntries ?? [], activePluginId) : undefined;
   const headerTitle = activePluginLabel ?? viewTitle(view);
 
   // renderNav renders the enabled views from one registry partition (cluster or global), in registry
@@ -175,15 +289,7 @@ export function AppShell({
         <>
           <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
           <SectionLabel>Plugins</SectionLabel>
-          {pluginEntries.map((entry) => (
-            <NavItem
-              key={entry.id}
-              icon={<Puzzle className="size-4" aria-hidden />}
-              label={entry.label}
-              active={activePluginRoute === entry.route}
-              onClick={() => onPickPlugin(entry.route)}
-            />
-          ))}
+          <PluginNavTree entries={pluginEntries} activeId={activePluginId} onPick={onPickPlugin} />
         </>
       ) : null}
     </nav>

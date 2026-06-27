@@ -11,19 +11,37 @@
 
 import type { ComponentType, ReactNode } from "react";
 
-// SidebarEntry is a plugin-contributed nav item shown in the AppShell's Plugins zone. Clicking it
-// navigates to its route (a registerRoute with the same `route` path renders the content).
+// SidebarEntry is a plugin-contributed nav item shown in the AppShell's Plugins zone. A leaf entry
+// navigates to its route (a registerRoute with the same `route` path renders the content); a group
+// header (Headlamp's `parent: null` entry with no `url`, e.g. "Flux") has no route and only nests its
+// children.
 export interface SidebarEntry {
   // id is the entry's stable identity (Headlamp's sidebar `name`).
   id: string;
   label: string;
   // route is the path the entry navigates to (Headlamp's `url`); a matching PluginRoute renders it.
-  route: string;
+  // Optional: a group header has no route (it only expands/collapses its children).
+  route?: string;
   // icon is an optional React node (an inline <svg> or an icon element); a default is shown if absent.
   icon?: ReactNode;
+  // parent is the id (Headlamp `name`) of the entry this one nests under (Headlamp's `parent`); a
+  // top-level entry/group has none. The nested Flux sidebar uses a parent group + children.
+  parent?: string;
   // pluginName attributes the entry to the plugin that registered it (set by the loader).
   pluginName?: string;
 }
+
+// SidebarNode is a sidebar entry with its resolved children — the shape getSidebarTree() yields for the
+// AppShell to render nested groups.
+export interface SidebarNode extends SidebarEntry {
+  children: SidebarEntry[];
+}
+
+// SidebarEntryFilter is a plugin-registered predicate (Headlamp's registerSidebarEntryFilter) that hides
+// entries when it returns a falsy value (e.g. the Flux plugin hides its children when Flux is not
+// installed). It receives the entry in a Headlamp-compatible shape (`name` aliases `id`, `url` aliases
+// `route`).
+export type SidebarEntryFilter = (entry: SidebarEntry & { name: string; url?: string }) => unknown;
 
 // RouteProps are passed to a plugin route's component so it can scope its data to the active cluster.
 export interface RouteProps {
@@ -31,10 +49,14 @@ export interface RouteProps {
   clusterName: string | null;
 }
 
-// PluginRoute renders a component for a sidebar entry's `route` path.
+// PluginRoute renders a component for a route path. `sidebar` is the id of the sidebar entry to keep
+// highlighted while the route is active (Headlamp's route `sidebar`), so a detail route under a section
+// still highlights that section; `name` is the route's stable name used by createRouteURL/getRoute.
 export interface PluginRoute {
   path: string;
   component: ComponentType<RouteProps>;
+  sidebar?: string;
+  name?: string;
   pluginName?: string;
 }
 
@@ -78,6 +100,7 @@ type Listener = () => void;
 // when the set changes, so React surfaces re-render through useSyncExternalStore without snapshot churn.
 class ExtensionRegistry {
   private sidebarEntries: SidebarEntry[] = [];
+  private sidebarFilters: SidebarEntryFilter[] = [];
   private routes = new Map<string, PluginRoute>();
   private detailsSections: DetailsViewSection[] = [];
   private appBarActions: AppBarAction[] = [];
@@ -96,6 +119,11 @@ class ExtensionRegistry {
   registerSidebarEntry(entry: SidebarEntry): void {
     const next = { ...entry, pluginName: entry.pluginName ?? this.pluginContext };
     this.sidebarEntries = [...this.sidebarEntries.filter((existing) => existing.id !== entry.id), next];
+    this.bump();
+  }
+
+  registerSidebarEntryFilter(filter: SidebarEntryFilter): void {
+    this.sidebarFilters = [...this.sidebarFilters, filter];
     this.bump();
   }
 
@@ -129,8 +157,63 @@ class ExtensionRegistry {
     return this.sidebarEntries;
   }
 
+  // getSidebarTree returns the visible sidebar entries as a parent→children forest: registered filters
+  // are applied first (a hidden entry never produces an empty group), then each entry with a known
+  // `parent` nests under it; entries with no parent (or an unknown one) become roots. Registration order
+  // is preserved at every level, so the rendered nav matches the plugin's declaration order.
+  getSidebarTree(): SidebarNode[] {
+    const visible = this.sidebarEntries.filter((entry) => this.passesFilters(entry));
+    const nodes: SidebarNode[] = visible.map((entry) => ({ ...entry, children: [] }));
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const roots: SidebarNode[] = [];
+
+    for (const node of nodes) {
+      const parent = node.parent ? byId.get(node.parent) : undefined;
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    return roots;
+  }
+
   getRoute(path: string): PluginRoute | undefined {
     return this.routes.get(path);
+  }
+
+  // getRoutes returns every registered route, for the plugin router host to build its <Routes>.
+  getRoutes(): readonly PluginRoute[] {
+    return [...this.routes.values()];
+  }
+
+  // getRouteByName finds a route by its Headlamp route `name` (used by Router.createRouteURL/getRoute).
+  getRouteByName(name: string): PluginRoute | undefined {
+    for (const route of this.routes.values()) {
+      if (route.name === name) {
+        return route;
+      }
+    }
+
+    return undefined;
+  }
+
+  // passesFilters runs every registered sidebar filter against an entry (in Headlamp shape, `name`
+  // aliasing `id`); the entry is hidden if any filter returns falsy. A throwing filter is ignored (it
+  // never hides an entry), so a buggy plugin filter cannot blank the sidebar.
+  private passesFilters(entry: SidebarEntry): boolean {
+    for (const filter of this.sidebarFilters) {
+      try {
+        if (!filter({ ...entry, name: entry.id, url: entry.route })) {
+          return false;
+        }
+      } catch {
+        // A filter that throws does not hide the entry.
+      }
+    }
+
+    return true;
   }
 
   getDetailsSections(): readonly DetailsViewSection[] {
@@ -159,6 +242,7 @@ class ExtensionRegistry {
   // current installed set rather than accumulating duplicates across reloads.
   reset(): void {
     this.sidebarEntries = [];
+    this.sidebarFilters = [];
     this.routes = new Map();
     this.detailsSections = [];
     this.appBarActions = [];

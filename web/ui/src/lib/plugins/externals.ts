@@ -10,6 +10,8 @@
 // works (the component/hook surfaces are stable), but deep version-specific usage may need per-plugin
 // checks. This is the unavoidable cost of running plugins on KSail's React 19 rather than Headlamp's 18.
 
+import { makeReactRouterV5Compat, type ReactRouterCompatInput } from "./reactRouterCompat.ts";
+
 // installPluginExternals augments window.pluginLib with the lazy externals. It is idempotent: it returns
 // early once MuiMaterial is present, so repeated plugin (re)loads do not re-import the chunks.
 export async function installPluginExternals(): Promise<void> {
@@ -28,12 +30,40 @@ export async function installPluginExternals(): Promise<void> {
     import("@iconify/react"),
   ]);
 
-  lib.MuiMaterial = mui;
+  // Expose the full @mui/material namespace, with @mui/material/styles attached as `.styles`: Headlamp's
+  // build externalizes the deep import `@mui/material/styles` to `pluginLib.MuiMaterial.styles` (where
+  // useTheme/ThemeProvider/createTheme live), and `@mui/material/<Component>` to `pluginLib.MuiMaterial.
+  // <Component>` — both satisfied by this merged object. (MuiStyles is kept for @mui/styles consumers.)
+  lib.MuiMaterial = { ...(mui as Record<string, unknown>), styles: muiStyles };
   lib.MuiIconsMaterial = muiIcons;
   lib.MuiStyles = muiStyles;
   lib.ReactRedux = reactRedux;
-  lib.ReactRouter = reactRouter;
+  // Install the v5-shaped react-router shim (not raw v7), so a Headlamp plugin's useHistory/Switch/
+  // Redirect — built against react-router v5 — resolve against KSail's v7 runtime (see reactRouterCompat).
+  lib.ReactRouter = makeReactRouterV5Compat(reactRouter as unknown as ReactRouterCompatInput);
   // lodash is CJS; expose its callable default (the `_` object) when present, else the namespace.
   lib.Lodash = (lodash as { default?: unknown }).default ?? lodash;
   lib.Iconify = iconify;
+
+  await registerPluginIcons(iconify);
+}
+
+// registerPluginIcons registers the bundled Iconify collections so a plugin's `<Icon icon="mdi:cog">`
+// resolves OFFLINE: KSail's CSP (default-src 'self') blocks the Iconify API (api.iconify.design) and
+// clusters may be airgapped, so the icon data must be local. mdi (functional UI icons) and simple-icons
+// (brand logos, e.g. simple-icons:flux) are the sets Headlamp plugins use. Each JSON is its own dynamic
+// chunk, fetched only here — alongside the other plugin externals — so KSail's own UI never loads them.
+async function registerPluginIcons(iconify: unknown): Promise<void> {
+  const addCollection = (iconify as { addCollection?: (collection: unknown) => void }).addCollection;
+  if (typeof addCollection !== "function") {
+    return;
+  }
+
+  const [mdi, simpleIcons] = await Promise.all([
+    import("@iconify-json/mdi/icons.json"),
+    import("@iconify-json/simple-icons/icons.json"),
+  ]);
+
+  addCollection((mdi as { default?: unknown }).default ?? mdi);
+  addCollection((simpleIcons as { default?: unknown }).default ?? simpleIcons);
 }
