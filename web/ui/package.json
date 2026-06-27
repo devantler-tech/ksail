@@ -15,6 +15,8 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@headlessui/react": "^2.2.10",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/simple-icons": "^1.2.87",
     "@iconify/react": "^5.2.1",
     "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.5.0",

@@ -105,7 +105,11 @@ function PluginNavGroup({
         ) : (
           <ChevronRight className="size-4 shrink-0" aria-hidden />
         )}
-        <Puzzle className="size-4 shrink-0" aria-hidden />
+        {node.icon ? (
+          <span className="flex size-4 shrink-0 items-center justify-center">{node.icon}</span>
+        ) : (
+          <Puzzle className="size-4 shrink-0" aria-hidden />
+        )}
         <span className="truncate">{node.label}</span>
       </button>
       {expanded ? (
@@ -146,7 +150,13 @@ function PluginNavTree({
         ) : node.route === undefined ? null : (
           <NavItem
             key={node.id}
-            icon={<Puzzle className="size-4" aria-hidden />}
+            icon={
+              node.icon ? (
+                <span className="flex size-4 items-center justify-center">{node.icon}</span>
+              ) : (
+                <Puzzle className="size-4" aria-hidden />
+              )
+            }
             label={node.label}
             active={activeId === node.id}
             onClick={() => onPick(node.route as string)}

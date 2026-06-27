@@ -44,4 +44,26 @@ export async function installPluginExternals(): Promise<void> {
   // lodash is CJS; expose its callable default (the `_` object) when present, else the namespace.
   lib.Lodash = (lodash as { default?: unknown }).default ?? lodash;
   lib.Iconify = iconify;
+
+  await registerPluginIcons(iconify);
+}
+
+// registerPluginIcons registers the bundled Iconify collections so a plugin's `<Icon icon="mdi:cog">`
+// resolves OFFLINE: KSail's CSP (default-src 'self') blocks the Iconify API (api.iconify.design) and
+// clusters may be airgapped, so the icon data must be local. mdi (functional UI icons) and simple-icons
+// (brand logos, e.g. simple-icons:flux) are the sets Headlamp plugins use. Each JSON is its own dynamic
+// chunk, fetched only here — alongside the other plugin externals — so KSail's own UI never loads them.
+async function registerPluginIcons(iconify: unknown): Promise<void> {
+  const addCollection = (iconify as { addCollection?: (collection: unknown) => void }).addCollection;
+  if (typeof addCollection !== "function") {
+    return;
+  }
+
+  const [mdi, simpleIcons] = await Promise.all([
+    import("@iconify-json/mdi/icons.json"),
+    import("@iconify-json/simple-icons/icons.json"),
+  ]);
+
+  addCollection((mdi as { default?: unknown }).default ?? mdi);
+  addCollection((simpleIcons as { default?: unknown }).default ?? simpleIcons);
 }

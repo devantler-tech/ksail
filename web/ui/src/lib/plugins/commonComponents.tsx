@@ -7,6 +7,7 @@
 
 import * as React from "react";
 import { pluginNavigate } from "./pluginNavigation.ts";
+import { renderPluginIcon as renderIcon } from "./pluginIcon.ts";
 
 // ---------------------------------------------------------------------------
 // Section primitives
@@ -188,7 +189,7 @@ export function HoverInfoLabel({
   return (
     <span className="inline-flex items-center gap-1" title={typeof hoverInfo === "string" ? hoverInfo : undefined}>
       {label}
-      {icon ?? <span aria-hidden>ⓘ</span>}
+      {renderIcon(icon) ?? <span aria-hidden>ⓘ</span>}
     </span>
   );
 }
@@ -520,7 +521,7 @@ export function ActionButton({
       onClick={onClick}
       className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {icon}
+      {renderIcon(icon)}
     </button>
   );
 }

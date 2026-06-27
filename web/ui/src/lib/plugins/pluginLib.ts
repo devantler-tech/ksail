@@ -17,6 +17,7 @@ import * as ReactDOM from "react-dom";
 import * as ReactJSX from "react/jsx-runtime";
 import { listResources } from "../../api.ts";
 import { CommonComponents, localeDate, timeAgo, type CommonComponentsShape } from "./commonComponents.tsx";
+import { renderPluginIcon } from "./pluginIcon.ts";
 import { KubeObject, makeResourceClasses, setActiveCluster, type ResourceClasses } from "./k8s.ts";
 import { apiFactory, apiFactoryWithNamespace, makeCustomResourceClass } from "./makeCustomResourceClass.ts";
 import { registry, type PluginResource, type RouteProps, type SidebarEntryFilter } from "./registry.ts";
@@ -175,7 +176,9 @@ export function installPluginLib(getCluster: () => ClusterRef | null): void {
       // A group header (e.g. Flux's `parent: null` "Flux" entry) carries no url — leave route undefined
       // so it renders as a non-navigable collapsible group rather than a dead link.
       route: entry.url,
-      icon: entry.icon,
+      // Headlamp's sidebar icon is often a plain icon-name string (e.g. "simple-icons:flux"); wrap it in
+      // the @iconify/react Icon so the sidebar shows the plugin's logo, not the literal name as text.
+      icon: renderPluginIcon(entry.icon),
       // Headlamp passes `parent: null` for a top-level entry; normalize to undefined.
       parent: entry.parent ?? undefined,
     });
