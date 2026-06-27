@@ -32,10 +32,15 @@ export interface PluginLoaderState {
   reload: () => void;
 }
 
-// usePluginLoader loads the installed plugins once when `enabled` becomes true, exposing each plugin's
-// load outcome (for the Plugins view) and a reload(). getCluster supplies the active cluster to the K8s
-// data shim; it is read through a ref so switching clusters does not reload plugins — the shim reads the
-// live cluster on each fetch instead.
+/**
+ * usePluginLoader loads the installed plugins once when `enabled` becomes true, exposing each plugin's
+ * load outcome (for the Plugins view) plus a `reload()` trigger.
+ *
+ * `getCluster` is a function (rather than a `ClusterRef | null`) so the latest value can be held in a
+ * ref and read by the K8s data shim at fetch time. That keeps the active cluster out of the load
+ * dependencies, so switching clusters does not reload plugins — the shim reads the live cluster on each
+ * fetch instead.
+ */
 export function usePluginLoader(enabled: boolean, getCluster: () => ClusterRef | null): PluginLoaderState {
   const [plugins, setPlugins] = useState<LoadedPlugin[]>([]);
   const [loading, setLoading] = useState(false);
