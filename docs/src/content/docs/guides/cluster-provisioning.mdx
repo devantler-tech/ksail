@@ -27,7 +27,7 @@ The full lifecycle — create a real cluster, inspect it, deploy a workload, and
 
 ## Ephemeral Clusters
 
-Use `--ttl` to create a cluster that auto-destroys after a set duration. See [Ephemeral Clusters](/features/ephemeral-clusters/) for usage patterns and tips.
+Use `--ttl` to create a cluster that auto-destroys after a set duration. See [Ephemeral Clusters](/guides/ephemeral-clusters/) for usage patterns and tips.
 
 ```bash
 ksail cluster create --ttl 1h
@@ -35,7 +35,7 @@ ksail cluster create --ttl 1h
 
 ## Updating Clusters
 
-`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, recreate-required, or wipe-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, recreate-required, or wipe-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/integrations/mcp/):
 
 ```bash
 # Preview changes without applying

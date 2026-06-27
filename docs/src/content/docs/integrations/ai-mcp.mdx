@@ -11,7 +11,7 @@ KSail's MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server 
 > KSail is listed in the [GitHub MCP Registry](https://github.com/mcp) as `io.github.devantler-tech/ksail`. MCP clients that support the registry can discover and install KSail automatically, without the manual JSON configuration shown below.
 
 > [!NOTE]
-> For a full reference of the MCP server's available tools, configuration options, and troubleshooting, see the [MCP Server](/mcp/) reference page.
+> For a full reference of the MCP server's available tools, configuration options, and troubleshooting, see the [MCP Server](/integrations/mcp/) reference page.
 
 ## Prerequisites
 
@@ -135,7 +135,7 @@ After saving, **restart the Cascade AI** session or reload MCP servers from the 
 </TabItem>
 <TabItem label="VS Code (Copilot)">
 
-The [KSail VSCode extension](/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
+The [KSail VSCode extension](/integrations/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
 
 1. Install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) from the VS Code Marketplace.
 2. Open a workspace with a `ksail.yaml` file (or run **KSail: Init Cluster** from the Command Palette to create one).
@@ -193,7 +193,7 @@ Once connected, you can manage Kubernetes clusters with natural language. Here a
 
 ## Tips
 
-- **Available tools**: KSail consolidates its commands into a small set of MCP tools grouped by permission level. For the complete, auto-generated tool catalog with subcommands and flags, see the [MCP Server reference](/mcp/#available-tools).
+- **Available tools**: KSail consolidates its commands into a small set of MCP tools grouped by permission level. For the complete, auto-generated tool catalog with subcommands and flags, see the [MCP Server reference](/integrations/mcp/#available-tools).
 - **Multiple environments**: Combine with the `--config` flag in your prompts — for example, "Apply manifests using the staging config" will work if you reference the config file path in your prompt and KSail finds it.
 - **Cluster creation takes time**: Inform your AI assistant that cluster creation can take 2–5 minutes. Most MCP clients have configurable tool timeouts.
-- **Security**: The MCP server runs with the full permissions of the `ksail` process. Only connect trusted AI clients. See the [MCP Server security note](/mcp/#configuration) for details.
+- **Security**: The MCP server runs with the full permissions of the `ksail` process. Only connect trusted AI clients. See the [MCP Server security note](/integrations/mcp/#configuration) for details.

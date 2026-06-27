@@ -1,0 +1,122 @@
+---
+title: Deliver with GitOps
+description: The recommended KSail workflow — package your manifests as an OCI artifact and let Flux or ArgoCD reconcile them, with the same commands from laptop to production.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+The [Quickstart](/start/quickstart/) used `ksail workload apply` to push manifests straight at a cluster.
+That's great for experimenting, but real environments should be driven by **GitOps**: your manifests are
+the source of truth, KSail packages them as a versioned OCI artifact, and a GitOps engine
+([Flux](/guides/gitops-workflows/) or ArgoCD) continuously reconciles the cluster to match. This is the
+workflow KSail is built around, and the one that scales from your laptop to production unchanged.
+
+:::note[Prerequisites]
+- You've completed the [Quickstart](/start/quickstart/).
+- Docker is running.
+:::
+
+## The GitOps loop
+
+```text
+edit k8s/  ──►  ksail workload push  ──►  ksail workload reconcile  ──►  Flux/ArgoCD applies
+   ▲                (compile +                   (tell the engine               │
+   └──────────────── push OCI artifact)          to pull & apply) ──────────────┘
+```
+
+- **`ksail workload push`** compiles your source directory and pushes it as an OCI artifact to a registry.
+- **`ksail workload reconcile`** triggers the in-cluster GitOps engine to pull that artifact and apply it.
+
+## 1. Initialize a GitOps project
+
+```bash
+mkdir gitops-demo && cd gitops-demo
+ksail cluster init \
+  --name gitops-demo \
+  --distribution K3s \
+  --gitops-engine Flux \
+  --local-registry localhost:5050
+```
+
+This scaffolds a `ksail.yaml` with a GitOps engine and a local OCI registry already wired up:
+
+```yaml
+# ksail.yaml (excerpt)
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: gitops-demo
+spec:
+  cluster:
+    distribution: K3s
+    gitOpsEngine: Flux
+    localRegistry:
+      registry: localhost:5050
+  workload:
+    sourceDirectory: k8s
+```
+
+## 2. Create the cluster
+
+```bash
+ksail cluster create
+```
+
+KSail provisions the cluster, installs the GitOps engine, and bootstraps it to watch the local registry —
+no separate `flux bootstrap` step required.
+
+## 3. Push and reconcile
+
+Add or edit manifests under `k8s/`, then:
+
+```bash
+ksail workload push        # compile k8s/ and push the OCI artifact
+ksail workload reconcile   # tell Flux to pull and apply it
+```
+
+Watch it converge:
+
+```bash
+ksail workload get pods -A
+```
+
+Every change from now on is the same two commands — or just a `git push` once you wire `push`/`reconcile`
+into [CI/CD](/guides/cicd-integration/).
+
+## 4. Add a second environment
+
+The same project can describe many clusters. Keep a second config — say `ksail.prod.yaml` — and target it
+with `--config`:
+
+```bash
+# Validate the prod config's manifests offline — no cluster needed
+ksail --config ksail.prod.yaml workload validate
+
+# Deliver to prod
+ksail --config ksail.prod.yaml workload push
+ksail --config ksail.prod.yaml workload reconcile
+```
+
+`--config` is the backbone of multi-environment work: one repository, one workflow, a config per
+environment. See the [Multi-Environment guide](/guides/multi-environment/) for the full pattern.
+
+:::tip[Validate before you ship]
+`ksail workload validate` and `ksail workload scan` check your manifests — schema validation, Flux
+variable substitution, and security posture — **fully offline, without a cluster**. They make an ideal CI
+gate. See [Workload Management](/guides/workload-management/) and [CI/CD Integration](/guides/cicd-integration/).
+:::
+
+## What's next
+
+<Steps>
+
+1. **[Project Structure & GitOps Layout →](/concepts/project-structure/)** — how a flat `k8s/` grows into a
+   layered repository (shared bases, provider overlays, per-cluster overlays) as you add environments.
+
+2. **[GitOps Workflows →](/guides/gitops-workflows/)** — Flux and ArgoCD in depth: artifacts, reconciliation,
+   and failure diagnostics.
+
+3. **[Reference Architecture →](/concepts/reference-architecture/)** — what a complete multi-environment KSail
+   platform looks like end to end.
+
+</Steps>
