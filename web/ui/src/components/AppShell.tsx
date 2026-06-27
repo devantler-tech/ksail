@@ -10,7 +10,7 @@ import type { SidebarNode } from "../lib/plugins/registry.ts";
 import { usePluginLocation } from "../lib/plugins/usePlugins.ts";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
-import { IconButton } from "./ui.tsx";
+import { IconButton, NavButton } from "./ui.tsx";
 
 // Plugin-contributed sidebar items render from the registry's SidebarNode tree (a parent group with
 // nested children, e.g. the Flux plugin's "Flux" group). The icon is uniform (a puzzle piece) so the
@@ -41,6 +41,8 @@ function findPluginLabel(entries: readonly SidebarNode[], id: string | null): st
 // both ⌘K and Ctrl+K regardless; this only affects the displayed kbd).
 const isMacLike = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+// NavItem is the app's primary sidebar item. It delegates to the shared NavButton (single source of
+// the active/idle treatment), keeping its required-icon / string-label shape for existing callers.
 function NavItem({
   icon,
   label,
@@ -52,21 +54,7 @@ function NavItem({
   active?: boolean;
   onClick: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={
-        active
-          ? "flex w-full items-center gap-2.5 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
-          : "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
-      }
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  return <NavButton icon={icon} label={label} active={active} onClick={onClick} />;
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -187,7 +175,6 @@ export function AppShell({
   clusters,
   activeClusterKey,
   onSelectCluster,
-  settingsEnabled,
   workloadEnabled,
   secretsEnabled,
   pluginsEnabled,
@@ -211,7 +198,6 @@ export function AppShell({
   // activeClusterKey is the cluster the workspace is drilled into (null = none; cluster zone hidden).
   activeClusterKey: string | null;
   onSelectCluster: (key: string) => void;
-  settingsEnabled: boolean;
   workloadEnabled: boolean;
   secretsEnabled: boolean;
   pluginsEnabled: boolean;
@@ -241,7 +227,6 @@ export function AppShell({
     activeCluster: true,
     workloadEnabled,
     secretsEnabled,
-    settingsEnabled,
     pluginsEnabled,
     aiChatEnabled,
   };

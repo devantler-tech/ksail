@@ -46,6 +46,21 @@ func NewProviderWithState(st state.State) *Provider {
 	return &Provider{st: st}
 }
 
+// Close releases the underlying Omni client connection. Safe to call on a Provider without a client
+// (e.g. one created via NewProviderWithState), in which case it is a no-op.
+func (p *Provider) Close() error {
+	if p.client == nil {
+		return nil
+	}
+
+	err := p.client.Close()
+	if err != nil {
+		return fmt.Errorf("close omni client: %w", err)
+	}
+
+	return nil
+}
+
 // StartNodes is a no-op for Omni. Omni manages the machine lifecycle
 // and nodes are automatically started when allocated to a cluster.
 // It validates that the cluster has nodes and returns provider.ErrNoNodes

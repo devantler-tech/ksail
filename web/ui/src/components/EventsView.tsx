@@ -2,12 +2,12 @@ import { Activity, RotateCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Cluster } from "../api.ts";
 import { useResourceList } from "../hooks/useResourceList.ts";
+import { usePreferences, useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { cx } from "../lib/cx.ts";
-import { relativeAge } from "../lib/format.ts";
 import { clusterKey, recentEvents } from "../lib/k8s.ts";
 import { EventTypeBadge } from "./EventList.tsx";
 import { EmptyState } from "./states.tsx";
-import { DataStates, TableCard, td, th } from "./table.tsx";
+import { DataStates, TableCard, TablePager, td, th, usePagination } from "./table.tsx";
 import { Button, SelectField, TextField } from "./ui.tsx";
 
 type TypeFilter = "all" | "Warning" | "Normal";
@@ -16,6 +16,8 @@ type TypeFilter = "all" | "Warning" | "Normal";
 // and free-text search — newest-first. Built on the shared useResourceList(kind="Event"); the cluster
 // comes from the workspace context (no selector here).
 export function EventsView({ cluster }: { cluster: Cluster | null }) {
+  const { format } = useTimeFormatters();
+  const { prefs } = usePreferences();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
 
@@ -34,6 +36,9 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
           : `${event.reason} ${event.objectKind} ${event.objectName} ${event.message}`.toLowerCase().includes(needle),
     });
   }, [items, typeFilter, search]);
+
+  // Paginate the filtered events per the rows-per-page preference (0 = show all).
+  const pagination = usePagination(rows, prefs.rowsPerPage);
 
   if (!cluster) {
     return <EmptyState title="No cluster selected" description="Choose a cluster to view its events." />;
@@ -87,7 +92,7 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.map((event, index) => (
+            {pagination.pageItems.map((event, index) => (
               <tr key={`${event.objectName}-${event.reason}-${index}`}>
                 <td className={td}>
                   <EventTypeBadge type={event.type} />
@@ -112,12 +117,13 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
                   {event.count}
                 </td>
                 <td className={cx(td, "text-sm tabular-nums text-slate-500 dark:text-slate-400")}>
-                  {relativeAge(event.lastSeen)}
+                  {format(event.lastSeen)}
                 </td>
               </tr>
             ))}
           </tbody>
         </TableCard>
+        <TablePager pagination={pagination} className="px-1 pt-3" />
       </DataStates>
     </div>
   );

@@ -2,10 +2,11 @@ import { ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { epochMs, relativeAge } from "../lib/format.ts";
+import { epochMs } from "../lib/format.ts";
+import { usePreferences, useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { clusterKey, clusterPhase, isHostCluster } from "../lib/k8s.ts";
 import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
-import { SortHeader, td, th, useSort } from "./table.tsx";
+import { SortHeader, TablePager, td, th, usePagination, useSort } from "./table.tsx";
 
 type SortKey = "name" | "namespace" | "distribution" | "provider" | "status" | "nodes" | "age";
 
@@ -69,6 +70,8 @@ export function ClustersTable({
   onEdit: (cluster: Cluster) => void;
   onDelete: (cluster: Cluster) => void;
 }) {
+  const { format } = useTimeFormatters();
+  const { prefs } = usePreferences();
   const { sortKey, sortDir, toggleSort } = useSort<SortKey>("name");
 
   // Sort a copy with a stable namespace/name tiebreaker so equal values keep a deterministic order
@@ -82,6 +85,9 @@ export function ClustersTable({
   }, [clusters, sortKey, sortDir]);
 
   const headerProps = { activeKey: sortKey, dir: sortDir, onSort: toggleSort } as const;
+
+  // Paginate the sorted clusters per the rows-per-page preference (0 = show all).
+  const pagination = usePagination(sorted, prefs.rowsPerPage);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -102,7 +108,7 @@ export function ClustersTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {sorted.map((cluster) => (
+            {pagination.pageItems.map((cluster) => (
               <tr
                 key={clusterKey(cluster)}
                 role="button"
@@ -145,7 +151,7 @@ export function ClustersTable({
                   <NodeCount cluster={cluster} />
                 </td>
                 <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
-                  {relativeAge(cluster.metadata.creationTimestamp)}
+                  {format(cluster.metadata.creationTimestamp)}
                 </td>
                 <td className={cx(td, "text-right")}>
                   {/* Lifecycle actions are hidden for the host cluster (the cluster the operator
@@ -185,6 +191,10 @@ export function ClustersTable({
           </tbody>
         </table>
       </div>
+      <TablePager
+        pagination={pagination}
+        className="border-t border-slate-200 px-4 py-3 dark:border-slate-800"
+      />
     </div>
   );
 }

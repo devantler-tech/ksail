@@ -47,6 +47,7 @@ import { LoginScreen } from "./components/LoginScreen.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
 import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
+import { usePreferences } from "./hooks/usePreferences.tsx";
 import { useClusterStream } from "./hooks/useClusterStream.ts";
 import { useDeepLinks } from "./hooks/useDeepLinks.ts";
 import { useDesktopCommands, type DesktopCommand } from "./hooks/useDesktopCommands.ts";
@@ -76,6 +77,7 @@ function capability(config: Config | null, key: keyof Capabilities): boolean {
 
 export function App() {
   const { theme, toggle } = useTheme();
+  const { prefs } = usePreferences();
   const toast = useToast();
 
   // config is the single source for every capability/option projection below. null until the initial
@@ -135,7 +137,6 @@ export function App() {
   const distributions = config?.distributions ?? DEFAULT_DISTRIBUTIONS;
   // providerStatus gates the create form's provider options. null = backend does not gate (operator).
   const providerStatus = config?.providers ?? null;
-  const settingsEnabled = config?.settingsEnabled ?? false;
   // canPlugins gates the Plugins view and plugin loading on the backend serving UI plugins.
   const canPlugins = capability(config, "plugins");
   // canAIChat gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
@@ -454,22 +455,44 @@ export function App() {
     [refresh, toast],
   );
 
+  // performDelete deletes a specific cluster and refreshes the list. It rethrows so the confirm
+  // dialog keeps its open/spinner state on failure; the immediate (unconfirmed) path swallows it.
+  const performDelete = useCallback(
+    async (target: Cluster) => {
+      const name = target.metadata.name;
+      const namespace = target.metadata.namespace ?? "default";
+      try {
+        await deleteCluster(namespace, name);
+        toast.success(`Deleting cluster "${name}"`);
+        await refresh(true);
+      } catch (err) {
+        toast.error(errorMessage(err));
+        throw err;
+      }
+    },
+    [refresh, toast],
+  );
+
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) {
       return;
     }
+    await performDelete(deleteTarget);
+  }, [deleteTarget, performDelete]);
 
-    const name = deleteTarget.metadata.name;
-    const namespace = deleteTarget.metadata.namespace ?? "default";
-    try {
-      await deleteCluster(namespace, name);
-      toast.success(`Deleting cluster "${name}"`);
-      await refresh(true);
-    } catch (err) {
-      toast.error(errorMessage(err));
-      throw err;
-    }
-  }, [deleteTarget, refresh, toast]);
+  // requestDeleteCluster is the per-row / overview delete trigger: it opens the confirm dialog, or —
+  // when the confirm-destructive preference is off — deletes the cluster immediately.
+  const requestDeleteCluster = useCallback(
+    (cluster: Cluster) => {
+      if (prefs.confirmDestructive) {
+        setDeleteTarget(cluster);
+
+        return;
+      }
+      void performDelete(cluster).catch(() => undefined);
+    },
+    [prefs.confirmDestructive, performDelete],
+  );
 
   if (needsLogin) {
     return <LoginScreen />;
@@ -502,7 +525,6 @@ export function App() {
     activeCluster: activeClusterKey !== null,
     workloadEnabled: canBrowse,
     secretsEnabled: canCipher,
-    settingsEnabled,
     pluginsEnabled: canPlugins,
     aiChatEnabled: canAIChat,
   };
@@ -574,7 +596,6 @@ export function App() {
         clusters={clusters}
         activeClusterKey={activeClusterKey}
         onSelectCluster={selectCluster}
-        settingsEnabled={settingsEnabled}
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
         pluginsEnabled={canPlugins}
@@ -591,7 +612,7 @@ export function App() {
             <PluginRouterHost initialPath={activePluginRoute} clusterName={activeCluster?.metadata.name ?? null} />
           </Suspense>
         ) : view === "settings" ? (
-          <SettingsPage onSaved={() => void reloadConfig()} />
+          <SettingsPage config={config} onSaved={() => void reloadConfig()} onNavigate={navigateView} />
         ) : view === "plugins" ? (
           <PluginsView
             plugins={pluginLoader.plugins}
@@ -617,7 +638,7 @@ export function App() {
             canDelete={!readOnly}
             canDownloadKubeconfig={canKubeconfig}
             onEdit={openEdit}
-            onDelete={(cluster) => setDeleteTarget(cluster)}
+            onDelete={requestDeleteCluster}
           />
         ) : view === "events" ? (
           <EventsView cluster={activeCluster} />
@@ -661,7 +682,7 @@ export function App() {
                 canEdit={canEdit}
                 onSelect={(cluster) => enterCluster(clusterKey(cluster))}
                 onEdit={openEdit}
-                onDelete={(cluster) => setDeleteTarget(cluster)}
+                onDelete={requestDeleteCluster}
               />
             )}
           </div>

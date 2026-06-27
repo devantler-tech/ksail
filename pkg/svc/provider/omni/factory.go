@@ -1,6 +1,7 @@
 package omni
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -67,4 +68,23 @@ func NewProviderFromOptions(opts v1alpha1.OptionsOmni) (*Provider, error) {
 	}
 
 	return NewProvider(client), nil
+}
+
+// ValidateCredentials verifies the configured Omni endpoint + service account authenticate by making
+// one cheap authenticated API call (listing clusters). It returns the configuration error when the
+// endpoint or key is unset, or the API error when the call fails; nil means the credentials work.
+func ValidateCredentials(ctx context.Context, opts v1alpha1.OptionsOmni) error {
+	prov, err := NewProviderFromOptions(opts)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = prov.Close() }()
+
+	_, err = prov.ListAllClusters(ctx)
+	if err != nil {
+		return fmt.Errorf("omni API request failed: %w", err)
+	}
+
+	return nil
 }

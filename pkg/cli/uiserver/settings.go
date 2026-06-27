@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
 
@@ -82,6 +86,75 @@ func (s settingsService) Update(
 	}
 
 	return s.Get(ctx)
+}
+
+func (s settingsService) AppSettings(_ context.Context) (api.AppSettings, error) {
+	return toAPIAppSettings(s.manager.AppSettings()), nil
+}
+
+func (s settingsService) UpdateAppSettings(
+	ctx context.Context,
+	request api.AppSettings,
+) (api.AppSettings, error) {
+	err := s.manager.UpdateAppSettings(credentials.AppSettings{
+		Editor:              request.Editor,
+		ChatModel:           request.Chat.Model,
+		ChatReasoningEffort: request.Chat.ReasoningEffort,
+	})
+	if errors.Is(err, credentials.ErrInvalidReasoningEffort) {
+		return api.AppSettings{}, fmt.Errorf("%w: %w", api.ErrInvalid, err)
+	}
+
+	if err != nil {
+		return api.AppSettings{}, fmt.Errorf("update app settings: %w", err)
+	}
+
+	return s.AppSettings(ctx)
+}
+
+// TestConnection validates the stored credentials for a provider by making one cheap authenticated
+// API call. Credentials resolve from the environment (the Manager overlays stored secrets there), so
+// the zero options use the default variable names. A failed connection is reported via the result;
+// an unsupported provider returns an ErrInvalid error so the handler answers 400.
+func (s settingsService) TestConnection(
+	ctx context.Context,
+	provider string,
+) (api.CredentialTestResult, error) {
+	var err error
+
+	switch strings.ToLower(provider) {
+	case "hetzner":
+		err = hetzner.ValidateCredentials(ctx, v1alpha1.OptionsHetzner{})
+	case "omni":
+		err = omni.ValidateCredentials(ctx, v1alpha1.OptionsOmni{})
+	default:
+		return api.CredentialTestResult{}, fmt.Errorf(
+			"%w: connection testing is not supported for provider %q",
+			api.ErrInvalid,
+			provider,
+		)
+	}
+
+	result := api.CredentialTestResult{
+		Provider: provider,
+		OK:       err == nil,
+		Message:  "Connection successful.",
+	}
+	if err != nil {
+		result.Message = err.Error()
+	}
+
+	return result, nil
+}
+
+func toAPIAppSettings(app credentials.AppSettings) api.AppSettings {
+	return api.AppSettings{
+		Editor: app.Editor,
+		Chat: api.ChatSettings{
+			Model:           app.ChatModel,
+			ReasoningEffort: app.ChatReasoningEffort,
+		},
+	}
 }
 
 func toCredentialSettings(statuses []credentials.CredentialStatus) []api.CredentialSetting {

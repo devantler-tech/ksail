@@ -1,5 +1,5 @@
 import { cx } from "../lib/cx.ts";
-import { relativeAge } from "../lib/format.ts";
+import { useTimeFormatters } from "../hooks/usePreferences.tsx";
 import type { EventFields } from "../lib/k8s.ts";
 
 // EventTypeBadge colours a Kubernetes event by its type: Warning stands out (amber), Normal is muted.
@@ -23,6 +23,8 @@ export function EventTypeBadge({ type }: { type: string }) {
 // EventRow is the compact representation of a single event (type badge · reason · target · age · note),
 // shared by the Overview "recent warnings" panel and the resource detail's "related events" section.
 function EventRow({ event }: { event: EventFields }) {
+  const { format } = useTimeFormatters();
+
   return (
     <li className="flex items-start gap-2 text-sm">
       <EventTypeBadge type={event.type} />
@@ -35,7 +37,7 @@ function EventRow({ event }: { event: EventFields }) {
               {event.objectName}
             </span>
           ) : null}
-          <span className="ml-auto shrink-0 text-xs tabular-nums text-slate-400">{relativeAge(event.lastSeen)}</span>
+          <span className="ml-auto shrink-0 text-xs tabular-nums text-slate-400">{format(event.lastSeen)}</span>
         </div>
         {event.message ? (
           <p className="break-words text-xs text-slate-500 dark:text-slate-400" title={event.message}>

@@ -87,6 +87,10 @@ type Server struct {
 	// desktop shell overrides the label client-side when served from the wails:// origin.
 	Mode string
 
+	// Version reports build metadata (version, commit, date) to the SPA via /api/v1/config for the
+	// About screen. The zero value omits it (an older or operator backend simply shows no version).
+	Version VersionInfo
+
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
 
@@ -121,6 +125,20 @@ type configResponse struct {
 	// affordances (e.g. cluster edit) it cannot fulfill. Always present (no omitempty): an absent
 	// field would force the SPA to guess, and the false zero-value is meaningful.
 	Capabilities Capabilities `json:"capabilities"`
+	// Version is the serving backend's build metadata for the About screen. Omitted when unset.
+	Version *VersionInfo `json:"version,omitempty"`
+}
+
+// VersionInfo is the serving backend's build metadata, surfaced to the SPA's About screen.
+type VersionInfo struct {
+	Version string `json:"version,omitempty"`
+	Commit  string `json:"commit,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
+// isZero reports whether no build metadata was provided (so configResponse omits the version object).
+func (v VersionInfo) isZero() bool {
+	return v.Version == "" && v.Commit == "" && v.Date == ""
 }
 
 // ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
@@ -240,6 +258,9 @@ func (s *Server) Handler() http.Handler {
 	if s.Settings != nil {
 		mux.HandleFunc("GET /api/v1/settings", s.handleGetSettings)
 		mux.HandleFunc("PUT /api/v1/settings", s.handleUpdateSettings)
+		mux.HandleFunc("GET /api/v1/settings/app", s.handleGetAppSettings)
+		mux.HandleFunc("PUT /api/v1/settings/app", s.handleUpdateAppSettings)
+		mux.HandleFunc("POST /api/v1/settings/credentials/{provider}/test", s.handleTestCredential)
 	}
 
 	if s.auth != nil {
@@ -604,6 +625,11 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 		SettingsEnabled: s.Settings != nil,
 		Capabilities:    capabilities,
 		Mode:            s.Mode,
+	}
+
+	if !s.Version.isZero() {
+		version := s.Version
+		response.Version = &version
 	}
 
 	if s.ProviderStatus != nil {

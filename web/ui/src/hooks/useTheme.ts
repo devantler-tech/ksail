@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 export type Theme = "light" | "dark";
 
+// ThemeMode is the user-facing choice: an explicit theme, or "system" to follow the OS preference
+// live. It maps onto the internal pinned/theme state (pinned ? theme : "system").
+export type ThemeMode = "light" | "dark" | "system";
+
 const STORAGE_KEY = "ksail-theme";
 
 function prefersDark(): boolean {
@@ -31,7 +35,12 @@ function storedTheme(): Theme | null {
 // class-based dark variant applies. Until the user explicitly toggles, the theme follows the system
 // preference live (including OS-level changes while the app is open); a toggle pins the choice and
 // persists it. The no-flash init in index.html applies the same resolution before first paint.
-export function useTheme(): { theme: Theme; toggle: () => void } {
+export function useTheme(): {
+  theme: Theme;
+  toggle: () => void;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+} {
   const [pinned, setPinned] = useState<boolean>(() => storedTheme() !== null);
   const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? (prefersDark() ? "dark" : "light"));
 
@@ -70,5 +79,32 @@ export function useTheme(): { theme: Theme; toggle: () => void } {
     });
   }, []);
 
-  return { theme, toggle };
+  // setMode applies an explicit theme choice, or "system" to clear the pin and follow the OS live.
+  const setMode = useCallback((next: ThemeMode) => {
+    if (next === "system") {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore: storage unavailable */
+      }
+      setPinned(false);
+      // Re-resolve to the current OS preference immediately; the follow-effect keeps it live after.
+      setTheme(prefersDark() ? "dark" : "light");
+
+      return;
+    }
+
+    setPinned(true);
+    setTheme(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* ignore: storage unavailable (theme still applies for this session) */
+    }
+  }, []);
+
+  // mode reflects the user-facing choice: "system" while unpinned (following the OS), else the theme.
+  const mode: ThemeMode = pinned ? theme : "system";
+
+  return { theme, toggle, mode, setMode };
 }

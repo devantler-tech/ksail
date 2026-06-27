@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
@@ -25,9 +26,14 @@ func NewServer() *api.Server {
 	service := clusterapi.NewService()
 
 	server := &api.Server{
-		Service:       service,
-		ReadOnly:      false,
-		Mode:          api.ModeLocal,
+		Service:  service,
+		ReadOnly: false,
+		Mode:     api.ModeLocal,
+		Version: api.VersionInfo{
+			Version: buildmeta.Version,
+			Commit:  buildmeta.Commit,
+			Date:    buildmeta.Date,
+		},
 		Distributions: clusterapi.CreatableDistributions(),
 		StaticFS:      webui.Assets(),
 		// Gate the create form on which providers this machine can actually reach (Docker running,
