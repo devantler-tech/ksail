@@ -29,3 +29,12 @@ var TimeoutWaitingError = timeoutWaitingError
 
 // HandleTransientError exports handleTransientError for testing.
 var HandleTransientError = handleTransientError
+
+// IsPermanentOCIError exports isPermanentOCIError for testing.
+var IsPermanentOCIError = isPermanentOCIError
+
+// EvaluateOCIRepositoryConditions exports evaluateOCIRepositoryConditions for testing.
+var EvaluateOCIRepositoryConditions = evaluateOCIRepositoryConditions
+
+// OCITimeoutError exports ociTimeoutError for testing.
+var OCITimeoutError = ociTimeoutError
