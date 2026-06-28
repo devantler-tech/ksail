@@ -24,6 +24,9 @@ export function SettingsPage({
   onNavigate?: (view: View) => void;
 }) {
   const settingsEnabled = config?.settingsEnabled ?? false;
+  // Gate the Plugins cross-link on the same capability App uses to show the Plugins view, so Settings
+  // can't navigate to a surface the backend doesn't serve.
+  const canPlugins = config?.capabilities?.plugins ?? false;
   const categories = availableCategories({ settingsEnabled });
   const [active, setActive] = useState<SettingsCategoryId>("general");
 
@@ -41,7 +44,9 @@ export function SettingsPage({
         </div>
         <div className="min-w-0">
           {current === "general" ? (
-            <GeneralSettings onOpenPlugins={onNavigate ? () => onNavigate("plugins") : undefined} />
+            <GeneralSettings
+              onOpenPlugins={onNavigate && canPlugins ? () => onNavigate("plugins") : undefined}
+            />
           ) : current === "appearance" ? (
             <AppearanceSettings />
           ) : current === "credentials" ? (

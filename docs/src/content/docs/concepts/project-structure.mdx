@@ -1,0 +1,98 @@
+---
+title: Project Structure & GitOps Layout
+description: How a KSail project grows from a flat k8s/ directory into a layered GitOps repository — shared bases, provider overlays, and per-cluster overlays — that scales to many environments.
+---
+
+`ksail cluster init` scaffolds a deliberately simple project. As you add environments — a local cluster,
+a staging cluster, production on a different provider — that flat layout grows into a **layered Kustomize
+repository**. This page explains the recommended layout and why it's shaped the way it is, so you can grow
+into it instead of rearchitecting later.
+
+## Where you start: a flat project
+
+```text
+my-project/
+├── ksail.yaml          # cluster config (distribution, provider, GitOps, registries)
+├── kind.yaml           # native distribution config
+└── k8s/
+    ├── kustomization.yaml
+    └── …your manifests…
+```
+
+`spec.workload.sourceDirectory` (default `k8s`) tells KSail where your manifests live. For a single
+cluster, this is all you need.
+
+## Where you grow to: a layered repository
+
+Once more than one cluster shares the same platform, duplicating manifests per environment becomes
+unmaintainable. The recommended structure factors the repository into three layers:
+
+```text
+k8s/
+├── bases/                      # shared, environment-agnostic definitions
+│   ├── bootstrap/              #   variables & config consumed via Flux post-build substitution
+│   ├── infrastructure/
+│   │   └── controllers/        #   HelmReleases for cluster components
+│   └── apps/                   #   your applications
+├── providers/                  # per-provider overlays (what differs by infrastructure)
+│   ├── docker/                 #   e.g. local-only components, self-signed issuers
+│   └── hetzner/                #   e.g. cloud load balancers, cloud DNS, storage
+└── clusters/                   # per-cluster overlays (what differs by environment)
+    ├── base/                   #   the Flux Kustomizations that wire the layers together
+    ├── local/                  #   patches: cluster name, provider = docker, local values
+    └── prod/                   #   patches: cluster name, provider = hetzner, prod values
+```
+
+- **`bases/`** holds everything common to every cluster — components and apps defined once.
+- **`providers/<name>/`** overlays the differences that come from *where* a cluster runs (a Docker cluster
+  needs different storage and ingress than a Hetzner one).
+- **`clusters/<name>/`** is the thin, environment-specific layer: which provider, the cluster's name, and
+  its specific values and secrets.
+
+Each cluster's `ksail.yaml` points `spec.workload.kustomizationFile` at its overlay:
+
+```yaml
+# ksail.yaml (local)
+spec:
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/local
+```
+
+```yaml
+# ksail.prod.yaml (production)
+spec:
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/prod
+```
+
+## The reconciliation order
+
+The cluster overlay wires up a chain of Flux Kustomizations that reconcile **in dependency order**, each
+waiting for the previous to be ready:
+
+```text
+bootstrap ─► infrastructure-controllers ─► infrastructure ─► apps
+```
+
+This guarantees, for example, that the CNI and secret tooling exist before the workloads that depend on
+them. Each link in the chain reconciles a path assembled from the layers above (`clusters/<name>` →
+`providers/<name>` → `bases`), so a single edit in `bases/` propagates to every environment, while an
+override in `clusters/prod/` stays scoped to production.
+
+## Why this shape
+
+- **No duplication** — shared definitions live once in `bases/`; environments only express their
+  differences.
+- **Provider portability** — swapping Docker for a cloud provider is an overlay change, not a rewrite.
+- **Safe blast radius** — a change to a base is visible everywhere on the next reconcile; a change to a
+  cluster overlay is contained.
+- **Same commands everywhere** — every environment is still just `ksail --config <file> workload
+  push`/`reconcile`.
+
+## Related
+
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the push/reconcile workflow this layout feeds.
+- [Multi-Environment Workflows](/guides/multi-environment/) — driving many clusters with `--config`.
+- [Reference Architecture](/concepts/reference-architecture/) — a complete worked example.

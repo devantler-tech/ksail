@@ -1,0 +1,134 @@
+---
+title: Workload Management
+description: Deploy, inspect, debug, and operate Kubernetes workloads with one command family — kubectl and Helm patterns, plus validation, scanning, and GitOps built in.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Everything you do to workloads lives under one command family: `ksail workload`. The subcommands
+follow familiar kubectl and Helm patterns, so existing muscle memory transfers — and because the
+tooling is embedded, there is nothing else to install.
+
+```bash
+ksail workload get pods
+ksail workload logs deployment/nginx -f
+ksail workload gen deployment my-app --image=nginx --port=80
+```
+
+## Two ways to deploy
+
+There are two ways to get manifests onto a cluster. Pick by what you're doing, not by preference.
+
+<Steps>
+
+1. **Imperative — for learning and the inner loop.** Apply a directory straight at the cluster and
+   iterate:
+
+   ```bash
+   ksail workload apply -k ./k8s
+   ```
+
+   This is the quickest way to push manifests while you experiment. Pair it with
+   [`watch`](/cli-flags/workload/workload-watch/) to auto-apply on every file save.
+
+2. **GitOps — recommended for real environments.** Your manifests are the source of truth: KSail
+   compiles your source directory into a versioned OCI artifact, and [Flux or
+   ArgoCD](/guides/gitops-workflows/) reconciles the cluster to match.
+
+   ```bash
+   ksail workload push        # compile the source dir and push the OCI artifact
+   ksail workload reconcile   # tell the GitOps engine to pull and apply
+   ```
+
+</Steps>
+
+:::tip[`apply` is the learning shortcut]
+`ksail workload apply` is great for experimenting, but it is not how you run production. The
+**recommended** workflow is GitOps — see **[Deliver with GitOps](/start/deliver-with-gitops/)** for
+the full walkthrough and **[GitOps Workflows](/guides/gitops-workflows/)** for `push`/`reconcile` in
+depth.
+:::
+
+## Inspect and debug
+
+Day-2 commands work against whatever your kubeconfig points at, no matter how the workload got
+there:
+
+```bash
+ksail workload get pods                     # list resources
+ksail workload describe pod/nginx-abc123    # full status and events
+ksail workload logs deployment/nginx -f     # stream logs (-f to follow)
+ksail workload exec deployment/nginx -- sh  # run a command in a container
+ksail workload explain deployment.spec      # API field documentation
+```
+
+To block until something is ready — handy in scripts and CI:
+
+```bash
+ksail workload wait deployment/nginx --for=condition=available
+ksail workload watch          # live view of resources as they change
+```
+
+## Operate
+
+Scale and manage rollouts the way you already know:
+
+```bash
+ksail workload scale deployment/nginx --replicas=3
+ksail workload rollout status deployment/nginx
+ksail workload rollout restart deployment/nginx
+ksail workload rollout undo deployment/nginx
+```
+
+Scaffold new manifests with [`gen`](/cli-flags/workload/workload-gen-root/) instead of writing YAML
+from scratch:
+
+```bash
+ksail workload gen deployment my-app --image=nginx --port=80 > k8s/my-app.yaml
+```
+
+## Check before you ship
+
+`ksail workload validate` and `ksail workload scan` inspect your manifests **fully offline, without a
+cluster** — which makes them an ideal CI gate:
+
+```bash
+ksail workload validate   # schema validation + Flux ${VAR} substitution expansion
+ksail workload scan       # security posture via Kubescape (NSA, MITRE, and more)
+```
+
+See [Validate configuration](/configuration/workload-validate/) for how `${VAR}` substitution is
+expanded during validation.
+
+## Move images around
+
+Beyond `push`/`reconcile`, the workload family also handles container images and secrets:
+
+| Command | What it does |
+|---------|--------------|
+| [`images`](/cli-flags/workload/workload-images/) | List the container images your workloads require |
+| [`export`](/cli-flags/workload/workload-export/) / [`import`](/cli-flags/workload/workload-import/) | Move images as tar archives — air-gapped environments, CI caching |
+| [`cipher`](/cli-flags/workload/workload-cipher-root/) | Encrypt and decrypt SOPS secrets — see [Secret Management](/guides/secret-management/) |
+
+## Target a specific environment
+
+Any workload command can run against a different config with `--config`. One repository, one
+workflow, a config per environment:
+
+```bash
+# Validate the prod config's manifests offline, then deliver
+ksail --config ksail.prod.yaml workload validate
+ksail --config ksail.prod.yaml workload push
+ksail --config ksail.prod.yaml workload reconcile
+```
+
+See the [Multi-Environment guide](/guides/multi-environment/) for the full pattern.
+
+## Related
+
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the recommended `push` + `reconcile` workflow, end to end
+- [GitOps Workflows](/guides/gitops-workflows/) — Flux and ArgoCD setup, artifacts, and reconciliation in depth
+- [Registry Management](/guides/registry-management/) — where `push` artifacts and your images live
+- [Secret Management](/guides/secret-management/) — SOPS-encrypted secrets with `workload cipher`
+- [Companion Tools](/integrations/companion-tools/) — K9s and the embedded tooling behind these commands
+- [`ksail workload` CLI reference](/cli-flags/workload/workload-root/) — every subcommand and flag

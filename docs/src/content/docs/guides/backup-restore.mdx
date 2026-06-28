@@ -1,0 +1,94 @@
+---
+title: Backup & Restore
+description: Export cluster resources to a compressed archive and restore them to any cluster — with dependency-ordered restore, scoping flags, and dry-run.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Export cluster resources to a compressed archive and restore them to any cluster — even one running a different distribution. Because backups capture portable YAML rather than disk images, they double as a migration path between Vanilla, K3s, Talos, and VCluster clusters.
+
+```bash
+ksail cluster backup --output ./backup.tar.gz
+ksail cluster restore --input ./backup.tar.gz
+```
+
+> [!NOTE]
+> This feature backs up resource manifests (YAML) only. Persistent volume **data** is not included.
+
+## What's in the Archive
+
+A backup is a compressed tarball (`.tar.gz`) with resources organized by type, server-side metadata stripped so the manifests apply cleanly elsewhere, and a manifest inventory that restore operations use to apply everything in dependency order.
+
+## Scoping a Backup
+
+By default everything is captured (minus `events`). Narrow the scope when you need less:
+
+```bash
+# Only specific namespaces
+ksail cluster backup -o ./backup.tar.gz --namespaces default,kube-system
+
+# Skip noisy or ephemeral resource types
+ksail cluster backup -o ./backup.tar.gz --exclude-types events,pods
+
+# Trade speed for size with the gzip level (-1 = default, 9 = smallest)
+ksail cluster backup -o ./backup.tar.gz --compression 9
+```
+
+## Restoring
+
+Resources are restored in dependency order — CRDs first, then namespaces, storage, and finally workloads — so nothing lands before what it depends on. When a resource already exists in the target cluster, `--existing-resource-policy` decides what happens:
+
+| Policy | Behavior |
+|--------|----------|
+| `none` (default) | Skip resources that already exist |
+| `update` | Patch existing resources to match the backup |
+
+Preview before you commit:
+
+```bash
+ksail cluster restore -i ./backup.tar.gz --dry-run
+ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
+```
+
+## Migrating Between Clusters
+
+<Steps>
+
+1. **Back up the source cluster:**
+
+   ```bash
+   ksail cluster backup -o ./migrate.tar.gz --exclude-types events,pods
+   ```
+
+2. **Create the target cluster** — any distribution works:
+
+   ```bash
+   ksail cluster init --name new-home --distribution K3s
+   ksail cluster create
+   ```
+
+3. **Dry-run the restore** to spot conflicts early:
+
+   ```bash
+   ksail cluster restore -i ./migrate.tar.gz --dry-run
+   ```
+
+4. **Restore for real:**
+
+   ```bash
+   ksail cluster restore -i ./migrate.tar.gz
+   ```
+
+</Steps>
+
+> [!TIP]
+> Take a backup before a risky `ksail cluster update` — if the change goes sideways, recreate the cluster and restore in minutes.
+
+## CLI Reference
+
+[`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)
+
+## Related
+
+- [Day-2 Operations](/guides/day-2-operations/) — diagnose and repair running clusters
+- [Cluster Provisioning](/guides/cluster-provisioning/) — updating clusters and drift detection

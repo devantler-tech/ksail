@@ -341,12 +341,6 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/runner/`: Cobra command execution helpers
 - `pkg/timer/`: Command timing and performance tracking
 
-## Benchmark Pipeline Consistency
-
-The benchmark regression gate (the `📊 Compare benchmark results` step in `.github/workflows/ci.yaml`) compares **only the deterministic allocation metrics** (`B/op`, `allocs/op`); the noisy wall-clock `ns/op` series is neutralized in the gate input (`bench-compare.txt`, derived from `bench-filtered.txt` by pinning every `ns/op` value to `1`) because gating on `ns/op` produces false-positive alerts from 2–5× runner jitter. Pull requests run `-count=1` (deterministic metrics need no averaging) and the gate **fails the check** on a ≥1.5× allocation/byte regression; pushes to `main` run `-count=5` to feed the historical `ns/op` chart and only refresh the baseline (they never fail, so the baseline self-heals after an intentional increase lands).
-
-When changing `-count` (or otherwise editing the awk in "Prepare benchmark regression gate input"), keep it producing **exactly one result line per benchmark name**, and keep `bench-compare.txt` carrying the real `B/op`/`allocs/op` values under names byte-identical to the baseline — `github-action-benchmark` compares each line against the single stored baseline entry by name, so duplicate lines create spurious alerts and renamed series silently stop gating. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details.
-
 ## Active Technologies
 
 - Go 1.26.1+ (see `go.mod`)

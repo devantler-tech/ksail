@@ -2,6 +2,7 @@ package fluxsubst_test
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,8 +11,9 @@ import (
 )
 
 const (
-	stringType  = "string"
-	booleanType = "boolean"
+	stringType             = "string"
+	booleanType            = "boolean"
+	maxCacheFileNameLength = 200
 )
 
 func TestParseInteger(t *testing.T) {
@@ -21,13 +23,19 @@ func TestParseInteger(t *testing.T) {
 		"42":  int64(42),
 		"0":   int64(0),
 		"-17": int64(-17),
-		"abc": "abc", // not parseable → defaultVal returned verbatim
-		"":    "",    // empty → defaultVal returned verbatim
+		// int64 boundaries parse exactly; one step beyond overflows and the raw
+		// string defaultVal is returned verbatim.
+		"9223372036854775807":  int64(math.MaxInt64),
+		"-9223372036854775808": int64(math.MinInt64),
+		"9223372036854775808":  "9223372036854775808",  // overflow → defaultVal verbatim
+		"-9223372036854775809": "-9223372036854775809", // underflow → defaultVal verbatim
+		"abc":                  "abc",                  // not parseable → defaultVal verbatim
+		"":                     "",                     // empty → defaultVal verbatim
 	}
 
-	for in, want := range tests {
-		if got := fluxsubst.ParseInteger(in, in); got != want {
-			t.Errorf("ParseInteger(%q) = %#v, want %#v", in, got, want)
+	for input, want := range tests {
+		if got := fluxsubst.ParseInteger(input, input); got != want {
+			t.Errorf("ParseInteger(%q) = %#v, want %#v", input, got, want)
 		}
 	}
 }
@@ -36,16 +44,52 @@ func TestParseNumber(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]any{
-		"2.5":       2.5,
-		"10":        10.0,
-		"notafloat": "notafloat", // not parseable → defaultVal returned verbatim
-		"":          "",          // empty → defaultVal returned verbatim
+		"2.5": 2.5,
+		"10":  10.0,
+		// Scientific notation and the float64 magnitude limits round-trip; %f also
+		// recognises the IEEE-754 specials NaN/Infinity.
+		"1e10":                    1e10,
+		"1e-10":                   1e-10,
+		"1.7976931348623157e+308": math.MaxFloat64,
+		"NaN":                     math.NaN(),
+		"Infinity":                math.Inf(1),
+		"+Inf":                    math.Inf(1),
+		"-Inf":                    math.Inf(-1),
+		"notafloat":               "notafloat", // not parseable → defaultVal verbatim
+		"":                        "",          // empty → defaultVal verbatim
 	}
 
-	for in, want := range tests {
-		if got := fluxsubst.ParseNumber(in, in); got != want {
-			t.Errorf("ParseNumber(%q) = %#v, want %#v", in, got, want)
+	for input, want := range tests {
+		got := fluxsubst.ParseNumber(input, input)
+
+		if wantFloat, isFloat := want.(float64); isFloat {
+			gotFloat, gotIsFloat := got.(float64)
+			if !gotIsFloat || !floatEqual(gotFloat, wantFloat) {
+				t.Errorf("ParseNumber(%q) = %#v, want %#v", input, got, want)
+			}
+
+			continue
 		}
+
+		if got != want {
+			t.Errorf("ParseNumber(%q) = %#v, want %#v", input, got, want)
+		}
+	}
+}
+
+// floatEqual compares two float64 values, treating NaN as equal to NaN and
+// matching signed infinities — parseNumber routes through fmt.Sscanf's %f verb,
+// which accepts "NaN", "Infinity", "+Inf", and "-Inf".
+func floatEqual(got, want float64) bool {
+	switch {
+	case math.IsNaN(want):
+		return math.IsNaN(got)
+	case math.IsInf(want, 1):
+		return math.IsInf(got, 1)
+	case math.IsInf(want, -1):
+		return math.IsInf(got, -1)
+	default:
+		return got == want
 	}
 }
 
@@ -55,13 +99,19 @@ func TestParseBoolean(t *testing.T) {
 	tests := map[string]any{
 		"true":  true,
 		"false": false,
+		// Parsing is case-sensitive: only the exact lowercase spellings match, so
+		// every case variant falls through to the verbatim defaultVal.
+		"True":  "True",
+		"TRUE":  "TRUE",
+		"False": "False",
+		"FALSE": "FALSE",
 		"yes":   "yes", // only "true"/"false" parse → defaultVal returned verbatim
 		"":      "",
 	}
 
-	for in, want := range tests {
-		if got := fluxsubst.ParseBoolean(in, in); got != want {
-			t.Errorf("ParseBoolean(%q) = %#v, want %#v", in, got, want)
+	for input, want := range tests {
+		if got := fluxsubst.ParseBoolean(input, input); got != want {
+			t.Errorf("ParseBoolean(%q) = %#v, want %#v", input, got, want)
 		}
 	}
 }
@@ -134,8 +184,8 @@ func TestSchemaCacheFileName(t *testing.T) {
 	long := "http://example.com/" + strings.Repeat("seg/", 200) + "schema.json"
 
 	got := fluxsubst.SchemaCacheFileName(long)
-	if len(got) != 200 {
-		t.Errorf("SchemaCacheFileName(long) len = %d, want 200", len(got))
+	if len(got) != maxCacheFileNameLength {
+		t.Errorf("SchemaCacheFileName(long) len = %d, want %d", len(got), maxCacheFileNameLength)
 	}
 
 	if !strings.HasSuffix(got, ".json") {

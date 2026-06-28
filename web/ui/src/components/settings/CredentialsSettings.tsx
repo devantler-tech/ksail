@@ -87,10 +87,11 @@ function computeUpdates(
   return updates;
 }
 
-// envVarError validates an environment-variable name override, returning a message or null when ok.
+// envVarError validates an environment-variable name override, returning a message or null when ok. A
+// blank name is allowed: the backend treats it as "reset to the conventional default variable".
 function envVarError(name: string): string | null {
   if (name.trim() === "") {
-    return "Required";
+    return null;
   }
   if (!envVarNamePattern.test(name)) {
     return "Letters, digits and underscore only; cannot start with a digit.";
@@ -203,6 +204,13 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
   }
 
   const hasErrors = credentials.some((credential) => envVarError(drafts[credential.key]?.envVar ?? "") !== null);
+  // Test connection validates the saved/overlaid credentials, so a provider with unsaved edits has its
+  // Test button disabled — otherwise the result would reflect the old config, not what's on screen.
+  const dirtyProviders = new Set(
+    groupByProvider(credentials)
+      .filter(([, group]) => computeUpdates(group, drafts).length > 0)
+      .map(([provider]) => provider),
+  );
 
   return (
     <div className="space-y-6">
@@ -234,6 +242,8 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
                 variant="secondary"
                 size="sm"
                 loading={testing[provider]}
+                disabled={dirtyProviders.has(provider)}
+                title={dirtyProviders.has(provider) ? "Save changes before testing" : undefined}
                 onClick={() => void handleTest(provider)}
               >
                 Test connection

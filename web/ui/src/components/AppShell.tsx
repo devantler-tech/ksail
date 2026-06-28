@@ -254,6 +254,9 @@ export function AppShell({
 
   // navContent renders the two zones — the cluster workspace (switcher + scoped nav, only when a
   // cluster is active) above the always-present global zone. onPick lets the drawer close on navigate.
+  // Plugin-contributed nav is cluster-scoped: it lives inside the cluster workspace (so installed
+  // plugins are only reachable once a cluster is selected), while the global "Plugins" management view
+  // (install/configure) stays in the always-present global zone below.
   const navContent = (onPick: (next: View) => void, onPickPlugin: (route: string) => void) => (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-3">
       {activeClusterKey ? (
@@ -262,18 +265,18 @@ export function AppShell({
             <ClusterSwitcher clusters={clusters} activeKey={activeClusterKey} onSelect={onSelectCluster} />
           </div>
           {renderNav(clusterViews, onPick)}
+          {pluginEntries && pluginEntries.length > 0 ? (
+            <>
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
+              <SectionLabel>Plugins</SectionLabel>
+              <PluginNavTree entries={pluginEntries} activeId={activePluginId} onPick={onPickPlugin} />
+            </>
+          ) : null}
           <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
           <SectionLabel>Manage</SectionLabel>
         </>
       ) : null}
       {renderNav(globalViews, onPick)}
-      {pluginEntries && pluginEntries.length > 0 ? (
-        <>
-          <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
-          <SectionLabel>Plugins</SectionLabel>
-          <PluginNavTree entries={pluginEntries} activeId={activePluginId} onPick={onPickPlugin} />
-        </>
-      ) : null}
     </nav>
   );
 

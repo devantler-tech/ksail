@@ -1,0 +1,127 @@
+---
+title: Ephemeral Clusters with --ttl
+description: How to use KSail's --ttl flag for time-limited clusters that auto-destroy — ideal for debugging, demos, and temporary access.
+---
+
+KSail's `--ttl` flag creates **ephemeral clusters** that auto-destroy after a specified duration. This is useful when you want to give yourself or others temporary access to a cluster — for debugging, demos, pair programming, or on-call investigation — without worrying about cleaning it up afterwards.
+
+> [!NOTE]
+> Automated CI tests don't need `--ttl` — create the cluster, run tests, and delete it explicitly. See [Testing in CI/CD](/guides/cicd-integration/) for that pattern. However, `--ttl` can be added as a safety net in CI to auto-destroy clusters if the cleanup step is skipped (e.g. runner crash).
+
+## How `--ttl` Works
+
+When you pass `--ttl` to `ksail cluster create`, KSail:
+
+1. Creates the cluster normally.
+2. Blocks the process, waiting for the TTL to elapse.
+3. Auto-deletes the cluster when the timer expires.
+
+```bash
+# Create a cluster that auto-destroys after 2 hours
+ksail cluster create --ttl 2h
+```
+
+Pressing `Ctrl+C` (or sending `SIGINT`/`SIGTERM`) cancels the TTL wait and leaves the cluster running. This lets you extend a session — just delete the cluster manually when you're done.
+
+> [!IMPORTANT]
+> TTL deletion only runs while the `ksail cluster create` process is alive. If you close the terminal or kill the process, the cluster is **not** auto-deleted. Use `ksail cluster delete` to clean up manually.
+
+## When to Use `--ttl`
+
+| Scenario | Example | Suggested TTL |
+|----------|---------|---------------|
+| **Debugging a failing deployment** | Spin up a cluster, deploy the broken app, inspect logs and state | `--ttl 1h` |
+| **Demo or walkthrough** | Show a feature to a colleague or stakeholder | `--ttl 30m` |
+| **Pair programming** | Share a cluster with a teammate for a focused session | `--ttl 2h` |
+| **On-call investigation** | Reproduce a production issue in a local cluster | `--ttl 1h` |
+| **Learning / experimentation** | Try out a new Helm chart or CRD | `--ttl 1h` |
+| **PR review** | Spin up a cluster to manually verify a pull request | `--ttl 30m` |
+
+## Basic Usage
+
+### Create a Time-Limited Cluster
+
+```bash
+ksail cluster create --ttl 1h
+```
+
+The process blocks and prints a message:
+
+```
+ℹ cluster will auto-destroy in 1h0m0s (press Ctrl+C to cancel)
+```
+
+When the timer expires, KSail automatically deletes the cluster and exits.
+
+### Check Remaining Time
+
+While the cluster is running, you can check the TTL status from another terminal:
+
+```bash
+ksail cluster info
+```
+
+This appends TTL information to the standard cluster info output, showing the remaining time. You can also see TTL status in the cluster list:
+
+```bash
+ksail cluster list
+```
+
+### Cancel the TTL
+
+Press `Ctrl+C` in the terminal running `ksail cluster create --ttl ...`. The cluster stays running and you can continue using it. Delete it manually when you're done:
+
+```bash
+ksail cluster delete
+```
+
+## Running in the Background
+
+If you want to keep using your terminal while the TTL timer runs, background the process:
+
+```bash
+ksail cluster create --ttl 2h &
+```
+
+The cluster creates normally and the TTL countdown runs in the background. When the timer expires, the cluster is auto-deleted.
+
+> [!NOTE]
+> If you close the terminal session, the background process may be killed (depending on your shell configuration). To keep it alive, use `nohup`:
+> ```bash
+> nohup ksail cluster create --ttl 2h &
+> ```
+
+## Kubeconfig Context
+
+KSail writes the kubeconfig context to the configured kubeconfig path (default `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`). Use `kubectl`, `k9s`, or `ksail cluster connect` immediately after creation. For context name formats per distribution, see [Companion Tools](/integrations/companion-tools/).
+
+## Sharing a Cluster
+
+To share a running ephemeral cluster with a colleague on the same network, they need:
+
+1. A minimal kubeconfig for the specific cluster context
+2. Network access to the cluster's API server
+
+Export only the relevant context to avoid leaking unrelated clusters or credentials:
+
+```bash
+kubectl config view --minify --flatten --context k3d-ksail > /tmp/ksail-kubeconfig.yaml
+```
+
+For local Docker-based clusters, this typically means running on the same machine. For Talos clusters on Hetzner or Omni, the API server is network-accessible and the kubeconfig can be shared directly.
+
+> [!CAUTION]
+> Kubeconfig files contain cluster credentials (client certificates or tokens). Always share a minimal, context-specific kubeconfig rather than your full `~/.kube/config`, use secure channels, and only share with trusted individuals. Note that your kubeconfig path may differ if you configured `spec.cluster.connection.kubeconfig`.
+
+## Distribution Tips
+
+- **K3s** starts fast and uses few resources for a full-workload cluster — good for quick debugging sessions where you need to run actual workloads.
+- **Vanilla** (Kind) provides standard upstream Kubernetes — useful when you need exact API compatibility.
+- **Talos** is immutable and secure — ideal for reproducing production-like environments.
+- **VCluster** uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane directly in Docker containers — no pre-existing host cluster required, useful for lightweight isolated environments.
+- **KWOK** starts in seconds and consumes minimal resources — ideal for control-plane testing and CI/CD pipelines that need a real Kubernetes API server without running actual workloads.
+
+## CI/CD with the GitHub Action
+
+Use the `ksail-cluster` GitHub Actions composite action to set up KSail, cache Helm charts and mirror images, and run `ksail cluster init` + `ksail cluster create` in a single step. See [PR Preview Clusters](/guides/pr-preview-clusters/) for the full action reference and GitOps CI workflows, or [Testing in CI/CD](/guides/cicd-integration/) for integration test patterns.
+

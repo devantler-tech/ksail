@@ -1,5 +1,5 @@
 import { Moon, Plus, RotateCw, Server, Sun } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ApiError,
   createCluster,
@@ -32,6 +32,7 @@ import { PluginsView } from "./components/PluginsView.tsx";
 import { AIAssistant } from "./components/AIAssistant.tsx";
 import { pluginNavigate } from "./lib/plugins/pluginNavigation.ts";
 import { registry } from "./lib/plugins/registry.ts";
+import { clearResourceDetail, getResourceDetailTarget, subscribeResourceDetail } from "./lib/plugins/resourceDetail.ts";
 import { usePluginLoader, usePluginRegistry } from "./lib/plugins/usePlugins.ts";
 import { setKubeWatchAvailable } from "./lib/plugins/watchStream.ts";
 import { setWSMultiplexerAvailable } from "./lib/plugins/wsMultiplexer.ts";
@@ -65,6 +66,12 @@ const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 // matching the lazy-externals approach for MUI/Redux.
 const PluginRouterHost = lazy(() =>
   import("./lib/plugins/PluginRouterHost.tsx").then((module) => ({ default: module.PluginRouterHost })),
+);
+
+// HostResourceDetail is lazy-loaded so the plugin K8s data layer (kube-proxy fetch) it pulls in stays out
+// of the main bundle until a plugin link actually opens a resource-detail overlay.
+const HostResourceDetail = lazy(() =>
+  import("./components/HostResourceDetail.tsx").then((module) => ({ default: module.HostResourceDetail })),
 );
 
 // capability reads one capability flag from a (possibly null/partial) Config, defaulting to
@@ -174,6 +181,10 @@ export function App() {
   // The plugin sidebar is a parent→children tree (Headlamp plugins like Flux register a group + nested
   // entries); getSidebarTree applies any registered sidebar filters and nests children under their parent.
   const pluginEntries = registry.getSidebarTree();
+  // resourceDetailTarget is the resource a plugin link asked to open (via the resourceDetail bridge);
+  // non-null mounts the host detail overlay (HostResourceDetail) for it. Subscribed through the module
+  // singleton so a Link rendered inside the plugin router can drive KSail's chrome.
+  const resourceDetailTarget = useSyncExternalStore(subscribeResourceDetail, getResourceDetailTarget);
 
   // enterCluster drills into a cluster's workspace, landing on its Overview. Used by the Clusters list,
   // deep links, and the command palette.
@@ -221,6 +232,21 @@ export function App() {
       setView("clusters");
     }
   }, [activeClusterKey, view]);
+
+  // The plugin surface is cluster-scoped (its nav lives in the cluster workspace), so close any open
+  // plugin route when no cluster is active — leaving a cluster must not strand the user on a plugin view
+  // that targets a cluster they are no longer in.
+  useEffect(() => {
+    if (!activeClusterKey) {
+      setActivePluginRoute(null);
+    }
+  }, [activeClusterKey]);
+
+  // Close the resource-detail overlay whenever the active cluster changes — its fetched object targets the
+  // previous cluster's apiserver, so it must not linger across a switch.
+  useEffect(() => {
+    clearResourceDetail();
+  }, [activeClusterKey]);
 
   // refresh returns false when the session was lost (HTTP 401), so callers (e.g. init) can avoid
   // starting/continuing the poll while the login screen is shown.
@@ -438,14 +464,14 @@ export function App() {
     [formMode, formInitial, refresh, toast],
   );
 
-  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
-  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
-  // form fields.
-  const handleSubmitRaw = useCallback(
-    async (cluster: Cluster) => {
+  // runClusterMutation runs a cluster mutation, refreshing the list on success and surfacing failures
+  // via a toast. It rethrows so callers (e.g. the confirm dialog) keep their open/spinner state on
+  // failure; sharing this body keeps the create/delete handlers from duplicating it.
+  const runClusterMutation = useCallback(
+    async (action: () => Promise<unknown>, successMessage: string) => {
       try {
-        await createCluster(cluster);
-        toast.success(`Cluster "${cluster.metadata.name}" created`);
+        await action();
+        toast.success(successMessage);
         await refresh(true);
       } catch (err) {
         toast.error(errorMessage(err));
@@ -455,22 +481,28 @@ export function App() {
     [refresh, toast],
   );
 
+  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
+  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
+  // form fields.
+  const handleSubmitRaw = useCallback(
+    async (cluster: Cluster) => {
+      await runClusterMutation(
+        () => createCluster(cluster),
+        `Cluster "${cluster.metadata.name}" created`,
+      );
+    },
+    [runClusterMutation],
+  );
+
   // performDelete deletes a specific cluster and refreshes the list. It rethrows so the confirm
   // dialog keeps its open/spinner state on failure; the immediate (unconfirmed) path swallows it.
   const performDelete = useCallback(
     async (target: Cluster) => {
       const name = target.metadata.name;
       const namespace = target.metadata.namespace ?? "default";
-      try {
-        await deleteCluster(namespace, name);
-        toast.success(`Deleting cluster "${name}"`);
-        await refresh(true);
-      } catch (err) {
-        toast.error(errorMessage(err));
-        throw err;
-      }
+      await runClusterMutation(() => deleteCluster(namespace, name), `Deleting cluster "${name}"`);
     },
-    [refresh, toast],
+    [runClusterMutation],
   );
 
   const handleDelete = useCallback(async () => {
@@ -720,6 +752,19 @@ export function App() {
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
         />
+
+        {/* Resource-detail overlay opened when a plugin links to a resource (resourceDetail bridge). Renders
+            over whatever surface is active; fetches the target through the kube-proxy for the active cluster. */}
+        {resourceDetailTarget ? (
+          <Suspense fallback={null}>
+            <HostResourceDetail
+              target={resourceDetailTarget}
+              clusterNamespace={activeCluster?.metadata.namespace ?? "default"}
+              clusterName={activeCluster?.metadata.name ?? null}
+              onClose={clearResourceDetail}
+            />
+          </Suspense>
+        ) : null}
 
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       </AppShell>

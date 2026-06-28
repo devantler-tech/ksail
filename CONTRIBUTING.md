@@ -111,29 +111,6 @@ mockery
 go test ./...
 ```
 
-#### Benchmarks
-
-KSail includes Go benchmarks for performance-critical code paths. When making performance-related changes, run benchmarks to validate improvements:
-
-```sh
-# working-directory: ./
-# Run all benchmarks
-go test -bench=. -benchmem ./...
-
-# Run benchmarks for specific package (e.g., resource polling)
-go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
-
-# Compare before/after performance
-go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt
-# (make changes)
-go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
-benchstat before.txt after.txt
-```
-
-PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
-
-Baseline results are stored in the CI benchmark store (the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data), fed by pushes to `main`) — that store is what PR comparisons run against. See package-specific `BENCHMARKS.md` files (located throughout `pkg/` — search with `find pkg -name BENCHMARKS.md`) for what each package benchmarks and how to run it.
-
 ### Documentation
 
 The project documentation is built using [Astro](https://astro.build/) with the [Starlight](https://starlight.astro.build/) theme and is located in the `docs/` directory.
@@ -325,7 +302,7 @@ The `gen-smoke-test` job runs on every PR that has Go source changes (`needs.cha
 
 These tests do not require Docker or a cluster and complete in under a minute.
 
-Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests and benchmarks in `pkg/cli/cmd/workload/cipher/`.
+Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests in `pkg/cli/cmd/workload/cipher/`.
 
 **What the system test covers:**
 

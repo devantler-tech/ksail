@@ -135,7 +135,12 @@ func (s *Server) handleUpdateAppSettings(writer http.ResponseWriter, request *ht
 
 	var update AppSettings
 
-	decodeErr := json.NewDecoder(limited).Decode(&update)
+	// Reject unknown fields: this endpoint replaces the stored settings, so a typo'd key (e.g.
+	// "reasoningEffortt") would otherwise be silently ignored and clear the real field on save.
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+
+	decodeErr := decoder.Decode(&update)
 	if decodeErr != nil {
 		writeDecodeError(writer, fmt.Errorf("decode app settings: %w", decodeErr))
 

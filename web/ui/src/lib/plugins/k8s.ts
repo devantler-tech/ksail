@@ -39,8 +39,10 @@ export class ApiError extends Error {
 type KubeJSON = Record<string, unknown>;
 
 // ListOptions mirror the Headlamp useList/apiList options object (a plugin calls
-// `Pod.useList({ namespace })`). Only namespace filtering is applied today; the rest are accepted for
-// API parity.
+// `Pod.useList({ namespace })`). namespace narrows the apiserver collection path (single namespace) or is
+// applied client-side (multiple); labelSelector/fieldSelector are forwarded to the kube-proxy (and the
+// watch), which relay them to the apiserver — so a plugin's `Deployment.useList({ labelSelector })` filters
+// server-side exactly like Headlamp (the Flux Overview's controller/resource counts depend on this).
 export interface ListOptions {
   namespace?: string | string[];
   cluster?: string;
@@ -101,7 +103,8 @@ export class KubeObject {
     opts?: ListOptions,
   ): () => () => void {
     const cls = this;
-    const listPath = collectionPath(cls.apiEndpoint);
+    const listPath = collectionPath(cls.apiEndpoint, singleNamespace(opts?.namespace));
+    const query = listSelectorQuery(opts);
 
     return () => {
       const cluster = activeClusterGetter();
@@ -112,7 +115,7 @@ export class KubeObject {
       }
 
       let cancelled = false;
-      proxyList(cluster, listPath, cls)
+      proxyList(cluster, listPath, query, cls)
         .then((items) => {
           if (!cancelled) {
             onList(filterByNamespace(items, opts?.namespace));
@@ -136,7 +139,8 @@ export class KubeObject {
   // → polling), same as the rest of the plugin K8s layer.
   static useList(this: KubeObjectClass, opts: ListOptions = {}): [KubeObject[], ApiError | null] {
     const cls = this;
-    const listPath = collectionPath(cls.apiEndpoint);
+    const listPath = collectionPath(cls.apiEndpoint, singleNamespace(opts.namespace));
+    const query = listSelectorQuery(opts);
     const namespaceKey = Array.isArray(opts.namespace) ? opts.namespace.join(",") : opts.namespace ?? "";
 
     const cluster = activeClusterGetter();
@@ -145,16 +149,16 @@ export class KubeObject {
     const hasCluster = clusterName !== null && clusterNamespace !== null;
 
     const watch: WatchBinding<KubeObject> = {
-      url: hasCluster ? watchStreamURL(clusterNamespace, clusterName, listPath) : "",
-      mux: hasCluster ? { clusterId: clusterName, path: listPath, query: "" } : undefined,
+      url: hasCluster ? watchStreamURL(clusterNamespace, clusterName, listPath, query) : "",
+      mux: hasCluster ? { clusterId: clusterName, path: listPath, query } : undefined,
       toItem: (raw: RawKubeObject) => cls.create(raw as KubeJSON),
       keyOf: (item: KubeObject) => kubeObjectKey(item.jsonData as RawKubeObject),
     };
 
     const [items, error] = useClusterScopedList<KubeObject>(
       activeClusterGetter,
-      async (active) => filterByNamespace(await proxyList(active, listPath, cls), opts.namespace),
-      [listPath, namespaceKey],
+      async (active) => filterByNamespace(await proxyList(active, listPath, query, cls), opts.namespace),
+      [listPath, namespaceKey, query],
       watch,
     );
 
@@ -359,6 +363,32 @@ function objectPath(ep: ResourceEndpoint, name: string, namespace?: string): str
   return `${collectionPath(ep, namespace)}/${name}`;
 }
 
+// listSelectorQuery builds the apiserver selector query string (without a leading '?') from ListOptions.
+// Only label/field selectors go on the wire; namespace is handled via the collection path (single) or
+// client-side filterByNamespace (multiple). Empty when neither selector is set.
+function listSelectorQuery(opts?: ListOptions): string {
+  const params = new URLSearchParams();
+  if (opts?.labelSelector) {
+    params.set("labelSelector", opts.labelSelector);
+  }
+  if (opts?.fieldSelector) {
+    params.set("fieldSelector", opts.fieldSelector);
+  }
+
+  return params.toString();
+}
+
+// singleNamespace returns the one namespace to scope the apiserver collection path to, or undefined when
+// the request is cluster-wide or spans multiple namespaces — those list cluster-wide and are narrowed
+// client-side by filterByNamespace (the apiserver lists one namespace or all, not an arbitrary subset).
+function singleNamespace(namespace?: string | string[]): string | undefined {
+  if (typeof namespace === "string") {
+    return namespace;
+  }
+
+  return Array.isArray(namespace) && namespace.length === 1 ? namespace[0] : undefined;
+}
+
 // filterByNamespace keeps items in the requested namespace(s); cluster-scoped items (no namespace) always
 // pass. An empty/absent filter returns everything (cluster-wide list).
 function filterByNamespace(items: KubeObject[], namespace?: string | string[]): KubeObject[] {
@@ -385,10 +415,18 @@ function toApiError(err: unknown): ApiError {
 }
 
 // proxyList fetches a collection through the kube-proxy and wraps each item as the given class, throwing
-// ApiError (with the HTTP status) on a non-OK response so callers can branch on 404 etc.
-async function proxyList(cluster: ClusterRef, listPath: string, cls: KubeObjectClass): Promise<KubeObject[]> {
+// ApiError (with the HTTP status) on a non-OK response so callers can branch on 404 etc. `query` is the
+// apiserver selector query (without the leading '?', built by listSelectorQuery); the kube-proxy relays
+// it to the apiserver, so label/field selectors filter server-side.
+async function proxyList(
+  cluster: ClusterRef,
+  listPath: string,
+  query: string,
+  cls: KubeObjectClass,
+): Promise<KubeObject[]> {
   const base = `/api/v1/clusters/${encodeURIComponent(cluster.namespace)}/${encodeURIComponent(cluster.name)}`;
-  const response = await fetch(`${base}/proxy/${listPath.replace(/^\//, "")}`);
+  const suffix = query ? `?${query}` : "";
+  const response = await fetch(`${base}/proxy/${listPath.replace(/^\//, "")}${suffix}`);
   if (!response.ok) {
     throw new ApiError(`apiserver GET ${listPath} failed: ${response.status}`, response.status);
   }
@@ -415,4 +453,41 @@ async function proxyGet(cluster: ClusterRef, objPath: string, cls: KubeObjectCla
   obj.cluster = cluster.name;
 
   return obj;
+}
+
+// ResourceTarget addresses a single object to fetch through the kube-proxy — the shape the resource-detail
+// bridge (resourceDetail.ts) carries when a plugin link is followed. apiVersion is "group/version" (or
+// "v1" for core); plural is the apiserver resource name; namespace is omitted for cluster-scoped kinds.
+// kind is carried for display (the detail panel's subtitle).
+export interface ResourceTarget {
+  apiVersion: string;
+  kind: string;
+  plural: string;
+  namespace?: string;
+  name: string;
+}
+
+// getObjectByTarget fetches one object (raw apiserver JSON) through the kube-proxy for the given cluster +
+// target. It is the host-side counterpart to the class-based useGet: KSail's resource-detail overlay
+// (App.tsx) calls it to load whatever resource a plugin link points at, without needing a registered
+// KubeObject subclass for that kind. The returned object is the unstructured manifest the detail panel
+// renders (structurally a K8sObject).
+export async function getObjectByTarget(cluster: ClusterRef, target: ResourceTarget): Promise<KubeJSON> {
+  const slash = target.apiVersion.indexOf("/");
+  const group = slash === -1 ? "" : target.apiVersion.slice(0, slash);
+  const version = slash === -1 ? target.apiVersion : target.apiVersion.slice(slash + 1);
+  const endpoint: ResourceEndpoint = {
+    group,
+    version,
+    plural: target.plural,
+    namespaced: target.namespace !== undefined,
+  };
+  const path = objectPath(endpoint, target.name, target.namespace);
+  const base = `/api/v1/clusters/${encodeURIComponent(cluster.namespace)}/${encodeURIComponent(cluster.name)}`;
+  const response = await fetch(`${base}/proxy/${path.replace(/^\//, "")}`);
+  if (!response.ok) {
+    throw new ApiError(`apiserver GET ${path} failed: ${response.status}`, response.status);
+  }
+
+  return (await response.json()) as KubeJSON;
 }

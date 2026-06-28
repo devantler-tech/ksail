@@ -10,8 +10,40 @@ import (
 
 // These black-box tests cover small, pure helper functions across the v1alpha1
 // config API that previously had no direct coverage: OIDC validation/enablement,
-// Hetzner network/CNI-port resolution, provider Docker-need predicate, node-count
-// arithmetic, and the host-cluster label predicate.
+// Flux signature-verification enablement, Hetzner network/CNI-port resolution,
+// provider Docker-need predicate, node-count arithmetic, and the host-cluster
+// label predicate.
+
+func TestFluxVerifySpecEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		spec v1alpha1.FluxVerifySpec
+		want bool
+	}{
+		{
+			name: "provider set is enabled",
+			spec: v1alpha1.FluxVerifySpec{Provider: "cosign"},
+			want: true,
+		},
+		{name: "empty provider is disabled", spec: v1alpha1.FluxVerifySpec{}, want: false},
+		{
+			name: "whitespace-only provider is disabled",
+			spec: v1alpha1.FluxVerifySpec{Provider: "  \t "},
+			want: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			spec := testCase.spec
+			assert.Equal(t, testCase.want, spec.Enabled())
+		})
+	}
+}
 
 func TestOIDCSpecEnabled(t *testing.T) {
 	t.Parallel()

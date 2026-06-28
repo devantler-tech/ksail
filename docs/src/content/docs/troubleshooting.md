@@ -21,7 +21,7 @@ docker system prune -f
 
 ### Port Already in Use
 
-If you see `Error: Port 5000 is already allocated`, use a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
+If you see `Error: Port 5000 is already allocated`, specify a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
 
 **macOS/Linux:**
 
@@ -88,7 +88,7 @@ If the error mentions `connectivity check pod image pull failed` with `ImagePull
 
 ### Flux Reconciliation Fails Immediately
 
-When `ksail workload reconcile` fails, KSail automatically displays a [diagnostic report](/features/gitops-workflows/#automatic-failure-diagnostics) showing failing resources, pods, and recent warning events. Use this output as a starting point before running manual `kubectl` commands.
+When `ksail workload reconcile` fails, KSail automatically displays a [diagnostic report](/guides/gitops-workflows/#automatic-failure-diagnostics) showing failing resources, pods, and recent warning events. Use this output as a starting point before running manual `kubectl` commands.
 
 `ksail workload reconcile` automatically resets HelmReleases stuck in Failed or Stalled states before polling begins. If a HelmRelease reset does not resolve the issue, or if a Flux Kustomization encounters a permanent error, reconciliation also fails fast (without waiting for the timeout):
 
@@ -213,7 +213,7 @@ This means the CA certificate stored under the current context in `~/.talos/conf
 ksail cluster repair
 ```
 
-The `talosconfig-ca` repair detects a known single-byte BasicConstraints corruption pattern, fixes it in place, and writes a timestamped backup (`~/.talos/config.bak.<timestamp>`) before overwriting. The repair is idempotent and only modifies CA bytes whose corruption it recognises.
+The `talosconfig-ca` repair detects a known single-byte BasicConstraints corruption pattern, fixes it in place, and writes a timestamped backup (`~/.talos/config.bak.<timestamp>`) before overwriting. The repair is idempotent and only modifies CA bytes whose corruption it recognizes.
 
 **Verify manually** (optional):
 

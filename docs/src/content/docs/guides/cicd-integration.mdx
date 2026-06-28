@@ -1,0 +1,236 @@
+---
+title: CI/CD Integration
+description: The recommended KSail CI/CD shape — an offline validate-and-scan gate on every pull request, ordered manifest-then-node delivery on merge, and one-step ephemeral clusters in GitHub Actions.
+---
+
+import { Steps, TabItem, Tabs } from "@astrojs/starlight/components";
+
+KSail is a single static binary, so CI/CD is just the same commands you run on your laptop —
+`workload validate`, `workload scan`, `workload push`, `workload reconcile`, `cluster update` —
+wired into a pipeline. This guide shows the recommended shape: a fast **offline gate** on every pull
+request, **ordered delivery** on merge, and how to spin up real clusters in GitHub Actions when a job
+actually needs one.
+
+:::note[Prerequisites]
+- A GitOps project — see [Deliver with GitOps](/start/deliver-with-gitops/).
+- For multi-environment delivery, a config per environment (e.g. `ksail.yaml` and `ksail.prod.yaml`) —
+  see [Multi-Environment Workflows](/guides/multi-environment/).
+:::
+
+## The shape
+
+```text
+  pull request                         merge
+  ┌─────────────────────────┐          ┌──────────────────────────────────────────┐
+  │ validate  +  scan        │          │ push  ──►  reconcile  ──►  cluster update │
+  │ (offline, no cluster)    │          │ (manifests first)        (node config last)│
+  └─────────────────────────┘          └──────────────────────────────────────────┘
+```
+
+- **On every pull request**, gate the change offline — no cluster, no credentials beyond what
+  rendering needs.
+- **On merge**, deliver manifests first, then sync node configuration, so an unreachable node can
+  never block application delivery.
+
+## 1. Gate every pull request — offline
+
+`ksail workload validate` (schema validation via kubeconform, with Flux `${var}` substitution resolved
+from a local schema cache) and `ksail workload scan` (security posture via [Kubescape](https://kubescape.io))
+both run **fully offline, without a cluster**. That makes them an ideal PR gate: fast, deterministic,
+and free of cloud access.
+
+```bash
+ksail workload validate
+ksail workload scan --framework nsa --compliance-threshold 85
+```
+
+When a repository describes several environments, validate **each** config — a manifest can be valid
+for one overlay and broken for another:
+
+```bash
+ksail workload validate
+ksail --config ksail.prod.yaml workload validate
+ksail --config ksail.prod.yaml workload scan --framework nsa --compliance-threshold 85
+```
+
+`scan` fails the job when the compliance score drops below `--compliance-threshold`, so a regression in
+security posture blocks the merge. Both commands also read their defaults from `spec.workload` in
+`ksail.yaml`, so `ksail workload scan` with no flags is a turnkey gate once configured.
+
+:::tip[Render-aware checks]
+For a Kustomize root, both commands render the overlay first (Kustomize build + Flux substitution +
+in-process Helm templating) so findings reflect what actually ships, not the raw files. See
+[`workload validate`](/cli-flags/workload/workload-validate/) and
+[`workload scan`](/cli-flags/workload/workload-scan/).
+:::
+
+## 2. Deliver on merge — manifests first, node config last
+
+Once a change lands, deliver it. KSail keeps two concerns separate and **orders them deliberately**:
+
+<Steps>
+
+1. **Push** the source directory as a versioned OCI artifact:
+
+   ```bash
+   ksail --config ksail.prod.yaml workload push
+   ```
+
+2. **Reconcile** — tell the in-cluster GitOps engine to pull that artifact and apply it:
+
+   ```bash
+   ksail --config ksail.prod.yaml workload reconcile
+   ```
+
+3. **Update node configuration last** — only after the application has shipped:
+
+   ```bash
+   ksail --config ksail.prod.yaml cluster update
+   ```
+
+</Steps>
+
+Run `cluster update` **last** on purpose. Pushing and reconciling manifests talks to the GitOps engine
+over the Kubernetes API; updating node configuration touches the underlying nodes, which can be slow or
+temporarily unreachable. Ordering delivery before node sync means a stuck or offline node can never
+block application delivery — the manifests are already on their way. This is the same ordering described
+in the [Reference Architecture](/concepts/reference-architecture/).
+
+:::note[Credentials reach CI as secrets]
+Configs stay Git-safe via `${VAR}` expansion, so the pipeline supplies the values as secrets:
+- A **registry token** consumed via `${VAR}` in `spec.cluster.localRegistry.registry` (e.g.
+  `"user:${GHCR_TOKEN}@ghcr.io/org/platform/manifests"`).
+- A **SOPS age key** written to `~/.config/sops/age/keys.txt` (e.g. from a `SOPS_AGE_KEY` secret) so
+  the engine can decrypt `*.enc.yaml` on the way in.
+
+See [Secret Management](/guides/secret-management/) and [Configuration](/configuration/).
+:::
+
+## 3. Provision a cluster in GitHub Actions
+
+The gate above needs no cluster. When a job *does* — integration tests, smoke tests, a per-PR preview —
+the `ksail-cluster` composite action sets up KSail, caches Helm charts and mirror-registry images
+between runs, and runs `init` + `create` in one step:
+
+```yaml
+- uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+  with:
+    distribution: K3s
+```
+
+The action outputs `kubeconfig` — the path to the provisioned cluster's kubeconfig — so follow-up steps
+can talk to it with any tool. Pair it with [`--ttl`](/guides/ephemeral-clusters/) as a cleanup safety
+net so the cluster self-destructs even if a job is cancelled mid-run.
+
+> [!NOTE]
+> Examples reference the action at `@main` for brevity. For reproducible pipelines, pin to a release tag
+> (e.g. `@v7.56.0`) or a commit SHA — there is currently no floating major tag like `@v7`.
+
+<Tabs>
+  <TabItem label="Integration tests">
+    ```yaml
+    jobs:
+      integration:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+            id: cluster
+            with:
+              distribution: Vanilla
+          - name: Run tests against the cluster
+            env:
+              KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+            run: go test ./... -tags=integration
+    ```
+  </TabItem>
+  <TabItem label="Full GitOps pipeline">
+    Validate manifests, create the cluster, push to its local registry, and wait for the GitOps engine
+    to reconcile — all from inputs:
+
+    ```yaml
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+      with:
+        distribution: K3s
+        validate: "true"     # ksail workload validate before create
+        push: "true"         # ksail workload push after create
+        reconcile: "true"    # ksail workload reconcile and wait
+        sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+    ```
+  </TabItem>
+  <TabItem label="Security scanning">
+    Run [Kubescape](https://kubescape.io) and upload results to GitHub Code Scanning:
+
+    ```yaml
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+      with:
+        distribution: Vanilla
+        scan: "true"
+        scan-framework: nsa,mitre
+        scan-format: sarif
+        scan-output: results.sarif
+    - uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+    ```
+  </TabItem>
+</Tabs>
+
+### Key inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster, KWOK) |
+| `provider` | `Docker` | Infrastructure provider; cloud providers need credentials via env vars (`HCLOUD_TOKEN`, `OMNI_SERVICE_ACCOUNT_KEY`) |
+| `ksail-version` | `latest` | Pin a released KSail version for reproducible pipelines |
+| `args` | — | Extra CLI arguments passed to `cluster init` |
+| `config` | — | Use an existing `ksail.yaml` instead of scaffolding (`init: "false"` skips init entirely) |
+| `cache` | `true` | Cache Helm charts and mirror registry volumes between runs |
+| `sops-age-key` | — | SOPS age key for decrypting secrets during Flux setup |
+| `validate` / `scan` | `false` | Pre-create manifest validation and Kubescape scanning |
+| `push` / `reconcile` | `false` | GitOps push and reconcile after create |
+| `delete` | `false` | Tear the cluster down at the end (runs even on failure) |
+
+See the [action source](https://github.com/devantler-tech/ksail/tree/main/.github/actions/ksail-cluster)
+for the complete input list, including scan thresholds and host customization.
+
+> [!TIP]
+> On hosted runners the cluster disappears with the VM, so `delete` defaults to `false`. Set
+> `delete: "true"` on self-hosted runners — and always for cloud providers like Hetzner, where leaked
+> clusters cost real money.
+
+## Beyond GitHub Actions
+
+The composite action is a convenience, not a requirement. [Install KSail](/installation/) on any runner
+image and run the same commands directly:
+
+```bash
+ksail cluster init --distribution K3s
+ksail cluster create
+```
+
+Add [`--ttl`](/guides/ephemeral-clusters/) so clusters self-destruct even when a job is cancelled
+mid-run.
+
+## Hardening the supply chain (optional)
+
+The gate-and-deliver flow above is complete on its own. When you need a verifiable supply chain, layer
+these on top — they're standard, vendor-agnostic practices that build on KSail's OCI delivery rather
+than replacing it:
+
+- **Sign** the OCI artifact that `workload push` produces.
+- **Attach an SBOM** and a **provenance attestation** to it.
+- Have the **GitOps engine verify the signature** before it applies the artifact, so an unsigned or
+  tampered artifact never reaches the cluster.
+
+This is optional and orthogonal to the recommended shape — adopt it when your compliance posture calls
+for it.
+
+## Related
+
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the push/reconcile loop these pipelines automate
+- [Reference Architecture](/concepts/reference-architecture/) — the full multi-environment delivery pipeline
+- [Multi-Environment Workflows](/guides/multi-environment/) — `--config` per environment
+- [PR Preview Clusters](/guides/pr-preview-clusters/) — per-PR ephemeral clusters in GitHub Actions
+- [Ephemeral Clusters](/guides/ephemeral-clusters/) — `--ttl` auto-destruction for CI safety nets
+- [Secret Management](/guides/secret-management/) — SOPS keys and `${VAR}` tokens in CI

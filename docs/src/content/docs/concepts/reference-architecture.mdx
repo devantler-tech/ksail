@@ -1,0 +1,130 @@
+---
+title: Reference Architecture
+description: A complete, recommended multi-environment KSail setup — a thin local cluster and a full production cluster sharing one layered GitOps repository — built entirely from KSail-native features.
+---
+
+This page sketches a recommended **reference architecture** for running real workloads with KSail: a thin
+local cluster for development and a full production cluster, driven from one repository with one workflow.
+It's a generic blueprint — adapt the pieces to your needs. Everything here is built from KSail-native
+features introduced elsewhere in these docs.
+
+import { Steps } from "@astrojs/starlight/components";
+
+## The shape
+
+```text
+        one Git repository
+        ┌───────────────────────────────────────────────┐
+        │  ksail.yaml          ksail.prod.yaml           │
+        │  (local)             (production)              │
+        │        │                    │                  │
+        │   k8s/  ── bases/ ─ providers/ ─ clusters/ ─┐  │
+        └────────┼────────────────────────────────────┼──┘
+                 ▼                                    ▼
+        ┌──────────────────┐               ┌────────────────────────┐
+        │ Local cluster    │               │ Production cluster     │
+        │ Talos + Docker   │               │ Talos + Hetzner        │
+        │ thin: core only  │               │ full: + autoscaling,   │
+        │                  │               │ HA, cloud LB & storage │
+        └──────────────────┘               └────────────────────────┘
+```
+
+Both clusters run the **same distribution** (Talos) so local development has high fidelity to production —
+only the provider and the depth of installed components differ.
+
+## Two configs, one workflow
+
+```yaml
+# ksail.yaml — local: thin test-bed on Docker
+spec:
+  cluster:
+    distribution: Talos
+    provider: Docker
+    gitOpsEngine: Flux
+    controlPlanes: 1
+    workers: 1
+    distributionConfig: talos-local      # modular Talos patches for local
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/local
+```
+
+```yaml
+# ksail.prod.yaml — production: full cluster on Hetzner
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    gitOpsEngine: Flux
+    controlPlanes: 3
+    workers: 3
+    distributionConfig: talos             # modular Talos patches for prod
+    autoscaler:
+      node:
+        enabled: true
+        maxNodesTotal: 10
+        pools:
+          - { name: autoscale, serverType: cx33, min: 0, max: 4 }
+    localRegistry:
+      registry: "user:${GHCR_TOKEN}@ghcr.io/org/platform/manifests"
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/prod
+```
+
+Every operation targets an environment by config — there is no separate "prod CLI":
+
+```bash
+ksail cluster create                               # local
+ksail --config ksail.prod.yaml cluster create      # production
+```
+
+## The pieces, and where to learn them
+
+| Concern | How it's done | Learn more |
+|---------|---------------|------------|
+| Repository layout | Layered `bases/` → `providers/` → `clusters/` | [Project Structure](/concepts/project-structure/) |
+| Delivery | `workload push` (OCI artifact) → `workload reconcile` | [Deliver with GitOps](/start/deliver-with-gitops/) |
+| Per-environment targeting | `--config ksail.prod.yaml` | [Multi-Environment](/guides/multi-environment/) |
+| Node configuration | Modular Talos patches via `distributionConfig` | [Talos](/distributions/talos/) |
+| Secrets at rest | SOPS-encrypted `*.enc.yaml`, key per environment | [Secret Management](/guides/secret-management/) |
+| Credentials in config | `${VAR}` expansion keeps configs Git-safe | [Configuration](/configuration/) |
+| Scaling production | `autoscaler.node` pools | [Cluster Provisioning](/guides/cluster-provisioning/) |
+| CI gate | `workload validate` + `workload scan`, offline | [CI/CD Integration](/guides/cicd-integration/) |
+
+## The delivery pipeline
+
+A typical pipeline keeps two concerns separate so an unreachable node can never block application delivery:
+
+<Steps>
+
+1. **On every pull request** — validate and security-scan both environments, no cluster required:
+
+   ```bash
+   ksail workload validate
+   ksail --config ksail.prod.yaml workload validate
+   ksail --config ksail.prod.yaml workload scan --compliance-threshold 85
+   ```
+
+2. **On merge** — deliver manifests first, then reconcile:
+
+   ```bash
+   ksail --config ksail.prod.yaml workload push
+   ksail --config ksail.prod.yaml workload reconcile
+   ```
+
+3. **When node configuration changes** — sync it last:
+
+   ```bash
+   ksail --config ksail.prod.yaml cluster update
+   ```
+
+</Steps>
+
+## Why this works
+
+- **High fidelity** — same distribution locally and in production; bugs surface early.
+- **One source of truth** — every environment is a thin overlay on shared bases.
+- **Credential-free Git** — secrets are SOPS-encrypted; tokens arrive via `${VAR}` expansion.
+- **Fail-safe delivery** — manifests ship independently of node configuration.
+- **Confidence before deploy** — validation and security scanning gate every change, offline.

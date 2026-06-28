@@ -3,249 +3,186 @@ title: Multi-Environment Workflows with --config
 description: How to manage dev, staging, and production environments from the same project using KSail's --config flag and environment variable expansion.
 ---
 
-KSail supports two complementary approaches for multi-environment workflows:
+import { Steps } from "@astrojs/starlight/components";
 
-1. **Separate config files** (`--config`) — a dedicated `ksail.<env>.yaml` per environment with different settings
-2. **Environment variable expansion** — a single shared `ksail.yaml` with `${VAR}` placeholders substituted at runtime
-
-You can use either approach or combine both. This guide walks through common patterns.
-
-## Approach 1 — Separate Config Files (`--config`)
-
-The `--config` flag overrides KSail's default config file discovery (which walks up the directory tree looking for `ksail.yaml`). Pair it with environment-specific files to manage distinct clusters from the same project root.
-
-### Project Layout
-
-```text
-my-app/
-├── ksail.yaml           # shared defaults (optional, not used directly)
-├── ksail.dev.yaml       # local dev cluster
-├── ksail.staging.yaml   # staging cluster on Hetzner
-├── ksail.prod.yaml      # production cluster
-├── k8s/
-│   ├── kustomization.yaml
-│   └── ...
-├── kind.yaml            # Kind cluster config (used by ksail.dev.yaml)
-└── talos/               # Talos configs (used by ksail.staging.yaml / ksail.prod.yaml)
-```
-
-### Example Config Files
-
-**`ksail.dev.yaml`** — local Kind cluster with Flux and a local registry:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: dev
-    distribution: Vanilla
-    gitOpsEngine: Flux
-    cni: Default
-    localRegistry:
-      registry: localhost:5050
-    metricsServer: Default
-  workload:
-    sourceDirectory: k8s
-```
-
-**`ksail.staging.yaml`** — Talos cluster on Hetzner with Cilium and Flux:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: staging
-    distribution: Talos
-    provider: Hetzner
-    gitOpsEngine: Flux
-    cni: Cilium
-    metricsServer: Enabled
-  provider:
-    hetzner:
-      location: "fsn1"
-  workload:
-    sourceDirectory: k8s
-```
-
-**`ksail.prod.yaml`** — production Talos cluster on Omni with all security components:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: production
-    distribution: Talos
-    provider: Omni
-    gitOpsEngine: Flux
-    cni: Cilium
-    policyEngine: Kyverno
-    certManager: Enabled
-    metricsServer: Enabled
-  provider:
-    omni:
-      endpoint: "https://<account>.omni.siderolabs.io:443"
-  workload:
-    sourceDirectory: k8s
-```
-
-### Usage
+KSail's recommended pattern for running many environments is simple: **one config file per
+environment, selected with `--config`**. You keep `ksail.yaml` (e.g. local on Docker) and
+`ksail.prod.yaml` (e.g. production on a cloud provider) side by side in one repository, and every
+command targets an environment by pointing at its config:
 
 ```bash
-# Work on the local dev cluster
-ksail --config ksail.dev.yaml cluster create
-ksail --config ksail.dev.yaml workload watch
-
-# Validate manifests against staging constraints before promoting
-ksail --config ksail.staging.yaml workload validate
-
-# Push manifests to the OCI registry for production GitOps
-ksail --config ksail.prod.yaml workload push
-
-# Update a running cluster to match the latest config
-ksail --config ksail.staging.yaml cluster update
-
-# Tear down the dev cluster after a session
-ksail --config ksail.dev.yaml cluster delete
+ksail cluster create                               # local — ksail.yaml is the default
+ksail --config ksail.prod.yaml cluster create      # production
 ```
 
-> [!NOTE]
-> `--config` is a **root persistent flag**. You can provide it anywhere before the subcommand's positional arguments, just like other global flags:
->
-> ```bash
-> ksail --config ksail.dev.yaml cluster create
-> ksail cluster --config ksail.dev.yaml create
-> ksail cluster create --config ksail.dev.yaml
-> ```
+There is no separate "prod CLI" and no per-environment workflow to learn — `create`, `update`,
+`workload push`, `workload reconcile`, `workload validate`, and `workload scan` all take the same
+`--config`. This guide walks through the pattern end to end.
 
-## Approach 2 — Shared Config with Environment Variables
+:::note[Prerequisites]
+- You've completed the [Quickstart](/start/quickstart/) and read [Deliver with GitOps](/start/deliver-with-gitops/).
+- Docker is running (for local clusters).
+:::
 
-Use a single `ksail.yaml` with `${VAR}` placeholders. KSail expands them at runtime from your shell environment. This keeps one file in version control while allowing machine- or environment-specific values.
+## The pattern
 
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: "${CLUSTER_NAME:-dev}"
-    distribution: "${CLUSTER_DISTRIBUTION:-Vanilla}"
-    provider: "${CLUSTER_PROVIDER:-Docker}"
-    gitOpsEngine: Flux
-    cni: "${CLUSTER_CNI:-Default}"
-    localRegistry:
-      registry: "${LOCAL_REGISTRY:-localhost:5050}"
-  workload:
-    sourceDirectory: "${WORKLOAD_DIR:-k8s}"
-```
+<Steps>
 
-Switch environments by exporting different variable sets:
+1. ### Keep a config per environment
 
-```bash
-# Local dev (default values used)
-ksail cluster create
+   Start from your `ksail.yaml` and add a sibling for each additional environment. Name them after
+   the environment so the intent is obvious and context names stay predictable across machines:
 
-# Staging
-export CLUSTER_NAME=staging
-export CLUSTER_DISTRIBUTION=Talos
-export CLUSTER_PROVIDER=Hetzner
-export CLUSTER_CNI=Cilium
-ksail cluster update
+   ```text
+   my-platform/
+   ├── ksail.yaml          # local — Talos on Docker
+   ├── ksail.prod.yaml     # production — Talos on Hetzner
+   ├── k8s/                # one shared manifest tree (see step 3)
+   └── talos/              # shared Talos patches
+   ```
 
-# CI (inline)
-CLUSTER_NAME=ci CLUSTER_DISTRIBUTION=K3s ksail cluster create
-```
+   `--config` overrides KSail's default discovery (which walks up the directory tree looking for
+   `ksail.yaml`), so a single repository root can drive many clusters.
 
-### `.env` Files (Optional)
+   :::tip
+   `--config` is a **root persistent flag** — place it anywhere before the subcommand's positional
+   arguments. `ksail --config ksail.prod.yaml cluster create` and
+   `ksail cluster create --config ksail.prod.yaml` are equivalent.
+   :::
 
-For convenience, manage per-environment variables in `.env` files and source them before running KSail:
+2. ### Keep the distribution, change the provider
 
-```bash
-# .env.dev
-export CLUSTER_NAME=dev
-export CLUSTER_DISTRIBUTION=Vanilla
-export LOCAL_REGISTRY=localhost:5050
-```
+   For high fidelity, run the **same `distribution`** in every environment and let only the
+   `provider` (and the depth of installed components) differ. Bugs then surface locally instead of
+   in production.
 
-```bash
-# .env.staging
-export CLUSTER_NAME=staging
-export CLUSTER_DISTRIBUTION=Talos
-export CLUSTER_PROVIDER=Hetzner
-export CLUSTER_CNI=Cilium
-```
+   ```yaml
+   # ksail.yaml — local: thin test-bed on Docker
+   apiVersion: ksail.io/v1alpha1
+   kind: Cluster
+   spec:
+     cluster:
+       name: local
+       distribution: Talos
+       provider: Docker
+       gitOpsEngine: Flux
+     workload:
+       sourceDirectory: k8s
+       kustomizationFile: clusters/local
+   ```
 
-```bash
-source .env.staging && ksail cluster update
-```
+   ```yaml
+   # ksail.prod.yaml — production: full cluster on Hetzner
+   apiVersion: ksail.io/v1alpha1
+   kind: Cluster
+   spec:
+     cluster:
+       name: production
+       distribution: Talos
+       provider: Hetzner
+       gitOpsEngine: Flux
+       cni: Cilium
+       certManager: Enabled
+       policyEngine: Kyverno
+     provider:
+       hetzner:
+         location: "fsn1"
+     workload:
+       sourceDirectory: k8s
+       kustomizationFile: clusters/prod
+   ```
 
-> [!WARNING]
-> Never commit `.env` files containing credentials to version control. Add them to `.gitignore`.
+   The configs differ only where the environments genuinely differ. Everything else is shared.
 
-## Approach 3 — Combining Both
+3. ### Share one manifest tree, overlay per cluster
 
-Use `--config` for structural differences between environments (different distributions, providers, or components) and environment variables within each config file for credentials and machine-specific paths:
+   Both configs point `spec.workload.sourceDirectory` at the **same** `k8s/` tree. As the repo
+   grows, factor that tree into layers — shared `bases/`, then `providers/` overlays, then a thin
+   `clusters/<env>` overlay per environment — and aim each config's
+   `spec.workload.kustomizationFile` at its cluster overlay:
 
-**`ksail.dev.yaml`:**
+   ```yaml
+   # ksail.yaml
+   workload:
+     kustomizationFile: clusters/local
+   ```
 
-```yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: dev
-    distribution: Vanilla
-    localRegistry:
-      registry: "${DEV_REGISTRY:-localhost:5050}"
-```
+   ```yaml
+   # ksail.prod.yaml
+   workload:
+     kustomizationFile: clusters/prod
+   ```
 
-**`ksail.prod.yaml`:**
+   This keeps shared definitions in one place while each environment stays a thin overlay. See
+   [Project Structure & GitOps Layout](/concepts/project-structure/) for the full layout.
 
-```yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    name: production
-    distribution: Talos
-    provider: Omni
-    localRegistry:
-      registry: "${PROD_REGISTRY}"
-  provider:
-    omni:
-      endpoint: "${OMNI_ENDPOINT}"
-```
+4. ### Keep credentials out of Git with `${VAR}`
 
-```bash
-# Dev: env vars provide the registry URL
-DEV_REGISTRY=localhost:5050 ksail --config ksail.dev.yaml cluster create
+   Configs support `${VAR}` environment-variable expansion, substituted at load time. Commit the
+   placeholder, supply the value from your shell or CI secret store — so a single config stays
+   credential-free and safe to version-control:
 
-# Prod: env vars provide the Omni endpoint and external registry
-OMNI_ENDPOINT=https://my-org.omni.siderolabs.io:443 \
-  PROD_REGISTRY=ghcr.io/myorg/myrepo \
-  ksail --config ksail.prod.yaml workload push
-```
+   ```yaml
+   # ksail.prod.yaml (excerpt) — token never touches Git
+   spec:
+     cluster:
+       localRegistry:
+         registry: "user:${GHCR_TOKEN}@ghcr.io/org/platform/manifests"
+   ```
 
-## CI/CD Usage
+   ```bash
+   GHCR_TOKEN=… ksail --config ksail.prod.yaml workload push
+   ```
 
-Pass `--config` as an argument to the [`ksail-cluster` composite action](https://github.com/devantler-tech/ksail/tree/main/.github/actions/ksail-cluster):
+   :::tip
+   `${VAR}` defaults too — `name: "${CLUSTER_NAME:-local}"` falls back when the variable is unset.
+   For secrets stored in Git, encrypt them with SOPS rather than relying on env vars; see
+   [Secret Management](/guides/secret-management/).
+   :::
+
+5. ### Deliver and operate, per environment
+
+   Every operation is the same command with a different `--config`. Provision and reconcile through
+   the GitOps loop, and gate changes offline before they reach a cluster:
+
+   ```bash
+   # Provision (or reconcile node config on) an environment
+   ksail --config ksail.prod.yaml cluster create
+   ksail --config ksail.prod.yaml cluster update
+
+   # Deliver manifests via GitOps: push the OCI artifact, then reconcile
+   ksail --config ksail.prod.yaml workload push
+   ksail --config ksail.prod.yaml workload reconcile
+
+   # Gate changes offline — no cluster required, ideal in CI
+   ksail --config ksail.prod.yaml workload validate
+   ksail --config ksail.prod.yaml workload scan
+   ```
+
+</Steps>
+
+## Result
+
+One repository describes every environment. The same handful of commands carry a change from your
+laptop to production — only the `--config` argument changes — while shared manifests and a
+credential-free Git history keep the environments in lockstep without duplication.
+
+## In CI/CD
+
+CI is the same `--config` discipline. Validate and scan every environment on each pull request, then
+push and reconcile on merge — secrets arrive as masked variables that `${VAR}` expansion resolves:
 
 ```yaml
 - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
   with:
-    config: ksail.staging.yaml    # path to the environment-specific config
-    push: "true"                  # push manifests for GitOps
-    reconcile: "true"             # trigger GitOps reconcile step
+    config: ksail.prod.yaml    # the environment-specific config
+    push: "true"               # push manifests for GitOps
+    reconcile: "true"          # trigger the reconcile step
   env:
-    OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+    GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 ```
 
-For ephemeral test clusters in CI, combine `--config` with `--ttl` as a safety net:
+For ephemeral test or preview clusters, combine `--config` with `--ttl` as a safety net:
 
 ```bash
 ksail --config ksail.ci.yaml cluster create --ttl 30m
@@ -253,17 +190,19 @@ ksail --config ksail.ci.yaml cluster create --ttl 30m
 ksail --config ksail.ci.yaml cluster delete
 ```
 
-See [Ephemeral Clusters (--ttl)](/features/ephemeral-clusters/) for the full TTL guide, or [PR Preview Clusters](/guides/pr-preview-clusters/) for the full action inputs reference and PR preview patterns.
+See [Ephemeral Clusters (--ttl)](/guides/ephemeral-clusters/) and
+[PR Preview Clusters](/guides/pr-preview-clusters/) for the full action inputs and preview patterns.
 
-## Tips
+## Related
 
-- **Name your clusters after their environment** (`dev`, `staging`, `production`) so context names are predictable across machines.
-- **Keep distribution-specific config files** (`kind.yaml`, `talos/`) named consistently — `ksail cluster init` generates them alongside `ksail.yaml`.
-- **Version-control all `ksail.<env>.yaml` files** but keep credentials in environment variables or a secret manager.
-- **Use `ksail workload validate`** with the target environment config before promoting manifests. See [Substitution Expansion (validate)](/configuration/workload-validate/) for how Flux `${VAR}` substitutions are handled during validation.
-
-  ```bash
-  ksail --config ksail.staging.yaml workload validate
-  ```
-
-- **Use `ksail cluster update --dry-run`** to preview the impact of config changes on a running cluster before applying them.
+- [Deliver with GitOps](/start/deliver-with-gitops/) — the push/reconcile loop these configs drive.
+- [Project Structure & GitOps Layout](/concepts/project-structure/) — the layered `bases/` →
+  `providers/` → `clusters/` tree behind `kustomizationFile`.
+- [Reference Architecture](/concepts/reference-architecture/) — a complete two-environment platform
+  built on this pattern.
+- [GitOps Workflows](/guides/gitops-workflows/) — Flux and ArgoCD in depth.
+- [Secret Management](/guides/secret-management/) — SOPS-encrypted secrets, one key per environment.
+- [CI/CD Integration](/guides/cicd-integration/) — wiring `validate`/`scan`/`push`/`reconcile` into
+  pipelines.
+- [Configuration reference](/configuration/) · [Cluster flags](/cli-flags/cluster/cluster-root/) ·
+  [Workload flags](/cli-flags/workload/workload-root/)
