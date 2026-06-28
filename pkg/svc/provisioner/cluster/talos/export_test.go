@@ -774,3 +774,16 @@ func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bo
 func NodeIsReadyForTest(node *corev1.Node) bool {
 	return nodeIsReady(node)
 }
+
+// PropagateAutoscalerBaselineForTest exposes propagateAutoscalerBaseline for unit
+// testing — the #5219 dispatcher routing existing autoscaler nodes to the recycle,
+// in-place reboot, or NO_REBOOT in-place path based on how disruptive the diff is.
+func (p *Provisioner) PropagateAutoscalerBaselineForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+}
