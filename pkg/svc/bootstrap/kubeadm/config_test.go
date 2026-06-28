@@ -12,6 +12,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// validCACertHash is a full SHA-256 CA pin (64 hex chars), the form kubeadm's
+// token discovery requires, used as a valid fixture.
+const validCACertHash = "sha256:" +
+	"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 // parsedInit mirrors the InitConfiguration subset Render emits.
 type parsedInit struct {
 	APIVersion      string `yaml:"apiVersion"`
@@ -147,7 +152,7 @@ func TestRenderServerJoinsAsControlPlane(t *testing.T) {
 		Role:              kubeadmbootstrap.RoleServer,
 		Token:             "abcdef.0123456789abcdef",
 		APIServerEndpoint: "10.0.0.1:6443",
-		CACertHashes:      []string{"sha256:deadbeef"},
+		CACertHashes:      []string{validCACertHash},
 	})
 	require.NoError(t, err)
 
@@ -160,7 +165,7 @@ func TestRenderServerJoinsAsControlPlane(t *testing.T) {
 	assert.Equal(t, "JoinConfiguration", joinCfg.Kind)
 	assert.Equal(t, "10.0.0.1:6443", joinCfg.Discovery.BootstrapToken.APIServerEndpoint)
 	assert.Equal(t, "abcdef.0123456789abcdef", joinCfg.Discovery.BootstrapToken.Token)
-	assert.Equal(t, []string{"sha256:deadbeef"}, joinCfg.Discovery.BootstrapToken.CACertHashes)
+	assert.Equal(t, []string{validCACertHash}, joinCfg.Discovery.BootstrapToken.CACertHashes)
 	assert.NotNil(t, joinCfg.ControlPlane, "an additional server joins as a control plane")
 }
 
@@ -171,7 +176,7 @@ func TestRenderAgentJoinsAsWorker(t *testing.T) {
 		Role:              kubeadmbootstrap.RoleAgent,
 		Token:             "abcdef.0123456789abcdef",
 		APIServerEndpoint: "10.0.0.1:6443",
-		CACertHashes:      []string{"sha256:deadbeef"},
+		CACertHashes:      []string{validCACertHash},
 	})
 	require.NoError(t, err)
 
@@ -210,11 +215,14 @@ func TestRenderSortsAndDropsEmptyListEntries(t *testing.T) {
 func TestRenderJoinSortsCACertHashes(t *testing.T) {
 	t.Parallel()
 
+	hashA := "sha256:" + strings.Repeat("a", 64)
+	hashB := "sha256:" + strings.Repeat("b", 64)
+
 	stream, err := kubeadmbootstrap.Render(kubeadmbootstrap.NodeConfig{
 		Role:              kubeadmbootstrap.RoleAgent,
 		Token:             "abcdef.0123456789abcdef",
 		APIServerEndpoint: "10.0.0.1:6443",
-		CACertHashes:      []string{"sha256:bbbb", "sha256:aaaa"},
+		CACertHashes:      []string{hashB, hashA},
 	})
 	require.NoError(t, err)
 
@@ -224,7 +232,7 @@ func TestRenderJoinSortsCACertHashes(t *testing.T) {
 
 	require.NoError(t, docs[0].Decode(&joinCfg))
 
-	want := []string{"sha256:aaaa", "sha256:bbbb"}
+	want := []string{hashA, hashB}
 	assert.Equal(t, want, joinCfg.Discovery.BootstrapToken.CACertHashes,
 		"CA cert hashes are sorted for deterministic output")
 }
@@ -257,7 +265,7 @@ func TestRenderRejectsInvalidConfigs(t *testing.T) {
 			cfg: kubeadmbootstrap.NodeConfig{
 				Role:         kubeadmbootstrap.RoleAgent,
 				Token:        "t",
-				CACertHashes: []string{"sha256:deadbeef"},
+				CACertHashes: []string{validCACertHash},
 			},
 			wantErr: kubeadmbootstrap.ErrMissingAPIServerEndpoint,
 		},
@@ -266,7 +274,7 @@ func TestRenderRejectsInvalidConfigs(t *testing.T) {
 				Role:              kubeadmbootstrap.RoleAgent,
 				Token:             "t",
 				APIServerEndpoint: "10.0.0.1",
-				CACertHashes:      []string{"sha256:deadbeef"},
+				CACertHashes:      []string{validCACertHash},
 			},
 			wantErr: kubeadmbootstrap.ErrInvalidAPIServerEndpoint,
 		},
@@ -275,7 +283,7 @@ func TestRenderRejectsInvalidConfigs(t *testing.T) {
 				Role:              kubeadmbootstrap.RoleAgent,
 				Token:             "t",
 				APIServerEndpoint: "10.0.0.1:https",
-				CACertHashes:      []string{"sha256:deadbeef"},
+				CACertHashes:      []string{validCACertHash},
 			},
 			wantErr: kubeadmbootstrap.ErrInvalidAPIServerEndpoint,
 		},
@@ -301,7 +309,16 @@ func TestRenderRejectsInvalidConfigs(t *testing.T) {
 				Role:              kubeadmbootstrap.RoleServer,
 				Token:             "t",
 				APIServerEndpoint: "10.0.0.1:6443",
-				CACertHashes:      []string{"sha256:zzzz"},
+				CACertHashes:      []string{"sha256:" + strings.Repeat("z", 64)},
+			},
+			wantErr: kubeadmbootstrap.ErrInvalidCACertHash,
+		},
+		"join invalid CA hash (too short)": {
+			cfg: kubeadmbootstrap.NodeConfig{
+				Role:              kubeadmbootstrap.RoleServer,
+				Token:             "t",
+				APIServerEndpoint: "10.0.0.1:6443",
+				CACertHashes:      []string{"sha256:deadbeef"},
 			},
 			wantErr: kubeadmbootstrap.ErrInvalidCACertHash,
 		},
@@ -310,7 +327,7 @@ func TestRenderRejectsInvalidConfigs(t *testing.T) {
 				Role:              kubeadmbootstrap.RoleAgent,
 				Token:             "t",
 				APIServerEndpoint: "10.0.0.1:6443",
-				CACertHashes:      []string{"sha256:deadbeef"},
+				CACertHashes:      []string{validCACertHash},
 				PodSubnet:         "10.244.0.0/16",
 			},
 			wantErr: kubeadmbootstrap.ErrServerInitOnlyOption,

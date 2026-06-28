@@ -21,6 +21,12 @@ const apiVersion = "kubeadm.k8s.io/v1beta4"
 // caCertHashPrefix is the only hash algorithm kubeadm's token discovery accepts.
 const caCertHashPrefix = "sha256:"
 
+// caCertHashHexLen is the number of hex characters in a full SHA-256 digest
+// (32 bytes). kubeadm rejects a discovery hash that is not a full digest, so a
+// shorter (or longer) hex string is caught here at render time rather than at
+// join time.
+const caCertHashHexLen = 64
+
 // Role is a kubeadm node's role within the cluster. It selects the shape of the
 // rendered config: an Init/Cluster configuration that starts a cluster, or a
 // Join configuration (with or without a control-plane block) that joins one.
@@ -369,11 +375,13 @@ func validateCACertHashes(hashes []string) error {
 	return nil
 }
 
-// validCACertHash reports whether pin is a "sha256:" prefix followed by a
-// non-empty lowercase-hex digest.
+// validCACertHash reports whether pin is a "sha256:" prefix followed by a full
+// 64-character lowercase-hex SHA-256 digest. A shorter hex string (e.g.
+// "sha256:deadbeef") is rejected: kubeadm requires a full digest, so accepting a
+// truncated one would render a config it fails to join with.
 func validCACertHash(pin string) bool {
 	digest, found := strings.CutPrefix(pin, caCertHashPrefix)
-	if !found || digest == "" {
+	if !found || len(digest) != caCertHashHexLen {
 		return false
 	}
 
