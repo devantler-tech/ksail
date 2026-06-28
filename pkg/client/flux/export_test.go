@@ -17,3 +17,15 @@ var CheckHelmReleaseStuck = checkHelmReleaseStuck
 
 // CheckHelmReleaseStuckFunc is the function signature for checkHelmReleaseStuck.
 type CheckHelmReleaseStuckFunc = func(hr *unstructured.Unstructured) *StuckHelmRelease
+
+// IsConnectionError exports isConnectionError for testing.
+var IsConnectionError = isConnectionError
+
+// IsTransientAPIError exports isTransientAPIError for testing.
+var IsTransientAPIError = isTransientAPIError
+
+// TimeoutWaitingError exports timeoutWaitingError for testing.
+var TimeoutWaitingError = timeoutWaitingError
+
+// HandleTransientError exports handleTransientError for testing.
+var HandleTransientError = handleTransientError
