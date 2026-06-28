@@ -18,7 +18,7 @@ const (
 	// header is the literal first line cloud-init requires to recognise a payload
 	// as a cloud-config document; it must be the very first bytes of user_data.
 	header = "#cloud-config\n"
-	// scriptShebang and scriptPreamble open the generated boot script. `set -eu`
+	// scriptShebang and scriptSetFlags open the generated boot script. `set -eu`
 	// aborts on the first failing command or unset variable, and the `exec`
 	// redirect sends every subsequent line's stdout and stderr to the log without
 	// masking the script's exit code (unlike a trailing `| tee`).
@@ -146,15 +146,26 @@ func (cfg Config) validatedCommands() ([]string, error) {
 
 // buildScript assembles the POSIX boot script: a shebang, strict-mode flags, an
 // exec redirect that captures all output to logPath, then each command on its
-// own line.
+// own line. logPath is shell-quoted because it is the one config value spliced
+// into a shell context: an absolute-path check alone would still let a path with
+// a space break the redirect, or a crafted `/var/log/x; cmd` change the script's
+// behaviour. (scriptPath needs no quoting — it only ever appears as a YAML
+// scalar and a runcmd argv element, never inside a shell string.)
 func buildScript(logPath string, commands []string) string {
 	lines := make([]string, 0, len(commands)+3) //nolint:mnd // shebang + flags + exec redirect
 	lines = append(lines,
 		scriptShebang,
 		scriptSetFlags,
-		"exec >> "+logPath+" 2>&1",
+		"exec >> "+shellQuote(logPath)+" 2>&1",
 	)
 	lines = append(lines, commands...)
 
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// shellQuote single-quotes s for safe inclusion in a POSIX shell command,
+// escaping any embedded single quote via the '\” idiom, so shell
+// metacharacters in the value are never interpreted.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

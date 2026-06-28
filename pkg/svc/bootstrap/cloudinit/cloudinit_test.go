@@ -57,11 +57,12 @@ func TestBuildUserDataDefaults(t *testing.T) {
 	// preserved by cloud-init.
 	assert.Equal(t, [][]string{{"/bin/sh", cloudinitbootstrap.DefaultScriptPath}}, cfg.RunCmd)
 
-	// Strict mode + an exec redirect to the default log, then the commands in order.
+	// Strict mode + an exec redirect to the (shell-quoted) default log, then the
+	// commands in order.
 	assert.Equal(t,
 		"#!/bin/sh\n"+
 			"set -eu\n"+
-			"exec >> "+cloudinitbootstrap.DefaultLogPath+" 2>&1\n"+
+			"exec >> '"+cloudinitbootstrap.DefaultLogPath+"' 2>&1\n"+
 			"echo first\n"+
 			"echo second\n",
 		file.Content,
@@ -83,7 +84,29 @@ func TestBuildUserDataCustomPaths(t *testing.T) {
 	require.Len(t, cfg.WriteFiles, 1)
 	assert.Equal(t, "/opt/ksail/boot.sh", cfg.WriteFiles[0].Path)
 	assert.Equal(t, [][]string{{"/bin/sh", "/opt/ksail/boot.sh"}}, cfg.RunCmd)
-	assert.Contains(t, cfg.WriteFiles[0].Content, "exec >> /var/log/custom.log 2>&1\n")
+	assert.Contains(t, cfg.WriteFiles[0].Content, "exec >> '/var/log/custom.log' 2>&1\n")
+}
+
+func TestBuildUserDataQuotesLogPath(t *testing.T) {
+	t.Parallel()
+
+	// A log path with shell metacharacters (a space, and an injection attempt) must
+	// be neutralised by quoting: it stays a single literal redirect target and
+	// cannot break the redirect or run an extra command at first boot.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+		LogPath:  "/var/log/x; touch /tmp/pwned",
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	assert.Contains(t,
+		cfg.WriteFiles[0].Content,
+		"exec >> '/var/log/x; touch /tmp/pwned' 2>&1\n",
+	)
+	assert.NotContains(t, cfg.WriteFiles[0].Content, "touch /tmp/pwned\n")
 }
 
 func TestBuildUserDataDropsBlankCommands(t *testing.T) {
@@ -101,7 +124,7 @@ func TestBuildUserDataDropsBlankCommands(t *testing.T) {
 	assert.Equal(t,
 		"#!/bin/sh\n"+
 			"set -eu\n"+
-			"exec >> "+cloudinitbootstrap.DefaultLogPath+" 2>&1\n"+
+			"exec >> '"+cloudinitbootstrap.DefaultLogPath+"' 2>&1\n"+
 			"echo kept\n",
 		cfg.WriteFiles[0].Content,
 	)
