@@ -116,6 +116,14 @@ export function AIAssistant({
     [streaming, messages, clusterName, namespace],
   );
 
+  // Abort an in-flight turn if availability is revoked (e.g. the token is removed via a settings/config
+  // reload) while this component stays mounted — the unmount cleanup alone wouldn't catch that.
+  useEffect(() => {
+    if (!available) {
+      abortRef.current?.abort();
+    }
+  }, [available]);
+
   // No Copilot token configured on the serving backend: the chat cannot run, so explain how to enable
   // it instead of showing a dead input. The hooks above still run unconditionally (rules of hooks).
   if (!available) {

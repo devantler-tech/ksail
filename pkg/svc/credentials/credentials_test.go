@@ -45,6 +45,26 @@ func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {
 	assert.Empty(t, credentials.DefaultEnvVar(credentials.Key("nope.nope")))
 }
 
+// TestEnvResolver_CopilotTokenFallback verifies the Copilot credential resolves from COPILOT_TOKEN when
+// the primary KSAIL_COPILOT_TOKEN is unset, mirroring webchat.copilotToken()'s two-variable lookup.
+func TestEnvResolver_CopilotTokenFallback(t *testing.T) {
+	// Not parallel: mutates process env via t.Setenv.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	t.Setenv("COPILOT_TOKEN", "from-secondary")
+
+	var resolver credentials.EnvResolver
+
+	assert.Equal(t, "from-secondary", resolver.Value(credentials.CopilotToken))
+
+	// The primary variable wins when both are set.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "from-primary")
+	assert.Equal(t, "from-primary", resolver.Value(credentials.CopilotToken))
+
+	// The fallback is Copilot-specific: other credentials don't read COPILOT_TOKEN.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	assert.Empty(t, resolver.Value(credentials.HetznerToken))
+}
+
 func TestEnvResolver_ReadsProcessEnvironment(t *testing.T) {
 	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "tok-123")
 

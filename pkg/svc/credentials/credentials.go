@@ -58,6 +58,9 @@ const (
 	// defaultCopilotTokenEnvVar is the primary variable webchat.copilotToken() reads first (it also
 	// falls back to COPILOT_TOKEN); using it as the default keeps a stored token resolvable via Overlay.
 	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
+	// copilotEnvFallback is the secondary variable webchat.copilotToken() reads after the primary; the
+	// credential resolution mirrors it so Settings recognizes a Copilot token set only via COPILOT_TOKEN.
+	copilotEnvFallback = "COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
 )
 
 // AllKeys returns every credential key in a stable order. The Settings UI and API iterate this.
@@ -111,12 +114,27 @@ func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
 
 // Value returns the process-environment value for key's default variable, or "".
 func (EnvResolver) Value(key Key) string {
-	name := DefaultEnvVar(key)
-	if name == "" {
+	return resolveEnvValue(key, DefaultEnvVar(key))
+}
+
+// resolveEnvValue reads key's value from the process environment under envVar, applying the Copilot
+// secondary-variable fallback (COPILOT_TOKEN) when the primary default is unset — matching
+// webchat.copilotToken(), so a COPILOT_TOKEN-only setup still resolves (and reports as "env").
+func resolveEnvValue(key Key, envVar string) string {
+	if envVar == "" {
 		return ""
 	}
 
-	return os.Getenv(name)
+	value := os.Getenv(envVar)
+	if value != "" {
+		return value
+	}
+
+	if key == CopilotToken && envVar == defaultCopilotTokenEnvVar {
+		return os.Getenv(copilotEnvFallback)
+	}
+
+	return ""
 }
 
 // Ensure EnvResolver satisfies Resolver.
