@@ -60,7 +60,7 @@ const (
 	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
 	// copilotEnvFallback is the secondary variable webchat.copilotToken() reads after the primary; the
 	// credential resolution mirrors it so Settings recognizes a Copilot token set only via COPILOT_TOKEN.
-	copilotEnvFallback = "COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
+	copilotEnvFallback = "COPILOT_TOKEN"
 )
 
 // AllKeys returns every credential key in a stable order. The Settings UI and API iterate this.
