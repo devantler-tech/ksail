@@ -16,7 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { downloadKubeconfig, errorMessage, type Cluster, type Condition } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { formatTimestamp, relativeAge } from "../lib/format.ts";
+import { useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { clusterKey, clusterPhase, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
 import { loadHealth, type LiveHealth, type PodSegment } from "../lib/health.ts";
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
@@ -93,6 +93,7 @@ export function OverviewView({
 }) {
   const meta = useMeta();
   const toast = useToast();
+  const { format, formatAbsolute } = useTimeFormatters();
   const [health, setHealth] = useState<LiveHealth | null>(null);
   const [loading, setLoading] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -308,11 +309,11 @@ export function OverviewView({
                   : "—"}
             </Field>
             <Field label="Created">
-              <span title={formatTimestamp(createdAt)}>{relativeAge(createdAt)}</span>
+              <span title={formatAbsolute(createdAt)}>{format(createdAt)}</span>
             </Field>
             {status?.lastReconcileTime ? (
               <Field label="Last reconcile">
-                <span title={formatTimestamp(status.lastReconcileTime)}>{relativeAge(status.lastReconcileTime)}</span>
+                <span title={formatAbsolute(status.lastReconcileTime)}>{format(status.lastReconcileTime)}</span>
               </Field>
             ) : null}
             {secret ? (
@@ -342,7 +343,7 @@ export function OverviewView({
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{condition.type}</span>
                         {condition.lastTransitionTime ? (
                           <span className="shrink-0 text-xs tabular-nums text-slate-400">
-                            {relativeAge(condition.lastTransitionTime)}
+                            {format(condition.lastTransitionTime)}
                           </span>
                         ) : null}
                       </div>

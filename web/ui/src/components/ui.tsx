@@ -1,4 +1,4 @@
-import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
+import { Dialog, DialogPanel, DialogTitle, Switch, Transition, TransitionChild } from "@headlessui/react";
 import { LoaderCircle, X } from "lucide-react";
 import {
   Fragment,
@@ -117,6 +117,41 @@ export function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+// NavButton is the shared sidebar/rail navigation item: a full-width button with an optional leading
+// icon and an active (current-page) state. Used by AppShell's primary nav and the settings category
+// rail so both share one active/idle treatment.
+export function NavButton({
+  icon,
+  label,
+  active,
+  onClick,
+  className,
+}: {
+  icon?: ReactNode;
+  label: ReactNode;
+  active?: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        active
+          ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white",
+        className,
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -254,14 +289,30 @@ export function SlideOver({
 }
 
 const fieldLabel = "block text-xs font-medium text-slate-600 dark:text-slate-300";
-const fieldControl =
-  "mt-1 block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 dark:bg-slate-800 dark:text-white dark:ring-slate-700";
+const fieldControlBase =
+  "block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 dark:bg-slate-800 dark:text-white dark:ring-slate-700";
+const fieldControl = cx("mt-1", fieldControlBase);
 
 export function TextField({
   label,
   className,
+  trailing,
   ...props
-}: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+}: { label: string; trailing?: ReactNode } & InputHTMLAttributes<HTMLInputElement>) {
+  // With a trailing adornment (e.g. a show/hide toggle), the input sits in a relative wrapper that
+  // carries the top margin, the input reserves right padding, and the adornment is pinned to the end.
+  if (trailing) {
+    return (
+      <label className="block">
+        <span className={fieldLabel}>{label}</span>
+        <div className="relative mt-1">
+          <input className={cx(fieldControlBase, "pr-10", className)} {...props} />
+          <span className="absolute inset-y-0 right-1 flex items-center">{trailing}</span>
+        </div>
+      </label>
+    );
+  }
+
   return (
     <label className="block">
       <span className={fieldLabel}>{label}</span>
@@ -283,5 +334,50 @@ export function SelectField({
         {children}
       </select>
     </label>
+  );
+}
+
+// Toggle is an accessible on/off switch with an inline label and optional description, for boolean
+// preferences. Wraps Headless UI's Switch (keyboard + ARIA handled) with the app's blue/slate styling.
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  description,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="flex flex-col">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
+        {description ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">{description}</span>
+        ) : null}
+      </span>
+      <Switch
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label={label}
+        className={cx(
+          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-slate-900",
+          checked ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cx(
+            "pointer-events-none inline-block size-5 transform rounded-full bg-white shadow ring-0 transition duration-200",
+            checked ? "translate-x-5" : "translate-x-0",
+          )}
+        />
+      </Switch>
+    </div>
   );
 }

@@ -13,9 +13,14 @@ import (
 
 // fakeSettings is a stub SettingsService capturing the last update for assertions.
 type fakeSettings struct {
-	response   api.SettingsResponse
-	lastUpdate *api.SettingsUpdateRequest
-	updateErr  error
+	response      api.SettingsResponse
+	lastUpdate    *api.SettingsUpdateRequest
+	updateErr     error
+	app           api.AppSettings
+	lastAppUpdate *api.AppSettings
+	appUpdateErr  error
+	testResult    api.CredentialTestResult
+	testErr       error
 }
 
 func (f *fakeSettings) Get(context.Context) (api.SettingsResponse, error) {
@@ -32,6 +37,36 @@ func (f *fakeSettings) Update(
 	}
 
 	return f.response, nil
+}
+
+func (f *fakeSettings) AppSettings(context.Context) (api.AppSettings, error) {
+	return f.app, nil
+}
+
+func (f *fakeSettings) UpdateAppSettings(
+	_ context.Context,
+	request api.AppSettings,
+) (api.AppSettings, error) {
+	f.lastAppUpdate = &request
+	if f.appUpdateErr != nil {
+		return api.AppSettings{}, f.appUpdateErr
+	}
+
+	return f.app, nil
+}
+
+func (f *fakeSettings) TestConnection(
+	_ context.Context,
+	provider string,
+) (api.CredentialTestResult, error) {
+	if f.testErr != nil {
+		return api.CredentialTestResult{}, f.testErr
+	}
+
+	result := f.testResult
+	result.Provider = provider
+
+	return result, nil
 }
 
 func TestSettingsRoutesAbsentWhenServiceUnset(t *testing.T) {
@@ -111,6 +146,88 @@ func TestUpdateSettingsMapsInvalidToUnprocessable(t *testing.T) {
 		http.MethodPut,
 		"/api/v1/settings",
 		`{"updates":[{"key":"hetzner.token","envVar":"bad name"}]}`,
+	)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+}
+
+func TestGetAppSettingsReturnsPreferences(t *testing.T) {
+	t.Parallel()
+
+	settings := &fakeSettings{app: api.AppSettings{
+		Editor: "code --wait",
+		Chat:   api.ChatSettings{Model: "gpt-5", ReasoningEffort: "high"},
+	}}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/settings/app", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"editor":"code --wait"`)
+	assert.Contains(t, recorder.Body.String(), `"reasoningEffort":"high"`)
+}
+
+func TestUpdateAppSettingsDecodesAndDelegates(t *testing.T) {
+	t.Parallel()
+
+	settings := &fakeSettings{}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
+
+	body := `{"editor":"vim","chat":{"model":"gpt-5-mini","reasoningEffort":"low"}}`
+	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/settings/app", body)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	require.NotNil(t, settings.lastAppUpdate)
+	assert.Equal(t, "vim", settings.lastAppUpdate.Editor)
+	assert.Equal(t, "gpt-5-mini", settings.lastAppUpdate.Chat.Model)
+	assert.Equal(t, "low", settings.lastAppUpdate.Chat.ReasoningEffort)
+}
+
+func TestUpdateAppSettingsMapsInvalidToUnprocessable(t *testing.T) {
+	t.Parallel()
+
+	settings := &fakeSettings{appUpdateErr: api.ErrInvalid}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPut,
+		"/api/v1/settings/app",
+		`{"chat":{"reasoningEffort":"bananas"}}`,
+	)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+}
+
+func TestTestConnectionReturnsResult(t *testing.T) {
+	t.Parallel()
+
+	settings := &fakeSettings{testResult: api.CredentialTestResult{OK: true, Message: "ok"}}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/settings/credentials/hetzner/test",
+		"",
+	)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"provider":"hetzner"`)
+	assert.Contains(t, recorder.Body.String(), `"ok":true`)
+}
+
+func TestTestConnectionMapsInvalidToUnprocessable(t *testing.T) {
+	t.Parallel()
+
+	settings := &fakeSettings{testErr: api.ErrInvalid}
+	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/settings/credentials/nope/test",
+		"",
 	)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)

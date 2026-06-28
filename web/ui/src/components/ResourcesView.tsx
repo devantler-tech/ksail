@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { deleteResource, errorMessage, listResources, type Cluster, type K8sObject } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { useResourceKinds } from "../lib/meta.ts";
-import { relativeAge } from "../lib/format.ts";
+import { usePreferences, useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { clusterKey, recentEvents, splitClusterKey, type EventFields } from "../lib/k8s.ts";
 import {
   buildResourceTarget,
@@ -20,7 +20,7 @@ import { ResourceDetailPanel } from "./ResourceDetailPanel.tsx";
 import { PodExec, PodLogs } from "./PodSession.tsx";
 import { useResourceList } from "../hooks/useResourceList.ts";
 import { EmptyState } from "./states.tsx";
-import { DataStates, SortHeader, TableCard, td, useSort } from "./table.tsx";
+import { DataStates, SortHeader, TableCard, TablePager, td, usePagination, useSort } from "./table.tsx";
 import { StatusDot } from "./StatusBadge.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, TextField } from "./ui.tsx";
@@ -69,13 +69,17 @@ export function ResourcesView({
   canExec: boolean;
 }) {
   const toast = useToast();
+  const { prefs, setPreference } = usePreferences();
+  const { format } = useTimeFormatters();
   // kindLists drives the kind selector and the action affordances: served by /api/v1/meta's
   // resourceKinds on current backends, with the api.ts constants as the older-backend fallback.
   const kindLists = useResourceKinds();
   // clusterId is the active cluster's "namespace/name" — the fetch target shared by every request.
   const clusterId = cluster ? clusterKey(cluster) : "";
   const [kind, setKind] = useState<string>("Pod");
-  const [namespaceFilter, setNamespaceFilter] = useState("");
+  // Seed the namespace filter from the default-namespace preference (empty = all namespaces); it
+  // stays freely editable — this is a starting value, not a lock.
+  const [namespaceFilter, setNamespaceFilter] = useState(prefs.defaultNamespace);
   const [nameFilter, setNameFilter] = useState("");
   const { sortKey, sortDir, toggleSort } = useSort<SortKey>("name");
   // The list, its load/error state, and refresh() come from the shared hook (the Events view uses it
@@ -94,8 +98,9 @@ export function ResourcesView({
   const [execPod, setExecPod] = useState<K8sObject | null>(null);
   const [execContainer, setExecContainer] = useState("");
   // detailFormat is the manifest rendering of the selected resource (kubectl-familiar YAML by
-  // default). It is a persistent preference — kept across selections, not reset per resource.
-  const [detailFormat, setDetailFormat] = useState<"yaml" | "json">("yaml");
+  // default). It is a persisted preference (kept across selections and sessions), sourced from the
+  // preferences store rather than local state.
+  const detailFormat = prefs.detailFormat;
   // relatedEvents holds the recent events targeting the selected resource (its namespace, matched by
   // involvedObject), shown in the detail panel.
   const [relatedEvents, setRelatedEvents] = useState<EventFields[]>([]);
@@ -185,6 +190,20 @@ export function ResourcesView({
     void runAction(verb, perform).catch(() => undefined);
   }
 
+  // requestDelete is the detail panel's delete trigger: it opens the confirm dialog, or — when the
+  // confirm-destructive preference is off — deletes the selected resource immediately (the same
+  // action the dialog's confirm runs).
+  function requestDelete() {
+    if (prefs.confirmDestructive) {
+      setDeleteOpen(true);
+
+      return;
+    }
+    if (selected) {
+      runActionFireAndForget("Deleted", () => deleteResource(buildResourceTarget(clusterId, kind, selected)));
+    }
+  }
+
   // Apply the namespace + name filters (client-side) and sort by the active column with a stable
   // namespace/name tiebreak so equal values keep a deterministic order across refreshes.
   const filtered = useMemo(() => {
@@ -206,6 +225,9 @@ export function ResourcesView({
       return primary !== 0 ? primary : objectKey(a, 0).localeCompare(objectKey(b, 0));
     });
   }, [items, namespaceFilter, nameFilter, sortKey, sortDir]);
+
+  // Paginate the sorted+filtered rows per the rows-per-page preference (0 = show all).
+  const pagination = usePagination(filtered, prefs.rowsPerPage);
 
   if (!cluster) {
     return <EmptyState title="No cluster selected" description="Choose a cluster to browse its resources." />;
@@ -289,7 +311,7 @@ export function ResourcesView({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filtered.map((item, index) => (
+            {pagination.pageItems.map((item, index) => (
               <tr
                 key={objectKey(item, index)}
                 role="button"
@@ -311,12 +333,13 @@ export function ResourcesView({
                   <ResourceStatusBadge obj={item} />
                 </td>
                 <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
-                  {relativeAge(item.metadata?.creationTimestamp)}
+                  {format(item.metadata?.creationTimestamp)}
                 </td>
               </tr>
             ))}
           </tbody>
         </TableCard>
+        <TablePager pagination={pagination} className="px-1 pt-3" />
       </DataStates>
 
       <ResourceDetailPanel
@@ -332,12 +355,12 @@ export function ResourcesView({
         scaleValue={scaleValue}
         onScaleChange={setScaleValue}
         detailFormat={detailFormat}
-        onDetailFormatChange={setDetailFormat}
+        onDetailFormatChange={(value) => setPreference("detailFormat", value)}
         relatedEvents={relatedEvents}
         onClose={() => setSelected(null)}
         onOpenLogs={openLogs}
         onOpenExec={openExec}
-        onRequestDelete={() => setDeleteOpen(true)}
+        onRequestDelete={requestDelete}
       />
 
       <ConfirmDialog

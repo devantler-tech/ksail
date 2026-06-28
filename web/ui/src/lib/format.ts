@@ -36,12 +36,38 @@ export function relativeAge(iso?: string): string {
   return `${days}d`;
 }
 
-// formatTimestamp renders an ISO timestamp in the user's locale, or an em dash when absent.
-export function formatTimestamp(iso?: string): string {
+// AbsoluteOptions selects how formatAbsolute renders a timestamp. `dateStyle` picks the
+// locale-native string ("locale") vs. an ISO-like "YYYY-MM-DD HH:MM:SS" ("iso"); `timeZone`
+// renders in the viewer's local zone ("local") or UTC ("utc"). Both are structurally the same
+// string-literal unions the preferences store exposes, so callers can pass prefs directly.
+export interface AbsoluteOptions {
+  dateStyle?: "locale" | "iso";
+  timeZone?: "local" | "utc";
+}
+
+// formatAbsolute renders an ISO timestamp as an absolute date-time string in the requested style
+// and zone, or an em dash when absent/invalid. The "iso" style borrows the sv-SE locale, which
+// formats as ISO-ordered "YYYY-MM-DD HH:MM:SS" across browsers without manual field assembly.
+export function formatAbsolute(iso?: string, opts?: AbsoluteOptions): string {
   if (!iso) {
     return "—";
   }
 
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  const utc = opts?.timeZone === "utc";
+  const tzOpt: Intl.DateTimeFormatOptions | undefined = utc ? { timeZone: "UTC" } : undefined;
+  const locale = opts?.dateStyle === "iso" ? "sv-SE" : undefined;
+  const rendered = date.toLocaleString(locale, tzOpt);
+
+  return utc ? `${rendered} UTC` : rendered;
+}
+
+// formatTimestamp renders an ISO timestamp in the viewer's locale and local zone, or an em dash
+// when absent. Kept as the default-options shorthand over formatAbsolute.
+export function formatTimestamp(iso?: string): string {
+  return formatAbsolute(iso, { dateStyle: "locale", timeZone: "local" });
 }

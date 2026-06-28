@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { ToastProvider } from "./components/Toast.tsx";
+import { PreferencesProvider } from "./hooks/usePreferences.tsx";
 import "./index.css";
 
 const root = document.getElementById("root");
@@ -11,8 +12,10 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <PreferencesProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </PreferencesProvider>
   </StrictMode>,
 );

@@ -269,6 +269,16 @@ export interface Config {
   // mode labels the serving surface ("operator" | "local") so the SPA can brand itself accurately.
   // Absent against an older backend; the desktop shell (wails:// origin) overrides the label anyway.
   mode?: "operator" | "local";
+  // version is the serving backend's build metadata, shown on the About settings screen. Absent on
+  // an older backend (and omitted when no metadata was injected, e.g. a plain `go build`).
+  version?: VersionInfo;
+}
+
+// VersionInfo is the serving backend's build metadata for the About screen.
+export interface VersionInfo {
+  version?: string;
+  commit?: string;
+  date?: string;
 }
 
 // CredentialSetting describes one provider credential in the Settings page. Secret values are never
@@ -382,6 +392,49 @@ export function updateSettings(req: SettingsUpdateRequest): Promise<SettingsResp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
+}
+
+// ChatSettings is the AI assistant's model selection and reasoning effort. Empty values defer to the
+// backend's runtime defaults.
+export interface ChatSettings {
+  model: string;
+  reasoningEffort: string;
+}
+
+// AppSettings is the local UI's non-credential preferences (editor command + chat). It is the body
+// of both GET and PUT /api/v1/settings/app; a PUT replaces the stored values.
+export interface AppSettings {
+  editor: string;
+  chat: ChatSettings;
+}
+
+export function getAppSettings(): Promise<AppSettings> {
+  return request<AppSettings>("/api/v1/settings/app");
+}
+
+export function updateAppSettings(req: AppSettings): Promise<AppSettings> {
+  return request<AppSettings>("/api/v1/settings/app", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+// CredentialTestResult is the outcome of a provider connection test. ok=false with a message is a
+// normal result (the credentials did not authenticate), not a transport error.
+export interface CredentialTestResult {
+  provider: string;
+  ok: boolean;
+  message: string;
+}
+
+// testCredential checks whether the stored credentials for a provider authenticate. Only providers
+// that support testing (Hetzner, Omni) are accepted; others return a 4xx error.
+export function testCredential(provider: string): Promise<CredentialTestResult> {
+  return request<CredentialTestResult>(
+    `/api/v1/settings/credentials/${encodeURIComponent(provider)}/test`,
+    { method: "POST" },
+  );
 }
 
 export function listClusters(): Promise<ClusterList> {

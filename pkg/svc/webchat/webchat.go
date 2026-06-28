@@ -61,6 +61,10 @@ var (
 type Runner struct {
 	rootCmd *cobra.Command
 
+	// sessionDefaults supplies the model and reasoning effort for new sessions, read fresh per turn so
+	// Settings changes take effect without a restart. Nil leaves both to the Copilot runtime defaults.
+	sessionDefaults func() (model, reasoningEffort string)
+
 	mu     sync.Mutex
 	client *copilot.Client
 
@@ -72,10 +76,24 @@ type Runner struct {
 	confirms map[string]chan bool
 }
 
+// Option configures a Runner.
+type Option func(*Runner)
+
+// WithSessionDefaults supplies the model and reasoning effort applied to new chat sessions. The
+// provider is read fresh per turn, so Settings changes take effect without restarting the server.
+func WithSessionDefaults(provider func() (model, reasoningEffort string)) Option {
+	return func(runner *Runner) { runner.sessionDefaults = provider }
+}
+
 // New builds a Runner that generates its tools from rootCmd's command tree (the same source the CLI
 // chat uses), so the assistant can run the same read operations.
-func New(rootCmd *cobra.Command) *Runner {
-	return &Runner{rootCmd: rootCmd, confirms: make(map[string]chan bool)}
+func New(rootCmd *cobra.Command, opts ...Option) *Runner {
+	runner := &Runner{rootCmd: rootCmd, confirms: make(map[string]chan bool)}
+	for _, opt := range opts {
+		opt(runner)
+	}
+
+	return runner
 }
 
 // Available reports whether the assistant can run: a Copilot token must be present. A server cannot
@@ -107,8 +125,15 @@ func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.Cha
 	tools, _ := chatsvc.GetKSailToolMetadata(r.rootCmd, nil, toolgen.NewSessionLogRef())
 	streaming := true
 
+	model, reasoningEffort := "", ""
+	if r.sessionDefaults != nil {
+		model, reasoningEffort = r.sessionDefaults()
+	}
+
 	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		Streaming: &streaming,
+		Streaming:       &streaming,
+		Model:           model,
+		ReasoningEffort: reasoningEffort,
 		SystemMessage: &copilot.SystemMessageConfig{
 			Mode:     "customize",
 			Sections: chatsvc.BuildSystemSections(r.rootCmd),

@@ -30,10 +30,48 @@ var ErrInvalidEnvVarName = errors.New("invalid environment variable name")
 // ErrUnknownCredential indicates an update referenced a credential key KSail does not recognize.
 var ErrUnknownCredential = errors.New("unknown credential")
 
+// ErrInvalidReasoningEffort indicates a chat reasoning-effort value outside the allowed set.
+var ErrInvalidReasoningEffort = errors.New("invalid reasoning effort")
+
+// editorEnvVar is the conventional environment variable KSail's editor resolution honors; Overlay
+// exports the configured editor command under it so CLI editor flows (and subprocesses) pick it up.
+const editorEnvVar = "EDITOR"
+
+// validReasoningEffort reports whether effort is one UpdateAppSettings accepts (matching
+// ChatSpec.ReasoningEffort); "" means "leave to the runtime default".
+func validReasoningEffort(effort string) bool {
+	switch effort {
+	case "", "low", "medium", "high":
+		return true
+	default:
+		return false
+	}
+}
+
 // settings holds the non-secret, file-persisted configuration: per-credential overrides of the
-// environment-variable name a credential resolves from. Secret values live in the Store, never here.
+// environment-variable name a credential resolves from, plus local UI app preferences (editor
+// command, chat model/effort). Secret values live in the Store, never here.
 type settings struct {
 	EnvVars map[Key]string `json:"envVars,omitempty"`
+	// Editor is the command used for interactive editor flows (e.g. "code --wait"). Exported to the
+	// EDITOR environment variable by Overlay so KSail's editor resolution and subprocesses honor it.
+	Editor string `json:"editor,omitempty"`
+	// Chat holds AI assistant preferences. A pointer so an unset value is omitted from the file.
+	Chat *chatPrefs `json:"chat,omitempty"`
+}
+
+// chatPrefs holds the AI assistant model selection and reasoning effort.
+type chatPrefs struct {
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+}
+
+// AppSettings is the local UI's non-credential preferences (editor command + chat model/effort),
+// persisted alongside the env-var overrides in ui-settings.json.
+type AppSettings struct {
+	Editor              string
+	ChatModel           string
+	ChatReasoningEffort string
 }
 
 // envSnapshot records what a process environment variable held before Overlay first overrode it, so
@@ -129,6 +167,8 @@ func (m *Manager) Overlay() error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.addEditorOverlay(desired)
 
 	// Restore variables we exported on a previous Overlay that are no longer desired (cleared secret
 	// or renamed variable) to the value they held before we overrode them — re-setting an inherited
@@ -280,6 +320,59 @@ func (m *Manager) Update(updates []CredentialUpdate) error {
 	return m.Overlay()
 }
 
+// AppSettings returns the local UI app preferences (editor command + chat model/effort).
+func (m *Manager) AppSettings() AppSettings {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.settings.appSettings()
+}
+
+// UpdateAppSettings persists the editor command and chat preferences, then re-runs Overlay so an
+// editor change takes effect (via EDITOR) without a restart. An invalid reasoning effort is rejected.
+func (m *Manager) UpdateAppSettings(next AppSettings) error {
+	if !validReasoningEffort(next.ChatReasoningEffort) {
+		return fmt.Errorf("%w: %q", ErrInvalidReasoningEffort, next.ChatReasoningEffort)
+	}
+
+	m.mu.Lock()
+
+	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
+	m.settings.Editor = next.Editor
+
+	if next.ChatModel == "" && next.ChatReasoningEffort == "" {
+		m.settings.Chat = nil
+	} else {
+		m.settings.Chat = &chatPrefs{
+			Model:           next.ChatModel,
+			ReasoningEffort: next.ChatReasoningEffort,
+		}
+	}
+
+	saveErr := saveSettings(m.settings)
+	if saveErr != nil {
+		// Roll back the in-memory mutation so a failed persist doesn't leave rejected values live (a
+		// later successful write would otherwise commit them).
+		m.settings.Editor, m.settings.Chat = prevEditor, prevChat
+		m.mu.Unlock()
+
+		return saveErr
+	}
+
+	m.mu.Unlock()
+
+	return m.Overlay()
+}
+
+// addEditorOverlay adds the configured editor command to the desired environment under EDITOR so
+// KSail's editor resolution (and any editor subprocess) honors it — important for a Dock/Finder-
+// launched desktop app with no shell env. The caller must hold m.mu.
+func (m *Manager) addEditorOverlay(desired map[string]string) {
+	if m.settings.Editor != "" {
+		desired[editorEnvVar] = m.settings.Editor
+	}
+}
+
 func (m *Manager) applyEnvVarOverrides(updates []CredentialUpdate) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -307,6 +400,29 @@ func (m *Manager) applyEnvVarOverrides(updates []CredentialUpdate) error {
 	}
 
 	return saveSettings(m.settings)
+}
+
+// appSettings projects the persisted settings onto the public AppSettings shape.
+func (s settings) appSettings() AppSettings {
+	out := AppSettings{Editor: s.Editor}
+	if s.Chat != nil {
+		out.ChatModel = s.Chat.Model
+		out.ChatReasoningEffort = s.Chat.ReasoningEffort
+	}
+
+	return out
+}
+
+// LoadAppSettings reads the app preferences from the settings file directly, returning zero values
+// when the file is absent or unreadable. Best-effort: used for non-critical defaults (e.g. seeding
+// the web assistant's chat model/effort) without requiring a Manager instance.
+func LoadAppSettings() AppSettings {
+	loaded, err := loadSettings()
+	if err != nil {
+		return AppSettings{}
+	}
+
+	return loaded.appSettings()
 }
 
 // Ensure Manager satisfies Resolver.

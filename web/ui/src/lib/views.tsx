@@ -30,8 +30,6 @@ export interface ViewGates {
   workloadEnabled: boolean;
   // secretsEnabled gates the Secrets view on the backend's SOPS-cipher capability.
   secretsEnabled: boolean;
-  // settingsEnabled gates the Settings view on the backend's credential-settings endpoints.
-  settingsEnabled: boolean;
   // pluginsEnabled gates the Plugins view on the backend's plugins capability (it serves UI plugins).
   pluginsEnabled: boolean;
   // aiChatEnabled gates the Assistant view on the backend's AI chat capability (e.g. Copilot configured).
@@ -60,7 +58,10 @@ export const VIEWS = [
   { id: "secrets", title: "Secrets", icon: KeyRound, scope: "global", enabled: (g) => g.secretsEnabled },
   { id: "assistant", title: "Assistant", icon: Sparkles, scope: "global", enabled: (g) => g.aiChatEnabled },
   { id: "plugins", title: "Plugins", icon: Puzzle, scope: "global", enabled: (g) => g.pluginsEnabled },
-  { id: "settings", title: "Settings", icon: Settings, scope: "global", enabled: (g) => g.settingsEnabled },
+  // Settings is always available: its General/Appearance/About categories are pure client-side
+  // preferences (useful on every backend, including the operator). The Credentials category gates
+  // itself on the backend's settings endpoints from within the page (see settings/catalog.ts).
+  { id: "settings", title: "Settings", icon: Settings, scope: "global", enabled: () => true },
 ] as const satisfies readonly ViewDef[];
 
 // RegisteredView is one concrete registry entry (its id narrowed to the View literal), the element

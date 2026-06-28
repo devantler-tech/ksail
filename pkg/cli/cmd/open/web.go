@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/browser"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/pluginsig"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/webchat"
 	"github.com/spf13/cobra"
@@ -79,7 +80,13 @@ func runWebCmd(cmd *cobra.Command, port int, noBrowser bool) error {
 	// tool generation. Kept in the command layer (not the shared uiserver) so the Copilot SDK stays out
 	// of the desktop app, which reuses uiserver without the assistant. The panel stays hidden unless
 	// Copilot is configured; the subprocess is stopped on shutdown.
-	chatRunner := webchat.New(cmd.Root())
+	// Seed the assistant's model/effort from the saved app settings (Settings → Editor & AI), read
+	// fresh per turn so a change applies without restarting the server.
+	chatRunner := webchat.New(cmd.Root(), webchat.WithSessionDefaults(func() (string, string) {
+		app := credentials.LoadAppSettings()
+
+		return app.ChatModel, app.ChatReasoningEffort
+	}))
 	if service, ok := server.Service.(*clusterapi.Service); ok {
 		service.UseChat(chatRunner)
 		// Wire cosign/sigstore plugin verification (the strongest install authenticity tier). Kept in the

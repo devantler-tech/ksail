@@ -16,6 +16,14 @@ type SettingsService interface {
 	Get(ctx context.Context) (SettingsResponse, error)
 	// Update applies the requested changes and returns the resulting settings.
 	Update(ctx context.Context, request SettingsUpdateRequest) (SettingsResponse, error)
+	// AppSettings returns the local UI app preferences (editor command + chat model/effort).
+	AppSettings(ctx context.Context) (AppSettings, error)
+	// UpdateAppSettings persists the app preferences and returns the resulting settings.
+	UpdateAppSettings(ctx context.Context, request AppSettings) (AppSettings, error)
+	// TestConnection checks whether the stored credentials for a provider authenticate. A failed
+	// connection is reported via the result (OK=false), not an error; an error is returned only for an
+	// unsupported provider so the handler can answer 400.
+	TestConnection(ctx context.Context, provider string) (CredentialTestResult, error)
 }
 
 // SettingsResponse is the settings payload the SPA renders.
@@ -54,6 +62,30 @@ type CredentialUpdate struct {
 	Value  *string `json:"value,omitempty"`
 }
 
+// AppSettings is the local UI's non-credential preferences surfaced on the Settings page. It is the
+// body of both GET and PUT /api/v1/settings/app (a PUT replaces the stored values).
+type AppSettings struct {
+	// Editor is the command used for interactive editor flows (e.g. "code --wait").
+	Editor string `json:"editor"`
+	// Chat holds the AI assistant preferences.
+	Chat ChatSettings `json:"chat"`
+}
+
+// ChatSettings is the AI assistant's model selection and reasoning effort. Empty values defer to the
+// runtime defaults.
+type ChatSettings struct {
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoningEffort"`
+}
+
+// CredentialTestResult reports the outcome of a provider connection test. OK=false with a Message is
+// a normal result (the credentials did not authenticate), not a transport error.
+type CredentialTestResult struct {
+	Provider string `json:"provider"`
+	OK       bool   `json:"ok"`
+	Message  string `json:"message"`
+}
+
 func (s *Server) handleGetSettings(writer http.ResponseWriter, request *http.Request) {
 	response, err := s.Settings.Get(request.Context())
 	if err != nil {
@@ -85,4 +117,55 @@ func (s *Server) handleUpdateSettings(writer http.ResponseWriter, request *http.
 	}
 
 	writeJSON(writer, http.StatusOK, response)
+}
+
+func (s *Server) handleGetAppSettings(writer http.ResponseWriter, request *http.Request) {
+	response, err := s.Settings.AppSettings(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func (s *Server) handleUpdateAppSettings(writer http.ResponseWriter, request *http.Request) {
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	var update AppSettings
+
+	// Reject unknown fields: this endpoint replaces the stored settings, so a typo'd key (e.g.
+	// "reasoningEffortt") would otherwise be silently ignored and clear the real field on save.
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+
+	decodeErr := decoder.Decode(&update)
+	if decodeErr != nil {
+		writeDecodeError(writer, fmt.Errorf("decode app settings: %w", decodeErr))
+
+		return
+	}
+
+	response, err := s.Settings.UpdateAppSettings(request.Context(), update)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func (s *Server) handleTestCredential(writer http.ResponseWriter, request *http.Request) {
+	provider := request.PathValue("provider")
+
+	result, err := s.Settings.TestConnection(request.Context(), provider)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, result)
 }

@@ -1,6 +1,7 @@
 package hetzner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -45,4 +46,21 @@ func NewProviderFromOptions(opts v1alpha1.OptionsHetzner) (*Provider, *hcloud.Cl
 	client := hcloud.NewClient(hcloud.WithToken(token))
 
 	return NewProvider(client), client, nil
+}
+
+// ValidateCredentials verifies the configured Hetzner token authenticates by making one cheap
+// authenticated API call (listing locations). It returns ErrTokenRequired when the token is unset,
+// or the API error when the call fails; nil means the credentials work.
+func ValidateCredentials(ctx context.Context, opts v1alpha1.OptionsHetzner) error {
+	_, client, err := NewProviderFromOptions(opts)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Location.All(ctx)
+	if err != nil {
+		return fmt.Errorf("hetzner API request failed: %w", err)
+	}
+
+	return nil
 }
