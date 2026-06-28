@@ -35,12 +35,34 @@ func TestDefaultEnvVar_MatchesCanonicalSources(t *testing.T) {
 		credentials.DefaultEnvVar(credentials.AWSSecretAccessKey),
 	)
 	assert.Equal(t, "AWS_SESSION_TOKEN", credentials.DefaultEnvVar(credentials.AWSSessionToken))
+	// The Copilot token has no external canonical source; it mirrors webchat's primary token variable.
+	assert.Equal(t, "KSAIL_COPILOT_TOKEN", credentials.DefaultEnvVar(credentials.CopilotToken))
 }
 
 func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {
 	t.Parallel()
 
 	assert.Empty(t, credentials.DefaultEnvVar(credentials.Key("nope.nope")))
+}
+
+// TestEnvResolver_CopilotTokenFallback verifies the Copilot credential resolves from COPILOT_TOKEN when
+// the primary KSAIL_COPILOT_TOKEN is unset, mirroring webchat.copilotToken()'s two-variable lookup.
+func TestEnvResolver_CopilotTokenFallback(t *testing.T) {
+	// Not parallel: mutates process env via t.Setenv.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	t.Setenv("COPILOT_TOKEN", "from-secondary")
+
+	var resolver credentials.EnvResolver
+
+	assert.Equal(t, "from-secondary", resolver.Value(credentials.CopilotToken))
+
+	// The primary variable wins when both are set.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "from-primary")
+	assert.Equal(t, "from-primary", resolver.Value(credentials.CopilotToken))
+
+	// The fallback is Copilot-specific: other credentials don't read COPILOT_TOKEN.
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	assert.Empty(t, resolver.Value(credentials.HetznerToken))
 }
 
 func TestEnvResolver_ReadsProcessEnvironment(t *testing.T) {

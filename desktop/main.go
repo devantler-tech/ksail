@@ -18,7 +18,12 @@ import (
 	"log"
 	"runtime"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/webchat"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
@@ -68,6 +73,11 @@ func run() error {
 	// The same configured server `ksail open web` uses (local cluster lifecycle, embedded SPA, credential
 	// settings). Its Handler() is handed to the Wails AssetServer; we never bind a TCP listener.
 	server := uiserver.NewServer()
+
+	// Wire the Copilot-backed AI assistant onto the local backend (see wireAssistant). The assistant
+	// stays hidden in the UI until a Copilot token (KSAIL_COPILOT_TOKEN / COPILOT_TOKEN) is configured.
+	chatRunner := wireAssistant(server)
+	defer chatRunner.Close()
 
 	// Native notification + dock-badge services. Registered with the app (so their platform impls
 	// start) and retained here so the cluster-status watcher can drive them. SendNotification/SetBadge
@@ -140,12 +150,9 @@ func run() error {
 	installSystemTray(app, window)
 
 	// Watch local cluster status for the lifetime of the app: a native notification when a cluster
-	// reaches Ready/Failed, and an in-progress count on the dock badge. The context is cancelled when
-	// Run returns (app quit), stopping the poll loop.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go watchClusterStatus(ctx, server.Service, notifSvc, dockSvc)
+	// reaches Ready/Failed, and an in-progress count on the dock badge (see startClusterWatch). The
+	// returned cancel runs when Run returns (app quit), stopping the poll loop.
+	defer startClusterWatch(server, notifSvc, dockSvc)()
 
 	err := app.Run()
 	if err != nil {
@@ -153,6 +160,41 @@ func run() error {
 	}
 
 	return nil
+}
+
+// startClusterWatch begins watching local cluster status for the app's lifetime — driving native
+// notifications and the dock badge — and returns the cancel func the caller defers to stop the poll
+// loop on shutdown.
+func startClusterWatch(
+	server *api.Server,
+	notifSvc *notifications.NotificationService,
+	dockSvc *dock.DockService,
+) context.CancelFunc {
+	ctx, cancel := context.WithCancel(context.Background())
+	go watchClusterStatus(ctx, server.Service, notifSvc, dockSvc)
+
+	return cancel
+}
+
+// wireAssistant attaches the Copilot-backed AI assistant to the server's local backend, mirroring
+// `ksail open web`. It is kept in the command layer (not the shared uiserver) so the Copilot SDK is
+// linked into the desktop binary only here. The model/effort come from the saved app settings
+// (Settings → Editor & AI). It returns the runner so the caller can Close it on shutdown.
+func wireAssistant(server *api.Server) *webchat.Runner {
+	runner := webchat.New(
+		cmd.NewRootCmd("", "", ""),
+		webchat.WithSessionDefaults(func() (string, string) {
+			app := credentials.LoadAppSettings()
+
+			return app.ChatModel, app.ChatReasoningEffort
+		}),
+	)
+
+	if service, ok := server.Service.(*clusterapi.Service); ok {
+		service.UseChat(runner)
+	}
+
+	return runner
 }
 
 // installSystemTray adds a menu-bar/system-tray icon with show/hide/quit actions. It picks a platform-

@@ -134,7 +134,8 @@ func DetectStore() (Store, bool) {
 // so the user can see and edit them.
 func IsSecret(key Key) bool {
 	switch key {
-	case HetznerToken, OmniServiceAccountKey, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken:
+	case HetznerToken, OmniServiceAccountKey, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken,
+		CopilotToken:
 		return true
 	case OmniEndpoint, AWSRegion, AWSProfile:
 		return false
@@ -143,40 +144,45 @@ func IsSecret(key Key) bool {
 	}
 }
 
-// ProviderFor returns the infrastructure provider a credential belongs to.
-func ProviderFor(key Key) v1alpha1.Provider {
+// copilotGroup is the Settings UI section label for the GitHub Copilot credential — a feature group
+// rather than an infrastructure provider.
+const copilotGroup = "GitHub Copilot"
+
+// ProviderFor returns the Settings UI group a credential belongs to: the infrastructure provider for
+// cloud credentials, or a feature group (e.g. the AI assistant) for non-provider credentials.
+func ProviderFor(key Key) string {
 	switch key {
 	case HetznerToken:
-		return v1alpha1.ProviderHetzner
+		return string(v1alpha1.ProviderHetzner)
 	case OmniEndpoint, OmniServiceAccountKey:
-		return v1alpha1.ProviderOmni
+		return string(v1alpha1.ProviderOmni)
 	case AWSRegion, AWSProfile, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken:
-		return v1alpha1.ProviderAWS
+		return string(v1alpha1.ProviderAWS)
+	case CopilotToken:
+		return copilotGroup
 	default:
 		return ""
 	}
 }
 
-// Label returns a short human-readable name for a credential, for the Settings UI.
+// Label returns a short human-readable name for a credential, for the Settings UI; an unknown key
+// falls back to its raw string form.
 func Label(key Key) string {
-	switch key {
-	case HetznerToken:
-		return "API token"
-	case OmniEndpoint:
-		return "Endpoint URL"
-	case OmniServiceAccountKey:
-		return "Service account key"
-	case AWSRegion:
-		return "Region"
-	case AWSProfile:
-		return "Profile"
-	case AWSAccessKeyID:
-		return "Access key ID"
-	case AWSSecretAccessKey:
-		return "Secret access key"
-	case AWSSessionToken:
-		return "Session token"
-	default:
-		return string(key)
+	labels := map[Key]string{
+		HetznerToken:          "API token",
+		OmniEndpoint:          "Endpoint URL",
+		OmniServiceAccountKey: "Service account key",
+		AWSRegion:             "Region",
+		AWSProfile:            "Profile",
+		AWSAccessKeyID:        "Access key ID",
+		AWSSecretAccessKey:    "Secret access key",
+		AWSSessionToken:       "Session token",
+		CopilotToken:          "Token",
 	}
+
+	if label, ok := labels[key]; ok {
+		return label
+	}
+
+	return string(key)
 }

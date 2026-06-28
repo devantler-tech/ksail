@@ -134,7 +134,7 @@ func (m *Manager) Value(key Key) string {
 		return ""
 	}
 
-	return os.Getenv(name)
+	return resolveEnvValue(key, name)
 }
 
 // Overlay reconciles the process environment to match the stored credentials: it exports every
@@ -235,7 +235,7 @@ func (m *Manager) Status() ([]CredentialStatus, error) {
 
 		hasStored = hasStored && stored != ""
 		envVar := m.EnvVar(key)
-		envValue := os.Getenv(envVar)
+		envValue := resolveEnvValue(key, envVar)
 
 		status := CredentialStatus{
 			Key:    key,
