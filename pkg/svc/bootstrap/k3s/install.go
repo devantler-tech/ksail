@@ -178,31 +178,38 @@ func (cfg InstallConfig) validateAgent() error {
 		return ErrMissingServerURL
 	}
 
-	if len(cfg.TLSSANs) > 0 || len(cfg.Disable) > 0 {
+	if len(cfg.TLSSANs) > 0 || len(cfg.Disable) > 0 || cfg.WriteKubeconfigMode != "" {
 		return ErrAgentServerOnlyOption
 	}
 
 	return nil
 }
 
-// assembleCommand stitches the curl|sh pipeline together:
+// assembleCommand builds the install command for a node:
 //
-//	curl -sfL <url> | <env…> sh -s - <subcommand> <args…>
+//	script="$(curl -sfL '<url>')" && printf '%s' "$script" | <env…> sh -s - <subcommand> <args…>
 //
-// `sh -s -` passes the trailing tokens as positional arguments to the piped
-// script, which forwards them to k3s.
+// The install script is captured into a shell variable first, then run, rather
+// than piped straight into `sh`. A bare `curl … | sh` masks a download failure:
+// when curl fails (a `-f` 4xx/5xx, a TLS error, no network) it prints nothing,
+// so `sh` runs on empty input and exits 0, silently leaving k3s uninstalled on
+// the node. With the capture, the assignment's exit status is curl's, and the
+// `&&` gates execution on a successful download, so a failed fetch aborts the
+// whole command. This is POSIX-portable — it needs no `set -o pipefail`, so it
+// runs the same under dash or bash. `sh -s -` passes the trailing tokens as
+// positional arguments to the script, which forwards them to k3s.
 func assembleCommand(env []string, subcommand string, args []string) string {
-	// Fixed tokens around the interpolated env/args: "curl -sfL <url> |" (4) and
+	// Fixed tokens after the capture: `printf '%s' "$script" |` (4) and
 	// "sh -s - <subcommand>" (4).
 	const fixedTokens = 8
 
-	parts := make([]string, 0, len(env)+len(args)+fixedTokens)
-	parts = append(parts, "curl", "-sfL", installScriptURL, "|")
-	parts = append(parts, env...)
-	parts = append(parts, "sh", "-s", "-", subcommand)
-	parts = append(parts, args...)
+	run := make([]string, 0, len(env)+len(args)+fixedTokens)
+	run = append(run, "printf", "'%s'", `"$script"`, "|")
+	run = append(run, env...)
+	run = append(run, "sh", "-s", "-", subcommand)
+	run = append(run, args...)
 
-	return strings.Join(parts, " ")
+	return `script="$(curl -sfL '` + installScriptURL + `')" && ` + strings.Join(run, " ")
 }
 
 // sortedCopy returns a sorted copy of in without mutating the caller's slice, so

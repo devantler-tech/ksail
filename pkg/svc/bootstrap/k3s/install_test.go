@@ -24,7 +24,8 @@ func TestRenderValid(t *testing.T) {
 				Role:    k3sbootstrap.RoleServerInit,
 				Token:   "secret",
 			},
-			want: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
+			want: "script=\"$(curl -sfL 'https://get.k3s.io')\" && printf '%s' \"$script\" | " +
+				"INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
 				"K3S_TOKEN='secret' sh -s - server --cluster-init",
 		},
 		{
@@ -38,7 +39,8 @@ func TestRenderValid(t *testing.T) {
 				WriteKubeconfigMode: "0644",
 			},
 			// SANs and disables are emitted in sorted order for determinism.
-			want: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
+			want: "script=\"$(curl -sfL 'https://get.k3s.io')\" && printf '%s' \"$script\" | " +
+				"INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
 				"K3S_TOKEN='secret' sh -s - server --cluster-init " +
 				"--tls-san '10.0.0.1' --tls-san 'lb.example.com' " +
 				"--disable 'servicelb' --disable 'traefik' --write-kubeconfig-mode '0644'",
@@ -51,7 +53,8 @@ func TestRenderValid(t *testing.T) {
 				Token:     "secret",
 				ServerURL: "https://10.0.0.2:6443",
 			},
-			want: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
+			want: "script=\"$(curl -sfL 'https://get.k3s.io')\" && printf '%s' \"$script\" | " +
+				"INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
 				"K3S_TOKEN='secret' sh -s - server --server 'https://10.0.0.2:6443'",
 		},
 		{
@@ -62,7 +65,8 @@ func TestRenderValid(t *testing.T) {
 				Token:     "secret",
 				ServerURL: "https://10.0.0.2:6443",
 			},
-			want: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
+			want: "script=\"$(curl -sfL 'https://get.k3s.io')\" && printf '%s' \"$script\" | " +
+				"INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
 				"K3S_URL='https://10.0.0.2:6443' K3S_TOKEN='secret' sh -s - agent",
 		},
 		{
@@ -72,7 +76,8 @@ func TestRenderValid(t *testing.T) {
 				Role:    k3sbootstrap.RoleServerInit,
 				Token:   "a'b",
 			},
-			want: `curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.30.2+k3s1' ` +
+			want: `script="$(curl -sfL 'https://get.k3s.io')" && printf '%s' "$script" | ` +
+				`INSTALL_K3S_VERSION='v1.30.2+k3s1' ` +
 				`K3S_TOKEN='a'\''b' sh -s - server --cluster-init`,
 		},
 	}
@@ -146,6 +151,17 @@ func TestRenderInvalid(t *testing.T) {
 				Token:     "t",
 				ServerURL: "https://10.0.0.2:6443",
 				Disable:   []string{"traefik"},
+			},
+			wantErr: k3sbootstrap.ErrAgentServerOnlyOption,
+		},
+		{
+			name: "agent rejects kubeconfig mode",
+			cfg: k3sbootstrap.InstallConfig{
+				Version:             "v1.30.2+k3s1",
+				Role:                k3sbootstrap.RoleAgent,
+				Token:               "t",
+				ServerURL:           "https://10.0.0.2:6443",
+				WriteKubeconfigMode: "0644",
 			},
 			wantErr: k3sbootstrap.ErrAgentServerOnlyOption,
 		},

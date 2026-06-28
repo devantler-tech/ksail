@@ -28,10 +28,11 @@ var (
 	)
 
 	// ErrAgentServerOnlyOption is returned when an agent is given a server-only
-	// option (TLS SANs or component disables). Those configure the control plane
-	// and have no effect on an agent, so accepting them silently would mislead.
+	// option (TLS SANs, component disables, or kubeconfig mode). Those configure
+	// the control plane and have no effect on an agent, so accepting them silently
+	// would mislead.
 	ErrAgentServerOnlyOption = errors.New(
-		"k3s install: TLS SANs and disabled components are server-only options",
+		"k3s install: TLS SANs, disabled components, and kubeconfig mode are server-only options",
 	)
 
 	// ErrUnknownRole is returned when InstallConfig.Role is not one of the defined
