@@ -464,14 +464,14 @@ export function App() {
     [formMode, formInitial, refresh, toast],
   );
 
-  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
-  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
-  // form fields.
-  const handleSubmitRaw = useCallback(
-    async (cluster: Cluster) => {
+  // runClusterMutation runs a cluster mutation, refreshing the list on success and surfacing failures
+  // via a toast. It rethrows so callers (e.g. the confirm dialog) keep their open/spinner state on
+  // failure; sharing this body keeps the create/delete handlers from duplicating it.
+  const runClusterMutation = useCallback(
+    async (action: () => Promise<unknown>, successMessage: string) => {
       try {
-        await createCluster(cluster);
-        toast.success(`Cluster "${cluster.metadata.name}" created`);
+        await action();
+        toast.success(successMessage);
         await refresh(true);
       } catch (err) {
         toast.error(errorMessage(err));
@@ -481,22 +481,28 @@ export function App() {
     [refresh, toast],
   );
 
+  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
+  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
+  // form fields.
+  const handleSubmitRaw = useCallback(
+    async (cluster: Cluster) => {
+      await runClusterMutation(
+        () => createCluster(cluster),
+        `Cluster "${cluster.metadata.name}" created`,
+      );
+    },
+    [runClusterMutation],
+  );
+
   // performDelete deletes a specific cluster and refreshes the list. It rethrows so the confirm
   // dialog keeps its open/spinner state on failure; the immediate (unconfirmed) path swallows it.
   const performDelete = useCallback(
     async (target: Cluster) => {
       const name = target.metadata.name;
       const namespace = target.metadata.namespace ?? "default";
-      try {
-        await deleteCluster(namespace, name);
-        toast.success(`Deleting cluster "${name}"`);
-        await refresh(true);
-      } catch (err) {
-        toast.error(errorMessage(err));
-        throw err;
-      }
+      await runClusterMutation(() => deleteCluster(namespace, name), `Deleting cluster "${name}"`);
     },
-    [refresh, toast],
+    [runClusterMutation],
   );
 
   const handleDelete = useCallback(async () => {
