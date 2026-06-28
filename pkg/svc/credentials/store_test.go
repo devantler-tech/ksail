@@ -108,6 +108,13 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 	for key, want := range tests {
 		assert.Equalf(t, want, credentials.IsSecret(key), "IsSecret(%q)", key)
 	}
+
+	// Drift guard: every advertised key must be explicitly classified above, so a new credential added
+	// to AllKeys() can't silently default to non-secret (which would leak its value over the API).
+	for _, key := range credentials.AllKeys() {
+		_, classified := tests[key]
+		assert.Truef(t, classified, "IsSecret classification missing for advertised key %q", key)
+	}
 }
 
 func TestProviderFor_MapsEveryKey(t *testing.T) {
