@@ -2,6 +2,7 @@ package cipher_test
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1201,7 +1202,7 @@ func TestShowRotatePreviewSingleFile(t *testing.T) {
 func TestBuildRotateOptsEmpty(t *testing.T) {
 	t.Parallel()
 
-	opts, err := cipher.BuildRotateOpts("", "")
+	opts, err := cipher.BuildRotateOpts("", "", nil)
 	if err != nil {
 		t.Fatalf("expected no error for empty keys, got: %v", err)
 	}
@@ -1227,7 +1228,7 @@ func TestBuildRotateOptsEmpty(t *testing.T) {
 func TestBuildRotateOptsWithRemoveKey(t *testing.T) {
 	t.Parallel()
 
-	opts, err := cipher.BuildRotateOpts("", "age1somepublickey123")
+	opts, err := cipher.BuildRotateOpts("", "age1somepublickey123", nil)
 	if err != nil {
 		t.Fatalf("expected no error for remove-key only, got: %v", err)
 	}
@@ -1240,7 +1241,7 @@ func TestBuildRotateOptsWithRemoveKey(t *testing.T) {
 func TestBuildRotateOptsWithInvalidAddKey(t *testing.T) {
 	t.Parallel()
 
-	_, err := cipher.BuildRotateOpts("not-a-valid-key-format", "")
+	_, err := cipher.BuildRotateOpts("not-a-valid-key-format", "", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid add-key, got nil")
 	}
@@ -1254,7 +1255,7 @@ func TestBuildRotateOptsWithValidAddKey(t *testing.T) {
 		t.Fatalf("generate age identity: %v", err)
 	}
 
-	opts, err := cipher.BuildRotateOpts(identity.Recipient().String(), "")
+	opts, err := cipher.BuildRotateOpts(identity.Recipient().String(), "", nil)
 	if err != nil {
 		t.Fatalf("expected no error for valid add-key, got: %v", err)
 	}
@@ -1267,5 +1268,62 @@ func TestBuildRotateOptsWithValidAddKey(t *testing.T) {
 		want := identity.Recipient().String()
 		got := opts.AddKeys[0].ToString()
 		t.Errorf("expected AddKeys[0] to match recipient %q, got %q", want, got)
+	}
+}
+
+func TestBuildRotateOptsWithSetKeys(t *testing.T) {
+	t.Parallel()
+
+	identity1, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity1: %v", err)
+	}
+
+	identity2, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity2: %v", err)
+	}
+
+	recipients := []string{identity1.Recipient().String(), identity2.Recipient().String()}
+
+	opts, err := cipher.BuildRotateOpts("", "", recipients)
+	if err != nil {
+		t.Fatalf("expected no error for valid set-keys, got: %v", err)
+	}
+
+	if len(opts.SetKeys) != 2 {
+		t.Fatalf("expected SetKeys to have 2 entries, got %d", len(opts.SetKeys))
+	}
+
+	if len(opts.AddKeys) != 0 || len(opts.RemoveKeys) != 0 {
+		t.Errorf("expected no Add/Remove keys when set-key is used, got add=%v remove=%v",
+			opts.AddKeys, opts.RemoveKeys)
+	}
+}
+
+func TestBuildRotateOptsWithInvalidSetKey(t *testing.T) {
+	t.Parallel()
+
+	_, err := cipher.BuildRotateOpts("", "", []string{"not-a-valid-key-format"})
+	if err == nil {
+		t.Fatal("expected error for invalid set-key, got nil")
+	}
+}
+
+func TestBuildRotateOptsSetKeyConflictsWithAddKey(t *testing.T) {
+	t.Parallel()
+
+	_, err := cipher.BuildRotateOpts("age1addkey", "", []string{"age1setkey"})
+	if !errors.Is(err, cipher.ErrRotateKeyConflict) {
+		t.Fatalf("expected ErrRotateKeyConflict, got: %v", err)
+	}
+}
+
+func TestBuildRotateOptsSetKeyConflictsWithRemoveKey(t *testing.T) {
+	t.Parallel()
+
+	_, err := cipher.BuildRotateOpts("", "age1removekey", []string{"age1setkey"})
+	if !errors.Is(err, cipher.ErrRotateKeyConflict) {
+		t.Fatalf("expected ErrRotateKeyConflict, got: %v", err)
 	}
 }

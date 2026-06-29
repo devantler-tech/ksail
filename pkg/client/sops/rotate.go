@@ -24,6 +24,16 @@ type RotateOpts struct {
 	// RemoveKeys are public key strings to remove from recipients during rotation.
 	// Keys are matched by their ToString() representation.
 	RemoveKeys []string
+	// SetKeys, when non-empty, REPLACES the entire recipient set with exactly
+	// these master keys instead of incrementally adding/removing. This is the
+	// wholesale Age-recipient rotation used to re-seal every file to a new key
+	// set after a key is added, retired, or compromised — the caller declares
+	// the complete desired set rather than enumerating every stale key to
+	// remove. Because RotateFile always generates a fresh data key and
+	// re-encrypts all values, a removed (e.g. compromised) recipient cannot
+	// read the rotated file even though it could unwrap the previous data key.
+	// Takes precedence over AddKeys/RemoveKeys when set.
+	SetKeys []keys.MasterKey
 	// KeyServices are the key services to use for decryption/encryption.
 	KeyServices []keyservice.KeyServiceClient
 	// DecryptionOrder controls the order in which key types are tried for decryption.
@@ -229,7 +239,17 @@ func RotateFile(path string, opts RotateOpts) error {
 }
 
 // modifyKeyGroups adds and removes master keys from the tree metadata.
+// When opts.SetKeys is non-empty it replaces the recipient set wholesale and
+// the add/remove options are ignored.
 func modifyKeyGroups(metadata *sops.Metadata, opts RotateOpts) {
+	if len(opts.SetKeys) > 0 {
+		newGroup := make(sops.KeyGroup, 0, len(opts.SetKeys))
+		newGroup = append(newGroup, opts.SetKeys...)
+		metadata.KeyGroups = []sops.KeyGroup{newGroup}
+
+		return
+	}
+
 	if len(opts.AddKeys) > 0 {
 		if len(metadata.KeyGroups) == 0 {
 			metadata.KeyGroups = append(metadata.KeyGroups, sops.KeyGroup{})
