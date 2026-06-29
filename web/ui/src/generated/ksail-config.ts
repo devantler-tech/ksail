@@ -772,6 +772,10 @@ export interface KSailClusterConfiguration {
          */
         skipKinds?: string[];
         /**
+         * Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Appended after the built-in Kubernetes schemas and the CRDs-catalog, so CRDs absent from the catalog can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location.
+         */
+        schemaLocations?: string[];
+        /**
          * Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render.
          */
         helmRender?: boolean;
