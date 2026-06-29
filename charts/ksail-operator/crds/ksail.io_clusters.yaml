@@ -974,6 +974,14 @@ spec:
                         description: HelmRender controls whether HelmReleases are
                           rendered before validation.
                         type: boolean
+                      schemaLocations:
+                        description: |-
+                          SchemaLocations lists additional kubeconform schema locations (local
+                          directories or URL templates) for CRDs absent from the CRDs-catalog, so
+                          they can be validated against a supplied schema rather than skipped.
+                        items:
+                          type: string
+                        type: array
                       skipKinds:
                         description: |-
                           SkipKinds lists additional Kubernetes kinds to skip during validation.

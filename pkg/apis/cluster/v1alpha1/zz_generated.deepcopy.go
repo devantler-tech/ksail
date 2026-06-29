@@ -927,6 +927,11 @@ func (in *ValidationConfig) DeepCopyInto(out *ValidationConfig) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.SchemaLocations != nil {
+		in, out := &in.SchemaLocations, &out.SchemaLocations
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.HelmRender != nil {
 		in, out := &in.HelmRender, &out.HelmRender
 		*out = new(bool)
