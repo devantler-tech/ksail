@@ -417,21 +417,29 @@ func (c *Configs) Extensions() []string {
 }
 
 // InstallImagePatch reports whether any user-provided patch sets machine.install.image,
-// returning the first such value. KSail derives machine.install.image from
+// returning the effective value. KSail derives machine.install.image from
 // spec.cluster.talos.extensions (see applySchematic), so a patch that also sets it is
 // redundant and silently overridden during config generation — callers use this to warn
 // about the resulting skew. The raw patch content is inspected (not the already-overridden
-// bundle), so the user's intent is recovered rather than KSail's computed value. Only
-// strategic-merge patches are detected; an RFC-6902 op targeting /machine/install/image is
-// not (none are scaffolded, and such a patch is unusual).
+// bundle), so the user's intent is recovered rather than KSail's computed value.
+//
+// Patches are stored in application order (LoadPatches: cluster, control-plane, worker;
+// then runtime patches appended) and a later strategic-merge patch overrides an earlier
+// one, so the LAST patch that sets the image is the effective value. Only strategic-merge
+// patches are detected; an RFC-6902 op targeting /machine/install/image is not (none are
+// scaffolded, and such a patch is unusual).
 func (c *Configs) InstallImagePatch() (string, bool) {
+	image := ""
+	found := false
+
 	for _, patch := range c.patches {
-		if image := installImageFromPatch(patch.Content); image != "" {
-			return image, true
+		if patchImage := installImageFromPatch(patch.Content); patchImage != "" {
+			image = patchImage
+			found = true
 		}
 	}
 
-	return "", false
+	return image, found
 }
 
 // installImageFromPatch extracts machine.install.image from a strategic-merge patch's raw

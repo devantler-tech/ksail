@@ -529,14 +529,19 @@ const installImageSkewField = "spec.cluster.talos.extensions"
 // generation — so the patch is redundant and can silently drift from the extensions list.
 //
 // The check fires under the exact condition that triggers the auto-override
-// (distribution wiring): no explicit schematicId is set and the normalized extensions
-// list is non-empty. When schematicId is set it takes precedence over extensions and KSail
-// does not derive the image, so a patch is legitimate and no warning is emitted.
+// (distribution wiring): the distribution is Talos, no explicit schematicId is set, and
+// the normalized extensions list is non-empty. When schematicId is set it takes precedence
+// over extensions and KSail does not derive the image, so a patch is legitimate and no
+// warning is emitted.
 func (v *Validator) validateTalosInstallImageSkew(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
 	if v.talosConfig == nil {
+		return
+	}
+
+	if config.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		return
 	}
 

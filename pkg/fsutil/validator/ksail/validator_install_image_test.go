@@ -56,19 +56,50 @@ func installImageSkewWarning(result *validator.ValidationResult) (validator.Vali
 	return validator.ValidationError{}, false
 }
 
+type skewCase struct {
+	name         string
+	distribution v1alpha1.Distribution
+	extensions   []string
+	schematicID  string
+	withPatch    bool
+	noTalos      bool
+	wantWarning  bool
+}
+
+func runSkewCase(t *testing.T, testCase skewCase) {
+	t.Helper()
+
+	distribution := testCase.distribution
+	if distribution == "" {
+		distribution = v1alpha1.DistributionTalos
+	}
+
+	config := createValidKSailConfig(distribution)
+	config.Spec.Cluster.Talos.Extensions = testCase.extensions
+	config.Spec.Cluster.Talos.SchematicID = testCase.schematicID
+
+	validatorInstance := ksailvalidator.NewValidator()
+
+	if !testCase.noTalos {
+		talosConfig := loadTalosConfigsForSkew(t, testCase.extensions, testCase.withPatch)
+		validatorInstance = ksailvalidator.NewValidatorForTalos(talosConfig)
+	}
+
+	warning, ok := installImageSkewWarning(validatorInstance.Validate(config))
+	assert.Equal(t, testCase.wantWarning, ok)
+
+	if testCase.wantWarning {
+		assert.Contains(t, warning.Message, "factory.talos.dev/installer/deadbeef:v1.13.4")
+		assert.Contains(t, warning.FixSuggestion, "spec.cluster.talos.extensions")
+	}
+}
+
 func TestValidateTalosInstallImageSkew(t *testing.T) {
 	t.Parallel()
 
 	exts := []string{"siderolabs/iscsi-tools"}
 
-	tests := []struct {
-		name        string
-		extensions  []string
-		schematicID string
-		withPatch   bool
-		noTalos     bool
-		wantWarning bool
-	}{
+	tests := []skewCase{
 		{
 			name:        "patch coexists with extensions",
 			extensions:  exts,
@@ -84,32 +115,18 @@ func TestValidateTalosInstallImageSkew(t *testing.T) {
 		{name: "no extensions configured", withPatch: true},
 		{name: "no install-image patch", extensions: exts},
 		{name: "no Talos config", extensions: exts, noTalos: true},
+		{
+			name:         "non-Talos distribution with a Talos-backed validator",
+			distribution: v1alpha1.DistributionVanilla,
+			extensions:   exts,
+			withPatch:    true,
+		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-
-			config := createValidKSailConfig(v1alpha1.DistributionTalos)
-			config.Spec.Cluster.Talos.Extensions = testCase.extensions
-			config.Spec.Cluster.Talos.SchematicID = testCase.schematicID
-
-			validatorInstance := ksailvalidator.NewValidator()
-
-			if !testCase.noTalos {
-				talosConfig := loadTalosConfigsForSkew(t, testCase.extensions, testCase.withPatch)
-				validatorInstance = ksailvalidator.NewValidatorForTalos(talosConfig)
-			}
-
-			result := validatorInstance.Validate(config)
-
-			warning, ok := installImageSkewWarning(result)
-			assert.Equal(t, testCase.wantWarning, ok)
-
-			if testCase.wantWarning {
-				assert.Contains(t, warning.Message, "factory.talos.dev/installer/deadbeef:v1.13.4")
-				assert.Contains(t, warning.FixSuggestion, "spec.cluster.talos.extensions")
-			}
+			runSkewCase(t, testCase)
 		})
 	}
 }

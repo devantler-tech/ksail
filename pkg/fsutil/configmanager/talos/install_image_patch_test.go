@@ -9,6 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// installImagePatch builds a cluster-scope strategic-merge patch setting machine.install.image.
+func installImagePatch(name, image string) talos.Patch {
+	return talos.Patch{
+		Path:    "talos/cluster/" + name,
+		Scope:   talos.PatchScopeCluster,
+		Content: []byte("machine:\n  install:\n    image: " + image + "\n"),
+	}
+}
+
 // loadWithPatch builds a Talos Configs carrying the given additional patch content (if any).
 func loadWithPatch(t *testing.T, content string) *talos.Configs {
 	t.Helper()
@@ -62,5 +71,28 @@ func TestConfigsInstallImagePatch(t *testing.T) {
 		image, ok := configs.InstallImagePatch()
 		assert.False(t, ok)
 		assert.Empty(t, image)
+	})
+
+	t.Run("returns the effective (last) image when multiple patches set it", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "patch-test", "1.32.0", "10.5.0.0/24").
+			WithAdditionalPatches([]talos.Patch{
+				installImagePatch(
+					"install-image-a.yaml",
+					"factory.talos.dev/installer/aaa:v1.13.4",
+				),
+				installImagePatch(
+					"install-image-b.yaml",
+					"factory.talos.dev/installer/bbb:v1.13.4",
+				),
+			})
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		image, ok := configs.InstallImagePatch()
+		assert.True(t, ok)
+		assert.Equal(t, "factory.talos.dev/installer/bbb:v1.13.4", image)
 	})
 }
