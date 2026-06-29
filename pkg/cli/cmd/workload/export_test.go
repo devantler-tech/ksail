@@ -6,6 +6,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
@@ -344,3 +345,16 @@ func ExportRunHooks(ctx context.Context, cmd *cobra.Command, hooks []string) err
 
 // ErrHookFailed exposes the errHookFailed sentinel for test assertions.
 var ErrHookFailed = errHookFailed
+
+// ErrCNINotCiliumExport exposes the network command's CNI-guard sentinel.
+var ErrCNINotCiliumExport = ErrCNINotCilium
+
+// ExportSetFlowObserverFactory swaps the network command's observer factory so
+// tests can inject a fake observer without a live Hubble relay. It returns a
+// restore function that reinstates the original factory.
+func ExportSetFlowObserverFactory(factory func(string) hubble.FlowObserver) func() {
+	original := newFlowObserver
+	newFlowObserver = factory
+
+	return func() { newFlowObserver = original }
+}

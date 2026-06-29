@@ -166,6 +166,15 @@ linters:
             - golang.org/x/sync
             - golang.org/x/term
             - golang.org/x/text
+            # cilium provides the Hubble flow/observer gRPC API used by
+            # pkg/client/hubble for `ksail workload network` traffic observability.
+            # Already linked transitively via the Cilium CNI installer.
+            - github.com/cilium/cilium
+            # google.golang.org/grpc + protobuf back the Hubble Relay gRPC client
+            # (and timestamp projection) in pkg/client/hubble. Already linked
+            # transitively via the Kubernetes client stack.
+            - google.golang.org/grpc
+            - google.golang.org/protobuf
             - gopkg.in/yaml.v3
             - helm.sh/helm
             - k8s.io
