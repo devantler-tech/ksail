@@ -494,6 +494,10 @@ workload_write
         },
         "type": "array"
       },
+      "no-devcontainer": {
+        "description": "Skip scaffolding .devcontainer/devcontainer.json (applies to: init)",
+        "type": "boolean"
+      },
       "node-autoscaler-enabled": {
         "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, init, update)",
         "type": "string"

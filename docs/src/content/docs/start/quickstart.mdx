@@ -26,13 +26,14 @@ only Docker. The exact same commands work for every other [distribution](/distri
    ksail cluster init --name quickstart --distribution Vanilla
    ```
 
-2. KSail writes three things you can commit to Git:
+2. KSail writes a few things you can commit to Git:
 
    | File | What it is |
    |------|------------|
    | `ksail.yaml` | KSail's declarative cluster config — distribution, networking, GitOps, registries |
    | `kind.yaml` | The native Kind config (works with `kind` directly — no lock-in) |
    | `k8s/` | Your workload manifests, with a `kustomization.yaml` to start |
+   | `.devcontainer/devcontainer.json` | A ready-to-use [Dev Container](https://containers.dev/) so the project opens in GitHub Codespaces or VS Code Dev Containers with Docker-in-Docker and the KSail CLI already on `PATH` — pass `--no-devcontainer` to skip it |
 
 </Steps>
 

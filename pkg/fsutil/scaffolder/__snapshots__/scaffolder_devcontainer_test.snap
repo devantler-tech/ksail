@@ -1,0 +1,38 @@
+
+[TestScaffoldDevcontainerUsesClusterName - 1]
+{
+  "name": "my-cluster",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/go:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "minikube": "none"
+    }
+  },
+  "postCreateCommand": "go install github.com/devantler-tech/ksail/v7@latest",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:${containerEnv:HOME}/go/bin"
+  }
+}
+
+---
+
+[TestScaffoldGeneratesDevcontainerByDefault - 1]
+{
+  "name": "ksail",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/go:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "minikube": "none"
+    }
+  },
+  "postCreateCommand": "go install github.com/devantler-tech/ksail/v7@latest",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:${containerEnv:HOME}/go/bin"
+  }
+}
+
+---
