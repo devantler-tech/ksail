@@ -38,7 +38,10 @@
 //     connections and forwards a copy to the local process over a reverse tunnel
 //     built from the embedded port-forward primitive. Read-only: the local
 //     process receives mirrored traffic but does not answer back into the
-//     cluster — the lowest-risk first mode the issue itself suggests.
+//     cluster — the lowest-risk first mode the issue itself suggests. Its first
+//     increment is [SelectTapPoint]: pick the concrete pod and container the tap
+//     attaches to (honouring an optional container selector), pure logic shared
+//     by the injection and tunnel steps that follow.
 //   - Phase 2 — intercept: steer a subset (or all) of the Deployment's traffic to
 //     the local process and return its responses.
 //   - Phase 3 — environment & volume projection: run the local process with the
