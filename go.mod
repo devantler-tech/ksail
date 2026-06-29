@@ -58,6 +58,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/cilium/cilium v1.17.15
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.19.0
@@ -297,7 +298,6 @@ require (
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
-	github.com/cilium/cilium v1.17.15 // indirect
 	github.com/cilium/ebpf v0.21.0 // indirect
 	github.com/ckaznocha/intrange v0.3.1 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect

@@ -1515,7 +1515,7 @@ workload_write
         "type": "string"
       },
       "cni": {
-        "description": "Container Network Interface (CNI) to use (applies to: images)",
+        "description": "Container Network Interface (CNI) to use (applies to: images, network)",
         "type": "string"
       },
       "compliance-threshold": {
@@ -1732,6 +1732,11 @@ workload_write
         },
         "type": "array"
       },
+      "last": {
+        "default": 20,
+        "description": "Number of most recent flows to fetch (applies to: network)",
+        "type": "integer"
+      },
       "limit-bytes": {
         "default": 0,
         "description": "Maximum bytes of logs to return. Defaults to no limit. (applies to: logs)",
@@ -1763,7 +1768,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network)",
         "type": "string"
       },
       "no-headers": {
@@ -1795,6 +1800,10 @@ workload_write
         "description": "Output watch event objects when --watch or --watch-only is used. Existing objects are output as initial ADDED events. (applies to: get)",
         "type": "boolean"
       },
+      "pod": {
+        "description": "Filter flows by pod-name substring (source or destination) (applies to: network)",
+        "type": "string"
+      },
       "pod-running-timeout": {
         "default": "1m0s",
         "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: forward, logs)",
@@ -1821,6 +1830,10 @@ workload_write
       "previous": {
         "description": "If true, print the logs for the previous instance of the container in a pod if it exists. (applies to: logs)",
         "type": "boolean"
+      },
+      "protocol": {
+        "description": "Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP) (applies to: network)",
+        "type": "string"
       },
       "provider": {
         "description": "Infrastructure provider backend (e.g., Docker) (applies to: images)",
@@ -2043,7 +2056,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nexport: Export container images from the cluster\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
+        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nexport: Export container images from the cluster\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
         "enum": [
           "describe",
           "explain",
@@ -2074,6 +2087,7 @@ workload_write
           "get",
           "images",
           "logs",
+          "network",
           "scan",
           "validate",
           "wait"
