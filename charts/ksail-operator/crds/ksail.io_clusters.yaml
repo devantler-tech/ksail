@@ -1006,6 +1006,42 @@ spec:
               It is the operator's source of truth for observed state; the imperative CLI continues to
               persist its own state under ~/.ksail/clusters/<name>/spec.json independently.
             properties:
+              components:
+                description: |-
+                  Components reports the install outcome of each component declared in the spec (CNI, CSI,
+                  metrics-server, cert-manager, load-balancer, policy-engine, GitOps), so a UI can surface
+                  per-component health instead of only the aggregate ComponentsReady condition. It is empty when
+                  component installation is not supported for the cluster (e.g. the provisioner exposes no
+                  operator-reachable kubeconfig).
+                items:
+                  description: |-
+                    ComponentStatus reports the install outcome of a single cluster component. The ComponentState enum
+                    it carries lives in its own file (componentstate.go), per the one-enum-per-file convention.
+                  properties:
+                    message:
+                      description: Message is a human-readable detail, set to the
+                        failure reason when State is Failed.
+                      type: string
+                    name:
+                      description: |-
+                        Name is the component's installer key (e.g. cilium, cert-manager, flux). It is the list-map key,
+                        so it is required (the package default is Optional).
+                      type: string
+                    state:
+                      description: State is the component's install outcome in the
+                        last reconcile. Always set by the operator.
+                      enum:
+                      - Ready
+                      - Failed
+                      type: string
+                  required:
+                  - name
+                  - state
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               conditions:
                 description: Conditions represent the latest observations of the cluster's
                   state.
