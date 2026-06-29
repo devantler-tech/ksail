@@ -79,6 +79,7 @@ func (o *RelayObserver) ObserveFlows(ctx context.Context, last uint64) ([]FlowRe
 	if err != nil {
 		return nil, fmt.Errorf("connect to hubble relay %q: %w", o.address, err)
 	}
+
 	defer func() { _ = conn.Close() }()
 
 	stream, err := observerpb.NewObserverClient(conn).GetFlows(ctx, &observerpb.GetFlowsRequest{
