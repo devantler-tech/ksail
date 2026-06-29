@@ -1,5 +1,7 @@
 package k3sbootstrap
 
+import "slices"
+
 // PlanInput describes the topology of a K3s cluster to bootstrap across a set of
 // freshly-provisioned servers (e.g. Hetzner Cloud servers). It is the typed input
 // for [Plan], which expands it into the ordered per-node [InstallConfig]s a
@@ -138,14 +140,19 @@ func (input PlanInput) hasJoiningNodes() bool {
 // role, carrying the shared server-only options (TLS SANs, disables, kubeconfig
 // mode). serverURL is empty for RoleServerInit and the join endpoint for
 // RoleServer.
+//
+// TLSSANs and Disable are cloned per config: a single PlanInput expands into
+// multiple server configs, and sharing the input's slice headers would let a
+// downstream mutation of one node's slice corrupt every other node's. slices.Clone
+// preserves nil, so an unset field stays nil rather than becoming an empty slice.
 func (input PlanInput) serverConfig(role Role, serverURL string) InstallConfig {
 	return InstallConfig{
 		Version:             input.Version,
 		Role:                role,
 		Token:               input.Token,
 		ServerURL:           serverURL,
-		TLSSANs:             input.TLSSANs,
-		Disable:             input.Disable,
+		TLSSANs:             slices.Clone(input.TLSSANs),
+		Disable:             slices.Clone(input.Disable),
 		WriteKubeconfigMode: input.WriteKubeconfigMode,
 	}
 }

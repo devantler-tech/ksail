@@ -169,6 +169,47 @@ func TestPlanConfigsRender(t *testing.T) {
 	}
 }
 
+// TestPlanServerConfigsCloneSlices guards the per-config deep copy of the
+// server-only slices. A single PlanInput expands into multiple server configs, so
+// they must not share TLSSANs/Disable backing arrays: mutating one server's slice
+// (or the caller's input) must never leak into the others.
+func TestPlanServerConfigsCloneSlices(t *testing.T) {
+	t.Parallel()
+
+	tlsSANs := []string{"lb.example.com"}
+	disable := []string{"traefik"}
+
+	nodes, err := k3sbootstrap.Plan(k3sbootstrap.PlanInput{
+		Version:           "v1.30.2+k3s1",
+		Token:             "secret",
+		ControlPlaneCount: 2,
+		ServerURL:         "https://10.0.0.2:6443",
+		TLSSANs:           tlsSANs,
+		Disable:           disable,
+	})
+	require.NoError(t, err)
+
+	// Mutating the first server's slices must not affect the second server's.
+	nodes[0].Config.TLSSANs[0] = "evil.example.com"
+	nodes[0].Config.Disable[0] = "servicelb"
+	assert.Equal(
+		t,
+		[]string{"lb.example.com"},
+		nodes[1].Config.TLSSANs,
+		"second server TLS SANs must be independent",
+	)
+	assert.Equal(
+		t,
+		[]string{"traefik"},
+		nodes[1].Config.Disable,
+		"second server disables must be independent",
+	)
+
+	// The caller's input slices must also be untouched.
+	assert.Equal(t, []string{"lb.example.com"}, tlsSANs, "input TLS SANs must not be aliased")
+	assert.Equal(t, []string{"traefik"}, disable, "input disables must not be aliased")
+}
+
 func TestPlanErrors(t *testing.T) {
 	t.Parallel()
 
