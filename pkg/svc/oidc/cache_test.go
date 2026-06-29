@@ -72,6 +72,42 @@ func TestCacheKeyDeterminism(t *testing.T) {
 	})
 }
 
+// TestCacheFederationSharedSession pins the multi-cluster single-sign-on
+// guarantee end to end: a token cached while authenticating against one cluster
+// is transparently reused by a different cluster that trusts the same OIDC
+// provider. The cache key is derived solely from the provider parameters
+// (issuer, client ID, scopes) and carries no cluster dimension, so federated
+// clusters share one authenticated session — authenticate once, operate across
+// the fleet (https://github.com/devantler-tech/ksail/issues/4602).
+func TestCacheFederationSharedSession(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	const (
+		issuer   = "https://dex.example.com"
+		clientID = "kubectl"
+	)
+
+	scopes := []string{"email", "groups"}
+
+	// Cluster A authenticates and caches its session.
+	clusterAKey := oidc.CacheKey(issuer, clientID, scopes)
+	expiry := time.Now().Add(time.Hour).Truncate(time.Second)
+	tok := &oidc.TokenResult{IDToken: "shared-id", RefreshToken: "shared-ref", Expiry: expiry}
+	require.NoError(t, oidc.SaveCachedToken(dir, clusterAKey, tok))
+
+	// Cluster B trusts the same provider (identical issuer/client/scopes) and
+	// therefore resolves the same key — it must find cluster A's session.
+	clusterBKey := oidc.CacheKey(issuer, clientID, scopes)
+	require.Equal(t, clusterAKey, clusterBKey,
+		"clusters sharing an OIDC provider must resolve the same cache key")
+
+	loaded := oidc.LoadCachedToken(dir, clusterBKey)
+	require.NotNil(t, loaded, "cluster B must reuse the session cached by cluster A (SSO)")
+	assert.Equal(t, "shared-id", loaded.IDToken)
+}
+
 func TestLoadSaveCachedToken(t *testing.T) {
 	t.Parallel()
 
