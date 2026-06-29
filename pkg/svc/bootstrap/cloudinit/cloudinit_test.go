@@ -224,3 +224,168 @@ func TestBuildUserDataErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildUserDataShellQuotesSingleQuoteInLogPath(t *testing.T) {
+	t.Parallel()
+
+	// A log path containing a single quote must be escaped via the POSIX '\''
+	// idiom so it does not terminate the surrounding single-quoted string.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+		LogPath:  "/var/log/it's-here.log",
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	// The redirect line must contain the escaped single-quote sequence '\'' so
+	// the shell sees the path as a single literal token.
+	assert.Contains(t,
+		cfg.WriteFiles[0].Content,
+		`exec >> '/var/log/it'\''s-here.log' 2>&1`,
+		"single quote in log path must be escaped via the POSIX '\\'' idiom",
+	)
+}
+
+func TestBuildUserDataLogPathWithSpace(t *testing.T) {
+	t.Parallel()
+
+	// A log path with a space must be kept as one redirect target (not split
+	// into two tokens) when the shell evaluates the exec line.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+		LogPath:  "/var/log/k sail bootstrap.log",
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	assert.Contains(t,
+		cfg.WriteFiles[0].Content,
+		"exec >> '/var/log/k sail bootstrap.log' 2>&1\n",
+		"log path with a space must be wrapped in single quotes as a single token",
+	)
+}
+
+func TestBuildUserDataCommandsWithWhitespace(t *testing.T) {
+	t.Parallel()
+
+	// Commands with leading or trailing whitespace are not blank: they must be
+	// kept verbatim, not dropped like whitespace-only entries.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"  echo leading", "echo trailing  "},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	content := cfg.WriteFiles[0].Content
+	assert.Contains(t, content, "\n  echo leading\n",
+		"command with leading whitespace must be kept verbatim")
+	assert.Contains(t, content, "\necho trailing  \n",
+		"command with trailing whitespace must be kept verbatim")
+}
+
+func TestBuildUserDataSingleCommand(t *testing.T) {
+	t.Parallel()
+
+	// A single command must produce exactly four lines: shebang, set flags,
+	// exec redirect, and the command itself.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo only"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	assert.Equal(t,
+		"#!/bin/sh\n"+
+			"set -eu\n"+
+			"exec >> '"+cloudinitbootstrap.DefaultLogPath+"' 2>&1\n"+
+			"echo only\n",
+		cfg.WriteFiles[0].Content,
+	)
+}
+
+func TestBuildUserDataScriptEndsWithExactlyOneNewline(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo a", "echo b"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	content := cfg.WriteFiles[0].Content
+	assert.True(t, strings.HasSuffix(content, "\n"),
+		"script must end with a newline")
+	assert.False(t, strings.HasSuffix(content, "\n\n"),
+		"script must end with exactly one newline, not two")
+}
+
+func TestBuildUserDataRunCmdUsesShBinary(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.RunCmd, 1)
+	require.Len(t, cfg.RunCmd[0], 2)
+	assert.Equal(t, "/bin/sh", cfg.RunCmd[0][0],
+		"runcmd must use /bin/sh so the script's shebang is the actual interpreter")
+}
+
+func TestBuildUserDataBothPathsRelative(t *testing.T) {
+	t.Parallel()
+
+	// Both ScriptPath and LogPath are relative: the combined check rejects the
+	// config with ErrPathNotAbsolute.
+	out, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands:   []string{"echo hi"},
+		ScriptPath: "boot.sh",
+		LogPath:    "boot.log",
+	})
+	require.ErrorIs(t, err, cloudinitbootstrap.ErrPathNotAbsolute)
+	assert.Empty(t, out)
+}
+
+func TestBuildUserDataZeroValueConfig(t *testing.T) {
+	t.Parallel()
+
+	// A zero-value Config (no Commands set at all) must fail with ErrNoCommands.
+	out, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{})
+	require.ErrorIs(t, err, cloudinitbootstrap.ErrNoCommands)
+	assert.Empty(t, out)
+}
+
+func TestBuildUserDataScriptHeaderOrder(t *testing.T) {
+	t.Parallel()
+
+	// The first three non-empty lines of the script must be shebang, set flags,
+	// exec redirect — in that exact order — regardless of the commands that
+	// follow.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo cmd"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	lines := strings.SplitN(cfg.WriteFiles[0].Content, "\n", 5)
+	require.GreaterOrEqual(t, len(lines), 4)
+	assert.Equal(t, "#!/bin/sh", lines[0])
+	assert.Equal(t, "set -eu", lines[1])
+	assert.True(t, strings.HasPrefix(lines[2], "exec >> '"), "third line must be the exec redirect")
+	assert.True(t, strings.HasSuffix(lines[2], "2>&1"), "exec redirect must capture stderr")
+}
