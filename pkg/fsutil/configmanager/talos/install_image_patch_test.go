@@ -72,6 +72,10 @@ func TestConfigsInstallImagePatch(t *testing.T) {
 		assert.False(t, ok)
 		assert.Empty(t, image)
 	})
+}
+
+func TestConfigsInstallImagePatchLastWins(t *testing.T) {
+	t.Parallel()
 
 	t.Run("returns the effective (last) image when multiple patches set it", func(t *testing.T) {
 		t.Parallel()
@@ -94,5 +98,29 @@ func TestConfigsInstallImagePatch(t *testing.T) {
 		image, ok := configs.InstallImagePatch()
 		assert.True(t, ok)
 		assert.Equal(t, "factory.talos.dev/installer/bbb:v1.13.4", image)
+	})
+
+	t.Run("a later explicit clear wins (no effective pin)", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "patch-test", "1.32.0", "10.5.0.0/24").
+			WithAdditionalPatches([]talos.Patch{
+				installImagePatch(
+					"install-image-a.yaml",
+					"factory.talos.dev/installer/aaa:v1.13.4",
+				),
+				{
+					Path:    "talos/cluster/install-image-clear.yaml",
+					Scope:   talos.PatchScopeCluster,
+					Content: []byte("machine:\n  install:\n    image: \"\"\n"),
+				},
+			})
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		image, ok := configs.InstallImagePatch()
+		assert.False(t, ok, "an explicit clear leaves no effective pin")
+		assert.Empty(t, image)
 	})
 }

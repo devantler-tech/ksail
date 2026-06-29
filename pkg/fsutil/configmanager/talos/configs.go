@@ -430,36 +430,45 @@ func (c *Configs) Extensions() []string {
 // scaffolded, and such a patch is unusual).
 func (c *Configs) InstallImagePatch() (string, bool) {
 	image := ""
-	found := false
 
 	for _, patch := range c.patches {
-		if patchImage := installImageFromPatch(patch.Content); patchImage != "" {
+		// Track field presence, not string-emptiness: the LAST patch that sets the
+		// machine.install.image field wins, even when it explicitly clears the image
+		// to "" (an earlier patch's value must not then be reported as effective).
+		if patchImage, present := installImageFromPatch(patch.Content); present {
 			image = patchImage
-			found = true
 		}
 	}
 
-	return image, found
+	// found is true only when the effective value is a real (non-empty) image — an
+	// explicit clear leaves no effective pin, so no skew warning is warranted.
+	return image, image != ""
 }
 
 // installImageFromPatch extracts machine.install.image from a strategic-merge patch's raw
-// YAML content. Returns an empty string when the patch does not set it, or when the content
+// YAML content. The bool reports whether the patch sets the machine.install.image field at
+// all (independent of the string value, so an explicit empty clear is distinguishable from
+// an absent field). Returns ("", false) when the patch does not set it, or when the content
 // is not a strategic-merge document (e.g. an RFC-6902 patch list).
-func installImageFromPatch(content []byte) string {
+func installImageFromPatch(content []byte) (string, bool) {
 	var doc struct {
-		Machine struct {
-			Install struct {
-				Image string `json:"image"`
+		Machine *struct {
+			Install *struct {
+				Image *string `json:"image"`
 			} `json:"install"`
 		} `json:"machine"`
 	}
 
 	err := yaml.Unmarshal(content, &doc)
 	if err != nil {
-		return ""
+		return "", false
 	}
 
-	return strings.TrimSpace(doc.Machine.Install.Image)
+	if doc.Machine == nil || doc.Machine.Install == nil || doc.Machine.Install.Image == nil {
+		return "", false
+	}
+
+	return strings.TrimSpace(*doc.Machine.Install.Image), true
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
