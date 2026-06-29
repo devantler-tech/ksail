@@ -72,19 +72,8 @@ type ClusterStatus struct {
 	Components []ComponentStatus `json:"components,omitempty"`
 }
 
-// ComponentState is the install outcome of a single component, as observed in the last reconcile.
-// +kubebuilder:validation:Enum=Ready;Failed
-type ComponentState string
-
-const (
-	// ComponentStateReady indicates the component installed (or upgraded) successfully.
-	ComponentStateReady ComponentState = "Ready"
-	// ComponentStateFailed indicates the component's install failed in the last reconcile; the
-	// operator retries it on the next reconcile (its Message carries the failure detail).
-	ComponentStateFailed ComponentState = "Failed"
-)
-
-// ComponentStatus reports the install outcome of a single cluster component.
+// ComponentStatus reports the install outcome of a single cluster component. The ComponentState enum
+// it carries lives in its own file (componentstate.go), per the one-enum-per-file convention.
 type ComponentStatus struct {
 	// Name is the component's installer key (e.g. cilium, cert-manager, flux). It is the list-map key,
 	// so it is required (the package default is Optional).

@@ -1014,8 +1014,9 @@ spec:
                   component installation is not supported for the cluster (e.g. the provisioner exposes no
                   operator-reachable kubeconfig).
                 items:
-                  description: ComponentStatus reports the install outcome of a single
-                    cluster component.
+                  description: |-
+                    ComponentStatus reports the install outcome of a single cluster component. The ComponentState enum
+                    it carries lives in its own file (componentstate.go), per the one-enum-per-file convention.
                   properties:
                     message:
                       description: Message is a human-readable detail, set to the
