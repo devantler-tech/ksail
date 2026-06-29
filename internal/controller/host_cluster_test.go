@@ -68,10 +68,10 @@ func newHostReconciler(
 			_ context.Context,
 			_ clusterprovisioner.Provisioner,
 			_ *v1alpha1.Cluster,
-		) (bool, error) {
+		) (bool, []v1alpha1.ComponentStatus, error) {
 			t.Error("the host cluster must never get components installed")
 
-			return false, errBoom
+			return false, nil, errBoom
 		},
 		ObserveHostStatus: func(
 			_ context.Context,

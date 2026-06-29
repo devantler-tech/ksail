@@ -427,10 +427,12 @@ func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
 		_ context.Context,
 		_ clusterprovisioner.Provisioner,
 		_ *v1alpha1.Cluster,
-	) (bool, error) {
+	) (bool, []v1alpha1.ComponentStatus, error) {
 		calls++
 
-		return true, nil
+		return true, []v1alpha1.ComponentStatus{
+			{Name: "cilium", State: v1alpha1.ComponentStateReady},
+		}, nil
 	}
 
 	_, err := reconciler.Reconcile(context.Background(), request())
@@ -446,6 +448,10 @@ func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
 	)
 	require.NotNil(t, condition)
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	// The per-component status is recorded so a UI can surface per-component health.
+	assert.Equal(t, []v1alpha1.ComponentStatus{
+		{Name: "cilium", State: v1alpha1.ComponentStateReady},
+	}, got.Status.Components)
 
 	// A second reconcile at the same generation must not reinstall.
 	_, err = reconciler.Reconcile(context.Background(), request())
@@ -463,8 +469,10 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 		_ context.Context,
 		_ clusterprovisioner.Provisioner,
 		_ *v1alpha1.Cluster,
-	) (bool, error) {
-		return true, errBoom
+	) (bool, []v1alpha1.ComponentStatus, error) {
+		return true, []v1alpha1.ComponentStatus{
+			{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
+		}, errBoom
 	}
 
 	result, err := reconciler.Reconcile(context.Background(), request())
@@ -488,6 +496,10 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	assert.Equal(t, metav1.ConditionFalse, condition.Status)
 	// The cluster itself is still provisioned/Ready independent of component health.
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
+	// The failed component is recorded in the per-component status even on the failure path.
+	assert.Equal(t, []v1alpha1.ComponentStatus{
+		{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
+	}, got.Status.Components)
 }
 
 func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {
@@ -502,10 +514,10 @@ func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {
 		_ context.Context,
 		_ clusterprovisioner.Provisioner,
 		_ *v1alpha1.Cluster,
-	) (bool, error) {
+	) (bool, []v1alpha1.ComponentStatus, error) {
 		calls++
 		// applied=false: installation is not supported for this cluster.
-		return false, nil
+		return false, nil, nil
 	}
 
 	result, err := reconciler.Reconcile(context.Background(), request())
