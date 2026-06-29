@@ -46,11 +46,15 @@ var installOrder = []string{
 // The returned applied is false when installation was skipped (no Connector), so the reconciler can
 // report ComponentsReady=Unknown rather than a misleading True. It is true once a Connector exists,
 // even if a subsequent step fails (the error then drives the status).
+//
+// The returned components carry the per-component install outcome (one entry per declared component,
+// in install order) so the reconciler can surface per-component health in ClusterStatus. They are nil
+// on the skip path and when install never reached the installer set (kubeconfig/helm/factory errors).
 func InstallComponents(
 	ctx context.Context,
 	provisioner clusterprovisioner.Provisioner,
 	cluster *v1alpha1.Cluster,
-) (bool, error) {
+) (bool, []v1alpha1.ComponentStatus, error) {
 	log := logf.FromContext(ctx)
 
 	connector, ok := provisioner.(clusterprovisioner.Connector)
@@ -61,23 +65,23 @@ func InstallComponents(
 			"provider", cluster.Spec.Cluster.Provider,
 		)
 
-		return false, nil
+		return false, nil, nil
 	}
 
 	raw, err := connector.Kubeconfig(ctx, controller.ProvisionedName(cluster))
 	if err != nil {
-		return true, fmt.Errorf("get child cluster kubeconfig: %w", err)
+		return true, nil, fmt.Errorf("get child cluster kubeconfig: %w", err)
 	}
 
 	kubeconfigPath, cleanup, err := writeTempKubeconfig(raw)
 	if err != nil {
-		return true, err
+		return true, nil, err
 	}
 	defer cleanup()
 
 	helmClient, err := helm.NewClient(kubeconfigPath, "")
 	if err != nil {
-		return true, fmt.Errorf("build helm client for child cluster: %w", err)
+		return true, nil, fmt.Errorf("build helm client for child cluster: %w", err)
 	}
 
 	factory := installer.NewFactory(
@@ -91,10 +95,12 @@ func InstallComponents(
 
 	installers, err := factory.CreateInstallersForConfig(cluster)
 	if err != nil {
-		return true, fmt.Errorf("build installers: %w", err)
+		return true, nil, fmt.Errorf("build installers: %w", err)
 	}
 
-	return true, runInstallers(ctx, installers)
+	components, err := runInstallers(ctx, installers)
+
+	return true, components, err
 }
 
 // writeTempKubeconfig writes the child kubeconfig bytes to a temp file and returns its path plus a
@@ -129,22 +135,33 @@ func writeTempKubeconfig(raw []byte) (string, func(), error) {
 
 // runInstallers installs the components in dependency order (CNI → infra → GitOps), continuing past
 // individual failures and returning their joined error so one broken component does not block the
-// rest.
-func runInstallers(ctx context.Context, installers map[string]installer.Installer) error {
+// rest. It also returns a per-component status (one entry per installer, in install order) so the
+// reconciler can report per-component health: a failed Install yields ComponentStateFailed with the
+// error as its message, a successful one yields ComponentStateReady.
+func runInstallers(
+	ctx context.Context,
+	installers map[string]installer.Installer,
+) ([]v1alpha1.ComponentStatus, error) {
 	log := logf.FromContext(ctx)
 
 	var errs []error
 
+	statuses := make([]v1alpha1.ComponentStatus, 0, len(installers))
 	done := make(map[string]bool, len(installers))
 
 	install := func(key string, component installer.Installer) {
 		log.Info("installing component", "component", key)
 
+		status := v1alpha1.ComponentStatus{Name: key, State: v1alpha1.ComponentStateReady}
+
 		err := component.Install(ctx)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", key, err))
+			status.State = v1alpha1.ComponentStateFailed
+			status.Message = err.Error()
 		}
 
+		statuses = append(statuses, status)
 		done[key] = true
 	}
 
@@ -161,5 +178,5 @@ func runInstallers(ctx context.Context, installers map[string]installer.Installe
 		}
 	}
 
-	return errors.Join(errs...)
+	return statuses, errors.Join(errs...)
 }

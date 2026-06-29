@@ -38,4 +38,16 @@ var (
 	// ErrUnknownRole is returned when InstallConfig.Role is not one of the defined
 	// roles.
 	ErrUnknownRole = errors.New("k3s install: unknown node role")
+
+	// ErrInvalidControlPlaneCount is returned by Plan when PlanInput.ControlPlaneCount
+	// is less than one. Every K3s cluster needs at least one control-plane node (the
+	// cluster-initialising server), so a count below one cannot describe a cluster.
+	ErrInvalidControlPlaneCount = errors.New(
+		"k3s plan: control-plane count must be at least one",
+	)
+
+	// ErrInvalidAgentCount is returned by Plan when PlanInput.AgentCount is negative.
+	// A cluster may have zero agents (control-plane nodes are schedulable), but a
+	// negative count is meaningless.
+	ErrInvalidAgentCount = errors.New("k3s plan: agent count must not be negative")
 )

@@ -111,11 +111,14 @@ type StatusObserver func(
 // The returned applied is false when installation was skipped because it is not supported for this
 // cluster (e.g. the provisioner exposes no operator-reachable kubeconfig); the reconciler then
 // reports ComponentsReady=Unknown rather than a misleading True.
+//
+// The returned components carry the per-component install outcome (one entry per declared component);
+// the reconciler records them in ClusterStatus.Components so a UI can surface per-component health.
 type ComponentInstaller func(
 	ctx context.Context,
 	provisioner clusterprovisioner.Provisioner,
 	cluster *v1alpha1.Cluster,
-) (applied bool, err error)
+) (applied bool, components []v1alpha1.ComponentStatus, err error)
 
 // ClusterReconciler reconciles a Cluster object towards its desired state.
 type ClusterReconciler struct {
@@ -323,7 +326,9 @@ func (r *ClusterReconciler) reconcileComponents(
 		return true
 	}
 
-	applied, err := r.InstallComponents(ctx, provisioner, cluster)
+	applied, components, err := r.InstallComponents(ctx, provisioner, cluster)
+	cluster.Status.Components = components
+
 	if err != nil {
 		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
 		setCondition(

@@ -22,6 +22,11 @@ const (
 	// schemaCacheDirPerm is the permission for the schema cache directory.
 	schemaCacheDirPerm = 0o700
 
+	// builtinSchemaLocationCount is the number of built-in schema locations
+	// (the default Kubernetes schemas and the CRDs-catalog) prepended before any
+	// caller-supplied locations.
+	builtinSchemaLocationCount = 2
+
 	// defaultValidateMaxRetryAttempts bounds how many times a validation is
 	// retried when a schema download hits a transient network error.
 	defaultValidateMaxRetryAttempts = 3
@@ -169,6 +174,11 @@ func (c *Client) processResults(results []validator.Result) error {
 type ValidationOptions struct {
 	// SkipKinds is a list of Kubernetes kinds to skip during validation (e.g., "Secret").
 	SkipKinds []string
+	// SchemaLocations lists additional kubeconform schema locations (local directories
+	// or URL templates) appended after the built-in Kubernetes schemas and the
+	// CRDs-catalog. They let a repo validate CRDs that are absent from (or stale in)
+	// the catalog against a supplied schema instead of skipping the kind entirely.
+	SchemaLocations []string
 	// Strict enables strict validation mode.
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
@@ -177,14 +187,19 @@ type ValidationOptions struct {
 
 // createValidator creates a kubeconform validator with the given options.
 func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, error) {
-	// Create schema locations
-	schemaLocations := []string{
+	// Create schema locations. Caller-supplied locations are appended last so they
+	// act as a fallback for CRDs absent from the catalog (the catalog URL 404s and
+	// kubeconform falls through to these) without changing precedence for kinds
+	// already covered.
+	schemaLocations := make([]string, 0, builtinSchemaLocationCount+len(opts.SchemaLocations))
+	schemaLocations = append(schemaLocations,
 		// Default Kubernetes schemas
 		"default",
 		// Add Datree CRDs catalog for additional CRD schemas
-		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"+
 			"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
-	}
+	)
+	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
 
 	// Convert skip kinds to map
 	skipKinds := make(map[string]struct{})
