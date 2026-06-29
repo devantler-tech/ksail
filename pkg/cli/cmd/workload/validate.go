@@ -217,13 +217,16 @@ func runValidateCmd(
 	// Additional schema locations come from the --schema-location flag and from
 	// spec.workload.validation.schemaLocations in ksail.yaml. They let a repo
 	// validate CRDs absent from the CRDs-catalog against a supplied schema rather
-	// than skipping the kind via --skip-kinds.
+	// than skipping the kind via --skip-kinds. Local filesystem locations are
+	// canonicalized (see canonicalizeSchemaLocations) so validation reads the
+	// intended schema tree; URLs and kubeconform path templates pass through.
+	suppliedSchemaLocations := slices.Concat(
+		flags.schemaLocations,
+		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
+	)
 	validationOpts.SchemaLocations = append(
 		validationOpts.SchemaLocations,
-		flags.schemaLocations...)
-	validationOpts.SchemaLocations = append(
-		validationOpts.SchemaLocations,
-		configuredSchemaLocations(cmd, cfg, configFound, loadErr)...,
+		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
 	)
 
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
@@ -383,6 +386,46 @@ func configuredSchemaLocations(
 	}
 
 	return cfg.Spec.Workload.Validation.SchemaLocations
+}
+
+// canonicalizeSchemaLocations resolves local filesystem schema locations to real,
+// absolute paths (expanding ~ and following symlinks) so validation reads the
+// intended schema tree and symlink-escape is prevented in CI — matching how the
+// validate target path and --config are canonicalized.
+//
+// A kubeconform schema location may also be a URL (contains "://") or a path
+// template carrying kubeconform placeholders (contains "{{", e.g.
+// "schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"); those are
+// not local paths and pass through verbatim. A local path that cannot be resolved
+// (e.g. it does not exist) is left as supplied so kubeconform surfaces a clear error.
+func canonicalizeSchemaLocations(locations []string) []string {
+	canonical := make([]string, 0, len(locations))
+
+	for _, loc := range locations {
+		if strings.Contains(loc, "://") || strings.Contains(loc, "{{") {
+			canonical = append(canonical, loc)
+
+			continue
+		}
+
+		expanded, err := fsutil.ExpandHomePath(loc)
+		if err != nil {
+			canonical = append(canonical, loc)
+
+			continue
+		}
+
+		resolved, err := fsutil.EvalCanonicalPath(expanded)
+		if err != nil {
+			canonical = append(canonical, expanded)
+
+			continue
+		}
+
+		canonical = append(canonical, resolved)
+	}
+
+	return canonical
 }
 
 // validatePath validates all manifests in the given path. Helm rendering applies
