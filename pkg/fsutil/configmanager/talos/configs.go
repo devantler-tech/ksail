@@ -14,6 +14,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
+	"sigs.k8s.io/yaml"
 )
 
 // Configs holds the loaded Talos machine configurations with patches applied.
@@ -413,6 +414,44 @@ func (c *Configs) Extensions() []string {
 	copy(result, c.extensions)
 
 	return result
+}
+
+// InstallImagePatch reports whether any user-provided patch sets machine.install.image,
+// returning the first such value. KSail derives machine.install.image from
+// spec.cluster.talos.extensions (see applySchematic), so a patch that also sets it is
+// redundant and silently overridden during config generation — callers use this to warn
+// about the resulting skew. The raw patch content is inspected (not the already-overridden
+// bundle), so the user's intent is recovered rather than KSail's computed value. Only
+// strategic-merge patches are detected; an RFC-6902 op targeting /machine/install/image is
+// not (none are scaffolded, and such a patch is unusual).
+func (c *Configs) InstallImagePatch() (string, bool) {
+	for _, patch := range c.patches {
+		if image := installImageFromPatch(patch.Content); image != "" {
+			return image, true
+		}
+	}
+
+	return "", false
+}
+
+// installImageFromPatch extracts machine.install.image from a strategic-merge patch's raw
+// YAML content. Returns an empty string when the patch does not set it, or when the content
+// is not a strategic-merge document (e.g. an RFC-6902 patch list).
+func installImageFromPatch(content []byte) string {
+	var doc struct {
+		Machine struct {
+			Install struct {
+				Image string `json:"image"`
+			} `json:"install"`
+		} `json:"machine"`
+	}
+
+	err := yaml.Unmarshal(content, &doc)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(doc.Machine.Install.Image)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").

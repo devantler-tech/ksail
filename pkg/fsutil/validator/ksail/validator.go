@@ -110,6 +110,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	v.validateFlux(config, result)
 	v.validateAutoscalerConfig(config, result)
 	v.validatePublicNet(config, result)
+	v.validateTalosInstallImageSkew(config, result)
 
 	return result
 }
@@ -515,6 +516,56 @@ func (v *Validator) validateTalosDefaultCNIAlignment(result *validator.Validatio
 				"or set CNI to Cilium in your ksail.yaml",
 		})
 	}
+}
+
+// installImageSkewField is the ksail.yaml field path reported for install-image skew warnings.
+const installImageSkewField = "spec.cluster.talos.extensions"
+
+// validateTalosInstallImageSkew warns when a Talos machine config patch sets
+// machine.install.image while KSail is already deriving it from
+// spec.cluster.talos.extensions. KSail patches machine.install.image with the Image
+// Factory installer computed from the extensions list (and the schematic also drives the
+// Hetzner autoscaler snapshot), overriding any user-provided install.image during config
+// generation — so the patch is redundant and can silently drift from the extensions list.
+//
+// The check fires under the exact condition that triggers the auto-override
+// (distribution wiring): no explicit schematicId is set and the normalized extensions
+// list is non-empty. When schematicId is set it takes precedence over extensions and KSail
+// does not derive the image, so a patch is legitimate and no warning is emitted.
+func (v *Validator) validateTalosInstallImageSkew(
+	config *v1alpha1.Cluster,
+	result *validator.ValidationResult,
+) {
+	if v.talosConfig == nil {
+		return
+	}
+
+	if strings.TrimSpace(config.Spec.Cluster.Talos.SchematicID) != "" {
+		return
+	}
+
+	if len(talosconfigmanager.NormalizeExtensions(config.Spec.Cluster.Talos.Extensions)) == 0 {
+		return
+	}
+
+	image, ok := v.talosConfig.InstallImagePatch()
+	if !ok {
+		return
+	}
+
+	result.AddWarning(validator.ValidationError{
+		Field: installImageSkewField,
+		Message: fmt.Sprintf(
+			"A Talos machine config patch sets machine.install.image (%s), but KSail derives the "+
+				"installer image from spec.cluster.talos.extensions and overrides it during config "+
+				"generation. The patch is redundant and can silently drift from the extensions list.",
+			image,
+		),
+		FixSuggestion: "Remove the machine.install.image patch (e.g. talos/cluster/install-image.yaml); " +
+			"KSail computes and applies the Image Factory installer image from " +
+			"spec.cluster.talos.extensions. To pin a specific schematic instead, set " +
+			"spec.cluster.talos.schematicId.",
+	})
 }
 
 // validateGitOpsEngine ensures the GitOps engine value is supported.
