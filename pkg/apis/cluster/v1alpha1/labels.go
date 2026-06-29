@@ -25,6 +25,17 @@ const FinalizerName = "ksail.io/finalizer"
 // share one definition and can never silently desync on a rename.
 const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 
+// LastAppliedComponentsAnnotation stores the JSON of the cluster spec the operator last installed
+// components for, used as the baseline to detect components the spec has since dropped (flipped to
+// None/Default) so the operator can uninstall them — the inverse of install-only reconciliation.
+// It is distinct from LastAppliedSpecAnnotation on purpose: that one is the drift-detection baseline
+// owned by the provisioner path (and rewritten as soon as an in-place update applies, before
+// components reconcile), so reusing it would race the component diff. This one is owned solely by
+// the component reconciler and written only after a successful component apply. Like the spec
+// baseline it is reconciler-owned and stripped from client-submitted objects by the REST API, so a
+// user cannot forge it.
+const LastAppliedComponentsAnnotation = "ksail.io/last-applied-components"
+
 // IsHostCluster reports whether this Cluster resource is the operator's self-registration of the
 // cluster it runs on (see HostClusterLabel).
 func (c *Cluster) IsHostCluster() bool {

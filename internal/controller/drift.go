@@ -105,3 +105,47 @@ func (r *ClusterReconciler) recordAppliedSpec(
 
 	return nil
 }
+
+// recordAppliedComponents stores the full cluster spec as the baseline for component-removal
+// detection, so a later spec change that drops a component (e.g. policyEngine Kyverno→None) can be
+// detected and the component uninstalled. It persists the whole Spec (the installer factory reads
+// cluster, workload, and provider fields), under a distinct annotation from recordAppliedSpec so it
+// is owned by the component reconciler and decoupled from drift-detection timing.
+//
+// Unlike recordAppliedSpec it runs after runtime status has been observed this reconcile, so it must
+// not clobber the pending status. A plain Update would overwrite cluster.Status with the server's
+// stored status (the status subresource ignores the write but the response is decoded back into the
+// object). It therefore writes through a deep copy and propagates only the new metadata (annotations
+// + resourceVersion) back to cluster, leaving the conditions and observed status this reconcile set
+// intact for the single status update at the end of reconcileNormal. It is a no-op when the baseline
+// already matches, avoiding a needless write + watch event.
+func (r *ClusterReconciler) recordAppliedComponents(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+) error {
+	data, err := json.Marshal(cluster.Spec)
+	if err != nil {
+		return fmt.Errorf("marshal cluster spec for components baseline: %w", err)
+	}
+
+	if cluster.Annotations[v1alpha1.LastAppliedComponentsAnnotation] == string(data) {
+		return nil
+	}
+
+	updated := cluster.DeepCopy()
+	if updated.Annotations == nil {
+		updated.Annotations = map[string]string{}
+	}
+
+	updated.Annotations[v1alpha1.LastAppliedComponentsAnnotation] = string(data)
+
+	updateErr := r.Update(ctx, updated)
+	if updateErr != nil {
+		return fmt.Errorf("record last-applied components: %w", updateErr)
+	}
+
+	cluster.Annotations = updated.Annotations
+	cluster.ResourceVersion = updated.ResourceVersion
+
+	return nil
+}

@@ -2,9 +2,11 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
@@ -50,6 +52,11 @@ var installOrder = []string{
 // The returned components carry the per-component install outcome (one entry per declared component,
 // in install order) so the reconciler can surface per-component health in ClusterStatus. They are nil
 // on the skip path and when install never reached the installer set (kubeconfig/helm/factory errors).
+//
+// Before converging the desired set it uninstalls components the spec previously declared but has
+// since dropped (flipped to None/Default) — read from the last-applied-components baseline annotation
+// the reconciler records after each successful apply — so a removed component is torn down rather than
+// left orphaned. The uninstall is best-effort and folded into the returned error so a failure requeues.
 func InstallComponents(
 	ctx context.Context,
 	provisioner clusterprovisioner.Provisioner,
@@ -98,9 +105,124 @@ func InstallComponents(
 		return true, nil, fmt.Errorf("build installers: %w", err)
 	}
 
-	components, err := runInstallers(ctx, installers)
+	uninstallErr := uninstallRemovedComponents(ctx, factory, cluster, installers)
 
-	return true, components, err
+	components, installErr := runInstallers(ctx, installers)
+
+	return true, components, errors.Join(uninstallErr, installErr)
+}
+
+// uninstallRemovedComponents tears down components present in the last-applied-components baseline but
+// absent from the desired set (the spec flipped them to None/Default). A malformed or unbuildable
+// baseline must never block converging the desired set, so a failure to *determine* what to remove is
+// logged and swallowed (the next reconcile retries); only a failure to actually *uninstall* a resolved
+// component is returned, so it surfaces as ComponentsReady=False and requeues.
+func uninstallRemovedComponents(
+	ctx context.Context,
+	factory *installer.Factory,
+	cluster *v1alpha1.Cluster,
+	desired map[string]installer.Installer,
+) error {
+	removed, err := removedComponentInstallers(factory, cluster, desired)
+	if err != nil {
+		logf.FromContext(ctx).
+			Info("skip uninstall of removed components (best-effort)", "error", err.Error())
+
+		return nil
+	}
+
+	return runUninstallers(ctx, removed)
+}
+
+// removedComponentInstallers returns the installers for components that were in the last-applied
+// component set but are no longer desired. It rebuilds the previous installer set from the baseline
+// spec via the same factory, then keeps the entries whose key is absent from the desired set. It
+// returns an empty map when no baseline is recorded (first reconcile, or an unparseable annotation).
+func removedComponentInstallers(
+	factory *installer.Factory,
+	cluster *v1alpha1.Cluster,
+	desired map[string]installer.Installer,
+) (map[string]installer.Installer, error) {
+	previousSpec, ok := lastAppliedComponentsSpec(cluster)
+	if !ok {
+		return map[string]installer.Installer{}, nil
+	}
+
+	previousCluster := &v1alpha1.Cluster{Spec: *previousSpec}
+
+	previous, err := factory.CreateInstallersForConfig(previousCluster)
+	if err != nil {
+		return nil, fmt.Errorf("build previous installers: %w", err)
+	}
+
+	removed := make(map[string]installer.Installer)
+
+	for key, inst := range previous {
+		_, stillDesired := desired[key]
+		if !stillDesired {
+			removed[key] = inst
+		}
+	}
+
+	return removed, nil
+}
+
+// lastAppliedComponentsSpec parses the component-baseline annotation into a spec. The second return
+// is false when no baseline is recorded or the annotation is not valid JSON (treated as "no baseline"
+// so a corrupt value can never block a fresh apply).
+func lastAppliedComponentsSpec(cluster *v1alpha1.Cluster) (*v1alpha1.Spec, bool) {
+	raw, ok := cluster.Annotations[v1alpha1.LastAppliedComponentsAnnotation]
+	if !ok || raw == "" {
+		return nil, false
+	}
+
+	var spec v1alpha1.Spec
+
+	err := json.Unmarshal([]byte(raw), &spec)
+	if err != nil {
+		return nil, false
+	}
+
+	return &spec, true
+}
+
+// runUninstallers uninstalls the given components in REVERSE dependency order (GitOps first, CNI last
+// — the inverse of runInstallers), continuing past individual failures and returning their joined
+// error so one stuck uninstall does not block the rest.
+func runUninstallers(ctx context.Context, installers map[string]installer.Installer) error {
+	log := logf.FromContext(ctx)
+
+	var errs []error
+
+	done := make(map[string]bool, len(installers))
+
+	uninstall := func(key string, component installer.Installer) {
+		log.Info("uninstalling removed component", "component", key)
+
+		err := component.Uninstall(ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", key, err))
+		}
+
+		done[key] = true
+	}
+
+	// Reverse dependency order: tear down GitOps first, CNI last.
+	for _, key := range slices.Backward(installOrder) {
+		component, ok := installers[key]
+		if ok {
+			uninstall(key, component)
+		}
+	}
+
+	// Uninstall any component not covered by the known order after the ordered ones.
+	for key, component := range installers {
+		if !done[key] {
+			uninstall(key, component)
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // writeTempKubeconfig writes the child kubeconfig bytes to a temp file and returns its path plus a
