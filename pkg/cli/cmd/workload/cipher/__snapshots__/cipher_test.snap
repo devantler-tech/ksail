@@ -199,6 +199,10 @@ Examples:
   # Replace a recipient (add new, remove old)
   ksail workload cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
+  # Re-seal every file to a completely new recipient set (e.g. after a key is
+  # retired or compromised) — declare the full set, no need to enumerate old keys
+  ksail workload cipher rotate ./k8s --set-key age1newkey1... --set-key age1newkey2... --recursive
+
   # Preview which files would be rotated without making changes
   ksail workload cipher rotate ./k8s --dry-run
 
@@ -206,11 +210,12 @@ Usage:
   cipher rotate <file/folder> [flags]
 
 Flags:
-      --add-key string      public key to add as a master key recipient
-      --dry-run             show which files would be rotated without making changes
-  -f, --force               skip confirmation prompt and rotate immediately
-  -h, --help                help for rotate
-  -r, --recursive           scan subdirectories when target is a folder
-      --remove-key string   public key to remove from master key recipients
+      --add-key string        public key to add as a master key recipient
+      --dry-run               show which files would be rotated without making changes
+  -f, --force                 skip confirmation prompt and rotate immediately
+  -h, --help                  help for rotate
+  -r, --recursive             scan subdirectories when target is a folder
+      --remove-key string     public key to remove from master key recipients
+      --set-key stringArray   public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
 
 ---

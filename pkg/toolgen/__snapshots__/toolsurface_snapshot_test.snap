@@ -1211,6 +1211,13 @@ workload_write
         "description": "When used with '--copy-to', a list of name=image pairs for changing container images, similar to how 'kubectl set image' works. (applies to: debug)",
         "type": "string"
       },
+      "set-key": {
+        "description": "public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key (applies to: cipher_rotate)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "share-processes": {
         "default": true,
         "description": "When used with '--copy-to', enable process namespace sharing in the copy. (applies to: debug)",
