@@ -92,8 +92,8 @@ func endpointString(endpoint Endpoint) string {
 	}
 }
 
-func formatTime(timestamp time.Time) string {
-	if timestamp.IsZero() {
+func formatTime(timestamp *time.Time) string {
+	if timestamp == nil || timestamp.IsZero() {
 		return "-"
 	}
 

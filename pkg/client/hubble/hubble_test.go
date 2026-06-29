@@ -18,18 +18,19 @@ import (
 var errObserve = errors.New("boom")
 
 func sampleRecords() []hubble.FlowRecord {
-	base := time.Date(2026, time.June, 29, 8, 0, 0, 0, time.UTC)
+	first := time.Date(2026, time.June, 29, 8, 0, 0, 0, time.UTC)
+	second := first.Add(time.Second)
 
 	return []hubble.FlowRecord{
 		{
-			Time:        base,
+			Time:        &first,
 			Verdict:     "FORWARDED",
 			Protocol:    "TCP",
 			Source:      hubble.Endpoint{Namespace: "default", Pod: "web-abc123"},
 			Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "coredns-xyz"},
 		},
 		{
-			Time:        base.Add(time.Second),
+			Time:        &second,
 			Verdict:     "DROPPED",
 			Protocol:    "UDP",
 			Source:      hubble.Endpoint{Namespace: "monitoring", Pod: "prom-1"},
@@ -88,7 +89,8 @@ func TestRecordFromFlow(t *testing.T) {
 
 	record := hubble.ExportRecordFromFlow(observed)
 
-	assert.True(t, when.Equal(record.Time))
+	require.NotNil(t, record.Time)
+	assert.True(t, when.Equal(*record.Time))
 	assert.Equal(t, "FORWARDED", record.Verdict)
 	assert.Equal(t, "TCP", record.Protocol)
 	assert.Equal(t, hubble.Endpoint{Namespace: "default", Pod: "web-abc123"}, record.Source)
@@ -104,7 +106,7 @@ func TestRecordFromFlowToleratesNilSubmessages(t *testing.T) {
 
 	record := hubble.ExportRecordFromFlow(&flowpb.Flow{})
 
-	assert.True(t, record.Time.IsZero())
+	assert.Nil(t, record.Time)
 	assert.Equal(t, "VERDICT_UNKNOWN", record.Verdict)
 	assert.Empty(t, record.Protocol)
 	assert.Equal(t, hubble.Endpoint{}, record.Source)
@@ -205,6 +207,19 @@ func TestFormatJSONEmptyIsArray(t *testing.T) {
 	assert.Equal(t, "[]\n", buf.String())
 }
 
+func TestFormatJSONOmitsMissingTime(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	record := hubble.FlowRecord{Verdict: "DROPPED", Source: hubble.Endpoint{Pod: "p"}}
+	require.NoError(t, hubble.FormatJSON(&buf, []hubble.FlowRecord{record}))
+
+	// A nil timestamp must not serialize as the year-0001 zero value.
+	assert.NotContains(t, buf.String(), "0001-01-01")
+	assert.NotContains(t, buf.String(), `"time"`)
+}
+
 func TestFormatPlain(t *testing.T) {
 	t.Parallel()
 
@@ -232,9 +247,11 @@ type fakeObserver struct {
 	records  []hubble.FlowRecord
 	err      error
 	lastSeen uint64
+	called   bool
 }
 
 func (f *fakeObserver) ObserveFlows(_ context.Context, last uint64) ([]hubble.FlowRecord, error) {
+	f.called = true
 	f.lastSeen = last
 
 	return f.records, f.err
@@ -291,16 +308,15 @@ func TestObservePropagatesObserverError(t *testing.T) {
 	require.ErrorIs(t, err, errObserve)
 }
 
-func TestObserveRejectsUnknownOutput(t *testing.T) {
+func TestObserveRejectsUnknownOutputBeforeDialing(t *testing.T) {
 	t.Parallel()
+
+	observer := &fakeObserver{records: sampleRecords()}
 
 	var buf bytes.Buffer
 
-	err := hubble.Observe(
-		context.Background(),
-		&fakeObserver{records: sampleRecords()},
-		hubble.Options{Output: "yaml"},
-		&buf,
-	)
+	err := hubble.Observe(context.Background(), observer, hubble.Options{Output: "yaml"}, &buf)
 	require.ErrorIs(t, err, hubble.ErrUnknownOutputFormat)
+	// The format is validated before any flows are fetched.
+	assert.False(t, observer.called)
 }

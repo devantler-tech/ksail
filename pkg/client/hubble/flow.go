@@ -16,11 +16,13 @@ type Endpoint struct {
 // carries only the fields the `ksail workload network` command renders, so the
 // command and its tests never have to depend on the full Hubble protobuf type.
 type FlowRecord struct {
-	Time        time.Time `json:"time"`
-	Verdict     string    `json:"verdict"`
-	Protocol    string    `json:"protocol,omitempty"`
-	Source      Endpoint  `json:"source"`
-	Destination Endpoint  `json:"destination"`
+	// Time is nil when Hubble did not report a timestamp, so an unknown time
+	// stays absent in JSON instead of serializing as the year-0001 zero value.
+	Time        *time.Time `json:"time,omitempty"`
+	Verdict     string     `json:"verdict"`
+	Protocol    string     `json:"protocol,omitempty"`
+	Source      Endpoint   `json:"source"`
+	Destination Endpoint   `json:"destination"`
 }
 
 // recordFromFlow projects a Hubble protobuf flow into a [FlowRecord]. It is
@@ -41,7 +43,8 @@ func recordFromFlow(observed *flowpb.Flow) FlowRecord {
 	}
 
 	if ts := observed.GetTime(); ts != nil {
-		record.Time = ts.AsTime()
+		when := ts.AsTime()
+		record.Time = &when
 	}
 
 	return record

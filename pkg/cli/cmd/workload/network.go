@@ -53,7 +53,7 @@ Examples:
   # Only flows in the "default" namespace, as JSON
   ksail workload network --namespace default --output json
 
-  # Only dropped-or-forwarded TCP flows touching a pod
+  # Only the last 100 TCP flows touching a pod
   ksail workload network --pod my-app --protocol tcp --last 100`
 
 // NewNetworkCmd creates the command that streams Cilium Hubble traffic flows.

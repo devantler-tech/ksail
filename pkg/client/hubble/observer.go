@@ -40,8 +40,15 @@ type Options struct {
 }
 
 // Observe queries flows from observer, applies the option filters, and renders
-// the result to out in the requested format.
+// the result to out in the requested format. The output format is validated
+// before any flows are fetched, so an invalid format fails fast without a
+// (possibly slow or failing) relay round-trip masking the real input error.
 func Observe(ctx context.Context, observer FlowObserver, opts Options, out io.Writer) error {
+	err := validateOutput(opts.Output)
+	if err != nil {
+		return err
+	}
+
 	records, err := observer.ObserveFlows(ctx, opts.Last)
 	if err != nil {
 		return fmt.Errorf("observe flows: %w", err)
@@ -49,15 +56,22 @@ func Observe(ctx context.Context, observer FlowObserver, opts Options, out io.Wr
 
 	records = FilterFlows(records, opts.Filter)
 
-	switch opts.Output {
-	case OutputJSON:
+	if opts.Output == OutputJSON {
 		return FormatJSON(out, records)
-	case OutputPlain, "":
-		return FormatPlain(out, records)
+	}
+
+	return FormatPlain(out, records)
+}
+
+// validateOutput rejects an unrecognized output format.
+func validateOutput(output string) error {
+	switch output {
+	case OutputJSON, OutputPlain, "":
+		return nil
 	default:
 		return fmt.Errorf(
 			"%w: %s (valid: %s, %s)",
-			ErrUnknownOutputFormat, opts.Output, OutputPlain, OutputJSON,
+			ErrUnknownOutputFormat, output, OutputPlain, OutputJSON,
 		)
 	}
 }
