@@ -43,4 +43,7 @@ var (
 
 	// ErrGitOpsConfigGeneration wraps failures when creating GitOps CR manifests.
 	ErrGitOpsConfigGeneration = errors.New("failed to generate gitops configuration")
+
+	// ErrDevcontainerGeneration wraps failures when creating .devcontainer/devcontainer.json.
+	ErrDevcontainerGeneration = errors.New("failed to generate devcontainer configuration")
 )

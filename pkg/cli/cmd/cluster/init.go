@@ -92,6 +92,8 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	_ = cfgManager.Viper.BindPFlag("output", cmd.Flags().Lookup("output"))
 	cmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
+	cmd.Flags().Bool("no-devcontainer", false, "Skip scaffolding .devcontainer/devcontainer.json")
+	_ = cfgManager.Viper.BindPFlag("no-devcontainer", cmd.Flags().Lookup("no-devcontainer"))
 
 	registerMirrorRegistryFlag(cmd)
 	registerNameFlag(cmd, cfgManager)
@@ -251,6 +253,9 @@ func prepareScaffolder(
 	if clusterName != "" {
 		scaffolderInstance.WithClusterName(clusterName)
 	}
+
+	// Dev Container scaffolding is on by default; --no-devcontainer opts out.
+	scaffolderInstance.WithDevcontainer(!cfgManager.Viper.GetBool("no-devcontainer"))
 
 	return scaffolderInstance, targetPath, force, nil
 }
