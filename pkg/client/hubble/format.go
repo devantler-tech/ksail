@@ -14,6 +14,74 @@ const (
 	tabwriterTabSize = 2
 )
 
+// Fixed column widths for the streaming plain output. A [tabwriter] needs every
+// row up front to align, which an unbounded follow stream never provides, so
+// [FormatPlainHeader] and [FormatPlainLine] use fixed widths to keep live rows
+// readable and aligned with the header.
+const (
+	timeColWidth     = 30
+	endpointColWidth = 28
+	protocolColWidth = 8
+)
+
+// streamRowFormat lays out one streaming row: time, source, destination,
+// protocol (all left-padded to fixed widths), then the trailing verdict.
+const streamRowFormat = "%-*s %-*s %-*s %-*s %s\n"
+
+// FormatPlainHeader writes the streaming table's header row once, before any
+// flows. It mirrors the columns of [FormatPlainLine].
+func FormatPlainHeader(out io.Writer) error {
+	_, err := fmt.Fprintf(
+		out,
+		streamRowFormat,
+		timeColWidth, "TIME",
+		endpointColWidth, "SOURCE",
+		endpointColWidth, "DESTINATION",
+		protocolColWidth, "PROTOCOL",
+		"VERDICT",
+	)
+	if err != nil {
+		return fmt.Errorf("write flows header: %w", err)
+	}
+
+	return nil
+}
+
+// FormatPlainLine writes a single flow as one fixed-width row, for streaming
+// output where rows arrive one at a time.
+func FormatPlainLine(out io.Writer, record FlowRecord) error {
+	_, err := fmt.Fprintf(
+		out,
+		streamRowFormat,
+		timeColWidth, formatTime(record.Time),
+		endpointColWidth, endpointString(record.Source),
+		endpointColWidth, endpointString(record.Destination),
+		protocolColWidth, orDash(record.Protocol),
+		orDash(record.Verdict),
+	)
+	if err != nil {
+		return fmt.Errorf("write flow row: %w", err)
+	}
+
+	return nil
+}
+
+// FormatJSONLine writes a single flow as one line of newline-delimited JSON
+// (NDJSON), the streaming counterpart to the [FormatJSON] array.
+func FormatJSONLine(out io.Writer, record FlowRecord) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal flow to JSON: %w", err)
+	}
+
+	_, err = fmt.Fprintln(out, string(data))
+	if err != nil {
+		return fmt.Errorf("write JSON flow: %w", err)
+	}
+
+	return nil
+}
+
 // FormatJSON writes records as an indented JSON array. An empty slice is
 // rendered as `[]` so the output is always valid JSON.
 func FormatJSON(out io.Writer, records []FlowRecord) error {

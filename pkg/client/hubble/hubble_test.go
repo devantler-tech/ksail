@@ -5,17 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
 	flowpb "github.com/cilium/cilium/api/v1/flow"
+	observerpb "github.com/cilium/cilium/api/v1/observer"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var errObserve = errors.New("boom")
+var (
+	errObserve = errors.New("boom")
+	errEmit    = errors.New("emit failed")
+)
 
 func sampleRecords() []hubble.FlowRecord {
 	first := time.Date(2026, time.June, 29, 8, 0, 0, 0, time.UTC)
@@ -257,6 +263,24 @@ func (f *fakeObserver) ObserveFlows(_ context.Context, last uint64) ([]hubble.Fl
 	return f.records, f.err
 }
 
+func (f *fakeObserver) StreamFlows(
+	_ context.Context,
+	last uint64,
+	emit func(hubble.FlowRecord) error,
+) error {
+	f.called = true
+	f.lastSeen = last
+
+	for _, record := range f.records {
+		emitErr := emit(record)
+		if emitErr != nil {
+			return emitErr
+		}
+	}
+
+	return f.err
+}
+
 func TestObserveFiltersAndFormatsJSON(t *testing.T) {
 	t.Parallel()
 
@@ -319,4 +343,192 @@ func TestObserveRejectsUnknownOutputBeforeDialing(t *testing.T) {
 	require.ErrorIs(t, err, hubble.ErrUnknownOutputFormat)
 	// The format is validated before any flows are fetched.
 	assert.False(t, observer.called)
+}
+
+func TestStreamPlainWritesHeaderThenPerFlowRows(t *testing.T) {
+	t.Parallel()
+
+	observer := &fakeObserver{records: sampleRecords()}
+
+	var buf bytes.Buffer
+
+	err := hubble.Stream(context.Background(), observer, hubble.Options{Last: 7}, &buf)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), observer.lastSeen, "Last should be passed as the backlog size")
+
+	lines := nonEmptyLines(buf.String())
+	require.Len(t, lines, 3, "one header row plus one row per flow")
+	assert.Contains(t, lines[0], "TIME")
+	assert.Contains(t, lines[0], "VERDICT")
+	assert.Contains(t, lines[1], "default/web-abc123")
+	assert.Contains(t, lines[1], "FORWARDED")
+	assert.Contains(t, lines[2], "monitoring/prom-1")
+	assert.Contains(t, lines[2], "DROPPED")
+}
+
+func TestStreamJSONWritesNewlineDelimitedFlows(t *testing.T) {
+	t.Parallel()
+
+	observer := &fakeObserver{records: sampleRecords()}
+
+	var buf bytes.Buffer
+
+	err := hubble.Stream(
+		context.Background(),
+		observer,
+		hubble.Options{Output: hubble.OutputJSON},
+		&buf,
+	)
+	require.NoError(t, err)
+
+	lines := nonEmptyLines(buf.String())
+	require.Len(t, lines, 2, "NDJSON: one object per line, no array wrapper")
+
+	for _, line := range lines {
+		var record hubble.FlowRecord
+
+		require.NoError(t, json.Unmarshal([]byte(line), &record), "each line is a JSON object")
+	}
+
+	assert.NotContains(t, buf.String(), "[", "NDJSON must not wrap the stream in an array")
+}
+
+func TestStreamAppliesFilterWhileStreaming(t *testing.T) {
+	t.Parallel()
+
+	observer := &fakeObserver{records: sampleRecords()}
+
+	var buf bytes.Buffer
+
+	err := hubble.Stream(context.Background(), observer, hubble.Options{
+		Output: hubble.OutputJSON,
+		Filter: hubble.FilterOptions{Protocol: "tcp"},
+	}, &buf)
+	require.NoError(t, err)
+
+	lines := nonEmptyLines(buf.String())
+	require.Len(t, lines, 1, "only the single TCP flow survives the filter")
+	assert.Contains(t, lines[0], "web-abc123")
+}
+
+func TestStreamPropagatesObserverError(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	err := hubble.Stream(
+		context.Background(),
+		&fakeObserver{err: errObserve},
+		hubble.Options{},
+		&buf,
+	)
+	require.ErrorIs(t, err, errObserve)
+}
+
+func TestStreamRejectsUnknownOutputBeforeStreaming(t *testing.T) {
+	t.Parallel()
+
+	observer := &fakeObserver{records: sampleRecords()}
+
+	var buf bytes.Buffer
+
+	err := hubble.Stream(context.Background(), observer, hubble.Options{Output: "yaml"}, &buf)
+	require.ErrorIs(t, err, hubble.ErrUnknownOutputFormat)
+	assert.False(t, observer.called, "format is validated before any flows are streamed")
+}
+
+func TestReceiveFlowsStopsOnEOFAndSkipsNilFlows(t *testing.T) {
+	t.Parallel()
+
+	flow := &flowpb.Flow{Verdict: flowpb.Verdict_FORWARDED}
+	stream := &scriptedStream{steps: []recvStep{
+		{flow: flow},
+		{flow: nil}, // a non-flow response (e.g. node status) is skipped
+		{flow: flow},
+		{err: io.EOF},
+	}}
+
+	var got []hubble.FlowRecord
+
+	err := hubble.ExportReceiveFlows(stream, func(record hubble.FlowRecord) error {
+		got = append(got, record)
+
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Len(t, got, 2, "EOF stops the loop and the nil-flow response is skipped")
+}
+
+func TestReceiveFlowsPropagatesEmitError(t *testing.T) {
+	t.Parallel()
+
+	stream := &scriptedStream{steps: []recvStep{
+		{flow: &flowpb.Flow{}},
+		{flow: &flowpb.Flow{}},
+	}}
+
+	calls := 0
+
+	err := hubble.ExportReceiveFlows(stream, func(hubble.FlowRecord) error {
+		calls++
+
+		return errEmit
+	})
+	require.ErrorIs(t, err, errEmit)
+	assert.Equal(t, 1, calls, "an emit error stops the loop immediately")
+}
+
+func TestReceiveFlowsPropagatesRecvError(t *testing.T) {
+	t.Parallel()
+
+	stream := &scriptedStream{steps: []recvStep{{err: errObserve}}}
+
+	err := hubble.ExportReceiveFlows(stream, func(hubble.FlowRecord) error {
+		return nil
+	})
+	require.ErrorIs(t, err, errObserve)
+}
+
+// nonEmptyLines splits rendered output into its non-blank lines.
+func nonEmptyLines(out string) []string {
+	var lines []string
+
+	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	return lines
+}
+
+// recvStep is one scripted result from a [scriptedStream.Recv] call: either a
+// flow (wrapped in a response) or a terminal error.
+type recvStep struct {
+	flow *flowpb.Flow
+	err  error
+}
+
+// scriptedStream is a fake Hubble receive stream that replays scripted steps,
+// so the relay receive loop can be tested without a live relay.
+type scriptedStream struct {
+	steps []recvStep
+	pos   int
+}
+
+func (s *scriptedStream) Recv() (*observerpb.GetFlowsResponse, error) {
+	if s.pos >= len(s.steps) {
+		return nil, io.EOF
+	}
+
+	step := s.steps[s.pos]
+	s.pos++
+
+	if step.err != nil {
+		return nil, step.err
+	}
+
+	return &observerpb.GetFlowsResponse{
+		ResponseTypes: &observerpb.GetFlowsResponse_Flow{Flow: step.flow},
+	}, nil
 }

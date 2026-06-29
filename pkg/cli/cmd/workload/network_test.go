@@ -19,6 +19,21 @@ func (s stubObserver) ObserveFlows(_ context.Context, _ uint64) ([]hubble.FlowRe
 	return s.records, nil
 }
 
+func (s stubObserver) StreamFlows(
+	_ context.Context,
+	_ uint64,
+	emit func(hubble.FlowRecord) error,
+) error {
+	for _, record := range s.records {
+		err := emit(record)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func TestNewNetworkCmdHasCorrectDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -96,4 +111,47 @@ func TestNetworkCmdWithCiliumStreamsFlows(t *testing.T) {
 	output := out.String()
 	assert.Contains(t, output, `"web"`)
 	assert.Contains(t, output, "FORWARDED")
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestNetworkCmdFollowStreamsLiveFlows(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	restore := workload.ExportSetFlowObserverFactory(func(_ string) hubble.FlowObserver {
+		return stubObserver{records: []hubble.FlowRecord{
+			{
+				Verdict:     "FORWARDED",
+				Protocol:    "TCP",
+				Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
+				Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+			},
+		}}
+	})
+	defer restore()
+
+	cmd := workload.NewNetworkCmd()
+	cmd.SetArgs([]string{"--cni", "Cilium", "--follow"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	output := out.String()
+	assert.Contains(t, output, "TIME", "follow plain output prints the streaming header")
+	assert.Contains(t, output, "default/web")
+	assert.Contains(t, output, "FORWARDED")
+}
+
+func TestNetworkCmdHasFollowFlag(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewNetworkCmd()
+
+	flag := cmd.Flags().Lookup("follow")
+	require.NotNil(t, flag)
+	assert.Equal(t, "f", flag.Shorthand)
+	assert.Equal(t, "false", flag.DefValue)
 }
