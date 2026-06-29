@@ -86,10 +86,13 @@ const (
 
 // ComponentStatus reports the install outcome of a single cluster component.
 type ComponentStatus struct {
-	// Name is the component's installer key (e.g. cilium, cert-manager, flux).
+	// Name is the component's installer key (e.g. cilium, cert-manager, flux). It is the list-map key,
+	// so it is required (the package default is Optional).
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// State is the component's install outcome in the last reconcile.
+	// State is the component's install outcome in the last reconcile. Always set by the operator.
+	// +kubebuilder:validation:Required
 	State ComponentState `json:"state"`
 
 	// Message is a human-readable detail, set to the failure reason when State is Failed.

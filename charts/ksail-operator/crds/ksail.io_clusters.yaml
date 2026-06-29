@@ -1022,16 +1022,20 @@ spec:
                         failure reason when State is Failed.
                       type: string
                     name:
-                      description: Name is the component's installer key (e.g. cilium,
-                        cert-manager, flux).
+                      description: |-
+                        Name is the component's installer key (e.g. cilium, cert-manager, flux). It is the list-map key,
+                        so it is required (the package default is Optional).
                       type: string
                     state:
                       description: State is the component's install outcome in the
-                        last reconcile.
+                        last reconcile. Always set by the operator.
                       enum:
                       - Ready
                       - Failed
                       type: string
+                  required:
+                  - name
+                  - state
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:
