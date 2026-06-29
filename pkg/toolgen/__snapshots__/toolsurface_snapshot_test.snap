@@ -1613,7 +1613,7 @@ workload_write
         "type": "array"
       },
       "follow": {
-        "description": "Specify if the logs should be streamed. (applies to: logs)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: logs, network)",
         "type": "boolean"
       },
       "for": {
