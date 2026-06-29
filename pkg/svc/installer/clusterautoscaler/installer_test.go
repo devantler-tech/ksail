@@ -447,6 +447,11 @@ func assertValuesYamlContents(t *testing.T, valuesYaml string) {
 		"node-role.kubernetes.io/control-plane",
 		"nodeSelector:",
 		"rbac:",
+		// Core-informer RBAC rules the autoscaler binary needs unconditionally,
+		// granted even without capacity-buffers (ksail#5405).
+		"additionalRules:",
+		"- deployments",
+		"- resourcequotas",
 		"resources:",
 	}
 	for _, want := range required {
@@ -627,12 +632,17 @@ func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 		{
 			name:    "DisabledOmitsFlagsAndCRD",
 			enabled: false,
+			wantContain: []string{
+				// Core-informer rules are granted unconditionally, even with
+				// capacity-buffers disabled (ksail#5405).
+				"additionalRules:",
+				"- deployments",
+				"- resourcequotas",
+			},
 			wantOmit: []string{
 				"capacity-buffer-controller-enabled",
 				"capacity-buffer-pod-injection-enabled",
 				"capacitybuffers",
-				"- deployments",
-				"- resourcequotas",
 				"kind: CustomResourceDefinition",
 			},
 		},
