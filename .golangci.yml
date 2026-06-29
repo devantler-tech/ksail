@@ -64,6 +64,11 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
+    misspell:
+      # mirrord (metalbear) is a product name referenced in docs/comments, not a
+      # misspelling of "mirrored".
+      ignore-rules:
+        - mirrord
     goconst:
       # Repeated string literals in table-driven tests (distribution names, config
       # field paths, fixture cluster names) are idiomatic and clearer inline than
