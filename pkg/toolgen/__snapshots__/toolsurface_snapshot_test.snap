@@ -1613,7 +1613,7 @@ workload_write
         "type": "array"
       },
       "follow": {
-        "description": "Specify if the logs should be streamed. (applies to: logs)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: logs, network)",
         "type": "boolean"
       },
       "for": {
@@ -1892,6 +1892,13 @@ workload_write
       "schedule": {
         "description": "A schedule in the Cron format the job should be run with. (applies to: gen_cronjob)",
         "type": "string"
+      },
+      "schema-location": {
+        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog... (applies to: validate)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",

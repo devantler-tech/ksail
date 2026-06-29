@@ -318,3 +318,118 @@ func TestValidateFile_NilOptions(t *testing.T) {
 		t.Fatalf("expected validation with nil options to succeed, got error: %v", err)
 	}
 }
+
+// widgetCRD is a JSON schema for a fictional CRD kind that exists in neither the
+// built-in Kubernetes schemas nor the CRDs-catalog, so it can only be validated
+// via a caller-supplied schema location.
+const widgetCRDSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "apiVersion": {"type": "string"},
+    "kind": {"type": "string"},
+    "metadata": {"type": "object"},
+    "spec": {
+      "type": "object",
+      "properties": {"size": {"type": "integer"}},
+      "required": ["size"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["spec"]
+}`
+
+const validWidgetCR = `apiVersion: example.com/v1
+kind: WidgetThing
+metadata:
+  name: widget
+spec:
+  size: 3
+`
+
+// invalidWidgetCR violates widgetCRDSchema (additionalProperties: false).
+const invalidWidgetCR = `apiVersion: example.com/v1
+kind: WidgetThing
+metadata:
+  name: widget
+spec:
+  size: 3
+  bogus: true
+`
+
+// writeWidgetSchema writes widgetCRDSchema where kubeconform's template resolves
+// it (lowercased kind + version) and returns the template schema location.
+func writeWidgetSchema(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	err := os.WriteFile(
+		filepath.Join(tmpDir, "widgetthing_v1.json"),
+		[]byte(widgetCRDSchema),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write widget schema: %v", err)
+	}
+
+	return filepath.Join(tmpDir, "{{.ResourceKind}}_{{.ResourceAPIVersion}}.json")
+}
+
+func TestValidateBytes_SchemaLocation_ValidatesCatalogAbsentCRD(t *testing.T) {
+	t.Parallel()
+
+	schemaLoc := writeWidgetSchema(t)
+	client := kubeconform.NewClient()
+	ctx := context.Background()
+
+	// With the supplied schema location, a valid CR passes...
+	err := client.ValidateBytes(
+		ctx,
+		"widget.yaml",
+		[]byte(validWidgetCR),
+		&kubeconform.ValidationOptions{
+			IgnoreMissingSchemas: false,
+			SchemaLocations:      []string{schemaLoc},
+		},
+	)
+	if err != nil {
+		t.Fatalf("expected valid widget CR to pass with schema location, got: %v", err)
+	}
+
+	// ...and a CR that violates the supplied schema is caught.
+	err = client.ValidateBytes(
+		ctx,
+		"widget.yaml",
+		[]byte(invalidWidgetCR),
+		&kubeconform.ValidationOptions{
+			IgnoreMissingSchemas: false,
+			SchemaLocations:      []string{schemaLoc},
+		},
+	)
+	if err == nil {
+		t.Fatal("expected invalid widget CR to fail validation against the supplied schema")
+	}
+}
+
+func TestValidateBytes_SchemaLocation_AbsentMeansKindIgnored(t *testing.T) {
+	t.Parallel()
+
+	client := kubeconform.NewClient()
+	ctx := context.Background()
+
+	// Without the schema location the kind has no schema; IgnoreMissingSchemas
+	// lets the otherwise-invalid CR pass — proving the schema location is what
+	// enables the catch in the test above (and is appended, not relied upon).
+	err := client.ValidateBytes(
+		ctx,
+		"widget.yaml",
+		[]byte(invalidWidgetCR),
+		&kubeconform.ValidationOptions{
+			IgnoreMissingSchemas: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("expected catalog-absent CR to be ignored without a schema location, got: %v", err)
+	}
+}

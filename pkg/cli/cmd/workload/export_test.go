@@ -141,6 +141,12 @@ func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
 }
 
+// ExportCanonicalizeSchemaLocations exposes canonicalizeSchemaLocations for
+// testing local-path canonicalization vs URL/template passthrough.
+func ExportCanonicalizeSchemaLocations(locations []string) []string {
+	return canonicalizeSchemaLocations(locations)
+}
+
 // ExportScanSettings mirrors the resolved scan settings for external tests.
 type ExportScanSettings struct {
 	Frameworks          []string

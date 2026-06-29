@@ -212,6 +212,11 @@ type ValidationConfig struct {
 	// "additional properties not allowed").
 	SkipKinds []string `json:"skipKinds,omitzero" jsonschema_description:"Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."` //nolint:lll
 
+	// SchemaLocations lists additional kubeconform schema locations (local
+	// directories or URL templates) for CRDs absent from the CRDs-catalog, so
+	// they can be validated against a supplied schema rather than skipped.
+	SchemaLocations []string `json:"schemaLocations,omitzero" jsonschema_description:"Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Appended after the built-in Kubernetes schemas and the CRDs-catalog, so CRDs absent from the catalog can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location."` //nolint:lll
+
 	// HelmRender controls whether HelmReleases are rendered before validation.
 	HelmRender *bool `json:"helmRender,omitzero" jsonschema_description:"Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."` //nolint:lll
 }

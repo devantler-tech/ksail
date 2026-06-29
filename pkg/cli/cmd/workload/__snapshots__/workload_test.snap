@@ -239,12 +239,13 @@ Usage:
   validate [PATH] [flags]
 
 Flags:
-  -h, --help                     help for validate
-      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
-      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
-      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
-      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
-      --strict                   Enable strict validation mode
+  -h, --help                      help for validate
+      --ignore-missing-schemas    Ignore resources with missing schemas (default true)
+      --schema-location strings   Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog, so they are validated against a supplied schema instead of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)
+      --skip-helm-render          Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
+      --skip-kinds strings        Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets              Skip validation of Kubernetes Secrets (default true)
+      --strict                    Enable strict validation mode
 
 ---
 
@@ -3228,12 +3229,13 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
-  -h, --help                     help for validate
-      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
-      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
-      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
-      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
-      --strict                   Enable strict validation mode
+  -h, --help                      help for validate
+      --ignore-missing-schemas    Ignore resources with missing schemas (default true)
+      --schema-location strings   Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog, so they are validated against a supplied schema instead of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)
+      --skip-helm-render          Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
+      --skip-kinds strings        Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets              Skip validation of Kubernetes Secrets (default true)
+      --strict                    Enable strict validation mode
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -3681,9 +3683,13 @@ Port-forward the in-cluster relay first, e.g.:
 
   kubectl -n kube-system port-forward svc/hubble-relay 4245:80
 
+Pass --follow to keep streaming live flows as they happen (like 'kubectl logs
+-f'), until you interrupt with Ctrl-C.
+
 Output formats:
-  - plain: an aligned table (default)
-  - json:  a JSON array of flow records (for scripting / AI consumption)
+  - plain: an aligned table (default; one row per flow while following)
+  - json:  a JSON array of flow records, or newline-delimited JSON (one object
+           per line) while following — both fit scripting / AI consumption
 
 Examples:
   # Show the 20 most recent flows
@@ -3695,11 +3701,15 @@ Examples:
   # Only the last 100 TCP flows touching a pod
   ksail workload network --pod my-app --protocol tcp --last 100
 
+  # Stream live flows until Ctrl-C
+  ksail workload network --follow
+
 Usage:
   ksail workload network [flags]
 
 Flags:
       --cni CNI            Container Network Interface (CNI) to use
+  -f, --follow             Stream flows continuously until interrupted (Ctrl-C)
   -h, --help               help for network
       --last uint          Number of most recent flows to fetch (default 20)
   -n, --namespace string   Filter flows by namespace (source or destination)

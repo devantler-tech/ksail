@@ -61,6 +61,31 @@ type ClusterStatus struct {
 	// GitOps reports observed GitOps reconciliation state for monitoring only.
 	// It does NOT control the UI read-only lock, which is a deployment-level configuration.
 	GitOps *GitOpsStatus `json:"gitOps,omitempty"`
+
+	// Components reports the install outcome of each component declared in the spec (CNI, CSI,
+	// metrics-server, cert-manager, load-balancer, policy-engine, GitOps), so a UI can surface
+	// per-component health instead of only the aggregate ComponentsReady condition. It is empty when
+	// component installation is not supported for the cluster (e.g. the provisioner exposes no
+	// operator-reachable kubeconfig).
+	// +listType=map
+	// +listMapKey=name
+	Components []ComponentStatus `json:"components,omitempty"`
+}
+
+// ComponentStatus reports the install outcome of a single cluster component. The ComponentState enum
+// it carries lives in its own file (componentstate.go), per the one-enum-per-file convention.
+type ComponentStatus struct {
+	// Name is the component's installer key (e.g. cilium, cert-manager, flux). It is the list-map key,
+	// so it is required (the package default is Optional).
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// State is the component's install outcome in the last reconcile. Always set by the operator.
+	// +kubebuilder:validation:Required
+	State ComponentState `json:"state"`
+
+	// Message is a human-readable detail, set to the failure reason when State is Failed.
+	Message string `json:"message,omitempty"`
 }
 
 // SecretReference identifies a Secret by name and (optionally) namespace.

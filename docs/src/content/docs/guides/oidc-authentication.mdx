@@ -242,6 +242,62 @@ subjects:
     name: "oidc:platform-admins"
 ```
 
+## Multi-Cluster OIDC (Federation)
+
+The OIDC story extends naturally to **multiple clusters**: authenticate once, then operate across every cluster that trusts the same identity provider — without managing per-cluster credentials.
+
+### Federation Model: Shared-Issuer Trust
+
+KSail's federation model is **shared-issuer trust**. Each cluster is configured independently, but when several clusters point at the **same** OIDC provider, they all accept tokens from a single identity:
+
+- Every cluster's API server is configured with the same `--oidc-issuer-url` and `--oidc-client-id`, so each one independently verifies and trusts tokens minted by that provider.
+- Usernames and groups are derived from the same JWT claims, so a single OIDC identity (and its group memberships) maps to the **same** Kubernetes subject on every federated cluster — RBAC bindings are portable across the fleet.
+
+There is no central control plane to manage: trust is established declaratively, per cluster, by pointing at a shared issuer.
+
+### Single Sign-On Across Clusters
+
+Because tokens come from one provider, **you authenticate once and the session is reused across all federated clusters**. This works today with no extra configuration: `ksail cluster oidc get-token` caches tokens in `~/.ksail/oidc/cache/` keyed by the **issuer URL, client ID, and scopes** — *not* by cluster name. The first `kubectl` call against any federated cluster opens the browser; every subsequent call against any cluster sharing that OIDC configuration reuses the cached token (and silently refreshes it when it expires).
+
+### Workflow
+
+<Steps>
+1. **Configure every cluster with the same OIDC provider**
+
+   Use identical `issuerURL`, `clientID`, and `extraScopes` in each cluster's `ksail.yaml`:
+
+   ```yaml
+   # cluster-a/ksail.yaml and cluster-b/ksail.yaml
+   spec:
+     cluster:
+       oidc:
+         issuerURL: https://dex.example.com
+         clientID: kubectl
+         extraScopes:
+           - email
+           - groups
+   ```
+
+2. **Apply portable RBAC**
+
+   Bind the same OIDC user or group on each cluster (see [RBAC Integration](#rbac-integration)). Because the username/group claims resolve identically everywhere, one set of bindings works fleet-wide.
+
+3. **Authenticate once, use everywhere**
+
+   ```bash
+   kubectl --context oidc@cluster-a get pods   # opens the browser on first use
+   kubectl --context oidc@cluster-b get pods   # reuses the cached token — no second login
+   ```
+
+</Steps>
+
+> [!NOTE]
+> The cache key intentionally excludes the cluster name, so the **same** issuer/client/scopes always share one cached session. Use a **distinct** `clientID` (or scopes) per provider if you want isolated sessions per group of clusters.
+
+### Scope & Limitations
+
+This federation model covers **identity federation** — a single authenticated identity, authorized independently on each cluster via portable RBAC. It does **not** (yet) cover **cross-cluster service-account projection** (presenting one cluster's workload identity to another cluster's API server), which is a separate, larger capability tracked on the [OIDC federation roadmap issue](https://github.com/devantler-tech/ksail/issues/4602).
+
 ## Related
 
 - [Declarative Configuration](/configuration/declarative-configuration/) — full `ksail.yaml` schema reference

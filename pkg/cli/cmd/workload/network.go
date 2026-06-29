@@ -42,9 +42,13 @@ Port-forward the in-cluster relay first, e.g.:
 
   kubectl -n kube-system port-forward svc/hubble-relay 4245:80
 
+Pass --follow to keep streaming live flows as they happen (like 'kubectl logs
+-f'), until you interrupt with Ctrl-C.
+
 Output formats:
-  - plain: an aligned table (default)
-  - json:  a JSON array of flow records (for scripting / AI consumption)
+  - plain: an aligned table (default; one row per flow while following)
+  - json:  a JSON array of flow records, or newline-delimited JSON (one object
+           per line) while following — both fit scripting / AI consumption
 
 Examples:
   # Show the 20 most recent flows
@@ -54,7 +58,10 @@ Examples:
   ksail workload network --namespace default --output json
 
   # Only the last 100 TCP flows touching a pod
-  ksail workload network --pod my-app --protocol tcp --last 100`
+  ksail workload network --pod my-app --protocol tcp --last 100
+
+  # Stream live flows until Ctrl-C
+  ksail workload network --follow`
 
 // NewNetworkCmd creates the command that streams Cilium Hubble traffic flows.
 func NewNetworkCmd() *cobra.Command {
@@ -65,6 +72,7 @@ func NewNetworkCmd() *cobra.Command {
 		output    string
 		server    string
 		last      uint
+		follow    bool
 	)
 
 	cmd := &cobra.Command{
@@ -87,11 +95,14 @@ func NewNetworkCmd() *cobra.Command {
 	cmd.Flags().
 		StringVar(&server, "server", hubble.DefaultRelayAddress, "Hubble Relay address to query")
 	cmd.Flags().UintVar(&last, "last", defaultFlowCount, "Number of most recent flows to fetch")
+	cmd.Flags().
+		BoolVarP(&follow, "follow", "f", false, "Stream flows continuously until interrupted (Ctrl-C)")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return runNetworkCommand(cmd, cfgManager, hubble.Options{
 			Last:   uint64(last),
 			Output: output,
+			Follow: follow,
 			Filter: hubble.FilterOptions{
 				Namespace: namespace,
 				Pod:       pod,
@@ -132,6 +143,15 @@ func runNetworkCommand(
 	}
 
 	observer := newFlowObserver(server)
+
+	if opts.Follow {
+		err = hubble.Stream(cmd.Context(), observer, opts, cmd.OutOrStdout())
+		if err != nil {
+			return fmt.Errorf("stream network flows: %w", err)
+		}
+
+		return nil
+	}
 
 	err = hubble.Observe(cmd.Context(), observer, opts, cmd.OutOrStdout())
 	if err != nil {

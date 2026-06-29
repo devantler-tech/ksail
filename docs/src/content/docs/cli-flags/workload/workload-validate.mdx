@@ -39,11 +39,12 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
-      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
-      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
-      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
-      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
-      --strict                   Enable strict validation mode
+      --ignore-missing-schemas    Ignore resources with missing schemas (default true)
+      --schema-location strings   Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog, so they are validated against a supplied schema instead of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)
+      --skip-helm-render          Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
+      --skip-kinds strings        Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets              Skip validation of Kubernetes Secrets (default true)
+      --strict                    Enable strict validation mode
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
