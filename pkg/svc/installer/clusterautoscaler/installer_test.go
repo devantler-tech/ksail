@@ -11,12 +11,55 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 const (
 	envHCLOUDPublicIPv4 = "HCLOUD_PUBLIC_IPV4"
 	envHCLOUDPublicIPv6 = "HCLOUD_PUBLIC_IPV6"
 )
+
+// coreInformerReadVerbs is the get/list/watch verb set the autoscaler's core
+// Deployment/ResourceQuota informers require (ksail#5405).
+func coreInformerReadVerbs() []string {
+	return []string{"get", "list", "watch"}
+}
+
+// renderedRBAC mirrors the rbac.additionalRules shape of the rendered chart
+// values so a test can assert the full PolicyRule (apiGroups + resources +
+// verbs), not just resource-name substrings.
+type renderedRBAC struct {
+	RBAC struct {
+		AdditionalRules []struct {
+			APIGroups []string `json:"apiGroups"`
+			Resources []string `json:"resources"`
+			Verbs     []string `json:"verbs"`
+		} `json:"additionalRules"`
+	} `json:"rbac"`
+}
+
+// assertHasRBACRule unmarshals the rendered chart values and asserts an
+// rbac.additionalRules entry matches the given apiGroups, resources, and verbs
+// EXACTLY — so a wrong apiGroups or a missing verb fails the test (ksail#5405).
+func assertHasRBACRule(t *testing.T, valuesYaml string, apiGroups, resources, verbs []string) {
+	t.Helper()
+
+	var rendered renderedRBAC
+	require.NoError(t, yaml.Unmarshal([]byte(valuesYaml), &rendered))
+
+	for _, rule := range rendered.RBAC.AdditionalRules {
+		if assert.ObjectsAreEqual(apiGroups, rule.APIGroups) &&
+			assert.ObjectsAreEqual(resources, rule.Resources) &&
+			assert.ObjectsAreEqual(verbs, rule.Verbs) {
+			return
+		}
+	}
+
+	t.Errorf(
+		"no rbac.additionalRules entry matched apiGroups=%v resources=%v verbs=%v; got %+v",
+		apiGroups, resources, verbs, rendered.RBAC.AdditionalRules,
+	)
+}
 
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
@@ -447,16 +490,22 @@ func assertValuesYamlContents(t *testing.T, valuesYaml string) {
 		"node-role.kubernetes.io/control-plane",
 		"nodeSelector:",
 		"rbac:",
-		// Core-informer RBAC rules the autoscaler binary needs unconditionally,
-		// granted even without capacity-buffers (ksail#5405).
-		"additionalRules:",
-		"- deployments",
-		"- resourcequotas",
 		"resources:",
 	}
 	for _, want := range required {
 		assert.Contains(t, valuesYaml, want)
 	}
+
+	// Core-informer RBAC rules the autoscaler binary needs unconditionally,
+	// granted even without capacity-buffers — assert the full rule shape so a
+	// wrong apiGroups or missing verb is caught, not just the resource name
+	// (ksail#5405).
+	assertHasRBACRule(
+		t, valuesYaml, []string{"apps"}, []string{"deployments"}, coreInformerReadVerbs(),
+	)
+	assertHasRBACRule(
+		t, valuesYaml, []string{""}, []string{"resourcequotas"}, coreInformerReadVerbs(),
+	)
 }
 
 // TestClusterAutoscalerInstaller_ValuesYaml_Contents verifies that the rendered
@@ -686,6 +735,20 @@ func assertCapacityBuffersValuesYaml(
 
 				for _, omit := range wantOmit {
 					assert.NotContains(t, spec.ValuesYaml, omit)
+				}
+
+				// Core-informer rules are granted unconditionally; assert their
+				// full shape regardless of the capacity-buffers toggle (ksail#5405).
+				assertHasRBACRule(t, spec.ValuesYaml,
+					[]string{"apps"}, []string{"deployments"}, coreInformerReadVerbs())
+				assertHasRBACRule(t, spec.ValuesYaml,
+					[]string{""}, []string{"resourcequotas"}, coreInformerReadVerbs())
+
+				if enabled {
+					assertHasRBACRule(t, spec.ValuesYaml,
+						[]string{"autoscaling.x-k8s.io"},
+						[]string{"capacitybuffers", "capacitybuffers/status"},
+						[]string{"get", "list", "watch", "update", "patch"})
 				}
 
 				return true
