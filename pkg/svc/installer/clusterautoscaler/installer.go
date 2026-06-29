@@ -296,10 +296,38 @@ func buildChartValues(
 				Create: true,
 				Name:   "cluster-autoscaler",
 			},
+			AdditionalRules: coreInformerRBACRules(),
 		},
 		Resources: chartResources{
 			Requests: chartResourceRequests{CPU: "50m", Memory: "128Mi"},
 			Limits:   chartResourceLimits{Memory: "256Mi"},
+		},
+	}
+}
+
+// coreInformerRBACRules returns the read-only rules the cluster-autoscaler binary's
+// core informers require but the chart's ClusterRole omits. The autoscaler watches
+// Deployments (scale-down owner traversal) and ResourceQuotas (quota-aware scale-up
+// simulation) unconditionally — i.e. even with the capacity-buffer controller
+// disabled — so without these it logs a continuous "deployments.apps is forbidden" /
+// "resourcequotas is forbidden" and the informers never sync (ksail#5405). The chart
+// only grants apps/{daemonsets,replicasets,statefulsets} and exposes no values knob to
+// inject extra rules beyond rbac.additionalRules, so KSail adds them here. They are
+// granted in the base values (not gated behind capacity-buffers) because the core
+// binary needs them regardless of that feature.
+func coreInformerRBACRules() []chartRBACRule {
+	readVerbs := []string{"get", "list", "watch"}
+
+	return []chartRBACRule{
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     readVerbs,
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"resourcequotas"},
+			Verbs:     readVerbs,
 		},
 	}
 }
