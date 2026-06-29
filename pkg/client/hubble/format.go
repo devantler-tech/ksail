@@ -28,6 +28,28 @@ const (
 // protocol (all left-padded to fixed widths), then the trailing verdict.
 const streamRowFormat = "%-*s %-*s %-*s %-*s %s\n"
 
+// clip truncates s to at most width runes, replacing the overflowing tail with an
+// ellipsis so a long value (e.g. a generated pod name) cannot spill past its
+// column and break the alignment of the fixed-width streaming rows. The padding
+// verb (%-*s) only pads short values; it never truncates long ones, hence this.
+// width <= 0 returns s unchanged.
+func clip(value string, width int) string {
+	if width <= 0 {
+		return value
+	}
+
+	runes := []rune(value)
+	if len(runes) <= width {
+		return value
+	}
+
+	if width == 1 {
+		return "…"
+	}
+
+	return string(runes[:width-1]) + "…"
+}
+
 // FormatPlainHeader writes the streaming table's header row once, before any
 // flows. It mirrors the columns of [FormatPlainLine].
 func FormatPlainHeader(out io.Writer) error {
@@ -53,10 +75,10 @@ func FormatPlainLine(out io.Writer, record FlowRecord) error {
 	_, err := fmt.Fprintf(
 		out,
 		streamRowFormat,
-		timeColWidth, formatTime(record.Time),
-		endpointColWidth, endpointString(record.Source),
-		endpointColWidth, endpointString(record.Destination),
-		protocolColWidth, orDash(record.Protocol),
+		timeColWidth, clip(formatTime(record.Time), timeColWidth),
+		endpointColWidth, clip(endpointString(record.Source), endpointColWidth),
+		endpointColWidth, clip(endpointString(record.Destination), endpointColWidth),
+		protocolColWidth, clip(orDash(record.Protocol), protocolColWidth),
 		orDash(record.Verdict),
 	)
 	if err != nil {

@@ -179,6 +179,13 @@ func (o *RelayObserver) StreamFlows(
 ) error {
 	conn, stream, err := o.getFlows(ctx, &observerpb.GetFlowsRequest{Number: last, Follow: true})
 	if err != nil {
+		// A cancellation while the stream is still being established is a clean
+		// stop (e.g. --follow interrupted during relay setup), mirroring the
+		// post-receiveFlows handling below.
+		if ctx.Err() != nil {
+			return nil
+		}
+
 		return err
 	}
 

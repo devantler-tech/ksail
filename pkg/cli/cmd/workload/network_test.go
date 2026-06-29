@@ -13,9 +13,18 @@ import (
 
 type stubObserver struct {
 	records []hubble.FlowRecord
+	// observed and streamed record which path ran, so a test can assert that
+	// --follow selects StreamFlows and the one-shot path selects ObserveFlows
+	// (both yield the same records, so output alone can't distinguish them).
+	observed *bool
+	streamed *bool
 }
 
 func (s stubObserver) ObserveFlows(_ context.Context, _ uint64) ([]hubble.FlowRecord, error) {
+	if s.observed != nil {
+		*s.observed = true
+	}
+
 	return s.records, nil
 }
 
@@ -24,6 +33,10 @@ func (s stubObserver) StreamFlows(
 	_ uint64,
 	emit func(hubble.FlowRecord) error,
 ) error {
+	if s.streamed != nil {
+		*s.streamed = true
+	}
+
 	for _, record := range s.records {
 		err := emit(record)
 		if err != nil {
@@ -86,15 +99,21 @@ func TestNetworkCmdRequiresCilium(t *testing.T) {
 func TestNetworkCmdWithCiliumStreamsFlows(t *testing.T) {
 	t.Chdir(t.TempDir())
 
+	var observed, streamed bool
+
 	restore := workload.ExportSetFlowObserverFactory(func(_ string) hubble.FlowObserver {
-		return stubObserver{records: []hubble.FlowRecord{
-			{
-				Verdict:     "FORWARDED",
-				Protocol:    "TCP",
-				Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
-				Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+		return stubObserver{
+			records: []hubble.FlowRecord{
+				{
+					Verdict:     "FORWARDED",
+					Protocol:    "TCP",
+					Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
+					Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+				},
 			},
-		}}
+			observed: &observed,
+			streamed: &streamed,
+		}
 	})
 	defer restore()
 
@@ -111,21 +130,29 @@ func TestNetworkCmdWithCiliumStreamsFlows(t *testing.T) {
 	output := out.String()
 	assert.Contains(t, output, `"web"`)
 	assert.Contains(t, output, "FORWARDED")
+	assert.True(t, observed, "one-shot mode must call ObserveFlows")
+	assert.False(t, streamed, "one-shot mode must not call StreamFlows")
 }
 
 //nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
 func TestNetworkCmdFollowStreamsLiveFlows(t *testing.T) {
 	t.Chdir(t.TempDir())
 
+	var observed, streamed bool
+
 	restore := workload.ExportSetFlowObserverFactory(func(_ string) hubble.FlowObserver {
-		return stubObserver{records: []hubble.FlowRecord{
-			{
-				Verdict:     "FORWARDED",
-				Protocol:    "TCP",
-				Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
-				Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+		return stubObserver{
+			records: []hubble.FlowRecord{
+				{
+					Verdict:     "FORWARDED",
+					Protocol:    "TCP",
+					Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
+					Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+				},
 			},
-		}}
+			observed: &observed,
+			streamed: &streamed,
+		}
 	})
 	defer restore()
 
@@ -143,6 +170,8 @@ func TestNetworkCmdFollowStreamsLiveFlows(t *testing.T) {
 	assert.Contains(t, output, "TIME", "follow plain output prints the streaming header")
 	assert.Contains(t, output, "default/web")
 	assert.Contains(t, output, "FORWARDED")
+	assert.True(t, streamed, "follow mode must call StreamFlows")
+	assert.False(t, observed, "follow mode must not call ObserveFlows")
 }
 
 func TestNetworkCmdHasFollowFlag(t *testing.T) {
