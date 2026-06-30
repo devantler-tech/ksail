@@ -128,7 +128,7 @@ func CloneEnvironmentConfig(
 	}
 
 	info, err := os.Stat(srcAbs)
-	if err != nil || info.IsDir() {
+	if err != nil || !info.Mode().IsRegular() {
 		return "", false, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
 	}
 
