@@ -108,6 +108,28 @@ func HandleAddEnvironmentRunE(cmd *cobra.Command, dstName string) error {
 	return cloneEnvironment(cmd, params)
 }
 
+// validateEnvironmentNames rejects an invalid or path-like source or destination
+// environment name before either is interpolated into a file path
+// (ksail.<env>.yaml, clusters/<env>) — defence in depth ahead of the clone's
+// downstream containment guard — and rejects cloning an environment onto itself.
+func validateEnvironmentNames(srcName, dstName string) error {
+	err := v1alpha1.ValidateClusterName(srcName)
+	if err != nil {
+		return fmt.Errorf("invalid source environment name: %w", err)
+	}
+
+	err = v1alpha1.ValidateClusterName(dstName)
+	if err != nil {
+		return fmt.Errorf("invalid environment name: %w", err)
+	}
+
+	if dstName == srcName {
+		return fmt.Errorf("%w: %q", ErrSameEnvironment, dstName)
+	}
+
+	return nil
+}
+
 // resolveAddEnvironmentParams reads flags, loads the source config, and validates
 // the destination before any file is written.
 func resolveAddEnvironmentParams(
@@ -118,13 +140,9 @@ func resolveAddEnvironmentParams(
 	dstProvider, _ := cmd.Flags().GetString("provider")
 	force, _ := cmd.Flags().GetBool("force")
 
-	if dstName == srcName {
-		return addEnvironmentParams{}, fmt.Errorf("%w: %q", ErrSameEnvironment, dstName)
-	}
-
-	err := v1alpha1.ValidateClusterName(dstName)
+	err := validateEnvironmentNames(srcName, dstName)
 	if err != nil {
-		return addEnvironmentParams{}, fmt.Errorf("invalid environment name: %w", err)
+		return addEnvironmentParams{}, err
 	}
 
 	workDir, err := os.Getwd()

@@ -159,6 +159,17 @@ func TestHandleAddEnvironmentRunE_RejectsInvalidName(t *testing.T) {
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleAddEnvironmentRunE_RejectsInvalidSourceName(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+	t.Chdir(repoRoot)
+
+	// A path-like source name is rejected before it is interpolated into a file path.
+	_, err := runAddEnvironment(t, "staging", "--from", "../prod")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid source environment name")
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
 func TestHandleAddEnvironmentRunE_RejectsInvalidProvider(t *testing.T) {
 	repoRoot := writeAddEnvSourceRepo(t)
 	t.Chdir(repoRoot)
