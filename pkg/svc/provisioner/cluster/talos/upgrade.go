@@ -12,6 +12,7 @@ import (
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -347,6 +348,10 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 
 // rollingUpgradeNodes performs a rolling Talos OS upgrade across all cluster
 // nodes. Workers are upgraded first, then control-planes, one node at a time.
+// Each node is cordoned and drained before its reboot and uncordoned after it
+// returns Ready — the same graceful per-node sequence the config-change rolling
+// reboot uses (rollingRebootSingleNode) — so an OS upgrade evicts workloads
+// cleanly instead of hard-rebooting them out from under their pods and volumes.
 // Before each node's OS upgrade it reconciles the node's desired machine config so
 // the new installer validates the desired config rather than the stale committed
 // one (issue #5294, see reconcileNodeConfigBeforeUpgrade).
@@ -371,26 +376,31 @@ func (p *Provisioner) rollingUpgradeNodes(
 	// to a best-effort per-node reconcile.
 	secretsSource, _, _ := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 
+	// Graceful drain and the between-node storage-health gate both need the
+	// Kubernetes API. Build the clientset (and the prober) once; when the API is
+	// unreachable both are nil and the per-node sequence degrades to the legacy
+	// reboot-without-drain rather than aborting a needed OS upgrade.
+	clientset := p.k8sClientOrWarnForUpgrade(clusterName)
+
+	var storageProber storageHealthProber
+	if clientset != nil {
+		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
+	}
+
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Upgrading %s (%s)...\n",
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		// Reconcile the desired config onto the node before upgrading it. Best-effort:
-		// a failure here must not regress upgrades that already validate cleanly
-		// against the committed config, so warn and proceed (the upgrade then behaves
-		// as it did pre-#5294, and the update's in-place reconcile re-surfaces any
-		// genuine drift afterwards).
-		configErr := p.reconcileNodeConfigBeforeUpgrade(ctx, node, secretsSource)
-		if configErr != nil {
-			_, _ = fmt.Fprintf(p.logWriter,
-				"  ⚠ Could not reconcile config on %s before upgrade: %v\n",
-				node.IP, configErr,
-			)
-		}
-
-		upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage, desiredTag)
+		upgradeErr := p.upgradeSingleNode(ctx, upgradeNodeRequest{
+			clientset:      clientset,
+			node:           node,
+			secretsSource:  secretsSource,
+			prober:         storageProber,
+			installerImage: installerImage,
+			desiredTag:     desiredTag,
+		})
 		if upgradeErr != nil {
 			return fmt.Errorf("upgrading node %s (%s): %w", node.IP, node.Role, upgradeErr)
 		}
@@ -402,6 +412,119 @@ func (p *Provisioner) rollingUpgradeNodes(
 	}
 
 	return nil
+}
+
+// upgradeNodeRequest bundles the inputs for upgradeSingleNode's graceful per-node
+// upgrade sequence.
+type upgradeNodeRequest struct {
+	clientset      kubernetes.Interface
+	node           nodeWithRole
+	secretsSource  talosconfig.Provider
+	prober         storageHealthProber
+	installerImage string
+	desiredTag     string
+}
+
+// upgradeSingleNode runs the full graceful per-node OS-upgrade sequence: cordon →
+// drain → reconcile desired config (#5294) → upgrade + reboot → wait Ready →
+// uncordon → between-node storage-health gate (#5467). When the clientset is nil
+// (Kubernetes API unreachable) or the node cannot be resolved to a Kubernetes node,
+// it degrades to the legacy reconcile + upgrade + reboot without draining, so a
+// needed OS upgrade still proceeds. A drain failure aborts the roll with the node
+// best-effort uncordoned (see cordonAndDrain), matching the config-change path.
+func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
+	nodeName := ""
+
+	if req.clientset != nil {
+		resolved, resolveErr := p.resolveNodeName(ctx, req.clientset, req.node.IP)
+		if resolveErr != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
+				req.node.IP, resolveErr,
+			)
+		} else {
+			nodeName = resolved
+
+			drainErr := p.cordonAndDrain(ctx, req.clientset, nodeName)
+			if drainErr != nil {
+				return drainErr
+			}
+		}
+	}
+
+	// Reconcile the desired config onto the node before upgrading it. Best-effort:
+	// a failure here must not regress upgrades that already validate cleanly against
+	// the committed config, so warn and proceed (the update's in-place reconcile
+	// re-surfaces any genuine drift afterwards).
+	configErr := p.reconcileNodeConfigBeforeUpgrade(ctx, req.node, req.secretsSource)
+	if configErr != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Could not reconcile config on %s before upgrade: %v\n",
+			req.node.IP, configErr,
+		)
+	}
+
+	upgradeErr := p.upgradeNodeTalosVersion(ctx, req.node.IP, req.installerImage, req.desiredTag)
+	if upgradeErr != nil {
+		return upgradeErr
+	}
+
+	// Nothing to uncordon (and no storage gate) when the node was never cordoned.
+	if nodeName == "" {
+		return nil
+	}
+
+	p.uncordonAfterUpgrade(ctx, req.clientset, nodeName)
+
+	// Gate progression to the next node on replicated-storage volume health so a
+	// one-replica-per-node volume is not faulted by rebooting consecutive replica
+	// holders before a rebuild completes (#5467). No-op when the gate is disabled or
+	// no backend was detected (prober == nil).
+	storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
+	if storageErr != nil {
+		return fmt.Errorf("storage health gate: %w", storageErr)
+	}
+
+	return nil
+}
+
+// uncordonAfterUpgrade waits for the upgraded node to report Ready, then uncordons
+// it. Both steps are best-effort: the OS upgrade already succeeded, so a readiness
+// or uncordon hiccup is warned rather than failing the roll (the next reconcile
+// re-evaluates schedulability).
+func (p *Provisioner) uncordonAfterUpgrade(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) {
+	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	if readyErr != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    ⚠ %s did not report Ready before uncordon: %v\n", nodeName, readyErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
+
+	uncordonErr := p.uncordonNode(ctx, clientset, nodeName)
+	if uncordonErr != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    ⚠ Failed to uncordon %s (best-effort): %v\n", nodeName, uncordonErr)
+	}
+}
+
+// k8sClientOrWarnForUpgrade builds the Kubernetes clientset used to drain nodes
+// during a rolling OS upgrade. It returns nil (with a warning) when the API is
+// unreachable, so the upgrade degrades to reboot-without-drain instead of aborting.
+func (p *Provisioner) k8sClientOrWarnForUpgrade(clusterName string) kubernetes.Interface {
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Kubernetes API unreachable; upgrading without graceful drain: %v\n", err)
+
+		return nil
+	}
+
+	return clientset
 }
 
 // reconcileNodeConfigBeforeUpgrade applies a node's desired machine config with
