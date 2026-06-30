@@ -48,6 +48,18 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    # Astro, Starlight and the Starlight/Astro plugins are a co-dependent set: a
+    # Starlight major requires a matching Astro major and plugin releases that
+    # support the new Astro markdown processor. Bumping one alone breaks the docs
+    # build (ksail#5600 — Starlight 0.41 needed Astro 7 + updated peer plugins).
+    # Group them so Dependabot raises a single PR that moves the whole set together.
+    groups:
+      astro:
+        patterns:
+          - "astro"
+          - "astro-*"
+          - "@astrojs/*"
+          - "starlight-*"
 
   - package-ecosystem: npm
     directory: /vsce
