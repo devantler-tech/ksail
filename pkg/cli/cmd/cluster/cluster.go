@@ -86,6 +86,7 @@ func NewClusterCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(NewInitCmd())
+	cmd.AddCommand(NewAddEnvironmentCmd())
 	cmd.AddCommand(NewCreateCmd())
 	cmd.AddCommand(NewUpdateCmd())
 	cmd.AddCommand(NewDeleteCmd())
