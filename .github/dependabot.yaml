@@ -157,6 +157,13 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+    # The flux-operator chart and its manifests-distribution artifact are a MATCHED
+    # PAIR released together; bumping one without the other breaks Flux bootstrap
+    # (ksail#5595). Group them so Dependabot raises a single PR that moves both tags.
+    groups:
+      flux-operator:
+        patterns:
+          - "*flux-operator*"
 
   - package-ecosystem: docker
     registries: [ghcr]
