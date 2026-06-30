@@ -92,6 +92,20 @@ type OptionsTalos struct {
 	// re-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.
 	// Override per invocation with --drain-timeout. Example: "15m".
 	DrainTimeout metav1.Duration `json:"drainTimeout,omitzero"`
+	// StorageHealthTimeout opts into a between-node storage-health gate during the
+	// `cluster update` rolling reboot. When set to a positive duration and the cluster
+	// runs a replicated node-local storage backend (Longhorn), the roll waits — up to
+	// this timeout — for the just-rebooted node's volumes to return to a healthy state
+	// before draining the next node. This prevents progressively faulting volumes whose
+	// replicas are spread one-per-node: without the gate the roll advances as soon as a
+	// node reports Kubernetes Ready, so rebooting consecutive replica holders before a
+	// rebuild completes can take every replica of a volume down at once. Default off
+	// (unset / 0): behaviour is unchanged. No effect when no replicated storage backend
+	// is detected. The gate only helps when replicas have spare capacity to rebuild
+	// during the roll; on a fully drained pool with hard anti-affinity it times out
+	// (naming the stuck volumes) rather than hanging. Example: "10m".
+	//+kubebuilder:validation:XValidation:rule="self.matches('^[0-9]+(ns|us|µs|ms|s|m|h)$')"
+	StorageHealthTimeout metav1.Duration `json:"storageHealthTimeout,omitzero"`
 }
 
 // PortMapping defines a mapping between a container port and a host port.

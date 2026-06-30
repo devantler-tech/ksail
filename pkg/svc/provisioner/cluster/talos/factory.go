@@ -88,6 +88,7 @@ func newProvisionerFromOptions(
 		WithTalosconfigPath(talosconfigPath).
 		WithKubernetesVersion(opts.KubernetesVersion).
 		WithDrainTimeout(opts.DrainTimeout.Duration).
+		WithStorageHealthTimeout(opts.StorageHealthTimeout.Duration).
 		WithSkipCNIChecks(skipCNIChecks)
 
 	// Override the default Talos container image when a version pin is set.

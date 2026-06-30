@@ -422,3 +422,53 @@ func assertEnum(t *testing.T, prop map[string]any, want []string) {
 		}
 	}
 }
+
+// TestSchemaDescriptionsStripControllerGenMarkers guards the generator's marker-stripping:
+// controller-gen markers (e.g. +kubebuilder:validation:XValidation) in a Go doc comment
+// steer CRD generation, not this config schema, and must never leak into a user-facing
+// description. storageHealthTimeout carries an XValidation marker, so it is the concrete
+// regression target; the tree-wide sweep guards every other field too.
+func TestSchemaDescriptionsStripControllerGenMarkers(t *testing.T) {
+	t.Parallel()
+
+	schema := generateSchema(t)
+
+	field := mustNestedProp(t, schema, specKey, clusterKey, "talos", "storageHealthTimeout")
+
+	desc, _ := field["description"].(string)
+	if desc == "" {
+		t.Fatal("storageHealthTimeout description is empty")
+	}
+
+	if strings.Contains(desc, "+kubebuilder") {
+		t.Errorf("storageHealthTimeout description leaks a controller-gen marker:\n%s", desc)
+	}
+
+	if got, _ := field["pattern"].(string); got == "" {
+		t.Error("storageHealthTimeout lost its duration pattern constraint")
+	}
+
+	forEachDescription(schema, func(desc string) {
+		if strings.Contains(desc, "+kubebuilder") {
+			t.Errorf("a schema description leaks a controller-gen marker:\n%s", desc)
+		}
+	})
+}
+
+// forEachDescription invokes visit on every "description" string in the schema tree.
+func forEachDescription(node any, visit func(string)) {
+	switch typed := node.(type) {
+	case map[string]any:
+		if desc, ok := typed["description"].(string); ok {
+			visit(desc)
+		}
+
+		for _, child := range typed {
+			forEachDescription(child, visit)
+		}
+	case []any:
+		for _, child := range typed {
+			forEachDescription(child, visit)
+		}
+	}
+}
