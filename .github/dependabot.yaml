@@ -152,7 +152,7 @@ updates:
 
   - package-ecosystem: docker
     registries: [ghcr]
-    directory: /pkg/svc/installer/flux # Flux operator chart version (OCI chart artifact)
+    directory: /pkg/svc/installer/flux # Flux operator chart + manifests-distribution versions (OCI artifacts, matched pair)
     cooldown:
       default-days: 7
     schedule:

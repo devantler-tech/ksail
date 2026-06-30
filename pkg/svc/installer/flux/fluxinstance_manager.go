@@ -28,7 +28,6 @@ const (
 	fluxIntervalFallback     = time.Minute
 	fluxDistributionVersion  = "2.x"
 	fluxDistributionRegistry = "ghcr.io/fluxcd"
-	fluxDistributionArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 )
 
 // instanceManager handles FluxInstance lifecycle operations.
@@ -304,7 +303,7 @@ func buildInstance(
 			Distribution: Distribution{
 				Version:  fluxDistributionVersion,
 				Registry: fluxDistributionRegistry,
-				Artifact: fluxDistributionArtifact,
+				Artifact: distributionArtifact(),
 			},
 			Sync: &Sync{
 				Kind:       fluxOCIRepositoryKind,
