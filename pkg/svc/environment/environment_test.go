@@ -176,6 +176,7 @@ func TestRewriteOverlayFile_ClustersPathBoundary(t *testing.T) {
   - clusters/prod
   - clusters/prod/bootstrap
   - clusters/production
+  # documentary cross-reference to clusters/prod stays put
 `
 
 	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
@@ -187,6 +188,8 @@ func TestRewriteOverlayFile_ClustersPathBoundary(t *testing.T) {
 	assert.Contains(t, newContent, "clusters/staging/bootstrap")
 	// "clusters/production" must NOT be rewritten — "prod" is only a prefix there.
 	assert.Contains(t, newContent, "clusters/production")
+	// A documentary reference inside a comment is left unchanged.
+	assert.Contains(t, newContent, "# documentary cross-reference to clusters/prod stays put")
 }
 
 func TestRewriteOverlayFile_PreservesQuotingAndTrailingComment(t *testing.T) {
@@ -216,6 +219,9 @@ func TestRewriteOverlayFile_InvalidRewrite(t *testing.T) {
 		"empty New": {Kind: environment.PathSegment, Old: "prod", New: ""},
 		"no Field": {
 			Kind: environment.MetaFieldValue, Field: "", Old: "prod", New: "staging",
+		},
+		"unknown Kind": {
+			Kind: environment.RewriteKind(99), Old: "prod", New: "staging",
 		},
 	}
 

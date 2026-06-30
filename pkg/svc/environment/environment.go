@@ -41,14 +41,23 @@ type Rewrite struct {
 	New string
 }
 
-// validate reports whether the rewrite is well-formed.
+// validate reports whether the rewrite is well-formed, rejecting an unknown Kind
+// so a malformed rewrite fails with ErrInvalidRewrite rather than silently
+// no-opping through RewriteOverlayFile's switch.
 func (r Rewrite) validate() error {
 	if r.Old == "" || r.New == "" {
 		return fmt.Errorf("%w: Old and New must be non-empty", ErrInvalidRewrite)
 	}
 
-	if r.Kind == MetaFieldValue && r.Field == "" {
-		return fmt.Errorf("%w: MetaFieldValue requires a Field", ErrInvalidRewrite)
+	switch r.Kind {
+	case MetaFieldValue:
+		if r.Field == "" {
+			return fmt.Errorf("%w: MetaFieldValue requires a Field", ErrInvalidRewrite)
+		}
+	case PathSegment:
+		// No extra fields required.
+	default:
+		return fmt.Errorf("%w: unknown Kind %d", ErrInvalidRewrite, r.Kind)
 	}
 
 	return nil
@@ -208,9 +217,47 @@ func rewritePathTokens(path, old, replacement string) string {
 
 // rewriteClustersPath rewrites a "clusters/<old>" path reference in file contents
 // to "clusters/<new>", matching only on a trailing boundary so "clusters/<old>x"
-// is left untouched.
+// is left untouched. It rewrites only the code portion of each line, leaving a
+// trailing "# ..." comment unchanged so a documentary reference such as
+// "# see clusters/<old>" is preserved.
 func rewriteClustersPath(content, old, replacement string) string {
 	pattern := regexp.MustCompile(`clusters/` + regexp.QuoteMeta(old) + `([/"'\s]|$)`)
+	lines := strings.Split(content, "\n")
 
-	return pattern.ReplaceAllString(content, "clusters/"+replacement+"$1")
+	for index, line := range lines {
+		code, comment := splitLineComment(line)
+		lines[index] = pattern.ReplaceAllString(code, "clusters/"+replacement+"$1") + comment
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// splitLineComment splits a line into its code portion and a trailing YAML
+// comment — a "#" at the line start or preceded by whitespace, outside any
+// quoted scalar. A line with no such comment returns the whole line and "".
+func splitLineComment(line string) (string, string) {
+	var quote byte
+
+	for index := range len(line) {
+		char := line[index]
+
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			}
+		case char == '\'' || char == '"':
+			quote = char
+		case char == '#' && commentPrecededByBoundary(line, index):
+			return line[:index], line[index:]
+		}
+	}
+
+	return line, ""
+}
+
+// commentPrecededByBoundary reports whether the "#" at index begins a YAML
+// comment, i.e. it is at the line start or preceded by whitespace.
+func commentPrecededByBoundary(line string, index int) bool {
+	return index == 0 || line[index-1] == ' ' || line[index-1] == '\t'
 }
