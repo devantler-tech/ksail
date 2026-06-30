@@ -86,6 +86,28 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 	return rewrites
 }
 
+// DeriveConfigRewrites returns the substitutions for cloning a root environment
+// config (ksail.<src>.yaml -> ksail.<dst>.yaml), as opposed to an overlay file. It
+// is a superset of [DeriveRewrites]: it adds a rewrite for the config's top-level
+// metadata `name:` field — the canonical environment identity in a ksail config
+// (the overlay files instead carry the identity in a `cluster_name:` ConfigMap
+// field, which [DeriveRewrites] already covers). The `name` rewrite is value-exact
+// (only `name: <src>` lines change), so sibling list entries such as
+// `name: autoscale-cx33` are left untouched.
+//
+// The connection `context:` (e.g. `admin@<env>` for Talos, `kind-<env>` for Kind)
+// is deliberately NOT rewritten here: its format is distribution-specific, so
+// repointing it correctly needs the distribution, which the eventual
+// `cluster add-environment` command resolves. A cloned config therefore keeps the
+// source's context until the new cluster is created (or the user edits it); this
+// boundary is called out so the foundation stays distribution-agnostic.
+func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
+	return append(
+		DeriveRewrites(srcName, dstName, dstProvider, srcProvider),
+		Rewrite{Kind: MetaFieldValue, Field: "name", Old: srcName, New: dstName},
+	)
+}
+
 // RewriteOverlayFile applies the rewrites to one cloned overlay file, returning the
 // file's new repository-relative path and its new contents. Only the structured
 // locations the rewrites target are changed; every other byte is preserved, so a

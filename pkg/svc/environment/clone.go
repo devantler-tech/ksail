@@ -21,6 +21,10 @@ const encryptedFileSuffix = ".enc.yaml"
 // not exist or is not a directory.
 var ErrSourceOverlayMissing = errors.New("source overlay directory not found")
 
+// ErrSourceConfigMissing is returned by CloneEnvironmentConfig when
+// repoRoot/srcConfigRel does not exist or is not a regular file.
+var ErrSourceConfigMissing = errors.New("source environment config not found")
+
 // CloneOverlay clones every file under repoRoot/srcRelDir into the destination
 // overlay implied by rewrites, applying the structured path+content rewrites to
 // each regular file and copying SOPS-encrypted *.enc.yaml files byte-for-byte
@@ -87,6 +91,58 @@ func CloneOverlay(repoRoot, srcRelDir string, rewrites []Rewrite, force bool) ([
 	}
 
 	return written, nil
+}
+
+// CloneEnvironmentConfig clones a single root environment config file (e.g.
+// ksail.<src>.yaml) into the destination environment's config (ksail.<dst>.yaml).
+// Pass the rewrites from [DeriveConfigRewrites] (not [DeriveRewrites]): the root
+// config carries the environment identity in its top-level `name:` field, so the
+// config-specific derivation repoints `name` and `provider` field values and swaps
+// any clusters/<env> path or content reference, while every other byte (the
+// connection context, version pins, comments, the rest of the spec) is preserved.
+// The destination filename is derived from the rewrites' PathSegment
+// (ksail.<src>.yaml -> ksail.<dst>.yaml), so the source and destination need not be
+// named by convention and the caller does not repeat the naming logic the
+// foundation already owns.
+//
+// It mirrors CloneOverlay's write semantics: the source and destination are
+// containment-checked against repoRoot, an existing destination is preserved unless
+// force is set, and parent directories are created as needed. It returns the
+// destination's repo-relative path and whether a file was actually written (false
+// when an existing destination was skipped because force is unset). A SOPS-encrypted
+// *.enc.yaml source keeps its ciphertext verbatim and only has its path repointed,
+// matching cloneFile.
+func CloneEnvironmentConfig(
+	repoRoot, srcConfigRel string,
+	rewrites []Rewrite,
+	force bool,
+) (string, bool, error) {
+	srcConfigRel = filepath.ToSlash(srcConfigRel)
+	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
+
+	// Containment guard: a srcConfigRel with ".." segments or a symlink escape must
+	// not let the clone read from outside repoRoot.
+	if !fsutil.IsPathWithinDirectory(srcAbs, repoRoot) {
+		return "", false, fmt.Errorf("%w: %s escapes the repository root",
+			ErrSourceConfigMissing, srcConfigRel)
+	}
+
+	info, err := os.Stat(srcAbs)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
+	}
+
+	newRelPath, content, err := cloneFile(repoRoot, repoRoot, srcAbs, rewrites)
+	if err != nil {
+		return "", false, err
+	}
+
+	wrote, err := writeClone(repoRoot, newRelPath, content, force)
+	if err != nil {
+		return "", false, err
+	}
+
+	return newRelPath, wrote, nil
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning

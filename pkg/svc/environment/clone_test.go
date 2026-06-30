@@ -240,3 +240,166 @@ func TestCloneOverlay_InvalidRewritePropagates(t *testing.T) {
 	_, err := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", bad, false)
 	require.ErrorIs(t, err, environment.ErrInvalidRewrite)
 }
+
+// rootConfig mirrors a real platform ksail.<env>.yaml: the environment identity is
+// in the top-level metadata `name:`, a distribution-specific `context:`, and the
+// workload `kustomizationFile: clusters/<env>` — plus a node-group entry whose
+// `name:` is NOT the environment, to prove the value-exact rewrite leaves it alone.
+const rootConfig = `---
+apiVersion: cluster.ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: prod
+spec:
+  connection:
+    context: admin@prod
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    nodeAutoscaler:
+      nodeGroups:
+        - name: autoscale-cx33
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/prod
+`
+
+func writeRootConfig(t *testing.T, repoRoot string) {
+	t.Helper()
+
+	abs := filepath.Join(repoRoot, "ksail.prod.yaml")
+	require.NoError(t, os.WriteFile(abs, []byte(rootConfig), 0o600))
+}
+
+func TestDeriveConfigRewrites_AddsNameOnTopOfOverlayRewrites(t *testing.T) {
+	t.Parallel()
+
+	overlay := environment.DeriveRewrites("prod", "staging", "", "")
+	config := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	// The config derivation is a strict superset: every overlay rewrite is present,
+	// plus exactly one extra — the metadata `name:` field repoint.
+	require.Len(t, config, len(overlay)+1)
+	assert.Contains(t, config, environment.Rewrite{
+		Kind: environment.MetaFieldValue, Field: "name", Old: "prod", New: "staging",
+	})
+}
+
+func TestCloneEnvironmentConfig_RepointsIdentityFields(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeRootConfig(t, repoRoot)
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	newRel, wrote, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, false)
+	require.NoError(t, err)
+	assert.True(t, wrote)
+	// The destination filename is derived from the rewrites, not a convention.
+	assert.Equal(t, "ksail.staging.yaml", newRel)
+
+	clone := readClone(t, repoRoot, "ksail.staging.yaml")
+	// metadata.name is repointed to the destination environment...
+	assert.Contains(t, clone, "name: staging")
+	assert.NotContains(t, clone, "name: prod")
+	// ...the clusters/<env> reference is swapped...
+	assert.Contains(t, clone, "kustomizationFile: clusters/staging")
+	// ...the unrelated node-group name is left untouched (value-exact match)...
+	assert.Contains(t, clone, "name: autoscale-cx33")
+	// ...and the distribution-specific context is preserved (documented boundary).
+	assert.Contains(t, clone, "context: admin@prod")
+}
+
+func TestCloneEnvironmentConfig_ProviderOverride(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeRootConfig(t, repoRoot)
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "AWS", "Hetzner")
+
+	_, _, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, false)
+	require.NoError(t, err)
+
+	clone := readClone(t, repoRoot, "ksail.staging.yaml")
+	assert.Contains(t, clone, "provider: AWS")
+	assert.NotContains(t, clone, "provider: Hetzner")
+}
+
+func TestCloneEnvironmentConfig_SkipsExistingWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeRootConfig(t, repoRoot)
+	dest := filepath.Join(repoRoot, "ksail.staging.yaml")
+	require.NoError(t, os.WriteFile(dest, []byte("SENTINEL\n"), 0o600))
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	newRel, wrote, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, false)
+	require.NoError(t, err)
+	assert.False(t, wrote)
+	assert.Equal(t, "ksail.staging.yaml", newRel)
+	assert.Equal(t, "SENTINEL\n", readClone(t, repoRoot, "ksail.staging.yaml"))
+}
+
+func TestCloneEnvironmentConfig_OverwritesExistingWithForce(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeRootConfig(t, repoRoot)
+	dest := filepath.Join(repoRoot, "ksail.staging.yaml")
+	require.NoError(t, os.WriteFile(dest, []byte("SENTINEL\n"), 0o600))
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	_, wrote, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, true)
+	require.NoError(t, err)
+	assert.True(t, wrote)
+
+	clone := readClone(t, repoRoot, "ksail.staging.yaml")
+	assert.NotContains(t, clone, "SENTINEL")
+	assert.Contains(t, clone, "name: staging")
+}
+
+func TestCloneEnvironmentConfig_MissingSource(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	_, _, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.absent.yaml", rewrites, false)
+	require.ErrorIs(t, err, environment.ErrSourceConfigMissing)
+}
+
+func TestCloneEnvironmentConfig_SourceIsDirectory(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, "ksail.prod.yaml"), 0o750))
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	// A path that exists but is a directory is rejected (the config must be a file).
+	_, _, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, false)
+	require.ErrorIs(t, err, environment.ErrSourceConfigMissing)
+}
+
+func TestCloneEnvironmentConfig_SourceTraversalRejected(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	// A srcConfigRel with ".." segments that escapes repoRoot must be rejected.
+	_, _, err := environment.CloneEnvironmentConfig(
+		repoRoot, "../../etc/passwd", rewrites, false)
+	require.ErrorIs(t, err, environment.ErrSourceConfigMissing)
+}
