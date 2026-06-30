@@ -11,17 +11,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 // errProber is a stub storageHealthProber error used to exercise the gate's
 // transient-error tolerance.
 var errProber = errors.New("prober unavailable")
+
+// errStubForbidden stands in for a non-NotFound namespace lookup failure (e.g. RBAC)
+// so the detection path can be exercised without a live API server.
+var errStubForbidden = errors.New("forbidden")
 
 func newGateProvisioner() *talosprovisioner.Provisioner {
 	return talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
@@ -125,7 +131,39 @@ func TestBuildStorageHealthProber_NoBackend(t *testing.T) {
 	assert.False(t, built, "no longhorn-system namespace → no prober built")
 }
 
-// TestLonghornDetected covers backend detection by namespace presence.
+// TestBuildStorageHealthProberOrWarn covers the graceful-degrade wrapper shared by the
+// primary and autoscaler rolls: disabled gate → no prober; enabled gate with a
+// detection failure → no prober (warn + disable) rather than aborting the roll.
+func TestBuildStorageHealthProberOrWarn(t *testing.T) {
+	t.Parallel()
+
+	// Gate disabled (timeout 0) → never builds a prober, regardless of backend.
+	disabled := newGateProvisioner()
+	assert.False(t,
+		disabled.BuildStorageHealthProberOrWarnForTest(
+			context.Background(), fake.NewClientset(), "test"),
+		"disabled gate → no prober")
+
+	// Gate enabled but the backend lookup fails (RBAC/transient) → degrade to no
+	// prober instead of failing; the warning is emitted to the (discarded) log writer.
+	opts := talosprovisioner.NewOptions().WithStorageHealthTimeout(5 * time.Minute)
+	enabled := talosprovisioner.NewProvisioner(nil, opts).WithLogWriter(io.Discard)
+
+	forbidden := fake.NewClientset()
+	forbidden.PrependReactor("get", "namespaces",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Resource: "namespaces"}, "longhorn-system",
+				errStubForbidden)
+		})
+	assert.False(t,
+		enabled.BuildStorageHealthProberOrWarnForTest(context.Background(), forbidden, "test"),
+		"enabled gate + detection error → degrade to no prober")
+}
+
+// TestLonghornDetected covers backend detection by namespace presence: present →
+// (true, nil); a clean NotFound → (false, nil); and any other lookup failure (RBAC,
+// transient) → (false, error) so the gate is not silently disabled.
 func TestLonghornDetected(t *testing.T) {
 	t.Parallel()
 
@@ -134,12 +172,28 @@ func TestLonghornDetected(t *testing.T) {
 	withNS := fake.NewClientset(&corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "longhorn-system"},
 	})
-	assert.True(t, prov.LonghornDetectedForTest(context.Background(), withNS),
-		"longhorn-system present → detected")
+	detected, err := prov.LonghornDetectedForTest(context.Background(), withNS)
+	require.NoError(t, err)
+	assert.True(t, detected, "longhorn-system present → detected")
 
 	withoutNS := fake.NewClientset()
-	assert.False(t, prov.LonghornDetectedForTest(context.Background(), withoutNS),
-		"longhorn-system absent → not detected")
+	detected, err = prov.LonghornDetectedForTest(context.Background(), withoutNS)
+	require.NoError(t, err, "a clean NotFound is not an error")
+	assert.False(t, detected, "longhorn-system absent → not detected")
+
+	// A non-NotFound lookup failure (e.g. RBAC withholding the namespace get) must
+	// propagate, so an enabled gate disables with a warning rather than silently
+	// treating the cluster as Longhorn-free.
+	forbidden := fake.NewClientset()
+	forbidden.PrependReactor("get", "namespaces",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Resource: "namespaces"}, "longhorn-system",
+				errStubForbidden)
+		})
+	detected, err = prov.LonghornDetectedForTest(context.Background(), forbidden)
+	require.Error(t, err, "an RBAC/transient lookup error must propagate")
+	assert.False(t, detected, "detection is false when the lookup failed")
 }
 
 // TestLonghornDegradedVolumes covers the robustness classification: only "degraded"

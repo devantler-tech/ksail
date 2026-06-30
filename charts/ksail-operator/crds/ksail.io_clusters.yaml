@@ -547,6 +547,8 @@ spec:
                           during the roll; on a fully drained pool with hard anti-affinity it times out
                           (naming the stuck volumes) rather than hanging. Example: "10m".
                         type: string
+                        x-kubernetes-validations:
+                        - rule: self.matches('^[0-9]+(ns|us|µs|ms|s|m|h)$')
                       version:
                         description: |-
                           Version pins the Talos OS (distribution) version used for cluster creation and

@@ -56,7 +56,15 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 	// "parse PEM block".
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
-	return p.rollingRebootAutoscalerServers(ctx, clientset, ordered, secretsSource, result)
+	// Autoscaler workers can hold Longhorn replicas too, so apply the same between-node
+	// storage-health gate (#5467) here when it is enabled — build the prober once and
+	// reuse it for every node, matching the primary roll (rollingApplyRebootChanges).
+	// It is nil when the gate is disabled or no replicated storage backend is detected.
+	storageProber := p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
+
+	return p.rollingRebootAutoscalerServers(
+		ctx, clientset, ordered, secretsSource, storageProber, result,
+	)
 }
 
 // rollingRebootAutoscalerServers reboots the given autoscaler servers in place, one
@@ -71,6 +79,7 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 	clientset kubernetes.Interface,
 	ordered []*hcloud.Server,
 	secretsSource talosconfig.Provider,
+	storageProber storageHealthProber,
 	result *clusterupdate.UpdateResult,
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter,
@@ -93,11 +102,15 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 			idx+1, len(ordered), server.Name,
 		)
 
-		// nil prober: the between-node storage-health gate (#5467) currently scopes to
-		// the primary cluster-update roll (rollingApplyRebootChanges); applying it to
-		// the autoscaler roll is a follow-up.
+		// storageProber gates progression to the next autoscaler node on Longhorn
+		// volume health, the same as the primary roll. It is nil (gate skipped) when
+		// the gate is disabled or no replicated storage backend is detected.
 		rebootErr := p.rollingRebootSingleNode(
-			ctx, clientset, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource, nil,
+			ctx,
+			clientset,
+			nodeWithRole{IP: serverIP, Role: RoleWorker},
+			secretsSource,
+			storageProber,
 		)
 
 		switch {

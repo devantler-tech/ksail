@@ -350,16 +350,7 @@ func (p *Provisioner) rollingApplyRebootChanges(
 	// unset) or no replicated storage backend is detected, in which case the gate
 	// no-ops. A construction error degrades gracefully: warn and proceed without the
 	// gate rather than aborting the roll.
-	var storageProber storageHealthProber
-	if p.storageHealthTimeout() > 0 {
-		storageProber, err = p.buildStorageHealthProber(ctx, clientset, clusterName)
-		if err != nil {
-			_, _ = fmt.Fprintf(p.logWriter,
-				"  ⚠ storage-health gate disabled: %v\n", err)
-
-			storageProber = nil
-		}
-	}
+	storageProber := p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,

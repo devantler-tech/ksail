@@ -818,11 +818,12 @@ func (p *Provisioner) WaitForStorageHealthyForTest(
 }
 
 // LonghornDetectedForTest exposes longhornDetected for unit testing the storage
-// backend detection.
+// backend detection, returning the detection result alongside any non-NotFound
+// lookup error.
 func (p *Provisioner) LonghornDetectedForTest(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-) bool {
+) (bool, error) {
 	return p.longhornDetected(ctx, clientset)
 }
 
@@ -859,4 +860,14 @@ func (p *Provisioner) BuildStorageHealthProberForTest(
 	prober, err := p.buildStorageHealthProber(ctx, clientset, clusterName)
 
 	return prober != nil, err
+}
+
+// BuildStorageHealthProberOrWarnForTest exercises the graceful-degrade wrapper shared
+// by the primary and autoscaler rolls, returning whether a (non-nil) prober was built.
+func (p *Provisioner) BuildStorageHealthProberOrWarnForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+) bool {
+	return p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName) != nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -66,17 +67,52 @@ func (p *Provisioner) storageHealthTimeout() time.Duration {
 	return 0
 }
 
+// buildStorageHealthProberOrWarn builds the between-node storage-health prober when
+// the gate is enabled (spec.cluster.talos.storageHealthTimeout > 0), degrading
+// gracefully on a construction error: it warns and returns nil so a probe-setup
+// failure (e.g. the storage backend briefly unreachable, or RBAC withholding the
+// namespace lookup) never aborts a roll. Returns nil when the gate is disabled or no
+// replicated storage backend is detected. Shared by the primary cluster-update roll
+// and the autoscaler roll so both apply the gate identically.
+func (p *Provisioner) buildStorageHealthProberOrWarn(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+) storageHealthProber {
+	if p.storageHealthTimeout() <= 0 {
+		return nil
+	}
+
+	prober, err := p.buildStorageHealthProber(ctx, clientset, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ storage-health gate disabled: %v\n", err)
+
+		return nil
+	}
+
+	return prober
+}
+
 // buildStorageHealthProber detects the cluster's replicated-storage backend and
 // returns a prober for it, or (nil, nil) when none is detected so the gate no-ops.
 // Only Longhorn is supported today; detection is by the presence of its namespace
 // rather than a hardcoded assumption, so the gate stays inert on clusters that do not
-// run it.
+// run it. A detection lookup that fails for any reason other than a clean NotFound
+// (RBAC, API unreachable, transient) is propagated rather than swallowed, so an
+// enabled gate surfaces the failure (and disables with a warning via
+// buildStorageHealthProberOrWarn) instead of silently treating it as "no Longhorn".
 func (p *Provisioner) buildStorageHealthProber(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	clusterName string,
 ) (storageHealthProber, error) {
-	if !p.longhornDetected(ctx, clientset) {
+	detected, err := p.longhornDetected(ctx, clientset)
+	if err != nil {
+		return nil, err
+	}
+
+	if !detected {
 		// (nil, nil) is the "no replicated storage backend detected" signal: a valid,
 		// expected outcome that disables the gate, not an error.
 		return nil, nil //nolint:nilnil
@@ -91,11 +127,23 @@ func (p *Provisioner) buildStorageHealthProber(
 }
 
 // longhornDetected reports whether the cluster runs Longhorn, by the presence of its
-// namespace.
-func (p *Provisioner) longhornDetected(ctx context.Context, clientset kubernetes.Interface) bool {
+// namespace. Only a clean NotFound means "no Longhorn" (false, nil); every other
+// lookup error (RBAC, API unreachable, transient) is returned so the caller does not
+// silently disable an enabled gate on a cluster that may well run Longhorn.
+func (p *Provisioner) longhornDetected(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) (bool, error) {
 	_, err := clientset.CoreV1().Namespaces().Get(ctx, longhornNamespace, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
 
-	return err == nil
+		return false, fmt.Errorf("detect longhorn namespace: %w", err)
+	}
+
+	return true, nil
 }
 
 // newDynamicClient builds a dynamic client for the cluster, resolving the kubeconfig

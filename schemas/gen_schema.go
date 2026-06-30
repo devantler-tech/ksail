@@ -104,6 +104,11 @@ func customizeSchema(schema *jsonschema.Schema) error {
 
 	// Walk schema tree once, applying all transformations.
 	walkSchema(schema, func(s *jsonschema.Schema) {
+		// Strip any controller-gen marker lines (e.g. +kubebuilder:validation:...) the
+		// Go-comment extractor folded into a description. Markers steer CRD generation,
+		// not this config schema, so they must never surface as user-facing docs.
+		s.Description = stripControllerGenMarkers(s.Description)
+
 		// Clear required everywhere (all fields use omitzero). The root spec is
 		// deliberately NOT required: the runtime treats an absent spec as
 		// all-defaults, and `ksail cluster init` scaffolds a ksail.yaml without
@@ -231,6 +236,30 @@ func supportedProviderValues(distribution v1alpha1.Distribution) []any {
 	}
 
 	return providers
+}
+
+// stripControllerGenMarkers removes controller-gen marker lines (a "+"-prefixed
+// directive such as +kubebuilder:validation:XValidation:...) that the Go-comment
+// extractor folds into a description verbatim. Those markers drive CRD generation, not
+// this configuration schema, so they are noise in a user-facing description. Only whole
+// lines whose first non-space rune is "+" are dropped, so ordinary prose is untouched.
+func stripControllerGenMarkers(description string) string {
+	if !strings.Contains(description, "+") {
+		return description
+	}
+
+	lines := strings.Split(description, "\n")
+	kept := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "+") {
+			continue
+		}
+
+		kept = append(kept, line)
+	}
+
+	return strings.TrimRight(strings.Join(kept, "\n"), "\n")
 }
 
 // walkSchema traverses the schema tree and calls fn on each node.

@@ -104,6 +104,7 @@ type OptionsTalos struct {
 	// is detected. The gate only helps when replicas have spare capacity to rebuild
 	// during the roll; on a fully drained pool with hard anti-affinity it times out
 	// (naming the stuck volumes) rather than hanging. Example: "10m".
+	//+kubebuilder:validation:XValidation:rule="self.matches('^[0-9]+(ns|us|µs|ms|s|m|h)$')"
 	StorageHealthTimeout metav1.Duration `json:"storageHealthTimeout,omitzero"`
 }
 
