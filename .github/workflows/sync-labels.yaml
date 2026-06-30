@@ -21,4 +21,4 @@ jobs:
         with:
           persist-credentials: false
       - name: 🔄 Sync labels
-        uses: devantler-tech/actions/sync-github-labels@172feec0374dfdb5d9777a12a7d4cd2291c03e08 # v7.1.1
+        uses: devantler-tech/actions/sync-github-labels@6a2f24aa5a859f7d0de66f9d0bde52254adba641 # v7.1.3
