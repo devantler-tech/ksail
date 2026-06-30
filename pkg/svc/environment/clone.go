@@ -1,0 +1,164 @@
+package environment
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+)
+
+// encryptedFileSuffix marks a SOPS-encrypted file whose ciphertext is cloned
+// byte-for-byte. Only its path is repointed to the destination environment;
+// re-encryption to that environment's recipients is out of scope for the clone
+// (the eventual command calls it out in --help).
+const encryptedFileSuffix = ".enc.yaml"
+
+// ErrSourceOverlayMissing is returned by CloneOverlay when repoRoot/srcRelDir does
+// not exist or is not a directory.
+var ErrSourceOverlayMissing = errors.New("source overlay directory not found")
+
+// CloneOverlay clones every file under repoRoot/srcRelDir into the destination
+// overlay implied by rewrites, applying the structured path+content rewrites to
+// each regular file and copying SOPS-encrypted *.enc.yaml files byte-for-byte
+// (their path is still repointed). It reuses [RewriteOverlayFile] for both the
+// per-file path and content rewrite, so the directory clone repoints
+// cluster_name/provider values, the clusters/<env>/ segment and clusters/<env>
+// content references exactly as the foundation already does — no second rewrite
+// implementation to drift.
+//
+// Existing destination files are preserved unless force is set
+// (fsutil.TryWriteFile semantics), and parent directories are created as needed.
+// It returns the repo-relative paths it actually wrote — a destination skipped
+// because it already exists (force is false) is excluded — in deterministic
+// (lexical) walk order. Source and destination paths are containment-checked
+// against repoRoot, so a srcRelDir or rewritten path with ".." segments or a
+// symlink escape is rejected (ErrSourceOverlayMissing / ErrPathOutsideBase) rather
+// than reading or writing outside the repository.
+func CloneOverlay(repoRoot, srcRelDir string, rewrites []Rewrite, force bool) ([]string, error) {
+	srcAbs := filepath.Join(repoRoot, srcRelDir)
+
+	// Containment guard: a srcRelDir with ".." segments or a symlinked overlay must
+	// not let the clone read from outside repoRoot.
+	if !fsutil.IsPathWithinDirectory(srcAbs, repoRoot) {
+		return nil, fmt.Errorf("%w: %s escapes the repository root",
+			ErrSourceOverlayMissing, srcRelDir)
+	}
+
+	info, err := os.Stat(srcAbs)
+	if err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("%w: %s", ErrSourceOverlayMissing, srcRelDir)
+	}
+
+	var written []string
+
+	walk := func(absPath string, dirEntry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if dirEntry.IsDir() {
+			return nil
+		}
+
+		newRelPath, content, cloneErr := cloneFile(repoRoot, srcAbs, absPath, rewrites)
+		if cloneErr != nil {
+			return cloneErr
+		}
+
+		wrote, writeErr := writeClone(repoRoot, newRelPath, content, force)
+		if writeErr != nil {
+			return writeErr
+		}
+
+		if wrote {
+			written = append(written, newRelPath)
+		}
+
+		return nil
+	}
+
+	err = filepath.WalkDir(srcAbs, walk)
+	if err != nil {
+		return nil, fmt.Errorf("cloning overlay %s: %w", srcRelDir, err)
+	}
+
+	return written, nil
+}
+
+// writeClone writes one cloned file's content to repoRoot/newRelPath, returning
+// whether a file was actually written. The destination is containment-checked
+// against repoRoot, and an existing file is preserved (wrote=false) unless force
+// is set — mirroring fsutil.TryWriteFile's skip semantics so the caller's
+// "paths written" list excludes skipped files.
+func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
+	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
+
+	// Lexical containment on the cleaned destination: filepath.Join collapses any
+	// ".." segments, so a rewritten path that escapes repoRoot yields a relative
+	// path starting with "..". (The destination's parents may not exist yet, so the
+	// symlink-resolving EvalCanonicalPath can't be used here; the source overlay was
+	// already canonicalised and contained above.)
+	rel, relErr := filepath.Rel(repoRoot, dest)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false, fmt.Errorf("destination %s escapes the repository root: %w",
+			newRelPath, fsutil.ErrPathOutsideBase)
+	}
+
+	// TryWriteFile returns the content (not a write-status), so decide up front
+	// whether it will skip: it skips iff the file exists and force is false.
+	if !force {
+		_, statErr := os.Stat(dest)
+		if statErr == nil {
+			return false, nil
+		}
+
+		if !errors.Is(statErr, os.ErrNotExist) {
+			return false, fmt.Errorf("checking destination %s: %w", newRelPath, statErr)
+		}
+	}
+
+	_, writeErr := fsutil.TryWriteFile(content, dest, force)
+	if writeErr != nil {
+		return false, fmt.Errorf("writing %s: %w", newRelPath, writeErr)
+	}
+
+	return true, nil
+}
+
+// cloneFile reads one source file and returns its destination repo-relative path
+// and the contents to write. A SOPS-encrypted *.enc.yaml file keeps its ciphertext
+// verbatim and only has its path repointed; every other file is rewritten through
+// [RewriteOverlayFile].
+func cloneFile(repoRoot, srcAbs, absPath string, rewrites []Rewrite) (string, string, error) {
+	raw, err := fsutil.ReadFileSafe(srcAbs, absPath)
+	if err != nil {
+		return "", "", fmt.Errorf("reading %s: %w", absPath, err)
+	}
+
+	relPath, err := filepath.Rel(repoRoot, absPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolving %s relative to repo root: %w", absPath, err)
+	}
+
+	// Normalise to forward slashes so the rewrites — which operate on '/'-delimited
+	// path tokens and clusters/<env> references — behave identically on every OS.
+	relPath = filepath.ToSlash(relPath)
+
+	if strings.HasSuffix(relPath, encryptedFileSuffix) {
+		// Path-only rewrite: an empty content argument keeps the content rewrite a
+		// no-op so the ciphertext is preserved exactly, while newRelPath is still
+		// repointed to the destination environment.
+		newRelPath, _, pathErr := RewriteOverlayFile(relPath, "", rewrites)
+		if pathErr != nil {
+			return "", "", pathErr
+		}
+
+		return newRelPath, string(raw), nil
+	}
+
+	return RewriteOverlayFile(relPath, string(raw), rewrites)
+}

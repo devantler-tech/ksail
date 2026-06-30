@@ -1,9 +1,8 @@
 // Package environment is the foundation for `ksail cluster add-environment
 // <name> --from <env>`, which clones an existing cluster environment overlay so
 // adding an environment to a multi-cluster ksail repository stops being a manual
-// `cp -R k8s/clusters/<env> k8s/clusters/<new>` + hand-edit recipe. It is
-// increment 1 of the multi-cluster / multi-provider GitOps scaffolding epic; see
-// ksail#5441 and ksail#5562.
+// `cp -R k8s/clusters/<env> k8s/clusters/<new>` + hand-edit recipe. It is part of
+// the multi-cluster / multi-provider GitOps scaffolding epic; see ksail#5441.
 //
 // # Design decision: structured rewrites, not string replace
 //
@@ -17,26 +16,29 @@
 // clone must rewrite specific, structured locations and leave everything else
 // byte-identical.
 //
-// This package provides the pure-logic primitives for that, fully unit-testable
-// with no filesystem or CLI surface:
+// This package provides the rewrite primitives and the directory-clone
+// orchestrator, fully unit-testable with no CLI surface:
 //
 //   - [Rewrite] describes one structured substitution.
 //   - [DeriveRewrites] computes what changes between two environments.
 //   - [RewriteOverlayFile] applies those rewrites to one cloned file's relative
 //     path and contents, preserving every untargeted byte.
+//   - [CloneOverlay] walks a source overlay directory and writes the rewritten
+//     clone, copying SOPS *.enc.yaml files byte-for-byte (path still repointed)
+//     and honouring fsutil's force/skip semantics.
 //
 // # Phased delivery
 //
 // The command is large, so it ships in independently-valuable slices:
 //
-//   - Foundation (this package): the structured-rewrite primitives — what changes
-//     between two environments and how it is applied to one file. Pure logic,
-//     fully unit-tested, needed by every later slice regardless of the eventual
-//     walk and CLI.
-//   - Next: the directory walk + write that clones k8s/clusters/<from>/** to
-//     k8s/clusters/<name>/** (honouring fsutil's force/skip semantics; SOPS
-//     *.enc.yaml copied as-is), and the ksail.<env>.yaml field repoint (name,
-//     context, config paths).
-//   - Then: the cobra `cluster add-environment` command and its generated-artifact
-//     refresh (cli-flags docs, help/toolgen snapshots).
+//   - Foundation: the structured-rewrite primitives — what changes between two
+//     environments and how it is applied to one file. Pure logic, fully
+//     unit-tested, needed by every later slice regardless of the eventual walk and
+//     CLI (ksail#5562).
+//   - Directory clone ([CloneOverlay]): the walk + write that clones
+//     k8s/clusters/<from>/** to k8s/clusters/<name>/** honouring fsutil's
+//     force/skip semantics, with SOPS *.enc.yaml copied as-is (ksail#5567).
+//   - Next: the ksail.<env>.yaml root-config repoint (name, context, config
+//     paths), the cobra `cluster add-environment` command, and its
+//     generated-artifact refresh (cli-flags docs, help/toolgen snapshots).
 package environment
