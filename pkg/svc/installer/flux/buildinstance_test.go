@@ -83,6 +83,23 @@ func TestBuildInstance_MinimalConfig(t *testing.T) {
 	assert.Equal(t, "FluxInstance", instance.Kind)
 	assert.Equal(t, "flux", instance.Name)
 	assert.Equal(t, "flux-system", instance.Namespace)
+
+	// Regression guard for ksail#5595: the distribution artifact must stay PINNED to
+	// a specific flux-operator-manifests version (a matched pair with the embedded
+	// chart) and must never float back to ":latest" — a floating manifests tag let an
+	// upstream Receiver-CRD change break every Flux bootstrap.
+	assert.NotContains(
+		t,
+		instance.Spec.Distribution.Artifact,
+		":latest",
+		"distribution artifact must be pinned, never floating :latest",
+	)
+	assert.Regexp(
+		t,
+		`^oci://ghcr\.io/controlplaneio-fluxcd/flux-operator-manifests:v\d+\.\d+\.\d+$`,
+		instance.Spec.Distribution.Artifact,
+		"distribution artifact must be a version-pinned flux-operator-manifests reference",
+	)
 }
 
 func TestBuildInstance_WithLocalRegistryAndWorkload(t *testing.T) {
