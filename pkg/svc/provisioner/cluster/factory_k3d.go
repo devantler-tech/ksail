@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
+	k3shetznerprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3shetzner"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"
 )
@@ -106,12 +107,53 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 	return provisioner, nil, nil
 }
 
-func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setup steps
+// createK3sHetznerProvisioner creates a native-k3s-on-Hetzner provisioner. It
+// resolves the node counts from the cluster spec and the k3s release from the
+// Dependabot-tracked default (converted to the INSTALL_K3S_VERSION form), then
+// builds the provisioner, which constructs the Hetzner provider from the cluster's
+// Hetzner options.
+func createK3sHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, any, error) {
+	controlPlanes := int(cluster.Spec.Cluster.ControlPlanes)
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	provisioner, err := k3shetznerprovisioner.NewProvisioner(
+		cluster.Name,
+		k3sInstallVersion(),
+		controlPlanes,
+		int(cluster.Spec.Cluster.Workers),
+		cluster.Spec.Provider.Hetzner,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create K3s Hetzner provisioner: %w", err)
+	}
+
+	return provisioner, nil, nil
+}
+
+// k3sInstallVersion returns the default k3s release in INSTALL_K3S_VERSION form
+// (e.g. "v1.36.1+k3s1"). DefaultK3sVersion returns the container-image tag form
+// ("v1.36.1-k3s1") sourced from the Dependabot-tracked Dockerfile; the install
+// script expects the GitHub-release form, which uses "+k3s" rather than "-k3s".
+func k3sInstallVersion() string {
+	return strings.Replace(k3dconfigmanager.DefaultK3sVersion(), "-k3s", "+k3s", 1)
+}
+
+//nolint:funlen,cyclop // sequential setup steps plus provider dispatch (Kubernetes/Hetzner/K3d).
+func (f DefaultFactory) createK3dProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	// Kubernetes provider: use k3k operator instead of Docker-based K3d
 	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
 		return f.createK3dKubernetesProvisioner(cluster)
+	}
+
+	// Hetzner provider: native k3s on Hetzner Cloud servers. The K3s × Hetzner
+	// combination is unselectable until the validation flip (#5514), so this path
+	// is gated; see the k3shetzner package.
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+		return createK3sHetznerProvisioner(cluster)
 	}
 
 	if f.DistributionConfig.K3d == nil {
