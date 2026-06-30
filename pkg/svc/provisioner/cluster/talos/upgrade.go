@@ -474,7 +474,10 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 		return nil
 	}
 
-	p.uncordonAfterUpgrade(ctx, req.clientset, nodeName)
+	uncordonErr := p.uncordonAfterUpgrade(ctx, req.clientset, nodeName)
+	if uncordonErr != nil {
+		return uncordonErr
+	}
 
 	// Gate progression to the next node on replicated-storage volume health so a
 	// one-replica-per-node volume is not faulted by rebooting consecutive replica
@@ -489,18 +492,19 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 }
 
 // uncordonAfterUpgrade waits for the upgraded node to report Ready, then uncordons
-// it. Both steps are best-effort: the OS upgrade already succeeded, so a readiness
-// or uncordon hiccup is warned rather than failing the roll (the next reconcile
-// re-evaluates schedulability).
+// it. Readiness gates progression: a node that does not return Ready within the
+// timeout fails the roll, so the next node is not rebooted while this one is still
+// down (the whole point of the cordon → drain → reboot → wait-Ready sequence). The
+// uncordon itself stays best-effort — a node that is back Ready but momentarily
+// fails to uncordon is recovered by the next reconcile and must not fail the roll.
 func (p *Provisioner) uncordonAfterUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
-) {
+) error {
 	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
 	if readyErr != nil {
-		_, _ = fmt.Fprintf(p.logWriter,
-			"    ⚠ %s did not report Ready before uncordon: %v\n", nodeName, readyErr)
+		return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
@@ -510,6 +514,8 @@ func (p *Provisioner) uncordonAfterUpgrade(
 		_, _ = fmt.Fprintf(p.logWriter,
 			"    ⚠ Failed to uncordon %s (best-effort): %v\n", nodeName, uncordonErr)
 	}
+
+	return nil
 }
 
 // k8sClientOrWarnForUpgrade builds the Kubernetes clientset used to drain nodes

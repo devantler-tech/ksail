@@ -31,13 +31,55 @@ func TestUncordonAfterUpgradeUncordonsReadyNode(t *testing.T) {
 	clientset := fake.NewClientset(node)
 	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
 
-	prov.UncordonAfterUpgradeForTest(context.Background(), clientset, "prod-worker-1")
+	uncordonErr := prov.UncordonAfterUpgradeForTest(
+		context.Background(),
+		clientset,
+		"prod-worker-1",
+	)
+	require.NoError(t, uncordonErr)
 
 	got, err := clientset.CoreV1().
 		Nodes().
 		Get(context.Background(), "prod-worker-1", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.False(t, got.Spec.Unschedulable, "node should be uncordoned after a successful upgrade")
+}
+
+// TestUncordonAfterUpgradeGatesOnReadiness asserts that a node which never reports
+// Ready after its upgrade fails the roll (so the next node is not rebooted while this
+// one is still down) and is left cordoned rather than uncordoned-and-advanced.
+func TestUncordonAfterUpgradeGatesOnReadiness(t *testing.T) {
+	t.Parallel()
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+			},
+		},
+	}
+	clientset := fake.NewClientset(node)
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	// A cancelled context makes the readiness poll fail fast instead of blocking for
+	// the full nodeReadinessTimeout, exercising the not-Ready gate path.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	uncordonErr := prov.UncordonAfterUpgradeForTest(ctx, clientset, "prod-worker-1")
+	require.Error(t, uncordonErr, "a node that never reports Ready must fail the roll")
+
+	got, err := clientset.CoreV1().
+		Nodes().
+		Get(context.Background(), "prod-worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.True(
+		t,
+		got.Spec.Unschedulable,
+		"a node that never became Ready must stay cordoned, not be uncordoned-and-advanced",
+	)
 }
 
 // TestK8sClientOrWarnForUpgradeNilOnUnreachableAPI asserts the upgrade roll degrades

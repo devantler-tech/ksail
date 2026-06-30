@@ -537,8 +537,8 @@ func (p *Provisioner) UncordonAfterUpgradeForTest(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
-) {
-	p.uncordonAfterUpgrade(ctx, clientset, nodeName)
+) error {
+	return p.uncordonAfterUpgrade(ctx, clientset, nodeName)
 }
 
 // K8sClientOrWarnForUpgradeForTest exposes k8sClientOrWarnForUpgrade for unit testing.
