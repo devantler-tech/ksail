@@ -93,8 +93,11 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 			idx+1, len(ordered), server.Name,
 		)
 
+		// nil prober: the between-node storage-health gate (#5467) currently scopes to
+		// the primary cluster-update roll (rollingApplyRebootChanges); applying it to
+		// the autoscaler roll is a follow-up.
 		rebootErr := p.rollingRebootSingleNode(
-			ctx, clientset, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource,
+			ctx, clientset, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource, nil,
 		)
 
 		switch {

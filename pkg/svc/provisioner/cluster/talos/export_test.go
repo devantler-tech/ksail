@@ -17,6 +17,8 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
@@ -786,4 +788,75 @@ func (p *Provisioner) PropagateAutoscalerBaselineForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+}
+
+// --- between-node storage-health gate (#5467) test seam ---
+
+// StorageHealthProberForTest is the test view of the unexported storageHealthProber
+// seam: a func returning the namespaced names of currently-unhealthy volumes.
+type StorageHealthProberForTest func(ctx context.Context) ([]string, error)
+
+// degradedVolumes makes StorageHealthProberForTest satisfy the storageHealthProber
+// seam so tests can stub volume health without a live cluster.
+func (f StorageHealthProberForTest) degradedVolumes(ctx context.Context) ([]string, error) {
+	return f(ctx)
+}
+
+// WaitForStorageHealthyForTest exercises the between-node storage-health gate with a
+// stubbed prober. A nil prober exercises the "no backend detected / gate disabled"
+// no-op path.
+func (p *Provisioner) WaitForStorageHealthyForTest(
+	ctx context.Context,
+	prober StorageHealthProberForTest,
+	timeout time.Duration,
+) error {
+	if prober == nil {
+		return p.waitForStorageHealthy(ctx, nil, timeout)
+	}
+
+	return p.waitForStorageHealthy(ctx, prober, timeout)
+}
+
+// LonghornDetectedForTest exposes longhornDetected for unit testing the storage
+// backend detection.
+func (p *Provisioner) LonghornDetectedForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) bool {
+	return p.longhornDetected(ctx, clientset)
+}
+
+// LonghornDegradedVolumesForTest exposes the Longhorn volume robustness
+// classification against a (fake) dynamic client.
+func LonghornDegradedVolumesForTest(
+	ctx context.Context,
+	client dynamic.Interface,
+) ([]string, error) {
+	prober := &longhornVolumeProber{client: client}
+
+	return prober.degradedVolumes(ctx)
+}
+
+// LonghornVolumeGVRForTest exposes the Longhorn Volume GroupVersionResource so tests
+// can register matching objects with the dynamic fake.
+func LonghornVolumeGVRForTest() schema.GroupVersionResource {
+	return longhornVolumeGVR()
+}
+
+// StorageHealthTimeoutForTest exposes the resolved gate timeout (0 = disabled).
+func (p *Provisioner) StorageHealthTimeoutForTest() time.Duration {
+	return p.storageHealthTimeout()
+}
+
+// BuildStorageHealthProberForTest exercises buildStorageHealthProber, returning
+// whether a (non-nil) prober was built alongside any error — so the "no backend
+// detected → no prober" branch is testable without a live cluster.
+func (p *Provisioner) BuildStorageHealthProberForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+) (bool, error) {
+	prober, err := p.buildStorageHealthProber(ctx, clientset, clusterName)
+
+	return prober != nil, err
 }

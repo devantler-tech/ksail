@@ -277,23 +277,36 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 	return ordered
 }
 
-// createK8sClient creates a Kubernetes clientset using the provisioner's kubeconfig
-// path and the appropriate context for the given cluster name. The kubeconfig path
-// is expanded and canonicalized for path safety.
-func (p *Provisioner) createK8sClient(clusterName string) (kubernetes.Interface, error) {
+// resolveKubeconfig expands and canonicalizes the provisioner's kubeconfig path and
+// resolves the context for clusterName (defaulting to "admin@<clusterName>"). It is
+// shared by createK8sClient and the dynamic client used by the storage-health gate so
+// both reach the same cluster the same way.
+func (p *Provisioner) resolveKubeconfig(clusterName string) (string, string, error) {
 	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
+		return "", "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+		return "", "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}
 
 	kubeconfigContext := p.options.KubeconfigContext
 	if kubeconfigContext == "" {
 		kubeconfigContext = "admin@" + clusterName
+	}
+
+	return canonicalPath, kubeconfigContext, nil
+}
+
+// createK8sClient creates a Kubernetes clientset using the provisioner's kubeconfig
+// path and the appropriate context for the given cluster name. The kubeconfig path
+// is expanded and canonicalized for path safety.
+func (p *Provisioner) createK8sClient(clusterName string) (kubernetes.Interface, error) {
+	canonicalPath, kubeconfigContext, err := p.resolveKubeconfig(clusterName)
+	if err != nil {
+		return nil, err
 	}
 
 	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
@@ -332,13 +345,29 @@ func (p *Provisioner) rollingApplyRebootChanges(
 	// same PKI, so any one is a valid source (mirrors applyInPlaceConfigChanges).
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
+	// Build the between-node storage-health prober once (it is reused for every node).
+	// It is nil when the gate is disabled (spec.cluster.talos.storageHealthTimeout
+	// unset) or no replicated storage backend is detected, in which case the gate
+	// no-ops. A construction error degrades gracefully: warn and proceed without the
+	// gate rather than aborting the roll.
+	var storageProber storageHealthProber
+	if p.storageHealthTimeout() > 0 {
+		storageProber, err = p.buildStorageHealthProber(ctx, clientset, clusterName)
+		if err != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  ⚠ storage-health gate disabled: %v\n", err)
+
+			storageProber = nil
+		}
+	}
+
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Rolling reboot for %s (%s)...\n",
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node, secretsSource)
+		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node, secretsSource, storageProber)
 		if rebootErr != nil {
 			recordFailedChange(result, node.Role, node.IP, rebootErr)
 
@@ -361,12 +390,15 @@ func (p *Provisioner) rollingApplyRebootChanges(
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
 // wait → uncordon sequence for a single node. secretsSource is a control-plane
 // config supplying the cluster PKI for the staged-config rebuild (see
-// stageNodeConfigForReboot).
+// stageNodeConfigForReboot). prober, when non-nil, gates progression to the next
+// node on replicated-storage volume health after the node is Ready and uncordoned
+// (see waitForStorageHealthy); a nil prober skips the gate.
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	node nodeWithRole,
 	secretsSource talosconfig.Provider,
+	prober storageHealthProber,
 ) error {
 	nodeName, err := p.resolveNodeName(ctx, clientset, node.IP)
 	if err != nil {
@@ -402,6 +434,15 @@ func (p *Provisioner) rollingRebootSingleNode(
 	uncordonErr := p.uncordonNode(ctx, clientset, nodeName)
 	if uncordonErr != nil {
 		return fmt.Errorf("uncordon: %w", uncordonErr)
+	}
+
+	// Before advancing to the next node, optionally wait for replicated-storage
+	// volumes to recover so a one-replica-per-node volume is not faulted by rebooting
+	// consecutive replica holders before a rebuild completes (#5467). No-op when the
+	// gate is disabled or no backend was detected (prober == nil).
+	storageErr := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
+	if storageErr != nil {
+		return fmt.Errorf("storage health gate: %w", storageErr)
 	}
 
 	return nil
