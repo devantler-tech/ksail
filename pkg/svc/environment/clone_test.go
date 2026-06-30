@@ -157,12 +157,15 @@ func TestCloneOverlay_SkipsExistingWithoutForce(t *testing.T) {
 
 	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
 
-	_, err := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", rewrites, false)
+	written, err := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", rewrites, false)
 	require.NoError(t, err)
 
 	// Without force the existing destination file is preserved.
 	assert.Equal(t, "SENTINEL\n",
 		readClone(t, repoRoot, "k8s/clusters/staging/kustomization.yaml"))
+	// The skipped file is excluded from the returned "paths written" list.
+	assert.NotContains(t, written, "k8s/clusters/staging/kustomization.yaml")
+	assert.Contains(t, written, "k8s/clusters/staging/bootstrap/kustomization.yaml")
 }
 
 func TestCloneOverlay_OverwritesExistingWithForce(t *testing.T) {
@@ -208,6 +211,19 @@ func TestCloneOverlay_SourceIsFileNotDirectory(t *testing.T) {
 
 	// A path that exists but is a file, not a directory, is rejected.
 	_, err := environment.CloneOverlay(repoRoot, "ksail.prod.yaml", rewrites, false)
+	require.ErrorIs(t, err, environment.ErrSourceOverlayMissing)
+}
+
+func TestCloneOverlay_SourceTraversalRejected(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+
+	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
+
+	// A srcRelDir with ".." segments that escapes repoRoot must be rejected even
+	// if it resolves to a real directory outside the repo.
+	_, err := environment.CloneOverlay(repoRoot, "../../etc", rewrites, false)
 	require.ErrorIs(t, err, environment.ErrSourceOverlayMissing)
 }
 

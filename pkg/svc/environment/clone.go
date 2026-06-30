@@ -32,10 +32,21 @@ var ErrSourceOverlayMissing = errors.New("source overlay directory not found")
 //
 // Existing destination files are preserved unless force is set
 // (fsutil.TryWriteFile semantics), and parent directories are created as needed.
-// It returns the repo-relative paths written, in deterministic (lexical) walk
-// order, and ErrSourceOverlayMissing if the source overlay does not exist.
+// It returns the repo-relative paths it actually wrote — a destination skipped
+// because it already exists (force is false) is excluded — in deterministic
+// (lexical) walk order. Source and destination paths are containment-checked
+// against repoRoot, so a srcRelDir or rewritten path with ".." segments or a
+// symlink escape is rejected (ErrSourceOverlayMissing / ErrPathOutsideBase) rather
+// than reading or writing outside the repository.
 func CloneOverlay(repoRoot, srcRelDir string, rewrites []Rewrite, force bool) ([]string, error) {
 	srcAbs := filepath.Join(repoRoot, srcRelDir)
+
+	// Containment guard: a srcRelDir with ".." segments or a symlinked overlay must
+	// not let the clone read from outside repoRoot.
+	if !fsutil.IsPathWithinDirectory(srcAbs, repoRoot) {
+		return nil, fmt.Errorf("%w: %s escapes the repository root",
+			ErrSourceOverlayMissing, srcRelDir)
+	}
 
 	info, err := os.Stat(srcAbs)
 	if err != nil || !info.IsDir() {
@@ -58,14 +69,14 @@ func CloneOverlay(repoRoot, srcRelDir string, rewrites []Rewrite, force bool) ([
 			return cloneErr
 		}
 
-		dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
-
-		_, writeErr := fsutil.TryWriteFile(content, dest, force)
+		wrote, writeErr := writeClone(repoRoot, newRelPath, content, force)
 		if writeErr != nil {
-			return fmt.Errorf("writing %s: %w", newRelPath, writeErr)
+			return writeErr
 		}
 
-		written = append(written, newRelPath)
+		if wrote {
+			written = append(written, newRelPath)
+		}
 
 		return nil
 	}
@@ -76,6 +87,46 @@ func CloneOverlay(repoRoot, srcRelDir string, rewrites []Rewrite, force bool) ([
 	}
 
 	return written, nil
+}
+
+// writeClone writes one cloned file's content to repoRoot/newRelPath, returning
+// whether a file was actually written. The destination is containment-checked
+// against repoRoot, and an existing file is preserved (wrote=false) unless force
+// is set — mirroring fsutil.TryWriteFile's skip semantics so the caller's
+// "paths written" list excludes skipped files.
+func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
+	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
+
+	// Lexical containment on the cleaned destination: filepath.Join collapses any
+	// ".." segments, so a rewritten path that escapes repoRoot yields a relative
+	// path starting with "..". (The destination's parents may not exist yet, so the
+	// symlink-resolving EvalCanonicalPath can't be used here; the source overlay was
+	// already canonicalised and contained above.)
+	rel, relErr := filepath.Rel(repoRoot, dest)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false, fmt.Errorf("destination %s escapes the repository root: %w",
+			newRelPath, fsutil.ErrPathOutsideBase)
+	}
+
+	// TryWriteFile returns the content (not a write-status), so decide up front
+	// whether it will skip: it skips iff the file exists and force is false.
+	if !force {
+		_, statErr := os.Stat(dest)
+		if statErr == nil {
+			return false, nil
+		}
+
+		if !errors.Is(statErr, os.ErrNotExist) {
+			return false, fmt.Errorf("checking destination %s: %w", newRelPath, statErr)
+		}
+	}
+
+	_, writeErr := fsutil.TryWriteFile(content, dest, force)
+	if writeErr != nil {
+		return false, fmt.Errorf("writing %s: %w", newRelPath, writeErr)
+	}
+
+	return true, nil
 }
 
 // cloneFile reads one source file and returns its destination repo-relative path
