@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
 // ErrInvalidRewrite is returned by RewriteOverlayFile when a rewrite is malformed
@@ -97,15 +99,50 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 //
 // The connection `context:` (e.g. `admin@<env>` for Talos, `kind-<env>` for Kind)
 // is deliberately NOT rewritten here: its format is distribution-specific, so
-// repointing it correctly needs the distribution, which the eventual
-// `cluster add-environment` command resolves. A cloned config therefore keeps the
-// source's context until the new cluster is created (or the user edits it); this
-// boundary is called out so the foundation stays distribution-agnostic.
+// repointing it correctly needs the distribution. [DeriveContextRewrite] provides
+// that distribution-aware rewrite, which the `cluster add-environment` command
+// appends to this set once it has resolved the source environment's distribution.
+// Keeping the two separate lets this foundation stay distribution-agnostic.
 func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
 	return append(
 		DeriveRewrites(srcName, dstName, dstProvider, srcProvider),
 		Rewrite{Kind: MetaFieldValue, Field: "name", Old: srcName, New: dstName},
 	)
+}
+
+// DeriveContextRewrite returns the distribution-aware substitution that repoints a
+// cloned root config's connection `context:` from the source environment to the
+// destination, plus a bool reporting whether a rewrite applies. It is the
+// distribution-specific complement to [DeriveConfigRewrites]: the command layer
+// resolves the source environment's distribution and appends this rewrite to the
+// distribution-agnostic set.
+//
+// The context value is derived from the distribution's own naming convention via
+// [v1alpha1.Distribution.ContextName] (Talos `admin@<name>`, Vanilla `kind-<name>`,
+// K3s `k3d-<name>`, VCluster `vcluster-docker_<name>`, KWOK `kwok-<name>`), so the
+// derivation never drifts from the rest of KSail. The rewrite is value-exact (like
+// the `name` rewrite in [DeriveConfigRewrites]): it only fires when the config's
+// `context:` scalar equals the source context exactly, so a config carrying a
+// hand-edited or post-creation context is left untouched. This also makes it safe
+// for EKS, whose `ContextName` yields only the `<name>.eksctl.io` suffix because the
+// full `<iam>@<cluster>.<region>.eksctl.io` context is unknown until the cluster
+// exists — the value-exact match simply no-ops against the real eksctl context.
+//
+// ok is false when either context name is empty (an empty environment name or an
+// unknown distribution), in which case the returned Rewrite is the zero value and
+// must not be applied.
+func DeriveContextRewrite(
+	distribution v1alpha1.Distribution,
+	srcName, dstName string,
+) (Rewrite, bool) {
+	srcContext := distribution.ContextName(srcName)
+	dstContext := distribution.ContextName(dstName)
+
+	if srcContext == "" || dstContext == "" {
+		return Rewrite{}, false
+	}
+
+	return Rewrite{Kind: MetaFieldValue, Field: "context", Old: srcContext, New: dstContext}, true
 }
 
 // RewriteOverlayFile applies the rewrites to one cloned overlay file, returning the
