@@ -5,6 +5,13 @@ import (
 	"unicode"
 )
 
+// ConfigPath is containerd's default configuration path — where the daemon reads
+// its config.toml at start-up and where a provisioner drops the output of
+// [RenderContainerdConfig] so the runtime picks up the systemd cgroup driver
+// before it is enabled. It is exported so a delivery layer (e.g. a cloud-init
+// write_files entry) can address the file without re-hardcoding the path.
+const ConfigPath = "/etc/containerd/config.toml"
+
 // header is prepended to the rendered config so an operator inspecting a node
 // can see the file is ksail-managed rather than hand-written. It mirrors the
 // managed-file header the sibling kubeadmbootstrap renderer emits.
