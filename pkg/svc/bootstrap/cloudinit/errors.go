@@ -28,19 +28,20 @@ var (
 	)
 
 	// ErrInvalidAptSource is returned when an [AptSource] has a blank or multi-line
-	// Name or Source, a Key containing a NUL byte, or a Name that duplicates
-	// another source's. cloud-init keys the sources map by Name and writes the
-	// single Source line to a .list file, so both must be present and one line, and
-	// the names must be unique.
+	// Name or Source, a Name containing a path separator, a Key containing a NUL
+	// byte, or a Name that duplicates another source's. cloud-init keys the sources
+	// map by Name and writes the single Source line to a .list file named after it,
+	// so Name must be a unique one-line filename and Source must be present.
 	ErrInvalidAptSource = errors.New(
-		"cloud-init: an apt source needs a unique single-line Name and Source",
+		"cloud-init: an apt source needs a unique single-line Name (no path separator) and Source",
 	)
 
 	// ErrInvalidFile is returned when a [File] has a non-absolute or multi-line
-	// Path or a Content containing a NUL byte. cloud-init resolves a write_files
-	// path with no defined working directory, so it must be absolute.
+	// Path, a Content containing a NUL byte, or an explicit Permissions that is not
+	// an octal mode. cloud-init resolves a write_files path with no defined working
+	// directory (so it must be absolute) and fails the boot on a malformed mode.
 	ErrInvalidFile = errors.New(
-		"cloud-init: a file needs an absolute single-line Path and NUL-free Content",
+		"cloud-init: a file needs an absolute single-line Path, NUL-free Content, and an octal mode",
 	)
 
 	// ErrPathNotAbsolute is returned when ScriptPath or LogPath is set to a

@@ -409,7 +409,7 @@ func runErrorCases(t *testing.T, cases []errorCase) {
 	}
 }
 
-func TestBuildUserDataDeclarativeErrors(t *testing.T) {
+func TestBuildUserDataPackageErrors(t *testing.T) {
 	t.Parallel()
 
 	tests := []errorCase{
@@ -423,6 +423,15 @@ func TestBuildUserDataDeclarativeErrors(t *testing.T) {
 			cfg:     cloudinitbootstrap.Config{Packages: []string{"kube\x00let"}},
 			wantErr: cloudinitbootstrap.ErrInvalidPackage,
 		},
+	}
+
+	runErrorCases(t, tests)
+}
+
+func TestBuildUserDataAptSourceErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []errorCase{
 		{
 			name: "apt source with blank name",
 			cfg: cloudinitbootstrap.Config{
@@ -465,9 +474,33 @@ func TestBuildUserDataDeclarativeErrors(t *testing.T) {
 			},
 			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
 		},
+		{
+			name: "apt source name with path separator",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{
+					{Name: "../evil", Source: "deb https://x /"},
+				},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
 	}
 
 	runErrorCases(t, tests)
+}
+
+func TestBuildUserDataAcceptsThreeDigitMode(t *testing.T) {
+	t.Parallel()
+
+	// A three-digit octal mode is valid cloud-init and must pass through verbatim.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Files: []cloudinitbootstrap.File{{Path: "/etc/x", Permissions: "600", Content: "x"}},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	require.Len(t, cfg.WriteFiles, 1)
+	assert.Equal(t, "600", cfg.WriteFiles[0].Permissions)
 }
 
 func TestBuildUserDataFileErrors(t *testing.T) {
@@ -492,6 +525,24 @@ func TestBuildUserDataFileErrors(t *testing.T) {
 			name: "file with NUL in content",
 			cfg: cloudinitbootstrap.Config{
 				Files: []cloudinitbootstrap.File{{Path: "/etc/x", Content: "a\x00b"}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidFile,
+		},
+		{
+			name: "file with non-octal permissions",
+			cfg: cloudinitbootstrap.Config{
+				Files: []cloudinitbootstrap.File{
+					{Path: "/etc/x", Permissions: "999", Content: "x"},
+				},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidFile,
+		},
+		{
+			name: "file with wrong-length mode",
+			cfg: cloudinitbootstrap.Config{
+				Files: []cloudinitbootstrap.File{
+					{Path: "/etc/x", Permissions: "60", Content: "x"},
+				},
 			},
 			wantErr: cloudinitbootstrap.ErrInvalidFile,
 		},

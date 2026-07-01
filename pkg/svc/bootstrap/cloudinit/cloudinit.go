@@ -75,7 +75,8 @@ type Config struct {
 type AptSource struct {
 	// Name is the cloud-init sources-map key; cloud-init writes the source line to
 	// /etc/apt/sources.list.d/<Name>.list. Required; a single line with no NUL
-	// byte, and unique across a Config's AptSources (see [ErrInvalidAptSource]).
+	// byte or path separator (it is a filename, not a path), and unique across a
+	// Config's AptSources (see [ErrInvalidAptSource]).
 	Name string
 	// Source is the one-line APT source entry, e.g.
 	// "deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /".
@@ -94,8 +95,9 @@ type AptSource struct {
 type File struct {
 	// Path is the absolute destination path (see [ErrInvalidFile]). Required.
 	Path string
-	// Permissions is the octal mode string cloud-init applies, e.g. "0600".
-	// Optional; defaults to [DefaultFilePermissions].
+	// Permissions is the octal mode string cloud-init applies, e.g. "0600" (three
+	// or four octal digits). Optional; defaults to [DefaultFilePermissions]. An
+	// explicit non-octal value is rejected (see [ErrInvalidFile]).
 	Permissions string
 	// Content is the file's contents, written verbatim. May be empty or span
 	// multiple lines; only a NUL byte is rejected.
@@ -315,7 +317,11 @@ func (cfg Config) validatedAptSources() (map[string]aptSource, error) {
 	sources := make(map[string]aptSource, len(cfg.AptSources))
 
 	for _, src := range cfg.AptSources {
-		if isBlankOrMultiline(src.Name) || isBlankOrMultiline(src.Source) {
+		// Name becomes the /etc/apt/sources.list.d/<Name>.list filename, so a path
+		// separator would let it escape that directory — reject it, not just blanks.
+		if isBlankOrMultiline(src.Name) ||
+			strings.ContainsAny(src.Name, `/\`) ||
+			isBlankOrMultiline(src.Source) {
 			return nil, ErrInvalidAptSource
 		}
 
@@ -334,8 +340,9 @@ func (cfg Config) validatedAptSources() (map[string]aptSource, error) {
 }
 
 // validatedFiles returns cfg.Files as write_files entries, rejecting a file with
-// a non-absolute or multi-line Path or a Content with a NUL byte, and applying
-// [DefaultFilePermissions] to an entry with no explicit mode.
+// a non-absolute or multi-line Path, a Content with a NUL byte, or an explicit
+// Permissions that is not an octal mode, and applying [DefaultFilePermissions]
+// to an entry with no explicit mode.
 func (cfg Config) validatedFiles() ([]writeFile, error) {
 	files := make([]writeFile, 0, len(cfg.Files))
 
@@ -345,6 +352,12 @@ func (cfg Config) validatedFiles() ([]writeFile, error) {
 		}
 
 		if strings.ContainsRune(file.Content, '\x00') {
+			return nil, ErrInvalidFile
+		}
+
+		// An explicit mode is passed verbatim to cloud-init, which fails the boot if
+		// it is not a valid octal string — reject a malformed one at build time.
+		if file.Permissions != "" && !isOctalMode(file.Permissions) {
 			return nil, ErrInvalidFile
 		}
 
@@ -367,6 +380,22 @@ func (cfg Config) validatedFiles() ([]writeFile, error) {
 // newline or NUL byte — the rejection shared by an apt source's Name and Source.
 func isBlankOrMultiline(s string) bool {
 	return strings.TrimSpace(s) == "" || strings.ContainsAny(s, "\n\x00")
+}
+
+// isOctalMode reports whether s is a cloud-init file mode: three or four octal
+// digits (e.g. "644" or "0600"), which is what write_files accepts.
+func isOctalMode(s string) bool {
+	if len(s) != 3 && len(s) != 4 {
+		return false
+	}
+
+	for _, r := range s {
+		if r < '0' || r > '7' {
+			return false
+		}
+	}
+
+	return true
 }
 
 // buildScript assembles the POSIX boot script: a shebang, strict-mode flags, an

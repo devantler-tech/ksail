@@ -23,8 +23,9 @@
 //
 // Everything here is pure: it performs no I/O and reaches no network, so it is
 // fully unit-testable without a cluster or a Hetzner account. Note that
-// cloud-init user_data is readable by anyone holding the Hetzner API token, so a
-// secret embedded in a directive (such as the k3s node token in a command, or an
-// apt source's key) is exposed to that audience; that is inherent to user_data
-// delivery, not a property of this package.
+// cloud-init user_data is readable by anyone holding the Hetzner API token, so
+// sensitive material embedded in a directive (such as the k3s node token in a
+// command) is exposed to that audience; that is inherent to user_data delivery,
+// not a property of this package. An apt source's Key is a public signing key,
+// so exposing it carries no such risk.
 package cloudinitbootstrap
