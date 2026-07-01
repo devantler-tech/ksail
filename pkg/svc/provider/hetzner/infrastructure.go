@@ -58,6 +58,43 @@ func (p *Provider) EnsureNetwork(
 	return network, nil
 }
 
+// defaultServerSubnetCIDR is the historical server subnet carved out of the
+// default network range; kept so existing default-CIDR clusters reconcile
+// unchanged.
+const defaultServerSubnetCIDR = "10.0.1.0/24"
+
+// subnetMaskBits is the prefix length of the server subnet derived from a
+// custom network range.
+const subnetMaskBits = 24
+
+// ipv4Bits is the bit length of an IPv4 mask, used to recognise IPv4 ranges.
+const ipv4Bits = 32
+
+// serverSubnetCIDR derives the server subnet from the network CIDR. The
+// default network keeps its historical 10.0.1.0/24 subnet; a custom network
+// uses its first /24 (a Hetzner subnet must sit inside the network range, and
+// the full range would leave no room for further subnets). A custom range
+// that is already /24 or smaller — or not IPv4 — is used whole.
+func serverSubnetCIDR(cidr string) (string, error) {
+	if cidr == v1alpha1.DefaultHetznerNetworkCIDR {
+		return defaultServerSubnetCIDR, nil
+	}
+
+	_, ipRange, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", fmt.Errorf("invalid network CIDR %s: %w", cidr, err)
+	}
+
+	ones, bits := ipRange.Mask.Size()
+	if bits != ipv4Bits || ones >= subnetMaskBits {
+		return ipRange.String(), nil
+	}
+
+	firstSlash24 := net.IPNet{IP: ipRange.IP, Mask: net.CIDRMask(subnetMaskBits, bits)}
+
+	return firstSlash24.String(), nil
+}
+
 // ensureSubnet adds the server subnet to the network when it is not already present.
 // It reconciles a partial-failure state (network created but AddSubnet failed) on a
 // retry and is idempotent: a subnet that already exists on the network is left as-is.
@@ -68,10 +105,9 @@ func (p *Provider) ensureSubnet(
 	cidr string,
 ) error {
 	// Add a subnet for the servers
-	subnetCIDR := "10.0.1.0/24"
-	if cidr != v1alpha1.DefaultHetznerNetworkCIDR {
-		// Use first /24 of the provided range
-		subnetCIDR = cidr
+	subnetCIDR, err := serverSubnetCIDR(cidr)
+	if err != nil {
+		return err
 	}
 
 	_, subnetIPRange, err := net.ParseCIDR(subnetCIDR)
