@@ -4,63 +4,25 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kubeadmbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/kubeadm"
 )
 
-// Create provisions a kubeadm cluster on Hetzner Cloud. In the current increment it
-// guards against an existing cluster, ensures the shared infrastructure (network,
-// firewall, placement group, SSH key), and composes the per-node cloud-init
-// user_data, then stops at the live-bring-up boundary: creating the servers (which
-// needs boot-image resolution), the runtime join sequencing, and retrieving the
-// kubeconfig land with the Hetzner system-test lane (see [ErrLiveBringUpNotImplemented],
-// devantler-tech/ksail#5515). Multi-node topologies return
-// [ErrMultiNodeNotImplemented]. The Vanilla × Hetzner combination is unselectable
-// until the validation flip (#5514), so this path is gated.
+// Create provisions a kubeadm cluster on Hetzner Cloud. It runs the shared Hetzner
+// create flow ([hetznerbase.Base.RunCreate]) — guard against an existing cluster,
+// reject multi-node topologies, ensure the shared infrastructure, and compose the
+// per-node cloud-init user_data — stopping at the live-bring-up boundary
+// ([ErrLiveBringUpNotImplemented], devantler-tech/ksail#5515). Only the node token
+// (generateNodeToken) and the user_data composition (composeNodes) are
+// kubeadm-specific; they are handed to the shared flow. The Vanilla × Hetzner
+// combination is unselectable until the validation flip (#5514), so this path is
+// gated.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
-	// The exists/multi-node guards and ensure-infra step are an intentional sibling
-	// of k3shetzner.Create; only the user_data composition below differs (a future
-	// dedup could extract a shared base — see #5650).
-	// jscpd:ignore-start
-	clusterName := p.resolveName(name)
-
-	exists, err := p.infra.NodesExist(ctx, clusterName)
+	err := p.RunCreate(ctx, name, p.composeNodes, generateNodeToken)
 	if err != nil {
-		return fmt.Errorf("check existing nodes: %w", err)
+		return fmt.Errorf("provision Vanilla × Hetzner cluster: %w", err)
 	}
 
-	if exists {
-		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
-	}
-
-	if p.controlPlanes > 1 || p.agents > 0 {
-		return ErrMultiNodeNotImplemented
-	}
-
-	err = p.ensureInfrastructure(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	token, err := generateNodeToken()
-	if err != nil {
-		return err
-	}
-	// jscpd:ignore-end
-
-	nodes, err := p.buildNodes(clusterName, token)
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintf(
-		p.logWriter,
-		"Prepared cloud-init bootstrap for %d node(s); server creation and "+
-			"kubeconfig retrieval are tracked by #5515\n",
-		len(nodes),
-	)
-
-	return ErrLiveBringUpNotImplemented
+	return nil
 }
 
 // buildNodes composes the ordered per-node cloud-init user_data for the cluster's
@@ -75,8 +37,8 @@ func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, err
 		Plan: kubeadmbootstrap.PlanInput{
 			Token:             token,
 			KubernetesVersion: p.kubernetesVersion,
-			ControlPlaneCount: p.controlPlanes,
-			AgentCount:        p.agents,
+			ControlPlaneCount: p.ControlPlanes,
+			AgentCount:        p.Agents,
 		},
 	})
 	if err != nil {
@@ -86,112 +48,14 @@ func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, err
 	return nodes, nil
 }
 
-// ensureInfrastructure creates (or reuses) the cluster's shared Hetzner
-// resources: the private network, the firewall, the placement group, and the SSH
-// key when one is configured.
-//
-// ensureInfrastructure and the Delete/Start/Stop/List/Exists delegations below are
-// an intentional sibling of k3shetzner: the two provisioners share the same Hetzner
-// lifecycle and differ only in user_data composition (a future dedup could extract
-// a shared base — see #5650).
-//
-// jscpd:ignore-start
-func (p *Provisioner) ensureInfrastructure(ctx context.Context, clusterName string) error {
-	cidr := p.opts.NetworkCIDR
-	if cidr == "" {
-		cidr = v1alpha1.DefaultHetznerNetworkCIDR
-	}
-
-	_, err := p.infra.EnsureNetwork(ctx, clusterName, cidr)
+// composeNodes composes the kubeadm per-node cloud-init user_data and returns the
+// node count, adapting buildNodes to the shared create flow's composeNodes callback
+// ([hetznerbase.Base.RunCreate]).
+func (p *Provisioner) composeNodes(clusterName, token string) (int, error) {
+	nodes, err := p.buildNodes(clusterName, token)
 	if err != nil {
-		return fmt.Errorf("ensure network: %w", err)
+		return 0, err
 	}
 
-	_, err = p.infra.EnsureFirewall(ctx, clusterName, p.opts.AllowedCIDRs)
-	if err != nil {
-		return fmt.Errorf("ensure firewall: %w", err)
-	}
-
-	_, err = p.infra.EnsurePlacementGroup(
-		ctx,
-		clusterName,
-		p.opts.PlacementGroupStrategy.String(),
-		p.opts.PlacementGroup,
-	)
-	if err != nil {
-		return fmt.Errorf("ensure placement group: %w", err)
-	}
-
-	if p.opts.SSHKeyName != "" {
-		_, err = p.infra.GetSSHKey(ctx, p.opts.SSHKeyName)
-		if err != nil {
-			return fmt.Errorf("get SSH key: %w", err)
-		}
-	}
-
-	return nil
+	return len(nodes), nil
 }
-
-// Delete removes the cluster's servers. It is a no-op (nil) when the cluster's
-// network does not exist, mirroring the k3s × Hetzner delete guard.
-func (p *Provisioner) Delete(ctx context.Context, name string) error {
-	clusterName := p.resolveName(name)
-
-	networkExists, err := p.infra.NetworkExists(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("check network: %w", err)
-	}
-
-	if !networkExists {
-		return nil
-	}
-
-	err = p.infra.DeleteNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("delete nodes: %w", err)
-	}
-
-	return nil
-}
-
-// Start starts the cluster's servers.
-func (p *Provisioner) Start(ctx context.Context, name string) error {
-	err := p.infra.StartNodes(ctx, p.resolveName(name))
-	if err != nil {
-		return fmt.Errorf("start nodes: %w", err)
-	}
-
-	return nil
-}
-
-// Stop stops the cluster's servers.
-func (p *Provisioner) Stop(ctx context.Context, name string) error {
-	err := p.infra.StopNodes(ctx, p.resolveName(name))
-	if err != nil {
-		return fmt.Errorf("stop nodes: %w", err)
-	}
-
-	return nil
-}
-
-// List returns the names of all clusters the Hetzner provider manages.
-func (p *Provisioner) List(ctx context.Context) ([]string, error) {
-	clusters, err := p.infra.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list clusters: %w", err)
-	}
-
-	return clusters, nil
-}
-
-// Exists reports whether servers exist for the named cluster.
-func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
-	exists, err := p.infra.NodesExist(ctx, p.resolveName(name))
-	if err != nil {
-		return false, fmt.Errorf("check nodes exist: %w", err)
-	}
-
-	return exists, nil
-}
-
-// jscpd:ignore-end
