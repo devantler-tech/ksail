@@ -141,13 +141,19 @@ func TestResolverChartCacheConcurrentSingleRender(t *testing.T) {
 
 	var waitGroup sync.WaitGroup
 
+	// Each goroutine writes its own slot, so no synchronization is needed to
+	// collect the results; every caller must observe the single cached manifest.
+	manifests := make([]string, goroutines)
+	errs := make([]error, goroutines)
+
 	waitGroup.Add(goroutines)
 
-	for range goroutines {
+	for index := range goroutines {
 		go func() {
 			defer waitGroup.Done()
 
-			_, _ = render.NewHelmChartResolver(client, render.WithChartCache(cache)).
+			manifests[index], errs[index] = render.
+				NewHelmChartResolver(client, render.WithChartCache(cache)).
 				Render(context.Background(), chartRefRelease(), source)
 		}()
 	}
@@ -156,16 +162,28 @@ func TestResolverChartCacheConcurrentSingleRender(t *testing.T) {
 
 	assert.Equal(t, int64(1), client.calls.Load(),
 		"concurrent identical renders must collapse to one TemplateChart call")
+
+	for index := range goroutines {
+		require.NoErrorf(t, errs[index], "goroutine %d must not error", index)
+		assert.Equalf(t, "render-1", manifests[index],
+			"goroutine %d must observe the single cached manifest", index)
+	}
 }
 
 // BenchmarkResolverChartCacheHit measures the cache-hit path (key build + map
-// lookup) that replaces a full chart template on a repeat render. The first
-// iteration primes the cache; the rest are hits.
+// lookup) that replaces a full chart template on a repeat render. The cache is
+// primed before the timer resets, so every measured iteration is a hit.
 func BenchmarkResolverChartCacheHit(b *testing.B) {
 	client := &countingClient{}
 	resolver := render.NewHelmChartResolver(client, render.WithChartCache(render.NewChartCache()))
 	source := ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"})
 	release := chartRefRelease()
+
+	// Prime the cache so the timed loop measures only cache hits.
+	_, err := resolver.Render(context.Background(), release, source)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
