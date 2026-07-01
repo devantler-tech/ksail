@@ -3,10 +3,10 @@ package kubeadmbootstrap
 import (
 	"fmt"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/internal/sliceutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -211,7 +211,7 @@ func renderJoin(cfg NodeConfig) (string, error) {
 			BootstrapToken: bootstrapTokenDiscovery{
 				APIServerEndpoint: cfg.APIServerEndpoint,
 				Token:             cfg.Token,
-				CACertHashes:      sortedCopy(cfg.CACertHashes),
+				CACertHashes:      sliceutil.SortedNonEmpty(cfg.CACertHashes),
 			},
 		},
 	}
@@ -236,7 +236,7 @@ func newNetworking(podSubnet, serviceSubnet string) *networking {
 // newAPIServerConfig returns an *apiServerConfig when any cert SAN is set, or nil
 // so the apiServer key is omitted entirely.
 func newAPIServerConfig(certSANs []string) *apiServerConfig {
-	sans := sortedCopy(certSANs)
+	sans := sliceutil.SortedNonEmpty(certSANs)
 	if len(sans) == 0 {
 		return nil
 	}
@@ -361,7 +361,7 @@ func validateAPIServerEndpoint(endpoint string) error {
 // validateCACertHashes requires at least one pin and rejects any that is not in
 // the "sha256:<hex>" form kubeadm's token discovery expects.
 func validateCACertHashes(hashes []string) error {
-	pins := sortedCopy(hashes)
+	pins := sliceutil.SortedNonEmpty(hashes)
 	if len(pins) == 0 {
 		return ErrMissingCACertHashes
 	}
@@ -393,25 +393,4 @@ func validCACertHash(pin string) bool {
 	}
 
 	return true
-}
-
-// sortedCopy returns a sorted copy of values with empty entries dropped, so the
-// rendered list is deterministic and free of blank items. It never mutates the
-// caller's slice and returns nil for an all-empty input so the key is omitted.
-func sortedCopy(values []string) []string {
-	out := make([]string, 0, len(values))
-
-	for _, value := range values {
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	sort.Strings(out)
-
-	return out
 }

@@ -3,8 +3,8 @@ package k3sbootstrap
 import (
 	"fmt"
 	"net/url"
-	"sort"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/internal/sliceutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -81,8 +81,8 @@ func RenderConfig(cfg NodeConfig) (string, error) {
 	// Server-only options are validated empty for agents, so copying them
 	// unconditionally for the two server roles is sufficient.
 	if cfg.Role != RoleAgent {
-		rendered.TLSSAN = sortedNonEmpty(cfg.TLSSANs)
-		rendered.Disable = sortedNonEmpty(cfg.Disable)
+		rendered.TLSSAN = sliceutil.SortedNonEmpty(cfg.TLSSANs)
+		rendered.Disable = sliceutil.SortedNonEmpty(cfg.Disable)
 		rendered.WriteKubeconfigMode = cfg.WriteKubeconfigMode
 	}
 
@@ -169,27 +169,4 @@ func validateServerURL(serverURL string) error {
 	}
 
 	return nil
-}
-
-// sortedNonEmpty returns a sorted copy of values with empty entries dropped, so
-// the rendered list is deterministic and free of blank items. It never mutates
-// the caller's slice and returns nil for an all-empty input so the YAML key is
-// omitted. (Distinct from [sortedCopy], which preserves length for the
-// install-command renderer.)
-func sortedNonEmpty(values []string) []string {
-	out := make([]string, 0, len(values))
-
-	for _, value := range values {
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	sort.Strings(out)
-
-	return out
 }
