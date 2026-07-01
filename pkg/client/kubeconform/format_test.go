@@ -13,20 +13,43 @@ import (
 // (err113 requires a static error value rather than an inline errors.New).
 var errBoom = errors.New("boom")
 
-// TestFormatFailure exercises each identity branch of the failure formatter:
-// a namespaced resource (Kind/Namespace/Name), a cluster-scoped resource
-// (Kind/Name), and a document with no usable signature (detail only); plus the
-// attribution branches that append " (from <source>)" when the resource's identity
-// is present in the attribution map (and leave the message unchanged otherwise).
-func TestFormatFailure(t *testing.T) {
+// formatCase is a single FormatFailure table entry.
+type formatCase struct {
+	name        string
+	bytes       string
+	attribution map[string]string
+	want        string
+}
+
+// runFormatCases asserts FormatFailure over a table of cases.
+func runFormatCases(t *testing.T, tests []formatCase) {
+	t.Helper()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			res := validator.Result{
+				Resource: resource.Resource{Bytes: []byte(testCase.bytes)},
+				Err:      errBoom,
+				Status:   validator.Error,
+			}
+
+			got := kubeconform.FormatFailure(res, testCase.attribution)
+			if got != testCase.want {
+				t.Fatalf("FormatFailure() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+// TestFormatFailureIdentity exercises each identity branch of the failure formatter
+// with no attribution: a namespaced resource (Kind/Namespace/Name), a cluster-scoped
+// resource (Kind/Name), and a document with no usable signature (detail only).
+func TestFormatFailureIdentity(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		bytes       string
-		attribution map[string]string
-		want        string
-	}{
+	runFormatCases(t, []formatCase{
 		{
 			name: "namespaced resource is prefixed with Kind/Namespace/Name",
 			bytes: `apiVersion: v1
@@ -54,6 +77,17 @@ metadata:
 `,
 			want: "boom",
 		},
+	})
+}
+
+// TestFormatFailureAttribution exercises the attribution branch that appends
+// " (from <source>)" when the resource's identity is present in the attribution map,
+// and leaves the message unchanged when the map targets a different resource or the
+// resource carries no usable signature.
+func TestFormatFailureAttribution(t *testing.T) {
+	t.Parallel()
+
+	runFormatCases(t, []formatCase{
 		{
 			name: "matching attribution appends the source layer",
 			bytes: `apiVersion: v1
@@ -87,22 +121,5 @@ metadata:
 			attribution: map[string]string{"ConfigMap/apps/web": "HelmRelease flux-system/app"},
 			want:        "boom",
 		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			res := validator.Result{
-				Resource: resource.Resource{Bytes: []byte(testCase.bytes)},
-				Err:      errBoom,
-				Status:   validator.Error,
-			}
-
-			got := kubeconform.FormatFailure(res, testCase.attribution)
-			if got != testCase.want {
-				t.Fatalf("FormatFailure() = %q, want %q", got, testCase.want)
-			}
-		})
-	}
+	})
 }
