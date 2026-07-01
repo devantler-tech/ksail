@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kwok/pkg/consts"
-	"sigs.k8s.io/kwok/pkg/kwokctl/k8s"
+	"sigs.k8s.io/kwok/pkg/kwokctl/components"
 	"sigs.k8s.io/kwok/pkg/utils/version"
 )
 
@@ -42,11 +42,12 @@ func TestControlPlaneImageTagsMatchKwokDefaults(t *testing.T) {
 	kubeTag := version.AddPrefixV(consts.KubeVersion)
 
 	// etcd tracks the version KWOK maps the Kubernetes minor release to, exactly
-	// as KWOK's own setKwokctlEtcdConfig does: k8s.GetEtcdVersion(<minor>).
+	// as KWOK's own setKwokctlEtcdConfig does: components.GetEtcdVersion(<minor>)
+	// (moved from pkg/kwokctl/k8s in kwok v0.8.0).
 	kubeVersion, err := version.ParseVersion(consts.KubeVersion)
 	require.NoError(t, err, "kwok consts.KubeVersion must be valid semver")
 
-	etcdTag := k8s.GetEtcdVersion(kubeMinor(kubeVersion))
+	etcdTag := components.GetEtcdVersion(kubeMinor(kubeVersion))
 
 	// kwok-controller tracks the released image version KSail pins in provisioner.go.
 	kwokTag := kwokprovisioner.KwokControllerImageVersionForTest
@@ -69,7 +70,7 @@ func TestControlPlaneImageTagsMatchKwokDefaults(t *testing.T) {
 }
 
 // kubeMinor returns the Kubernetes minor release as an int, mirroring KWOK's own
-// parseRelease (pkg/config/vars.go) that feeds k8s.GetEtcdVersion. The minor of a
+// parseRelease (pkg/config/vars.go) that feeds components.GetEtcdVersion. The minor of a
 // Kubernetes release is always small and non-negative, so the conversion is safe.
 func kubeMinor(kubeVersion version.Version) int {
 	const minorMax = 1 << 30 // guards the uint64→int conversion against absurd input.

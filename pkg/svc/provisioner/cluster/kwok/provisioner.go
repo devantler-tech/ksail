@@ -27,10 +27,10 @@ import (
 	kwoklog "sigs.k8s.io/kwok/pkg/log"
 )
 
-// kwokControllerImageVersion is the released KWOK image version to use.
-// We pin to v0.7.0 because our Go dependency uses a main-branch
-// pseudo-version whose embedded version (v0.8.0) has no published images.
-const kwokControllerImageVersion = "v0.7.0"
+// kwokControllerImageVersion is the released KWOK image version to use. It
+// matches the sigs.k8s.io/kwok module version pinned in go.mod so the embedded
+// kwokctl and the controller image it requests agree.
+const kwokControllerImageVersion = "v0.8.0"
 
 // kwokControllerImage is the full image reference for the KWOK controller.
 const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVersion

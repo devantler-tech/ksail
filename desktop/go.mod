@@ -424,8 +424,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20260407060928-11b94ed970f2 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/itchyny/gojq v0.12.18 // indirect
-	github.com/itchyny/timefmt-go v0.1.7 // indirect
+	github.com/itchyny/gojq v0.12.19 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.7.8 // indirect
@@ -709,8 +709,7 @@ require (
 	github.com/wagoodman/go-progress v0.0.0-20260303201901-10176f79b2c0 // indirect
 	github.com/wailsapp/wails/webview2 v1.0.24 // indirect
 	github.com/wzshiming/ctc v1.2.3 // indirect
-	github.com/wzshiming/getch v0.0.0-20201023133301-8e758c21cf27 // indirect
-	github.com/wzshiming/httpseek v0.5.0 // indirect
+	github.com/wzshiming/httpseek v0.6.1 // indirect
 	github.com/wzshiming/winseq v0.0.0-20200720163736-7fa652d2b50e // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
@@ -814,12 +813,11 @@ require (
 	k8s.io/component-base v0.36.2 // indirect
 	k8s.io/component-helpers v0.36.2 // indirect
 	k8s.io/cri-api v0.36.1 // indirect
-	k8s.io/cri-client v0.36.0 // indirect
+	k8s.io/cri-client v0.36.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-aggregator v0.36.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
-	k8s.io/kube-scheduler v0.36.1 // indirect
 	k8s.io/kubectl v0.36.2 // indirect
 	k8s.io/kubelet v0.36.1 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
@@ -841,7 +839,7 @@ require (
 	sigs.k8s.io/knftables v0.0.21 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
-	sigs.k8s.io/kwok v0.7.1-0.20260414082732-bea15031f3ec // indirect
+	sigs.k8s.io/kwok v0.8.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
