@@ -50,4 +50,9 @@ var (
 	// A cluster may have zero agents (control-plane nodes are schedulable), but a
 	// negative count is meaningless.
 	ErrInvalidAgentCount = errors.New("k3s plan: agent count must not be negative")
+	// ErrInvalidServerURL is returned by the config renderer ([RenderConfig]) when a
+	// joining node's ServerURL is not a well-formed https URL with a host. k3s joins
+	// its supervisor over https, so a URL without an https scheme and a host would
+	// never connect.
+	ErrInvalidServerURL = errors.New("k3s: server URL must be an https URL with a host")
 )
