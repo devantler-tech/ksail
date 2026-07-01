@@ -126,7 +126,7 @@ func (c *Client) validateData(
 	return c.validateWithRetry(ctx, func() error {
 		results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
 
-		return c.processResults(results)
+		return c.processResults(results, opts.Attribution)
 	})
 }
 
@@ -157,12 +157,14 @@ func (c *Client) validateWithRetry(ctx context.Context, validate func() error) e
 // that, when validating a stream of many manifests (e.g. a whole Kustomize + Helm render),
 // the message points at the offending resource instead of surfacing a bare schema error.
 // The caller is responsible for including any file/source context in the wrapping error.
-func (c *Client) processResults(results []validator.Result) error {
+// attribution optionally maps a resource identity to a source descriptor so a failure
+// can be traced to the layer that produced it (see formatFailure); a nil map is fine.
+func (c *Client) processResults(results []validator.Result, attribution map[string]string) error {
 	var errDetails []string
 
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
-			errDetails = append(errDetails, formatFailure(res))
+			errDetails = append(errDetails, formatFailure(res, attribution))
 		}
 	}
 
@@ -175,16 +177,25 @@ func (c *Client) processResults(results []validator.Result) error {
 
 // formatFailure renders a single failing result as "<identity>: <detail>", falling
 // back to just the detail when the resource signature is unavailable (e.g. a document
-// missing apiVersion/kind). Preserving the original detail keeps existing error
-// substrings intact for callers that match on them.
-func formatFailure(res validator.Result) string {
+// missing apiVersion/kind). When attribution carries an entry for the resource's
+// identity, its source descriptor is appended as " (from <source>)" so a failure in a
+// multi-layer render is traced to the layer that produced it. Preserving the original
+// detail keeps existing error substrings intact for callers that match on them.
+func formatFailure(res validator.Result, attribution map[string]string) string {
 	detail := fmt.Sprintf("%v", res.Err)
 
-	if identity := resourceIdentity(res); identity != "" {
-		return identity + ": " + detail
+	identity := resourceIdentity(res)
+	if identity == "" {
+		return detail
 	}
 
-	return detail
+	message := identity + ": " + detail
+
+	if source := attribution[identity]; source != "" {
+		message += " (from " + source + ")"
+	}
+
+	return message
 }
 
 // resourceIdentity returns a "<Kind>/<Namespace>/<Name>" (or "<Kind>/<Name>" for
@@ -216,6 +227,13 @@ type ValidationOptions struct {
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
 	IgnoreMissingSchemas bool
+	// Attribution optionally maps a resource identity ("Kind/Namespace/Name", or
+	// "Kind/Name" for cluster-scoped resources) to a human-readable source descriptor
+	// (e.g. "HelmRelease flux-system/app"). When a failing resource's identity is
+	// present, its source is appended to the failure message so a validation error in
+	// a multi-layer render points at the originating layer. A nil map (the default)
+	// disables attribution and leaves failure messages unchanged.
+	Attribution map[string]string
 }
 
 // createValidator creates a kubeconform validator with the given options.

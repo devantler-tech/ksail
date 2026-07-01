@@ -19,6 +19,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
 )
@@ -646,12 +647,28 @@ func (v *kustomizationValidator) validate(ctx context.Context, kustDir string) e
 // it without output (for parallel execution). The kustomize build error is
 // returned unwrapped so simplifyBuildError can strip its verbose prefix.
 func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir string) error {
-	data, err := v.manifests(ctx, kustDir)
+	data, attribution, err := v.manifests(ctx, kustDir)
 	if err != nil {
 		return err
 	}
 
-	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, v.opts)
+	// Attach per-call attribution without mutating the shared v.opts, which
+	// validate fans out concurrently across kustomizations (see the -race guard
+	// TestValidateRendersConcurrentlyNoRace). A shallow copy is enough: the other
+	// fields are read-only during validation.
+	opts := v.opts
+
+	if attribution != nil {
+		clone := kubeconform.ValidationOptions{}
+		if v.opts != nil {
+			clone = *v.opts
+		}
+
+		clone.Attribution = attribution
+		opts = &clone
+	}
+
+	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, opts)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
 	}
@@ -659,26 +676,91 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	return nil
 }
 
-// manifests returns the validation input: the Helm-rendered output when
-// rendering is enabled, otherwise the Flux-substituted kustomize build output.
-func (v *kustomizationValidator) manifests(ctx context.Context, kustDir string) ([]byte, error) {
+// manifests returns the validation input — the Helm-rendered output when rendering
+// is enabled, otherwise the Flux-substituted kustomize build output — together with
+// a resource-identity→source attribution map derived from the render provenance
+// (nil when rendering is disabled or nothing is attributable).
+func (v *kustomizationValidator) manifests(
+	ctx context.Context,
+	kustDir string,
+) ([]byte, map[string]string, error) {
 	if v.renderer != nil {
 		result, err := v.renderer.expand(ctx, kustDir)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		v.sink.add(result.Degradations)
 
-		return result.Bytes(), nil
+		return result.Bytes(), attributionFromDocuments(result.Documents), nil
 	}
 
 	output, err := v.kustomize.Build(ctx, kustDir)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
+		return nil, nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
 	}
 
-	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil
+	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil, nil
+}
+
+// attributionFromDocuments maps each rendered document's identity to a source
+// descriptor ("HelmRelease <namespace>/<name>") so kubeconform validation failures
+// can be traced to the originating HelmRelease layer. Documents that came verbatim
+// from the input stream (OriginStream) carry no source and are omitted. When two
+// distinct sources render the same identity the attribution is ambiguous, so that
+// identity is dropped rather than mis-attributed. Returns nil when nothing is
+// attributable, which leaves failure messages unchanged downstream.
+func attributionFromDocuments(docs []render.Document) map[string]string {
+	sources := make(map[string]string, len(docs))
+	ambiguous := make(map[string]struct{})
+
+	for _, doc := range docs {
+		if doc.Provenance.Origin != render.OriginRendered ||
+			doc.Provenance.SourceHelmRelease == "" {
+			continue
+		}
+
+		identity := documentIdentity(doc)
+		if identity == "" {
+			continue
+		}
+
+		source := "HelmRelease " + doc.Provenance.SourceHelmRelease
+		if existing, ok := sources[identity]; ok && existing != source {
+			ambiguous[identity] = struct{}{}
+
+			continue
+		}
+
+		sources[identity] = source
+	}
+
+	for identity := range ambiguous {
+		delete(sources, identity)
+	}
+
+	if len(sources) == 0 {
+		return nil
+	}
+
+	return sources
+}
+
+// documentIdentity builds the "Kind/Namespace/Name" (or "Kind/Name" for cluster-scoped
+// resources) key used to match a rendered document against the resource identity
+// kubeconform reports for a validation failure. It returns "" when the document lacks a
+// Kind or Name, mirroring the kubeconform formatter's fallback so unkeyable documents
+// are simply left unattributed.
+func documentIdentity(doc render.Document) string {
+	if doc.Kind == "" || doc.Name == "" {
+		return ""
+	}
+
+	if doc.Namespace != "" {
+		return doc.Kind + "/" + doc.Namespace + "/" + doc.Name
+	}
+
+	return doc.Kind + "/" + doc.Name
 }
 
 // validateFileSilent validates a single YAML file without output (for parallel execution).

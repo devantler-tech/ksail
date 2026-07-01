@@ -30,6 +30,11 @@ var (
 	ExportTypedPlaceholderValue   = fluxsubst.TypedPlaceholderValue   //nolint:gochecknoglobals // test export
 )
 
+// ExportAttributionFromDocuments exposes attributionFromDocuments so external-package
+// tests can assert the render-provenance→failure-attribution mapping (layer tagging,
+// stream-origin skipping, and ambiguous-identity dropping) without a full render run.
+var ExportAttributionFromDocuments = attributionFromDocuments //nolint:gochecknoglobals // test export
+
 // ExportDebounceState is an exported type alias for the workloadwatch debounce
 // state. The debounce/poll machinery moved to pkg/svc/workloadwatch; the shims
 // below delegate to its exported API so existing command-package tests keep
