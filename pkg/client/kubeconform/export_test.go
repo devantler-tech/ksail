@@ -6,6 +6,11 @@ import "time"
 // ValidateWithRetry exposes validateWithRetry for black-box tests.
 var ValidateWithRetry = (*Client).validateWithRetry
 
+// FormatFailure exposes formatFailure so black-box tests can assert the
+// resource-identity prefixing across the namespaced, cluster-scoped, and
+// no-signature branches without depending on kubeconform's status flow.
+var FormatFailure = formatFailure
+
 // SetRetryConfig overrides the internal retry-tuning fields for black-box tests.
 func (c *Client) SetRetryConfig(maxAttempts int, baseWait, maxWait time.Duration) {
 	c.maxRetryAttempts = maxAttempts
