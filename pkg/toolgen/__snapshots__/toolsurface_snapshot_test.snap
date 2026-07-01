@@ -2,6 +2,7 @@
 [TestToolSurfaceSnapshot - 1]
 cluster_read
 cluster_write
+project_write
 tenant_write
 workload_read
 workload_write
@@ -359,9 +360,8 @@ workload_write
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nadd-environment: Clone an existing cluster environment into a new one\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\ninit: Initialize a new project\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
+        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\ninit: Initialize a new project\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
         "enum": [
-          "add-environment",
           "backup",
           "create",
           "delete",
@@ -432,16 +432,12 @@ workload_write
         "type": "string"
       },
       "force": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: add-environment, delete, init)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: delete, init)",
         "type": "boolean"
       },
       "force-drain": {
         "description": "Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction... (applies to: update)",
         "type": "boolean"
-      },
-      "from": {
-        "description": "Source environment to clone from (required) (applies to: add-environment)",
-        "type": "string"
       },
       "gitops-engine": {
         "default": "None",
@@ -458,7 +454,7 @@ workload_write
       },
       "kubeconfig": {
         "default": "~/.kube/config",
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete, init, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "kubernetes-version": {
@@ -2116,6 +2112,58 @@ workload_write
     },
     "required": [
       "workload_command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/project_write - 1]
+{
+  "name": "project_write",
+  "title": "Project Write",
+  "description": "Manage GitOps project files",
+  "commandPath": "ksail project",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "command",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "command": {
+        "description": "The subcommand to execute. Options:\nadd-environment: Clone an existing cluster environment into a new one",
+        "enum": [
+          "add-environment"
+        ],
+        "type": "string"
+      },
+      "force": {
+        "description": "Overwrite existing destination files",
+        "type": "boolean"
+      },
+      "from": {
+        "description": "Source environment to clone from (required)",
+        "type": "string"
+      },
+      "provider": {
+        "description": "Provider for the new environment (defaults to the source provider)",
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
     ],
     "type": "object"
   }

@@ -4,8 +4,16 @@ Manage the GitOps project files (the on-disk project structure) without contacti
 
 Usage:
   project [flags]
+  project [command]
+
+Available Commands:
+  add-environment Clone an existing cluster environment into a new one
+  completion      Generate the autocompletion script for the specified shell
+  help            Help about any command
 
 Flags:
   -h, --help   help for project
+
+Use "project [command] --help" for more information about a command.
 
 ---

@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster/oidc"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
 	"github.com/spf13/cobra"
 )
 
@@ -86,7 +87,7 @@ func NewClusterCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(NewInitCmd())
-	cmd.AddCommand(NewAddEnvironmentCmd())
+	cmd.AddCommand(newDeprecatedAddEnvironmentCmd())
 	cmd.AddCommand(NewCreateCmd())
 	cmd.AddCommand(NewUpdateCmd())
 	cmd.AddCommand(NewDeleteCmd())
@@ -102,6 +103,21 @@ func NewClusterCmd() *cobra.Command {
 	cmd.AddCommand(NewSwitchCmd())
 	cmd.AddCommand(NewRepairCmd(nil))
 	cmd.AddCommand(oidc.NewOIDCCmd())
+
+	return cmd
+}
+
+// newDeprecatedAddEnvironmentCmd returns the add-environment command as a hidden,
+// deprecated alias under `cluster`. The command moved to `ksail project
+// add-environment` (issue #5626); this alias keeps the previously released
+// `ksail cluster add-environment` working for one deprecation cycle, printing a
+// notice that points at the new location. It is Hidden so it stays out of help,
+// the generated docs, and the MCP/chat tool surface (toolgen skips hidden
+// commands) — the canonical `project add-environment` is the only surfaced form.
+func newDeprecatedAddEnvironmentCmd() *cobra.Command {
+	cmd := project.NewAddEnvironmentCmd()
+	cmd.Hidden = true
+	cmd.Deprecated = `use "ksail project add-environment" instead`
 
 	return cmd
 }

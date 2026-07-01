@@ -1,4 +1,4 @@
-package cluster
+package project
 
 import (
 	"errors"
@@ -17,6 +17,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
 	"github.com/spf13/cobra"
 )
+
+// permissionWrite is the annotations.AnnotationPermission value that marks a
+// command as state-modifying (and therefore requiring user confirmation).
+const permissionWrite = "write"
 
 // clustersDirSegment is the conventional sub-directory under the source directory
 // that holds per-environment cluster overlays (sourceDir/clusters/<env>/), so a
@@ -52,10 +56,10 @@ repointed; re-encrypt them to the new environment's recipients afterwards with
 
 Examples:
   # Clone the "prod" environment into a new "staging" environment
-  ksail cluster add-environment staging --from prod
+  ksail project add-environment staging --from prod
 
   # Clone "prod" into "dev" on a different provider, overwriting any existing files
-  ksail cluster add-environment dev --from prod --provider Docker --force`
+  ksail project add-environment dev --from prod --provider Docker --force`
 
 // NewAddEnvironmentCmd creates and returns the add-environment command.
 func NewAddEnvironmentCmd() *cobra.Command {
