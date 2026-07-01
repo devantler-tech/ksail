@@ -18,6 +18,10 @@ import (
 // [ErrMultiNodeNotImplemented]. The Vanilla × Hetzner combination is unselectable
 // until the validation flip (#5514), so this path is gated.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
+	// The exists/multi-node guards and ensure-infra step are an intentional sibling
+	// of k3shetzner.Create; only the user_data composition below differs (a future
+	// dedup could extract a shared base — see #5650).
+	// jscpd:ignore-start
 	clusterName := p.resolveName(name)
 
 	exists, err := p.infra.NodesExist(ctx, clusterName)
@@ -42,6 +46,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	// jscpd:ignore-end
 
 	nodes, err := p.buildNodes(clusterName, token)
 	if err != nil {
@@ -84,6 +89,13 @@ func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, err
 // ensureInfrastructure creates (or reuses) the cluster's shared Hetzner
 // resources: the private network, the firewall, the placement group, and the SSH
 // key when one is configured.
+//
+// ensureInfrastructure and the Delete/Start/Stop/List/Exists delegations below are
+// an intentional sibling of k3shetzner: the two provisioners share the same Hetzner
+// lifecycle and differ only in user_data composition (a future dedup could extract
+// a shared base — see #5650).
+//
+// jscpd:ignore-start
 func (p *Provisioner) ensureInfrastructure(ctx context.Context, clusterName string) error {
 	cidr := p.opts.NetworkCIDR
 	if cidr == "" {
@@ -181,3 +193,5 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 
 	return exists, nil
 }
+
+// jscpd:ignore-end

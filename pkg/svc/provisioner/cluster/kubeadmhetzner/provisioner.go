@@ -43,6 +43,10 @@ func NewProvisioner(
 	controlPlanes, agents int,
 	opts v1alpha1.OptionsHetzner,
 ) (*Provisioner, error) {
+	// Intentional sibling of k3shetzner.NewProvisioner: both build the shared Hetzner
+	// provider from options and initialise the same fields; a future dedup could
+	// extract a shared base (see #5650).
+	// jscpd:ignore-start
 	provider, _, err := hetzner.NewProviderFromOptions(opts)
 	if err != nil {
 		return nil, fmt.Errorf("create Hetzner provider: %w", err)
@@ -57,6 +61,7 @@ func NewProvisioner(
 		agents:            agents,
 		logWriter:         os.Stdout,
 	}, nil
+	// jscpd:ignore-end
 }
 
 // resolveName returns name when non-empty, otherwise the provisioner's configured

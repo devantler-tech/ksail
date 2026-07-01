@@ -13,6 +13,12 @@ import (
 // methods this provisioner depends on. It matches the k3s × Hetzner provisioner's
 // seam — the two share the same Hetzner infrastructure lifecycle and differ only
 // in the per-node user_data they compose.
+//
+// Intentional sibling of k3shetzner's hetznerInfra seam; the two share this Hetzner
+// infrastructure subset by design (a future dedup could extract a shared base — see
+// #5650).
+//
+// jscpd:ignore-start
 type hetznerInfra interface {
 	// EnsureNetwork creates (or returns the existing) private network for the cluster.
 	EnsureNetwork(ctx context.Context, clusterName, cidr string) (*hcloud.Network, error)
@@ -43,6 +49,8 @@ type hetznerInfra interface {
 	// ListAllClusters returns the names of all clusters the provider manages.
 	ListAllClusters(ctx context.Context) ([]string, error)
 }
+
+// jscpd:ignore-end
 
 // staticHetznerInfraCheck asserts at compile time that the concrete Hetzner
 // provider satisfies the subset the provisioner depends on.
