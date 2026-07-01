@@ -142,6 +142,7 @@ func TestRenderContainerdConfigRejectsMalformedSandboxImage(t *testing.T) {
 		"newline":        "registry.k8s.io/pause:3.10\n",
 		"tab":            "registry.k8s.io/pause:\t3.10",
 		"control-char":   "registry.k8s.io/pause:3.10\x00",
+		"backslash":      `registry.k8s.io\pause:3.10`,
 	}
 
 	for name, image := range cases {

@@ -87,16 +87,16 @@ func RenderContainerdConfig(cfg ContainerdConfig) (string, error) {
 
 // validateSandboxImage accepts an empty image (the sandbox_image key is omitted)
 // and otherwise rejects any reference that carries a space, a control character
-// (including a newline), or a double quote — none of which a valid image
-// reference contains, and any of which would break the quoted TOML string the
-// value is embedded in.
+// (including a newline), a double quote, or a backslash — none of which a valid
+// image reference contains, and any of which would break the quoted TOML string
+// the value is embedded in (a lone backslash starts an escape sequence).
 func validateSandboxImage(image string) error {
 	if image == "" {
 		return nil
 	}
 
 	for _, char := range image {
-		if char == '"' || unicode.IsSpace(char) || unicode.IsControl(char) {
+		if char == '"' || char == '\\' || unicode.IsSpace(char) || unicode.IsControl(char) {
 			return ErrInvalidSandboxImage
 		}
 	}
