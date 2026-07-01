@@ -23,14 +23,21 @@ const renderedManifestPerm = 0o600
 // actually applies: Kustomize build, Flux variable substitution, then in-process
 // Helm rendering of HelmReleases. It is shared by the validate and scan commands.
 type gitopsRenderer struct {
-	kustomize *kustomize.Client
+	kustomize  *kustomize.Client
+	chartCache *render.ChartCache
 }
 
 // newGitOpsRenderer constructs a renderer. The kustomize client is stateless and
 // safe to share across goroutines; the Helm template client is created per
-// kustomization in expand (see below).
+// kustomization in expand (see below). The chart cache is created once here so a
+// chart referenced by several kustomizations in this run is templated once; it
+// is scoped to this renderer (one run) so a floating chart version can't go
+// stale across runs.
 func newGitOpsRenderer() *gitopsRenderer {
-	return &gitopsRenderer{kustomize: kustomize.NewClient()}
+	return &gitopsRenderer{
+		kustomize:  kustomize.NewClient(),
+		chartCache: render.NewChartCache(),
+	}
 }
 
 // expand builds, substitutes, and Helm-renders one kustomization directory. The
@@ -55,7 +62,10 @@ func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Res
 	expanded := fluxsubst.ExpandFluxSubstitutions(output.Bytes())
 
 	result, err := render.Expand(ctx, expanded, render.Options{
-		Resolver: render.NewHelmChartResolver(helmClient),
+		Resolver: render.NewHelmChartResolver(
+			helmClient,
+			render.WithChartCache(g.chartCache),
+		),
 	})
 	if err != nil {
 		return render.Result{}, fmt.Errorf("expand HelmReleases: %w", err)
