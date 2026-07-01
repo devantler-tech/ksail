@@ -24,12 +24,14 @@ const packageRepoBaseURL = "https://pkgs.k8s.io/core:/stable:/"
 // repository. cloud-init writes it to /etc/apt/sources.list.d/<name>.list.
 const aptSourceName = "kubernetes"
 
-// keyringPath is where the community repository's signing key is trusted on the
-// node. It is named in the apt source's signed-by= option and is the path the
-// cloud-init transport writes the (dearmored) key to, so the deb line is scoped
-// to exactly this keyring rather than trusting it system-wide. It matches the
-// path Kubernetes' own install docs use for the community keyring.
-const keyringPath = "/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+// keyFileVar is cloud-init's substitution variable for an apt source's signing
+// key. When an apt.sources entry carries an embedded key, cloud-init dearmors it,
+// writes it to a keyring path cloud-init itself manages, and substitutes that path
+// for $KEY_FILE in the source's signed-by= option. Naming the variable — rather
+// than hard-coding a keyring path cloud-init never actually writes to — scopes the
+// deb line to exactly the key cloud-init installs, so `apt update` verifies against
+// the right keyring on first boot instead of failing on a missing one.
+const keyFileVar = "$KEY_FILE"
 
 // communitySigningKey is the ASCII-armored public key that signs the Kubernetes
 // community (pkgs.k8s.io) package repository, pinned into the binary so a node
@@ -75,12 +77,14 @@ type AptSource struct {
 	// /etc/apt/sources.list.d/<Name>.list.
 	Name string
 	// Source is the one-line apt sources entry, scoped to the embedded key via a
-	// signed-by= option, e.g.
-	// "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /".
+	// signed-by=$KEY_FILE option — cloud-init substitutes $KEY_FILE with the keyring
+	// path it writes Key to — e.g.
+	// "deb [signed-by=$KEY_FILE] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /".
 	Source string
 	// Key is the repository's ASCII-armored signing key, embedded verbatim so the
 	// source is trusted declaratively at first boot rather than fetched at runtime.
-	// The transport writes it to the signed-by= path named in Source.
+	// cloud-init dearmors it to a keyring path it manages and substitutes that path
+	// for $KEY_FILE in Source's signed-by= option.
 	Key string
 }
 
@@ -171,7 +175,7 @@ func RenderInstall(cfg InstallConfig) (Install, error) {
 	return Install{
 		AptSources: []AptSource{{
 			Name:   aptSourceName,
-			Source: "deb [signed-by=" + keyringPath + "] " + repoURL + " /",
+			Source: "deb [signed-by=" + keyFileVar + "] " + repoURL + " /",
 			Key:    communitySigningKey,
 		}},
 		Packages: append([]string{containerdPackage}, kubePackages()...),

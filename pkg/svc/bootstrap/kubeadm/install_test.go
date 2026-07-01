@@ -28,7 +28,7 @@ func TestRenderInstallServerInitRepository(t *testing.T) {
 	source := install.AptSources[0]
 	assert.Equal(t, "kubernetes", source.Name)
 	assert.Equal(t,
-		"deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] "+
+		"deb [signed-by=$KEY_FILE] "+
 			"https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /",
 		source.Source,
 		"the deb line points at the version's minor track and is scoped to the embedded key",
@@ -136,7 +136,7 @@ func TestRenderInstallMinorTrack(t *testing.T) {
 		})
 		require.NoError(t, err, "version %q", version)
 
-		wantSource := "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] " +
+		wantSource := "deb [signed-by=$KEY_FILE] " +
 			"https://pkgs.k8s.io/core:/stable:/" + wantTrack + "/deb/ /"
 		assert.Equal(t, wantSource, install.AptSources[0].Source, "version %q track", version)
 	}
