@@ -42,7 +42,7 @@ func parse(t *testing.T, config string) parsedConfig {
 func TestRenderServerInit(t *testing.T) {
 	t.Parallel()
 
-	config, err := k3sbootstrap.Render(k3sbootstrap.NodeConfig{
+	config, err := k3sbootstrap.RenderConfig(k3sbootstrap.NodeConfig{
 		Role:                k3sbootstrap.RoleServerInit,
 		Token:               "shared-secret",
 		TLSSANs:             []string{"k8s.example.com"},
@@ -64,7 +64,7 @@ func TestRenderServerInit(t *testing.T) {
 func TestRenderServer(t *testing.T) {
 	t.Parallel()
 
-	config, err := k3sbootstrap.Render(k3sbootstrap.NodeConfig{
+	config, err := k3sbootstrap.RenderConfig(k3sbootstrap.NodeConfig{
 		Role:      k3sbootstrap.RoleServer,
 		Token:     "shared-secret",
 		ServerURL: "https://10.0.0.1:6443",
@@ -83,7 +83,7 @@ func TestRenderServer(t *testing.T) {
 func TestRenderAgent(t *testing.T) {
 	t.Parallel()
 
-	config, err := k3sbootstrap.Render(k3sbootstrap.NodeConfig{
+	config, err := k3sbootstrap.RenderConfig(k3sbootstrap.NodeConfig{
 		Role:      k3sbootstrap.RoleAgent,
 		Token:     "shared-secret",
 		ServerURL: "https://10.0.0.1:6443",
@@ -103,7 +103,7 @@ func TestRenderAgent(t *testing.T) {
 func TestRenderSortsAndDropsEmptyListEntries(t *testing.T) {
 	t.Parallel()
 
-	config, err := k3sbootstrap.Render(k3sbootstrap.NodeConfig{
+	config, err := k3sbootstrap.RenderConfig(k3sbootstrap.NodeConfig{
 		Role:    k3sbootstrap.RoleServerInit,
 		Token:   "shared-secret",
 		TLSSANs: []string{"z.example.com", "", "a.example.com"},
@@ -129,9 +129,9 @@ func TestRenderIsDeterministic(t *testing.T) {
 		Disable: []string{"traefik"},
 	}
 
-	first, err := k3sbootstrap.Render(cfg)
+	first, err := k3sbootstrap.RenderConfig(cfg)
 	require.NoError(t, err)
-	second, err := k3sbootstrap.Render(cfg)
+	second, err := k3sbootstrap.RenderConfig(cfg)
 	require.NoError(t, err)
 
 	assert.Equal(t, first, second, "Render is pure: the same input yields byte-identical output")
@@ -149,7 +149,7 @@ func validationErrorCases() map[string]validationCase {
 	return map[string]validationCase{
 		"unknown role": {
 			cfg:     k3sbootstrap.NodeConfig{Role: "worker", Token: "t"},
-			wantErr: k3sbootstrap.ErrInvalidRole,
+			wantErr: k3sbootstrap.ErrUnknownRole,
 		},
 		"missing token": {
 			cfg:     k3sbootstrap.NodeConfig{Role: k3sbootstrap.RoleServerInit},
@@ -159,7 +159,7 @@ func validationErrorCases() map[string]validationCase {
 			cfg: k3sbootstrap.NodeConfig{
 				Role: k3sbootstrap.RoleServerInit, Token: "t", ServerURL: "https://10.0.0.1:6443",
 			},
-			wantErr: k3sbootstrap.ErrServerInitWithServerURL,
+			wantErr: k3sbootstrap.ErrUnexpectedServerURL,
 		},
 		"joining server without url": {
 			cfg:     k3sbootstrap.NodeConfig{Role: k3sbootstrap.RoleServer, Token: "t"},
@@ -212,7 +212,7 @@ func TestRenderValidationErrors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			config, err := k3sbootstrap.Render(testCase.cfg)
+			config, err := k3sbootstrap.RenderConfig(testCase.cfg)
 			require.ErrorIs(t, err, testCase.wantErr)
 			assert.Empty(t, config, "no document is returned on a validation error")
 		})

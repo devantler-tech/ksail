@@ -59,6 +59,9 @@ type Scaffolder struct {
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 	ClusterName            string   // Optional override for cluster name. If set, overrides distribution defaults.
+	// Devcontainer, when true (the default), scaffolds .devcontainer/devcontainer.json.
+	// Disable it via WithDevcontainer(false) (wired to init's --no-devcontainer flag).
+	Devcontainer bool
 }
 
 // NewScaffolder creates a new Scaffolder instance with the provided KSail cluster configuration.
@@ -78,7 +81,17 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		KustomizationGenerator: kustomizationGenerator,
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
+		Devcontainer:           true,
 	}
+}
+
+// WithDevcontainer toggles scaffolding of .devcontainer/devcontainer.json.
+// Dev Container scaffolding is enabled by default; pass false (wired to the
+// init command's --no-devcontainer flag) to skip it.
+func (s *Scaffolder) WithDevcontainer(enabled bool) *Scaffolder {
+	s.Devcontainer = enabled
+
+	return s
 }
 
 // WithClusterName sets an explicit cluster name override for the scaffolder.
@@ -100,6 +113,7 @@ func (s *Scaffolder) WithClusterName(name string) *Scaffolder {
 //   - Distribution-specific configuration (kind.yaml or k3d.yaml)
 //   - kind/mirrors directory with hosts.toml files (for Kind with mirror registries)
 //   - kustomization.yaml in the source directory
+//   - .devcontainer/devcontainer.json (unless disabled via WithDevcontainer(false))
 //
 // Parameters:
 //   - output: The output directory for generated files
@@ -139,7 +153,16 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
-	return s.generateKustomizationConfig(output, force)
+	err = s.generateKustomizationConfig(output, force)
+	if err != nil {
+		return err
+	}
+
+	if s.Devcontainer {
+		return s.generateDevcontainerConfig(output, force)
+	}
+
+	return nil
 }
 
 // Configuration defaults and helpers.

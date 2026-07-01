@@ -6,6 +6,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
@@ -28,6 +29,11 @@ var (
 	ExportSplitAPIVersion         = fluxsubst.SplitAPIVersion         //nolint:gochecknoglobals // test export
 	ExportTypedPlaceholderValue   = fluxsubst.TypedPlaceholderValue   //nolint:gochecknoglobals // test export
 )
+
+// ExportAttributionFromDocuments exposes attributionFromDocuments so external-package
+// tests can assert the render-provenance→failure-attribution mapping (layer tagging,
+// stream-origin skipping, and ambiguous-identity dropping) without a full render run.
+var ExportAttributionFromDocuments = attributionFromDocuments //nolint:gochecknoglobals // test export
 
 // ExportDebounceState is an exported type alias for the workloadwatch debounce
 // state. The debounce/poll machinery moved to pkg/svc/workloadwatch; the shims
@@ -138,6 +144,12 @@ func ExportResolveScanInput(
 // --output directory creation and canonicalization.
 func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
+}
+
+// ExportCanonicalizeSchemaLocations exposes canonicalizeSchemaLocations for
+// testing local-path canonicalization vs URL/template passthrough.
+func ExportCanonicalizeSchemaLocations(locations []string) []string {
+	return canonicalizeSchemaLocations(locations)
 }
 
 // ExportScanSettings mirrors the resolved scan settings for external tests.
@@ -344,3 +356,16 @@ func ExportRunHooks(ctx context.Context, cmd *cobra.Command, hooks []string) err
 
 // ErrHookFailed exposes the errHookFailed sentinel for test assertions.
 var ErrHookFailed = errHookFailed
+
+// ErrCNINotCiliumExport exposes the network command's CNI-guard sentinel.
+var ErrCNINotCiliumExport = ErrCNINotCilium
+
+// ExportSetFlowObserverFactory swaps the network command's observer factory so
+// tests can inject a fake observer without a live Hubble relay. It returns a
+// restore function that reinstates the original factory.
+func ExportSetFlowObserverFactory(factory func(string) hubble.FlowObserver) func() {
+	original := newFlowObserver
+	newFlowObserver = factory
+
+	return func() { newFlowObserver = original }
+}

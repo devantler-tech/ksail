@@ -10,3 +10,6 @@ var ShowRotatePreview = showRotatePreview //nolint:gochecknoglobals // Standard 
 
 // BuildRotateOpts exposes the private buildRotateOpts for testing.
 var BuildRotateOpts = buildRotateOpts //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+
+// ErrRotateKeyConflict exposes the private errRotateKeyConflict for testing.
+var ErrRotateKeyConflict = errRotateKeyConflict

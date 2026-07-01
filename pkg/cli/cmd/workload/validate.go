@@ -19,6 +19,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
 )
@@ -39,20 +40,8 @@ var kustomizationFileNames = []string{kustomizationFileName, "kustomization.yml"
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
 
-// NewValidateCmd creates the workload validate command.
-func NewValidateCmd() *cobra.Command {
-	var (
-		skipSecrets          bool
-		strict               bool
-		ignoreMissingSchemas bool
-		skipHelmRender       bool
-		skipKinds            []string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "validate [PATH]",
-		Short: "Validate Kubernetes manifests and kustomizations",
-		Long: `Validate Kubernetes manifest files and kustomizations using kubeconform.
+// validateLongDescription is the long help text for the validate command.
+const validateLongDescription = `Validate Kubernetes manifest files and kustomizations using kubeconform.
 
 This command validates individual YAML files and kustomizations in the specified path.
 If no path is provided, the path is resolved in order:
@@ -79,8 +68,24 @@ The validation process:
 Schema lookups use a local disk cache and require no network access. When no cached
 JSON schema is available, placeholders fall back to strings with YAML-native parsing.
 
-By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
-		Args: cobra.MaximumNArgs(1),
+By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`
+
+// NewValidateCmd creates the workload validate command.
+func NewValidateCmd() *cobra.Command {
+	var (
+		skipSecrets          bool
+		strict               bool
+		ignoreMissingSchemas bool
+		skipHelmRender       bool
+		skipKinds            []string
+		schemaLocations      []string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "validate [PATH]",
+		Short: "Validate Kubernetes manifests and kustomizations",
+		Long:  validateLongDescription,
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runValidateCmd(
 				cmd.Context(),
@@ -92,12 +97,21 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 					ignoreMissingSchemas: ignoreMissingSchemas,
 					skipHelmRender:       skipHelmRender,
 					skipKinds:            skipKinds,
+					schemaLocations:      schemaLocations,
 				},
 			)
 		},
 	}
 
-	addValidateFlags(cmd, &skipSecrets, &strict, &ignoreMissingSchemas, &skipHelmRender, &skipKinds)
+	addValidateFlags(
+		cmd,
+		&skipSecrets,
+		&strict,
+		&ignoreMissingSchemas,
+		&skipHelmRender,
+		&skipKinds,
+		&schemaLocations,
+	)
 
 	return cmd
 }
@@ -109,13 +123,14 @@ type validateFlags struct {
 	ignoreMissingSchemas bool
 	skipHelmRender       bool
 	skipKinds            []string
+	schemaLocations      []string
 }
 
 // addValidateFlags registers the flags for the validate command.
 func addValidateFlags(
 	cmd *cobra.Command,
 	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender *bool,
-	skipKinds *[]string,
+	skipKinds, schemaLocations *[]string,
 ) {
 	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
 	cmd.Flags().BoolVar(strict, "strict", false, "Enable strict validation mode")
@@ -138,6 +153,14 @@ func addValidateFlags(
 		nil,
 		"Additional Kubernetes kinds to skip during validation "+
 			"(merged with spec.workload.validation.skipKinds from ksail.yaml)",
+	)
+	cmd.Flags().StringSliceVar(
+		schemaLocations,
+		"schema-location",
+		nil,
+		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
+			"absent from the CRDs-catalog, so they are validated against a supplied schema instead "+
+			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
 	)
 }
 
@@ -190,6 +213,21 @@ func runValidateCmd(
 	validationOpts.SkipKinds = append(
 		validationOpts.SkipKinds,
 		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
+	)
+
+	// Additional schema locations come from the --schema-location flag and from
+	// spec.workload.validation.schemaLocations in ksail.yaml. They let a repo
+	// validate CRDs absent from the CRDs-catalog against a supplied schema rather
+	// than skipping the kind via --skip-kinds. Local filesystem locations are
+	// canonicalized (see canonicalizeSchemaLocations) so validation reads the
+	// intended schema tree; URLs and kubeconform path templates pass through.
+	suppliedSchemaLocations := slices.Concat(
+		flags.schemaLocations,
+		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
+	)
+	validationOpts.SchemaLocations = append(
+		validationOpts.SchemaLocations,
+		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
 	)
 
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
@@ -320,6 +358,75 @@ func configuredSkipKinds(
 	}
 
 	return cfg.Spec.Workload.Validation.SkipKinds
+}
+
+// configuredSchemaLocations returns the configured
+// spec.workload.validation.schemaLocations from the single config load. It
+// returns nil when no config file is found or the field is unset. A config file
+// that exists but failed to load does not fail validation but emits a warning so
+// the omission is not silent.
+func configuredSchemaLocations(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) []string {
+	if loadErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "could not read spec.workload.validation.schemaLocations from ksail.yaml: %v",
+			Args:    []any{loadErr},
+			Writer:  cmd.ErrOrStderr(),
+		})
+
+		return nil
+	}
+
+	if !configFound {
+		return nil
+	}
+
+	return cfg.Spec.Workload.Validation.SchemaLocations
+}
+
+// canonicalizeSchemaLocations resolves local filesystem schema locations to real,
+// absolute paths (expanding ~ and following symlinks) so validation reads the
+// intended schema tree and symlink-escape is prevented in CI — matching how the
+// validate target path and --config are canonicalized.
+//
+// A kubeconform schema location may also be a URL (contains "://") or a path
+// template carrying kubeconform placeholders (contains "{{", e.g.
+// "schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"); those are
+// not local paths and pass through verbatim. A local path that cannot be resolved
+// (e.g. it does not exist) is left as supplied so kubeconform surfaces a clear error.
+func canonicalizeSchemaLocations(locations []string) []string {
+	canonical := make([]string, 0, len(locations))
+
+	for _, loc := range locations {
+		if strings.Contains(loc, "://") || strings.Contains(loc, "{{") {
+			canonical = append(canonical, loc)
+
+			continue
+		}
+
+		expanded, err := fsutil.ExpandHomePath(loc)
+		if err != nil {
+			canonical = append(canonical, loc)
+
+			continue
+		}
+
+		resolved, err := fsutil.EvalCanonicalPath(expanded)
+		if err != nil {
+			canonical = append(canonical, expanded)
+
+			continue
+		}
+
+		canonical = append(canonical, resolved)
+	}
+
+	return canonical
 }
 
 // validatePath validates all manifests in the given path. Helm rendering applies
@@ -540,12 +647,28 @@ func (v *kustomizationValidator) validate(ctx context.Context, kustDir string) e
 // it without output (for parallel execution). The kustomize build error is
 // returned unwrapped so simplifyBuildError can strip its verbose prefix.
 func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir string) error {
-	data, err := v.manifests(ctx, kustDir)
+	data, attribution, err := v.manifests(ctx, kustDir)
 	if err != nil {
 		return err
 	}
 
-	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, v.opts)
+	// Attach per-call attribution without mutating the shared v.opts, which
+	// validate fans out concurrently across kustomizations (see the -race guard
+	// TestValidateRendersConcurrentlyNoRace). A shallow copy is enough: the other
+	// fields are read-only during validation.
+	opts := v.opts
+
+	if attribution != nil {
+		clone := kubeconform.ValidationOptions{}
+		if v.opts != nil {
+			clone = *v.opts
+		}
+
+		clone.Attribution = attribution
+		opts = &clone
+	}
+
+	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, opts)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
 	}
@@ -553,26 +676,91 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	return nil
 }
 
-// manifests returns the validation input: the Helm-rendered output when
-// rendering is enabled, otherwise the Flux-substituted kustomize build output.
-func (v *kustomizationValidator) manifests(ctx context.Context, kustDir string) ([]byte, error) {
+// manifests returns the validation input — the Helm-rendered output when rendering
+// is enabled, otherwise the Flux-substituted kustomize build output — together with
+// a resource-identity→source attribution map derived from the render provenance
+// (nil when rendering is disabled or nothing is attributable).
+func (v *kustomizationValidator) manifests(
+	ctx context.Context,
+	kustDir string,
+) ([]byte, map[string]string, error) {
 	if v.renderer != nil {
 		result, err := v.renderer.expand(ctx, kustDir)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		v.sink.add(result.Degradations)
 
-		return result.Bytes(), nil
+		return result.Bytes(), attributionFromDocuments(result.Documents), nil
 	}
 
 	output, err := v.kustomize.Build(ctx, kustDir)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
+		return nil, nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
 	}
 
-	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil
+	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil, nil
+}
+
+// attributionFromDocuments maps each rendered document's identity to a source
+// descriptor ("HelmRelease <namespace>/<name>") so kubeconform validation failures
+// can be traced to the originating HelmRelease layer. Documents that came verbatim
+// from the input stream (OriginStream) carry no source and are omitted. When two
+// distinct sources render the same identity the attribution is ambiguous, so that
+// identity is dropped rather than mis-attributed. Returns nil when nothing is
+// attributable, which leaves failure messages unchanged downstream.
+func attributionFromDocuments(docs []render.Document) map[string]string {
+	sources := make(map[string]string, len(docs))
+	ambiguous := make(map[string]struct{})
+
+	for _, doc := range docs {
+		if doc.Provenance.Origin != render.OriginRendered ||
+			doc.Provenance.SourceHelmRelease == "" {
+			continue
+		}
+
+		identity := documentIdentity(doc)
+		if identity == "" {
+			continue
+		}
+
+		source := "HelmRelease " + doc.Provenance.SourceHelmRelease
+		if existing, ok := sources[identity]; ok && existing != source {
+			ambiguous[identity] = struct{}{}
+
+			continue
+		}
+
+		sources[identity] = source
+	}
+
+	for identity := range ambiguous {
+		delete(sources, identity)
+	}
+
+	if len(sources) == 0 {
+		return nil
+	}
+
+	return sources
+}
+
+// documentIdentity builds the "Kind/Namespace/Name" (or "Kind/Name" for cluster-scoped
+// resources) key used to match a rendered document against the resource identity
+// kubeconform reports for a validation failure. It returns "" when the document lacks a
+// Kind or Name, mirroring the kubeconform formatter's fallback so unkeyable documents
+// are simply left unattributed.
+func documentIdentity(doc render.Document) string {
+	if doc.Kind == "" || doc.Name == "" {
+		return ""
+	}
+
+	if doc.Namespace != "" {
+		return doc.Kind + "/" + doc.Namespace + "/" + doc.Name
+	}
+
+	return doc.Kind + "/" + doc.Name
 }
 
 // validateFileSilent validates a single YAML file without output (for parallel execution).

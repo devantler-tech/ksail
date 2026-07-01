@@ -21,6 +21,22 @@ func chartVersion() string {
 	)
 }
 
+// distributionArtifact returns the FluxInstance distribution OCI artifact reference,
+// pinned to the flux-operator-manifests version extracted from the embedded Dockerfile.
+// Pinning this (rather than floating ":latest") keeps it a matched pair with the
+// chart above so an upstream manifests release cannot silently break Flux bootstrap
+// (ksail#5595). The digest in the Dockerfile is for Dependabot; the FluxInstance
+// artifact field takes the tag form.
+func distributionArtifact() string {
+	version := parser.ParseImageFromDockerfile(
+		dockerfile,
+		`FROM\s+ghcr\.io/controlplaneio-fluxcd/flux-operator-manifests:([^\s@]+)`,
+		"flux-operator manifests",
+	)
+
+	return "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:" + version
+}
+
 // distributionImages returns the Flux distribution controller images from the
 // embedded Dockerfile.distribution. These are the images that the Flux operator
 // deploys when creating a FluxInstance.

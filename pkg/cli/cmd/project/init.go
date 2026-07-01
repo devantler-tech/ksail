@@ -1,4 +1,4 @@
-package cluster
+package project
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -92,11 +93,13 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	_ = cfgManager.Viper.BindPFlag("output", cmd.Flags().Lookup("output"))
 	cmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
+	cmd.Flags().Bool("no-devcontainer", false, "Skip scaffolding .devcontainer/devcontainer.json")
+	_ = cfgManager.Viper.BindPFlag("no-devcontainer", cmd.Flags().Lookup("no-devcontainer"))
 
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
-	registerOIDCExtraScopeFlag(cmd)
-	registerAllowedCIDRsFlag(cmd)
+	clusterflags.RegisterMirrorRegistryFlag(cmd)
+	clusterflags.RegisterNameFlag(cmd, cfgManager)
+	clusterflags.RegisterOIDCExtraScopeFlag(cmd)
+	clusterflags.RegisterAllowedCIDRsFlag(cmd)
 }
 
 // InitDeps holds dependencies injected into HandleInitRunE.
@@ -169,7 +172,7 @@ func HandleInitRunE(
 		return err
 	}
 
-	applyClusterMutationFlags(cmd, clusterCfg)
+	clusterflags.ApplyClusterMutationFlags(cmd, clusterCfg)
 
 	err = validatePostFlagInitConfig(clusterCfg)
 	if err != nil {
@@ -251,6 +254,9 @@ func prepareScaffolder(
 	if clusterName != "" {
 		scaffolderInstance.WithClusterName(clusterName)
 	}
+
+	// Dev Container scaffolding is on by default; --no-devcontainer opts out.
+	scaffolderInstance.WithDevcontainer(!cfgManager.Viper.GetBool("no-devcontainer"))
 
 	return scaffolderInstance, targetPath, force, nil
 }

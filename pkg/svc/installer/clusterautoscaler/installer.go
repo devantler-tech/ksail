@@ -148,6 +148,15 @@ type chartExtraArgs struct {
 	// see no values drift.
 	CapacityBufferControllerEnabled   bool `json:"capacity-buffer-controller-enabled,omitempty"`
 	CapacityBufferPodInjectionEnabled bool `json:"capacity-buffer-pod-injection-enabled,omitempty"`
+	// KubeAPIContentType forces the autoscaler's Kubernetes client to negotiate the
+	// given content type. capacity-buffers require application/json: the CapacityBuffer
+	// controller's client would otherwise negotiate protobuf (the autoscaler default for
+	// built-in types), but CapacityBuffer is a CRD and cannot be protobuf-encoded, so the
+	// controller fails ("does not implement the protobuf marshalling interface") and never
+	// writes buffer status — silently disabling over-provisioning (ksail#5603). omitempty
+	// keeps it out of the rendered values unless capacityBuffers is enabled, so existing
+	// releases see no values drift.
+	KubeAPIContentType string `json:"kube-api-content-type,omitempty"`
 }
 
 type chartSecretRef struct {
@@ -296,10 +305,38 @@ func buildChartValues(
 				Create: true,
 				Name:   "cluster-autoscaler",
 			},
+			AdditionalRules: coreInformerRBACRules(),
 		},
 		Resources: chartResources{
 			Requests: chartResourceRequests{CPU: "50m", Memory: "128Mi"},
 			Limits:   chartResourceLimits{Memory: "256Mi"},
+		},
+	}
+}
+
+// coreInformerRBACRules returns the read-only rules the cluster-autoscaler binary's
+// core informers require but the chart's ClusterRole omits. The autoscaler watches
+// Deployments (scale-down owner traversal) and ResourceQuotas (quota-aware scale-up
+// simulation) unconditionally — i.e. even with the capacity-buffer controller
+// disabled — so without these it logs a continuous "deployments.apps is forbidden" /
+// "resourcequotas is forbidden" and the informers never sync (ksail#5405). The chart
+// only grants apps/{daemonsets,replicasets,statefulsets} and exposes no values knob to
+// inject extra rules beyond rbac.additionalRules, so KSail adds them here. They are
+// granted in the base values (not gated behind capacity-buffers) because the core
+// binary needs them regardless of that feature.
+func coreInformerRBACRules() []chartRBACRule {
+	readVerbs := []string{"get", "list", "watch"}
+
+	return []chartRBACRule{
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     readVerbs,
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"resourcequotas"},
+			Verbs:     readVerbs,
 		},
 	}
 }

@@ -2,6 +2,7 @@
 [TestToolSurfaceSnapshot - 1]
 cluster_read
 cluster_write
+project_write
 tenant_write
 workload_read
 workload_write
@@ -333,7 +334,7 @@ workload_write
   "parameters": {
     "properties": {
       "allowed-cidrs": {
-        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: create, init, update)",
+        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: create, update)",
         "items": {
           "type": "string"
         },
@@ -347,24 +348,23 @@ workload_write
         "type": "array"
       },
       "cdi": {
-        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI) (applies to: create, init, update)",
+        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI) (applies to: create, update)",
         "type": "string"
       },
       "cert-manager": {
-        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip) (applies to: create, init, update)",
+        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip) (applies to: create, update)",
         "type": "string"
       },
       "cni": {
-        "description": "Container Network Interface (CNI) to use (applies to: create, init, update)",
+        "description": "Container Network Interface (CNI) to use (applies to: create, update)",
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\ninit: Initialize a new project\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
+        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
         "enum": [
           "backup",
           "create",
           "delete",
-          "init",
           "restore",
           "start",
           "stop",
@@ -378,16 +378,16 @@ workload_write
         "type": "integer"
       },
       "context": {
-        "description": "Kubernetes context of cluster (applies to: create, init, update)",
+        "description": "Kubernetes context of cluster (applies to: create, update)",
         "type": "string"
       },
       "control-planes": {
         "default": 1,
-        "description": "Number of control-plane nodes (applies to: create, init, update)",
+        "description": "Number of control-plane nodes (applies to: create, update)",
         "type": "integer"
       },
       "csi": {
-        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI) (applies to: create, init, update)",
+        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI) (applies to: create, update)",
         "type": "string"
       },
       "delete-storage": {
@@ -395,15 +395,15 @@ workload_write
         "type": "boolean"
       },
       "distribution": {
-        "description": "Kubernetes distribution to use (applies to: create, init, update)",
+        "description": "Kubernetes distribution to use (applies to: create, update)",
         "type": "string"
       },
       "distribution-config": {
-        "description": "Configuration file for the distribution (applies to: create, init, update)",
+        "description": "Configuration file for the distribution (applies to: create, update)",
         "type": "string"
       },
       "distribution-version": {
-        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, init, update)",
+        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, update)",
         "type": "string"
       },
       "drain-timeout": {
@@ -431,7 +431,7 @@ workload_write
         "type": "string"
       },
       "force": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: delete, init)",
+        "description": "Skip confirmation prompt and delete immediately (applies to: delete)",
         "type": "boolean"
       },
       "force-drain": {
@@ -440,44 +440,36 @@ workload_write
       },
       "gitops-engine": {
         "default": "None",
-        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: create, init, update)",
-        "type": "string"
-      },
-      "image-verification": {
-        "description": "Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch... (applies to: init)",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: create, update)",
         "type": "string"
       },
       "import-images": {
-        "description": "Path to tar archive with container images to import after cluster creation but before component installation (applies to: create, init, update)",
+        "description": "Path to tar archive with container images to import after cluster creation but before component installation (applies to: create, update)",
         "type": "string"
       },
       "kubeconfig": {
         "default": "~/.kube/config",
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete, update)",
         "type": "string"
       },
       "kubernetes-version": {
-        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, init, update)",
-        "type": "string"
-      },
-      "kustomization-file": {
-        "description": "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local) (applies to: init)",
+        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: create, update)",
         "type": "string"
       },
       "load-balancer": {
-        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall) (applies to: create, init, update)",
+        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall) (applies to: create, update)",
         "type": "string"
       },
       "local-registry": {
-        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: create, init, update)",
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: create, update)",
         "type": "string"
       },
       "metrics-server": {
-        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (applies to: create, init, update)",
+        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (applies to: create, update)",
         "type": "string"
       },
       "mirror-registry": {
-        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]... (applies to: create, init, update)",
+        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]... (applies to: create, update)",
         "items": {
           "type": "string"
         },
@@ -495,23 +487,23 @@ workload_write
         "type": "array"
       },
       "node-autoscaler-enabled": {
-        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, init, update)",
+        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting) (applies to: create, update)",
         "type": "string"
       },
       "node-autoscaling": {
-        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts... (applies to: create, init, update)",
+        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts... (applies to: create, update)",
         "type": "string"
       },
       "oidc-ca-file": {
-        "description": "Path to CA certificate for self-signed OIDC providers (applies to: create, init, update)",
+        "description": "Path to CA certificate for self-signed OIDC providers (applies to: create, update)",
         "type": "string"
       },
       "oidc-client-id": {
-        "description": "OIDC client ID for kubectl authentication (applies to: create, init, update)",
+        "description": "OIDC client ID for kubectl authentication (applies to: create, update)",
         "type": "string"
       },
       "oidc-extra-scope": {
-        "description": "Additional OIDC scopes beyond openid (repeatable) (applies to: create, init, update)",
+        "description": "Additional OIDC scopes beyond openid (repeatable) (applies to: create, update)",
         "items": {
           "type": "string"
         },
@@ -519,43 +511,39 @@ workload_write
       },
       "oidc-groups-claim": {
         "default": "groups",
-        "description": "JWT claim for Kubernetes groups (applies to: create, init, update)",
+        "description": "JWT claim for Kubernetes groups (applies to: create, update)",
         "type": "string"
       },
       "oidc-groups-prefix": {
         "default": "oidc:",
-        "description": "Prefix for OIDC groups in Kubernetes (applies to: create, init, update)",
+        "description": "Prefix for OIDC groups in Kubernetes (applies to: create, update)",
         "type": "string"
       },
       "oidc-issuer-url": {
-        "description": "OIDC provider issuer URL (e.g. https://dex.example.com) (applies to: create, init, update)",
+        "description": "OIDC provider issuer URL (e.g. https://dex.example.com) (applies to: create, update)",
         "type": "string"
       },
       "oidc-username-claim": {
         "default": "email",
-        "description": "JWT claim for Kubernetes username (applies to: create, init, update)",
+        "description": "JWT claim for Kubernetes username (applies to: create, update)",
         "type": "string"
       },
       "oidc-username-prefix": {
         "default": "oidc:",
-        "description": "Prefix for OIDC usernames in Kubernetes (applies to: create, init, update)",
+        "description": "Prefix for OIDC usernames in Kubernetes (applies to: create, update)",
         "type": "string"
       },
       "output": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: init, update)",
+        "default": "text",
+        "description": "Output format: text (default) or json (machine-readable, for CI/MCP) (applies to: update)",
         "type": "string"
       },
       "policy-engine": {
-        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper) (applies to: create, init, update)",
+        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper) (applies to: create, update)",
         "type": "string"
       },
       "provider": {
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
-        "type": "string"
-      },
-      "source-directory": {
-        "default": "k8s",
-        "description": "Directory containing workloads to deploy (applies to: init)",
         "type": "string"
       },
       "ttl": {
@@ -564,7 +552,7 @@ workload_write
       },
       "workers": {
         "default": 0,
-        "description": "Number of worker nodes (applies to: create, init, update)",
+        "description": "Number of worker nodes (applies to: create, update)",
         "type": "integer"
       },
       "yes": {
@@ -1207,6 +1195,13 @@ workload_write
         "description": "When used with '--copy-to', a list of name=image pairs for changing container images, similar to how 'kubectl set image' works. (applies to: debug)",
         "type": "string"
       },
+      "set-key": {
+        "description": "public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key (applies to: cipher_rotate)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "share-processes": {
         "default": true,
         "description": "When used with '--copy-to', enable process namespace sharing in the copy. (applies to: debug)",
@@ -1511,7 +1506,7 @@ workload_write
         "type": "string"
       },
       "cni": {
-        "description": "Container Network Interface (CNI) to use (applies to: images)",
+        "description": "Container Network Interface (CNI) to use (applies to: images, network)",
         "type": "string"
       },
       "compliance-threshold": {
@@ -1609,7 +1604,7 @@ workload_write
         "type": "array"
       },
       "follow": {
-        "description": "Specify if the logs should be streamed. (applies to: logs)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: logs, network)",
         "type": "boolean"
       },
       "for": {
@@ -1728,6 +1723,11 @@ workload_write
         },
         "type": "array"
       },
+      "last": {
+        "default": 20,
+        "description": "Number of most recent flows to fetch (applies to: network)",
+        "type": "integer"
+      },
       "limit-bytes": {
         "default": 0,
         "description": "Maximum bytes of logs to return. Defaults to no limit. (applies to: logs)",
@@ -1759,7 +1759,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network)",
         "type": "string"
       },
       "no-headers": {
@@ -1791,6 +1791,10 @@ workload_write
         "description": "Output watch event objects when --watch or --watch-only is used. Existing objects are output as initial ADDED events. (applies to: get)",
         "type": "boolean"
       },
+      "pod": {
+        "description": "Filter flows by pod-name substring (source or destination) (applies to: network)",
+        "type": "string"
+      },
       "pod-running-timeout": {
         "default": "1m0s",
         "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: forward, logs)",
@@ -1817,6 +1821,10 @@ workload_write
       "previous": {
         "description": "If true, print the logs for the previous instance of the container in a pod if it exists. (applies to: logs)",
         "type": "boolean"
+      },
+      "protocol": {
+        "description": "Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP) (applies to: network)",
+        "type": "string"
       },
       "provider": {
         "description": "Infrastructure provider backend (e.g., Docker) (applies to: images)",
@@ -1875,6 +1883,13 @@ workload_write
       "schedule": {
         "description": "A schedule in the Cron format the job should be run with. (applies to: gen_cronjob)",
         "type": "string"
+      },
+      "schema-location": {
+        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog... (applies to: validate)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",
@@ -2039,7 +2054,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nexport: Export container images from the cluster\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
+        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nexport: Export container images from the cluster\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
         "enum": [
           "describe",
           "explain",
@@ -2070,6 +2085,7 @@ workload_write
           "get",
           "images",
           "logs",
+          "network",
           "scan",
           "validate",
           "wait"
@@ -2079,6 +2095,221 @@ workload_write
     },
     "required": [
       "workload_command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/project_write - 1]
+{
+  "name": "project_write",
+  "title": "Project Write",
+  "description": "Manage GitOps project files",
+  "commandPath": "ksail project",
+  "requiresPermission": true,
+  "isConsolidated": true,
+  "subcommandParam": "command",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "allowed-cidrs": {
+        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)...",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "args": {
+        "description": "Positional arguments for the command",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cdi": {
+        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
+        "type": "string"
+      },
+      "cert-manager": {
+        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip)",
+        "type": "string"
+      },
+      "cni": {
+        "description": "Container Network Interface (CNI) to use",
+        "type": "string"
+      },
+      "command": {
+        "description": "The subcommand to execute. Options:\nadd-environment: Clone an existing cluster environment into a new one\ninit: Initialize a new project",
+        "enum": [
+          "add-environment",
+          "init"
+        ],
+        "type": "string"
+      },
+      "context": {
+        "description": "Kubernetes context of cluster",
+        "type": "string"
+      },
+      "control-planes": {
+        "default": 1,
+        "description": "Number of control-plane nodes",
+        "type": "integer"
+      },
+      "csi": {
+        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)",
+        "type": "string"
+      },
+      "distribution": {
+        "description": "Kubernetes distribution to use",
+        "type": "string"
+      },
+      "distribution-config": {
+        "description": "Configuration file for the distribution",
+        "type": "string"
+      },
+      "distribution-version": {
+        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version...",
+        "type": "string"
+      },
+      "force": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "boolean"
+      },
+      "from": {
+        "description": "Source environment to clone from (required)",
+        "type": "string"
+      },
+      "gitops-engine": {
+        "default": "None",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD)",
+        "type": "string"
+      },
+      "image-verification": {
+        "description": "Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch...",
+        "type": "string"
+      },
+      "import-images": {
+        "description": "Path to tar archive with container images to import after cluster creation but before component installation",
+        "type": "string"
+      },
+      "kubeconfig": {
+        "default": "~/.kube/config",
+        "description": "Path to kubeconfig file",
+        "type": "string"
+      },
+      "kubernetes-version": {
+        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version...",
+        "type": "string"
+      },
+      "kustomization-file": {
+        "description": "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)",
+        "type": "string"
+      },
+      "load-balancer": {
+        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)",
+        "type": "string"
+      },
+      "local-registry": {
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)",
+        "type": "string"
+      },
+      "metrics-server": {
+        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)",
+        "type": "string"
+      },
+      "mirror-registry": {
+        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]...",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "name": {
+        "description": "Cluster name used for container names, registry names, and kubeconfig context",
+        "type": "string"
+      },
+      "no-devcontainer": {
+        "description": "Skip scaffolding .devcontainer/devcontainer.json",
+        "type": "boolean"
+      },
+      "node-autoscaler-enabled": {
+        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+        "type": "string"
+      },
+      "node-autoscaling": {
+        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts...",
+        "type": "string"
+      },
+      "oidc-ca-file": {
+        "description": "Path to CA certificate for self-signed OIDC providers",
+        "type": "string"
+      },
+      "oidc-client-id": {
+        "description": "OIDC client ID for kubectl authentication",
+        "type": "string"
+      },
+      "oidc-extra-scope": {
+        "description": "Additional OIDC scopes beyond openid (repeatable)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oidc-groups-claim": {
+        "default": "groups",
+        "description": "JWT claim for Kubernetes groups",
+        "type": "string"
+      },
+      "oidc-groups-prefix": {
+        "default": "oidc:",
+        "description": "Prefix for OIDC groups in Kubernetes",
+        "type": "string"
+      },
+      "oidc-issuer-url": {
+        "description": "OIDC provider issuer URL (e.g. https://dex.example.com)",
+        "type": "string"
+      },
+      "oidc-username-claim": {
+        "default": "email",
+        "description": "JWT claim for Kubernetes username",
+        "type": "string"
+      },
+      "oidc-username-prefix": {
+        "default": "oidc:",
+        "description": "Prefix for OIDC usernames in Kubernetes",
+        "type": "string"
+      },
+      "output": {
+        "description": "Output directory for the project",
+        "type": "string"
+      },
+      "policy-engine": {
+        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)",
+        "type": "string"
+      },
+      "provider": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
+        "type": "string"
+      },
+      "source-directory": {
+        "default": "k8s",
+        "description": "Directory containing workloads to deploy",
+        "type": "string"
+      },
+      "workers": {
+        "default": 0,
+        "description": "Number of worker nodes",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "command"
     ],
     "type": "object"
   }

@@ -33,16 +33,20 @@ var capacityBufferCRDYAML []byte
 //
 //  1. Flags: capacity-buffer-controller-enabled and
 //     capacity-buffer-pod-injection-enabled, so the autoscaler reconciles
-//     CapacityBuffer resources and injects virtual pods for ready buffers.
+//     CapacityBuffer resources and injects virtual pods for ready buffers; plus
+//     kube-api-content-type=application/json, because the buffer controller's
+//     client defaults to protobuf (the autoscaler's built-in-type encoding) which
+//     the CapacityBuffer CRD cannot satisfy — without JSON the controller errors
+//     and never writes buffer status, silently disabling over-provisioning
+//     (ksail#5603).
 //  2. RBAC: the chart's ClusterRole only grants provisioningrequests in the
-//     autoscaling.x-k8s.io group, so the buffer controller's access is added
-//     via the chart's rbac.additionalRules value. It needs three things the
-//     chart role omits: the CapacityBuffer CRs themselves, plus the Deployments
-//     and ResourceQuotas its translators run informers over (to size buffers
-//     from a workload's template and respect namespace quota). Without the
-//     latter two the controller logs a continuous "deployments.apps is
-//     forbidden ... cannot list/watch" / "resourcequotas is forbidden ..." and
-//     never reconciles a buffer, so its status stays empty.
+//     autoscaling.x-k8s.io group, so the buffer controller's access to the
+//     CapacityBuffer CRs themselves is added via the chart's rbac.additionalRules
+//     value. The Deployments and ResourceQuotas its translators run informers over
+//     (to size buffers from a workload's template and respect namespace quota) are
+//     already granted unconditionally by coreInformerRBACRules in the base values —
+//     the core autoscaler needs them too (ksail#5405) — so only the CapacityBuffer
+//     rule is added here.
 //  3. CRD: the chart does not ship the CapacityBuffer CRD; it is delivered via
 //     the chart's extraObjects value. NOTE: because the CRD is then part of the
 //     Helm release, `helm uninstall` removes the CRD — and with it every
@@ -50,29 +54,21 @@ var capacityBufferCRDYAML []byte
 func enableCapacityBuffers(vals *chartValues) error {
 	vals.ExtraArgs.CapacityBufferControllerEnabled = true
 	vals.ExtraArgs.CapacityBufferPodInjectionEnabled = true
+	// The CapacityBuffer controller reconciles a CRD, but the autoscaler's client
+	// defaults to protobuf (built-in-type encoding) which CRDs cannot satisfy — force
+	// JSON for the whole autoscaler client. Negligible overhead on the small clusters
+	// that use capacity buffers; without it buffer status never populates and
+	// over-provisioning is silently a no-op (ksail#5603).
+	vals.ExtraArgs.KubeAPIContentType = "application/json"
 
-	// Read-only verbs shared by the buffer controller's Deployment and
-	// ResourceQuota informers (only marshaled to YAML, never mutated, so the
-	// shared slice is safe to reuse across both rules).
-	readVerbs := []string{"get", "list", "watch"}
-
+	// The CapacityBuffer CRs themselves; the Deployments and ResourceQuotas the
+	// buffer controller's translators run informers over are already covered by
+	// coreInformerRBACRules in the base values (the core autoscaler needs them too).
 	vals.RBAC.AdditionalRules = append(vals.RBAC.AdditionalRules,
 		chartRBACRule{
 			APIGroups: []string{"autoscaling.x-k8s.io"},
 			Resources: []string{"capacitybuffers", "capacitybuffers/status"},
 			Verbs:     []string{"get", "list", "watch", "update", "patch"},
-		},
-		// Deployments and ResourceQuotas: the chart ClusterRole covers neither,
-		// but the buffer controller runs informers over both.
-		chartRBACRule{
-			APIGroups: []string{"apps"},
-			Resources: []string{"deployments"},
-			Verbs:     readVerbs,
-		},
-		chartRBACRule{
-			APIGroups: []string{""},
-			Resources: []string{"resourcequotas"},
-			Verbs:     readVerbs,
 		},
 	)
 

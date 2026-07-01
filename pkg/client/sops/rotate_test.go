@@ -360,6 +360,126 @@ func TestRotateFile_RemoveKey(t *testing.T) {
 	}
 }
 
+// assertDecryptsWith points SOPS at identity's private key and asserts whether
+// the file decrypts (wantOK) or is locked out.
+func assertDecryptsWith(
+	t *testing.T,
+	identity *age.X25519Identity,
+	filePath string,
+	wantOK bool,
+) {
+	t.Helper()
+
+	keyFile := filepath.Join(t.TempDir(), "verify-key.txt")
+
+	err := os.WriteFile(keyFile, []byte(identity.String()+"\n"), 0o600)
+	if err != nil {
+		t.Fatalf("write verify key file: %v", err)
+	}
+
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
+
+	err = tryDecrypt(t, filePath)
+	if wantOK && err != nil {
+		t.Fatalf("expected decryption to succeed, got: %v", err)
+	}
+
+	if !wantOK && err == nil {
+		t.Fatal("expected decryption to fail, but it succeeded")
+	}
+}
+
+func TestRotateFile_SetKeys(t *testing.T) {
+	// identity1 is the original recipient (and the key RotateFile decrypts with);
+	// identity2 is the sole recipient after a wholesale --set-key rotation.
+	identity1, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity1: %v", err)
+	}
+
+	identity2, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity2: %v", err)
+	}
+
+	keyFile := filepath.Join(t.TempDir(), "keys.txt")
+
+	err = os.WriteFile(keyFile, []byte(identity1.String()+"\n"), 0o600)
+	if err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
+
+	masterKey1, err := sopsage.MasterKeyFromRecipient(identity1.Recipient().String())
+	if err != nil {
+		t.Fatalf("master key 1: %v", err)
+	}
+
+	masterKey2, err := sopsage.MasterKeyFromRecipient(identity2.Recipient().String())
+	if err != nil {
+		t.Fatalf("master key 2: %v", err)
+	}
+
+	dir := t.TempDir()
+	filePath := encryptTestFile(t, dir, "secret.yaml", []sops.KeyGroup{{masterKey1}})
+
+	opts := sopsclient.RotateOpts{
+		SetKeys:         []keys.MasterKey{masterKey2},
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	err = sopsclient.RotateFile(filePath, opts)
+	if err != nil {
+		t.Fatalf("RotateFile with SetKeys: %v", err)
+	}
+
+	// The new recipient can decrypt.
+	assertDecryptsWith(t, identity2, filePath, true)
+
+	// The original recipient is locked out — even though it knew the previous
+	// data key, RotateFile regenerated it and re-encrypted every value, so the
+	// removed recipient cannot read the rotated file (compromise-safe rotation).
+	assertDecryptsWith(t, identity1, filePath, false)
+}
+
+func TestRotateFile_SetKeys_ReplacesEntireSet(t *testing.T) {
+	// The file starts with TWO recipients; --set-key narrows it to a single new
+	// key, proving wholesale replacement (not additive add/remove).
+	identity1, identity2, keyGroups := setupTwoIdentities(t)
+
+	identity3, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity3: %v", err)
+	}
+
+	masterKey3, err := sopsage.MasterKeyFromRecipient(identity3.Recipient().String())
+	if err != nil {
+		t.Fatalf("master key 3: %v", err)
+	}
+
+	dir := t.TempDir()
+	filePath := encryptTestFile(t, dir, "secret.yaml", keyGroups)
+
+	opts := sopsclient.RotateOpts{
+		SetKeys:         []keys.MasterKey{masterKey3},
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	err = sopsclient.RotateFile(filePath, opts)
+	if err != nil {
+		t.Fatalf("RotateFile with SetKeys: %v", err)
+	}
+
+	// Only identity3 (the declared new set) can decrypt; both prior recipients
+	// are out, confirming the set was replaced rather than extended.
+	assertDecryptsWith(t, identity3, filePath, true)
+	assertDecryptsWith(t, identity1, filePath, false)
+	assertDecryptsWith(t, identity2, filePath, false)
+}
+
 func TestParseKeyType_Age(t *testing.T) {
 	t.Parallel()
 

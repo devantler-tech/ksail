@@ -423,6 +423,21 @@ export interface KSailClusterConfiguration {
          * Override per invocation with --drain-timeout. Example: "15m".
          */
         drainTimeout?: string;
+        /**
+         * StorageHealthTimeout opts into a between-node storage-health gate during the
+         * `cluster update` rolling reboot. When set to a positive duration and the cluster
+         * runs a replicated node-local storage backend (Longhorn), the roll waits — up to
+         * this timeout — for the just-rebooted node's volumes to return to a healthy state
+         * before draining the next node. This prevents progressively faulting volumes whose
+         * replicas are spread one-per-node: without the gate the roll advances as soon as a
+         * node reports Kubernetes Ready, so rebooting consecutive replica holders before a
+         * rebuild completes can take every replica of a volume down at once. Default off
+         * (unset / 0): behaviour is unchanged. No effect when no replicated storage backend
+         * is detected. The gate only helps when replicas have spare capacity to rebuild
+         * during the roll; on a fully drained pool with hard anti-affinity it times out
+         * (naming the stuck volumes) rather than hanging. Example: "10m".
+         */
+        storageHealthTimeout?: string;
       };
     };
     /**
@@ -771,6 +786,10 @@ export interface KSailClusterConfiguration {
          * Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject.
          */
         skipKinds?: string[];
+        /**
+         * Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Appended after the built-in Kubernetes schemas and the CRDs-catalog, so CRDs absent from the catalog can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location.
+         */
+        schemaLocations?: string[];
         /**
          * Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render.
          */

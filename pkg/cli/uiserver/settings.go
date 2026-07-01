@@ -162,7 +162,7 @@ func toCredentialSettings(statuses []credentials.CredentialStatus) []api.Credent
 	for _, status := range statuses {
 		settings = append(settings, api.CredentialSetting{
 			Key:      string(status.Key),
-			Provider: string(credentials.ProviderFor(status.Key)),
+			Provider: credentials.ProviderFor(status.Key),
 			Label:    credentials.Label(status.Key),
 			EnvVar:   status.EnvVar,
 			Secret:   status.Secret,

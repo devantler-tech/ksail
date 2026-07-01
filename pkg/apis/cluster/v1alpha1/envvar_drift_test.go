@@ -145,6 +145,7 @@ func skippedClusterWorkloadConfigFields() []string {
 		"Workload.Flux.Verify.Provider",
 		"Workload.Flux.Verify.SecretRef.Name",
 		"Workload.Scan.Frameworks[]",
+		"Workload.Validation.SchemaLocations[]",
 		"Workload.Validation.SkipKinds[]",
 		"Workload.Watch.Hooks[]",
 	}

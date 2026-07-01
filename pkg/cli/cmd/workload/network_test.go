@@ -1,0 +1,186 @@
+package workload_test
+
+import (
+	"bytes"
+	"context"
+	"testing"
+
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type stubObserver struct {
+	records []hubble.FlowRecord
+	// observed and streamed record which path ran, so a test can assert that
+	// --follow selects StreamFlows and the one-shot path selects ObserveFlows
+	// (both yield the same records, so output alone can't distinguish them).
+	observed *bool
+	streamed *bool
+}
+
+func (s stubObserver) ObserveFlows(_ context.Context, _ uint64) ([]hubble.FlowRecord, error) {
+	if s.observed != nil {
+		*s.observed = true
+	}
+
+	return s.records, nil
+}
+
+func (s stubObserver) StreamFlows(
+	_ context.Context,
+	_ uint64,
+	emit func(hubble.FlowRecord) error,
+) error {
+	if s.streamed != nil {
+		*s.streamed = true
+	}
+
+	for _, record := range s.records {
+		err := emit(record)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func TestNewNetworkCmdHasCorrectDefaults(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewNetworkCmd()
+
+	assert.Equal(t, "network", cmd.Name())
+	assert.Equal(t, "plain", cmd.Flags().Lookup("output").DefValue)
+	assert.Equal(t, "localhost:4245", cmd.Flags().Lookup("server").DefValue)
+	assert.Equal(t, "20", cmd.Flags().Lookup("last").DefValue)
+	assert.NotNil(t, cmd.Flags().Lookup("namespace"))
+	assert.NotNil(t, cmd.Flags().Lookup("pod"))
+	assert.NotNil(t, cmd.Flags().Lookup("protocol"))
+}
+
+func TestNetworkCmdHelp(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewNetworkCmd()
+	cmd.SetArgs([]string{"--help"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "Hubble")
+	assert.Contains(t, out.String(), "--protocol")
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestNetworkCmdRequiresCilium(t *testing.T) {
+	// Chdir to an empty directory so config discovery falls back to defaults
+	// (CNI=Default), which must be rejected.
+	t.Chdir(t.TempDir())
+
+	cmd := workload.NewNetworkCmd()
+	cmd.SetArgs([]string{})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, workload.ErrCNINotCiliumExport)
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestNetworkCmdWithCiliumStreamsFlows(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	var observed, streamed bool
+
+	restore := workload.ExportSetFlowObserverFactory(func(_ string) hubble.FlowObserver {
+		return stubObserver{
+			records: []hubble.FlowRecord{
+				{
+					Verdict:     "FORWARDED",
+					Protocol:    "TCP",
+					Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
+					Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+				},
+			},
+			observed: &observed,
+			streamed: &streamed,
+		}
+	})
+	defer restore()
+
+	cmd := workload.NewNetworkCmd()
+	cmd.SetArgs([]string{"--cni", "Cilium", "--output", "json"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	output := out.String()
+	assert.Contains(t, output, `"web"`)
+	assert.Contains(t, output, "FORWARDED")
+	assert.True(t, observed, "one-shot mode must call ObserveFlows")
+	assert.False(t, streamed, "one-shot mode must not call StreamFlows")
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestNetworkCmdFollowStreamsLiveFlows(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	var observed, streamed bool
+
+	restore := workload.ExportSetFlowObserverFactory(func(_ string) hubble.FlowObserver {
+		return stubObserver{
+			records: []hubble.FlowRecord{
+				{
+					Verdict:     "FORWARDED",
+					Protocol:    "TCP",
+					Source:      hubble.Endpoint{Namespace: "default", Pod: "web"},
+					Destination: hubble.Endpoint{Namespace: "kube-system", Pod: "dns"},
+				},
+			},
+			observed: &observed,
+			streamed: &streamed,
+		}
+	})
+	defer restore()
+
+	cmd := workload.NewNetworkCmd()
+	cmd.SetArgs([]string{"--cni", "Cilium", "--follow"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	output := out.String()
+	assert.Contains(t, output, "TIME", "follow plain output prints the streaming header")
+	assert.Contains(t, output, "default/web")
+	assert.Contains(t, output, "FORWARDED")
+	assert.True(t, streamed, "follow mode must call StreamFlows")
+	assert.False(t, observed, "follow mode must not call ObserveFlows")
+}
+
+func TestNetworkCmdHasFollowFlag(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewNetworkCmd()
+
+	flag := cmd.Flags().Lookup("follow")
+	require.NotNil(t, flag)
+	assert.Equal(t, "f", flag.Shorthand)
+	assert.Equal(t, "false", flag.DefValue)
+}

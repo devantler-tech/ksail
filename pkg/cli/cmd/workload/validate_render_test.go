@@ -106,7 +106,8 @@ func TestValidateRendersHelmReleaseFromLocalChart(t *testing.T) {
 
 // TestValidateCatchesInvalidRenderedManifest verifies that a HelmRelease whose
 // chart renders a schema-invalid manifest fails validation — the headline of
-// #5344. The HelmRelease CR itself is valid; only the rendered output is not.
+// #5344 — and that the failure is attributed back to the originating HelmRelease
+// layer (from the render provenance) so a multi-layer render points at the source.
 func TestValidateCatchesInvalidRenderedManifest(t *testing.T) {
 	t.Parallel()
 
@@ -114,6 +115,14 @@ func TestValidateCatchesInvalidRenderedManifest(t *testing.T) {
 
 	_, err := runValidate(t, dir, "--skip-kinds", "OCIRepository")
 	require.Error(t, err, "rendered invalid chart output should fail validation")
+	// The invalid ConfigMap is rendered from the HelmRelease flux-system/app, so the
+	// failure carries its source layer (SourceHelmRelease is "namespace/name").
+	assert.ErrorContains(
+		t,
+		err,
+		"(from HelmRelease flux-system/app)",
+		"a rendered failure should be attributed to its HelmRelease layer",
+	)
 }
 
 // TestValidateSkipHelmRenderValidatesCRAsIs verifies --skip-helm-render disables
@@ -227,4 +236,81 @@ spec:
 	output, err := runValidate(t, dir)
 	require.NoError(t, err, "a GitRepository-sourced HelmRelease must degrade silently, not fail")
 	assert.NotContains(t, output, "skipped Helm render", "GitRepository sources skip silently")
+}
+
+// writeWidgetKustomization writes a kustomization containing a single CR of a
+// CRD kind absent from both the built-in schemas and the CRDs-catalog, plus a
+// schema file for it, and returns (kustomization dir, schema-location template).
+func writeWidgetKustomization(t *testing.T) (string, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	const kustomization = `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - widget.yaml
+`
+	// Violates the schema below (additionalProperties: false rejects "bogus").
+	const (
+		widgetCR = `apiVersion: example.com/v1
+kind: WidgetThing
+metadata:
+  name: widget
+spec:
+  size: 3
+  bogus: true
+`
+		widgetSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "spec": {
+      "type": "object",
+      "properties": {"size": {"type": "integer"}},
+      "required": ["size"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["spec"]
+}`
+	)
+
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(kustomization), 0o600),
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "widget.yaml"), []byte(widgetCR), 0o600))
+
+	schemaDir := t.TempDir()
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(schemaDir, "widgetthing_v1.json"), []byte(widgetSchema), 0o600),
+	)
+
+	return dir, filepath.Join(schemaDir, "{{.ResourceKind}}_{{.ResourceAPIVersion}}.json")
+}
+
+// TestValidateSchemaLocationCatchesCatalogAbsentCRD verifies that
+// --schema-location lets validate catch a CRD that is absent from the
+// CRDs-catalog (which would otherwise be ignored) — the #5344 Phase 3a gap.
+func TestValidateSchemaLocationCatchesCatalogAbsentCRD(t *testing.T) {
+	t.Parallel()
+
+	dir, schemaLoc := writeWidgetKustomization(t)
+
+	_, err := runValidate(t, dir, "--schema-location", schemaLoc)
+	require.Error(t, err, "a catalog-absent CRD must be caught when its schema is supplied")
+}
+
+// TestValidateWithoutSchemaLocationIgnoresCatalogAbsentCRD is the contrast: the
+// same invalid CR passes when no schema is supplied (the kind is unknown and
+// ignored), proving --schema-location is what enables the catch above.
+func TestValidateWithoutSchemaLocationIgnoresCatalogAbsentCRD(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := writeWidgetKustomization(t)
+
+	_, err := runValidate(t, dir)
+	require.NoError(t, err, "a catalog-absent CRD is ignored without a supplied schema")
 }

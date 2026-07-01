@@ -2,17 +2,29 @@ package clusterprovisioner
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
+	kubeadmhetznerprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kubeadmhetzner"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 func (f DefaultFactory) createKindProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	// Hetzner provider: native kubeadm (upstream Kubernetes) on Hetzner Cloud
+	// servers — the Vanilla distribution's server implementation, mirroring the
+	// k3s × Hetzner path. The Vanilla × Hetzner combination stays unselectable
+	// until the validation flip (#5514), so this path is gated; see the
+	// kubeadmhetzner package. It needs no Kind config, so it dispatches before the
+	// Kind-config requirement below.
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+		return createKubeadmHetznerProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.Kind == nil {
 		return nil, nil, fmt.Errorf(
 			"kind config is required for Vanilla distribution: %w",
@@ -74,6 +86,53 @@ func (f DefaultFactory) createKindProvisioner(
 	}
 
 	return provisioner, kindConfig, nil
+}
+
+// createKubeadmHetznerProvisioner creates a native-kubeadm-on-Hetzner provisioner —
+// the Vanilla distribution's Hetzner (server) implementation. It resolves the node
+// counts from the cluster spec and the Kubernetes release from the Vanilla default
+// (see kubeadmInstallVersion), then builds the provisioner, which constructs the
+// Hetzner provider from the cluster's Hetzner options. It is the kubeadm sibling of
+// createK3sHetznerProvisioner.
+func createKubeadmHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, any, error) {
+	controlPlanes := int(cluster.Spec.Cluster.ControlPlanes)
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	provisioner, err := kubeadmhetznerprovisioner.NewProvisioner(
+		cluster.Name,
+		kubeadmInstallVersion(),
+		controlPlanes,
+		int(cluster.Spec.Cluster.Workers),
+		cluster.Spec.Provider.Hetzner,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create kubeadm Hetzner provisioner: %w", err)
+	}
+
+	return provisioner, nil, nil
+}
+
+// kubeadmInstallVersion returns the default Kubernetes release the kubeadm × Hetzner
+// nodes install, in the "vMAJOR.MINOR.PATCH" form kubeadm's package-repository
+// selection requires. The Vanilla distribution's Kubernetes version is defined by the
+// Dependabot-tracked Kind node image (kindconfigmanager.DefaultKindNodeImage, e.g.
+// "kindest/node:v1.36.1@sha256:..."); the kubeadm × Hetzner path installs the same
+// release so a Vanilla cluster runs the same Kubernetes version whether it lands on
+// Docker (Kind) or Hetzner (kubeadm). It is the kubeadm sibling of k3sInstallVersion.
+func kubeadmInstallVersion() string {
+	image := kindconfigmanager.DefaultKindNodeImage
+	// Strip an optional "@sha256:..." digest, then take the tag after the final ":".
+	if at := strings.IndexByte(image, '@'); at != -1 {
+		image = image[:at]
+	}
+
+	if colon := strings.LastIndexByte(image, ':'); colon != -1 {
+		return image[colon+1:]
+	}
+
+	return image
 }
 
 // createKindKubernetesProvisioner creates a Kind provisioner that runs inside

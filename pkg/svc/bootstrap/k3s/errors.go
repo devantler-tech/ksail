@@ -3,41 +3,56 @@ package k3sbootstrap
 import "errors"
 
 var (
-	// ErrInvalidRole is returned when a NodeConfig.Role is not one of the three
-	// recognised roles (RoleServerInit, RoleServer, RoleAgent). A node's role
-	// determines the whole shape of its config, so an unrecognised role cannot be
-	// rendered safely.
-	ErrInvalidRole = errors.New("k3s: node role must be server-init, server, or agent")
+	// ErrMissingVersion is returned when InstallConfig.Version is empty. A pinned
+	// k3s version is required so a node's Kubernetes version is reproducible and
+	// never silently tracks the upstream "latest" channel.
+	ErrMissingVersion = errors.New("k3s install: a pinned version is required")
 
-	// ErrMissingToken is returned when a NodeConfig carries no token. Every k3s
-	// node — the cluster-initialising server included — needs the shared token to
-	// establish or join the cluster, so an empty token is rejected rather than
-	// rendered into a config that would fail at startup.
-	ErrMissingToken = errors.New("k3s: a node token is required")
+	// ErrMissingToken is returned when InstallConfig.Token is empty. Every k3s node
+	// — the first server, additional servers, and agents — authenticates to the
+	// cluster with the shared node token.
+	ErrMissingToken = errors.New("k3s install: token is required")
 
-	// ErrMissingServerURL is returned when a joining node (RoleServer or RoleAgent)
-	// has no ServerURL. A joining node must be told which existing server to
-	// register against, so an empty URL is a misconfiguration.
-	ErrMissingServerURL = errors.New("k3s: a joining node (server or agent) requires a server URL")
-
-	// ErrServerInitWithServerURL is returned when RoleServerInit is given a
-	// ServerURL. The cluster-initialising server starts a new cluster and joins no
-	// existing one, so a server URL on it is contradictory and is rejected to catch
-	// a topology that would otherwise bootstrap two disjoint clusters.
-	ErrServerInitWithServerURL = errors.New(
-		"k3s: the cluster-initialising server must not be given a server URL",
+	// ErrMissingServerURL is returned when a joining node (an additional server or
+	// an agent) has no ServerURL to register against. Only the first server
+	// (RoleServerInit) bootstraps without one.
+	ErrMissingServerURL = errors.New(
+		"k3s install: server URL is required to join an existing cluster",
 	)
 
-	// ErrInvalidServerURL is returned when a joining node's ServerURL is not a
-	// well-formed https URL with a host. k3s joins its supervisor over https, so a
-	// URL without an https scheme and a host would never connect.
-	ErrInvalidServerURL = errors.New("k3s: server URL must be an https URL with a host")
+	// ErrUnexpectedServerURL is returned when RoleServerInit is given a ServerURL.
+	// The cluster-initialising server defines the join endpoint; it does not join
+	// another, so a ServerURL here signals a misconfiguration.
+	ErrUnexpectedServerURL = errors.New(
+		"k3s install: the cluster-init server must not be given a server URL",
+	)
 
-	// ErrAgentServerOnlyOption is returned when an agent node carries a server-only
-	// option (TLS SANs, disabled components, or a kubeconfig mode). Those options
-	// configure the control plane and have no effect on an agent, so accepting them
-	// would silently drop user intent; the misconfiguration is surfaced instead.
+	// ErrAgentServerOnlyOption is returned when an agent is given a server-only
+	// option (TLS SANs, component disables, or kubeconfig mode). Those configure
+	// the control plane and have no effect on an agent, so accepting them silently
+	// would mislead.
 	ErrAgentServerOnlyOption = errors.New(
-		"k3s: an agent must not set server-only options (TLS SANs, disabled components, kubeconfig mode)",
+		"k3s install: TLS SANs, disabled components, and kubeconfig mode are server-only options",
 	)
+
+	// ErrUnknownRole is returned when InstallConfig.Role is not one of the defined
+	// roles.
+	ErrUnknownRole = errors.New("k3s install: unknown node role")
+
+	// ErrInvalidControlPlaneCount is returned by Plan when PlanInput.ControlPlaneCount
+	// is less than one. Every K3s cluster needs at least one control-plane node (the
+	// cluster-initialising server), so a count below one cannot describe a cluster.
+	ErrInvalidControlPlaneCount = errors.New(
+		"k3s plan: control-plane count must be at least one",
+	)
+
+	// ErrInvalidAgentCount is returned by Plan when PlanInput.AgentCount is negative.
+	// A cluster may have zero agents (control-plane nodes are schedulable), but a
+	// negative count is meaningless.
+	ErrInvalidAgentCount = errors.New("k3s plan: agent count must not be negative")
+	// ErrInvalidServerURL is returned by the config renderer ([RenderConfig]) when a
+	// joining node's ServerURL is not a well-formed https URL with a host. k3s joins
+	// its supervisor over https, so a URL without an https scheme and a host would
+	// never connect.
+	ErrInvalidServerURL = errors.New("k3s: server URL must be an https URL with a host")
 )

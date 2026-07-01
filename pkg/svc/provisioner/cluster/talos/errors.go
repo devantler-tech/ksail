@@ -19,6 +19,12 @@ var (
 	)
 	// ErrInvalidPatch is returned when a patch file is invalid.
 	ErrInvalidPatch = errors.New("invalid patch file")
+	// ErrStorageHealthTimeout is returned when the opt-in between-node storage-health
+	// gate times out waiting for replicated-storage volumes to return to a healthy
+	// state during a rolling reboot (see spec.cluster.talos.storageHealthTimeout).
+	ErrStorageHealthTimeout = errors.New(
+		"timed out waiting for storage volumes to become healthy between nodes",
+	)
 	// ErrNotImplemented is returned when a method is not yet implemented.
 	ErrNotImplemented = errors.New("not implemented")
 	// ErrIPv6NotSupported is returned when IPv6 addresses are used but not supported.

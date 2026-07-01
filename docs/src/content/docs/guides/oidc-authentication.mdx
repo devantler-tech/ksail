@@ -242,6 +242,115 @@ subjects:
     name: "oidc:platform-admins"
 ```
 
+## Multi-Cluster OIDC (Federation)
+
+The OIDC story extends naturally to **multiple clusters**: authenticate once, then operate across every cluster that trusts the same identity provider — without managing per-cluster credentials.
+
+### Federation Model: Shared-Issuer Trust
+
+KSail's federation model is **shared-issuer trust**. Each cluster is configured independently, but when several clusters point at the **same** OIDC provider, they all accept tokens from a single identity:
+
+- Every cluster's API server is configured with the same `--oidc-issuer-url` and `--oidc-client-id`, so each one independently verifies and trusts tokens minted by that provider.
+- Usernames and groups are derived from the same JWT claims, so a single OIDC identity (and its group memberships) maps to the **same** Kubernetes subject on every federated cluster — RBAC bindings are portable across the fleet.
+
+There is no central control plane to manage: trust is established declaratively, per cluster, by pointing at a shared issuer.
+
+### Single Sign-On Across Clusters
+
+Because tokens come from one provider, **you authenticate once and the session is reused across all federated clusters**. This works today with no extra configuration: `ksail cluster oidc get-token` caches tokens in `~/.ksail/oidc/cache/` keyed by the **issuer URL, client ID, and scopes** — *not* by cluster name. The first `kubectl` call against any federated cluster opens the browser; every subsequent call against any cluster sharing that OIDC configuration reuses the cached token (and silently refreshes it when it expires).
+
+### Workflow
+
+<Steps>
+1. **Configure every cluster with the same OIDC provider**
+
+   Use identical `issuerURL`, `clientID`, and `extraScopes` in each cluster's `ksail.yaml`:
+
+   ```yaml
+   # cluster-a/ksail.yaml and cluster-b/ksail.yaml
+   spec:
+     cluster:
+       oidc:
+         issuerURL: https://dex.example.com
+         clientID: kubectl
+         extraScopes:
+           - email
+           - groups
+   ```
+
+2. **Apply portable RBAC**
+
+   Bind the same OIDC user or group on each cluster (see [RBAC Integration](#rbac-integration)). Because the username/group claims resolve identically everywhere, one set of bindings works fleet-wide.
+
+3. **Authenticate once, use everywhere**
+
+   ```bash
+   kubectl --context oidc@cluster-a get pods   # opens the browser on first use
+   kubectl --context oidc@cluster-b get pods   # reuses the cached token — no second login
+   ```
+
+</Steps>
+
+> [!NOTE]
+> The cache key intentionally excludes the cluster name, so the **same** issuer/client/scopes always share one cached session. Use a **distinct** `clientID` (or scopes) per provider if you want isolated sessions per group of clusters.
+
+The model so far covers **identity federation** — a single *human* identity, authenticated once and authorized independently on each cluster via portable RBAC. The complementary half is **cross-cluster service-account projection**: letting a *workload* in one cluster present a verifiable identity that another cluster (or an external service) trusts, without per-cluster static credentials.
+
+## Cross-Cluster Service-Account Projection
+
+> [!NOTE]
+> **Design decision:** KSail does **not** implement workload-identity projection itself. It delegates to the standards-based mechanisms already present in a KSail-managed platform — Kubernetes [projected service-account tokens](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#serviceaccount-token-volume-projection) and [SPIFFE/SPIRE](https://spiffe.io/) — and documents how to wire the trust. This mirrors the [shared-issuer model](#federation-model-shared-issuer-trust): trust is established declaratively, per cluster, against a shared issuer, with **no central control plane**. It is also consistent with KSail's posture of configuring *connections* to identity infrastructure rather than reimplementing it (KSail already injects each cluster's API-server OIDC flags but does not deploy the provider).
+
+Because KSail delegates here, **no new `ksail.yaml` field is required** — the existing OIDC configuration plus each distribution's service-account issuer already supply the trust anchors. Pick the mechanism that matches your trust requirements:
+
+### Option A — Projected service-account tokens (lightweight, no mesh)
+
+This extends the shared-issuer model from *user* tokens to *workload* tokens. Every cluster's API server is itself an OIDC issuer for the service-account tokens it mints (`--service-account-issuer` + a discoverable JWKS), so the same "verify against a trusted issuer" pattern applies:
+
+<Steps>
+1. **Project an audience-bound token in the source cluster**
+
+   Mount a [projected service-account token](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#serviceaccount-token-volume-projection) whose `audience` names the receiving party. The token is a short-lived JWT signed by the source cluster's service-account issuer, with claims identifying the namespace and service account:
+
+   ```yaml
+   volumes:
+     - name: federated-token
+       projected:
+         sources:
+           - serviceAccountToken:
+               audience: https://api.cluster-b.example.com # the receiver
+               expirationSeconds: 3600
+               path: token
+   ```
+
+2. **Trust the source cluster's issuer at the receiver**
+
+   Configure the receiving cluster (or external service) to validate tokens against the **source** cluster's service-account OIDC discovery document (`<issuer>/.well-known/openid-configuration` → JWKS). On the receiver this is the same [API-server OIDC configuration](#api-server-configuration) KSail already understands, pointed at the source issuer; on a non-Kubernetes verifier it is standard OIDC discovery.
+
+3. **Authorize the projected identity**
+
+   Bind RBAC (or the external service's policy) to the token's subject — `system:serviceaccount:<namespace>:<name>` — exactly as with [portable RBAC](#rbac-integration).
+</Steps>
+
+The source cluster's issuer URL must be **resolvable by the verifier** (a stable, externally reachable discovery endpoint), and audiences should be receiver-specific so a token cannot be replayed against an unintended cluster.
+
+### Option B — SPIFFE/SPIRE federation (mesh-grade, mutual)
+
+For mutual workload authentication across a fleet, use [SPIFFE/SPIRE](https://spiffe.io/). Each cluster runs a SPIRE server owning a **trust domain**; clusters federate by exchanging trust bundles over the [SPIFFE Federation](https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Federation.md) endpoint API, after which a workload's SVID — `spiffe://<trust-domain>/ns/<namespace>/sa/<service-account>` — is verifiable in every federated trust domain.
+
+> [!NOTE]
+> A KSail-managed platform that runs **Cilium with mutual authentication already runs an embedded SPIRE** as the workload-identity substrate, so Option B is often available with no extra deployment — federate the existing trust domains rather than standing up SPIRE from scratch.
+
+### Choosing between them
+
+| | Option A — Projected tokens | Option B — SPIFFE/SPIRE |
+|---|---|---|
+| Trust direction | One-way (workload → receiver) | Mutual (mTLS) |
+| Extra infrastructure | None (uses the cluster's SA issuer) | SPIRE servers + federation (may already exist via Cilium) |
+| Best for | A workload calling a specific cluster/service | Service-to-service mesh across the fleet |
+
+Both keep the no-central-control-plane property: trust is declared per cluster against a shared/federated issuer. If a future need arises for KSail to *manage* this trust declaratively (e.g. a `spec.cluster.federation` surface), that can be added incrementally on top of these mechanisms — see the [OIDC federation roadmap issue](https://github.com/devantler-tech/ksail/issues/4602).
+
 ## Related
 
 - [Declarative Configuration](/configuration/declarative-configuration/) — full `ksail.yaml` schema reference

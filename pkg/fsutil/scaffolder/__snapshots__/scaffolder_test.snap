@@ -66,6 +66,7 @@ Vanilla error occurred: false
 ✚ overwrote 'ksail.yaml'
 ✚ created 'kind.yaml'
 ✚ created 'k8s/kustomization.yaml'
+✚ created '.devcontainer/devcontainer.json'
 
 ---
 
@@ -73,6 +74,7 @@ Vanilla error occurred: false
 ✚ created 'ksail.yaml'
 ✚ overwrote 'kind.yaml'
 ✚ created 'k8s/kustomization.yaml'
+✚ created '.devcontainer/devcontainer.json'
 
 ---
 
@@ -80,5 +82,6 @@ Vanilla error occurred: false
 ⚠ skipped 'ksail.yaml', file exists use --force to overwrite
 ✚ created 'kind.yaml'
 ✚ created 'k8s/kustomization.yaml'
+✚ created '.devcontainer/devcontainer.json'
 
 ---

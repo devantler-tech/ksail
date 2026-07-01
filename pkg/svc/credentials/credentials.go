@@ -38,6 +38,10 @@ const (
 	AWSSecretAccessKey Key = "aws.secretAccessKey"
 	// AWSSessionToken is the AWS session token (for temporary credentials).
 	AWSSessionToken Key = "aws.sessionToken"
+	// CopilotToken is the GitHub Copilot token the AI assistant authenticates with. Not a cloud
+	// provider, but resolved the same way (secure store override, otherwise the environment) so it can
+	// be configured from the Settings page instead of only via the environment.
+	CopilotToken Key = "copilot.token"
 )
 
 // Default environment variable names. These mirror the canonical defaults declared on the v1alpha1
@@ -51,6 +55,12 @@ const (
 	defaultAWSAccessKeyIDEnvVar  = "AWS_ACCESS_KEY_ID"
 	defaultAWSSecretAccessEnvVar = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // env var NAME, not a secret
 	defaultAWSSessionTokenEnvVar = "AWS_SESSION_TOKEN"     //nolint:gosec // env var NAME, not a secret
+	// defaultCopilotTokenEnvVar is the primary variable webchat.copilotToken() reads first (it also
+	// falls back to COPILOT_TOKEN); using it as the default keeps a stored token resolvable via Overlay.
+	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
+	// copilotEnvFallback is the secondary variable webchat.copilotToken() reads after the primary; the
+	// credential resolution mirrors it so Settings recognizes a Copilot token set only via COPILOT_TOKEN.
+	copilotEnvFallback = "COPILOT_TOKEN"
 )
 
 // AllKeys returns every credential key in a stable order. The Settings UI and API iterate this.
@@ -64,32 +74,24 @@ func AllKeys() []Key {
 		AWSAccessKeyID,
 		AWSSecretAccessKey,
 		AWSSessionToken,
+		CopilotToken,
 	}
 }
 
 // DefaultEnvVar returns the conventional environment-variable name a credential resolves from when
-// no override key has been configured.
+// no override key has been configured, or "" for an unknown key.
 func DefaultEnvVar(key Key) string {
-	switch key {
-	case HetznerToken:
-		return v1alpha1.DefaultHetznerTokenEnvVar
-	case OmniEndpoint:
-		return defaultOmniEndpointEnvVar
-	case OmniServiceAccountKey:
-		return defaultOmniServiceAccountKey
-	case AWSRegion:
-		return defaultAWSRegionEnvVar
-	case AWSProfile:
-		return defaultAWSProfileEnvVar
-	case AWSAccessKeyID:
-		return defaultAWSAccessKeyIDEnvVar
-	case AWSSecretAccessKey:
-		return defaultAWSSecretAccessEnvVar
-	case AWSSessionToken:
-		return defaultAWSSessionTokenEnvVar
-	default:
-		return ""
-	}
+	return map[Key]string{
+		HetznerToken:          v1alpha1.DefaultHetznerTokenEnvVar,
+		OmniEndpoint:          defaultOmniEndpointEnvVar,
+		OmniServiceAccountKey: defaultOmniServiceAccountKey,
+		AWSRegion:             defaultAWSRegionEnvVar,
+		AWSProfile:            defaultAWSProfileEnvVar,
+		AWSAccessKeyID:        defaultAWSAccessKeyIDEnvVar,
+		AWSSecretAccessKey:    defaultAWSSecretAccessEnvVar,
+		AWSSessionToken:       defaultAWSSessionTokenEnvVar,
+		CopilotToken:          defaultCopilotTokenEnvVar,
+	}[key]
 }
 
 // Resolver resolves credential values and the environment-variable names they resolve from.
@@ -112,12 +114,27 @@ func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
 
 // Value returns the process-environment value for key's default variable, or "".
 func (EnvResolver) Value(key Key) string {
-	name := DefaultEnvVar(key)
-	if name == "" {
+	return resolveEnvValue(key, DefaultEnvVar(key))
+}
+
+// resolveEnvValue reads key's value from the process environment under envVar, applying the Copilot
+// secondary-variable fallback (COPILOT_TOKEN) when the primary default is unset — matching
+// webchat.copilotToken(), so a COPILOT_TOKEN-only setup still resolves (and reports as "env").
+func resolveEnvValue(key Key, envVar string) string {
+	if envVar == "" {
 		return ""
 	}
 
-	return os.Getenv(name)
+	value := os.Getenv(envVar)
+	if value != "" {
+		return value
+	}
+
+	if key == CopilotToken && envVar == defaultCopilotTokenEnvVar {
+		return os.Getenv(copilotEnvFallback)
+	}
+
+	return ""
 }
 
 // Ensure EnvResolver satisfies Resolver.

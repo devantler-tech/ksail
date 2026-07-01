@@ -4,10 +4,10 @@ description: |
 metadata:
     author: github
     github-path: skills/gh-stack
-    github-ref: refs/tags/v0.0.6
+    github-ref: refs/tags/v0.0.7
     github-repo: https://github.com/github/gh-stack
-    github-tree-sha: d690ac020267120882a2851d4a10404030565db5
-    version: 0.0.6
+    github-tree-sha: c68c56b3414753690759b148af1ce5a5c717d774
+    version: 0.0.7
 name: gh-stack
 ---
 # gh-stack
@@ -547,6 +547,7 @@ gh stack submit --auto --open
 - Pushes all active (non-merged) branches atomically (`--force-with-lease --atomic`)
 - Creates a new PR for each branch that doesn't have one (base set to the first non-merged ancestor branch)
 - After creating PRs, links them together as a **Stack** on GitHub (requires the repository to have stacks enabled)
+- If every PR in the stack has already been merged, the stack is complete and can't be extended. `submit` automatically forks your unmerged branches into a **new** stack rooted at the trunk and creates it on GitHub, leaving the merged stack untouched.
 - If stacks are not available (exit code 9), the repository does not have stacked PRs enabled. In interactive mode, `submit` offers to create regular (unstacked) PRs instead. In non-interactive mode, it exits with code 9.
 - Syncs PR metadata for branches that already have PRs
 
@@ -631,7 +632,8 @@ gh stack sync [flags]
 3. **Cascade rebase** all stack branches onto their updated parents (only if trunk moved). Handles merged PRs automatically. If a conflict is detected, **all branches are restored** to their pre-rebase state and the command exits with code 3 — see [Handle rebase conflicts](#handle-rebase-conflicts-agent-workflow) for the resolution workflow
 4. **Push** all active branches atomically
 5. **Sync PR state** from GitHub and report the status of each PR
-6. **Prune** — in interactive terminals, prompts to delete local branches for merged PRs. Use `--prune` to skip the prompt. In non-interactive environments, pruning only happens when `--prune` is passed explicitly
+6. **Sync the stack object** — link the open PRs into a stack on GitHub. If the PRs are not yet in a stack, a new stack is created; if some PRs are already in a stack, it is updated (additive only). This only happens when two or more PRs exist. Sync **never opens PRs** — use `gh stack submit` for that
+7. **Prune** — in interactive terminals, prompts to delete local branches for merged PRs. Use `--prune` to skip the prompt. In non-interactive environments, pruning only happens when `--prune` is passed explicitly
 
 **Output (stderr):**
 
@@ -641,8 +643,9 @@ gh stack sync [flags]
 - `✓ Pushed N branches`
 - `✓ PR #N (<branch>) — Open` per branch
 - `Merged: #N, #M` for merged branches
+- `✓ Stack created on GitHub with N PRs` / `✓ Stack updated on GitHub with N PRs` / `✓ Linked to the existing stack on GitHub` (when two or more PRs exist)
 - `✓ Pruned <branch> (merged)` per pruned branch (when pruning)
-- `✓ Stack synced`
+- `✓ Stack synced` when the stack object on GitHub was created/updated to match local, or `✓ Branches synced` when only the branches were synced (fewer than two PRs, stacked PRs unavailable, or a divergence)
 
 ---
 

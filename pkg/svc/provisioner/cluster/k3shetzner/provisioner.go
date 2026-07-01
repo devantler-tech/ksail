@@ -1,0 +1,44 @@
+package k3shetzner
+
+import (
+	"fmt"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
+)
+
+// Provisioner provisions a K3s cluster on Hetzner Cloud servers by composing the
+// native k3s install renderer, the cloud-init delivery transport, and the shared
+// Hetzner infrastructure lifecycle ([hetznerbase.Base]). See the package
+// documentation for the scope of the current increment.
+type Provisioner struct {
+	*hetznerbase.Base
+
+	transport cloudinitbootstrap.UserDataProvider
+	version   string
+}
+
+// NewProvisioner constructs a K3s × Hetzner provisioner. It builds the shared
+// [hetznerbase.Base] (which constructs the Hetzner provider from opts, resolving the
+// API token from the configured environment variable), mirroring how the Talos ×
+// Hetzner factory constructs its provider. version is the k3s release the nodes
+// install (INSTALL_K3S_VERSION form, e.g. "v1.36.1+k3s1"); controlPlanes and agents
+// are the node counts; clusterName is the default cluster name used when an
+// operation is called with an empty name.
+func NewProvisioner(
+	clusterName, version string,
+	controlPlanes, agents int,
+	opts v1alpha1.OptionsHetzner,
+) (*Provisioner, error) {
+	base, err := hetznerbase.NewBase(clusterName, controlPlanes, agents, opts)
+	if err != nil {
+		return nil, fmt.Errorf("create K3s × Hetzner base: %w", err)
+	}
+
+	return &Provisioner{
+		Base:      base,
+		transport: cloudinitbootstrap.New(),
+		version:   version,
+	}, nil
+}

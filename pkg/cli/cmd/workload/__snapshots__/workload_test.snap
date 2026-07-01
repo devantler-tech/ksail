@@ -99,6 +99,7 @@ Dev loop:
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
   logs        Print container logs
+  network     Inspect live network traffic flows via Cilium Hubble
   rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
 
@@ -238,12 +239,13 @@ Usage:
   validate [PATH] [flags]
 
 Flags:
-  -h, --help                     help for validate
-      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
-      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
-      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
-      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
-      --strict                   Enable strict validation mode
+  -h, --help                      help for validate
+      --ignore-missing-schemas    Ignore resources with missing schemas (default true)
+      --schema-location strings   Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog, so they are validated against a supplied schema instead of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)
+      --skip-helm-render          Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
+      --skip-kinds strings        Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets              Skip validation of Kubernetes Secrets (default true)
+      --strict                    Enable strict validation mode
 
 ---
 
@@ -3227,12 +3229,13 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
-  -h, --help                     help for validate
-      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
-      --skip-helm-render         Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
-      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
-      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
-      --strict                   Enable strict validation mode
+  -h, --help                      help for validate
+      --ignore-missing-schemas    Ignore resources with missing schemas (default true)
+      --schema-location strings   Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog, so they are validated against a supplied schema instead of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)
+      --skip-helm-render          Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). By default, charts are rendered in-process and the rendered manifests are validated.
+      --skip-kinds strings        Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets              Skip validation of Kubernetes Secrets (default true)
+      --strict                    Enable strict validation mode
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -3410,6 +3413,7 @@ Dev loop:
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
   logs        Print container logs
+  network     Inspect live network traffic flows via Cilium Hubble
   rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
 
@@ -3473,6 +3477,10 @@ Examples:
   # Replace a recipient (add new, remove old)
   ksail workload cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
+  # Re-seal every file to a completely new recipient set (e.g. after a key is
+  # retired or compromised) — declare the full set, no need to enumerate old keys
+  ksail workload cipher rotate ./k8s --set-key age1newkey1... --set-key age1newkey2... --recursive
+
   # Preview which files would be rotated without making changes
   ksail workload cipher rotate ./k8s --dry-run
 
@@ -3480,12 +3488,13 @@ Usage:
   ksail workload cipher rotate <file/folder> [flags]
 
 Flags:
-      --add-key string      public key to add as a master key recipient
-      --dry-run             show which files would be rotated without making changes
-  -f, --force               skip confirmation prompt and rotate immediately
-  -h, --help                help for rotate
-  -r, --recursive           scan subdirectories when target is a folder
-      --remove-key string   public key to remove from master key recipients
+      --add-key string        public key to add as a master key recipient
+      --dry-run               show which files would be rotated without making changes
+  -f, --force                 skip confirmation prompt and rotate immediately
+  -h, --help                  help for rotate
+  -r, --recursive             scan subdirectories when target is a folder
+      --remove-key string     public key to remove from master key recipients
+      --set-key stringArray   public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -3658,6 +3667,61 @@ Usage:
 
 Flags:
   -h, --help   help for import
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/network - 1]
+Inspect live network traffic flows via Cilium Hubble.
+
+When the cluster uses the Cilium CNI, Cilium's eBPF datapath records every
+network flow and exposes them through the Hubble Relay API. This command
+queries the most recent flows and prints them, so you can debug connectivity,
+spot drops, and see which workloads talk to each other without leaving the
+terminal.
+
+The command connects to a Hubble Relay address (default localhost:4245).
+Port-forward the in-cluster relay first, e.g.:
+
+  kubectl -n kube-system port-forward svc/hubble-relay 4245:80
+
+Pass --follow to keep streaming live flows as they happen (like 'kubectl logs
+-f'), until you interrupt with Ctrl-C.
+
+Output formats:
+  - plain: an aligned table (default; one row per flow while following)
+  - json:  a JSON array of flow records, or newline-delimited JSON (one object
+           per line) while following — both fit scripting / AI consumption
+
+Examples:
+  # Show the 20 most recent flows
+  ksail workload network
+
+  # Only flows in the "default" namespace, as JSON
+  ksail workload network --namespace default --output json
+
+  # Only the last 100 TCP flows touching a pod
+  ksail workload network --pod my-app --protocol tcp --last 100
+
+  # Stream live flows until Ctrl-C
+  ksail workload network --follow
+
+Usage:
+  ksail workload network [flags]
+
+Flags:
+      --cni CNI            Container Network Interface (CNI) to use
+  -f, --follow             Stream flows continuously until interrupted (Ctrl-C)
+  -h, --help               help for network
+      --last uint          Number of most recent flows to fetch (default 20)
+  -n, --namespace string   Filter flows by namespace (source or destination)
+  -o, --output string      Output format: plain, json (default "plain")
+      --pod string         Filter flows by pod-name substring (source or destination)
+      --protocol string    Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP)
+      --server string      Hubble Relay address to query (default "localhost:4245")
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
