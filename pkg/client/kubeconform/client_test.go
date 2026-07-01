@@ -319,6 +319,45 @@ func TestValidateFile_NilOptions(t *testing.T) {
 	}
 }
 
+// TestValidateBytes_NamesFailingResource verifies that when a multi-document stream
+// contains a schema-invalid resource, the failure message identifies that resource by
+// Kind/Namespace/Name — so a finding in a large Kustomize+Helm render is traceable to a
+// specific object — without implicating the valid resources in the same stream.
+func TestValidateBytes_NamesFailingResource(t *testing.T) {
+	t.Parallel()
+
+	// A stream with a valid Namespace and a schema-invalid ConfigMap (data must be a
+	// map of strings, not a scalar).
+	invalidConfigMap := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: broken-config
+  namespace: demo
+data: "this is not a map"
+`
+	manifests := validNamespaceYAML + "---\n" + invalidConfigMap
+
+	client := kubeconform.NewClient()
+	opts := &kubeconform.ValidationOptions{
+		Strict:               true,
+		IgnoreMissingSchemas: true,
+	}
+
+	err := client.ValidateBytes(context.Background(), "render.yaml", []byte(manifests), opts)
+	if err == nil {
+		t.Fatal("expected the invalid ConfigMap to fail validation")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "ConfigMap/demo/broken-config") {
+		t.Fatalf("expected error to name the failing resource, got: %v", err)
+	}
+
+	if strings.Contains(msg, "test-namespace") {
+		t.Fatalf("expected error not to implicate the valid Namespace, got: %v", err)
+	}
+}
+
 // widgetCRD is a JSON schema for a fictional CRD kind that exists in neither the
 // built-in Kubernetes schemas nor the CRDs-catalog, so it can only be validated
 // via a caller-supplied schema location.

@@ -153,13 +153,16 @@ func (c *Client) validateWithRetry(ctx context.Context, validate func() error) e
 // processResults processes validation results and returns an error if validation failed.
 // Error details are included in the returned error message (not written to stderr)
 // to avoid interleaving with ProgressGroup's ANSI output.
+// Each failing resource's identity (Kind/Namespace/Name) is prefixed to its detail so
+// that, when validating a stream of many manifests (e.g. a whole Kustomize + Helm render),
+// the message points at the offending resource instead of surfacing a bare schema error.
 // The caller is responsible for including any file/source context in the wrapping error.
 func (c *Client) processResults(results []validator.Result) error {
 	var errDetails []string
 
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
-			errDetails = append(errDetails, fmt.Sprintf("%v", res.Err))
+			errDetails = append(errDetails, formatFailure(res))
 		}
 	}
 
@@ -168,6 +171,36 @@ func (c *Client) processResults(results []validator.Result) error {
 	}
 
 	return nil
+}
+
+// formatFailure renders a single failing result as "<identity>: <detail>", falling
+// back to just the detail when the resource signature is unavailable (e.g. a document
+// missing apiVersion/kind). Preserving the original detail keeps existing error
+// substrings intact for callers that match on them.
+func formatFailure(res validator.Result) string {
+	detail := fmt.Sprintf("%v", res.Err)
+
+	if identity := resourceIdentity(res); identity != "" {
+		return identity + ": " + detail
+	}
+
+	return detail
+}
+
+// resourceIdentity returns a "<Kind>/<Namespace>/<Name>" (or "<Kind>/<Name>" for
+// cluster-scoped resources) label for a validation result, or "" when the result
+// carries no usable signature.
+func resourceIdentity(res validator.Result) string {
+	sig, err := res.Resource.Signature()
+	if err != nil || sig == nil || sig.Kind == "" {
+		return ""
+	}
+
+	if sig.Namespace != "" {
+		return fmt.Sprintf("%s/%s/%s", sig.Kind, sig.Namespace, sig.Name)
+	}
+
+	return fmt.Sprintf("%s/%s", sig.Kind, sig.Name)
 }
 
 // ValidationOptions configures validation behavior.
