@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -47,23 +48,6 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 	)
 }
 
-// registerMirrorRegistryFlag adds the --mirror-registry flag to a command.
-// The flag is intentionally NOT bound to Viper to allow custom merge logic
-// via getMirrorRegistriesWithDefaults() in setup/mirrorregistry.
-func registerMirrorRegistryFlag(cmd *cobra.Command) {
-	cmd.Flags().StringSlice("mirror-registry", []string{},
-		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
-			"Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). "+
-			"Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'")
-}
-
-// registerNameFlag adds the --name flag to a command and binds it to Viper.
-func registerNameFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager) {
-	cmd.Flags().StringP("name", "n", "",
-		"Cluster name used for container names, registry names, and kubeconfig context")
-	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
-}
-
 // hideConfigOnlyFlags hides the config-loading flags that a command needs for
 // defaults and validation but does not expose in its help (distribution,
 // distribution-config, gitops-engine, local-registry). Shared by connect and
@@ -78,69 +62,8 @@ func hideConfigOnlyFlags(cmd *cobra.Command) {
 	}
 }
 
-// registerOIDCExtraScopeFlag adds the --oidc-extra-scope flag to a command.
-// Like --mirror-registry, this is a string slice flag that is NOT bound to Viper
-// and instead merged manually after config loading.
-func registerOIDCExtraScopeFlag(cmd *cobra.Command) {
-	cmd.Flags().StringSlice("oidc-extra-scope", []string{},
-		"Additional OIDC scopes beyond openid (repeatable)")
-}
-
-// applyOIDCExtraScopeFlag merges --oidc-extra-scope flag values into the cluster config.
-// CLI flag values take precedence over config file values when explicitly set.
-func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
-	scopeFlag := cmd.Flags().Lookup("oidc-extra-scope")
-	if scopeFlag == nil || !scopeFlag.Changed {
-		return
-	}
-
-	scopes, err := cmd.Flags().GetStringSlice("oidc-extra-scope")
-	if err != nil {
-		return
-	}
-
-	// When the flag is explicitly set, always assign — even if empty — so the
-	// user can clear extraScopes from a config file via CLI.
-	clusterCfg.Spec.Cluster.OIDC.ExtraScopes = scopes
-}
-
-// registerAllowedCIDRsFlag adds the --allowed-cidrs flag to a command.
-// Like --mirror-registry, this is a string slice flag NOT bound to Viper
-// and merged manually via applyAllowedCIDRsFlag.
-func registerAllowedCIDRsFlag(cmd *cobra.Command) {
-	cmd.Flags().StringSlice("allowed-cidrs", []string{},
-		"CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. "+
-			"When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6). "+
-			"Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24")
-}
-
-// applyAllowedCIDRsFlag merges --allowed-cidrs flag values into the cluster config.
-// CLI flag values take precedence over config file values when explicitly set.
-func applyAllowedCIDRsFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
-	cidrFlag := cmd.Flags().Lookup("allowed-cidrs")
-	if cidrFlag == nil || !cidrFlag.Changed {
-		return
-	}
-
-	cidrs, err := cmd.Flags().GetStringSlice("allowed-cidrs")
-	if err != nil {
-		return
-	}
-
-	clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs = cidrs
-}
-
-// applyClusterMutationFlags merges the non-Viper CLI flag overrides
-// (--oidc-extra-scope and --allowed-cidrs) into the cluster config. Centralizing
-// the set keeps every mutation command (create, update, init) applying the same
-// flags; a new manually-merged flag is added here once rather than at each call site.
-func applyClusterMutationFlags(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
-	applyOIDCExtraScopeFlag(cmd, clusterCfg)
-	applyAllowedCIDRsFlag(cmd, clusterCfg)
-}
-
 // validatePostMutationFlags re-validates the configuration fields that
-// applyClusterMutationFlags can change: OIDC extra scopes and Hetzner allowed
+// clusterflags.ApplyClusterMutationFlags can change: OIDC extra scopes and Hetzner allowed
 // CIDRs. Shared by create and update so the two commands cannot drift.
 func validatePostMutationFlags(ctx *localregistry.Context) error {
 	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
@@ -167,10 +90,10 @@ func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager
 		defaultClusterMutationFieldSelectors(),
 	)
 
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
-	registerOIDCExtraScopeFlag(cmd)
-	registerAllowedCIDRsFlag(cmd)
+	clusterflags.RegisterMirrorRegistryFlag(cmd)
+	clusterflags.RegisterNameFlag(cmd, cfgManager)
+	clusterflags.RegisterOIDCExtraScopeFlag(cmd)
+	clusterflags.RegisterAllowedCIDRsFlag(cmd)
 
 	return cfgManager
 }

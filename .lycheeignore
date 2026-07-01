@@ -32,6 +32,11 @@ https://www.siderolabs.com/
 # Intermittent Network Errors (codecov badge returns 502 occasionally)
 https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
 
+# Intermittent Network Errors (goreportcard.com badge/report time out in CI even
+# with lychee's 3 retries + 30s timeout; glob matches the README badge and its
+# report link)
+https://goreportcard.com/
+
 # Intermittent Network Errors (star-history API returns 500/timeouts in CI)
 https://api.star-history.com/
 

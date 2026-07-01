@@ -1,4 +1,4 @@
-package cluster_test
+package project_test
 
 import (
 	"bytes"
@@ -9,13 +9,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
+
+// mirrorRegistryHelp is the help text used when the test config-manager helper
+// registers a stand-in mirror-registry flag (the init command registers the real
+// flag via clusterflags.RegisterMirrorRegistryFlag; the text is not asserted).
+const mirrorRegistryHelp = "Configure mirror registries with format 'host=upstream' " +
+	"(e.g., docker.io=https://registry-1.docker.io)."
+
+// setFlags sets the given flag values on cmd, failing the test on any error.
+func setFlags(t *testing.T, cmd *cobra.Command, values map[string]string) {
+	t.Helper()
+
+	for k, v := range values {
+		err := cmd.Flags().Set(k, v)
+		if err != nil {
+			t.Fatalf("failed to set flag %s: %v", k, err)
+		}
+	}
+}
 
 func newInitCommand(t *testing.T) *cobra.Command {
 	t.Helper()
@@ -35,7 +53,7 @@ func newConfigManager(
 	t.Helper()
 	cmd.SetOut(writer)
 	cmd.SetErr(writer)
-	manager := ksailconfigmanager.NewCommandConfigManager(cmd, cluster.InitFieldSelectors())
+	manager := ksailconfigmanager.NewCommandConfigManager(cmd, project.InitFieldSelectors())
 	// bind init-local flags like production code
 	cmd.Flags().StringP("output", "o", "", "Output directory for the project")
 	_ = manager.Viper.BindPFlag("output", cmd.Flags().Lookup("output"))
@@ -92,7 +110,7 @@ func TestHandleInitRunE_SuccessWithOutputFlag(t *testing.T) {
 
 	var err error
 
-	err = cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err = project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -126,7 +144,7 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err := project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -156,7 +174,7 @@ func TestHandleInitRunE_RespectsDistributionFlagTalos(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err := project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -236,7 +254,7 @@ func TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset(t *testing.T) {
 
 	var err error
 
-	err = cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err = project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -265,7 +283,7 @@ func TestHandleInitRunE_DefaultsLocalRegistryWithFlux(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err := project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -299,7 +317,7 @@ func TestHandleInitRunE_RespectsCertManagerFlag(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err := project.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -334,7 +352,7 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
+	err := project.HandleInitRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	//nolint:gosec // test file path is safe
@@ -355,11 +373,11 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 	}
 }
 
-func newInitDeps(t *testing.T) cluster.InitDeps {
+func newInitDeps(t *testing.T) project.InitDeps {
 	t.Helper()
 	tmr := timer.NewMockTimer(t)
 	tmr.EXPECT().Start().Return()
 	tmr.EXPECT().NewStage().Return()
 
-	return cluster.InitDeps{Timer: tmr}
+	return project.InitDeps{Timer: tmr}
 }

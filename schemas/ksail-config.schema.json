@@ -669,6 +669,11 @@
                   "type": "string",
                   "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
                   "description": "DrainTimeout is the per-node pod-eviction budget for rolling node drains during\n`cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When\nunset, KSail uses 10m. Increase it for clusters whose stateful workloads need\nlonger to evict gracefully — e.g. Longhorn volume rebuilds or database failovers\ngated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;\nre-run with --force-drain to delete pods bypassing PodDisruptionBudgets instead.\nOverride per invocation with --drain-timeout. Example: \"15m\"."
+                },
+                "storageHealthTimeout": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
+                  "description": "StorageHealthTimeout opts into a between-node storage-health gate during the\n`cluster update` rolling reboot. When set to a positive duration and the cluster\nruns a replicated node-local storage backend (Longhorn), the roll waits — up to\nthis timeout — for the just-rebooted node's volumes to return to a healthy state\nbefore draining the next node. This prevents progressively faulting volumes whose\nreplicas are spread one-per-node: without the gate the roll advances as soon as a\nnode reports Kubernetes Ready, so rebooting consecutive replica holders before a\nrebuild completes can take every replica of a volume down at once. Default off\n(unset / 0): behaviour is unchanged. No effect when no replicated storage backend\nis detected. The gate only helps when replicas have spare capacity to rebuild\nduring the roll; on a fully drained pool with hard anti-affinity it times out\n(naming the stuck volumes) rather than hanging. Example: \"10m\"."
                 }
               },
               "additionalProperties": false,
@@ -1007,6 +1012,13 @@
                   },
                   "type": "array",
                   "description": "Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."
+                },
+                "schemaLocations": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Appended after the built-in Kubernetes schemas and the CRDs-catalog, so CRDs absent from the catalog can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location."
                 },
                 "helmRender": {
                   "type": "boolean",

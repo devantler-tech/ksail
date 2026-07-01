@@ -22,6 +22,11 @@ const (
 	// schemaCacheDirPerm is the permission for the schema cache directory.
 	schemaCacheDirPerm = 0o700
 
+	// builtinSchemaLocationCount is the number of built-in schema locations
+	// (the default Kubernetes schemas and the CRDs-catalog) prepended before any
+	// caller-supplied locations.
+	builtinSchemaLocationCount = 2
+
 	// defaultValidateMaxRetryAttempts bounds how many times a validation is
 	// retried when a schema download hits a transient network error.
 	defaultValidateMaxRetryAttempts = 3
@@ -148,13 +153,16 @@ func (c *Client) validateWithRetry(ctx context.Context, validate func() error) e
 // processResults processes validation results and returns an error if validation failed.
 // Error details are included in the returned error message (not written to stderr)
 // to avoid interleaving with ProgressGroup's ANSI output.
+// Each failing resource's identity (Kind/Namespace/Name) is prefixed to its detail so
+// that, when validating a stream of many manifests (e.g. a whole Kustomize + Helm render),
+// the message points at the offending resource instead of surfacing a bare schema error.
 // The caller is responsible for including any file/source context in the wrapping error.
 func (c *Client) processResults(results []validator.Result) error {
 	var errDetails []string
 
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
-			errDetails = append(errDetails, fmt.Sprintf("%v", res.Err))
+			errDetails = append(errDetails, formatFailure(res))
 		}
 	}
 
@@ -165,10 +173,45 @@ func (c *Client) processResults(results []validator.Result) error {
 	return nil
 }
 
+// formatFailure renders a single failing result as "<identity>: <detail>", falling
+// back to just the detail when the resource signature is unavailable (e.g. a document
+// missing apiVersion/kind). Preserving the original detail keeps existing error
+// substrings intact for callers that match on them.
+func formatFailure(res validator.Result) string {
+	detail := fmt.Sprintf("%v", res.Err)
+
+	if identity := resourceIdentity(res); identity != "" {
+		return identity + ": " + detail
+	}
+
+	return detail
+}
+
+// resourceIdentity returns a "<Kind>/<Namespace>/<Name>" (or "<Kind>/<Name>" for
+// cluster-scoped resources) label for a validation result, or "" when the result
+// carries no usable signature.
+func resourceIdentity(res validator.Result) string {
+	sig, err := res.Resource.Signature()
+	if err != nil || sig == nil || sig.Kind == "" {
+		return ""
+	}
+
+	if sig.Namespace != "" {
+		return fmt.Sprintf("%s/%s/%s", sig.Kind, sig.Namespace, sig.Name)
+	}
+
+	return fmt.Sprintf("%s/%s", sig.Kind, sig.Name)
+}
+
 // ValidationOptions configures validation behavior.
 type ValidationOptions struct {
 	// SkipKinds is a list of Kubernetes kinds to skip during validation (e.g., "Secret").
 	SkipKinds []string
+	// SchemaLocations lists additional kubeconform schema locations (local directories
+	// or URL templates) appended after the built-in Kubernetes schemas and the
+	// CRDs-catalog. They let a repo validate CRDs that are absent from (or stale in)
+	// the catalog against a supplied schema instead of skipping the kind entirely.
+	SchemaLocations []string
 	// Strict enables strict validation mode.
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
@@ -177,14 +220,19 @@ type ValidationOptions struct {
 
 // createValidator creates a kubeconform validator with the given options.
 func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, error) {
-	// Create schema locations
-	schemaLocations := []string{
+	// Create schema locations. Caller-supplied locations are appended last so they
+	// act as a fallback for CRDs absent from the catalog (the catalog URL 404s and
+	// kubeconform falls through to these) without changing precedence for kinds
+	// already covered.
+	schemaLocations := make([]string, 0, builtinSchemaLocationCount+len(opts.SchemaLocations))
+	schemaLocations = append(schemaLocations,
 		// Default Kubernetes schemas
 		"default",
 		// Add Datree CRDs catalog for additional CRD schemas
-		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"+
 			"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
-	}
+	)
+	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
 
 	// Convert skip kinds to map
 	skipKinds := make(map[string]struct{})

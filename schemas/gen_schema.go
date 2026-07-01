@@ -104,6 +104,11 @@ func customizeSchema(schema *jsonschema.Schema) error {
 
 	// Walk schema tree once, applying all transformations.
 	walkSchema(schema, func(s *jsonschema.Schema) {
+		// Strip any controller-gen marker lines (e.g. +kubebuilder:validation:...) the
+		// Go-comment extractor folded into a description. Markers steer CRD generation,
+		// not this config schema, so they must never surface as user-facing docs.
+		s.Description = stripControllerGenMarkers(s.Description)
+
 		// Clear required everywhere (all fields use omitzero). The root spec is
 		// deliberately NOT required: the runtime treats an absent spec as
 		// all-defaults, and `ksail cluster init` scaffolds a ksail.yaml without
@@ -231,6 +236,67 @@ func supportedProviderValues(distribution v1alpha1.Distribution) []any {
 	}
 
 	return providers
+}
+
+// stripControllerGenMarkers removes controller-gen marker lines (a "+"-prefixed
+// directive such as +kubebuilder:validation:XValidation:...) that the Go-comment
+// extractor folds into a description verbatim. Those markers drive CRD generation, not
+// this configuration schema, so they are noise in a user-facing description. A line is
+// dropped only when its first non-space token is a recognised controller-gen marker, so
+// ordinary prose that merely begins with "+" (a bullet "+ note", a word "+optionally",
+// a signed value "+1") is preserved.
+func stripControllerGenMarkers(description string) string {
+	if !strings.Contains(description, "+") {
+		return description
+	}
+
+	// Marker tokens (the text before any ':' or '=') that controller-gen / kubebuilder
+	// emit at the start of a doc-comment line. Matching the whole token rather than a
+	// bare "+" prefix keeps prose that happens to start with "+" out of the strip set.
+	markers := map[string]bool{
+		"+kubebuilder":   true,
+		"+k8s":           true,
+		"+groupName":     true,
+		"+genclient":     true,
+		"+listType":      true,
+		"+listMapKey":    true,
+		"+mapType":       true,
+		"+optional":      true,
+		"+required":      true,
+		"+nullable":      true,
+		"+default":       true,
+		"+patchStrategy": true,
+		"+patchMergeKey": true,
+	}
+
+	lines := strings.Split(description, "\n")
+	kept := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		if isControllerGenMarkerLine(strings.TrimSpace(line), markers) {
+			continue
+		}
+
+		kept = append(kept, line)
+	}
+
+	return strings.TrimRight(strings.Join(kept, "\n"), "\n")
+}
+
+// isControllerGenMarkerLine reports whether a trimmed line is a controller-gen marker
+// directive rather than prose that merely begins with "+". The marker token is the text
+// up to the first ':', '=', or whitespace; it must match a known marker exactly.
+func isControllerGenMarkerLine(trimmed string, markers map[string]bool) bool {
+	if !strings.HasPrefix(trimmed, "+") {
+		return false
+	}
+
+	token := trimmed
+	if i := strings.IndexAny(trimmed, ":= \t"); i != -1 {
+		token = trimmed[:i]
+	}
+
+	return markers[token]
 }
 
 // walkSchema traverses the schema tree and calls fn on each node.

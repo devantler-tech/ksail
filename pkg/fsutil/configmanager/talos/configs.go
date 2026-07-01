@@ -14,6 +14,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
+	"sigs.k8s.io/yaml"
 )
 
 // Configs holds the loaded Talos machine configurations with patches applied.
@@ -413,6 +414,61 @@ func (c *Configs) Extensions() []string {
 	copy(result, c.extensions)
 
 	return result
+}
+
+// InstallImagePatch reports whether any user-provided patch sets machine.install.image,
+// returning the effective value. KSail derives machine.install.image from
+// spec.cluster.talos.extensions (see applySchematic), so a patch that also sets it is
+// redundant and silently overridden during config generation — callers use this to warn
+// about the resulting skew. The raw patch content is inspected (not the already-overridden
+// bundle), so the user's intent is recovered rather than KSail's computed value.
+//
+// Patches are stored in application order (LoadPatches: cluster, control-plane, worker;
+// then runtime patches appended) and a later strategic-merge patch overrides an earlier
+// one, so the LAST patch that sets the image is the effective value. Only strategic-merge
+// patches are detected; an RFC-6902 op targeting /machine/install/image is not (none are
+// scaffolded, and such a patch is unusual).
+func (c *Configs) InstallImagePatch() (string, bool) {
+	image := ""
+
+	for _, patch := range c.patches {
+		// Track field presence, not string-emptiness: the LAST patch that sets the
+		// machine.install.image field wins, even when it explicitly clears the image
+		// to "" (an earlier patch's value must not then be reported as effective).
+		if patchImage, present := installImageFromPatch(patch.Content); present {
+			image = patchImage
+		}
+	}
+
+	// found is true only when the effective value is a real (non-empty) image — an
+	// explicit clear leaves no effective pin, so no skew warning is warranted.
+	return image, image != ""
+}
+
+// installImageFromPatch extracts machine.install.image from a strategic-merge patch's raw
+// YAML content. The bool reports whether the patch sets the machine.install.image field at
+// all (independent of the string value, so an explicit empty clear is distinguishable from
+// an absent field). Returns ("", false) when the patch does not set it, or when the content
+// is not a strategic-merge document (e.g. an RFC-6902 patch list).
+func installImageFromPatch(content []byte) (string, bool) {
+	var doc struct {
+		Machine *struct {
+			Install *struct {
+				Image *string `json:"image"`
+			} `json:"install"`
+		} `json:"machine"`
+	}
+
+	err := yaml.Unmarshal(content, &doc)
+	if err != nil {
+		return "", false
+	}
+
+	if doc.Machine == nil || doc.Machine.Install == nil || doc.Machine.Install.Image == nil {
+		return "", false
+	}
+
+	return strings.TrimSpace(*doc.Machine.Install.Image), true
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").

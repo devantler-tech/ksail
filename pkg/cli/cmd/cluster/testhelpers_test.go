@@ -240,17 +240,6 @@ var (
 	_ installer.Installer            = (*fakeInstaller)(nil)
 )
 
-func setFlags(t *testing.T, cmd *cobra.Command, values map[string]string) {
-	t.Helper()
-
-	for k, v := range values {
-		err := cmd.Flags().Set(k, v)
-		if err != nil {
-			t.Fatalf("failed to set flag %s: %v", k, err)
-		}
-	}
-}
-
 func TestMain(m *testing.M) {
 	os.Exit(homeenv.RunFunc(func() int {
 		return snapshottest.Run(m, snaps.CleanOpts{Sort: true})

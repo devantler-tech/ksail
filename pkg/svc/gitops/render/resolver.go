@@ -19,13 +19,20 @@ import (
 // caches (HELM_REPOSITORY_CACHE / HELM_CONTENT_CACHE, read from shared defaults
 // by every helm.NewTemplateOnlyClient) and other shared SDK state that is not
 // safe for concurrent use. validate (and scan) render kustomizations in
-// parallel, and unserialized renders intermittently interleaved into each
-// other's manifest stream — producing malformed YAML at a random offset that
-// failed a different kustomization on each run (issue #5362). Constructing a
-// fresh client per render is not enough because the shared state lives on disk,
-// below the client. Serializing only the template step keeps the expensive
-// parallel work (kustomize build, kubeconform validation) unaffected, and keeps
-// the shared chart cache warm so each chart is downloaded at most once.
+// parallel, and unserialized renders corrupted that shared cache state.
+// Constructing a fresh client per render is not enough because the shared state
+// lives on disk, below the client. Serializing only the template step keeps the
+// expensive parallel work (kustomize build, kubeconform validation) unaffected,
+// and keeps the shared chart cache warm so each chart is downloaded at most once.
+//
+// This lock does not, on its own, resolve the #5362 YAML corruption. That
+// corruption's race-detector-confirmed root cause is a separate data race inside
+// kubeconform's resource.FromStream, which aliases the bufio.Scanner buffer
+// across documents it emits and validates concurrently; the large multi-resource
+// streams this in-process render produces merely widen that race (the in-process
+// render itself was a red herring). #5362 is fixed only by bumping kubeconform
+// past the FromStream fix (upstream yannh/kubeconform#363). The lock still earns
+// its place by preventing the distinct Helm shared-cache corruption above.
 //
 //nolint:gochecknoglobals // package-level lock guarding Helm's process-global render state
 var helmRenderMu sync.Mutex

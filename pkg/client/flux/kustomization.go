@@ -108,7 +108,13 @@ func (r *Reconciler) CheckNamedKustomizationReady(
 		return false, "", fmt.Errorf("get flux kustomization %q: %w", name, err)
 	}
 
-	return checkKustomizationStatus(kustomization)
+	// Resolve the revision the source has just made available so readiness is
+	// evaluated against the just-pushed artifact rather than a leftover Ready
+	// condition from the previous revision. An empty revision (source missing,
+	// unknown kind, no artifact) falls back to condition-only readiness.
+	sourceRevision := r.resolveSourceRevision(ctx, kustomization)
+
+	return checkKustomizationStatus(kustomization, sourceRevision)
 }
 
 // kustomizationClient returns a dynamic client for Flux Kustomizations.
@@ -152,8 +158,15 @@ func parseDependsOn(kustomization *unstructured.Unstructured) []string {
 
 // checkKustomizationStatus checks the kustomization status and returns ready state,
 // a human-readable status string for debugging, and any permanent failure errors.
+//
+// When sourceRevision is non-empty, readiness is revision-aware: the Ready
+// condition is only trusted once the Kustomization has attempted the current
+// source revision, and success additionally requires that revision to have been
+// applied. This prevents a leftover condition from the previous revision from
+// producing a false pass/fail immediately after a source artifact is pushed.
 func checkKustomizationStatus(
 	kustomization *unstructured.Unstructured,
+	sourceRevision string,
 ) (bool, string, error) {
 	conditions := reconciler.ParseConditions(kustomization)
 	if len(conditions) == 0 {
@@ -171,7 +184,85 @@ func checkKustomizationStatus(
 			generation, observed), nil
 	}
 
-	return evaluateKustomizationConditions(conditions)
+	// Revision-aware gate: until the Kustomization has attempted the current
+	// source revision, its Ready condition describes a prior revision and must
+	// not be trusted (avoids both the false-fail on a stale permanent failure
+	// and the false-pass on a stale Ready=True).
+	if sourceRevision != "" {
+		if status, observed := revisionObservedStatus(kustomization, sourceRevision); !observed {
+			return false, status, nil
+		}
+	}
+
+	ready, status, err := evaluateKustomizationConditions(conditions)
+
+	// A Ready=True verdict is only authoritative once the current source
+	// revision has actually been applied; otherwise the apply is still in
+	// flight and we keep polling.
+	if err == nil && ready && sourceRevision != "" {
+		if applied := lastAppliedRevision(kustomization); applied != sourceRevision {
+			return false, fmt.Sprintf(
+				"waiting for revision %s to be applied (applied %s)",
+				shortRevision(sourceRevision), shortRevision(applied),
+			), nil
+		}
+	}
+
+	return ready, status, err
+}
+
+// revisionObservedStatus reports whether the Kustomization has attempted to
+// reconcile the given source revision (status.lastAttemptedRevision == target).
+// When it has not, observed is false and the returned status explains what the
+// check is waiting for. Once observed, the Ready condition may be evaluated.
+func revisionObservedStatus(
+	kustomization *unstructured.Unstructured,
+	target string,
+) (string, bool) {
+	if lastAttemptedRevision(kustomization) == target {
+		return "", true
+	}
+
+	return fmt.Sprintf(
+		"waiting for revision %s to be reconciled (attempted %s)",
+		shortRevision(target), shortRevision(lastAttemptedRevision(kustomization)),
+	), false
+}
+
+// lastAttemptedRevision returns status.lastAttemptedRevision, the source
+// revision Flux most recently tried to build/apply.
+func lastAttemptedRevision(kustomization *unstructured.Unstructured) string {
+	revision, _, _ := unstructured.NestedString(
+		kustomization.Object, "status", "lastAttemptedRevision",
+	)
+
+	return revision
+}
+
+// lastAppliedRevision returns status.lastAppliedRevision, the source revision
+// Flux most recently applied successfully.
+func lastAppliedRevision(kustomization *unstructured.Unstructured) string {
+	revision, _, _ := unstructured.NestedString(
+		kustomization.Object, "status", "lastAppliedRevision",
+	)
+
+	return revision
+}
+
+// shortRevision trims a Flux revision string for human-readable status output,
+// keeping enough of the digest to be recognisable. An empty revision renders as
+// "<none>".
+func shortRevision(revision string) string {
+	if revision == "" {
+		return "<none>"
+	}
+
+	const maxLen = 20
+	if len(revision) <= maxLen {
+		return revision
+	}
+
+	return revision[:maxLen] + "…"
 }
 
 // isStatusStale checks if the observed generation is behind the current generation.

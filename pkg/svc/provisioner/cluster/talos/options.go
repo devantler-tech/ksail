@@ -72,6 +72,13 @@ type Options struct {
 	// cluster update. Zero means use defaultDrainTimeout. Sourced from
 	// spec.cluster.talos.drainTimeout (or --drain-timeout).
 	DrainTimeout time.Duration
+
+	// StorageHealthTimeout opts into the between-node storage-health gate during a
+	// rolling reboot. Zero (the default) disables the gate. When positive and a
+	// replicated storage backend (Longhorn) is detected, the roll waits up to this
+	// duration for the just-rebooted node's volumes to recover before draining the
+	// next node. Sourced from spec.cluster.talos.storageHealthTimeout.
+	StorageHealthTimeout time.Duration
 }
 
 // NewOptions creates new Options with default values.
@@ -175,6 +182,16 @@ func (o *Options) WithExtraPortMappings(ports []string) *Options {
 func (o *Options) WithDrainTimeout(timeout time.Duration) *Options {
 	if timeout > 0 {
 		o.DrainTimeout = timeout
+	}
+
+	return o
+}
+
+// WithStorageHealthTimeout opts into the between-node storage-health gate used
+// during rolling updates. Non-positive values leave the gate disabled (the default).
+func (o *Options) WithStorageHealthTimeout(timeout time.Duration) *Options {
+	if timeout > 0 {
+		o.StorageHealthTimeout = timeout
 	}
 
 	return o

@@ -201,8 +201,9 @@ require (
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260122224438-b01af16209d9 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
-	github.com/cilium/cilium v1.17.15 // indirect
+	github.com/cilium/cilium v1.19.5 // indirect
 	github.com/cilium/ebpf v0.21.0 // indirect
+	github.com/cilium/hive v0.0.0-20260108104938-97756f6ff54c // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/cli/go-gh/v2 v2.13.0 // indirect
 	github.com/cli/safeexec v1.0.0 // indirect
@@ -344,7 +345,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/go-openapi/validate v0.25.3 // indirect
-	github.com/go-piv/piv-go/v2 v2.5.0 // indirect
+	github.com/go-piv/piv-go/v2 v2.6.0 // indirect
 	github.com/go-restruct/restruct v1.2.0-alpha // indirect
 	github.com/go-test/deep v1.1.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -488,9 +489,9 @@ require (
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
-	github.com/loft-sh/vcluster v0.35.0 // indirect
+	github.com/loft-sh/vcluster v0.35.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
-	github.com/mackerelio/go-osstat v0.2.5 // indirect
+	github.com/mackerelio/go-osstat v0.2.6 // indirect
 	github.com/magefile/mage v1.17.2 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/maruel/natural v1.3.0 // indirect
@@ -643,7 +644,7 @@ require (
 	github.com/siderolabs/talos v1.14.0-alpha.1 // indirect
 	github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.1 // indirect
 	github.com/sigstore/cosign/v3 v3.0.6 // indirect
-	github.com/sigstore/fulcio v1.8.5 // indirect
+	github.com/sigstore/fulcio v1.8.6 // indirect
 	github.com/sigstore/protobuf-specs v0.5.1 // indirect
 	github.com/sigstore/rekor v1.5.2 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.2.2-0.20260601073857-5d098a2b6443 // indirect
@@ -701,7 +702,7 @@ require (
 	github.com/vbauerster/mpb/v8 v8.10.2 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.32 // indirect
 	github.com/vifraa/gopom v1.0.0 // indirect
-	github.com/vishvananda/netlink v1.3.1 // indirect
+	github.com/vishvananda/netlink v1.3.2-0.20260109214200-c6faf428e8f8 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651 // indirect
 	github.com/wagoodman/go-presenter v0.0.0-20211015174752-f9c01afc824b // indirect
@@ -761,6 +762,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/dig v1.17.1 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
@@ -824,10 +826,10 @@ require (
 	k8s.io/metrics v0.36.2 // indirect
 	k8s.io/streaming v0.36.2 // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
-	modernc.org/libc v1.70.0 // indirect
+	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.46.2 // indirect
+	modernc.org/sqlite v1.49.1 // indirect
 	mvdan.cc/sh/v3 v3.12.0 // indirect
 	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect

@@ -15,6 +15,18 @@ var (
 	// rejected rather than rendered into a config that would fail at bring-up.
 	ErrMissingToken = errors.New("kubeadm: a bootstrap token is required")
 
+	// ErrInvalidControlPlaneCount is returned by [Plan] when a [PlanInput] requests
+	// fewer than one control-plane node. Every cluster needs a cluster-initialising
+	// control plane, so a count below one cannot describe a bootstrappable topology.
+	ErrInvalidControlPlaneCount = errors.New(
+		"kubeadm: a cluster requires at least one control-plane node",
+	)
+
+	// ErrInvalidAgentCount is returned by [Plan] when a [PlanInput] requests a
+	// negative number of agent (worker) nodes. Zero agents is a valid
+	// control-plane-only cluster; a negative count is a misconfiguration.
+	ErrInvalidAgentCount = errors.New("kubeadm: the agent count must not be negative")
+
 	// ErrServerInitWithJoinFields is returned when RoleServerInit carries a
 	// join-only field (an API server endpoint or CA cert hashes). The
 	// cluster-initialising control plane starts a new cluster and joins no existing
@@ -65,5 +77,30 @@ var (
 	ErrServerInitOnlyOption = errors.New(
 		"kubeadm: a joining node must not set cluster-wide options " +
 			"(kubernetes version, control-plane endpoint, cert SANs, pod/service subnet)",
+	)
+
+	// ErrMissingKubernetesVersion is returned by [RenderInstall] when
+	// InstallConfig.KubernetesVersion is empty. The community package repository is
+	// published per minor version, so the version cannot be defaulted at install
+	// time — without it there is no repository track to point the node at.
+	ErrMissingKubernetesVersion = errors.New(
+		"kubeadm: a Kubernetes version is required to select the package repository",
+	)
+
+	// ErrInvalidKubernetesVersion is returned by [RenderInstall] when
+	// InstallConfig.KubernetesVersion is not a "vMAJOR.MINOR[.PATCH]" version with
+	// numeric major and minor components. Its minor track selects a repository URL,
+	// so a malformed version would point the node at a URL that does not resolve;
+	// it is rejected at render time instead.
+	ErrInvalidKubernetesVersion = errors.New(
+		"kubeadm: Kubernetes version must be of the form vMAJOR.MINOR[.PATCH]",
+	)
+
+	// ErrMissingConfig is returned by [RenderInstall] when InstallConfig.Config is
+	// empty. The install drops the node's kubeadm configuration and bootstraps from
+	// it, so an empty config would render an install that runs `kubeadm` against a
+	// non-existent file.
+	ErrMissingConfig = errors.New(
+		"kubeadm: a rendered kubeadm configuration is required to install a node",
 	)
 )

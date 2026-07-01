@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -75,7 +76,7 @@ func NewDiffCmd() *cobra.Command {
 		"Also report distribution/Kubernetes version drift the next 'cluster update' "+
 			"would reconcile (performs OCI registry lookups; off by default)")
 
-	registerNameFlag(cmd, cfgManager)
+	clusterflags.RegisterNameFlag(cmd, cfgManager)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		// Validate output format before entering WrapHandler to avoid unnecessary

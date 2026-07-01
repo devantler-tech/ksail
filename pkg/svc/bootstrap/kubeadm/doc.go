@@ -32,10 +32,30 @@
 // that node. It is pure: no I/O, no network, fully unit-testable without a
 // cluster or a Hetzner account.
 //
+// [Plan] sits one level up, expanding a cluster topology ([PlanInput]) into the
+// ordered per-node [NodeConfig]s a provisioner bootstraps in sequence
+// (cluster-initialising control plane → additional control planes → agents),
+// mirroring the k3sbootstrap planner. Because kubeadm discovers a joining node's
+// API server endpoint and CA cert hashes only once the first control plane is up,
+// those are [PlanInput] fields a provisioner injects at run time before planning
+// the joining nodes — unlike k3s's pre-shared token, which needs no run-time
+// artifact. Every [Node] Plan returns carries a Config that passes validation, so
+// [Render] never fails for a planned node.
+//
+// [RenderInstall] maps an [InstallConfig] to the declarative [Install] that
+// brings a node up at first boot: the Kubernetes community package repository for
+// the requested minor track, the container runtime and kube* packages, the
+// rendered kubeadm config dropped on disk, and the role's `kubeadm init`/`kubeadm
+// join` bootstrap command. It is transport-agnostic (apt sources / packages /
+// files / commands, not tied to any one first-boot channel) and, like [Render],
+// pure. The container-runtime CRI configuration, the CNI install, and the
+// kubeconfig fetch are out of scope for this slice — later, post-install
+// provisioner-lifecycle increments of slice #5513.
+//
 // The Kubernetes *components* (kubeadm, kubelet, the container runtime) are
-// installed at first boot by the cloud-config, not by the running node's
-// configuration; only kubernetesVersion (which pins the control-plane image set)
-// is part of ClusterConfiguration.
+// installed at first boot by the cloud-config the [Install] describes, not by the
+// running node's configuration; only kubernetesVersion (which pins the
+// control-plane image set) is part of ClusterConfiguration.
 //
 // # Token exposure
 //

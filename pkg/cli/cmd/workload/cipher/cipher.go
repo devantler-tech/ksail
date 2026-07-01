@@ -23,6 +23,9 @@ import (
 var (
 	errRotationFailed    = errors.New("rotation failed")
 	errRotationCancelled = errors.New("rotation cancelled")
+	errRotateKeyConflict = errors.New(
+		"--set-key cannot be combined with --add-key or --remove-key",
+	)
 )
 
 // permissionWrite is the annotations.AnnotationPermission value that marks a
@@ -516,6 +519,10 @@ Examples:
   # Replace a recipient (add new, remove old)
   ksail workload cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
+  # Re-seal every file to a completely new recipient set (e.g. after a key is
+  # retired or compromised) — declare the full set, no need to enumerate old keys
+  ksail workload cipher rotate ./k8s --set-key age1newkey1... --set-key age1newkey2... --recursive
+
   # Preview which files would be rotated without making changes
   ksail workload cipher rotate ./k8s --dry-run`
 
@@ -524,6 +531,7 @@ func NewRotateCmd() *cobra.Command {
 	var (
 		addKey    string
 		removeKey string
+		setKey    []string
 		recursive bool
 		force     bool
 		dryRun    bool
@@ -536,7 +544,16 @@ func NewRotateCmd() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleRotateRunE(cmd, args[0], addKey, removeKey, recursive, force, dryRun)
+			return handleRotateRunE(
+				cmd,
+				args[0],
+				addKey,
+				removeKey,
+				setKey,
+				recursive,
+				force,
+				dryRun,
+			)
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: permissionWrite,
@@ -546,6 +563,10 @@ func NewRotateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&addKey, "add-key", "", "public key to add as a master key recipient")
 	cmd.Flags().
 		StringVar(&removeKey, "remove-key", "", "public key to remove from master key recipients")
+	cmd.Flags().StringArrayVar(&setKey, "set-key", nil,
+		"public key for the complete new recipient set (repeatable); "+
+			"replaces all recipients and re-seals to a fresh data key — "+
+			"mutually exclusive with --add-key/--remove-key")
 	cmd.Flags().
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().
@@ -564,6 +585,7 @@ func NewRotateCmd() *cobra.Command {
 func handleRotateRunE(
 	cmd *cobra.Command,
 	target, addKey, removeKey string,
+	setKey []string,
 	recursive, force, dryRun bool,
 ) error {
 	writer := cmd.OutOrStdout()
@@ -573,7 +595,7 @@ func handleRotateRunE(
 		return fmt.Errorf("resolve target path %q: %w", target, err)
 	}
 
-	opts, err := buildRotateOpts(addKey, removeKey)
+	opts, err := buildRotateOpts(addKey, removeKey, setKey)
 	if err != nil {
 		return err
 	}
@@ -662,11 +684,21 @@ func collectRotateTargets(
 	return []string{canonPath}, false, nil
 }
 
-// buildRotateOpts constructs RotateOpts from CLI flag values.
-func buildRotateOpts(addKey, removeKey string) (sopsclient.RotateOpts, error) {
+// buildRotateOpts constructs RotateOpts from CLI flag values. When setKeys is
+// non-empty it specifies the complete new recipient set (wholesale replacement)
+// and is mutually exclusive with addKey/removeKey.
+func buildRotateOpts(addKey, removeKey string, setKeys []string) (sopsclient.RotateOpts, error) {
 	opts := sopsclient.RotateOpts{
 		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 		DecryptionOrder: []string{},
+	}
+
+	if len(setKeys) > 0 {
+		if addKey != "" || removeKey != "" {
+			return opts, errRotateKeyConflict
+		}
+
+		return buildRotateOptsWithSetKeys(opts, setKeys)
 	}
 
 	if addKey != "" {
@@ -681,6 +713,28 @@ func buildRotateOpts(addKey, removeKey string) (sopsclient.RotateOpts, error) {
 	if removeKey != "" {
 		opts.RemoveKeys = []string{removeKey}
 	}
+
+	return opts, nil
+}
+
+// buildRotateOptsWithSetKeys parses the complete recipient set from --set-key
+// values into opts.SetKeys.
+func buildRotateOptsWithSetKeys(
+	opts sopsclient.RotateOpts,
+	setKeys []string,
+) (sopsclient.RotateOpts, error) {
+	masterKeys := make([]keys.MasterKey, 0, len(setKeys))
+
+	for _, recipient := range setKeys {
+		masterKey, err := sopsclient.ParseKeyType(recipient)
+		if err != nil {
+			return opts, fmt.Errorf("parsing --set-key %q: %w", recipient, err)
+		}
+
+		masterKeys = append(masterKeys, masterKey)
+	}
+
+	opts.SetKeys = masterKeys
 
 	return opts, nil
 }

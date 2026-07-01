@@ -48,6 +48,18 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    # Astro, Starlight and the Starlight/Astro plugins are a co-dependent set: a
+    # Starlight major requires a matching Astro major and plugin releases that
+    # support the new Astro markdown processor. Bumping one alone breaks the docs
+    # build (ksail#5600 — Starlight 0.41 needed Astro 7 + updated peer plugins).
+    # Group them so Dependabot raises a single PR that moves the whole set together.
+    groups:
+      astro:
+        patterns:
+          - "astro"
+          - "astro-*"
+          - "@astrojs/*"
+          - "starlight-*"
 
   - package-ecosystem: npm
     directory: /vsce
@@ -152,11 +164,18 @@ updates:
 
   - package-ecosystem: docker
     registries: [ghcr]
-    directory: /pkg/svc/installer/flux # Flux operator chart version (OCI chart artifact)
+    directory: /pkg/svc/installer/flux # Flux operator chart + manifests-distribution versions (OCI artifacts, matched pair)
     cooldown:
       default-days: 7
     schedule:
       interval: daily
+    # The flux-operator chart and its manifests-distribution artifact are a MATCHED
+    # PAIR released together; bumping one without the other breaks Flux bootstrap
+    # (ksail#5595). Group them so Dependabot raises a single PR that moves both tags.
+    groups:
+      flux-operator:
+        patterns:
+          - "*flux-operator*"
 
   - package-ecosystem: docker
     registries: [ghcr]
