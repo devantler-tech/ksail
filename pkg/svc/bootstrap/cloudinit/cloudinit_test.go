@@ -18,7 +18,14 @@ type parsedConfig struct {
 		Permissions string `yaml:"permissions"`
 		Content     string `yaml:"content"`
 	} `yaml:"write_files"` //nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
-	RunCmd [][]string `yaml:"runcmd"`
+	Apt struct {
+		Sources map[string]struct {
+			Source string `yaml:"source"`
+			Key    string `yaml:"key"`
+		} `yaml:"sources"`
+	} `yaml:"apt"`
+	Packages []string   `yaml:"packages"`
+	RunCmd   [][]string `yaml:"runcmd"`
 }
 
 // parse asserts the document carries the cloud-config header and is valid YAML,
@@ -163,14 +170,176 @@ func TestBuildUserDataDeterministic(t *testing.T) {
 	assert.Equal(t, first, second)
 }
 
+func TestBuildUserDataCommandOnlyOmitsDeclarativeKeys(t *testing.T) {
+	t.Parallel()
+
+	// A command-only Config must render exactly as before the declarative fields
+	// existed: no packages: and no apt: keys leak in.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, userData, "packages:")
+	assert.NotContains(t, userData, "apt:")
+
+	cfg := parse(t, userData)
+	assert.Empty(t, cfg.Packages)
+	assert.Empty(t, cfg.Apt.Sources)
+	require.Len(t, cfg.WriteFiles, 1) // only the boot script
+}
+
+func TestBuildUserDataRendersPackages(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Packages: []string{"containerd", "", "kubeadm", "   ", "kubelet"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	// Blank entries dropped, order preserved.
+	assert.Equal(t, []string{"containerd", "kubeadm", "kubelet"}, cfg.Packages)
+	// Packages-only Config needs no boot script or runcmd.
+	assert.Empty(t, cfg.WriteFiles)
+	assert.Empty(t, cfg.RunCmd)
+}
+
+func TestBuildUserDataRendersAptSources(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		AptSources: []cloudinitbootstrap.AptSource{
+			{
+				Name:   "kubernetes",
+				Source: "deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /",
+				Key:    "-----BEGIN PGP PUBLIC KEY BLOCK-----\nabc\n-----END PGP PUBLIC KEY BLOCK-----",
+			},
+		},
+		Packages: []string{"kubeadm"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	source, ok := cfg.Apt.Sources["kubernetes"]
+	require.True(t, ok, "apt source must be keyed by its Name")
+	assert.Contains(t, source.Source, "pkgs.k8s.io/core")
+	assert.Contains(t, source.Key, "BEGIN PGP PUBLIC KEY BLOCK")
+}
+
+func TestBuildUserDataAptSourceKeyOptional(t *testing.T) {
+	t.Parallel()
+
+	// A source without a key omits the key: field entirely (rather than key: "").
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		AptSources: []cloudinitbootstrap.AptSource{
+			{Name: "extra", Source: "deb https://example.test/repo /"},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, userData, "key:")
+
+	cfg := parse(t, userData)
+	assert.Empty(t, cfg.Apt.Sources["extra"].Key)
+}
+
+func TestBuildUserDataAptSourcesDeterministic(t *testing.T) {
+	t.Parallel()
+
+	// Two sources declared out of alphabetical order must still render identically
+	// every time (yaml.v3 sorts map keys), so provisioning is reproducible.
+	cfg := cloudinitbootstrap.Config{
+		AptSources: []cloudinitbootstrap.AptSource{
+			{Name: "zeta", Source: "deb https://z /"},
+			{Name: "alpha", Source: "deb https://a /"},
+		},
+	}
+
+	first, err := cloudinitbootstrap.BuildUserData(cfg)
+	require.NoError(t, err)
+
+	second, err := cloudinitbootstrap.BuildUserData(cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, first, second)
+	assert.Less(t,
+		strings.Index(first, "alpha"), strings.Index(first, "zeta"),
+		"sources must be emitted in sorted key order",
+	)
+}
+
+func TestBuildUserDataRendersFiles(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Files: []cloudinitbootstrap.File{
+			{
+				Path:        "/etc/kubernetes/ksail/kubeadm.yaml",
+				Permissions: "0600",
+				Content:     "apiVersion: x",
+			},
+			{Path: "/etc/motd", Content: "hi"}, // no permissions -> default
+		},
+		Commands: []string{"kubeadm init"},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	// The two declared files come first, then the boot script.
+	require.Len(t, cfg.WriteFiles, 3)
+	assert.Equal(t, "/etc/kubernetes/ksail/kubeadm.yaml", cfg.WriteFiles[0].Path)
+	assert.Equal(t, "0600", cfg.WriteFiles[0].Permissions)
+	assert.Equal(t, "apiVersion: x", cfg.WriteFiles[0].Content)
+	assert.Equal(t, cloudinitbootstrap.DefaultFilePermissions, cfg.WriteFiles[1].Permissions)
+	assert.Equal(t, cloudinitbootstrap.DefaultScriptPath, cfg.WriteFiles[2].Path)
+}
+
+func TestBuildUserDataFullDeclarativeInstall(t *testing.T) {
+	t.Parallel()
+
+	// The whole point of the slice: a declarative install with no curl|sh — an apt
+	// source with its key, packages, a config file, then the install commands.
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Files: []cloudinitbootstrap.File{
+			{
+				Path:        "/etc/kubernetes/ksail/kubeadm.yaml",
+				Permissions: "0600",
+				Content:     "kind: InitConfiguration",
+			},
+		},
+		AptSources: []cloudinitbootstrap.AptSource{
+			{
+				Name:   "kubernetes",
+				Source: "deb https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /",
+				Key:    "KEY",
+			},
+		},
+		Packages: []string{"containerd", "kubeadm", "kubelet"},
+		Commands: []string{"kubeadm init --config /etc/kubernetes/ksail/kubeadm.yaml"},
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, userData, "curl")
+
+	cfg := parse(t, userData)
+	assert.Len(t, cfg.WriteFiles, 2) // config file + boot script
+	assert.NotEmpty(t, cfg.Apt.Sources["kubernetes"].Source)
+	assert.Equal(t, []string{"containerd", "kubeadm", "kubelet"}, cfg.Packages)
+	require.Len(t, cfg.RunCmd, 1)
+	assert.Contains(t,
+		cfg.WriteFiles[1].Content,
+		"kubeadm init --config /etc/kubernetes/ksail/kubeadm.yaml\n",
+	)
+}
+
 func TestBuildUserDataErrors(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		cfg     cloudinitbootstrap.Config
-		wantErr error
-	}{
+	tests := []errorCase{
 		{
 			name:    "no commands",
 			cfg:     cloudinitbootstrap.Config{},
@@ -214,7 +383,22 @@ func TestBuildUserDataErrors(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range tests {
+	runErrorCases(t, tests)
+}
+
+// errorCase is one BuildUserData rejection case, shared by the command-level and
+// declarative-field error tests.
+type errorCase struct {
+	name    string
+	cfg     cloudinitbootstrap.Config
+	wantErr error
+}
+
+// runErrorCases asserts each case returns its expected sentinel and no document.
+func runErrorCases(t *testing.T, cases []errorCase) {
+	t.Helper()
+
+	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -223,4 +407,95 @@ func TestBuildUserDataErrors(t *testing.T) {
 			assert.Empty(t, out, "no document should be returned on error")
 		})
 	}
+}
+
+func TestBuildUserDataDeclarativeErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []errorCase{
+		{
+			name:    "package with embedded newline",
+			cfg:     cloudinitbootstrap.Config{Packages: []string{"containerd\nkubeadm"}},
+			wantErr: cloudinitbootstrap.ErrInvalidPackage,
+		},
+		{
+			name:    "package with NUL byte",
+			cfg:     cloudinitbootstrap.Config{Packages: []string{"kube\x00let"}},
+			wantErr: cloudinitbootstrap.ErrInvalidPackage,
+		},
+		{
+			name: "apt source with blank name",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{{Name: "  ", Source: "deb https://x /"}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
+		{
+			name: "apt source with blank source",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{{Name: "k8s", Source: ""}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
+		{
+			name: "apt source with multi-line source",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{
+					{Name: "k8s", Source: "deb a /\ndeb b /"},
+				},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
+		{
+			name: "apt source with NUL in key",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{
+					{Name: "k8s", Source: "deb https://x /", Key: "-----BEGIN-----\x00"},
+				},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
+		{
+			name: "apt sources with duplicate name",
+			cfg: cloudinitbootstrap.Config{
+				AptSources: []cloudinitbootstrap.AptSource{
+					{Name: "k8s", Source: "deb https://a /"},
+					{Name: "k8s", Source: "deb https://b /"},
+				},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidAptSource,
+		},
+	}
+
+	runErrorCases(t, tests)
+}
+
+func TestBuildUserDataFileErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []errorCase{
+		{
+			name: "file with relative path",
+			cfg: cloudinitbootstrap.Config{
+				Files: []cloudinitbootstrap.File{{Path: "etc/kubernetes/config", Content: "x"}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidFile,
+		},
+		{
+			name: "file with multi-line path",
+			cfg: cloudinitbootstrap.Config{
+				Files: []cloudinitbootstrap.File{{Path: "/etc/a\n/etc/b", Content: "x"}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidFile,
+		},
+		{
+			name: "file with NUL in content",
+			cfg: cloudinitbootstrap.Config{
+				Files: []cloudinitbootstrap.File{{Path: "/etc/x", Content: "a\x00b"}},
+			},
+			wantErr: cloudinitbootstrap.ErrInvalidFile,
+		},
+	}
+
+	runErrorCases(t, tests)
 }

@@ -3,11 +3,13 @@ package cloudinitbootstrap
 import "errors"
 
 var (
-	// ErrNoCommands is returned when a Config carries no non-empty bootstrap
-	// command. A user_data document with nothing to run would create a server that
-	// silently never bootstraps, so an empty command set is rejected rather than
-	// rendered.
-	ErrNoCommands = errors.New("cloud-init: at least one bootstrap command is required")
+	// ErrNoCommands is returned when a Config carries no directive at all — no
+	// command, package, apt source, or file. A user_data document with nothing to
+	// do would create a server that silently never bootstraps, so an empty Config
+	// is rejected rather than rendered.
+	ErrNoCommands = errors.New(
+		"cloud-init: a Config must carry at least one command, package, apt source, or file",
+	)
 
 	// ErrInvalidCommand is returned when a bootstrap command contains a newline or
 	// a NUL byte. Each command is written as one line of the generated boot script,
@@ -16,6 +18,29 @@ var (
 	// need multiple statements pass them as separate commands.
 	ErrInvalidCommand = errors.New(
 		"cloud-init: a bootstrap command must be a single line with no NUL byte",
+	)
+
+	// ErrInvalidPackage is returned when a package name contains a newline or a NUL
+	// byte. Each name is one element of cloud-init's packages: list, so it must be a
+	// single line.
+	ErrInvalidPackage = errors.New(
+		"cloud-init: a package name must be a single line with no NUL byte",
+	)
+
+	// ErrInvalidAptSource is returned when an [AptSource] has a blank or multi-line
+	// Name or Source, a Key containing a NUL byte, or a Name that duplicates
+	// another source's. cloud-init keys the sources map by Name and writes the
+	// single Source line to a .list file, so both must be present and one line, and
+	// the names must be unique.
+	ErrInvalidAptSource = errors.New(
+		"cloud-init: an apt source needs a unique single-line Name and Source",
+	)
+
+	// ErrInvalidFile is returned when a [File] has a non-absolute or multi-line
+	// Path or a Content containing a NUL byte. cloud-init resolves a write_files
+	// path with no defined working directory, so it must be absolute.
+	ErrInvalidFile = errors.New(
+		"cloud-init: a file needs an absolute single-line Path and NUL-free Content",
 	)
 
 	// ErrPathNotAbsolute is returned when ScriptPath or LogPath is set to a
