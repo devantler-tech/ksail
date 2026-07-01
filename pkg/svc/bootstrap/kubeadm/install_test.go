@@ -28,14 +28,20 @@ func TestRenderInstallServerInitRepository(t *testing.T) {
 	source := install.AptSources[0]
 	assert.Equal(t, "kubernetes", source.Name)
 	assert.Equal(t,
-		"deb https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /",
+		"deb [signed-by=$KEY_FILE] "+
+			"https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /",
 		source.Source,
-		"the deb line points at the version's minor track",
+		"the deb line points at the version's minor track and is scoped to the embedded key",
 	)
-	assert.Equal(t,
-		"https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key",
-		source.KeyURL,
-		"the signing key is the track's Release.key so cloud-init trusts it declaratively",
+	assert.Contains(t,
+		source.Key,
+		"-----BEGIN PGP PUBLIC KEY BLOCK-----",
+		"the signing key is the embedded, ASCII-armored community key trusted declaratively",
+	)
+	assert.NotContains(t,
+		source.Key,
+		"Release.key",
+		"the key is embedded material, never a URL fetched at runtime",
 	)
 }
 
@@ -130,7 +136,8 @@ func TestRenderInstallMinorTrack(t *testing.T) {
 		})
 		require.NoError(t, err, "version %q", version)
 
-		wantSource := "deb https://pkgs.k8s.io/core:/stable:/" + wantTrack + "/deb/ /"
+		wantSource := "deb [signed-by=$KEY_FILE] " +
+			"https://pkgs.k8s.io/core:/stable:/" + wantTrack + "/deb/ /"
 		assert.Equal(t, wantSource, install.AptSources[0].Source, "version %q track", version)
 	}
 }

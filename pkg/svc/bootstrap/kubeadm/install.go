@@ -1,6 +1,9 @@
 package kubeadmbootstrap
 
-import "strings"
+import (
+	_ "embed"
+	"strings"
+)
 
 // ConfigPath is where the rendered kubeadm configuration (see [Render]) is dropped
 // on the node and where the first-boot bootstrap command reads it from. It is a
@@ -21,6 +24,35 @@ const packageRepoBaseURL = "https://pkgs.k8s.io/core:/stable:/"
 // repository. cloud-init writes it to /etc/apt/sources.list.d/<name>.list.
 const aptSourceName = "kubernetes"
 
+// keyFileVar is cloud-init's substitution variable for an apt source's signing
+// key. When an apt.sources entry carries an embedded key, cloud-init dearmors it,
+// writes it to a keyring path cloud-init itself manages, and substitutes that path
+// for $KEY_FILE in the source's signed-by= option. Naming the variable — rather
+// than hard-coding a keyring path cloud-init never actually writes to — scopes the
+// deb line to exactly the key cloud-init installs, so `apt update` verifies against
+// the right keyring on first boot instead of failing on a missing one.
+const keyFileVar = "$KEY_FILE"
+
+// communitySigningKey is the ASCII-armored public key that signs the Kubernetes
+// community (pkgs.k8s.io) package repository, pinned into the binary so a node
+// trusts the repository declaratively at first boot — never by fetching the key
+// over the network with `curl … | gpg` (see the native-provisioning direction).
+// It is emitted as the apt source's Key so the cloud-init transport can trust it
+// without any imperative key step.
+//
+// The pkgs.k8s.io stable channels all share this single community key (verified
+// identical across minor tracks), so one pinned key covers every track [RenderInstall]
+// selects. Provenance (audit when re-pinning):
+//
+//	Source:      https://pkgs.k8s.io/core:/stable:/<track>/deb/Release.key
+//	UID:         isv:kubernetes OBS Project <isv:kubernetes@build.opensuse.org>
+//	Fingerprint: DE15 B144 86CD 377B 9E87 6E1A 2346 54DA 9A29 6436
+//	Expires:     2026-12-29 — refresh this pin (and the fingerprint above) when
+//	             upstream rotates the key before it expires.
+//
+//go:embed kubernetes-apt-keyring.asc
+var communitySigningKey string
+
 // kubePackages returns the Kubernetes node components installed from the community
 // repository, in a deterministic order (kubelet the node agent, kubeadm the
 // bootstrapper, kubectl the CLI). The container runtime is installed separately
@@ -36,19 +68,24 @@ func kubePackages() []string {
 const containerdPackage = "containerd"
 
 // AptSource is a declarative apt repository for cloud-init's apt.sources module:
-// the module adds the Source deb line and trusts the signing key fetched from
-// KeyURL, so the node needs no imperative `curl … | gpg --dearmor` key step. It is
-// the declarative expression of "add the Kubernetes package repository".
+// the module adds the Source deb line and trusts the embedded, ASCII-armored Key
+// for it, so the node needs no imperative `curl … | gpg --dearmor` key step. It is
+// the declarative expression of "add the Kubernetes package repository" and maps
+// field-for-field onto the cloud-init transport's own apt-source shape.
 type AptSource struct {
 	// Name is the apt.sources entry name; cloud-init writes it to
 	// /etc/apt/sources.list.d/<Name>.list.
 	Name string
-	// Source is the one-line apt sources entry, e.g.
-	// "deb https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /".
+	// Source is the one-line apt sources entry, scoped to the embedded key via a
+	// signed-by=$KEY_FILE option — cloud-init substitutes $KEY_FILE with the keyring
+	// path it writes Key to — e.g.
+	// "deb [signed-by=$KEY_FILE] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /".
 	Source string
-	// KeyURL is the URL of the repository's signing key (its Release.key), which
-	// cloud-init fetches and trusts for this source.
-	KeyURL string
+	// Key is the repository's ASCII-armored signing key, embedded verbatim so the
+	// source is trusted declaratively at first boot rather than fetched at runtime.
+	// cloud-init dearmors it to a keyring path it manages and substitutes that path
+	// for $KEY_FILE in Source's signed-by= option.
+	Key string
 }
 
 // File is a file dropped onto the node before the install runs — the declarative
@@ -138,8 +175,8 @@ func RenderInstall(cfg InstallConfig) (Install, error) {
 	return Install{
 		AptSources: []AptSource{{
 			Name:   aptSourceName,
-			Source: "deb " + repoURL + " /",
-			KeyURL: repoURL + "Release.key",
+			Source: "deb [signed-by=" + keyFileVar + "] " + repoURL + " /",
+			Key:    communitySigningKey,
 		}},
 		Packages: append([]string{containerdPackage}, kubePackages()...),
 		Files: []File{{
