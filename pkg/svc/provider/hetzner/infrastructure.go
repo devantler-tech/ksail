@@ -13,6 +13,9 @@ import (
 )
 
 // EnsureNetwork ensures a network exists for the cluster, creating it if needed.
+// The server subnet is reconciled on every call, so a Create retry after a partial
+// failure (network created but AddSubnet not yet applied) heals the network instead
+// of returning it without a subnet.
 func (p *Provider) EnsureNetwork(
 	ctx context.Context,
 	clusterName string,
@@ -30,25 +33,40 @@ func (p *Provider) EnsureNetwork(
 		return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
 	}
 
-	if network != nil {
-		return network, nil
+	if network == nil {
+		// Parse the network CIDR
+		_, ipRange, parseErr := net.ParseCIDR(cidr)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid network CIDR %s: %w", cidr, parseErr)
+		}
+
+		network, _, err = p.client.Network.Create(ctx, hcloud.NetworkCreateOpts{
+			Name:    networkName,
+			IPRange: ipRange,
+			Labels:  ResourceLabels(clusterName),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create network %s: %w", networkName, err)
+		}
 	}
 
-	// Parse the network CIDR
-	_, ipRange, err := net.ParseCIDR(cidr)
+	err = p.ensureSubnet(ctx, network, networkName, cidr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid network CIDR %s: %w", cidr, err)
+		return nil, err
 	}
 
-	network, _, err = p.client.Network.Create(ctx, hcloud.NetworkCreateOpts{
-		Name:    networkName,
-		IPRange: ipRange,
-		Labels:  ResourceLabels(clusterName),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create network %s: %w", networkName, err)
-	}
+	return network, nil
+}
 
+// ensureSubnet adds the server subnet to the network when it is not already present.
+// It reconciles a partial-failure state (network created but AddSubnet failed) on a
+// retry and is idempotent: a subnet that already exists on the network is left as-is.
+func (p *Provider) ensureSubnet(
+	ctx context.Context,
+	network *hcloud.Network,
+	networkName string,
+	cidr string,
+) error {
 	// Add a subnet for the servers
 	subnetCIDR := "10.0.1.0/24"
 	if cidr != v1alpha1.DefaultHetznerNetworkCIDR {
@@ -58,7 +76,14 @@ func (p *Provider) EnsureNetwork(
 
 	_, subnetIPRange, err := net.ParseCIDR(subnetCIDR)
 	if err != nil {
-		return nil, fmt.Errorf("invalid subnet CIDR %s: %w", subnetCIDR, err)
+		return fmt.Errorf("invalid subnet CIDR %s: %w", subnetCIDR, err)
+	}
+
+	// Skip when the network already carries the subnet (idempotent reconcile).
+	for _, subnet := range network.Subnets {
+		if subnet.IPRange != nil && subnet.IPRange.String() == subnetIPRange.String() {
+			return nil
+		}
 	}
 
 	_, _, err = p.client.Network.AddSubnet(ctx, network, hcloud.NetworkAddSubnetOpts{
@@ -69,10 +94,10 @@ func (p *Provider) EnsureNetwork(
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to add subnet to network %s: %w", networkName, err)
+		return fmt.Errorf("failed to add subnet to network %s: %w", networkName, err)
 	}
 
-	return network, nil
+	return nil
 }
 
 // EnsureFirewall ensures a firewall exists for the cluster, creating it if needed.
