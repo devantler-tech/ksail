@@ -32,10 +32,20 @@
 // that node. It is pure: no I/O, no network, fully unit-testable without a
 // cluster or a Hetzner account.
 //
+// [RenderInstall] maps an [InstallConfig] to the declarative [Install] that
+// brings a node up at first boot: the Kubernetes community package repository for
+// the requested minor track, the container runtime and kube* packages, the
+// rendered kubeadm config dropped on disk, and the role's `kubeadm init`/`kubeadm
+// join` bootstrap command. It is transport-agnostic (apt sources / packages /
+// files / commands, not tied to any one first-boot channel) and, like [Render],
+// pure. The container-runtime CRI configuration, the CNI install, and the
+// kubeconfig fetch are out of scope for this slice — later, post-install
+// provisioner-lifecycle increments of slice #5513.
+//
 // The Kubernetes *components* (kubeadm, kubelet, the container runtime) are
-// installed at first boot by the cloud-config, not by the running node's
-// configuration; only kubernetesVersion (which pins the control-plane image set)
-// is part of ClusterConfiguration.
+// installed at first boot by the cloud-config the [Install] describes, not by the
+// running node's configuration; only kubernetesVersion (which pins the
+// control-plane image set) is part of ClusterConfiguration.
 //
 // # Token exposure
 //

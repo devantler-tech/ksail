@@ -66,4 +66,29 @@ var (
 		"kubeadm: a joining node must not set cluster-wide options " +
 			"(kubernetes version, control-plane endpoint, cert SANs, pod/service subnet)",
 	)
+
+	// ErrMissingKubernetesVersion is returned by [RenderInstall] when
+	// InstallConfig.KubernetesVersion is empty. The community package repository is
+	// published per minor version, so the version cannot be defaulted at install
+	// time — without it there is no repository track to point the node at.
+	ErrMissingKubernetesVersion = errors.New(
+		"kubeadm: a Kubernetes version is required to select the package repository",
+	)
+
+	// ErrInvalidKubernetesVersion is returned by [RenderInstall] when
+	// InstallConfig.KubernetesVersion is not a "vMAJOR.MINOR[.PATCH]" version with
+	// numeric major and minor components. Its minor track selects a repository URL,
+	// so a malformed version would point the node at a URL that does not resolve;
+	// it is rejected at render time instead.
+	ErrInvalidKubernetesVersion = errors.New(
+		"kubeadm: Kubernetes version must be of the form vMAJOR.MINOR[.PATCH]",
+	)
+
+	// ErrMissingConfig is returned by [RenderInstall] when InstallConfig.Config is
+	// empty. The install drops the node's kubeadm configuration and bootstraps from
+	// it, so an empty config would render an install that runs `kubeadm` against a
+	// non-existent file.
+	ErrMissingConfig = errors.New(
+		"kubeadm: a rendered kubeadm configuration is required to install a node",
+	)
 )
