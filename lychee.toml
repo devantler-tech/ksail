@@ -53,4 +53,8 @@ exclude_path = [
 #     from the lychee runner.
 #   - ksail.local: placeholder OIDC redirect/ingress host in chart template
 #     permutations; an unresolvable .local address, not a real link.
-exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'git\.k8s\.io', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0']
+#   - goreportcard.com: the README Go Report Card badge/report links. The service
+#     intermittently times out for GitHub Actions runner IP ranges through all
+#     retries (took `main` CI red on 2026-07-01); the badge is decorative and the
+#     report is a stable, reachable service outside CI — not a broken link.
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'git\.k8s\.io', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0', 'goreportcard\.com']
