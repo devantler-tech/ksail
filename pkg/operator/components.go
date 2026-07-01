@@ -91,21 +91,27 @@ func InstallComponents(
 		return true, nil, fmt.Errorf("build helm client for child cluster: %w", err)
 	}
 
-	factory := installer.NewFactory(
-		helmClient,
-		nil, // no Docker client: child-cluster components are Helm-based
-		kubeconfigPath,
-		"",
-		componentInstallTimeout,
-		cluster.Spec.Cluster.Distribution,
-	)
+	// Several installers are distribution-dependent, so a factory is only valid
+	// for the spec it was built for; the baseline uninstall set below rebuilds
+	// one for the previously-applied distribution rather than reusing this one.
+	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
+		return installer.NewFactory(
+			helmClient,
+			nil, // no Docker client: child-cluster components are Helm-based
+			kubeconfigPath,
+			"",
+			componentInstallTimeout,
+			distribution,
+		)
+	}
 
-	installers, err := factory.CreateInstallersForConfig(cluster)
+	installers, err := newFactory(cluster.Spec.Cluster.Distribution).
+		CreateInstallersForConfig(cluster)
 	if err != nil {
 		return true, nil, fmt.Errorf("build installers: %w", err)
 	}
 
-	uninstallErr := uninstallRemovedComponents(ctx, factory, cluster, installers)
+	uninstallErr := uninstallRemovedComponents(ctx, newFactory, cluster, installers)
 
 	components, installErr := runInstallers(ctx, installers)
 
@@ -119,11 +125,11 @@ func InstallComponents(
 // component is returned, so it surfaces as ComponentsReady=False and requeues.
 func uninstallRemovedComponents(
 	ctx context.Context,
-	factory *installer.Factory,
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
 	cluster *v1alpha1.Cluster,
 	desired map[string]installer.Installer,
 ) error {
-	removed, err := removedComponentInstallers(factory, cluster, desired)
+	removed, err := removedComponentInstallers(newFactory, cluster, desired)
 	if err != nil {
 		logf.FromContext(ctx).
 			Info("skip uninstall of removed components (best-effort)", "error", err.Error())
@@ -136,10 +142,12 @@ func uninstallRemovedComponents(
 
 // removedComponentInstallers returns the installers for components that were in the last-applied
 // component set but are no longer desired. It rebuilds the previous installer set from the baseline
-// spec via the same factory, then keeps the entries whose key is absent from the desired set. It
-// returns an empty map when no baseline is recorded (first reconcile, or an unparseable annotation).
+// spec via a factory built FOR that baseline's distribution (several installers are
+// distribution-dependent, so reusing the current cluster's factory would compute the wrong uninstall
+// set after a distribution change), then keeps the entries whose key is absent from the desired set.
+// It returns an empty map when no baseline is recorded (first reconcile, or an unparseable annotation).
 func removedComponentInstallers(
-	factory *installer.Factory,
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
 	cluster *v1alpha1.Cluster,
 	desired map[string]installer.Installer,
 ) (map[string]installer.Installer, error) {
@@ -150,7 +158,8 @@ func removedComponentInstallers(
 
 	previousCluster := &v1alpha1.Cluster{Spec: *previousSpec}
 
-	previous, err := factory.CreateInstallersForConfig(previousCluster)
+	previous, err := newFactory(previousSpec.Cluster.Distribution).
+		CreateInstallersForConfig(previousCluster)
 	if err != nil {
 		return nil, fmt.Errorf("build previous installers: %w", err)
 	}

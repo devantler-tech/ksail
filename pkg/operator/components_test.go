@@ -198,25 +198,36 @@ func TestRunUninstallers_AggregatesErrorsAndContinues(t *testing.T) {
 	assert.Equal(t, []string{componentFlux, componentCilium}, order)
 }
 
-// newComponentFactory builds an installer factory backed by a bare helm mock — installer
+// newComponentFactory returns a factory builder backed by a bare helm mock — installer
 // construction does not call helm, so no expectations are needed (mirrors the factory tests).
-func newComponentFactory(t *testing.T) *installer.Factory {
+// It records each distribution it is invoked with into gotDistributions when non-nil, so tests
+// can assert which distribution the baseline factory was built for.
+func newComponentFactory(
+	t *testing.T,
+	gotDistributions *[]v1alpha1.Distribution,
+) func(v1alpha1.Distribution) *installer.Factory {
 	t.Helper()
 
-	return installer.NewFactory(
-		helm.NewMockInterface(t),
-		nil,
-		"/tmp/kubeconfig",
-		"",
-		5*time.Minute,
-		v1alpha1.DistributionVanilla,
-	)
+	return func(distribution v1alpha1.Distribution) *installer.Factory {
+		if gotDistributions != nil {
+			*gotDistributions = append(*gotDistributions, distribution)
+		}
+
+		return installer.NewFactory(
+			helm.NewMockInterface(t),
+			nil,
+			"/tmp/kubeconfig",
+			"",
+			5*time.Minute,
+			distribution,
+		)
+	}
 }
 
 func TestRemovedComponentInstallers_ReturnsComponentsDroppedFromSpec(t *testing.T) {
 	t.Parallel()
 
-	factory := newComponentFactory(t)
+	newFactory := newComponentFactory(t, nil)
 
 	// Baseline had Kyverno + Flux; the desired spec keeps only Flux (policyEngine flipped to None), so
 	// Kyverno must be reported as removed and Flux must not.
@@ -238,23 +249,57 @@ func TestRemovedComponentInstallers_ReturnsComponentsDroppedFromSpec(t *testing.
 		PolicyEngine: v1alpha1.PolicyEngineNone,
 		GitOpsEngine: v1alpha1.GitOpsEngineFlux,
 	}}}
-	desiredInstallers, err := factory.CreateInstallersForConfig(desired)
+	desiredInstallers, err := newFactory(v1alpha1.DistributionVanilla).
+		CreateInstallersForConfig(desired)
 	require.NoError(t, err)
 
-	removed, err := operator.RemovedComponentInstallers(factory, cluster, desiredInstallers)
+	removed, err := operator.RemovedComponentInstallers(newFactory, cluster, desiredInstallers)
 	require.NoError(t, err)
 	assert.Contains(t, removed, componentKyverno, "a component dropped from the spec is removed")
 	assert.NotContains(t, removed, componentFlux, "a still-desired component is not removed")
 }
 
+func TestRemovedComponentInstallers_BaselineFactoryUsesPreviousDistribution(t *testing.T) {
+	t.Parallel()
+
+	var gotDistributions []v1alpha1.Distribution
+
+	newFactory := newComponentFactory(t, &gotDistributions)
+
+	// The baseline was applied while the cluster ran K3s; the cluster has since been
+	// switched to Vanilla. The previous installer set must be rebuilt with a factory
+	// for K3s — several installers are distribution-dependent, so reusing the current
+	// (Vanilla) factory would compute the wrong uninstall set.
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionK3s,
+		GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+	}
+
+	_, err = operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []v1alpha1.Distribution{v1alpha1.DistributionK3s}, gotDistributions,
+		"the baseline installer set must be built for the previously-applied distribution")
+}
+
 func TestRemovedComponentInstallers_NoBaselineReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	factory := newComponentFactory(t)
+	newFactory := newComponentFactory(t, nil)
 
 	// No baseline annotation (first reconcile): nothing is considered removed.
 	removed, err := operator.RemovedComponentInstallers(
-		factory,
+		newFactory,
 		&v1alpha1.Cluster{},
 		map[string]installer.Installer{},
 	)
@@ -265,7 +310,7 @@ func TestRemovedComponentInstallers_NoBaselineReturnsNil(t *testing.T) {
 func TestRemovedComponentInstallers_UnparseableBaselineReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	factory := newComponentFactory(t)
+	newFactory := newComponentFactory(t, nil)
 
 	// A corrupt baseline must never block a fresh apply: it is treated as "no baseline".
 	cluster := &v1alpha1.Cluster{}
@@ -274,7 +319,7 @@ func TestRemovedComponentInstallers_UnparseableBaselineReturnsNil(t *testing.T) 
 	}
 
 	removed, err := operator.RemovedComponentInstallers(
-		factory,
+		newFactory,
 		cluster,
 		map[string]installer.Installer{},
 	)
