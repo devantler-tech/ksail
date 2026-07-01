@@ -73,15 +73,32 @@ type SourceIndex struct {
 // HelmChartResolver is the production ChartResolver, backed by the in-process,
 // kubeconfig-free Helm template client (helm.NewTemplateOnlyClient()).
 type HelmChartResolver struct {
-	helm helm.Interface
+	helm  helm.Interface
+	cache *ChartCache
 }
 
 var _ ChartResolver = (*HelmChartResolver)(nil)
 
+// ResolverOption configures a HelmChartResolver.
+type ResolverOption func(*HelmChartResolver)
+
+// WithChartCache makes the resolver serve identical chart renders from the
+// shared cache instead of re-templating. Pass one cache per validate/scan run
+// (see ChartCache) so identical HelmReleases across kustomizations are
+// templated once.
+func WithChartCache(cache *ChartCache) ResolverOption {
+	return func(r *HelmChartResolver) { r.cache = cache }
+}
+
 // NewHelmChartResolver returns a resolver that renders charts with the given
 // Helm client. Pass a client from helm.NewTemplateOnlyClient() for offline use.
-func NewHelmChartResolver(client helm.Interface) *HelmChartResolver {
-	return &HelmChartResolver{helm: client}
+func NewHelmChartResolver(client helm.Interface, opts ...ResolverOption) *HelmChartResolver {
+	resolver := &HelmChartResolver{helm: client}
+	for _, opt := range opts {
+		opt(resolver)
+	}
+
+	return resolver
 }
 
 // Render resolves the chart source for helmRelease and templates it in-process.
@@ -91,6 +108,13 @@ func NewHelmChartResolver(client helm.Interface) *HelmChartResolver {
 // Helm's process-global on-disk caches, which concurrent renders corrupted
 // (issue #5362). The deferred Unlock holds the lock only across that call plus a
 // trivial error-wrap, and stays correct even if TemplateChart panics.
+//
+// When a ChartCache is configured (WithChartCache), the lookup and store happen
+// inside the helmRenderMu critical section: because that lock already serializes
+// every render, a second render of the same spec finds the first result and
+// skips TemplateChart entirely (no thundering herd), and cache hits release the
+// lock immediately. Only successful renders are cached — a template error is
+// returned as before, never memoized.
 func (r *HelmChartResolver) Render(
 	ctx context.Context,
 	helmRelease *helmv2.HelmRelease,
@@ -104,12 +128,22 @@ func (r *HelmChartResolver) Render(
 	helmRenderMu.Lock()
 	defer helmRenderMu.Unlock()
 
+	if r.cache != nil {
+		if manifest, ok := r.cache.get(spec); ok {
+			return manifest, nil
+		}
+	}
+
 	manifest, err := r.helm.TemplateChart(ctx, spec)
 	if err != nil {
 		return "", fmt.Errorf(
 			"template chart for HelmRelease %s/%s: %w",
 			helmRelease.Namespace, helmRelease.Name, err,
 		)
+	}
+
+	if r.cache != nil {
+		r.cache.put(spec, manifest)
 	}
 
 	return manifest, nil
