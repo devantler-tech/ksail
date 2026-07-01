@@ -5,11 +5,12 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
-// HetznerInfra exposes the unexported hetznerInfra interface so external tests can
+// HetznerInfra exposes the shared Hetzner infrastructure seam so external tests can
 // inject a fake provider in place of the live Hetzner Cloud API.
-type HetznerInfra = hetznerInfra
+type HetznerInfra = hetznerbase.Infra
 
 // TestNode is the exported view of a composed node used by external tests.
 type TestNode struct {
@@ -30,14 +31,16 @@ func NewProvisionerForTest(
 	logWriter io.Writer,
 ) *Provisioner {
 	return &Provisioner{
-		infra:         infra,
-		transport:     transport,
-		opts:          opts,
-		clusterName:   clusterName,
-		version:       version,
-		controlPlanes: controlPlanes,
-		agents:        agents,
-		logWriter:     logWriter,
+		Base: &hetznerbase.Base{
+			Infra:         infra,
+			Opts:          opts,
+			ClusterName:   clusterName,
+			ControlPlanes: controlPlanes,
+			Agents:        agents,
+			LogWriter:     logWriter,
+		},
+		transport: transport,
+		version:   version,
 	}
 }
 

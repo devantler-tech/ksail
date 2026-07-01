@@ -40,8 +40,8 @@ func (p *Provisioner) buildNodeUserData(
 	nodes, err := k3sbootstrap.Plan(k3sbootstrap.PlanInput{
 		Version:           p.version,
 		Token:             token,
-		ControlPlaneCount: p.controlPlanes,
-		AgentCount:        p.agents,
+		ControlPlaneCount: p.ControlPlanes,
+		AgentCount:        p.Agents,
 		ServerURL:         serverURL,
 	})
 	if err != nil {
@@ -70,6 +70,19 @@ func (p *Provisioner) buildNodeUserData(
 	}
 
 	return result, nil
+}
+
+// composeNodes composes the K3s per-node cloud-init user_data and returns the node
+// count, adapting buildNodeUserData to the shared create flow's composeNodes
+// callback ([hetznerbase.Base.RunCreate]). The single-control-plane path carries no
+// join server URL.
+func (p *Provisioner) composeNodes(clusterName, token string) (int, error) {
+	nodes, err := p.buildNodeUserData(clusterName, token, "")
+	if err != nil {
+		return 0, err
+	}
+
+	return len(nodes), nil
 }
 
 // nodeType maps a k3s role to the Hetzner node-type label value: agents are

@@ -4,11 +4,12 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
-// HetznerInfra exposes the unexported hetznerInfra interface so external tests can
+// HetznerInfra exposes the shared Hetzner infrastructure seam so external tests can
 // inject a fake provider in place of the live Hetzner Cloud API.
-type HetznerInfra = hetznerInfra
+type HetznerInfra = hetznerbase.Infra
 
 // NewProvisionerForTest constructs a Provisioner with an injected infrastructure
 // seam, bypassing the live Hetzner provider construction NewProvisioner performs.
@@ -20,13 +21,15 @@ func NewProvisionerForTest(
 	logWriter io.Writer,
 ) *Provisioner {
 	return &Provisioner{
-		infra:             infra,
-		opts:              opts,
-		clusterName:       clusterName,
+		Base: &hetznerbase.Base{
+			Infra:         infra,
+			Opts:          opts,
+			ClusterName:   clusterName,
+			ControlPlanes: controlPlanes,
+			Agents:        agents,
+			LogWriter:     logWriter,
+		},
 		kubernetesVersion: kubernetesVersion,
-		controlPlanes:     controlPlanes,
-		agents:            agents,
-		logWriter:         logWriter,
 	}
 }
 
