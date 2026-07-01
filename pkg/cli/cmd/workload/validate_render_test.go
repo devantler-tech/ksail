@@ -106,7 +106,8 @@ func TestValidateRendersHelmReleaseFromLocalChart(t *testing.T) {
 
 // TestValidateCatchesInvalidRenderedManifest verifies that a HelmRelease whose
 // chart renders a schema-invalid manifest fails validation — the headline of
-// #5344. The HelmRelease CR itself is valid; only the rendered output is not.
+// #5344 — and that the failure is attributed back to the originating HelmRelease
+// layer (from the render provenance) so a multi-layer render points at the source.
 func TestValidateCatchesInvalidRenderedManifest(t *testing.T) {
 	t.Parallel()
 
@@ -114,6 +115,14 @@ func TestValidateCatchesInvalidRenderedManifest(t *testing.T) {
 
 	_, err := runValidate(t, dir, "--skip-kinds", "OCIRepository")
 	require.Error(t, err, "rendered invalid chart output should fail validation")
+	// The invalid ConfigMap is rendered from the HelmRelease flux-system/app, so the
+	// failure carries its source layer (SourceHelmRelease is "namespace/name").
+	assert.ErrorContains(
+		t,
+		err,
+		"(from HelmRelease flux-system/app)",
+		"a rendered failure should be attributed to its HelmRelease layer",
+	)
 }
 
 // TestValidateSkipHelmRenderValidatesCRAsIs verifies --skip-helm-render disables
