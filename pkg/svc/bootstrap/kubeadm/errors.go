@@ -15,6 +15,18 @@ var (
 	// rejected rather than rendered into a config that would fail at bring-up.
 	ErrMissingToken = errors.New("kubeadm: a bootstrap token is required")
 
+	// ErrInvalidControlPlaneCount is returned by [Plan] when a [PlanInput] requests
+	// fewer than one control-plane node. Every cluster needs a cluster-initialising
+	// control plane, so a count below one cannot describe a bootstrappable topology.
+	ErrInvalidControlPlaneCount = errors.New(
+		"kubeadm: a cluster requires at least one control-plane node",
+	)
+
+	// ErrInvalidAgentCount is returned by [Plan] when a [PlanInput] requests a
+	// negative number of agent (worker) nodes. Zero agents is a valid
+	// control-plane-only cluster; a negative count is a misconfiguration.
+	ErrInvalidAgentCount = errors.New("kubeadm: the agent count must not be negative")
+
 	// ErrServerInitWithJoinFields is returned when RoleServerInit carries a
 	// join-only field (an API server endpoint or CA cert hashes). The
 	// cluster-initialising control plane starts a new cluster and joins no existing
