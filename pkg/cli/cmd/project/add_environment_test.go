@@ -1,4 +1,4 @@
-package cluster_test
+package project_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +77,7 @@ func writeAddEnvSourceRepo(t *testing.T) string {
 func runAddEnvironment(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
-	cmd := cluster.NewAddEnvironmentCmd()
+	cmd := project.NewAddEnvironmentCmd()
 
 	var out bytes.Buffer
 
@@ -145,7 +145,7 @@ func TestHandleAddEnvironmentRunE_RejectsSameEnvironment(t *testing.T) {
 	t.Chdir(repoRoot)
 
 	_, err := runAddEnvironment(t, "prod", "--from", "prod")
-	require.ErrorIs(t, err, cluster.ErrSameEnvironment)
+	require.ErrorIs(t, err, project.ErrSameEnvironment)
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
@@ -186,7 +186,7 @@ func TestHandleAddEnvironmentRunE_MissingSourceConfig(t *testing.T) {
 	t.Chdir(repoRoot)
 
 	_, err := runAddEnvironment(t, "staging", "--from", "ghost")
-	require.ErrorIs(t, err, cluster.ErrSourceConfigLoad)
+	require.ErrorIs(t, err, project.ErrSourceConfigLoad)
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
@@ -247,7 +247,7 @@ func TestHandleAddEnvironmentRunE_ForceOverwritesExisting(t *testing.T) {
 func TestNewAddEnvironmentCmd_Structure(t *testing.T) {
 	t.Parallel()
 
-	cmd := cluster.NewAddEnvironmentCmd()
+	cmd := project.NewAddEnvironmentCmd()
 
 	assert.Equal(t, "add-environment <name>", cmd.Use)
 	assert.NotEmpty(t, cmd.Short)

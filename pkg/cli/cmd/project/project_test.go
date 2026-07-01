@@ -34,15 +34,27 @@ func TestProjectCmd_ShowsHelp(t *testing.T) {
 	snaps.MatchSnapshot(t, output)
 }
 
-func TestProjectCmd_IsExcludedFromToolSurface(t *testing.T) {
+func TestProjectCmd_ConsolidatedIntoToolSurface(t *testing.T) {
 	t.Parallel()
 
 	cmd := projectpkg.NewProjectCmd()
-	require.Equal(
-		t,
-		annotations.AnnotationValueTrue,
-		cmd.Annotations[annotations.AnnotationExclude],
-	)
+
+	// Now that the group hosts a subcommand it is consolidated into the tool
+	// surface (mirroring the cluster group), no longer excluded.
+	require.Equal(t, "command", cmd.Annotations[annotations.AnnotationConsolidate])
+	require.Empty(t, cmd.Annotations[annotations.AnnotationExclude])
+
+	var found bool
+
+	for _, sub := range cmd.Commands() {
+		if sub.Name() == "add-environment" {
+			found = true
+
+			break
+		}
+	}
+
+	require.True(t, found, "project group should host the add-environment subcommand")
 }
 
 func TestProjectCmd_RejectsArgs(t *testing.T) {
