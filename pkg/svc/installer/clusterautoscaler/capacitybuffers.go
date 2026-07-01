@@ -33,7 +33,12 @@ var capacityBufferCRDYAML []byte
 //
 //  1. Flags: capacity-buffer-controller-enabled and
 //     capacity-buffer-pod-injection-enabled, so the autoscaler reconciles
-//     CapacityBuffer resources and injects virtual pods for ready buffers.
+//     CapacityBuffer resources and injects virtual pods for ready buffers; plus
+//     kube-api-content-type=application/json, because the buffer controller's
+//     client defaults to protobuf (the autoscaler's built-in-type encoding) which
+//     the CapacityBuffer CRD cannot satisfy — without JSON the controller errors
+//     and never writes buffer status, silently disabling over-provisioning
+//     (ksail#5603).
 //  2. RBAC: the chart's ClusterRole only grants provisioningrequests in the
 //     autoscaling.x-k8s.io group, so the buffer controller's access to the
 //     CapacityBuffer CRs themselves is added via the chart's rbac.additionalRules
@@ -49,6 +54,12 @@ var capacityBufferCRDYAML []byte
 func enableCapacityBuffers(vals *chartValues) error {
 	vals.ExtraArgs.CapacityBufferControllerEnabled = true
 	vals.ExtraArgs.CapacityBufferPodInjectionEnabled = true
+	// The CapacityBuffer controller reconciles a CRD, but the autoscaler's client
+	// defaults to protobuf (built-in-type encoding) which CRDs cannot satisfy — force
+	// JSON for the whole autoscaler client. Negligible overhead on the small clusters
+	// that use capacity buffers; without it buffer status never populates and
+	// over-provisioning is silently a no-op (ksail#5603).
+	vals.ExtraArgs.KubeAPIContentType = "application/json"
 
 	// The CapacityBuffer CRs themselves; the Deployments and ResourceQuotas the
 	// buffer controller's translators run informers over are already covered by

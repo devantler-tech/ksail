@@ -148,6 +148,15 @@ type chartExtraArgs struct {
 	// see no values drift.
 	CapacityBufferControllerEnabled   bool `json:"capacity-buffer-controller-enabled,omitempty"`
 	CapacityBufferPodInjectionEnabled bool `json:"capacity-buffer-pod-injection-enabled,omitempty"`
+	// KubeAPIContentType forces the autoscaler's Kubernetes client to negotiate the
+	// given content type. capacity-buffers require application/json: the CapacityBuffer
+	// controller's client would otherwise negotiate protobuf (the autoscaler default for
+	// built-in types), but CapacityBuffer is a CRD and cannot be protobuf-encoded, so the
+	// controller fails ("does not implement the protobuf marshalling interface") and never
+	// writes buffer status — silently disabling over-provisioning (ksail#5603). omitempty
+	// keeps it out of the rendered values unless capacityBuffers is enabled, so existing
+	// releases see no values drift.
+	KubeAPIContentType string `json:"kube-api-content-type,omitempty"`
 }
 
 type chartSecretRef struct {
