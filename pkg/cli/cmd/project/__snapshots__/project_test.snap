@@ -1,0 +1,11 @@
+
+[TestProjectCmd_ShowsHelp - 1]
+Manage the GitOps project files (the on-disk project structure) without contacting a live cluster. These commands scaffold and transform the project — e.g. initializing a new project and cloning environments — as opposed to the cluster commands that operate on a running cluster.
+
+Usage:
+  project [flags]
+
+Flags:
+  -h, --help   help for project
+
+---
