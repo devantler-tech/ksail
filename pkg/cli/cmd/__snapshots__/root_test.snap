@@ -18,6 +18,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
+  project     Manage GitOps project files
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
 
@@ -43,6 +44,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   open        Open a KSail interface (web UI, desktop app, AI chat, or MCP server)
+  project     Manage GitOps project files
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
 

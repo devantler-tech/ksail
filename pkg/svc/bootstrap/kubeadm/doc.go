@@ -32,6 +32,16 @@
 // that node. It is pure: no I/O, no network, fully unit-testable without a
 // cluster or a Hetzner account.
 //
+// [Plan] sits one level up, expanding a cluster topology ([PlanInput]) into the
+// ordered per-node [NodeConfig]s a provisioner bootstraps in sequence
+// (cluster-initialising control plane → additional control planes → agents),
+// mirroring the k3sbootstrap planner. Because kubeadm discovers a joining node's
+// API server endpoint and CA cert hashes only once the first control plane is up,
+// those are [PlanInput] fields a provisioner injects at run time before planning
+// the joining nodes — unlike k3s's pre-shared token, which needs no run-time
+// artifact. Every [Node] Plan returns carries a Config that passes validation, so
+// [Render] never fails for a planned node.
+//
 // [RenderInstall] maps an [InstallConfig] to the declarative [Install] that
 // brings a node up at first boot: the Kubernetes community package repository for
 // the requested minor track, the container runtime and kube* packages, the
