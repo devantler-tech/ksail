@@ -532,6 +532,20 @@ func (p *Provisioner) CordonAndDrainForTest(
 	return p.cordonAndDrain(ctx, clientset, nodeName)
 }
 
+// UncordonAfterUpgradeForTest exposes uncordonAfterUpgrade for unit testing.
+func (p *Provisioner) UncordonAfterUpgradeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.uncordonAfterUpgrade(ctx, clientset, nodeName)
+}
+
+// K8sClientOrWarnForUpgradeForTest exposes k8sClientOrWarnForUpgrade for unit testing.
+func (p *Provisioner) K8sClientOrWarnForUpgradeForTest(clusterName string) kubernetes.Interface {
+	return p.k8sClientOrWarnForUpgrade(clusterName)
+}
+
 // DrainTimeoutForTest exposes drainTimeout for unit testing.
 func (p *Provisioner) DrainTimeoutForTest() time.Duration {
 	return p.drainTimeout()
