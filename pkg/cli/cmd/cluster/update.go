@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -141,7 +142,7 @@ func handleUpdateRunE(
 		return err
 	}
 
-	applyClusterMutationFlags(cmd, ctx.ClusterCfg)
+	clusterflags.ApplyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
 	err = validatePostMutationFlags(ctx)
 	if err != nil {

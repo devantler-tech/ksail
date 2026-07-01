@@ -9,6 +9,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
@@ -89,7 +90,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	applyClusterMutationFlags(cmd, ctx.ClusterCfg)
+	clusterflags.ApplyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
 	err = validatePostMutationFlags(ctx)
 	if err != nil {
