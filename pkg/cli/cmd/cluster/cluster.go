@@ -86,7 +86,7 @@ func NewClusterCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(NewInitCmd())
+	cmd.AddCommand(newDeprecatedInitCmd())
 	cmd.AddCommand(newDeprecatedAddEnvironmentCmd())
 	cmd.AddCommand(NewCreateCmd())
 	cmd.AddCommand(NewUpdateCmd())
@@ -103,6 +103,21 @@ func NewClusterCmd() *cobra.Command {
 	cmd.AddCommand(NewSwitchCmd())
 	cmd.AddCommand(NewRepairCmd(nil))
 	cmd.AddCommand(oidc.NewOIDCCmd())
+
+	return cmd
+}
+
+// newDeprecatedInitCmd returns the init command as a hidden, deprecated alias
+// under `cluster`. The command moved to `ksail project init` (issue #5626); this
+// alias keeps the previously released `ksail cluster init` working for one
+// deprecation cycle, printing a notice that points at the new location. It is
+// Hidden so it stays out of help, the generated docs, and the MCP/chat tool
+// surface (toolgen skips hidden commands) — the canonical `project init` is the
+// only surfaced form.
+func newDeprecatedInitCmd() *cobra.Command {
+	cmd := project.NewInitCmd()
+	cmd.Hidden = true
+	cmd.Deprecated = `use "ksail project init" instead`
 
 	return cmd
 }

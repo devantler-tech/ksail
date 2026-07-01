@@ -550,7 +550,18 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 		t.Parallel()
 
 		assertToolContainsSubcommands(t, toolMap, "cluster_write",
-			"update", "create", "delete", "init", "start", "stop", "backup", "restore",
+			"update", "create", "delete", "start", "stop", "backup", "restore",
+		)
+	})
+
+	t.Run("project_write", func(t *testing.T) {
+		t.Parallel()
+
+		// init and add-environment moved from cluster to project (issue #5626);
+		// they are surfaced via project_write, not cluster_write. The hidden
+		// deprecated aliases under cluster are skipped by toolgen.
+		assertToolContainsSubcommands(t, toolMap, "project_write",
+			"init", "add-environment",
 		)
 	})
 

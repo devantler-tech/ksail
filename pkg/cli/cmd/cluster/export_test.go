@@ -493,11 +493,6 @@ func ExportGetOutputFormat(cmd *cobra.Command) string {
 	return getOutputFormat(cmd)
 }
 
-// ExportInitFieldSelectors exports InitFieldSelectors for testing.
-//
-//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var ExportInitFieldSelectors = InitFieldSelectors
-
 // ExportIsClusterContainer exports IsClusterContainer for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.

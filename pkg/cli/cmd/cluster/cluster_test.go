@@ -68,6 +68,36 @@ func TestClusterCmd_RegistersDeprecatedAddEnvironmentAlias(t *testing.T) {
 	)
 }
 
+// TestClusterCmd_RegistersDeprecatedInitAlias guards the backward compatibility
+// alias kept when `init` moved to the `project` group (issue #5626). The
+// previously released `ksail cluster init` must keep working for one deprecation
+// cycle: it stays wired to the shared project.NewInitCmd, marked Hidden (so it is
+// absent from help, docs, and the MCP/chat tool surface), and carries the
+// deprecation notice pointing at the new location. A silent regression of any of
+// these would break existing users' invocations without a compile error.
+func TestClusterCmd_RegistersDeprecatedInitAlias(t *testing.T) {
+	t.Parallel()
+
+	clusterCmd := cluster.NewClusterCmd()
+	require.NotNil(t, clusterCmd)
+
+	alias := findClusterSubcommand(clusterCmd, "init")
+	require.NotNil(t, alias, "expected 'init' alias to stay registered under cluster")
+
+	require.True(t, alias.Hidden, "cluster init alias must be Hidden")
+	require.Equal(t,
+		`use "ksail project init" instead`,
+		alias.Deprecated,
+		"alias must carry the deprecation notice pointing at the project group",
+	)
+
+	// Delegation: the alias is the shared project command, so its Use and Short
+	// must match the canonical project.NewInitCmd.
+	canonical := project.NewInitCmd()
+	require.Equal(t, canonical.Use, alias.Use, "alias must delegate to project.NewInitCmd")
+	require.Equal(t, canonical.Short, alias.Short, "alias must delegate to project.NewInitCmd")
+}
+
 // findClusterSubcommand returns the named direct subcommand of parent, or nil.
 func findClusterSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, sub := range parent.Commands() {
