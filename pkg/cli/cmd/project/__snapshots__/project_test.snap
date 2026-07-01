@@ -10,6 +10,7 @@ Available Commands:
   add-environment Clone an existing cluster environment into a new one
   completion      Generate the autocompletion script for the specified shell
   help            Help about any command
+  init            Initialize a new project
 
 Flags:
   -h, --help   help for project

@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const mirrorRegistryHelp = "Configure mirror registries with format 'host=upstream' " +
-	"(e.g., docker.io=https://registry-1.docker.io)."
-
 func TestValidateOutputFormat_ValidText(t *testing.T) {
 	t.Parallel()
 

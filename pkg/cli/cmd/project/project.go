@@ -9,13 +9,13 @@ import (
 
 // NewProjectCmd creates the parent project command and wires subcommands beneath
 // it. The project group hosts commands that operate solely on the GitOps project
-// files (scaffolding, environment cloning) with no live cluster involved. Its
-// first subcommand is add-environment, which moved here from `cluster` (see issue
-// #5626); the remaining file-operating commands (init) follow in later increments.
+// files (scaffolding, environment cloning) with no live cluster involved. Both
+// init and add-environment moved here from `cluster` (see issue #5626): init
+// scaffolds a new project and add-environment clones an environment overlay.
 //
-// Now that the group carries a subcommand it joins the generated MCP/chat tool
-// surface via the toolgen consolidate annotation (mirroring the cluster group),
-// so `project add-environment` is exposed as a tool.
+// The group carries subcommands so it joins the generated MCP/chat tool surface
+// via the toolgen consolidate annotation (mirroring the cluster group), so
+// `project init` and `project add-environment` are exposed as tools.
 func NewProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
@@ -32,6 +32,7 @@ func NewProjectCmd() *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(NewInitCmd())
 	cmd.AddCommand(NewAddEnvironmentCmd())
 
 	return cmd
