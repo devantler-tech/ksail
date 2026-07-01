@@ -16,3 +16,8 @@ func ExportApplyK3dNodeCounts(config *k3dv1alpha5.SimpleConfig, controlPlanes, w
 func ExportWriteK3dConfigToTempFile(config *k3dv1alpha5.SimpleConfig) (string, error) {
 	return writeK3dConfigToTempFile(config)
 }
+
+// ExportKubeadmInstallVersion exposes kubeadmInstallVersion for testing.
+func ExportKubeadmInstallVersion() string {
+	return kubeadmInstallVersion()
+}
