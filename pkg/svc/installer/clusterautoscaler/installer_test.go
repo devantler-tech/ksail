@@ -670,6 +670,10 @@ func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 			wantContain: []string{
 				"capacity-buffer-controller-enabled: true",
 				"capacity-buffer-pod-injection-enabled: true",
+				// JSON encoding is required so the CapacityBuffer CRD client works
+				// (the autoscaler defaults to protobuf, which CRDs cannot satisfy) —
+				// ksail#5603.
+				"kube-api-content-type: application/json",
 				"additionalRules:",
 				"capacitybuffers",
 				"- deployments",
@@ -691,6 +695,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers(t *testing.T) {
 			wantOmit: []string{
 				"capacity-buffer-controller-enabled",
 				"capacity-buffer-pod-injection-enabled",
+				"kube-api-content-type",
 				"capacitybuffers",
 				"kind: CustomResourceDefinition",
 			},
