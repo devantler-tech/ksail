@@ -2,10 +2,13 @@ package operator_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -80,11 +83,15 @@ func TestInstallComponents_KubeconfigNotReadyPropagates(t *testing.T) {
 	)
 }
 
-// recordingInstaller records the order in which installers run and optionally fails.
+// recordingInstaller records the order in which installers run and optionally fails. Install
+// failures use err; Uninstall failures use uninstallErr, and the uninstall order is recorded into
+// uninstallOrder when set (nil disables uninstall recording).
 type recordingInstaller struct {
-	name  string
-	err   error
-	order *[]string
+	name           string
+	err            error
+	uninstallErr   error
+	order          *[]string
+	uninstallOrder *[]string
 }
 
 func (r *recordingInstaller) Install(_ context.Context) error {
@@ -93,7 +100,13 @@ func (r *recordingInstaller) Install(_ context.Context) error {
 	return r.err
 }
 
-func (r *recordingInstaller) Uninstall(_ context.Context) error { return nil }
+func (r *recordingInstaller) Uninstall(_ context.Context) error {
+	if r.uninstallOrder != nil {
+		*r.uninstallOrder = append(*r.uninstallOrder, r.name)
+	}
+
+	return r.uninstallErr
+}
 
 func (r *recordingInstaller) Images(_ context.Context) ([]string, error) { return nil, nil }
 
@@ -139,4 +152,177 @@ func TestRunInstallers_AggregatesErrorsAndContinues(t *testing.T) {
 		{Name: componentCilium, State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
 		{Name: componentFlux, State: v1alpha1.ComponentStateReady},
 	}, statuses)
+}
+
+// componentKyverno is reused across the uninstall/removal tests.
+const componentKyverno = "kyverno"
+
+func TestRunUninstallers_OrdersGitOpsFirstAndCNILast(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+
+	// Uninstall is the inverse of install: GitOps must come down first, CNI last.
+	installers := map[string]installer.Installer{
+		componentCilium: &recordingInstaller{name: componentCilium, uninstallOrder: &order},
+		componentFlux:   &recordingInstaller{name: componentFlux, uninstallOrder: &order},
+		componentKyverno: &recordingInstaller{
+			name:           componentKyverno,
+			uninstallOrder: &order,
+		},
+	}
+
+	err := operator.RunUninstallers(context.Background(), installers)
+	require.NoError(t, err)
+	assert.Equal(t, []string{componentFlux, componentKyverno, componentCilium}, order)
+}
+
+func TestRunUninstallers_AggregatesErrorsAndContinues(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+
+	installers := map[string]installer.Installer{
+		componentFlux: &recordingInstaller{
+			name:           componentFlux,
+			uninstallErr:   errBoom,
+			uninstallOrder: &order,
+		},
+		componentCilium: &recordingInstaller{name: componentCilium, uninstallOrder: &order},
+	}
+
+	err := operator.RunUninstallers(context.Background(), installers)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), componentFlux)
+	// cilium still uninstalled despite flux failing, in reverse order.
+	assert.Equal(t, []string{componentFlux, componentCilium}, order)
+}
+
+// newComponentFactory returns a factory builder backed by a bare helm mock — installer
+// construction does not call helm, so no expectations are needed (mirrors the factory tests).
+// It records each distribution it is invoked with into gotDistributions when non-nil, so tests
+// can assert which distribution the baseline factory was built for.
+func newComponentFactory(
+	t *testing.T,
+	gotDistributions *[]v1alpha1.Distribution,
+) func(v1alpha1.Distribution) *installer.Factory {
+	t.Helper()
+
+	return func(distribution v1alpha1.Distribution) *installer.Factory {
+		if gotDistributions != nil {
+			*gotDistributions = append(*gotDistributions, distribution)
+		}
+
+		return installer.NewFactory(
+			helm.NewMockInterface(t),
+			nil,
+			"/tmp/kubeconfig",
+			"",
+			5*time.Minute,
+			distribution,
+		)
+	}
+}
+
+func TestRemovedComponentInstallers_ReturnsComponentsDroppedFromSpec(t *testing.T) {
+	t.Parallel()
+
+	newFactory := newComponentFactory(t, nil)
+
+	// Baseline had Kyverno + Flux; the desired spec keeps only Flux (policyEngine flipped to None), so
+	// Kyverno must be reported as removed and Flux must not.
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionVanilla,
+		PolicyEngine: v1alpha1.PolicyEngineKyverno,
+		GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+	}
+
+	desired := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionVanilla,
+		PolicyEngine: v1alpha1.PolicyEngineNone,
+		GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+	}}}
+	desiredInstallers, err := newFactory(v1alpha1.DistributionVanilla).
+		CreateInstallersForConfig(desired)
+	require.NoError(t, err)
+
+	removed, err := operator.RemovedComponentInstallers(newFactory, cluster, desiredInstallers)
+	require.NoError(t, err)
+	assert.Contains(t, removed, componentKyverno, "a component dropped from the spec is removed")
+	assert.NotContains(t, removed, componentFlux, "a still-desired component is not removed")
+}
+
+func TestRemovedComponentInstallers_BaselineFactoryUsesPreviousDistribution(t *testing.T) {
+	t.Parallel()
+
+	var gotDistributions []v1alpha1.Distribution
+
+	newFactory := newComponentFactory(t, &gotDistributions)
+
+	// The baseline was applied while the cluster ran K3s; the cluster has since been
+	// switched to Vanilla. The previous installer set must be rebuilt with a factory
+	// for K3s — several installers are distribution-dependent, so reusing the current
+	// (Vanilla) factory would compute the wrong uninstall set.
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionK3s,
+		GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+	}
+
+	_, err = operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []v1alpha1.Distribution{v1alpha1.DistributionK3s}, gotDistributions,
+		"the baseline installer set must be built for the previously-applied distribution")
+}
+
+func TestRemovedComponentInstallers_NoBaselineReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	newFactory := newComponentFactory(t, nil)
+
+	// No baseline annotation (first reconcile): nothing is considered removed.
+	removed, err := operator.RemovedComponentInstallers(
+		newFactory,
+		&v1alpha1.Cluster{},
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, removed)
+}
+
+func TestRemovedComponentInstallers_UnparseableBaselineReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	newFactory := newComponentFactory(t, nil)
+
+	// A corrupt baseline must never block a fresh apply: it is treated as "no baseline".
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: "{not valid json",
+	}
+
+	removed, err := operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, removed)
 }

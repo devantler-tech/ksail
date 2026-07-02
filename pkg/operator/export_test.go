@@ -14,6 +14,10 @@ var (
 	ResolveProvider = resolveProvider
 	// RunInstallers exposes runInstallers for testing.
 	RunInstallers = runInstallers
+	// RunUninstallers exposes runUninstallers for testing.
+	RunUninstallers = runUninstallers
+	// RemovedComponentInstallers exposes removedComponentInstallers for testing.
+	RemovedComponentInstallers = removedComponentInstallers
 	// CountReadyNodes exposes countReadyNodes for testing.
 	CountReadyNodes = countReadyNodes
 )

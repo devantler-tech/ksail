@@ -198,8 +198,8 @@ func (s *crClusterService) ensureNamespace(ctx context.Context, name string) err
 
 // sanitizeForWrite returns a copy of a client-supplied Cluster containing only the fields a caller
 // is allowed to set (name, namespace, labels, spec). It drops status, finalizers, resourceVersion,
-// and the operator-managed last-applied-spec annotation so the API cannot be used to interfere with
-// reconciliation or drift detection.
+// and the operator-managed last-applied baseline annotations so the API cannot be used to interfere
+// with reconciliation, drift detection, or component-removal detection.
 func sanitizeForWrite(cluster *v1alpha1.Cluster) *v1alpha1.Cluster {
 	out := &v1alpha1.Cluster{}
 	out.Name = cluster.Name
@@ -211,7 +211,8 @@ func sanitizeForWrite(cluster *v1alpha1.Cluster) *v1alpha1.Cluster {
 		annotations := make(map[string]string, len(cluster.Annotations))
 
 		for key, value := range cluster.Annotations {
-			if key == v1alpha1.LastAppliedSpecAnnotation {
+			if key == v1alpha1.LastAppliedSpecAnnotation ||
+				key == v1alpha1.LastAppliedComponentsAnnotation {
 				continue
 			}
 
