@@ -47,8 +47,9 @@ func NewProvisionerForTest(
 // BuildNodeUserData exposes buildNodeUserData to external tests as exported data.
 func (p *Provisioner) BuildNodeUserData(
 	clusterName, token, serverURL string,
+	sshAuthorizedKeys []string,
 ) ([]TestNode, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, serverURL)
+	nodes, err := p.buildNodeUserData(clusterName, token, serverURL, sshAuthorizedKeys)
 	if err != nil {
 		return nil, err
 	}

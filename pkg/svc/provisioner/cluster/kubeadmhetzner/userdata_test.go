@@ -120,6 +120,21 @@ func TestBuildNodeUserDataMultiNodeOrderRolesAndJoin(t *testing.T) {
 	assert.Equal(t, "3", nodes[3].Labels[hetzner.LabelNodeIndex])
 }
 
+func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {
+	t.Parallel()
+
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap"
+	input := singleControlPlaneInput()
+	input.SSHAuthorizedKeys = []string{key}
+
+	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	assert.Contains(t, nodes[0].UserData, "ssh_authorized_keys:")
+	assert.Contains(t, nodes[0].UserData, key)
+}
+
 func TestBuildNodeUserDataPinsSandboxImage(t *testing.T) {
 	t.Parallel()
 
