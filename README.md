@@ -50,7 +50,7 @@ Requires `ksail` on `PATH`.
 ## Quick Start
 
 ```bash
-ksail cluster init --name my-app   # scaffold project + native configs
+ksail project init --name my-app   # scaffold project + native configs
 ksail cluster create               # spin up the cluster (Docker only)
 ksail cluster connect              # open K9s
 ```

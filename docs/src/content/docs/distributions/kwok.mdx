@@ -30,7 +30,7 @@ Create a new KWOK configuration:
 mkdir my-kwok-cluster
 cd my-kwok-cluster
 
-ksail cluster init \
+ksail project init \
   --name dev-cluster \
   --distribution KWOK \
   --gitops-engine ArgoCD
@@ -178,6 +178,6 @@ This typically means KWOK's Stage configurations are missing. Ensure the `kwok/`
 
 ````bash
 ksail cluster delete
-ksail cluster init --distribution KWOK
+ksail project init --distribution KWOK
 ksail cluster create
 ````

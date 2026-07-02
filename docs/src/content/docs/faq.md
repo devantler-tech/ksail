@@ -56,7 +56,7 @@ KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluste
 
 ### Can I create multiple clusters?
 
-Yes. Use `ksail cluster init --name <name>` then `ksail cluster create` for each cluster. List all with `ksail cluster list`.
+Yes. Use `ksail project init --name <name>` then `ksail cluster create` for each cluster. List all with `ksail cluster list`.
 
 ### How do I create an ephemeral cluster that auto-destroys?
 
@@ -141,14 +141,14 @@ Use `ksail workload logs <resource>` to view logs, `ksail workload describe <res
 
 ### Which GitOps tools does KSail support?
 
-KSail supports both **Flux** and **ArgoCD**, chosen with `--gitops-engine Flux` or `--gitops-engine ArgoCD` during `ksail cluster init`.
+KSail supports both **Flux** and **ArgoCD**, chosen with `--gitops-engine Flux` or `--gitops-engine ArgoCD` during `ksail project init`.
 
 ### Do I need a Git repository for GitOps?
 
 Not necessarily. KSail packages manifests as OCI artifacts and pushes to a local registry, enabling GitOps without Git (useful for local development):
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry localhost:5050
+ksail project init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
 ksail workload push
 ksail workload reconcile
@@ -190,7 +190,7 @@ KSail includes **SOPS** for secret encryption via `ksail workload cipher <file>`
 
 ### Are my credentials stored securely?
 
-KSail expands `${VAR}` syntax at runtime; credentials are never stored in config files. Example: `ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'` (set `REGISTRY_TOKEN` before running).
+KSail expands `${VAR}` syntax at runtime; credentials are never stored in config files. Example: `ksail project init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'` (set `REGISTRY_TOKEN` before running).
 
 ## Licensing
 

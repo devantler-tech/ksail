@@ -57,7 +57,7 @@ Create a feature branch, make focused atomic changes, write tests, and update do
 
 ````bash
 go test ./... && golangci-lint run && go build -o ksail
-./ksail cluster init                                       # Smoke test
+./ksail project init                                       # Smoke test
 git add . && git commit -m "feat: add widget to cluster create" && git push origin feature/my-feature
 ````
 

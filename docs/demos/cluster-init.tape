@@ -1,6 +1,6 @@
 # Quick-start: scaffold a project and explore the declarative config.
 # Fast, no Docker required. Rendered via ./render.sh (runs in a scratch dir, so
-# there is no setup to type and `ksail cluster init` starts from a clean slate).
+# there is no setup to type and `ksail project init` starts from a clean slate).
 Output "cluster-init.gif"
 Output "cluster-init.mp4"
 Require ksail
@@ -24,7 +24,7 @@ Sleep 1s
 Type "# 1. Scaffold a GitOps-ready cluster project"
 Sleep 700ms
 Enter
-Type "ksail cluster init"
+Type "ksail project init"
 Sleep 400ms
 Enter
 Wait
@@ -42,7 +42,7 @@ Sleep 3s
 Type "# 3. Switch distribution in one command"
 Sleep 700ms
 Enter
-Type "ksail cluster init --distribution K3s --force"
+Type "ksail project init --distribution K3s --force"
 Sleep 400ms
 Enter
 Wait

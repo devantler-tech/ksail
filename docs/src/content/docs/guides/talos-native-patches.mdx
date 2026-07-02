@@ -36,7 +36,7 @@ This gives you:
 ### CDI
 
 Remove `spec.cluster.cdi` from `ksail.yaml`. If you need CDI disabled, ensure
-`talos/cluster/disable-cdi.yaml` exists (created by `ksail cluster init`):
+`talos/cluster/disable-cdi.yaml` exists (created by `ksail project init`):
 
 ```yaml
 # talos/cluster/disable-cdi.yaml
@@ -50,7 +50,7 @@ To enable CDI (Talos 1.13+ default), simply delete this patch file.
 ### OIDC
 
 Remove `spec.cluster.oidc.*` from `ksail.yaml`. Manage OIDC configuration directly in
-`talos/cluster/oidc.yaml` (created by `ksail cluster init --oidc-issuer-url=...`).
+`talos/cluster/oidc.yaml` (created by `ksail project init --oidc-issuer-url=...`).
 
 See [Talos OIDC docs](https://docs.siderolabs.com/talos/v1.13/kubernetes-guides/configuration/oidc/) for the full
 patch format.
@@ -58,7 +58,7 @@ patch format.
 ### Ingress Firewall
 
 Remove `spec.provider.hetzner.ingressFirewall` from `ksail.yaml`. The firewall patches are scaffolded by
-`ksail cluster init` in:
+`ksail project init` in:
 
 - `talos/cluster/ingress-firewall-default-action.yaml`
 - `talos/control-planes/ingress-firewall-rules.yaml`

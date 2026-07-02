@@ -45,10 +45,10 @@ KSail automatically retries transient registry errors (HTTP 429, 5xx, timeouts) 
 ```bash
 curl -I https://registry.example.com/v2/
 docker ps | grep registry
-ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
+ksail project init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
-- `external registry credentials are incomplete: username is set but password is empty` — a username was provided (e.g. `GITHUB_ACTOR` is set) but the password/token is missing. Export the token environment variable (e.g. `export GITHUB_TOKEN=...`) and ensure both are set in `spec.cluster.localRegistry.registry` in `ksail.yaml`, or re-initialize with `ksail cluster init --local-registry 'user:token@host/repo'`.
+- `external registry credentials are incomplete: username is set but password is empty` — a username was provided (e.g. `GITHUB_ACTOR` is set) but the password/token is missing. Export the token environment variable (e.g. `export GITHUB_TOKEN=...`) and ensure both are set in `spec.cluster.localRegistry.registry` in `ksail.yaml`, or re-initialize with `ksail project init --local-registry 'user:token@host/repo'`.
 - `registry requires authentication` — missing or incorrect `--local-registry` credentials
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
@@ -155,7 +155,7 @@ KSail retries transient Helm registry errors automatically (5 attempts, exponent
 
 ### Invalid ksail.yaml
 
-Validate against the [schema](https://github.com/devantler-tech/ksail/blob/main/schemas/ksail-config.schema.json) or re-initialize: `ksail cluster init --name my-cluster --distribution Vanilla`
+Validate against the [schema](https://github.com/devantler-tech/ksail/blob/main/schemas/ksail-config.schema.json) or re-initialize: `ksail project init --name my-cluster --distribution Vanilla`
 
 ### Environment Variables Not Expanding
 
@@ -183,7 +183,7 @@ If new LoadBalancer services remain pending after several successful allocations
 
 ### CNI Installation Failed
 
-If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node`). If failed, recreate: `ksail cluster init --cni Cilium && ksail cluster create`
+If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node`). If failed, recreate: `ksail project init --cni Cilium && ksail cluster create`
 
 ## Talos Issues
 

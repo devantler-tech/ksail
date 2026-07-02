@@ -182,7 +182,7 @@ You can also set it globally for all subsequent steps:
 | `reconcile` | `false` | Run `ksail workload reconcile` after push |
 | `delete` | `false` | Delete cluster at the end (`if: always()`) |
 | `args` | `""` | Extra args passed to `cluster init` (and `cluster create` when `init` is skipped) |
-| `init` | `true` | Run `ksail cluster init` before create |
+| `init` | `true` | Run `ksail project init` before create |
 | `install` | `true` | Install KSail from releases (set to `false` if already in PATH) |
 | `cache` | `true` | Cache Helm charts and mirror registry volumes |
 | `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) |

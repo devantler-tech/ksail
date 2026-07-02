@@ -66,11 +66,11 @@ export const features = [
 Scaffold a project, create a cluster, and deploy a workload — then follow the full
 [Quickstart](/start/quickstart/) and [Deliver with GitOps](/start/deliver-with-gitops/) tutorials.
 
-<img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail cluster init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
+<img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail project init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
 
 ```bash
 # 1. Initialize a new project (pick any distribution)
-ksail cluster init --name my-cluster --distribution Vanilla
+ksail project init --name my-cluster --distribution Vanilla
 
 # 2. Create and start the cluster
 ksail cluster create

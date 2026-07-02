@@ -24,7 +24,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     #### Step 1: Initialize Project
 
     ```bash
-    ksail cluster init \
+    ksail project init \
       --name talos-dev \
       --distribution Talos \
       --provider Docker \
@@ -72,7 +72,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     #### Step 2: Initialize Project
 
     ```bash
-    ksail cluster init \
+    ksail project init \
       --name talos-prod \
       --distribution Talos \
       --provider Hetzner \
@@ -123,7 +123,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     #### Step 2: Initialize Project
 
     ```bash
-    ksail cluster init \
+    ksail project init \
       --name talos-omni \
       --distribution Talos \
       --provider Omni \
@@ -196,7 +196,7 @@ Conventionally the directory is named `talos` for production and `talos-local` f
 
 ### Modular Machine-Config Patches
 
-KSail manages Talos machine configuration as a **directory of small, native patches** split by the node role they target — not one monolithic config file. Each file is a standard Talos machine-config patch (the same format you could apply with `talosctl`), so there is no lock-in and you have access to every Talos config option. `ksail cluster init` scaffolds this directory; `ksail cluster create` and `ksail cluster update` load every patch from it, classify the impact (in-place, reboot-required, or wipe-required), and apply them with the matching Talos SDK mode.
+KSail manages Talos machine configuration as a **directory of small, native patches** split by the node role they target — not one monolithic config file. Each file is a standard Talos machine-config patch (the same format you could apply with `talosctl`), so there is no lock-in and you have access to every Talos config option. `ksail project init` scaffolds this directory; `ksail cluster create` and `ksail cluster update` load every patch from it, classify the impact (in-place, reboot-required, or wipe-required), and apply them with the matching Talos SDK mode.
 
 Patches live in three role-scoped subdirectories:
 
@@ -372,7 +372,7 @@ For manual upgrades outside of KSail, see the [Talos upgrade docs](https://www.t
 Talos 1.13 introduced `ImageVerificationConfig`, which enforces machine-wide container image signature verification before any image is pulled. KSail can scaffold a starter configuration:
 
 ```bash
-ksail cluster init \
+ksail project init \
   --distribution Talos \
   --image-verification Enabled
 ```

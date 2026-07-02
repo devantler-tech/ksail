@@ -24,7 +24,7 @@ const configIntroProse = `KSail uses declarative YAML configuration files for re
 
 ## What is ksail.yaml?
 
-Each KSail project includes a ` + bt + `ksail.yaml` + bt + ` file describing cluster distribution, networking, components, and workload configuration. Run ` + bt + `ksail cluster init` + bt + ` to generate it — commit to version control to share with your team.`
+Each KSail project includes a ` + bt + `ksail.yaml` + bt + ` file describing cluster distribution, networking, components, and workload configuration. Run ` + bt + `ksail project init` + bt + ` to generate it — commit to version control to share with your team.`
 
 // configEnvVarProse documents environment variable expansion.
 const configEnvVarProse = `## Environment Variable Expansion

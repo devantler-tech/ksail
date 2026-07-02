@@ -3,7 +3,7 @@ title: Project Structure & GitOps Layout
 description: How a KSail project grows from a flat k8s/ directory into a layered GitOps repository — shared bases, provider overlays, and per-cluster overlays — that scales to many environments.
 ---
 
-`ksail cluster init` scaffolds a deliberately simple project. As you add environments — a local cluster,
+`ksail project init` scaffolds a deliberately simple project. As you add environments — a local cluster,
 a staging cluster, production on a different provider — that flat layout grows into a **layered Kustomize
 repository**. This page explains the recommended layout and why it's shaped the way it is, so you can grow
 into it instead of rearchitecting later.
