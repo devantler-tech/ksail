@@ -133,7 +133,17 @@ func (p *Provisioner) createHetznerNodeGroups(
 }
 
 // updateConfigsWithEndpoint regenerates Talos configs with the correct endpoint IP.
+//
+// By default the endpoint is the first control-plane node's reachable IP. When
+// FloatingIPEnabled is set, a cluster-owned Hetzner floating IP is ensured,
+// attached to the first control-plane server, and rendered as the endpoint
+// instead — with the control-plane node IPs added to the certificate SANs so
+// direct node access (and the readiness checks, which dial the first node)
+// keeps verifying.
 func (p *Provisioner) updateConfigsWithEndpoint(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
 	controlPlaneServers []*hcloud.Server,
 ) error {
 	if len(controlPlaneServers) == 0 {
@@ -151,17 +161,87 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		return addrErr
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", firstCPIP)
+	endpointIP := firstCPIP
 
-	updatedConfigs, err := p.talosConfigs.WithEndpoint(firstCPIP)
+	var certSANs []string
+
+	if p.hetznerOpts.FloatingIPEnabled {
+		floatingEndpoint, sans, err := p.ensureFloatingIPEndpoint(
+			ctx, hzProvider, clusterName, controlPlaneServers,
+		)
+		if err != nil {
+			return err
+		}
+
+		endpointIP = floatingEndpoint
+		certSANs = sans
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", endpointIP)
+
+	updatedConfigs, err := p.talosConfigs.WithEndpoint(endpointIP)
 	if err != nil {
 		return fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
+	}
+
+	if len(certSANs) > 0 {
+		updatedConfigs, err = updatedConfigs.WithCertSANs(certSANs)
+		if err != nil {
+			return fmt.Errorf("failed to regenerate configs with cert SANs: %w", err)
+		}
 	}
 
 	// Update the stored configs
 	p.talosConfigs = updatedConfigs
 
 	return nil
+}
+
+// ensureFloatingIPEndpoint ensures the cluster's floating IP exists, attaches
+// it to the first control-plane server, and returns it as the stable endpoint
+// together with the certificate SAN set (floating IP + every control-plane
+// node IP). The node IPs must stay in the SAN set because clients — including
+// KSail's own cluster-readiness checks — still dial nodes directly.
+func (p *Provisioner) ensureFloatingIPEndpoint(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	controlPlaneServers []*hcloud.Server,
+) (string, []string, error) {
+	floatingIP, err := hzProvider.EnsureFloatingIP(
+		ctx, clusterName, p.hetznerOpts.FloatingIPLocation,
+	)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to ensure floating IP: %w", err)
+	}
+
+	err = hzProvider.AttachFloatingIPToServer(ctx, floatingIP, controlPlaneServers[0])
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to attach floating IP: %w", err)
+	}
+
+	endpointIP := floatingIP.IP.String()
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  ✓ Floating IP %s attached to %s\n",
+		endpointIP,
+		controlPlaneServers[0].Name,
+	)
+
+	certSANs := make([]string, 0, len(controlPlaneServers)+1)
+	certSANs = append(certSANs, endpointIP)
+
+	for _, server := range controlPlaneServers {
+		nodeIP, nodeAddrErr := hetznerNodeTalosAddress(server)
+		if nodeAddrErr != nil {
+			return "", nil, nodeAddrErr
+		}
+
+		certSANs = append(certSANs, nodeIP)
+	}
+
+	return endpointIP, certSANs, nil
 }
 
 // prepareAndApplyConfigs prepares config bundle and applies configuration to all nodes.
@@ -777,7 +857,7 @@ func (p *Provisioner) applyConfigsAndBootstrap(
 	controlPlaneServers, workerServers []*hcloud.Server,
 	snapshotImageID int64,
 ) error {
-	err := p.updateConfigsWithEndpoint(controlPlaneServers)
+	err := p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 	if err != nil {
 		return err
 	}

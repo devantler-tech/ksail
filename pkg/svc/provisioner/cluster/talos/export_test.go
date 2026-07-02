@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
@@ -259,6 +260,16 @@ func ApplyTalosDefaultsForTest(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos
 // ApplyHetznerDefaultsForTest exposes applyHetznerDefaults for unit testing.
 func ApplyHetznerDefaultsForTest(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
 	return applyHetznerDefaults(opts)
+}
+
+// UpdateConfigsWithEndpointForTest exposes updateConfigsWithEndpoint for unit testing.
+func (p *Provisioner) UpdateConfigsWithEndpointForTest(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	controlPlaneServers []*hcloud.Server,
+) error {
+	return p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 }
 
 // RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
@@ -574,6 +585,13 @@ func (p *Provisioner) WithTalosOptsForTest(
 	p.talosOpts = opts
 
 	return p
+}
+
+// TalosConfigsForTest returns the provisioner's current talosConfigs for unit
+// testing (e.g. asserting the endpoint/cert-SANs rendered by
+// updateConfigsWithEndpoint).
+func (p *Provisioner) TalosConfigsForTest() *talosconfigmanager.Configs {
+	return p.talosConfigs
 }
 
 // WithTalosConfigsForTest sets talosConfigs on the provisioner for unit testing.

@@ -239,6 +239,13 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 		opts.FallbackLocations = v1alpha1.DefaultHetznerFallbackLocations()
 	}
 
+	// The floating IP is homed in the cluster's location unless explicitly
+	// overridden (homing affects routing latency only). Location is already
+	// defaulted above, so this always resolves to a concrete location.
+	if opts.FloatingIPLocation == "" {
+		opts.FloatingIPLocation = opts.Location
+	}
+
 	return opts
 }
 

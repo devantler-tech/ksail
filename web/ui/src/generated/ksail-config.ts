@@ -513,6 +513,14 @@ export interface KSailClusterConfiguration {
          */
         placementGroupFallbackToNone?: boolean;
         /**
+         * Provision a Hetzner floating IP and render it as the stable Kubernetes/Talos API endpoint (endpoint + certificate SANs). Defaults to false. Node-side ownership handover (Talos VIP) must be provided as a machine-config patch until KSail generates it.
+         */
+        floatingIPEnabled?: boolean;
+        /**
+         * Hetzner location the floating IP is homed in (routing latency only). Defaults to the cluster's location.
+         */
+        floatingIPLocation?: string;
+        /**
          * IngressFirewall controls the Talos OS-level ingress firewall configuration.
          * When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig
          * documents as Talos machine config patches, providing defense-in-depth at the node level

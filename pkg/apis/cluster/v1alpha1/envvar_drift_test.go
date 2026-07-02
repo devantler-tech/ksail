@@ -158,6 +158,7 @@ func skippedProviderInfraFields() []string {
 		"Provider.Hetzner.AllowedCIDRs[]",
 		"Provider.Hetzner.ControlPlaneServerType",
 		"Provider.Hetzner.FallbackLocations[]",
+		"Provider.Hetzner.FloatingIPLocation",
 		"Provider.Hetzner.Location",
 		"Provider.Hetzner.NetworkCIDR",
 		"Provider.Hetzner.WorkerServerType",
