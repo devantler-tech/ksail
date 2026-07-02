@@ -18,6 +18,10 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+// ephemeralContainersSubresource is the pod subresource the injection reactors
+// intercept.
+const ephemeralContainersSubresource = "ephemeralcontainers"
+
 // errUpdateFailed is a static sentinel for the UpdateEphemeralContainers-error
 // reactor test.
 var errUpdateFailed = errors.New("update ephemeral containers failed")
@@ -131,7 +135,7 @@ func TestInjectTapUpdateError(t *testing.T) {
 	clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
 	clientset.PrependReactor("update", "pods",
 		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			if action.GetSubresource() != "ephemeralcontainers" {
+			if action.GetSubresource() != ephemeralContainersSubresource {
 				return false, nil, nil
 			}
 
@@ -161,7 +165,7 @@ func TestInjectTapConflictRetriesAndSucceeds(t *testing.T) {
 
 	clientset.PrependReactor("update", "pods",
 		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			if action.GetSubresource() != "ephemeralcontainers" || conflicted {
+			if action.GetSubresource() != ephemeralContainersSubresource || conflicted {
 				return false, nil, nil
 			}
 
@@ -194,7 +198,7 @@ func TestInjectTapConflictLoserConvergesOnAlreadyInjected(t *testing.T) {
 
 	clientset.PrependReactor("update", "pods",
 		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			if action.GetSubresource() != "ephemeralcontainers" || conflicted {
+			if action.GetSubresource() != ephemeralContainersSubresource || conflicted {
 				return false, nil, nil
 			}
 
