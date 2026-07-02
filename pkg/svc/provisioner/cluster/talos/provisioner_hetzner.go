@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -139,7 +140,9 @@ func (p *Provisioner) createHetznerNodeGroups(
 // attached to the first control-plane server, and rendered as the endpoint
 // instead — with the control-plane node IPs added to the certificate SANs so
 // direct node access (and the readiness checks, which dial the first node)
-// keeps verifying.
+// keeps verifying, and a Talos VIP block on the control-plane configs so the
+// elected leader owns the address from then on (the explicit attach is only
+// the initial claim).
 func (p *Provisioner) updateConfigsWithEndpoint(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
@@ -191,10 +194,58 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		}
 	}
 
+	updatedConfigs, err = p.withHetznerVIPIfEnabled(updatedConfigs, endpointIP)
+	if err != nil {
+		return err
+	}
+
 	// Update the stored configs
 	p.talosConfigs = updatedConfigs
 
 	return nil
+}
+
+// withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
+// endpoint onto the control-plane configs when FloatingIPEnabled is set —
+// the node-side ownership handover that makes the elected leader claim the
+// floating IP via the hcloud API on every leader change. Returns the configs
+// unchanged when the floating IP is disabled.
+func (p *Provisioner) withHetznerVIPIfEnabled(
+	configs *talosconfigmanager.Configs,
+	endpointIP string,
+) (*talosconfigmanager.Configs, error) {
+	if !p.hetznerOpts.FloatingIPEnabled {
+		return configs, nil
+	}
+
+	token, err := p.hetznerAPIToken()
+	if err != nil {
+		return nil, err
+	}
+
+	updated, err := configs.WithHetznerVIP(endpointIP, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate configs with Hetzner VIP: %w", err)
+	}
+
+	return updated, nil
+}
+
+// hetznerAPIToken reads the Hetzner Cloud API token from the configured
+// environment variable (defaulting to DefaultHetznerTokenEnvVar), erroring
+// when it is unset.
+func (p *Provisioner) hetznerAPIToken() (string, error) {
+	tokenEnvVar := p.hetznerOpts.TokenEnvVar
+	if tokenEnvVar == "" {
+		tokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
+	}
+
+	token := os.Getenv(tokenEnvVar)
+	if token == "" {
+		return "", fmt.Errorf("%w: %s", ErrHcloudTokenNotSet, tokenEnvVar)
+	}
+
+	return token, nil
 }
 
 // ensureFloatingIPEndpoint ensures the cluster's floating IP exists, attaches
@@ -384,14 +435,9 @@ func (p *Provisioner) newSecretKubeclient(purpose string) (kubernetes.Interface,
 // but must be ensured during update when enabling the autoscaler for the first
 // time (the secret may be missing or lack the "network" key).
 func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string) error {
-	tokenEnvVar := p.hetznerOpts.TokenEnvVar
-	if tokenEnvVar == "" {
-		tokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
-	}
-
-	token := os.Getenv(tokenEnvVar)
-	if token == "" {
-		return fmt.Errorf("%w: %s", ErrHcloudTokenNotSet, tokenEnvVar)
+	token, err := p.hetznerAPIToken()
+	if err != nil {
+		return err
 	}
 
 	networkName := p.hetznerOpts.NetworkName

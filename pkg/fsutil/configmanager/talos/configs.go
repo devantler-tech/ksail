@@ -289,6 +289,67 @@ func buildCertSANsPatch(sans []string) Patch {
 	}
 }
 
+// WithHetznerVIP creates a new Configs whose control-plane machine configs carry a Talos
+// virtual-IP block for the given Hetzner floating IP, preserving the existing PKI. The
+// elected etcd leader claims the address via the Hetzner Cloud API, so the cluster keeps
+// answering on the floating IP across control-plane rolls without any user-provided patch.
+//
+// The hcloud API token is embedded in the rendered control-plane machine config — the
+// trust surface the Talos hcloud VIP support prescribes. Returns the original unchanged
+// when vip is empty; returns ErrHetznerVIPTokenRequired when vip is set but the token is
+// empty (Talos cannot reassign the address without it).
+func (c *Configs) WithHetznerVIP(vip, hcloudAPIToken string) (*Configs, error) {
+	if vip == "" {
+		return c, nil
+	}
+
+	if hcloudAPIToken == "" {
+		return nil, ErrHetznerVIPTokenRequired
+	}
+
+	// Append the VIP patch and regenerate, preserving the existing PKI.
+	return c.regenerate(func(params *regenParams) error {
+		patches := make([]Patch, 0, len(c.patches)+1)
+		patches = append(patches, c.patches...)
+		patches = append(patches, buildHetznerVIPPatch(vip, hcloudAPIToken))
+		params.patches = patches
+
+		return c.preserveSecrets(params)
+	})
+}
+
+// buildHetznerVIPPatch builds a control-plane-scope patch that configures the Talos
+// virtual (shared) IP on the public interface, with hcloud API management so the
+// elected leader reassigns the floating IP to itself.
+//
+// The public interface is addressed by name (eth0) rather than a deviceSelector:
+// KSail always attaches its servers to a cluster private network, so the VMs carry
+// two virtio NICs and a `physical: true` selector would match both — while Hetzner
+// Cloud VMs predictably enumerate the public NIC first under Talos' ethN naming
+// (design decision on devantler-tech/ksail#5718). dhcp stays enabled so declaring
+// the interface does not drop its primary address configuration.
+func buildHetznerVIPPatch(vip, hcloudAPIToken string) Patch {
+	content := fmt.Sprintf(
+		"machine:\n"+
+			"  network:\n"+
+			"    interfaces:\n"+
+			"      - interface: eth0\n"+
+			"        dhcp: true\n"+
+			"        vip:\n"+
+			"          ip: %q\n"+
+			"          hcloud:\n"+
+			"            apiToken: %q\n",
+		vip,
+		hcloudAPIToken,
+	)
+
+	return Patch{
+		Path:    "ksail-hetzner-vip",
+		Scope:   PatchScopeControlPlane,
+		Content: []byte(content),
+	}
+}
+
 // APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
 // API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
