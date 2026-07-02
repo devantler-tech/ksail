@@ -40,8 +40,11 @@
 //     the local process receives mirrored traffic but does not answer back into
 //     the cluster — the lowest-risk first mode the issue itself suggests.
 //     Increments so far: [SelectTapPoint] (pick the concrete pod and container),
-//     [InjectTap]/[WaitForTap] (the ephemeral tap container), and the capture
-//     spec ([CaptureCommand] + the hardened NET_RAW-only security context).
+//     [InjectTap]/[WaitForTap] (the ephemeral tap container), the capture
+//     spec ([CaptureCommand] + the hardened NET_RAW-only security context),
+//     and the capture session ([RunCaptureSession] streaming the pcap bytes
+//     over the exec channel + [SummarizeCapture] reading them locally with
+//     the pure-Go pcapgo reader).
 //
 //     Capture design (#4521): passive pcap via CAP_NET_RAW — tcpdump execed in
 //     the tap container, pcap on stdout over the already-embedded exec channel.
