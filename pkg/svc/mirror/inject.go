@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 )
 
 // TapContainerName is the fixed name of the ephemeral tap container InjectTap
@@ -66,6 +67,8 @@ func WithTapCommand(command ...string) TapOption {
 // runtime supports it; pod network is shared regardless, which is what the
 // mirror traffic path needs. Injection is one-way — ephemeral containers cannot
 // be removed — so a pod that already has a tap yields ErrTapAlreadyInjected.
+// Concurrent injectors converge on that same error: a 409 conflict from the
+// update re-reads the pod and re-checks for the tap before retrying.
 //
 // The container runs an inert holder command by default; wiring the actual
 // traffic tap and the reverse tunnel are the next Phase 1 increments (#4521).
@@ -86,29 +89,37 @@ func InjectTap(
 
 	pods := client.CoreV1().Pods(point.Namespace)
 
-	pod, err := pods.Get(ctx, point.Pod, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("getting pod %q in %s: %w", point.Pod, point.Namespace, err)
-	}
-
-	for _, ephemeral := range pod.Spec.EphemeralContainers {
-		if ephemeral.Name == TapContainerName {
-			return "", fmt.Errorf(
-				"%w: %q on pod %q", ErrTapAlreadyInjected, TapContainerName, point.Pod,
-			)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		pod, err := pods.Get(ctx, point.Pod, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("getting pod: %w", err)
 		}
-	}
 
-	pod.Spec.EphemeralContainers = append(pod.Spec.EphemeralContainers, corev1.EphemeralContainer{
-		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-			Name:    TapContainerName,
-			Image:   cfg.image,
-			Command: cfg.command,
-		},
-		TargetContainerName: point.Container,
+		for _, ephemeral := range pod.Spec.EphemeralContainers {
+			if ephemeral.Name == TapContainerName {
+				return fmt.Errorf(
+					"%w: %q on pod %q", ErrTapAlreadyInjected, TapContainerName, point.Pod,
+				)
+			}
+		}
+
+		tap := corev1.EphemeralContainer{
+			EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+				Name:    TapContainerName,
+				Image:   cfg.image,
+				Command: cfg.command,
+			},
+			TargetContainerName: point.Container,
+		}
+		pod.Spec.EphemeralContainers = append(pod.Spec.EphemeralContainers, tap)
+
+		_, err = pods.UpdateEphemeralContainers(ctx, pod.Name, pod, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("updating ephemeral containers: %w", err)
+		}
+
+		return nil
 	})
-
-	_, err = pods.UpdateEphemeralContainers(ctx, pod.Name, pod, metav1.UpdateOptions{})
 	if err != nil {
 		return "", fmt.Errorf(
 			"injecting tap container into pod %q in %s: %w", point.Pod, point.Namespace, err,

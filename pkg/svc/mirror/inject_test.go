@@ -2,6 +2,7 @@ package mirror_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,8 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -138,6 +141,78 @@ func TestInjectTapUpdateError(t *testing.T) {
 	name, err := mirror.InjectTap(t.Context(), clientset, newTapPoint())
 
 	require.ErrorIs(t, err, errUpdateFailed)
+	assert.Empty(t, name)
+}
+
+// conflictError builds the 409 the API server returns when a concurrent write
+// bumped the pod's resourceVersion between InjectTap's read and its update.
+func conflictError() error {
+	return apierrors.NewConflict(
+		schema.GroupResource{Resource: "pods"}, "api-0", errUpdateFailed,
+	)
+}
+
+func TestInjectTapConflictRetriesAndSucceeds(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+
+	conflicted := false
+
+	clientset.PrependReactor("update", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			if action.GetSubresource() != "ephemeralcontainers" || conflicted {
+				return false, nil, nil
+			}
+
+			conflicted = true
+
+			return true, nil, conflictError()
+		})
+
+	name, err := mirror.InjectTap(t.Context(), clientset, newTapPoint())
+
+	require.NoError(t, err)
+	assert.Equal(t, mirror.TapContainerName, name)
+	assert.True(t, conflicted)
+
+	pod, err := clientset.CoreV1().
+		Pods(testNamespace).
+		Get(t.Context(), "api-0", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Len(t, pod.Spec.EphemeralContainers, 1)
+}
+
+func TestInjectTapConflictLoserConvergesOnAlreadyInjected(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+
+	// The first update conflicts AND lands the winner's tap in the store, so
+	// the retry's re-read must yield ErrTapAlreadyInjected, not the conflict.
+	conflicted := false
+
+	clientset.PrependReactor("update", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			if action.GetSubresource() != "ephemeralcontainers" || conflicted {
+				return false, nil, nil
+			}
+
+			conflicted = true
+
+			err := clientset.Tracker().Update(
+				corev1.SchemeGroupVersion.WithResource("pods"), tappedPod(), testNamespace,
+			)
+			if err != nil {
+				return true, nil, fmt.Errorf("seeding winner pod: %w", err)
+			}
+
+			return true, nil, conflictError()
+		})
+
+	name, err := mirror.InjectTap(t.Context(), clientset, newTapPoint())
+
+	require.ErrorIs(t, err, mirror.ErrTapAlreadyInjected)
 	assert.Empty(t, name)
 }
 
