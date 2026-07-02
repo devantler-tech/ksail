@@ -216,6 +216,23 @@ func (c *Client) ReadFile(ctx context.Context, path string) ([]byte, error) {
 	return result.Stdout, nil
 }
 
+// FileExists reports whether a regular file exists at path on the remote node
+// (`test -f`, with the path single-quoted against shell interpretation). A
+// false exit (code 1) means the file does not exist; any other failure — a
+// transport error or an unexpected exit code — is returned as an error.
+func (c *Client) FileExists(ctx context.Context, path string) (bool, error) {
+	result, err := c.Run(ctx, "test -f "+shellQuote(path))
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, ErrCommandFailed) && result.ExitCode == 1 {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("probe remote file %s: %w", path, err)
+}
+
 // Close tears down the underlying SSH connection.
 func (c *Client) Close() error {
 	err := c.conn.Close()

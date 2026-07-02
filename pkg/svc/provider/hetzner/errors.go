@@ -18,10 +18,14 @@ var (
 	ErrAllRetriesExhausted = errors.New("all retry attempts failed")
 	// ErrSnapshotBuildFailed indicates that the Talos snapshot build process failed.
 	ErrSnapshotBuildFailed = errors.New("talos snapshot build failed")
-	// ErrImageAndISOBothSet indicates that both ImageID and ISOID were provided, which is invalid.
-	ErrImageAndISOBothSet = errors.New("ImageID and ISOID are mutually exclusive; set only one")
-	// ErrImageOrISORequired indicates that neither ImageID nor ISOID was provided, but one is required.
-	ErrImageOrISORequired = errors.New("either ImageID or ISOID must be provided")
+	// ErrImageAndISOBothSet indicates that more than one boot-image source
+	// (ImageName, ImageID, ISOID) was provided, which is invalid.
+	ErrImageAndISOBothSet = errors.New(
+		"ImageName, ImageID and ISOID are mutually exclusive; set exactly one",
+	)
+	// ErrImageOrISORequired indicates that no boot-image source (ImageName,
+	// ImageID, ISOID) was provided, but exactly one is required.
+	ErrImageOrISORequired = errors.New("one of ImageName, ImageID or ISOID must be provided")
 	// ErrServerTypeNotFound indicates that the requested server type does not exist.
 	ErrServerTypeNotFound = errors.New("server type not found")
 	// ErrServerTypeUnavailable indicates that the server type is not available in any configured location.
