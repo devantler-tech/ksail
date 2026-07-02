@@ -134,7 +134,7 @@ func TestBuildNodeUserDataSingleControlPlane(t *testing.T) {
 
 	prov := newProvisioner(&fakeInfra{}, 1, 0)
 
-	nodes, err := prov.BuildNodeUserData(testClusterName, "token", "")
+	nodes, err := prov.BuildNodeUserData(testClusterName, "token", "", nil)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 
@@ -151,7 +151,7 @@ func TestBuildNodeUserDataMultiNodeOrderAndLabels(t *testing.T) {
 
 	prov := newProvisioner(&fakeInfra{}, 3, 2)
 
-	nodes, err := prov.BuildNodeUserData(testClusterName, "token", "https://10.0.0.2:6443")
+	nodes, err := prov.BuildNodeUserData(testClusterName, "token", "https://10.0.0.2:6443", nil)
 	require.NoError(t, err)
 	require.Len(t, nodes, 5)
 
@@ -165,6 +165,20 @@ func TestBuildNodeUserDataMultiNodeOrderAndLabels(t *testing.T) {
 
 	assert.Equal(t, "controlplane", nodes[0].Labels[hetzner.LabelNodeType])
 	assert.Equal(t, "worker", nodes[4].Labels[hetzner.LabelNodeType])
+}
+
+func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {
+	t.Parallel()
+
+	prov := newProvisioner(&fakeInfra{}, 1, 0)
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap"
+
+	nodes, err := prov.BuildNodeUserData(testClusterName, "token", "", []string{key})
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	assert.Contains(t, nodes[0].UserData, "ssh_authorized_keys:")
+	assert.Contains(t, nodes[0].UserData, key)
 }
 
 func TestBuildNodeUserDataErrors(t *testing.T) {
@@ -200,7 +214,7 @@ func TestBuildNodeUserDataErrors(t *testing.T) {
 				io.Discard,
 			)
 
-			_, err := prov.BuildNodeUserData(testClusterName, "token", testCase.serverURL)
+			_, err := prov.BuildNodeUserData(testClusterName, "token", testCase.serverURL, nil)
 			require.Error(t, err)
 		})
 	}

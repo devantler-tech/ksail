@@ -20,12 +20,13 @@ var errBoom = errors.New("boom")
 // fakeClusterManager implements the client's cluster-manager seam with
 // injectable behaviour per operation.
 type fakeClusterManager struct {
-	createFunc func(*containerpb.CreateClusterRequest) (*containerpb.Operation, error)
-	deleteFunc func(*containerpb.DeleteClusterRequest) (*containerpb.Operation, error)
-	getFunc    func(*containerpb.GetClusterRequest) (*containerpb.Cluster, error)
-	listFunc   func(*containerpb.ListClustersRequest) (*containerpb.ListClustersResponse, error)
-	opFunc     func(*containerpb.GetOperationRequest) (*containerpb.Operation, error)
-	closeErr   error
+	createFunc  func(*containerpb.CreateClusterRequest) (*containerpb.Operation, error)
+	deleteFunc  func(*containerpb.DeleteClusterRequest) (*containerpb.Operation, error)
+	getFunc     func(*containerpb.GetClusterRequest) (*containerpb.Cluster, error)
+	listFunc    func(*containerpb.ListClustersRequest) (*containerpb.ListClustersResponse, error)
+	setSizeFunc func(*containerpb.SetNodePoolSizeRequest) (*containerpb.Operation, error)
+	opFunc      func(*containerpb.GetOperationRequest) (*containerpb.Operation, error)
+	closeErr    error
 }
 
 func (f *fakeClusterManager) CreateCluster(
@@ -58,6 +59,14 @@ func (f *fakeClusterManager) ListClusters(
 	_ ...gax.CallOption,
 ) (*containerpb.ListClustersResponse, error) {
 	return f.listFunc(req)
+}
+
+func (f *fakeClusterManager) SetNodePoolSize(
+	_ context.Context,
+	req *containerpb.SetNodePoolSizeRequest,
+	_ ...gax.CallOption,
+) (*containerpb.Operation, error) {
+	return f.setSizeFunc(req)
 }
 
 func (f *fakeClusterManager) GetOperation(
@@ -353,4 +362,82 @@ func TestCloseSucceeds(t *testing.T) {
 	client := newTestClient(t, &fakeClusterManager{})
 
 	require.NoError(t, client.Close())
+}
+
+func TestSetNodePoolSizeWaitsForOperation(t *testing.T) {
+	t.Parallel()
+
+	polls := 0
+	fake := &fakeClusterManager{
+		setSizeFunc: func(req *containerpb.SetNodePoolSizeRequest) (*containerpb.Operation, error) {
+			assert.Equal(
+				t,
+				"projects/proj/locations/europe-north1/clusters/demo/nodePools/default-pool",
+				req.GetName(),
+			)
+			assert.Equal(t, int32(3), req.GetNodeCount())
+
+			operation := runningOperation()
+			operation.Name = "op-resize"
+
+			return operation, nil
+		},
+		opFunc: func(req *containerpb.GetOperationRequest) (*containerpb.Operation, error) {
+			assert.Equal(
+				t,
+				"projects/proj/locations/europe-north1/operations/op-resize",
+				req.GetName(),
+			)
+
+			polls++
+
+			return doneOperation("op-resize"), nil
+		},
+	}
+
+	client := newTestClient(t, fake)
+
+	err := client.SetNodePoolSize(
+		t.Context(), "proj", "europe-north1", "demo", "default-pool", 3,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, polls)
+}
+
+func TestSetNodePoolSizeWrapsRequestError(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterManager{
+		setSizeFunc: func(*containerpb.SetNodePoolSizeRequest) (*containerpb.Operation, error) {
+			return nil, errBoom
+		},
+	}
+
+	client := newTestClient(t, fake)
+
+	err := client.SetNodePoolSize(t.Context(), "proj", "loc", "demo", "default-pool", 0)
+
+	require.ErrorIs(t, err, errBoom)
+	assert.Contains(t, err.Error(), `resizing GKE node pool "default-pool" to 0`)
+}
+
+func TestSetNodePoolSizeSurfacesOperationError(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterManager{
+		setSizeFunc: func(*containerpb.SetNodePoolSizeRequest) (*containerpb.Operation, error) {
+			operation := doneOperation("op-resize")
+			operation.Error = &status.Status{Message: "node pool is being repaired"}
+
+			return operation, nil
+		},
+	}
+
+	client := newTestClient(t, fake)
+
+	err := client.SetNodePoolSize(t.Context(), "proj", "loc", "demo", "default-pool", 1)
+
+	require.ErrorIs(t, err, gke.ErrOperationFailed)
+	assert.Contains(t, err.Error(), "node pool is being repaired")
 }

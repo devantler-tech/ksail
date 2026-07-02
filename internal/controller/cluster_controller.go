@@ -356,6 +356,25 @@ func (r *ClusterReconciler) reconcileComponents(
 		return true
 	}
 
+	// Record the spec we just reconciled components for, so a later spec change that drops a component
+	// (e.g. policyEngine Kyverno→None) is detected next reconcile and the component uninstalled. A
+	// write failure keeps ComponentsReady False so it retries — the baseline must exist before the
+	// condition reads True, or a removal could go undetected.
+	recordErr := r.recordAppliedComponents(ctx, cluster)
+	if recordErr != nil {
+		logf.FromContext(ctx).
+			Info("record components baseline (best-effort)", "error", recordErr.Error())
+		setCondition(
+			cluster,
+			v1alpha1.ConditionComponentsReady,
+			metav1.ConditionFalse,
+			"BaselineRecordFailed",
+			recordErr.Error(),
+		)
+
+		return false
+	}
+
 	setCondition(
 		cluster,
 		v1alpha1.ConditionComponentsReady,

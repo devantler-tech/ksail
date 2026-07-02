@@ -24,8 +24,10 @@ type parsedConfig struct {
 			Key    string `yaml:"key"`
 		} `yaml:"sources"`
 	} `yaml:"apt"`
-	Packages []string   `yaml:"packages"`
-	RunCmd   [][]string `yaml:"runcmd"`
+	Packages []string `yaml:"packages"`
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
+	SSHAuthorizedKeys []string   `yaml:"ssh_authorized_keys"`
+	RunCmd            [][]string `yaml:"runcmd"`
 }
 
 // parse asserts the document carries the cloud-config header and is valid YAML,
@@ -182,11 +184,68 @@ func TestBuildUserDataCommandOnlyOmitsDeclarativeKeys(t *testing.T) {
 
 	assert.NotContains(t, userData, "packages:")
 	assert.NotContains(t, userData, "apt:")
+	assert.NotContains(t, userData, "ssh_authorized_keys:")
 
 	cfg := parse(t, userData)
 	assert.Empty(t, cfg.Packages)
 	assert.Empty(t, cfg.Apt.Sources)
+	assert.Empty(t, cfg.SSHAuthorizedKeys)
 	require.Len(t, cfg.WriteFiles, 1) // only the boot script
+}
+
+func TestBuildUserDataRendersSSHAuthorizedKeys(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+		SSHAuthorizedKeys: []string{
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap",
+			"",
+			"   ",
+			"ssh-rsa AAAAB3NzaC1yc2E operator",
+		},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+
+	// Blank entries dropped, order preserved.
+	assert.Equal(t, []string{
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap",
+		"ssh-rsa AAAAB3NzaC1yc2E operator",
+	}, cfg.SSHAuthorizedKeys)
+}
+
+func TestBuildUserDataSSHKeysOnlyRejected(t *testing.T) {
+	t.Parallel()
+
+	// A key with nothing to run would create a server that never bootstraps, so a
+	// keys-only Config is rejected like an empty one.
+	_, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		SSHAuthorizedKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap"},
+	})
+	require.ErrorIs(t, err, cloudinitbootstrap.ErrNoCommands)
+}
+
+func TestBuildUserDataSSHKeyErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"newline": "ssh-ed25519 AAAA\nssh-rsa BBBB",
+		"NUL":     "ssh-ed25519 AAAA\x00 key",
+	}
+
+	for name, key := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+				Commands:          []string{"echo hi"},
+				SSHAuthorizedKeys: []string{key},
+			})
+			require.ErrorIs(t, err, cloudinitbootstrap.ErrInvalidSSHAuthorizedKey)
+		})
+	}
 }
 
 func TestBuildUserDataRendersPackages(t *testing.T) {

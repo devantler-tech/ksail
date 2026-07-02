@@ -2,6 +2,7 @@ package controller_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -459,6 +460,45 @@ func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
 	assert.Equal(t, 1, calls, "components must not reinstall when up-to-date for the generation")
 }
 
+func TestReconcile_RecordsComponentsBaselineAfterInstall(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	fakeClient := newFakeClient(scheme, newCluster(true))
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+	reconciler.InstallComponents = func(
+		_ context.Context,
+		_ clusterprovisioner.Provisioner,
+		_ *v1alpha1.Cluster,
+	) (bool, []v1alpha1.ComponentStatus, error) {
+		return true, []v1alpha1.ComponentStatus{
+			{Name: "cilium", State: v1alpha1.ComponentStateReady},
+		}, nil
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+
+	// After a successful apply the operator records the reconciled spec as the component-removal
+	// baseline, so a later spec change that drops a component can be detected and uninstalled.
+	baseline, ok := got.Annotations[v1alpha1.LastAppliedComponentsAnnotation]
+	require.True(t, ok, "component baseline annotation must be recorded after a successful apply")
+
+	wantBaseline, err := json.Marshal(got.Spec)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(wantBaseline), baseline, "baseline must be the full reconciled spec")
+
+	// Recording the baseline (a metadata write mid-reconcile) must not clobber the per-component
+	// status set this reconcile.
+	assert.Equal(t, []v1alpha1.ComponentStatus{
+		{Name: "cilium", State: v1alpha1.ComponentStateReady},
+	}, got.Status.Components)
+}
+
 func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	t.Parallel()
 
@@ -540,6 +580,8 @@ func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {
 		"skipped install must not report True",
 	)
 	assert.Equal(t, "NotSupported", condition.Reason)
+	// A skipped install never installed anything, so no component baseline is recorded.
+	assert.NotContains(t, got.Annotations, v1alpha1.LastAppliedComponentsAnnotation)
 
 	// A second reconcile at the same generation must not re-attempt the skipped install.
 	_, err = reconciler.Reconcile(context.Background(), request())

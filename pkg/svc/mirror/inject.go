@@ -19,9 +19,11 @@ import (
 const TapContainerName = "ksail-tap"
 
 // DefaultTapImage is the image the tap container runs when the caller does not
-// override it with WithTapImage. It matches the `workload debug` default: a
-// small, ubiquitous utility image.
-const DefaultTapImage = "docker.io/library/alpine:latest"
+// override it with WithTapImage. netshoot is the de-facto standard network
+// debugging image and carries tcpdump, which the read-only capture increment
+// execs to produce the mirror's pcap stream ([CaptureCommand]); it is pinned
+// to a release tag so tap behaviour doesn't drift under a floating latest.
+const DefaultTapImage = "docker.io/nicolaka/netshoot:v0.16"
 
 // tapPollInterval is how often WaitForTap re-reads the pod while waiting for
 // the tap container to reach Running.
@@ -105,9 +107,10 @@ func InjectTap(
 
 		tap := corev1.EphemeralContainer{
 			EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-				Name:    TapContainerName,
-				Image:   cfg.image,
-				Command: cfg.command,
+				Name:            TapContainerName,
+				Image:           cfg.image,
+				Command:         cfg.command,
+				SecurityContext: tapSecurityContext(),
 			},
 			TargetContainerName: point.Container,
 		}
@@ -127,6 +130,30 @@ func InjectTap(
 	}
 
 	return TapContainerName, nil
+}
+
+// tapSecurityContext returns the hardened security context every tap container
+// runs with: everything dropped except NET_RAW — the one capability passive
+// pcap capture ([CaptureCommand]) needs — no privilege escalation, a read-only
+// root filesystem (the capture writes only to stdout), and the runtime's
+// default seccomp profile. The context is intentionally not caller-configurable:
+// the read-only guarantee of mirror mode rests on the tap never holding more
+// than capture privileges.
+func tapSecurityContext() *corev1.SecurityContext {
+	allowPrivilegeEscalation := false
+	readOnlyRootFilesystem := true
+
+	return &corev1.SecurityContext{
+		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+			Add:  []corev1.Capability{"NET_RAW"},
+		},
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
 }
 
 // WaitForTap blocks until the tap container on the tap point's pod reports

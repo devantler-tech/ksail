@@ -27,6 +27,14 @@ var (
 		"cloud-init: a package name must be a single line with no NUL byte",
 	)
 
+	// ErrInvalidSSHAuthorizedKey is returned when an SSH authorized key contains a
+	// newline or a NUL byte. Each key is one element of cloud-init's
+	// ssh_authorized_keys: list — one authorized_keys line — so it must be a single
+	// line.
+	ErrInvalidSSHAuthorizedKey = errors.New(
+		"cloud-init: an SSH authorized key must be a single line with no NUL byte",
+	)
+
 	// ErrInvalidAptSource is returned when an [AptSource] has a blank or multi-line
 	// Name or Source, a Name containing a path separator, a Key containing a NUL
 	// byte, or a Name that duplicates another source's. cloud-init keys the sources

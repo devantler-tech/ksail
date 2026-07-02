@@ -33,9 +33,12 @@ type nodeUserData struct {
 // (the transport), and attaches the Hetzner node labels. It is pure — it performs
 // no I/O and reaches no network — so it is fully unit-testable; serverURL is the
 // address joining nodes register against (empty for a single control-plane node
-// with no agents).
+// with no agents), and sshAuthorizedKeys are the public keys delivered into every
+// node's authorized_keys (nil for none) so the post-provision SSH bootstrap seam
+// can authenticate.
 func (p *Provisioner) buildNodeUserData(
 	clusterName, token, serverURL string,
+	sshAuthorizedKeys []string,
 ) ([]nodeUserData, error) {
 	nodes, err := k3sbootstrap.Plan(k3sbootstrap.PlanInput{
 		Version:           p.version,
@@ -56,7 +59,7 @@ func (p *Provisioner) buildNodeUserData(
 			return nil, fmt.Errorf("render k3s install for node %d: %w", node.Index, renderErr)
 		}
 
-		userData, transportErr := p.transport.UserData([]string{command})
+		userData, transportErr := p.transport.UserData([]string{command}, sshAuthorizedKeys)
 		if transportErr != nil {
 			return nil, fmt.Errorf("build cloud-init for node %d: %w", node.Index, transportErr)
 		}
@@ -75,9 +78,10 @@ func (p *Provisioner) buildNodeUserData(
 // composeNodes composes the K3s per-node cloud-init user_data and returns the node
 // count, adapting buildNodeUserData to the shared create flow's composeNodes
 // callback ([hetznerbase.Base.RunCreate]). The single-control-plane path carries no
-// join server URL.
+// join server URL, and no SSH authorized key yet — the live bring-up composition
+// (#5515) generates the bootstrap keypair and threads its public half through here.
 func (p *Provisioner) composeNodes(clusterName, token string) (int, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, "")
+	nodes, err := p.buildNodeUserData(clusterName, token, "", nil)
 	if err != nil {
 		return 0, err
 	}

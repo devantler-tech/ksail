@@ -76,6 +76,24 @@ func TestInjectTapDefaults(t *testing.T) {
 	assert.Equal(t, mirror.DefaultTapImage, tap.Image)
 	assert.Equal(t, []string{"sleep", "infinity"}, tap.Command)
 	assert.Equal(t, "api", tap.TargetContainerName)
+	assertHardenedTapSecurityContext(t, tap.SecurityContext)
+}
+
+// assertHardenedTapSecurityContext pins the read-only guarantee: the tap holds
+// NET_RAW (for passive pcap capture) and nothing else.
+func assertHardenedTapSecurityContext(t *testing.T, secCtx *corev1.SecurityContext) {
+	t.Helper()
+
+	require.NotNil(t, secCtx)
+	require.NotNil(t, secCtx.AllowPrivilegeEscalation)
+	assert.False(t, *secCtx.AllowPrivilegeEscalation)
+	require.NotNil(t, secCtx.ReadOnlyRootFilesystem)
+	assert.True(t, *secCtx.ReadOnlyRootFilesystem)
+	require.NotNil(t, secCtx.Capabilities)
+	assert.Equal(t, []corev1.Capability{"ALL"}, secCtx.Capabilities.Drop)
+	assert.Equal(t, []corev1.Capability{"NET_RAW"}, secCtx.Capabilities.Add)
+	require.NotNil(t, secCtx.SeccompProfile)
+	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, secCtx.SeccompProfile.Type)
 }
 
 func TestInjectTapOptions(t *testing.T) {
