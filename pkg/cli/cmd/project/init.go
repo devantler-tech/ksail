@@ -3,6 +3,7 @@ package project
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -95,6 +96,14 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 	cmd.Flags().Bool("no-devcontainer", false, "Skip scaffolding .devcontainer/devcontainer.json")
 	_ = cfgManager.Viper.BindPFlag("no-devcontainer", cmd.Flags().Lookup("no-devcontainer"))
+	cmd.Flags().String(
+		"multi-cluster",
+		"",
+		"Scaffold a multi-cluster source layout (clusters/base/ + clusters/<env>/) with the "+
+			"given initial environment name; the generated ksail.yaml points its "+
+			"kustomizationFile at the environment overlay",
+	)
+	_ = cfgManager.Viper.BindPFlag("multi-cluster", cmd.Flags().Lookup("multi-cluster"))
 
 	clusterflags.RegisterMirrorRegistryFlag(cmd)
 	clusterflags.RegisterNameFlag(cmd, cfgManager)
@@ -257,6 +266,13 @@ func prepareScaffolder(
 
 	// Dev Container scaffolding is on by default; --no-devcontainer opts out.
 	scaffolderInstance.WithDevcontainer(!cfgManager.Viper.GetBool("no-devcontainer"))
+
+	// Multi-cluster layout is opt-in; the environment name is validated when the
+	// layout is derived, before any file is written.
+	multiClusterEnv := strings.TrimSpace(cfgManager.Viper.GetString("multi-cluster"))
+	if multiClusterEnv != "" {
+		scaffolderInstance.WithMultiClusterEnv(multiClusterEnv)
+	}
 
 	return scaffolderInstance, targetPath, force, nil
 }

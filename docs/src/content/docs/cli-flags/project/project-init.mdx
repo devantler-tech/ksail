@@ -33,6 +33,7 @@ Flags:
       --local-registry string                                     Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer                              Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings                                   Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
+      --multi-cluster string                                      Scaffold a multi-cluster source layout (clusters/base/ + clusters/<env>/) with the given initial environment name; the generated ksail.yaml points its kustomizationFile at the environment overlay
   -n, --name string                                               Cluster name used for container names, registry names, and kubeconfig context
       --no-devcontainer                                           Skip scaffolding .devcontainer/devcontainer.json
       --node-autoscaler-enabled NodeAutoscalerEnabled[=Enabled]   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)

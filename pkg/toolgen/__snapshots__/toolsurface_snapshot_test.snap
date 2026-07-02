@@ -2230,6 +2230,10 @@ workload_write
         },
         "type": "array"
       },
+      "multi-cluster": {
+        "description": "Scaffold a multi-cluster source layout (clusters/base/ + clusters/\u003cenv\u003e/) with the given initial environment name; the generated ksail.yaml points its kustomizationFile at the environment overlay",
+        "type": "string"
+      },
       "name": {
         "description": "Cluster name used for container names, registry names, and kubeconfig context",
         "type": "string"
