@@ -28,6 +28,9 @@ var (
 	ErrServerTypeUnavailable = errors.New("server type unavailable in all configured locations")
 	// ErrNoLocationsConfigured indicates that no valid locations were provided for server creation.
 	ErrNoLocationsConfigured = errors.New("no locations configured for server creation")
+	// ErrFloatingIPNotOwned indicates a floating IP with the cluster's conventional name exists
+	// but is not ksail-owned, so the cluster must not adopt (or ever release) it.
+	ErrFloatingIPNotOwned = errors.New("floating IP exists but is not ksail-owned")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.

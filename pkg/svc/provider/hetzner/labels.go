@@ -8,8 +8,11 @@ import (
 // These labels are applied to servers, networks, firewalls, and placement groups.
 const (
 	// LabelOwned indicates the resource is managed by KSail.
-	// Value is always "true" for KSail-managed resources.
+	// Value is always [LabelOwnedValue] for KSail-managed resources.
 	LabelOwned = "ksail.owned"
+
+	// LabelOwnedValue is the value LabelOwned carries on KSail-managed resources.
+	LabelOwnedValue = "true"
 
 	// LabelClusterName identifies which cluster the resource belongs to.
 	LabelClusterName = "ksail.cluster.name"
@@ -72,12 +75,15 @@ const (
 	FirewallSuffix = "-firewall"
 	// PlacementGroupSuffix is appended to cluster name for placement group naming.
 	PlacementGroupSuffix = "-placement"
+	// FloatingIPSuffix is appended to cluster name for the control-plane
+	// floating IP naming.
+	FloatingIPSuffix = "-floating-ip"
 )
 
 // ResourceLabels creates the standard label set for a KSail-managed resource.
 func ResourceLabels(clusterName string) map[string]string {
 	return map[string]string{
-		LabelOwned:       "true",
+		LabelOwned:       LabelOwnedValue,
 		LabelClusterName: clusterName,
 	}
 }

@@ -473,6 +473,13 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		return err
 	}
 
+	// Release the cluster's ksail-owned floating IP so `cluster delete` never
+	// leaks a billed reserved address (server deletion only unassigns it).
+	err = p.deleteFloatingIP(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	// Delete load balancers before the network — LBs attached to the network
 	// must be removed first, otherwise network deletion will fail.
 	err = p.deleteLoadBalancers(ctx, clusterName)
