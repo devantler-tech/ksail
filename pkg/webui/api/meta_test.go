@@ -67,6 +67,8 @@ func TestMeta_DistributionsAndProviderMatrix(t *testing.T) {
 	assert.Contains(t, meta.Providers["VCluster"], "Docker")
 	assert.NotContains(t, meta.Providers["VCluster"], "AWS")
 	assert.Contains(t, meta.Providers["Talos"], "Hetzner")
+	assert.Contains(t, meta.Providers["K3s"], "Hetzner")
+	assert.Contains(t, meta.Providers["Vanilla"], "Hetzner")
 }
 
 func TestMeta_ComponentsHaveValuesAndValidDefault(t *testing.T) {

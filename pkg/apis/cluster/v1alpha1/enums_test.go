@@ -599,6 +599,8 @@ func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 		{"docker_for_k3s", v1alpha1.ProviderDocker, v1alpha1.DistributionK3s},
 		{"docker_for_talos", v1alpha1.ProviderDocker, v1alpha1.DistributionTalos},
 		{"hetzner_for_talos", v1alpha1.ProviderHetzner, v1alpha1.DistributionTalos},
+		{"hetzner_for_vanilla", v1alpha1.ProviderHetzner, v1alpha1.DistributionVanilla},
+		{"hetzner_for_k3s", v1alpha1.ProviderHetzner, v1alpha1.DistributionK3s},
 		{"omni_for_talos", v1alpha1.ProviderOmni, v1alpha1.DistributionTalos},
 		{"kubernetes_for_vanilla", v1alpha1.ProviderKubernetes, v1alpha1.DistributionVanilla},
 		{"kubernetes_for_k3s", v1alpha1.ProviderKubernetes, v1alpha1.DistributionK3s},
@@ -627,8 +629,6 @@ func TestProvider_ValidateForDistribution_InvalidCombinations(t *testing.T) {
 		provider     v1alpha1.Provider
 		distribution v1alpha1.Distribution
 	}{
-		{"hetzner_for_vanilla_invalid", v1alpha1.ProviderHetzner, v1alpha1.DistributionVanilla},
-		{"hetzner_for_k3s_invalid", v1alpha1.ProviderHetzner, v1alpha1.DistributionK3s},
 		{"omni_for_vanilla_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionVanilla},
 		{"omni_for_k3s_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionK3s},
 		{"kubernetes_for_eks_invalid", v1alpha1.ProviderKubernetes, v1alpha1.DistributionEKS},

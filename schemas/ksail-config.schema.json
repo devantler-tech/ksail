@@ -49,6 +49,7 @@
                   "provider": {
                     "enum": [
                       "Docker",
+                      "Hetzner",
                       "Kubernetes"
                     ]
                   }
@@ -71,6 +72,7 @@
                   "provider": {
                     "enum": [
                       "Docker",
+                      "Hetzner",
                       "Kubernetes"
                     ]
                   }
