@@ -59,6 +59,8 @@ func newConfigManager(
 	_ = manager.Viper.BindPFlag("output", cmd.Flags().Lookup("output"))
 	cmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
 	_ = manager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
+	cmd.Flags().String("multi-cluster", "", "Scaffold a multi-cluster source layout")
+	_ = manager.Viper.BindPFlag("multi-cluster", cmd.Flags().Lookup("multi-cluster"))
 	cmd.Flags().
 		StringSlice("mirror-registry", []string{}, mirrorRegistryHelp)
 	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic in production
@@ -380,4 +382,57 @@ func newInitDeps(t *testing.T) project.InitDeps {
 	tmr.EXPECT().NewStage().Return()
 
 	return project.InitDeps{Timer: tmr}
+}
+
+func TestHandleInitRunE_MultiClusterFlagScaffoldsLayout(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	var buffer bytes.Buffer
+
+	cmd, cfgManager := setupInitTest(t, outDir, false, &buffer)
+	setFlags(t, cmd, map[string]string{"multi-cluster": "local"})
+
+	err := project.HandleInitRunE(cmd, cfgManager, newInitDeps(t))
+	require.NoError(t, err)
+
+	for _, relPath := range []string{
+		filepath.Join("k8s", "clusters", "base", "kustomization.yaml"),
+		filepath.Join("k8s", "clusters", "local", "kustomization.yaml"),
+	} {
+		_, statErr := os.Stat(filepath.Join(outDir, relPath))
+		require.NoError(t, statErr, "expected %s to be scaffolded", relPath)
+	}
+
+	ksailContent, err := os.ReadFile(filepath.Join(outDir, "ksail.yaml"))
+	require.NoError(t, err)
+	require.Contains(t, string(ksailContent), "kustomizationFile: clusters/local")
+
+	// The overlay replaces the flat single-cluster kustomization.
+	_, err = os.Stat(filepath.Join(outDir, "k8s", "kustomization.yaml"))
+	require.True(t, os.IsNotExist(err))
+}
+
+func TestHandleInitRunE_MultiClusterFlagRejectsReservedName(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	var buffer bytes.Buffer
+
+	cmd, cfgManager := setupInitTest(t, outDir, false, &buffer)
+	setFlags(t, cmd, map[string]string{"multi-cluster": "base"})
+
+	tmr := timer.NewMockTimer(t)
+	tmr.EXPECT().Start().Return()
+	tmr.EXPECT().NewStage().Return()
+
+	err := project.HandleInitRunE(cmd, cfgManager, project.InitDeps{Timer: tmr})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "reserved")
+
+	// Fail-fast: nothing was scaffolded.
+	_, statErr := os.Stat(filepath.Join(outDir, "ksail.yaml"))
+	require.True(t, os.IsNotExist(statErr))
 }

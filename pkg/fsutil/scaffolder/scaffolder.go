@@ -19,6 +19,7 @@ import (
 	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	ktypes "sigs.k8s.io/kustomize/api/types"
@@ -62,6 +63,12 @@ type Scaffolder struct {
 	// Devcontainer, when true (the default), scaffolds .devcontainer/devcontainer.json.
 	// Disable it via WithDevcontainer(false) (wired to init's --no-devcontainer flag).
 	Devcontainer bool
+	// MultiClusterEnv, when non-empty (wired to init's --multi-cluster flag), scaffolds a
+	// multi-cluster source layout (clusters/base/ + clusters/<env>/) instead of the flat
+	// single-cluster kustomization, and defaults the generated ksail.yaml's
+	// spec.workload.kustomizationFile to the environment overlay so the GitOps engine
+	// syncs from it.
+	MultiClusterEnv string
 }
 
 // NewScaffolder creates a new Scaffolder instance with the provided KSail cluster configuration.
@@ -90,6 +97,16 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // init command's --no-devcontainer flag) to skip it.
 func (s *Scaffolder) WithDevcontainer(enabled bool) *Scaffolder {
 	s.Devcontainer = enabled
+
+	return s
+}
+
+// WithMultiClusterEnv enables the multi-cluster source layout with envName as the
+// initial environment overlay (wired to the init command's --multi-cluster flag).
+// The name is validated when the layout is derived at the start of Scaffold, so an
+// invalid or reserved name fails before any file is written.
+func (s *Scaffolder) WithMultiClusterEnv(envName string) *Scaffolder {
+	s.MultiClusterEnv = envName
 
 	return s
 }
@@ -124,6 +141,19 @@ func (s *Scaffolder) WithClusterName(name string) *Scaffolder {
 func (s *Scaffolder) Scaffold(output string, force bool) error {
 	previousDistributionConfig := strings.TrimSpace(s.KSailConfig.Spec.Cluster.DistributionConfig)
 
+	// Derive the multi-cluster layout up front so an invalid or reserved environment
+	// name aborts before any file is written.
+	var multiClusterFiles []environment.LayoutFile
+
+	if s.MultiClusterEnv != "" {
+		var deriveErr error
+
+		multiClusterFiles, deriveErr = environment.DeriveMultiClusterLayout(s.MultiClusterEnv)
+		if deriveErr != nil {
+			return fmt.Errorf("failed to derive multi-cluster layout: %w", deriveErr)
+		}
+	}
+
 	err := s.generateKSailConfig(output, force)
 	if err != nil {
 		return err
@@ -153,7 +183,14 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
-	err = s.generateKustomizationConfig(output, force)
+	// In multi-cluster mode the environment overlay (pointed at by the generated
+	// ksail.yaml's kustomizationFile) replaces the flat single-cluster kustomization.
+	if multiClusterFiles != nil {
+		err = s.generateMultiClusterLayout(output, force, multiClusterFiles)
+	} else {
+		err = s.generateKustomizationConfig(output, force)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -163,6 +200,59 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	}
 
 	return nil
+}
+
+// generateMultiClusterLayout writes the derived multi-cluster layout under the source
+// directory via the shared writer, then emits the same skip/create/overwrite
+// notifications the single-cluster generators produce (the writer itself is silent;
+// with force=false it leaves existing files untouched, matching the pre-stat below).
+func (s *Scaffolder) generateMultiClusterLayout(
+	output string,
+	force bool,
+	files []environment.LayoutFile,
+) error {
+	sourceDir := filepath.Join(output, s.KSailConfig.Spec.Workload.SourceDirectory)
+
+	existed := make([]bool, len(files))
+	skipped := make([]bool, len(files))
+
+	for i, file := range files {
+		target := filepath.Join(sourceDir, filepath.FromSlash(file.RelPath))
+		skipped[i], existed[i], _ = s.checkFileExistsAndSkip(
+			target,
+			s.multiClusterDisplayName(file),
+			force,
+		)
+	}
+
+	_, err := environment.WriteMultiClusterLayout(
+		s.KustomizationGenerator,
+		sourceDir,
+		files,
+		force,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to generate multi-cluster layout: %w", err)
+	}
+
+	for i, file := range files {
+		if skipped[i] {
+			continue
+		}
+
+		s.notifyFileAction(s.multiClusterDisplayName(file), existed[i])
+	}
+
+	return nil
+}
+
+// multiClusterDisplayName renders a layout file's path relative to the project root
+// (source directory included) for user-facing notifications.
+func (s *Scaffolder) multiClusterDisplayName(file environment.LayoutFile) string {
+	return filepath.Join(
+		s.KSailConfig.Spec.Workload.SourceDirectory,
+		filepath.FromSlash(file.RelPath),
+	)
 }
 
 // Configuration defaults and helpers.
@@ -189,6 +279,16 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 			config.Spec.Cluster.Distribution,
 		)
 		config.Spec.Cluster.DistributionConfig = expectedConfigName
+	}
+
+	// In multi-cluster mode, point the GitOps sync path at the environment overlay
+	// (clusters/<env>/) unless the user pinned kustomizationFile explicitly.
+	if s.MultiClusterEnv != "" &&
+		strings.TrimSpace(config.Spec.Workload.KustomizationFile) == "" {
+		config.Spec.Workload.KustomizationFile = path.Join(
+			environment.ClustersDir,
+			s.MultiClusterEnv,
+		)
 	}
 
 	return config
