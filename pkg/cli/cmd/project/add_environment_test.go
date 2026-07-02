@@ -174,8 +174,8 @@ func TestHandleAddEnvironmentRunE_RejectsInvalidProvider(t *testing.T) {
 	repoRoot := writeAddEnvSourceRepo(t)
 	t.Chdir(repoRoot)
 
-	// Hetzner is not a valid provider for the Vanilla distribution.
-	_, err := runAddEnvironment(t, "dev", "--from", "prod", "--provider", "Hetzner")
+	// Omni is not a valid provider for the Vanilla distribution.
+	_, err := runAddEnvironment(t, "dev", "--from", "prod", "--provider", "Omni")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid --provider flag")
 }

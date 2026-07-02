@@ -1,9 +1,9 @@
 ---
 title: Hetzner Provider
-description: Deploy production-ready Talos Linux clusters on Hetzner Cloud servers with KSail.
+description: Deploy production-ready Talos, K3s, or Vanilla (kubeadm) Kubernetes clusters on Hetzner Cloud servers with KSail.
 ---
 
-The Hetzner provider creates Kubernetes cluster nodes as [Hetzner Cloud](https://www.hetzner.com/cloud/) servers running Talos Linux. It provisions real cloud infrastructure with public IPs, private networking, load balancers, and persistent volumes — ideal for production-grade clusters and cloud testing.
+The Hetzner provider creates Kubernetes cluster nodes as [Hetzner Cloud](https://www.hetzner.com/cloud/) servers. Nodes run Talos Linux (the default and most battle-tested path), or a standard Linux image bootstrapped into a native **K3s** or **Vanilla (kubeadm)** cluster via cloud-init. It provisions real cloud infrastructure with public IPs, private networking, load balancers, and persistent volumes — ideal for production-grade clusters and cloud testing.
 
 ## When to Use the Hetzner Provider
 
@@ -12,16 +12,16 @@ The Hetzner provider is ideal when you:
 - Need production-grade Kubernetes on affordable European cloud infrastructure
 - Want real cloud load balancers and persistent volumes (not emulated locally)
 - Run performance or integration tests that require dedicated server resources
-- Deploy Talos Linux clusters with high-availability placement groups
+- Deploy clusters with high-availability placement groups
 
 > [!NOTE]
-> The Hetzner provider only supports the **Talos** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/) or the [Talos distribution guide](/distributions/talos/).
+> The Hetzner provider supports the **Talos**, **K3s**, and **Vanilla (kubeadm)** distributions. Talos is the default and most battle-tested path; the K3s and Vanilla paths bootstrap standard Linux servers via cloud-init (see [K3s and Vanilla clusters](#k3s-and-vanilla-kubeadm-clusters) below). For local Docker-based clusters, see the [Docker Provider](/providers/docker/) or the [Talos distribution guide](/distributions/talos/).
 
 ## Prerequisites
 
 1. **Hetzner Cloud account** — Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud/)
 2. **API token** — Create one in the [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens (read/write permissions)
-3. **Talos ISO or Schematic** — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `125127` for Talos 1.12.4; for ARM, look up the matching ISO ID in the Hetzner Cloud Console), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
+3. **Talos ISO or Schematic** *(Talos distribution only)* — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `125127` for Talos 1.12.4; for ARM, look up the matching ISO ID in the Hetzner Cloud Console), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
 4. **Docker** — Required locally for `ksail` CLI operations
 
 ## Configuration
@@ -104,6 +104,44 @@ The full `spec.provider.hetzner` field reference — every option with its type,
 description — is generated from the API types: see
 [spec.provider.hetzner (OptionsHetzner)](/configuration/declarative-configuration/#specproviderhetzner-optionshetzner)
 in the Declarative Configuration reference.
+
+## K3s and Vanilla (kubeadm) Clusters
+
+Beyond Talos, the Hetzner provider can bootstrap **native K3s** and **Vanilla (kubeadm)**
+clusters. Instead of a Talos ISO, KSail creates servers from a standard Linux image and
+delivers the whole node bootstrap declaratively through **cloud-init** user data — the k3s
+install (server-init → additional servers → agents) or the kubeadm init/join sequence runs on
+first boot, and KSail fetches the kubeconfig once the control plane is up. No Talos ISO or
+schematic is needed, and all `spec.provider.hetzner` options above (server types, location,
+private networking, placement groups, firewalls, IPv4-less nodes) apply the same way:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-k3s-cluster
+spec:
+  cluster:
+    distribution: K3s      # or Vanilla for a kubeadm cluster
+    provider: Hetzner
+    controlPlanes: 1
+    workers: 2
+  provider:
+    hetzner:
+      controlPlaneServerType: "cx23"
+      workerServerType: "cx23"
+      location: "fsn1"
+```
+
+Differences from the Talos path to be aware of:
+
+- **K3s** bundles its usual defaults — the local-path storage provisioner and the servicelb
+  load balancer — so PersistentVolumeClaims and `LoadBalancer` Services work out of the box
+  (servicelb exposes node IPs rather than provisioning Hetzner Cloud load balancers).
+- **Vanilla (kubeadm)** provisions a bare cluster: bring your own CSI and load balancer, as
+  on any self-managed kubeadm install.
+- Node OS management (upgrades, hardening) is yours on the K3s/Vanilla paths; Talos handles
+  it declaratively via its own API.
 
 ### IPv4-less Nodes
 
