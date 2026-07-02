@@ -107,6 +107,22 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 		return err
 	}
 
+	// The source.toolkit.fluxcd.io APIs only exist after the flux-operator
+	// reconciles the FluxInstance, so confirm the operator Deployment is
+	// Available before spending the API availability budget polling for them.
+	// Under CI saturation the operator's own startup (image pulls, scheduling)
+	// can otherwise consume the whole poll budget while discovery keeps
+	// returning group-not-found (issue #5597).
+	err = waitForOperatorAvailable(
+		ctx,
+		params.restConfig,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+	)
+	if err != nil {
+		return err
+	}
+
 	// Wait for OCIRepository API to be available before patching
 	ociPatcher := newOCIRepositoryPatcher(
 		params.restConfig,
@@ -116,7 +132,13 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 
 	err = ociPatcher.waitForAPI(ctx)
 	if err != nil {
-		return err
+		diag := diagnoseFluxPodFailures(ctx, params.restConfig)
+
+		return fmt.Errorf(
+			"waiting for Flux source APIs (flux-operator is available but has"+
+				" not served source.toolkit.fluxcd.io yet): %w%s",
+			err, diag,
+		)
 	}
 
 	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
