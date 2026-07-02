@@ -15,7 +15,7 @@ different problem. This guide shows how to configure both.
 | **Why** | Fast inner-loop builds, [`workload push`](/guides/gitops-workflows/) targets | Avoid rate limits; images survive cluster recreation |
 
 :::note[Prerequisites]
-- A KSail project (`ksail cluster init`). See the [Quickstart](/start/quickstart/).
+- A KSail project (`ksail project init`). See the [Quickstart](/start/quickstart/).
 - Docker running (for local distributions).
 :::
 
@@ -29,7 +29,7 @@ and the OCI artifact `ksail workload push` publishes for [GitOps reconciliation]
 1. **Wire a registry at init**, then create the cluster:
 
    ```bash
-   ksail cluster init --local-registry localhost:5050
+   ksail project init --local-registry localhost:5050
    ksail cluster create
    ```
 
@@ -82,16 +82,16 @@ configuration.
 # upstream — the endpoint the mirror fetches from on a cache miss
 
 # Mirror Docker Hub through its real upstream endpoint
-ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io
+ksail project init --mirror-registry docker.io=https://registry-1.docker.io
 
 # Authenticated mirror — higher rate limits, private images
-ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
+ksail project init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
 ```
 
 :::caution[`--mirror-registry` replaces the defaults]
 Whatever you pass **completely replaces** the default mirror list (`docker.io`, `ghcr.io`, `quay.io`,
 `registry.k8s.io`) — it does not append. To customize one mirror while keeping the others, pass all of
-them on the same `ksail cluster init` invocation.
+them on the same `ksail project init` invocation.
 :::
 
 What this buys you:
@@ -117,7 +117,7 @@ run is usually enough.
 
 ## CLI Reference
 
-[`ksail cluster init`](/cli-flags/cluster/cluster-init/) (`--local-registry`, `--mirror-registry`)
+[`ksail project init`](/cli-flags/cluster/cluster-init/) (`--local-registry`, `--mirror-registry`)
 
 ## Related
 

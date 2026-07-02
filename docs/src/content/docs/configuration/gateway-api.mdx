@@ -14,7 +14,7 @@ KSail clusters using the **Cilium** CNI option come Gateway API–ready out of t
 You don't need to install any additional controllers or CRD bundles manually.
 
 > [!NOTE]
-> This guide assumes you are using **Cilium** as your CNI. Gateway API is not automatically enabled on the Default (kindnet) CNI. If you initialized your cluster without specifying `--cni`, run `ksail cluster init --cni Cilium` to get a Cilium-enabled cluster.
+> This guide assumes you are using **Cilium** as your CNI. Gateway API is not automatically enabled on the Default (kindnet) CNI. If you initialized your cluster without specifying `--cni`, run `ksail project init --cni Cilium` to get a Cilium-enabled cluster.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ You don't need to install any additional controllers or CRD bundles manually.
 - A cluster initialized with Cilium:
 
   ```bash
-  ksail cluster init --cni Cilium
+  ksail project init --cni Cilium
   ksail cluster create
   ```
 

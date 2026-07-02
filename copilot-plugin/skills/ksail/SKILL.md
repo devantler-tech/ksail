@@ -42,7 +42,7 @@ Flag-level docs live under <https://ksail.devantler.tech/cli-flags/>. Reference 
 Scaffold + launch a local cluster:
 
 ```bash
-ksail cluster init --name my-app            # writes ksail.yaml, native config, k8s/kustomization.yaml
+ksail project init --name my-app            # writes ksail.yaml, native config, k8s/kustomization.yaml
 ksail cluster create                        # creates + starts the cluster (Docker required)
 ksail cluster connect                       # opens K9s against the cluster
 ```

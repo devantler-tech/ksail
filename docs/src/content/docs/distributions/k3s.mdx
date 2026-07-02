@@ -12,13 +12,13 @@ K3s (K3d) is ideal for quick local development, CI/CD pipelines with ephemeral c
 Requires Docker ([installation prerequisites](/installation/)).
 
 ```bash
-ksail cluster init --name my-cluster --distribution K3s --control-planes 1 --workers 2
+ksail project init --name my-cluster --distribution K3s --control-planes 1 --workers 2
 ksail cluster create
 ksail cluster info && kubectl get nodes  # verify
 ksail cluster delete                     # cleanup
 ```
 
-`ksail cluster init` creates `ksail.yaml` (KSail config) and `k3d.yaml` (K3d cluster config).
+`ksail project init` creates `ksail.yaml` (KSail config) and `k3d.yaml` (K3d cluster config).
 
 ## Configuration
 
@@ -62,7 +62,7 @@ K3s includes these components by default—KSail does **not** reinstall them:
 Configure registry mirrors to avoid rate limits. KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. Override with `--mirror-registry` flags:
 
 ```bash
-ksail cluster init --name my-cluster --distribution K3s \
+ksail project init --name my-cluster --distribution K3s \
   --mirror-registry 'docker.io=https://registry-1.docker.io' \
   --mirror-registry 'ghcr.io=https://ghcr.io' \
   --mirror-registry 'quay.io=https://quay.io' \
@@ -110,7 +110,7 @@ docker ps --format "table {{.Names}}\t{{.Ports}}" | grep k3d
 k3d cluster list
 k3d cluster delete <cluster-name>
 # Or initialize with a different name:
-ksail cluster init --name my-cluster-2 --distribution K3s
+ksail project init --name my-cluster-2 --distribution K3s
 ```
 
 ### 5. Out of Memory or Disk Space

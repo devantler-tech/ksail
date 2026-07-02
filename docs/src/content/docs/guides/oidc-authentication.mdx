@@ -26,7 +26,7 @@ KSail provides native OIDC (OpenID Connect) authentication support. When configu
 1. **Initialize a cluster with OIDC**
 
    ```bash
-   ksail cluster init \
+   ksail project init \
      --oidc-issuer-url https://dex.example.com \
      --oidc-client-id kubectl \
      --oidc-extra-scope email \
@@ -87,7 +87,7 @@ All OIDC settings live under `spec.cluster.oidc` in `ksail.yaml`. See the [Decla
 
 ### CLI Flags
 
-OIDC can also be configured via CLI flags on `ksail cluster init`, `ksail cluster create`, and `ksail cluster update`:
+OIDC can also be configured via CLI flags on `ksail project init`, `ksail cluster create`, and `ksail cluster update`:
 
 ```
 --oidc-issuer-url         OIDC provider issuer URL

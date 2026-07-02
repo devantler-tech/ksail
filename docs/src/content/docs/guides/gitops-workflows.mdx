@@ -11,7 +11,7 @@ ArgoCD) continuously reconciles the cluster to match. This is the workflow KSail
 same two commands carry you from laptop to production.
 
 :::note[Prerequisites]
-- A KSail project (`ksail cluster init`). See the [Quickstart](/start/quickstart/).
+- A KSail project (`ksail project init`). See the [Quickstart](/start/quickstart/).
 - Docker running (for local distributions).
 :::
 
@@ -41,7 +41,7 @@ the cluster's source of truth in your repository and works the same from your la
 1. **Choose the engine at init.** Pick Flux or ArgoCD when you scaffold the project:
 
    ```bash
-   ksail cluster init --gitops-engine Flux --local-registry localhost:5050
+   ksail project init --gitops-engine Flux --local-registry localhost:5050
    ```
 
    This wires a GitOps engine and a local OCI registry into `ksail.yaml`:

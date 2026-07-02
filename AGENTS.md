@@ -72,9 +72,9 @@ npm run compile
 ```bash
 cd /path/to/repo
 ./ksail --help                    # Show all commands
-./ksail cluster init --help       # Show init options
-./ksail cluster init              # Initialize default project
-./ksail cluster init --distribution VCluster  # Initialize VCluster project
+./ksail project init --help       # Show init options
+./ksail project init              # Initialize default project
+./ksail project init --distribution VCluster  # Initialize VCluster project
 ./ksail cluster create            # Create cluster (requires Docker)
 ./ksail cluster update            # Update cluster configuration
 ./ksail cluster info              # Show cluster info
@@ -109,7 +109,7 @@ go run main.go --help
 
    ```bash
    cd /tmp && mkdir test-ksail && cd test-ksail
-   /path/to/repo/ksail cluster init
+   /path/to/repo/ksail project init
    # Should create: ksail.yaml, kind.yaml, k8s/kustomization.yaml
    ```
 
@@ -221,7 +221,7 @@ source of truth for the full command and flag inventory. Top-level command group
 Use the CLI help output as the source of truth:
 
 ```bash
-ksail cluster init --help
+ksail project init --help
 # See also: docs/src/content/docs/cli-flags/cluster/cluster-init.mdx
 
 # Supported distributions:

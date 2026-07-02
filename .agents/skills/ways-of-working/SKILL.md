@@ -57,7 +57,7 @@ Platform lifecycle commands:
 
 | Command | Purpose |
 |---------|---------|
-| `ksail cluster init` | Scaffold a new cluster configuration |
+| `ksail project init` | Scaffold a new cluster configuration |
 | `ksail cluster create` | Spin up the cluster locally (Docker) or on real infrastructure and verify workloads reconcile |
 | `ksail workload push` | Push Kubernetes manifests as OCI artifacts to a container registry |
 

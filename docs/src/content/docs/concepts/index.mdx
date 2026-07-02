@@ -12,7 +12,7 @@ see [Architecture](/concepts/architecture/); for how a project grows, see
 KSail bundles the Kubernetes tools you'd otherwise install and wire up yourself — kind, k3d, Talos,
 vCluster, Flux, ArgoCD, Helm, Kustomize, SOPS — behind **one binary and one declarative config**.
 
-Crucially, it doesn't invent proprietary formats. `ksail cluster init` generates **native** configuration
+Crucially, it doesn't invent proprietary formats. `ksail project init` generates **native** configuration
 files — `kind.yaml`, `k3d.yaml`, `talos/` patches, `vcluster.yaml`, `kwok/` — that work directly with the
 underlying tools. You can run those clusters, or migrate away, **without KSail**. KSail's value is the
 *consistent workflow* layered on top: the same `init → create → update → delete` commands across every
@@ -55,7 +55,7 @@ reference.
 Every distribution and provider shares the same verbs:
 
 ```bash
-ksail cluster init      # scaffold ksail.yaml + native configs + k8s/
+ksail project init      # scaffold ksail.yaml + native configs + k8s/
 ksail cluster create    # provision nodes and install components (CNI, CSI, GitOps, …)
 ksail cluster update    # reconcile ksail.yaml changes onto a running cluster
 ksail cluster delete    # tear it down
@@ -190,7 +190,7 @@ Policy engines enforce security, compliance, and best practices through admissio
 
 ## GitOps
 
-[GitOps](https://opengitops.dev/) uses Git (or an OCI registry) as the single source of truth for declarative infrastructure and applications. Pick one engine per cluster at `ksail cluster init --gitops-engine`.
+[GitOps](https://opengitops.dev/) uses Git (or an OCI registry) as the single source of truth for declarative infrastructure and applications. Pick one engine per cluster at `ksail project init --gitops-engine`.
 
 ### Flux
 

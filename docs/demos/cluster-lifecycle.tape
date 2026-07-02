@@ -32,7 +32,7 @@ Sleep 1s
 Type "# 1. Create a real Kubernetes cluster (Kind on Docker)"
 Sleep 700ms
 Enter
-Type "ksail cluster init --name ksail-demo"
+Type "ksail project init --name ksail-demo"
 Sleep 400ms
 Enter
 Wait

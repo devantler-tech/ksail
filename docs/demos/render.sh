@@ -6,7 +6,7 @@
 #   ./render.sh cluster-init    # render only cluster-init.tape
 #
 # Each tape runs inside a throwaway scratch directory, so demo commands such as
-# `ksail cluster init` operate on a clean project and NO setup (cd/source/clear)
+# `ksail project init` operate on a clean project and NO setup (cd/source/clear)
 # is ever typed on screen. VHS writes <name>.gif/.mp4 into that scratch dir and
 # we move the result into ../public/demos/, which is committed so the published
 # docs site can serve the recordings without a build-time render step.
@@ -36,7 +36,7 @@ trap '"$DEMOS_DIR/.bin/ksail" cluster delete --name ksail-demo --force >/dev/nul
 
 # Warm the OS page cache: the first cold run of the ~300MB binary is ~3s, which
 # would otherwise race the Sleep timings in the (cache-warm) recordings.
-(cd "$(mktemp -d)" && ksail cluster init >/dev/null 2>&1 || true)
+(cd "$(mktemp -d)" && ksail project init >/dev/null 2>&1 || true)
 
 # Shrink a rendered GIF. Lossless first; long, heavy-scroll demos (lifecycle)
 # stay multi-MB even so, so those get downscaled + mild lossy — the matching
