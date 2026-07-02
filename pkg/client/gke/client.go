@@ -39,6 +39,11 @@ type clusterManager interface {
 		req *containerpb.ListClustersRequest,
 		opts ...gax.CallOption,
 	) (*containerpb.ListClustersResponse, error)
+	SetNodePoolSize(
+		ctx context.Context,
+		req *containerpb.SetNodePoolSizeRequest,
+		opts ...gax.CallOption,
+	) (*containerpb.Operation, error)
 	GetOperation(
 		ctx context.Context,
 		req *containerpb.GetOperationRequest,
@@ -193,6 +198,30 @@ func (c *Client) ListClusters(
 	return response.GetClusters(), nil
 }
 
+// SetNodePoolSize resizes the named node pool to the given node count and
+// blocks until the resize operation completes. Resizing to the pool's current
+// size is a server-side no-op, so callers may re-assert a size idempotently.
+func (c *Client) SetNodePoolSize(
+	ctx context.Context,
+	project string,
+	location string,
+	cluster string,
+	nodePool string,
+	nodeCount int32,
+) error {
+	request := &containerpb.SetNodePoolSizeRequest{
+		Name:      nodePoolName(project, location, cluster, nodePool),
+		NodeCount: nodeCount,
+	}
+
+	operation, err := c.manager.SetNodePoolSize(ctx, request)
+	if err != nil {
+		return fmt.Errorf("resizing GKE node pool %q to %d: %w", nodePool, nodeCount, err)
+	}
+
+	return c.waitForOperation(ctx, project, location, operation)
+}
+
 // waitForOperation polls the long-running operation until it reaches DONE,
 // honouring context cancellation. A DONE operation that carries an error is
 // surfaced as ErrOperationFailed.
@@ -248,6 +277,11 @@ func locationName(project string, location string) string {
 // clusterName renders the fully-qualified cluster resource name.
 func clusterName(project string, location string, name string) string {
 	return fmt.Sprintf("%s/clusters/%s", locationName(project, location), name)
+}
+
+// nodePoolName renders the fully-qualified node-pool resource name.
+func nodePoolName(project string, location string, cluster string, nodePool string) string {
+	return fmt.Sprintf("%s/nodePools/%s", clusterName(project, location, cluster), nodePool)
 }
 
 // operationName renders the fully-qualified operation resource name.
