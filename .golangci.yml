@@ -165,6 +165,12 @@ linters:
             - github.com/loft-sh/vcluster
             - github.com/yannh
             - github.com/zalando/go-keyring
+            # cloud.google.com/go/container is the official native GKE SDK backing
+            # pkg/client/gke (cluster lifecycle for the GKE provider, #4510); gax-go
+            # carries its per-call options. Already linked transitively via the
+            # Google Cloud dependency graph.
+            - cloud.google.com/go/container
+            - github.com/googleapis/gax-go
             - filippo.io/age
             - golang.design/x
             - golang.org/x/oauth2

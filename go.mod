@@ -51,6 +51,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/container v1.53.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
@@ -68,6 +69,7 @@ require (
 	github.com/github/copilot-sdk/go v1.0.4
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/go-github/v72 v72.0.0
+	github.com/googleapis/gax-go/v2 v2.22.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.44.0
 	github.com/invopop/jsonschema v0.14.0
@@ -89,6 +91,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.38.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/yaml.v3 v3.0.1
@@ -105,7 +108,6 @@ require (
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	cloud.google.com/go/container v1.52.0 // indirect
 	cloud.google.com/go/iam v1.11.0 // indirect
 	cloud.google.com/go/kms v1.31.0 // indirect
 	cloud.google.com/go/longrunning v1.0.0 // indirect
@@ -488,7 +490,6 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
-	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gordonklaus/ineffassign v0.2.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
@@ -940,7 +941,6 @@ require (
 	google.golang.org/api v0.280.0 // indirect
 	google.golang.org/genproto v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.2 // indirect
