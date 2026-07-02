@@ -72,6 +72,9 @@ const (
 	FirewallSuffix = "-firewall"
 	// PlacementGroupSuffix is appended to cluster name for placement group naming.
 	PlacementGroupSuffix = "-placement"
+	// FloatingIPSuffix is appended to cluster name for the control-plane
+	// floating IP naming.
+	FloatingIPSuffix = "-floating-ip"
 )
 
 // ResourceLabels creates the standard label set for a KSail-managed resource.

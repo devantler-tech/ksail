@@ -82,6 +82,11 @@ func (p *Provider) CheckServerAvailabilityWithRetryForTest(
 	)
 }
 
+// DeleteFloatingIPForTest exports deleteFloatingIP for testing.
+func (p *Provider) DeleteFloatingIPForTest(ctx context.Context, clusterName string) error {
+	return p.deleteFloatingIP(ctx, clusterName)
+}
+
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
 // A nil logWriter is replaced with io.Discard, matching NewSnapshotManager behavior.
