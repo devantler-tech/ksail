@@ -310,6 +310,25 @@ func TestDelete_UnknownClusterFailsResolution(t *testing.T) {
 	require.ErrorIs(t, err, gkeprovisioner.ErrClusterNotFound)
 }
 
+func TestDelete_EmptyTargetFailsFastWithoutCalls(t *testing.T) {
+	t.Parallel()
+
+	client, err := gke.NewClient(
+		t.Context(),
+		gke.WithClusterManager(&fakeClusterManager{}),
+	)
+	require.NoError(t, err)
+
+	provisioner, err := gkeprovisioner.NewProvisioner(
+		"", "test-project", "europe-north1", nil, client, nil,
+	)
+	require.NoError(t, err)
+
+	err = provisioner.Delete(t.Context(), "")
+
+	require.ErrorIs(t, err, gkeprovisioner.ErrClusterNotFound)
+}
+
 func TestStart_DelegatesToProvider(t *testing.T) {
 	t.Parallel()
 

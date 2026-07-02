@@ -95,6 +95,9 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 // resolved via the all-locations list first.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
+	if target == "" {
+		return fmt.Errorf("%w: no cluster name configured", ErrClusterNotFound)
+	}
 
 	location, err := p.resolveLocation(ctx, target)
 	if err != nil {
