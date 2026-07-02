@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -119,6 +120,9 @@ func TestStorageHealthTimeout(t *testing.T) {
 
 // TestBuildStorageHealthProber_NoBackend covers the "no replicated storage backend
 // detected → no prober (gate no-ops)" branch.
+// TestBuildStorageHealthProber_NoBackend covers #5688: without a detected backend
+// the generic PV/PVC/VolumeAttachment prober still engages — the gate is no longer
+// inert on non-Longhorn clusters.
 func TestBuildStorageHealthProber_NoBackend(t *testing.T) {
 	t.Parallel()
 
@@ -128,7 +132,110 @@ func TestBuildStorageHealthProber_NoBackend(t *testing.T) {
 		context.Background(), fake.NewClientset(), "test",
 	)
 	require.NoError(t, err)
-	assert.False(t, built, "no longhorn-system namespace → no prober built")
+	assert.True(t, built, "no longhorn-system namespace → generic prober still built")
+}
+
+// TestGenericDegradedVolumes covers the backend-agnostic prober (#5688): a Failed
+// PV, a Lost PVC, and errored VolumeAttachments are reported (sorted, kind-prefixed);
+// healthy/benign steady states — Bound/Pending claims, Bound PVs, attached or
+// cleanly-detached attachments, a stale attachError on a now-attached attachment —
+// are not.
+func TestGenericDegradedVolumes(t *testing.T) {
+	t.Parallel()
+
+	attachErr := &storagev1.VolumeError{Message: "attach failed"}
+	detachErr := &storagev1.VolumeError{Message: "detach failed"}
+
+	clientset := fake.NewClientset(
+		&corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "pv-failed"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeFailed},
+		},
+		&corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "pv-bound"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
+		},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "data-lost", Namespace: "apps"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimLost},
+		},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "data-pending", Namespace: "apps"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+		},
+		&storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-attach-error"},
+			Status:     storagev1.VolumeAttachmentStatus{Attached: false, AttachError: attachErr},
+		},
+		&storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-detach-error"},
+			Status:     storagev1.VolumeAttachmentStatus{Attached: true, DetachError: detachErr},
+		},
+		&storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-stale-attach-error"},
+			Status:     storagev1.VolumeAttachmentStatus{Attached: true, AttachError: attachErr},
+		},
+		&storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-healthy"},
+			Status:     storagev1.VolumeAttachmentStatus{Attached: true},
+		},
+	)
+
+	unhealthy, err := talosprovisioner.GenericDegradedVolumesForTest(
+		context.Background(), clientset,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"pv/pv-failed",
+		"pvc/apps/data-lost",
+		"volumeattachment/va-attach-error",
+		"volumeattachment/va-detach-error",
+	}, unhealthy)
+}
+
+// TestGenericDegradedVolumes_ListError covers error propagation: a failing list is
+// wrapped and returned (the gate's poll loop treats it as transient).
+func TestGenericDegradedVolumes_ListError(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	clientset.PrependReactor("list", "persistentvolumes",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errProber
+		})
+
+	_, err := talosprovisioner.GenericDegradedVolumesForTest(
+		context.Background(), clientset,
+	)
+
+	require.ErrorIs(t, err, errProber)
+}
+
+// TestMultiDegradedVolumes covers the composed prober: union of the probers'
+// degraded sets, sorted and de-duplicated; an inner error propagates.
+func TestMultiDegradedVolumes(t *testing.T) {
+	t.Parallel()
+
+	union, err := talosprovisioner.MultiDegradedVolumesForTest(
+		context.Background(),
+		func(_ context.Context) ([]string, error) {
+			return []string{"pv/shared", "longhorn-system/pvc-a"}, nil
+		},
+		func(_ context.Context) ([]string, error) {
+			return []string{"pv/shared", "longhorn-system/pvc-b"}, nil
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t,
+		[]string{"longhorn-system/pvc-a", "longhorn-system/pvc-b", "pv/shared"}, union)
+
+	_, err = talosprovisioner.MultiDegradedVolumesForTest(
+		context.Background(),
+		func(_ context.Context) ([]string, error) { return nil, errProber },
+	)
+	require.ErrorIs(t, err, errProber)
 }
 
 // TestBuildStorageHealthProberOrWarn covers the graceful-degrade wrapper shared by the
