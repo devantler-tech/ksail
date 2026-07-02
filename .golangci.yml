@@ -191,6 +191,10 @@ linters:
             # transitively via the Kubernetes client stack.
             - google.golang.org/grpc
             - google.golang.org/protobuf
+            # cel-go powers the native CEL rule validation of rendered GitOps
+            # manifests in pkg/svc/gitops/celrules (#5693, epic #5344). Already
+            # linked transitively via the Kubernetes apiserver stack.
+            - github.com/google/cel-go
             - gopkg.in/yaml.v3
             - helm.sh/helm
             - k8s.io
