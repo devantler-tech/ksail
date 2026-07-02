@@ -31,6 +31,12 @@ type Input struct {
 	// node (see [containerdbootstrap.ContainerdConfig]). Empty leaves containerd's
 	// built-in default in place.
 	SandboxImage string
+	// SSHAuthorizedKeys are public keys delivered into every node's
+	// authorized_keys via cloud-init (see [cloudinitbootstrap.Config]) so the
+	// post-provision SSH bootstrap seam can authenticate. Optional; the live
+	// bring-up composition (#5515) generates the bootstrap keypair and threads
+	// its public half through here.
+	SSHAuthorizedKeys []string
 }
 
 // NodeUserData pairs a planned node with the cloud-init user_data that bootstraps
@@ -133,10 +139,11 @@ func buildNodeCloudInit(
 	}
 
 	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
-		AptSources: toCloudInitAptSources(install.AptSources),
-		Packages:   install.Packages,
-		Files:      append(toCloudInitFiles(install.Files), containerdFile),
-		Commands:   install.Commands,
+		AptSources:        toCloudInitAptSources(install.AptSources),
+		Packages:          install.Packages,
+		Files:             append(toCloudInitFiles(install.Files), containerdFile),
+		Commands:          install.Commands,
+		SSHAuthorizedKeys: input.SSHAuthorizedKeys,
 	})
 	if err != nil {
 		return "", fmt.Errorf("build cloud-init for node %d: %w", node.Index, err)

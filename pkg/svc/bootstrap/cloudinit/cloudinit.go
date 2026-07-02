@@ -60,6 +60,16 @@ type Config struct {
 	// apt/package processing and the boot script. Optional; see [File] and
 	// [ErrInvalidFile].
 	Files []File
+	// SSHAuthorizedKeys are public keys added to the default user's
+	// authorized_keys (cloud-init's `ssh_authorized_keys:` module; on Hetzner
+	// stock images the default user is root) so a post-provision client — the
+	// SSH bootstrap seam (#5696) that retrieves the generated kubeconfig — can
+	// authenticate. Optional; each must be a single line with no NUL byte (see
+	// [ErrInvalidSSHAuthorizedKey]). Blank entries are dropped. Keys alone do
+	// not make a Config renderable: a document with a key but nothing to run
+	// would create a server that never bootstraps, so a keys-only Config is
+	// still rejected with [ErrNoCommands].
+	SSHAuthorizedKeys []string
 	// ScriptPath overrides where the boot script is written. Optional; defaults to
 	// [DefaultScriptPath]. Must be absolute when set (see [ErrPathNotAbsolute]).
 	ScriptPath string
@@ -113,7 +123,9 @@ type cloudConfig struct {
 	WriteFiles []writeFile `yaml:"write_files,omitempty"`
 	Apt        *aptConfig  `yaml:"apt,omitempty"`
 	Packages   []string    `yaml:"packages,omitempty"`
-	RunCmd     [][]string  `yaml:"runcmd,omitempty"`
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ssh_authorized_keys".
+	SSHAuthorizedKeys []string   `yaml:"ssh_authorized_keys,omitempty"`
+	RunCmd            [][]string `yaml:"runcmd,omitempty"`
 }
 
 // writeFile is one entry of cloud-init's write_files module: a file dropped onto
@@ -173,10 +185,13 @@ type directives struct {
 	packages []string
 	sources  map[string]aptSource
 	files    []writeFile
+	sshKeys  []string
 }
 
 // empty reports whether there is nothing to render — no command, package, apt
-// source, or file.
+// source, or file. SSH authorized keys are deliberately excluded: a keys-only
+// document would create a server that never bootstraps, so keys alone don't
+// make a Config renderable (see [Config.SSHAuthorizedKeys]).
 func (d directives) empty() bool {
 	return len(d.commands) == 0 &&
 		len(d.packages) == 0 &&
@@ -207,12 +222,45 @@ func (cfg Config) validate() (directives, error) {
 		return directives{}, err
 	}
 
-	dirs := directives{commands: commands, packages: packages, sources: sources, files: files}
+	sshKeys, err := cfg.validatedSSHAuthorizedKeys()
+	if err != nil {
+		return directives{}, err
+	}
+
+	dirs := directives{
+		commands: commands,
+		packages: packages,
+		sources:  sources,
+		files:    files,
+		sshKeys:  sshKeys,
+	}
 	if dirs.empty() {
 		return directives{}, ErrNoCommands
 	}
 
 	return dirs, nil
+}
+
+// validatedSSHAuthorizedKeys returns the non-blank SSH public keys of cfg in
+// order, rejecting a key that is not a single line. Each key is one element of
+// cloud-init's ssh_authorized_keys: list (one authorized_keys line), so it must
+// be a single line. Blank entries are dropped.
+func (cfg Config) validatedSSHAuthorizedKeys() ([]string, error) {
+	keys := make([]string, 0, len(cfg.SSHAuthorizedKeys))
+
+	for _, key := range cfg.SSHAuthorizedKeys {
+		if strings.ContainsAny(key, "\n\x00") {
+			return nil, ErrInvalidSSHAuthorizedKey
+		}
+
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+
+		keys = append(keys, key)
+	}
+
+	return keys, nil
 }
 
 // buildDoc assembles the cloud-config from already-validated directives. Files
@@ -221,7 +269,11 @@ func (cfg Config) validate() (directives, error) {
 // cloud-init's own module order so a package a command relies on is present
 // before the command runs.
 func (cfg Config) buildDoc(dirs directives) (cloudConfig, error) {
-	doc := cloudConfig{WriteFiles: dirs.files, Packages: dirs.packages}
+	doc := cloudConfig{
+		WriteFiles:        dirs.files,
+		Packages:          dirs.packages,
+		SSHAuthorizedKeys: dirs.sshKeys,
+	}
 
 	if len(dirs.sources) > 0 {
 		doc.Apt = &aptConfig{Sources: dirs.sources}

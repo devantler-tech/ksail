@@ -12,8 +12,11 @@ package cloudinitbootstrap
 // — so it is not folded into this interface.
 type UserDataProvider interface {
 	// UserData returns the cloud-init user_data that runs commands once at first
-	// boot, or an error if commands is not a valid command set.
-	UserData(commands []string) (string, error)
+	// boot and installs sshAuthorizedKeys into the default user's authorized_keys
+	// (nil for none), or an error if commands or sshAuthorizedKeys is not valid.
+	// The keys are provision-time delivery too: they let the post-provision SSH
+	// bootstrap seam authenticate, but are delivered declaratively at first boot.
+	UserData(commands []string, sshAuthorizedKeys []string) (string, error)
 }
 
 // Transport is the cloud-init implementation of [UserDataProvider]. The zero
@@ -33,15 +36,17 @@ func New() *Transport {
 	return &Transport{}
 }
 
-// UserData renders commands into a cloud-init user_data document, honouring the
-// transport's script and log paths. It is pure and reaches no network, so the
-// command-construction it performs is fully unit-testable; the document it
-// returns is consumed by the provisioner at server-creation time.
-func (t *Transport) UserData(commands []string) (string, error) {
+// UserData renders commands (and any SSH authorized keys) into a cloud-init
+// user_data document, honouring the transport's script and log paths. It is pure
+// and reaches no network, so the command-construction it performs is fully
+// unit-testable; the document it returns is consumed by the provisioner at
+// server-creation time.
+func (t *Transport) UserData(commands []string, sshAuthorizedKeys []string) (string, error) {
 	return BuildUserData(Config{
-		Commands:   commands,
-		ScriptPath: t.ScriptPath,
-		LogPath:    t.LogPath,
+		Commands:          commands,
+		SSHAuthorizedKeys: sshAuthorizedKeys,
+		ScriptPath:        t.ScriptPath,
+		LogPath:           t.LogPath,
 	})
 }
 
