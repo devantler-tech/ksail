@@ -34,6 +34,18 @@ func (p *Provider) EnsureFloatingIP(
 	}
 
 	if floatingIP != nil {
+		// Only adopt a ksail-owned IP. A user-managed reserved address that
+		// merely shares the conventional name must never be claimed for the
+		// cluster (deleteFloatingIP applies the same ownership guard), and
+		// creating a second IP under the same name would fail Hetzner's name
+		// uniqueness anyway — so surface the collision instead.
+		if floatingIP.Labels[LabelOwned] != LabelOwnedValue {
+			return nil, fmt.Errorf(
+				"%w: %s (release or rename it, or choose a different cluster name)",
+				ErrFloatingIPNotOwned, floatingIPName,
+			)
+		}
+
 		return floatingIP, nil
 	}
 
@@ -101,7 +113,10 @@ func (p *Provider) DetachFloatingIP(ctx context.Context, floatingIP *hcloud.Floa
 // ksail-owned. A floating IP that merely shares the name but lacks the
 // ksail.owned label is left alone — reserved addresses the user manages
 // themselves must never be released by cluster deletion (a released floating
-// IP cannot be recovered).
+// IP cannot be recovered). Lookup failures propagate after the transient
+// retries: GetByName reports "not found" as a nil IP with a nil error, so a
+// non-nil error is a real API failure, and swallowing it would silently leak
+// a billed reserved address.
 func (p *Provider) deleteFloatingIP(ctx context.Context, clusterName string) error {
 	floatingIPName := clusterName + FloatingIPSuffix
 
@@ -119,11 +134,10 @@ func (p *Provider) deleteFloatingIP(ctx context.Context, clusterName string) err
 		},
 	)
 	if err != nil {
-		// Log error but don't fail - resource may not exist
-		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
+		return err
 	}
 
-	if floatingIP == nil || floatingIP.Labels[LabelOwned] != "true" {
+	if floatingIP == nil || floatingIP.Labels[LabelOwned] != LabelOwnedValue {
 		return nil
 	}
 

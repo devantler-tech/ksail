@@ -25,6 +25,15 @@ const ownedFloatingIPJSON = `{"id":7,"name":"test-cluster-floating-ip","descript
 	`"labels":{"ksail.owned":"true","ksail.cluster.name":"test-cluster"},` +
 	`"created":"2026-07-02T00:00:00+00:00"}`
 
+// unownedFloatingIPJSON is the same address without the ksail.owned label — a
+// user-managed reserved address that ksail must neither adopt nor release.
+const unownedFloatingIPJSON = `{"id":7,"name":"test-cluster-floating-ip","description":"",` +
+	`"ip":"192.0.2.10","type":"ipv4","server":null,"dns_ptr":[],` +
+	`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
+	`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
+	`"blocked":false,"protection":{"delete":false},"labels":{},` +
+	`"created":"2026-07-02T00:00:00+00:00"}`
+
 // newFloatingIPServer returns an httptest server answering the floating IP
 // list (GetByName) with listJSON, counting Create/Delete/Assign/Unassign
 // calls, and storing the last Create request body.
@@ -163,6 +172,21 @@ func TestEnsureFloatingIP_ReturnsExistingWithoutCreate(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create))
 }
 
+func TestEnsureFloatingIP_RejectsUnownedNameCollision(t *testing.T) {
+	t.Parallel()
+
+	// A user-managed reserved address sharing the conventional name must not
+	// be silently adopted for the cluster (and a same-name create would fail
+	// Hetzner's name uniqueness) — surface the collision as an error instead.
+	prov, counters := newFloatingIPProvider(t, unownedFloatingIPJSON)
+
+	floatingIP, err := prov.EnsureFloatingIP(t.Context(), "test-cluster", "fsn1")
+
+	require.ErrorIs(t, err, hetzner.ErrFloatingIPNotOwned)
+	assert.Nil(t, floatingIP)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create))
+}
+
 func TestEnsureFloatingIP_NilClient(t *testing.T) {
 	t.Parallel()
 
@@ -258,16 +282,7 @@ func TestDeleteFloatingIP_DeletesOwned(t *testing.T) {
 func TestDeleteFloatingIP_SkipsUnowned(t *testing.T) {
 	t.Parallel()
 
-	// Same name, but no ksail.owned label — a user-managed reserved address
-	// that cluster deletion must never release.
-	unowned := `{"id":7,"name":"test-cluster-floating-ip","description":"",` +
-		`"ip":"192.0.2.10","type":"ipv4","server":null,"dns_ptr":[],` +
-		`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
-		`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
-		`"blocked":false,"protection":{"delete":false},"labels":{},` +
-		`"created":"2026-07-02T00:00:00+00:00"}`
-
-	prov, counters := newFloatingIPProvider(t, unowned)
+	prov, counters := newFloatingIPProvider(t, unownedFloatingIPJSON)
 
 	err := prov.DeleteFloatingIPForTest(t.Context(), "test-cluster")
 
@@ -284,4 +299,39 @@ func TestDeleteFloatingIP_NoopWhenAbsent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.del))
+}
+
+func TestDeleteFloatingIP_PropagatesLookupError(t *testing.T) {
+	t.Parallel()
+
+	// A real API failure (here a non-retryable 401) must propagate — treating
+	// it as "not found" would silently skip the release and leak a billed
+	// reserved address. GetByName reports absence as nil/nil, never an error.
+	var deleteCalls atomic.Int32
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodDelete {
+				deleteCalls.Add(1)
+			}
+
+			responseWriter.Header().Set("Content-Type", "application/json")
+			responseWriter.WriteHeader(http.StatusUnauthorized)
+			_, _ = responseWriter.Write([]byte(
+				`{"error":{"code":"unauthorized","message":"unable to authenticate"}}`))
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+
+	err := prov.DeleteFloatingIPForTest(t.Context(), "test-cluster")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get floating IP test-cluster-floating-ip")
+	assert.Equal(t, int32(0), deleteCalls.Load())
 }
