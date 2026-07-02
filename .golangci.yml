@@ -173,6 +173,11 @@ linters:
             - github.com/googleapis/gax-go
             - filippo.io/age
             - golang.design/x
+            # x/crypto/ssh backs pkg/svc/bootstrap/ssh — the post-provision
+            # remote-exec transport for Hetzner live bring-up (#5696): kubeconfig
+            # fetch + join sequencing, native Go instead of a shelled ssh binary.
+            # Already linked transitively (containerd/helm stack).
+            - golang.org/x/crypto/ssh
             - golang.org/x/oauth2
             - golang.org/x/sync
             - golang.org/x/term
