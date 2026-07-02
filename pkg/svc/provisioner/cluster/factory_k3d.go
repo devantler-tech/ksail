@@ -120,6 +120,7 @@ func createK3sHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, any, e
 
 	provisioner, err := k3shetznerprovisioner.NewProvisioner(
 		cluster.Name,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
 		k3sInstallVersion(),
 		controlPlanes,
 		int(cluster.Spec.Cluster.Workers),

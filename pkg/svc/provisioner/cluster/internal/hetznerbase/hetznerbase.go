@@ -17,14 +17,30 @@ var (
 	// target cluster already exist, so creation would collide with a running cluster.
 	ErrClusterAlreadyExists = errors.New("hetzner: cluster already exists")
 
-	// ErrLiveBringUpNotImplemented is returned by [Base.RunCreate] after the shared
-	// infrastructure is ensured and the per-node cloud-init user_data is composed.
-	// The remaining steps — creating the servers (which needs boot-image resolution),
-	// the runtime join sequencing that depends on the first node's address, and
-	// retrieving the generated kubeconfig — are integration paths that land with the
-	// Hetzner system-test lane (devantler-tech/ksail#5515).
+	// ErrLiveBringUpNotImplemented is returned by the provisioners' composePlan
+	// callbacks (see [Base.RunCreate]) after the per-node cloud-init user_data is
+	// composed: deriving the live server specs still needs boot-image resolution
+	// and the bootstrap-material threading tracked by devantler-tech/ksail#5726.
+	// Once a caller returns a complete [BringUpPlan] instead, RunCreate carries the
+	// cluster all the way to a merged kubeconfig.
 	ErrLiveBringUpNotImplemented = errors.New(
-		"hetzner: live cluster bring-up is not yet implemented (tracked by #5515)",
+		"hetzner: live cluster bring-up is not yet implemented (tracked by #5726)",
+	)
+
+	// ErrSingleNodePlanExpected is returned by [Base.RunCreate] when a composed
+	// [BringUpPlan] does not carry exactly one server spec. Multi-node topologies
+	// are rejected before composition ([ErrMultiNodeNotImplemented]), so a plan
+	// with any other count is a composition bug, not a user error.
+	ErrSingleNodePlanExpected = errors.New(
+		"hetzner: bring-up plan must carry exactly one server spec",
+	)
+
+	// ErrMissingKubeconfigDestination is returned by [Base.RunCreate] when the
+	// Base has no kubeconfig destination path to merge the retrieved admin
+	// kubeconfig into. It is checked before any server is created so a
+	// misconfiguration cannot leak paid resources.
+	ErrMissingKubeconfigDestination = errors.New(
+		"hetzner: no kubeconfig destination path is configured",
 	)
 
 	// ErrMultiNodeNotImplemented is returned by [Base.RunCreate] for a topology with
@@ -112,6 +128,10 @@ type Base struct {
 	ControlPlanes int
 	// Agents is the requested agent (worker) node count.
 	Agents int
+	// KubeconfigPath is the local kubeconfig file the retrieved admin kubeconfig
+	// is merged into after a successful bring-up (the cluster spec's
+	// connection.kubeconfig, e.g. "~/.kube/config").
+	KubeconfigPath string
 	// LogWriter receives the provisioner's progress output.
 	LogWriter io.Writer
 }
@@ -119,9 +139,10 @@ type Base struct {
 // NewBase constructs a Base, building the Hetzner provider from opts (resolving the
 // API token from the configured environment variable). It is the shared provider
 // construction both provisioners' NewProvisioner constructors delegate to;
-// LogWriter defaults to os.Stdout.
+// kubeconfigPath is the local kubeconfig file a successful bring-up merges the
+// admin kubeconfig into; LogWriter defaults to os.Stdout.
 func NewBase(
-	clusterName string,
+	clusterName, kubeconfigPath string,
 	controlPlanes, agents int,
 	opts v1alpha1.OptionsHetzner,
 ) (*Base, error) {
@@ -131,13 +152,14 @@ func NewBase(
 	}
 
 	return &Base{
-		Infra:         provider,
-		Servers:       provider,
-		Opts:          opts,
-		ClusterName:   clusterName,
-		ControlPlanes: controlPlanes,
-		Agents:        agents,
-		LogWriter:     os.Stdout,
+		Infra:          provider,
+		Servers:        provider,
+		Opts:           opts,
+		ClusterName:    clusterName,
+		ControlPlanes:  controlPlanes,
+		Agents:         agents,
+		KubeconfigPath: kubeconfigPath,
+		LogWriter:      os.Stdout,
 	}, nil
 }
 
@@ -288,15 +310,19 @@ func (b *Base) Exists(ctx context.Context, name string) (bool, error) {
 // RunCreate runs the Hetzner create flow shared by the k3s and kubeadm provisioners:
 // guard against an existing cluster ([ErrClusterAlreadyExists]), reject multi-node
 // topologies ([ErrMultiNodeNotImplemented]), ensure the shared infrastructure,
-// generate the node token, compose the per-node cloud-init user_data, and stop at
-// the live-bring-up boundary ([ErrLiveBringUpNotImplemented], see
-// devantler-tech/ksail#5515). The two steps that differ between the provisioners are
-// supplied as callbacks: generateToken produces the node token, and composeNodes
-// composes the per-node user_data and returns the node count.
+// generate the node token, compose the bring-up plan, and — when the caller returns
+// a complete [BringUpPlan] — run the live bring-up: create the server, wait for the
+// distribution's admin kubeconfig ([Base.BringUpNode]), rewrite its endpoint to the
+// node's public IPv4, and merge it into the Base's kubeconfig destination. The two
+// steps that differ between the provisioners are supplied as callbacks:
+// generateToken produces the node token, and composePlan composes the per-node
+// cloud-init user_data into server specs plus the bootstrap material (a caller
+// whose spec derivation has not landed yet returns
+// [ErrLiveBringUpNotImplemented] there instead — see devantler-tech/ksail#5726).
 func (b *Base) RunCreate(
 	ctx context.Context,
 	name string,
-	composeNodes func(clusterName, token string) (int, error),
+	composePlan func(clusterName, token string, infra ResolvedInfra) (BringUpPlan, error),
 	generateToken func() (string, error),
 ) error {
 	clusterName := b.ResolveName(name)
@@ -314,7 +340,13 @@ func (b *Base) RunCreate(
 		return ErrMultiNodeNotImplemented
 	}
 
-	_, err = b.EnsureInfrastructure(ctx, clusterName)
+	// Fail before any paid resource exists when the retrieved kubeconfig would
+	// have nowhere to go.
+	if b.KubeconfigPath == "" {
+		return ErrMissingKubeconfigDestination
+	}
+
+	infra, err := b.EnsureInfrastructure(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -324,19 +356,64 @@ func (b *Base) RunCreate(
 		return err
 	}
 
-	count, err := composeNodes(clusterName, token)
+	plan, err := composePlan(clusterName, token, infra)
 	if err != nil {
 		return err
 	}
 
+	return b.bringUpFromPlan(ctx, clusterName, plan)
+}
+
+// bringUpFromPlan runs the live half of the create flow from a composed plan:
+// bring the single node up, rewrite the retrieved kubeconfig's endpoint to the
+// node's public IPv4, and merge it into the Base's kubeconfig destination. The
+// post-bring-up steps share [Base.BringUpNode]'s cleanup-on-failure semantics —
+// a cluster whose kubeconfig cannot be rewritten or persisted is torn down again
+// rather than left running without credentials (re-running create would only hit
+// [ErrClusterAlreadyExists]).
+func (b *Base) bringUpFromPlan(
+	ctx context.Context,
+	clusterName string,
+	plan BringUpPlan,
+) error {
+	if len(plan.Specs) != 1 {
+		return fmt.Errorf("%w: got %d", ErrSingleNodePlanExpected, len(plan.Specs))
+	}
+
+	result, err := b.BringUpNode(ctx, clusterName, BringUpSpec{
+		Server:          plan.Specs[0],
+		Signer:          plan.Signer,
+		HostKeyCallback: plan.HostKeyCallback,
+		KubeconfigPath:  plan.RemoteKubeconfigPath,
+		PollInterval:    plan.PollInterval,
+		Port:            plan.Port,
+	})
+	if err != nil {
+		return err
+	}
+
+	endpoint, err := apiServerEndpoint(result.Server)
+	if err != nil {
+		return b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	kubeconfig, err := rewriteKubeconfigEndpoint(result.Kubeconfig, endpoint)
+	if err != nil {
+		return b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	persistedPath, err := b.persistKubeconfig(kubeconfig)
+	if err != nil {
+		return b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
 	_, _ = fmt.Fprintf(
 		b.LogWriter,
-		"Prepared cloud-init bootstrap for %d node(s); server creation and "+
-			"kubeconfig retrieval are tracked by #5515\n",
-		count,
+		"Cluster %q is up at %s; kubeconfig merged into %q\n",
+		clusterName, endpoint, persistedPath,
 	)
 
-	return ErrLiveBringUpNotImplemented
+	return nil
 }
 
 // resolveSSHKeyID resolves the configured Hetzner SSH key name to its ID, or

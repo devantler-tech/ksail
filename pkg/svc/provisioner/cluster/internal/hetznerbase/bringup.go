@@ -40,6 +40,33 @@ var (
 	ErrMissingKubeconfigPath = errors.New("hetzner: bring-up spec is missing the kubeconfig path")
 )
 
+// BringUpPlan is what a provisioner's composePlan callback returns to
+// [Base.RunCreate]: the ordered composed server specs plus the bootstrap
+// material the live bring-up authenticates with and the remote location the
+// node's first boot writes the admin kubeconfig to. The current increment
+// carries exactly one spec (multi-node topologies are rejected before
+// composition); the ordered slice is the multi-node join sequencing's seam.
+type BringUpPlan struct {
+	// Specs is the ordered composed server specs (index 0 is the
+	// cluster-initialising control plane). Each spec's UserData must deliver
+	// the public half of the bootstrap keypair (see [BringUpSpec.Server]).
+	Specs []hetzner.CreateServerOpts
+	// Signer is the private half of the bootstrap keypair (see
+	// [BringUpSpec.Signer]).
+	Signer gossh.Signer
+	// HostKeyCallback is the host-key trust policy (see
+	// [BringUpSpec.HostKeyCallback]).
+	HostKeyCallback gossh.HostKeyCallback
+	// RemoteKubeconfigPath is the remote path of the admin kubeconfig the
+	// node's bootstrap writes (see [BringUpSpec.KubeconfigPath]).
+	RemoteKubeconfigPath string
+	// PollInterval is the delay between kubeconfig probes; zero means
+	// [DefaultKubeconfigPollInterval].
+	PollInterval time.Duration
+	// Port is the SSH port dialed on the node; empty means the standard port.
+	Port string
+}
+
 // BringUpSpec carries everything [Base.BringUpNode] needs to take one composed
 // server spec to a running node and its admin kubeconfig.
 type BringUpSpec struct {
@@ -174,16 +201,27 @@ func (b *Base) cleanUpFailedBringUp(ctx context.Context, clusterName string, cau
 // none (IPv4 disabled or not yet assigned). An empty port means the standard
 // SSH port.
 func publicSSHAddr(server *hcloud.Server, port string) (string, error) {
-	if server == nil || server.PublicNet.IPv4.IP == nil ||
-		server.PublicNet.IPv4.IP.IsUnspecified() {
-		return "", ErrNoPublicIPv4
+	address, err := publicIPv4(server)
+	if err != nil {
+		return "", err
 	}
 
 	if port == "" {
 		port = sshPort
 	}
 
-	return net.JoinHostPort(server.PublicNet.IPv4.IP.String(), port), nil
+	return net.JoinHostPort(address.String(), port), nil
+}
+
+// publicIPv4 returns the created server's public IPv4, or [ErrNoPublicIPv4]
+// when the server has none (IPv4 disabled or not yet assigned).
+func publicIPv4(server *hcloud.Server) (net.IP, error) {
+	if server == nil || server.PublicNet.IPv4.IP == nil ||
+		server.PublicNet.IPv4.IP.IsUnspecified() {
+		return nil, ErrNoPublicIPv4
+	}
+
+	return server.PublicNet.IPv4.IP, nil
 }
 
 // waitForRemoteFile polls the remote node until path exists
