@@ -11,6 +11,7 @@ import (
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -138,6 +139,27 @@ func SetLoadRESTConfig(fn func(string, string) (*rest.Config, error)) func() {
 
 	return func() {
 		loadRESTConfig = original
+	}
+}
+
+// WaitForOperatorAvailable exports waitForOperatorAvailable for testing.
+func WaitForOperatorAvailable(
+	ctx context.Context,
+	restConfig *rest.Config,
+	timeout, interval time.Duration,
+) error {
+	return waitForOperatorAvailable(ctx, restConfig, timeout, interval)
+}
+
+// SetNewKubernetesClient allows tests to replace newKubernetesClient with a mock.
+func SetNewKubernetesClient(
+	fn func(*rest.Config) (kubernetes.Interface, error),
+) func() {
+	original := newKubernetesClient
+	newKubernetesClient = fn
+
+	return func() {
+		newKubernetesClient = original
 	}
 }
 
