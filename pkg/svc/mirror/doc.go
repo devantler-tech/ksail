@@ -33,17 +33,29 @@
 //     pods and containers a tap would attach to ([ResolveTarget]). Pure
 //     client-go, fully unit-testable, needed by every later phase regardless of
 //     the eventual tap mechanism.
+//
 //   - Phase 1 — mirror-only: inject a read-only "tap" sidecar (reusing the
-//     ephemeral-container mechanism behind `workload debug`) that copies inbound
-//     connections and forwards a copy to the local process over a reverse tunnel
-//     built from the embedded port-forward primitive. Read-only: the local
-//     process receives mirrored traffic but does not answer back into the
-//     cluster — the lowest-risk first mode the issue itself suggests. Its first
-//     increment is [SelectTapPoint]: pick the concrete pod and container the tap
-//     attaches to (honouring an optional container selector), pure logic shared
-//     by the injection and tunnel steps that follow.
+//     ephemeral-container mechanism behind `workload debug`) that captures the
+//     target's inbound traffic and streams it to the local process. Read-only:
+//     the local process receives mirrored traffic but does not answer back into
+//     the cluster — the lowest-risk first mode the issue itself suggests.
+//     Increments so far: [SelectTapPoint] (pick the concrete pod and container),
+//     [InjectTap]/[WaitForTap] (the ephemeral tap container), and the capture
+//     spec ([CaptureCommand] + the hardened NET_RAW-only security context).
+//
+//     Capture design (#4521): passive pcap via CAP_NET_RAW — tcpdump execed in
+//     the tap container, pcap on stdout over the already-embedded exec channel.
+//     A userspace proxy (socat or Go) in the pod netns cannot passively observe
+//     traffic addressed to the app container; being in-path needs
+//     NET_ADMIN/iptables, which is Phase 2 intercept by definition, and eBPF
+//     costs node-level privilege for no Phase 1 gain. Because the exec channel
+//     itself carries the stream, mirror mode needs NO reverse tunnel — the
+//     tunnel returns in Phase 2, where responses must flow back into the
+//     cluster.
+//
 //   - Phase 2 — intercept: steer a subset (or all) of the Deployment's traffic to
 //     the local process and return its responses.
+//
 //   - Phase 3 — environment & volume projection: run the local process with the
 //     target pod's env vars and mounted volumes/secrets for cluster-equivalent
 //     context.
