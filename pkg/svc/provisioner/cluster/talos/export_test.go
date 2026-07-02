@@ -858,14 +858,40 @@ func LonghornVolumeGVRForTest() schema.GroupVersionResource {
 	return longhornVolumeGVR()
 }
 
+// GenericDegradedVolumesForTest exposes the backend-agnostic prober's PV / PVC /
+// VolumeAttachment classification against a (fake) clientset.
+func GenericDegradedVolumesForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) ([]string, error) {
+	prober := &genericStorageProber{clientset: clientset}
+
+	return prober.degradedVolumes(ctx)
+}
+
+// MultiDegradedVolumesForTest exposes the composed prober's union semantics over
+// stubbed probers.
+func MultiDegradedVolumesForTest(
+	ctx context.Context,
+	probers ...StorageHealthProberForTest,
+) ([]string, error) {
+	inner := make([]storageHealthProber, 0, len(probers))
+	for _, prober := range probers {
+		inner = append(inner, prober)
+	}
+
+	return (&multiStorageProber{probers: inner}).degradedVolumes(ctx)
+}
+
 // StorageHealthTimeoutForTest exposes the resolved gate timeout (0 = disabled).
 func (p *Provisioner) StorageHealthTimeoutForTest() time.Duration {
 	return p.storageHealthTimeout()
 }
 
 // BuildStorageHealthProberForTest exercises buildStorageHealthProber, returning
-// whether a (non-nil) prober was built alongside any error — so the "no backend
-// detected → no prober" branch is testable without a live cluster.
+// whether a (non-nil) prober was built alongside any error — so the composition
+// (generic prober always; backend prober when detected) is testable without a live
+// cluster.
 func (p *Provisioner) BuildStorageHealthProberForTest(
 	ctx context.Context,
 	clientset kubernetes.Interface,

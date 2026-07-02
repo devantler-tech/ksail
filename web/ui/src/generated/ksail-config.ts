@@ -425,15 +425,17 @@ export interface KSailClusterConfiguration {
         drainTimeout?: string;
         /**
          * StorageHealthTimeout opts into a between-node storage-health gate during the
-         * `cluster update` rolling reboot. When set to a positive duration and the cluster
-         * runs a replicated node-local storage backend (Longhorn), the roll waits — up to
-         * this timeout — for the just-rebooted node's volumes to return to a healthy state
-         * before draining the next node. This prevents progressively faulting volumes whose
-         * replicas are spread one-per-node: without the gate the roll advances as soon as a
-         * node reports Kubernetes Ready, so rebooting consecutive replica holders before a
-         * rebuild completes can take every replica of a volume down at once. Default off
-         * (unset / 0): behaviour is unchanged. No effect when no replicated storage backend
-         * is detected. The gate only helps when replicas have spare capacity to rebuild
+         * `cluster update` rolling reboot. When set to a positive duration, the roll waits
+         * — up to this timeout — for the cluster's storage to return to a stable state
+         * before draining the next node: generically, no PersistentVolume in phase Failed,
+         * no PersistentVolumeClaim in phase Lost, and no VolumeAttachment with an
+         * attach/detach error; plus, when a replicated node-local storage backend is
+         * detected (Longhorn), no degraded or faulted replicated volume. This prevents
+         * progressively faulting volumes whose replicas are spread one-per-node: without
+         * the gate the roll advances as soon as a node reports Kubernetes Ready, so
+         * rebooting consecutive replica holders before a rebuild completes can take every
+         * replica of a volume down at once. Default off (unset / 0): behaviour is
+         * unchanged. The gate only helps when replicas have spare capacity to rebuild
          * during the roll; on a fully drained pool with hard anti-affinity it times out
          * (naming the stuck volumes) rather than hanging. Example: "10m".
          */

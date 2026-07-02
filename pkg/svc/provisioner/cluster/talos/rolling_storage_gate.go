@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -94,36 +95,37 @@ func (p *Provisioner) buildStorageHealthProberOrWarn(
 	return prober
 }
 
-// buildStorageHealthProber detects the cluster's replicated-storage backend and
-// returns a prober for it, or (nil, nil) when none is detected so the gate no-ops.
-// Only Longhorn is supported today; detection is by the presence of its namespace
-// rather than a hardcoded assumption, so the gate stays inert on clusters that do not
-// run it. A detection lookup that fails for any reason other than a clean NotFound
-// (RBAC, API unreachable, transient) is propagated rather than swallowed, so an
-// enabled gate surfaces the failure (and disables with a warning via
-// buildStorageHealthProberOrWarn) instead of silently treating it as "no Longhorn".
+// buildStorageHealthProber composes the probers for the cluster's storage. The
+// backend-agnostic generic prober (PV / PVC / VolumeAttachment stability) always
+// engages when the gate is enabled, so the gate is no longer inert on clusters
+// without a detected backend (#5688); a backend-specific prober is layered on top
+// when one is detected — Longhorn today, by the presence of its namespace. A
+// detection lookup that fails for any reason other than a clean NotFound (RBAC, API
+// unreachable, transient) is propagated rather than swallowed, so an enabled gate
+// surfaces the failure (and disables with a warning via
+// buildStorageHealthProberOrWarn) instead of silently probing less than it should.
 func (p *Provisioner) buildStorageHealthProber(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	clusterName string,
 ) (storageHealthProber, error) {
+	probers := []storageHealthProber{&genericStorageProber{clientset: clientset}}
+
 	detected, err := p.longhornDetected(ctx, clientset)
 	if err != nil {
 		return nil, err
 	}
 
-	if !detected {
-		// (nil, nil) is the "no replicated storage backend detected" signal: a valid,
-		// expected outcome that disables the gate, not an error.
-		return nil, nil //nolint:nilnil
+	if detected {
+		dynamicClient, err := p.newDynamicClient(clusterName)
+		if err != nil {
+			return nil, fmt.Errorf("create dynamic client for storage-health gate: %w", err)
+		}
+
+		probers = append(probers, &longhornVolumeProber{client: dynamicClient})
 	}
 
-	dynamicClient, err := p.newDynamicClient(clusterName)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client for storage-health gate: %w", err)
-	}
-
-	return &longhornVolumeProber{client: dynamicClient}, nil
+	return &multiStorageProber{probers: probers}, nil
 }
 
 // longhornDetected reports whether the cluster runs Longhorn, by the presence of its
@@ -215,6 +217,140 @@ func (p *Provisioner) waitForStorageHealthy(
 	}
 
 	return nil
+}
+
+// multiStorageProber unions the degraded sets of its probers, so the generic
+// Kubernetes signals and a backend-specific probe gate the roll together. Any
+// prober error is propagated (the poll loop treats it as transient and keeps
+// waiting).
+type multiStorageProber struct {
+	probers []storageHealthProber
+}
+
+// degradedVolumes returns the sorted, de-duplicated union of the probers' degraded
+// sets.
+func (m *multiStorageProber) degradedVolumes(ctx context.Context) ([]string, error) {
+	var all []string
+
+	for _, prober := range m.probers {
+		unhealthy, err := prober.degradedVolumes(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, unhealthy...)
+	}
+
+	slices.Sort(all)
+
+	return slices.Compact(all), nil
+}
+
+// genericStorageProber is the backend-agnostic storageHealthProber (#5688): it
+// reports storage-stability signals every Kubernetes cluster exposes —
+// PersistentVolumes in phase Failed, PersistentVolumeClaims in phase Lost, and
+// VolumeAttachments whose CSI controller's attach/detach loop reports an error (the
+// closest portable "storage controller unstable" signal). Benign steady states are
+// deliberately not gated on: a Pending PVC (WaitForFirstConsumer) and a detached
+// attachment without errors are normal, and a stale attachError on an attachment
+// that has since attached is ignored — otherwise they would hold the gate open
+// until timeout.
+type genericStorageProber struct {
+	clientset kubernetes.Interface
+}
+
+// degradedVolumes returns the identifiers of generically-unhealthy storage objects,
+// prefixed by kind ("pv/", "pvc/", "volumeattachment/") to stay distinguishable
+// from a backend prober's "<namespace>/<name>" volumes in logs and errors. The
+// result is sorted for deterministic logs, errors, and tests.
+func (g *genericStorageProber) degradedVolumes(ctx context.Context) ([]string, error) {
+	unhealthy, err := g.degradedPersistentVolumes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	lostClaims, err := g.lostPersistentVolumeClaims(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	erroredAttachments, err := g.erroredVolumeAttachments(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	unhealthy = append(unhealthy, lostClaims...)
+	unhealthy = append(unhealthy, erroredAttachments...)
+
+	slices.Sort(unhealthy)
+
+	return unhealthy, nil
+}
+
+// degradedPersistentVolumes returns "pv/<name>" for every PersistentVolume in phase
+// Failed (its recycle/delete failed or the backing volume errored).
+func (g *genericStorageProber) degradedPersistentVolumes(ctx context.Context) ([]string, error) {
+	pvs, err := g.clientset.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list persistentvolumes: %w", err)
+	}
+
+	var unhealthy []string
+
+	for i := range pvs.Items {
+		if pvs.Items[i].Status.Phase == corev1.VolumeFailed {
+			unhealthy = append(unhealthy, "pv/"+pvs.Items[i].Name)
+		}
+	}
+
+	return unhealthy, nil
+}
+
+// lostPersistentVolumeClaims returns "pvc/<namespace>/<name>" for every
+// PersistentVolumeClaim in phase Lost (its bound PV is gone). Pending claims are
+// normal steady state (WaitForFirstConsumer) and are not reported.
+func (g *genericStorageProber) lostPersistentVolumeClaims(ctx context.Context) ([]string, error) {
+	pvcs, err := g.clientset.CoreV1().
+		PersistentVolumeClaims(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list persistentvolumeclaims: %w", err)
+	}
+
+	var unhealthy []string
+
+	for i := range pvcs.Items {
+		if pvcs.Items[i].Status.Phase == corev1.ClaimLost {
+			unhealthy = append(unhealthy,
+				"pvc/"+pvcs.Items[i].Namespace+"/"+pvcs.Items[i].Name)
+		}
+	}
+
+	return unhealthy, nil
+}
+
+// erroredVolumeAttachments returns "volumeattachment/<name>" for every
+// VolumeAttachment whose CSI attach/detach loop reports an error: an attach error
+// while not attached, or any detach error. An attachment that has since attached is
+// healthy even if a stale attachError remains recorded.
+func (g *genericStorageProber) erroredVolumeAttachments(ctx context.Context) ([]string, error) {
+	attachments, err := g.clientset.StorageV1().
+		VolumeAttachments().
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list volumeattachments: %w", err)
+	}
+
+	var unhealthy []string
+
+	for i := range attachments.Items {
+		status := attachments.Items[i].Status
+		if (status.AttachError != nil && !status.Attached) || status.DetachError != nil {
+			unhealthy = append(unhealthy, "volumeattachment/"+attachments.Items[i].Name)
+		}
+	}
+
+	return unhealthy, nil
 }
 
 // longhornVolumeProber is the storageHealthProber backed by Longhorn Volume custom
