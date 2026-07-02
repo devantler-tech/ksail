@@ -25,6 +25,18 @@ func newMultiClusterScaffolder(env string, writer io.Writer) *scaffolder.Scaffol
 		WithMultiClusterEnv(env)
 }
 
+// readScaffoldedFile reads a file scaffolded into a t.TempDir(), failing the test
+// on error.
+func readScaffoldedFile(t *testing.T, elem ...string) string {
+	t.Helper()
+
+	//nolint:gosec // test reads from t.TempDir()
+	content, err := os.ReadFile(filepath.Join(elem...))
+	require.NoError(t, err)
+
+	return string(content)
+}
+
 func TestScaffoldMultiClusterWritesLayoutAndPointsSyncPathAtOverlay(t *testing.T) {
 	t.Parallel()
 
@@ -34,21 +46,16 @@ func TestScaffoldMultiClusterWritesLayoutAndPointsSyncPathAtOverlay(t *testing.T
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	baseContent, err := os.ReadFile(
-		filepath.Join(tempDir, "k8s", "clusters", "base", "kustomization.yaml"),
-	)
-	require.NoError(t, err)
-	assert.NotContains(t, string(baseContent), "../base")
+	baseContent := readScaffoldedFile(t, tempDir, "k8s", "clusters", "base", "kustomization.yaml")
+	assert.NotContains(t, baseContent, "../base")
 
-	overlayContent, err := os.ReadFile(
-		filepath.Join(tempDir, "k8s", "clusters", "local", "kustomization.yaml"),
+	overlayContent := readScaffoldedFile(
+		t, tempDir, "k8s", "clusters", "local", "kustomization.yaml",
 	)
-	require.NoError(t, err)
-	assert.Contains(t, string(overlayContent), "../base")
+	assert.Contains(t, overlayContent, "../base")
 
-	ksailContent, err := os.ReadFile(filepath.Join(tempDir, "ksail.yaml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(ksailContent), "kustomizationFile: clusters/local")
+	ksailContent := readScaffoldedFile(t, tempDir, "ksail.yaml")
+	assert.Contains(t, ksailContent, "kustomizationFile: clusters/local")
 
 	// The environment overlay replaces the flat single-cluster kustomization.
 	_, err = os.Stat(filepath.Join(tempDir, "k8s", "kustomization.yaml"))
@@ -71,10 +78,9 @@ func TestScaffoldMultiClusterRespectsExplicitKustomizationFile(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	ksailContent, err := os.ReadFile(filepath.Join(tempDir, "ksail.yaml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(ksailContent), "kustomizationFile: custom/entry")
-	assert.NotContains(t, string(ksailContent), "clusters/local")
+	ksailContent := readScaffoldedFile(t, tempDir, "ksail.yaml")
+	assert.Contains(t, ksailContent, "kustomizationFile: custom/entry")
+	assert.NotContains(t, ksailContent, "clusters/local")
 
 	// The layout is still seeded so the user can repoint at it later.
 	_, err = os.Stat(filepath.Join(tempDir, "k8s", "clusters", "local", "kustomization.yaml"))
@@ -119,9 +125,7 @@ func TestScaffoldMultiClusterIsIdempotentWithoutForce(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	overlayPath := filepath.Join(tempDir, "k8s", "clusters", "local", "kustomization.yaml")
-	before, err := os.ReadFile(overlayPath)
-	require.NoError(t, err)
+	before := readScaffoldedFile(t, tempDir, "k8s", "clusters", "local", "kustomization.yaml")
 
 	buffer := &bytes.Buffer{}
 	rerunInstance := newMultiClusterScaffolder("local", buffer)
@@ -129,9 +133,8 @@ func TestScaffoldMultiClusterIsIdempotentWithoutForce(t *testing.T) {
 	err = rerunInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	after, err := os.ReadFile(overlayPath)
-	require.NoError(t, err)
-	assert.Equal(t, string(before), string(after))
+	after := readScaffoldedFile(t, tempDir, "k8s", "clusters", "local", "kustomization.yaml")
+	assert.Equal(t, before, after)
 	assert.Contains(t, buffer.String(), "skipped")
 	assert.Contains(
 		t,

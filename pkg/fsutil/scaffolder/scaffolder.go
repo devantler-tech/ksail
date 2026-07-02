@@ -143,18 +143,12 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 
 	// Derive the multi-cluster layout up front so an invalid or reserved environment
 	// name aborts before any file is written.
-	var multiClusterFiles []environment.LayoutFile
-
-	if s.MultiClusterEnv != "" {
-		var deriveErr error
-
-		multiClusterFiles, deriveErr = environment.DeriveMultiClusterLayout(s.MultiClusterEnv)
-		if deriveErr != nil {
-			return fmt.Errorf("failed to derive multi-cluster layout: %w", deriveErr)
-		}
+	multiClusterFiles, err := s.deriveMultiClusterFiles()
+	if err != nil {
+		return err
 	}
 
-	err := s.generateKSailConfig(output, force)
+	err = s.generateKSailConfig(output, force)
 	if err != nil {
 		return err
 	}
@@ -183,14 +177,7 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
-	// In multi-cluster mode the environment overlay (pointed at by the generated
-	// ksail.yaml's kustomizationFile) replaces the flat single-cluster kustomization.
-	if multiClusterFiles != nil {
-		err = s.generateMultiClusterLayout(output, force, multiClusterFiles)
-	} else {
-		err = s.generateKustomizationConfig(output, force)
-	}
-
+	err = s.generateWorkloadKustomizations(output, force, multiClusterFiles)
 	if err != nil {
 		return err
 	}
@@ -200,6 +187,37 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	}
 
 	return nil
+}
+
+// deriveMultiClusterFiles derives the multi-cluster layout when MultiClusterEnv is
+// set, so Scaffold can validate the environment name before writing any file. It
+// returns nil files in single-cluster mode.
+func (s *Scaffolder) deriveMultiClusterFiles() ([]environment.LayoutFile, error) {
+	if s.MultiClusterEnv == "" {
+		return nil, nil
+	}
+
+	files, err := environment.DeriveMultiClusterLayout(s.MultiClusterEnv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive multi-cluster layout: %w", err)
+	}
+
+	return files, nil
+}
+
+// generateWorkloadKustomizations writes the source tree's kustomizations: in
+// multi-cluster mode the environment overlay (pointed at by the generated
+// ksail.yaml's kustomizationFile) replaces the flat single-cluster kustomization.
+func (s *Scaffolder) generateWorkloadKustomizations(
+	output string,
+	force bool,
+	multiClusterFiles []environment.LayoutFile,
+) error {
+	if multiClusterFiles != nil {
+		return s.generateMultiClusterLayout(output, force, multiClusterFiles)
+	}
+
+	return s.generateKustomizationConfig(output, force)
 }
 
 // generateMultiClusterLayout writes the derived multi-cluster layout under the source

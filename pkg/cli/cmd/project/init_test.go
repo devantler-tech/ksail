@@ -405,6 +405,7 @@ func TestHandleInitRunE_MultiClusterFlagScaffoldsLayout(t *testing.T) {
 		require.NoError(t, statErr, "expected %s to be scaffolded", relPath)
 	}
 
+	//nolint:gosec // test reads from t.TempDir()
 	ksailContent, err := os.ReadFile(filepath.Join(outDir, "ksail.yaml"))
 	require.NoError(t, err)
 	require.Contains(t, string(ksailContent), "kustomizationFile: clusters/local")
