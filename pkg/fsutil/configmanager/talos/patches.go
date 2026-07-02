@@ -53,6 +53,9 @@ var (
 	ErrIPv6NotSupported = errors.New("IPv6 not supported")
 	// ErrNegativeOffset is returned when a negative offset is provided for IP calculation.
 	ErrNegativeOffset = errors.New("negative offset not allowed")
+	// ErrHetznerVIPTokenRequired is returned when a Hetzner VIP is requested without an
+	// hcloud API token — Talos cannot reassign the floating IP without it.
+	ErrHetznerVIPTokenRequired = errors.New("hetzner VIP requires an hcloud API token")
 )
 
 // LoadPatches loads all Talos patches from the configured directories.
