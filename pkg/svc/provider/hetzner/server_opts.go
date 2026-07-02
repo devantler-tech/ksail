@@ -4,10 +4,15 @@ import "github.com/hetznercloud/hcloud-go/v2/hcloud"
 
 // CreateServerOpts contains options for creating a Hetzner server.
 type CreateServerOpts struct {
-	Name             string
-	ServerType       string
-	ImageID          int64 // Image ID (for snapshots) - mutually exclusive with ISOID
-	ISOID            int64 // ISO ID (for Talos public ISOs) - mutually exclusive with ImageID
+	Name       string
+	ServerType string
+	// ImageName is a base OS image referenced by name (e.g. "ubuntu-24.04"), for
+	// distributions that install onto a stock image via cloud-init (k3s, kubeadm).
+	// The hcloud API resolves the name server-side, so no lookup call is needed.
+	// Exactly one of ImageName, ImageID, or ISOID must be set.
+	ImageName        string
+	ImageID          int64 // Image ID (for snapshots) - exactly one of ImageName/ImageID/ISOID
+	ISOID            int64 // ISO ID (for Talos public ISOs) - exactly one of ImageName/ImageID/ISOID
 	Location         string
 	Labels           map[string]string
 	UserData         string
@@ -30,15 +35,36 @@ func publicNetEnabled(ptr *bool) bool {
 	return ptr == nil || *ptr
 }
 
-// buildServerCreateOpts builds the hcloud.ServerCreateOpts from CreateServerOpts.
-// Exactly one of ImageID or ISOID must be set; both or neither is an error.
-func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
-	if opts.ImageID > 0 && opts.ISOID > 0 {
-		return hcloud.ServerCreateOpts{}, ErrImageAndISOBothSet
+// imageSourceCount returns how many of the mutually exclusive boot-image sources
+// (ImageName, ImageID, ISOID) are set on opts.
+func imageSourceCount(opts CreateServerOpts) int {
+	count := 0
+
+	if opts.ImageName != "" {
+		count++
 	}
 
-	if opts.ImageID == 0 && opts.ISOID == 0 {
+	if opts.ImageID > 0 {
+		count++
+	}
+
+	if opts.ISOID > 0 {
+		count++
+	}
+
+	return count
+}
+
+// buildServerCreateOpts builds the hcloud.ServerCreateOpts from CreateServerOpts.
+// Exactly one of ImageName, ImageID, or ISOID must be set; more or none is an error.
+func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
+	switch imageSourceCount(opts) {
+	case 0:
 		return hcloud.ServerCreateOpts{}, ErrImageOrISORequired
+	case 1:
+		// exactly one boot-image source — valid
+	default:
+		return hcloud.ServerCreateOpts{}, ErrImageAndISOBothSet
 	}
 
 	createOpts := hcloud.ServerCreateOpts{
@@ -59,8 +85,10 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCr
 		},
 	}
 
-	// Use either Image or ISO - ISOs are used for Talos public ISOs
-	if opts.ISOID > 0 {
+	// Boot from the single configured source: an ISO (Talos public ISOs), a
+	// snapshot image by ID, or a stock OS image by name (k3s/kubeadm cloud-init).
+	switch {
+	case opts.ISOID > 0:
 		// When using ISO, we need a placeholder image for the server disk.
 		// The server must NOT start automatically so the ISO can be attached
 		// before the first boot — otherwise the server boots from the Debian
@@ -69,7 +97,11 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCr
 			Name: "debian-13",
 		}
 		createOpts.StartAfterCreate = new(false)
-	} else {
+	case opts.ImageName != "":
+		createOpts.Image = &hcloud.Image{
+			Name: opts.ImageName,
+		}
+	default:
 		createOpts.Image = &hcloud.Image{
 			ID: opts.ImageID,
 		}

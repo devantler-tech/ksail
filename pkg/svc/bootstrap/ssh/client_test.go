@@ -207,6 +207,44 @@ func mustGenerateKeyPair(t *testing.T) sshbootstrap.KeyPair {
 	return pair
 }
 
+func TestFileExists(t *testing.T) {
+	t.Parallel()
+
+	pair := mustGenerateKeyPair(t)
+	addr, hostKey := startServer(
+		t,
+		pair.Signer.PublicKey(),
+		func(command string) (string, string, uint32) {
+			switch command {
+			case "test -f '/present'":
+				return "", "", 0
+			case "test -f '/absent'":
+				return "", "", 1
+			default:
+				return "", "", 2
+			}
+		},
+		0,
+	)
+
+	client := mustDial(t, addr, pair, hostKey)
+
+	exists, err := client.FileExists(t.Context(), "/present")
+	if err != nil || !exists {
+		t.Fatalf("present file: got exists=%v err=%v, want true, nil", exists, err)
+	}
+
+	exists, err = client.FileExists(t.Context(), "/absent")
+	if err != nil || exists {
+		t.Fatalf("absent file: got exists=%v err=%v, want false, nil", exists, err)
+	}
+
+	_, err = client.FileExists(t.Context(), "/probe-error")
+	if err == nil {
+		t.Fatal("unexpected exit code: want an error, got nil")
+	}
+}
+
 func TestGenerateKeyPairRoundTrips(t *testing.T) {
 	t.Parallel()
 

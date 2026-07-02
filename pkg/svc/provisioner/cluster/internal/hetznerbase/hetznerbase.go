@@ -74,9 +74,22 @@ type Infra interface {
 	ListAllClusters(ctx context.Context) ([]string, error)
 }
 
+// ServerCreator is the server-creation half of the provider seam, kept separate
+// from [Infra] (interface segregation): only the bring-up engine creates
+// servers, while every lifecycle operation uses [Infra]. Test doubles for the
+// lifecycle never have to fake server creation.
+type ServerCreator interface {
+	// CreateServer creates a single server from the composed options and waits
+	// for the creation to complete.
+	CreateServer(ctx context.Context, opts hetzner.CreateServerOpts) (*hcloud.Server, error)
+}
+
 // staticInfraCheck asserts at compile time that the concrete Hetzner provider
-// satisfies the subset the provisioners depend on.
-var _ Infra = (*hetzner.Provider)(nil)
+// satisfies the subsets the provisioners depend on.
+var (
+	_ Infra         = (*hetzner.Provider)(nil)
+	_ ServerCreator = (*hetzner.Provider)(nil)
+)
 
 // Base carries the Hetzner infrastructure lifecycle shared by the k3s and kubeadm ×
 // Hetzner provisioners: the common configuration and the ResolveName /
@@ -86,6 +99,9 @@ var _ Infra = (*hetzner.Provider)(nil)
 type Base struct {
 	// Infra is the Hetzner provider seam the lifecycle operations delegate to.
 	Infra Infra
+	// Servers is the server-creation seam the bring-up engine delegates to
+	// (backed by the same provider as Infra in production).
+	Servers ServerCreator
 	// Opts is the resolved Hetzner options (network CIDR, firewall CIDRs, placement
 	// group, SSH key) the infrastructure step reads.
 	Opts v1alpha1.OptionsHetzner
@@ -116,6 +132,7 @@ func NewBase(
 
 	return &Base{
 		Infra:         provider,
+		Servers:       provider,
 		Opts:          opts,
 		ClusterName:   clusterName,
 		ControlPlanes: controlPlanes,
@@ -135,43 +152,75 @@ func (b *Base) ResolveName(name string) string {
 	return b.ClusterName
 }
 
+// ResolvedInfra carries the IDs of the cluster's shared Hetzner resources after
+// [Base.EnsureInfrastructure] created (or reused) them — the placement a composed
+// server spec needs. A zero ID means the resource is not in play (no placement
+// group for the configured strategy, no SSH key configured, or a provider that
+// returned no ID).
+type ResolvedInfra struct {
+	// NetworkID is the private network every node joins.
+	NetworkID int64
+	// FirewallID is the firewall applied to every node; zero attaches none.
+	FirewallID int64
+	// PlacementGroupID is the placement group every node is created in; zero when
+	// the strategy disables placement groups.
+	PlacementGroupID int64
+	// SSHKeyID is the pre-registered Hetzner SSH key installed on every node; zero
+	// when no key name is configured. This is Hetzner's account-level key, distinct
+	// from the per-cluster bootstrap keypair delivered via cloud-init.
+	SSHKeyID int64
+}
+
 // EnsureInfrastructure creates (or reuses) the cluster's shared Hetzner resources:
 // the private network, the firewall, the placement group, and the SSH key when one
-// is configured.
-func (b *Base) EnsureInfrastructure(ctx context.Context, clusterName string) error {
+// is configured. It returns their resolved IDs so the server-spec composition can
+// place nodes into them.
+func (b *Base) EnsureInfrastructure(
+	ctx context.Context,
+	clusterName string,
+) (ResolvedInfra, error) {
 	cidr := b.Opts.NetworkCIDR
 	if cidr == "" {
 		cidr = v1alpha1.DefaultHetznerNetworkCIDR
 	}
 
-	_, err := b.Infra.EnsureNetwork(ctx, clusterName, cidr)
+	resolved := ResolvedInfra{}
+
+	network, err := b.Infra.EnsureNetwork(ctx, clusterName, cidr)
 	if err != nil {
-		return fmt.Errorf("ensure network: %w", err)
+		return ResolvedInfra{}, fmt.Errorf("ensure network: %w", err)
 	}
 
-	_, err = b.Infra.EnsureFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
+	resolved.NetworkID = idOrZero(network, func(n *hcloud.Network) int64 { return n.ID })
+
+	firewall, err := b.Infra.EnsureFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
 	if err != nil {
-		return fmt.Errorf("ensure firewall: %w", err)
+		return ResolvedInfra{}, fmt.Errorf("ensure firewall: %w", err)
 	}
 
-	_, err = b.Infra.EnsurePlacementGroup(
+	resolved.FirewallID = idOrZero(firewall, func(f *hcloud.Firewall) int64 { return f.ID })
+
+	placementGroup, err := b.Infra.EnsurePlacementGroup(
 		ctx,
 		clusterName,
 		b.Opts.PlacementGroupStrategy.String(),
 		b.Opts.PlacementGroup,
 	)
 	if err != nil {
-		return fmt.Errorf("ensure placement group: %w", err)
+		return ResolvedInfra{}, fmt.Errorf("ensure placement group: %w", err)
 	}
 
-	if b.Opts.SSHKeyName != "" {
-		_, err = b.Infra.GetSSHKey(ctx, b.Opts.SSHKeyName)
-		if err != nil {
-			return fmt.Errorf("get SSH key: %w", err)
-		}
+	resolved.PlacementGroupID = idOrZero(
+		placementGroup,
+		func(g *hcloud.PlacementGroup) int64 { return g.ID },
+	)
+
+	resolved.SSHKeyID, err = b.resolveSSHKeyID(ctx)
+	if err != nil {
+		return ResolvedInfra{}, err
 	}
 
-	return nil
+	return resolved, nil
 }
 
 // Delete removes the cluster's servers. It is a no-op (nil) when the cluster's
@@ -265,7 +314,7 @@ func (b *Base) RunCreate(
 		return ErrMultiNodeNotImplemented
 	}
 
-	err = b.EnsureInfrastructure(ctx, clusterName)
+	_, err = b.EnsureInfrastructure(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -288,4 +337,29 @@ func (b *Base) RunCreate(
 	)
 
 	return ErrLiveBringUpNotImplemented
+}
+
+// resolveSSHKeyID resolves the configured Hetzner SSH key name to its ID, or
+// zero when no key name is configured.
+func (b *Base) resolveSSHKeyID(ctx context.Context) (int64, error) {
+	if b.Opts.SSHKeyName == "" {
+		return 0, nil
+	}
+
+	sshKey, err := b.Infra.GetSSHKey(ctx, b.Opts.SSHKeyName)
+	if err != nil {
+		return 0, fmt.Errorf("get SSH key: %w", err)
+	}
+
+	return idOrZero(sshKey, func(k *hcloud.SSHKey) int64 { return k.ID }), nil
+}
+
+// idOrZero returns id(resource), or zero when the provider returned no
+// resource (e.g. a placement-group strategy that disables placement groups).
+func idOrZero[T any](resource *T, id func(*T) int64) int64 {
+	if resource == nil {
+		return 0
+	}
+
+	return id(resource)
 }
