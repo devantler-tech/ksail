@@ -51,7 +51,7 @@ type NodeAutoscalerConfig struct {
 	// should not, on its own, keep an otherwise-empty node above the scale-down
 	// threshold — otherwise heavy node agents (CNI, storage, observability) can
 	// pin every autoscaler node as "utilized" and prevent scale-down entirely.
-	IgnoreDaemonsetsUtilization bool `json:"ignoreDaemonsetsUtilization,omitzero" jsonschema:"description=Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization, off by default). Enable this when DaemonSets are system components (CNI, CSI, observability, security agents) whose per-node overhead should not keep an otherwise-empty node above the scale-down utilization threshold. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
+	IgnoreDaemonsetsUtilization bool `json:"ignoreDaemonsetsUtilization,omitzero" jsonschema_description:"Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization, off by default). Enable this when DaemonSets are system components (CNI, CSI, observability, security agents) whose per-node overhead should not keep an otherwise-empty node above the scale-down utilization threshold. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)."` //nolint:lll
 	// SkipNodesWithLocalStorage controls whether the Cluster Autoscaler refuses to
 	// scale down a node that runs a pod with local storage (emptyDir, hostPath, or
 	// a local PersistentVolume). Upstream defaults to true (never remove such

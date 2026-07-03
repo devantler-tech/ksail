@@ -266,7 +266,7 @@ export interface KSailClusterConfiguration {
            */
           capacityBuffers?: boolean;
           /**
-           * Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization
+           * Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization, off by default). Enable this when DaemonSets are system components (CNI, CSI, observability, security agents) whose per-node overhead should not keep an otherwise-empty node above the scale-down utilization threshold. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true).
            */
           ignoreDaemonsetsUtilization?: boolean;
           /**
