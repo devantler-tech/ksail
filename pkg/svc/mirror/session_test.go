@@ -170,6 +170,40 @@ func TestRunCaptureSession_CancelledContextIsCleanStop(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunCaptureSession_ExecFailureWithDoneContextIsSurfaced(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	executor := &stubExecutor{
+		stdout: nil,
+		stderr: "tcpdump: permission denied\n",
+		err:    errExecFailed,
+	}
+
+	err := mirror.RunCaptureSession(
+		ctx, newSessionClient(t), &rest.Config{}, newTapPoint(), 8080, &bytes.Buffer{},
+		mirror.WithCaptureExecutorFactory(stubFactory(executor, nil)),
+	)
+
+	require.ErrorIs(t, err, errExecFailed)
+	assert.Contains(t, err.Error(), "permission denied")
+}
+
+func TestRunCaptureSession_DeadlineExceededIsCleanStop(t *testing.T) {
+	t.Parallel()
+
+	executor := &stubExecutor{stdout: nil, stderr: "", err: context.DeadlineExceeded}
+
+	err := mirror.RunCaptureSession(
+		t.Context(), newSessionClient(t), &rest.Config{}, newTapPoint(), 8080, &bytes.Buffer{},
+		mirror.WithCaptureExecutorFactory(stubFactory(executor, nil)),
+	)
+
+	require.NoError(t, err)
+}
+
 func TestRunCaptureSession_Guards(t *testing.T) {
 	t.Parallel()
 
@@ -179,6 +213,11 @@ func TestRunCaptureSession_Guards(t *testing.T) {
 		t.Context(), client, &rest.Config{}, nil, 8080, &bytes.Buffer{},
 	)
 	require.ErrorIs(t, err, mirror.ErrTapPointNil)
+
+	err = mirror.RunCaptureSession(
+		t.Context(), nil, &rest.Config{}, newTapPoint(), 8080, &bytes.Buffer{},
+	)
+	require.ErrorIs(t, err, mirror.ErrCaptureClientNil)
 
 	err = mirror.RunCaptureSession(
 		t.Context(), client, nil, newTapPoint(), 8080, &bytes.Buffer{},

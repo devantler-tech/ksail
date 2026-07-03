@@ -20,6 +20,10 @@ import (
 // destination writer.
 var ErrCaptureWriterNil = errors.New("capture writer is nil")
 
+// ErrCaptureClientNil is returned when RunCaptureSession is called with a nil
+// Kubernetes client.
+var ErrCaptureClientNil = errors.New("capture client is nil")
+
 // ErrCaptureRESTConfigNil is returned when RunCaptureSession is called with a
 // nil REST config.
 var ErrCaptureRESTConfigNil = errors.New("capture rest config is nil")
@@ -91,6 +95,10 @@ func RunCaptureSession(
 		return ErrTapPointNil
 	}
 
+	if client == nil {
+		return ErrCaptureClientNil
+	}
+
 	if config == nil {
 		return ErrCaptureRESTConfigNil
 	}
@@ -127,23 +135,23 @@ func streamCapture(ctx context.Context, executor CaptureExecutor, out io.Writer)
 		Stdout: out,
 		Stderr: &stderr,
 	})
-
-	select {
-	case <-ctx.Done():
+	if streamErr == nil {
 		return nil
-	default:
 	}
 
-	if streamErr != nil {
-		remote := strings.TrimSpace(stderr.String())
-		if remote != "" {
-			return fmt.Errorf("capture stream: %w (remote stderr: %s)", streamErr, remote)
-		}
-
-		return fmt.Errorf("capture stream: %w", streamErr)
+	// StreamWithContext returns ctx.Err() verbatim when the context ends the
+	// stream, so only those two errors mark the intended stop — a real exec
+	// failure keeps its remote stderr even when ctx is already done.
+	if errors.Is(streamErr, context.Canceled) || errors.Is(streamErr, context.DeadlineExceeded) {
+		return nil
 	}
 
-	return nil
+	remote := strings.TrimSpace(stderr.String())
+	if remote != "" {
+		return fmt.Errorf("capture stream: %w (remote stderr: %s)", streamErr, remote)
+	}
+
+	return fmt.Errorf("capture stream: %w", streamErr)
 }
 
 // captureExecURL builds the exec-subresource URL that runs the capture
