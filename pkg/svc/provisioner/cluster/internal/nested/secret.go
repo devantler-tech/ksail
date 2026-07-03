@@ -24,21 +24,38 @@ func FetchKubeconfigSecret(
 	clientset kubernetes.Interface,
 	namespace, secretName, key string,
 ) ([]byte, error) {
+	raw, err := fetchSecretData(ctx, clientset, namespace, secretName, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(raw) == 0 {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	return raw, nil
+}
+
+// fetchSecretData is the single Get+NotFound+Data[key] step shared by
+// FetchKubeconfigSecret and WaitForKubeconfigSecret. A missing Secret or an
+// absent key yields (nil, nil) — the callers decide whether that means
+// "not ready" or "keep waiting"; any other API error is wrapped with the
+// Secret's coordinates.
+func fetchSecretData(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace, secretName, key string,
+) ([]byte, error) {
 	secret, err := clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		return nil, clustererr.ErrKubeconfigNotReady
+		return nil, nil
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("get kubeconfig secret %s/%s: %w", namespace, secretName, err)
 	}
 
-	raw := secret.Data[key]
-	if len(raw) == 0 {
-		return nil, clustererr.ErrKubeconfigNotReady
-	}
-
-	return raw, nil
+	return secret.Data[key], nil
 }
 
 // NamespaceExists reports whether namespace exists on the host cluster. A
@@ -82,19 +99,12 @@ func WaitForKubeconfigSecret(
 	err := wait.PollUntilContextTimeout(
 		ctx, interval, timeout, true,
 		func(ctx context.Context) (bool, error) {
-			secret, err := clientset.CoreV1().Secrets(namespace).Get(
-				ctx, secretName, metav1.GetOptions{},
-			)
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
+			data, err := fetchSecretData(ctx, clientset, namespace, secretName, key)
 			if err != nil {
-				return false, fmt.Errorf("get kubeconfig secret: %w", err)
+				return false, err
 			}
 
-			data, ok := secret.Data[key]
-			if !ok || len(data) == 0 {
+			if len(data) == 0 {
 				return false, nil
 			}
 
