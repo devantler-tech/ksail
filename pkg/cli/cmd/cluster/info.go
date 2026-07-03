@@ -216,10 +216,10 @@ func getProviderStatus(
 		return getHetznerProviderStatus(cmd.Context(), clusterName)
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
-	case v1alpha1.ProviderAWS:
-		// AWS/EKS status is derived from the EKS API through the provisioner,
-		// not from local container inspection. Return a minimal stub so callers
-		// that rely on this helper do not fail for EKS.
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP:
+		// AWS/EKS and GCP/GKE status is derived from the cloud API through the
+		// provisioner, not from local container inspection. Return a minimal
+		// stub so callers that rely on this helper do not fail for them.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider status is a stub: full pod/namespace status inspection

@@ -16,10 +16,12 @@
 // This package is the K3s × Hetzner provisioner tracked by
 // devantler-tech/ksail#5512 (epic #3983). The K3s × Hetzner distribution/provider
 // combination stays unselectable until the validation flip (#5514), so the
-// factory wiring exists but the path is gated. Live bring-up — actual server
-// creation (which needs the boot-image resolution), the runtime join sequencing
-// that depends on the first server's private address, and pulling the generated
-// kubeconfig off a node — lands with the Hetzner system-test lane (#5515 / #4972);
-// [Provisioner.Create] composes the per-node user_data and prepares the
-// infrastructure up to that boundary.
+// factory wiring exists but the path is gated. The shared create flow
+// ([Provisioner.Create] via hetznerbase) runs the live bring-up — server
+// creation, kubeconfig retrieval, endpoint rewrite, and persistence — once
+// composePlan returns a complete bring-up plan; deriving that plan (boot-image
+// resolution, the bootstrap keypair, pinned host keys) is tracked by #5726, and
+// the live E2E validation stays with the Hetzner system-test lane (#5515 /
+// #4972). Until then [Provisioner.Create] composes the per-node user_data and
+// prepares the infrastructure up to that boundary.
 package k3shetzner

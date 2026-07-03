@@ -90,6 +90,13 @@ func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 			errorIs:            clusterprovisioner.ErrMissingDistributionConfig,
 		},
 		{
+			name:               "gke without config returns error",
+			distribution:       v1alpha1.DistributionGKE,
+			distributionConfig: &clusterprovisioner.DistributionConfig{},
+			expectError:        true,
+			errorIs:            clusterprovisioner.ErrMissingDistributionConfig,
+		},
+		{
 			name:         "unsupported distribution returns error",
 			distribution: v1alpha1.Distribution("unknown"),
 			distributionConfig: &clusterprovisioner.DistributionConfig{

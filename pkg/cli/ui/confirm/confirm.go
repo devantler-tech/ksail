@@ -118,6 +118,10 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		// eksctl owns the underlying CloudFormation stacks so we only surface a
 		// human-readable placeholder rather than individual AWS resource names.
 		writeResourceList(&previewText, "EKS Resources:", preview.Servers)
+	case v1alpha1.ProviderGCP:
+		// The GKE API owns the managed control plane and node pools, so only a
+		// human-readable placeholder is surfaced rather than GCP resource names.
+		writeResourceList(&previewText, "GKE Resources:", preview.Servers)
 	case v1alpha1.ProviderKubernetes:
 		writeResourceList(&previewText, "Kubernetes Resources:", preview.Servers)
 	}

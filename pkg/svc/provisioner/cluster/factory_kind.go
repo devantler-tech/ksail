@@ -102,6 +102,7 @@ func createKubeadmHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, an
 
 	provisioner, err := kubeadmhetznerprovisioner.NewProvisioner(
 		cluster.Name,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
 		kubeadmInstallVersion(),
 		controlPlanes,
 		int(cluster.Spec.Cluster.Workers),

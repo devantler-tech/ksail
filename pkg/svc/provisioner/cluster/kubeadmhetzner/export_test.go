@@ -27,7 +27,10 @@ func NewProvisionerForTest(
 			ClusterName:   clusterName,
 			ControlPlanes: controlPlanes,
 			Agents:        agents,
-			LogWriter:     logWriter,
+			// A non-empty destination satisfies RunCreate's fail-fast guard; the
+			// gated composePlan stops before anything is persisted there.
+			KubeconfigPath: "test-kubeconfig",
+			LogWriter:      logWriter,
 		},
 		kubernetesVersion: kubernetesVersion,
 	}

@@ -425,6 +425,7 @@ func TestNewProvisionerMissingToken(t *testing.T) {
 
 	_, err := k3shetzner.NewProvisioner(
 		testClusterName,
+		"test-kubeconfig",
 		testVersion,
 		1,
 		0,
@@ -439,6 +440,7 @@ func TestNewProvisionerSucceeds(t *testing.T) {
 
 	prov, err := k3shetzner.NewProvisioner(
 		testClusterName,
+		"test-kubeconfig",
 		testVersion,
 		1,
 		0,

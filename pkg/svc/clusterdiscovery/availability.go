@@ -58,6 +58,14 @@ func (d *Discoverer) providerAvailability(
 		)
 	case v1alpha1.ProviderAWS:
 		return d.awsAvailability()
+	case v1alpha1.ProviderGCP:
+		// GCP discovery (credential probing + cluster listing) lands with
+		// ksail#5728 part 3; until then GCP is not offered for discovery.
+		return Availability{
+			Provider:  prov,
+			Available: false,
+			Reason:    "GCP discovery is not wired yet",
+		}
 	case v1alpha1.ProviderKubernetes:
 		return kubernetesAvailability()
 	default:

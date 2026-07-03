@@ -172,8 +172,8 @@ func serverWithPublicIPv4(host string) *hcloud.Server {
 }
 
 // kubeconfigHandler scripts a node whose kubeconfig appears after notReadyProbes
-// probes and then serves its content.
-func kubeconfigHandler(notReadyProbes int32) bringUpExecHandler {
+// probes and then serves content.
+func kubeconfigHandler(notReadyProbes int32, content string) bringUpExecHandler {
 	var probes atomic.Int32
 
 	return func(command string) (string, uint32) {
@@ -185,7 +185,7 @@ func kubeconfigHandler(notReadyProbes int32) bringUpExecHandler {
 
 			return "", 0
 		case testReadCommand:
-			return testKubeconfig, 0
+			return content, 0
 		default:
 			return "", errExitUnknownProbe
 		}
@@ -214,7 +214,7 @@ func TestBringUpNodeRetrievesKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 
 	host, port, hostKey := startBringUpSSHServer(
-		t, pair.Signer.PublicKey(), kubeconfigHandler(2),
+		t, pair.Signer.PublicKey(), kubeconfigHandler(2, testKubeconfig),
 	)
 
 	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host)}

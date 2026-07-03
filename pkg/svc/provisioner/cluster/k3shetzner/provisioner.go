@@ -25,13 +25,14 @@ type Provisioner struct {
 // Hetzner factory constructs its provider. version is the k3s release the nodes
 // install (INSTALL_K3S_VERSION form, e.g. "v1.36.1+k3s1"); controlPlanes and agents
 // are the node counts; clusterName is the default cluster name used when an
-// operation is called with an empty name.
+// operation is called with an empty name; kubeconfigPath is the local kubeconfig
+// file a successful bring-up merges the admin kubeconfig into.
 func NewProvisioner(
-	clusterName, version string,
+	clusterName, kubeconfigPath, version string,
 	controlPlanes, agents int,
 	opts v1alpha1.OptionsHetzner,
 ) (*Provisioner, error) {
-	base, err := hetznerbase.NewBase(clusterName, controlPlanes, agents, opts)
+	base, err := hetznerbase.NewBase(clusterName, kubeconfigPath, controlPlanes, agents, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create K3s × Hetzner base: %w", err)
 	}

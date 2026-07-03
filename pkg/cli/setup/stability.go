@@ -86,9 +86,9 @@ func apiServerStabilitySuccesses(dist v1alpha1.Distribution, prov v1alpha1.Provi
 		return apiServerStabilitySuccessesDefault
 	case v1alpha1.DistributionVCluster:
 		return apiServerStabilitySuccessesDefault
-	case v1alpha1.DistributionEKS:
-		// EKS control plane stability is managed by AWS; use the default
-		// conservative threshold.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// EKS and GKE control plane stability is managed by the cloud
+		// provider; use the default conservative threshold.
 		return apiServerStabilitySuccessesDefault
 	default:
 		return apiServerStabilitySuccessesDefault

@@ -75,20 +75,6 @@ func (p *Provisioner) buildNodeUserData(
 	return result, nil
 }
 
-// composeNodes composes the K3s per-node cloud-init user_data and returns the node
-// count, adapting buildNodeUserData to the shared create flow's composeNodes
-// callback ([hetznerbase.Base.RunCreate]). The single-control-plane path carries no
-// join server URL, and no SSH authorized key yet — the live bring-up composition
-// (#5515) generates the bootstrap keypair and threads its public half through here.
-func (p *Provisioner) composeNodes(clusterName, token string) (int, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, "", nil)
-	if err != nil {
-		return 0, err
-	}
-
-	return len(nodes), nil
-}
-
 // nodeType maps a k3s role to the Hetzner node-type label value: agents are
 // workers, every server role is a control plane.
 func nodeType(role k3sbootstrap.Role) string {

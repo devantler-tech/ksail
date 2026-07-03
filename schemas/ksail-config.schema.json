@@ -167,6 +167,27 @@
                   }
                 }
               }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "GKE"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "GCP"
+                    ]
+                  }
+                }
+              }
             }
           ],
           "properties": {
@@ -202,9 +223,10 @@
                 "Talos",
                 "VCluster",
                 "KWOK",
-                "EKS"
+                "EKS",
+                "GKE"
               ],
-              "description": "Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),\nK3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS)."
+              "description": "Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),\nK3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud)."
             },
             "provider": {
               "type": "string",
@@ -213,9 +235,10 @@
                 "Hetzner",
                 "Omni",
                 "AWS",
+                "GCP",
                 "Kubernetes"
               ],
-              "description": "Provider selects the infrastructure that runs the cluster nodes: Docker,\nHetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing\ncluster). Each distribution supports a subset of providers; when empty,\nKSail uses the distribution's default provider."
+              "description": "Provider selects the infrastructure that runs the cluster nodes: Docker,\nHetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing\ncluster). Each distribution supports a subset of providers; when empty,\nKSail uses the distribution's default provider."
             },
             "cni": {
               "type": "string",
@@ -863,6 +886,21 @@
               "type": "object",
               "description": "AWS holds options for the AWS provider used by the EKS distribution."
             },
+            "gcp": {
+              "properties": {
+                "projectEnvVar": {
+                  "type": "string",
+                  "description": "ProjectEnvVar is the environment variable containing the Google Cloud project ID.\nDefaults to \"GOOGLE_CLOUD_PROJECT\"."
+                },
+                "locationEnvVar": {
+                  "type": "string",
+                  "description": "LocationEnvVar is the environment variable containing the GKE location (zone or region).\nDefaults to \"GOOGLE_CLOUD_LOCATION\"."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "GCP holds options for the Google Cloud provider used by the GKE distribution."
+            },
             "kubernetes": {
               "properties": {
                 "kubeconfig": {
@@ -920,7 +958,7 @@
           },
           "additionalProperties": false,
           "type": "object",
-          "description": "Provider holds infrastructure-provider-specific options\n(Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters)."
+          "description": "Provider holds infrastructure-provider-specific options\n(Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters)."
         },
         "workload": {
           "properties": {

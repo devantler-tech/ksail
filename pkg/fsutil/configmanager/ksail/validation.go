@@ -81,9 +81,10 @@ func (m *ConfigManager) createDistributionValidator() (*ksailvalidator.Validator
 		return m.createVClusterValidator()
 	case v1alpha1.DistributionKWOK:
 		return m.createKWOKValidator()
-	case v1alpha1.DistributionEKS:
-		// EKS does not yet participate in declarative config validation; the
-		// eks.yaml is validated by the EKS provisioner.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// EKS and GKE do not yet participate in declarative config validation;
+		// eks.yaml is validated by the EKS provisioner and gke.yaml by the
+		// proto parse in cacheGKEConfig.
 		return ksailvalidator.NewValidator(), nil
 	default:
 		return ksailvalidator.NewValidator(), nil
@@ -186,6 +187,8 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "kwok"
 	case v1alpha1.DistributionEKS:
 		return "eks.yaml"
+	case v1alpha1.DistributionGKE:
+		return "gke.yaml"
 	default:
 		return ""
 	}
@@ -199,6 +202,7 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE,
 	}
 
 	for _, d := range allDefaults {

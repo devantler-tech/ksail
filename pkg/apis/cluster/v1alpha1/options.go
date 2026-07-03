@@ -381,6 +381,20 @@ type OptionsAWS struct {
 	SessionTokenEnvVar string `default:"AWS_SESSION_TOKEN" json:"sessionTokenEnvVar,omitzero"`
 }
 
+// OptionsGCP defines options specific to the Google Cloud provider used by the
+// GKE distribution. Credentials are resolved via Application Default
+// Credentials (GOOGLE_APPLICATION_CREDENTIALS / gcloud ADC); the *EnvVar fields
+// let users point KSail at non-standard environment variable names (mirrors
+// the AWS/Hetzner/Omni pattern).
+type OptionsGCP struct {
+	// ProjectEnvVar is the environment variable containing the Google Cloud project ID.
+	// Defaults to "GOOGLE_CLOUD_PROJECT".
+	ProjectEnvVar string `default:"GOOGLE_CLOUD_PROJECT" json:"projectEnvVar,omitzero"`
+	// LocationEnvVar is the environment variable containing the GKE location (zone or region).
+	// Defaults to "GOOGLE_CLOUD_LOCATION".
+	LocationEnvVar string `default:"GOOGLE_CLOUD_LOCATION" json:"locationEnvVar,omitzero"`
+}
+
 // OptionsKubernetes defines options specific to the Kubernetes provider.
 // The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster.
 // It uses Gateway API (TCPRoute) to expose the nested cluster's API server.

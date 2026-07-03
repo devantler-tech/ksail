@@ -124,7 +124,11 @@ func TestGeneratedSchema(t *testing.T) {
 		cluster := mustNestedProp(t, schema, specKey, clusterKey)
 		dist := mustMap(t, cluster["properties"], "cluster.properties")
 		distProp := mustMap(t, dist["distribution"], "distribution")
-		assertEnum(t, distProp, []string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS"})
+		assertEnum(
+			t,
+			distProp,
+			[]string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS", "GKE"},
+		)
 	})
 
 	t.Run("provider enum", func(t *testing.T) {
@@ -133,7 +137,7 @@ func TestGeneratedSchema(t *testing.T) {
 		cluster := mustNestedProp(t, schema, specKey, clusterKey)
 		props := mustMap(t, cluster["properties"], "cluster.properties")
 		prov := mustMap(t, props["provider"], "provider")
-		assertEnum(t, prov, []string{"Docker", "Hetzner", "Omni", "AWS", "Kubernetes"})
+		assertEnum(t, prov, []string{"Docker", "Hetzner", "Omni", "AWS", "GCP", "Kubernetes"})
 	})
 
 	testNoRequiredFields(t, schema)
@@ -232,7 +236,7 @@ func testDistributionProviderConstraints(t *testing.T, schema map[string]any) {
 			t.Fatalf("expected spec.cluster allOf to be an array, got %T", cluster["allOf"])
 		}
 
-		const wantBranches = 6
+		const wantBranches = 7
 		if len(allOf) != wantBranches {
 			t.Fatalf("spec.cluster allOf has %d branches, want %d", len(allOf), wantBranches)
 		}
@@ -240,6 +244,7 @@ func testDistributionProviderConstraints(t *testing.T, schema map[string]any) {
 		providersByDistribution := collectProviderConstraints(t, allOf)
 
 		assertEnum(t, providersByDistribution["EKS"], []string{"AWS"})
+		assertEnum(t, providersByDistribution["GKE"], []string{"GCP"})
 		assertEnum(
 			t,
 			providersByDistribution["Talos"],

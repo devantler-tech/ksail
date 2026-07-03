@@ -198,7 +198,8 @@ const distributionDetails = `See [Distributions](/concepts/#distributions) for d
 - ` + bt + `Talos` + bt + ` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
 - ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)
 - ` + bt + `KWOK` + bt + ` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)
-- ` + bt + `EKS` + bt + ` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the ` + bt + `eksctl` + bt + ` CLI on ` + bt + `PATH` + bt + `)`
+- ` + bt + `EKS` + bt + ` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the ` + bt + `eksctl` + bt + ` CLI on ` + bt + `PATH` + bt + `)
+- ` + bt + `GKE` + bt + ` – Google Kubernetes Engine via the native Go SDK (requires Google Cloud Application Default Credentials and a project via ` + bt + `GOOGLE_CLOUD_PROJECT` + bt + `)`
 
 // providerDetails provides prose after the provider enum list.
 const providerDetails = `See [Providers](/concepts/#providers) for more details.
@@ -207,9 +208,10 @@ const providerDetails = `See [Providers](/concepts/#providers) for more details.
 - ` + bt + `Hetzner` + bt + ` – Run nodes on Hetzner Cloud servers (requires ` + bt + `HCLOUD_TOKEN` + bt + `)
 - ` + bt + `Omni` + bt + ` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
 - ` + bt + `AWS` + bt + ` – Manage EKS clusters on Amazon Web Services (requires standard AWS SDK credentials)
+- ` + bt + `GCP` + bt + ` – Manage GKE clusters on Google Cloud (requires Application Default Credentials)
 
 > [!NOTE]
-> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution. The AWS provider is only supported with the ` + bt + `EKS` + bt + ` distribution.`
+> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution. The AWS provider is only supported with the ` + bt + `EKS` + bt + ` distribution, and the GCP provider only with the ` + bt + `GKE` + bt + ` distribution.`
 
 // configDistributionProse describes the distributionConfig field.
 const configDistributionProse = `#### distributionConfig
@@ -224,6 +226,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - ` + bt + `VCluster` + bt + ` → ` + bt + `vcluster.yaml` + bt + `
 - ` + bt + `KWOK` + bt + ` → ` + bt + `kwok/` + bt + ` (directory)
 - ` + bt + `EKS` + bt + ` → ` + bt + `eks.yaml` + bt + `
+- ` + bt + `GKE` + bt + ` → ` + bt + `gke.yaml` + bt + ` (optional – the GKE API owns the cluster shape)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.`
 
@@ -332,7 +335,7 @@ The Kubernetes version is set at the top level (` + bt + `spec.cluster.kubernete
 
 - ` + bt + `kubernetesVersion` + bt + ` – Pin the Kubernetes version (e.g. ` + bt + `v1.32.0` + bt + `). When unset, ` + bt + `cluster update` + bt + ` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned ` + bt + `talos.version` + bt + `
 
-**Provider options (` + bt + `spec.provider` + bt + `):** infrastructure provider options (Hetzner, Omni, AWS, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
+**Provider options (` + bt + `spec.provider` + bt + `):** infrastructure provider options (Hetzner, Omni, AWS, GCP, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
 
 **Autoscaler options (` + bt + `spec.cluster.autoscaler` + bt + `):** pod and node autoscaling options are documented in the generated [spec.cluster.autoscaler (AutoscalerConfig)](#specclusterautoscaler-autoscalerconfig) sections below.
 

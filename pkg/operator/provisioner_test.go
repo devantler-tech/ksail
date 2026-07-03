@@ -126,6 +126,23 @@ func TestBuildDistributionConfig_EKS(t *testing.T) {
 	assert.Equal(t, "eu-west-1", config.EKS.Region)
 }
 
+func TestBuildDistributionConfig_GKE(t *testing.T) {
+	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionGKE)
+	cluster.Spec.Provider.GCP.ProjectEnvVar = "KSAIL_TEST_GCP_PROJECT"
+	cluster.Spec.Provider.GCP.LocationEnvVar = "KSAIL_TEST_GCP_LOCATION"
+
+	t.Setenv("KSAIL_TEST_GCP_PROJECT", "my-project")
+	t.Setenv("KSAIL_TEST_GCP_LOCATION", "europe-north1")
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.GKE)
+	assert.Equal(t, "c1", config.GKE.Name)
+	assert.Equal(t, "my-project", config.GKE.Project)
+	assert.Equal(t, "europe-north1", config.GKE.Location)
+}
+
 func TestBuildDistributionConfig_Unsupported(t *testing.T) {
 	t.Parallel()
 
@@ -155,5 +172,12 @@ func TestResolveProvider(t *testing.T) {
 		t,
 		v1alpha1.ProviderAWS,
 		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionEKS)),
+	)
+
+	// GKE defaults to GCP, its only provider.
+	assert.Equal(
+		t,
+		v1alpha1.ProviderGCP,
+		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionGKE)),
 	)
 }

@@ -217,6 +217,10 @@ func (d *Discoverer) listProvider(
 		return d.listOmni(ctx)
 	case v1alpha1.ProviderAWS:
 		return d.listAWS(ctx)
+	case v1alpha1.ProviderGCP:
+		// GCP cluster listing lands with ksail#5728 part 3; until then GCP
+		// clusters are not discoverable.
+		return nil, fmt.Errorf("%w: %s", clustererr.ErrUnsupportedProvider, prov)
 	case v1alpha1.ProviderKubernetes:
 		return d.listKubernetes(ctx)
 	default:
@@ -317,6 +321,8 @@ func emptyDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{KWOK: &clusterprovisioner.KWOKConfig{}}
 	case v1alpha1.DistributionEKS:
 		return &clusterprovisioner.DistributionConfig{EKS: &clusterprovisioner.EKSConfig{}}
+	case v1alpha1.DistributionGKE:
+		return &clusterprovisioner.DistributionConfig{GKE: &clusterprovisioner.GKEConfig{}}
 	case v1alpha1.DistributionVanilla:
 		return &clusterprovisioner.DistributionConfig{Kind: &v1alpha4.Cluster{}}
 	default:

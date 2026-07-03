@@ -69,6 +69,8 @@ func skippedEnvVarNameFields() []string {
 		"Provider.AWS.RegionEnvVar",
 		"Provider.AWS.SecretAccessKeyEnvVar",
 		"Provider.AWS.SessionTokenEnvVar",
+		"Provider.GCP.LocationEnvVar",
+		"Provider.GCP.ProjectEnvVar",
 		"Provider.Hetzner.TokenEnvVar",
 		"Provider.Kubernetes.ContextEnvVar",
 		"Provider.Kubernetes.KubeconfigEnvVar",
