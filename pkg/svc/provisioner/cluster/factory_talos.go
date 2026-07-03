@@ -118,7 +118,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		clusterName = cluster.Name
 	}
 
-	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -148,6 +148,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
 			K8sProvider:      k8sProvider,
 			DynamicClient:    dynClient,
+			HostClientset:    hostClient,
 			RestConfig:       restConfig,
 			ClusterName:      clusterName,
 			Distribution:     string(cluster.Spec.Cluster.Distribution),
