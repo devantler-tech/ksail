@@ -1,7 +1,6 @@
 package kubeadmhetzner
 
 import (
-	"context"
 	"fmt"
 
 	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
@@ -14,20 +13,10 @@ import (
 // this file after first boot.
 const remoteKubeconfigPath = "/etc/kubernetes/admin.conf"
 
-// Create provisions a kubeadm cluster on Hetzner Cloud. It runs the shared Hetzner
-// create flow ([hetznerbase.Base.RunCreate]) — guard against an existing cluster,
-// reject multi-node topologies, ensure the shared infrastructure, compose the
-// bring-up plan, and run the live bring-up to a merged kubeconfig. Only the node
-// token (generateNodeToken) and the plan composition (composePlan) are
-// kubeadm-specific; they are handed to the shared flow.
-func (p *Provisioner) Create(ctx context.Context, name string) error {
-	err := p.RunCreate(ctx, name, p.composePlan, generateNodeToken)
-	if err != nil {
-		return fmt.Errorf("provision Vanilla × Hetzner cluster: %w", err)
-	}
-
-	return nil
-}
+// The kubeadm create flow is [hetznerbase.Base.Create], inherited by embedding
+// *Base; NewProvisioner registers this Provisioner as the base's
+// [hetznerbase.CreateStrategy] so the shared flow reaches the kubeadm-specific
+// pieces below.
 
 // buildNodes composes the ordered per-node cloud-init user_data for the cluster's
 // topology via [BuildNodeUserData]. In the current increment it is only reached for
@@ -60,44 +49,39 @@ func (p *Provisioner) buildNodes(
 	return nodes, nil
 }
 
-// composePlan composes the kubeadm per-node cloud-init user_data into the shared
-// create flow's bring-up plan ([hetznerbase.Base.RunCreate]): it mints the
-// per-cluster bootstrap material ([hetznerbase.GenerateBootstrapMaterial] — the
-// bootstrap client keypair plus the pinned host identity), threads it into every
-// node's cloud-init document, derives the live server specs
-// ([hetznerbase.DeriveServerSpecs]), and returns the complete plan the live
-// bring-up runs from.
-func (p *Provisioner) composePlan(
+// ComposeNodes threads the minted bootstrap material into the kubeadm per-node
+// cloud-init user_data and projects it onto the shared [hetznerbase.NodeSpec]
+// the bring-up plan derives server specs from.
+func (p *Provisioner) ComposeNodes(
 	clusterName, token string,
-	infra hetznerbase.ResolvedInfra,
-) (hetznerbase.BringUpPlan, error) {
-	plan, err := hetznerbase.ComposePlan(
-		clusterName, p.Opts, infra, remoteKubeconfigPath,
-		func(material hetznerbase.BootstrapMaterial) ([]hetznerbase.NodeSpec, error) {
-			nodes, err := p.buildNodes(
-				clusterName, token,
-				[]string{material.AuthorizedKey}, material.HostKeys,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			specs := make([]hetznerbase.NodeSpec, len(nodes))
-			for i, node := range nodes {
-				specs[i] = hetznerbase.NodeSpec{
-					Index:    node.Index,
-					NodeType: nodeType(node.Role),
-					UserData: node.UserData,
-					Labels:   node.Labels,
-				}
-			}
-
-			return specs, nil
-		},
+	material hetznerbase.BootstrapMaterial,
+) ([]hetznerbase.NodeSpec, error) {
+	nodes, err := p.buildNodes(
+		clusterName, token,
+		[]string{material.AuthorizedKey}, material.HostKeys,
 	)
 	if err != nil {
-		return hetznerbase.BringUpPlan{}, fmt.Errorf("compose kubeadm bring-up plan: %w", err)
+		return nil, err
 	}
 
-	return plan, nil
+	return hetznerbase.NodeSpecsFrom(nodes, func(node NodeUserData) hetznerbase.NodeSpec {
+		return hetznerbase.NodeSpec{
+			Index:    node.Index,
+			NodeType: nodeType(node.Role),
+			UserData: node.UserData,
+			Labels:   node.Labels,
+		}
+	}), nil
 }
+
+// RemoteKubeconfigPath reports where kubeadm writes the admin kubeconfig,
+// satisfying [hetznerbase.CreateStrategy].
+func (p *Provisioner) RemoteKubeconfigPath() string { return remoteKubeconfigPath }
+
+// DistroLabel labels the Vanilla × Hetzner distribution for the create flow's
+// error context, satisfying [hetznerbase.CreateStrategy].
+func (p *Provisioner) DistroLabel() string { return "Vanilla × Hetzner" }
+
+// GenerateToken produces the cluster's shared kubeadm join token, satisfying
+// [hetznerbase.CreateStrategy].
+func (p *Provisioner) GenerateToken() (string, error) { return generateNodeToken() }

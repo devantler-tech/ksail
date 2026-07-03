@@ -34,7 +34,7 @@ func NewProvisionerForTest(
 	opts v1alpha1.OptionsHetzner,
 	logWriter io.Writer,
 ) *Provisioner {
-	return &Provisioner{
+	provisioner := &Provisioner{
 		Base: &hetznerbase.Base{
 			Infra:         infra,
 			Opts:          opts,
@@ -50,6 +50,9 @@ func NewProvisionerForTest(
 		transport: transport,
 		version:   version,
 	}
+	provisioner.Strategy = provisioner
+
+	return provisioner
 }
 
 // BuildNodeUserData exposes buildNodeUserData to external tests as exported data.
@@ -76,14 +79,22 @@ func (p *Provisioner) BuildNodeUserData(
 	return out, nil
 }
 
-// ComposePlan exposes composePlan to external tests so the full plan
+// ComposePlan exposes the composed bring-up plan to external tests so the full
 // composition — bootstrap material, user_data threading, spec derivation — can
 // be asserted without a live bring-up.
 func (p *Provisioner) ComposePlan(
 	clusterName, token string,
 	infra hetznerbase.ResolvedInfra,
 ) (hetznerbase.BringUpPlan, error) {
-	return p.composePlan(clusterName, token, infra)
+	return hetznerbase.PlanComposer(
+		p.Opts,
+		remoteKubeconfigPath,
+		p.ComposeNodes,
+	)(
+		clusterName,
+		token,
+		infra,
+	)
 }
 
 // GenerateNodeToken exposes generateNodeToken to external tests.

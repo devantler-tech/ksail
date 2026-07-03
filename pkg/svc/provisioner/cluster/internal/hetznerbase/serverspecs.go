@@ -32,6 +32,21 @@ type NodeSpec struct {
 	Labels map[string]string
 }
 
+// NodeSpecsFrom maps a distro's per-node build output to the shared
+// []NodeSpec the bring-up plan derives server specs from, applying toSpec to
+// each node in order. It exists so each provisioner's composeNodes callback
+// need not re-write the make-and-loop boilerplate — only the per-node field
+// projection (toSpec), which differs by the distro's node type, lives at the
+// call site.
+func NodeSpecsFrom[Node any](nodes []Node, toSpec func(Node) NodeSpec) []NodeSpec {
+	specs := make([]NodeSpec, len(nodes))
+	for index, node := range nodes {
+		specs[index] = toSpec(node)
+	}
+
+	return specs
+}
+
 // DeriveServerSpecs turns the per-node cloud-init user_data a provisioner
 // composed into the ordered [hetzner.CreateServerOpts] fed to the Hetzner
 // server-creation API — the composition step between "what to run on each

@@ -16,9 +16,10 @@
 // This package is the K3s × Hetzner provisioner tracked by
 // devantler-tech/ksail#5512 (epic #3983). The shared create flow
 // ([Provisioner.Create] via hetznerbase) runs the live bring-up end to end:
-// composePlan mints the bootstrap material (client keypair plus pinned host
-// identity), threads it into every node's cloud-init document, and derives the
-// live server specs; the flow then creates the server, retrieves the admin
-// kubeconfig, rewrites its endpoint, and persists it. The live E2E validation
-// stays with the Hetzner system-test lane (#5515 / #4972).
+// it mints the bootstrap material (client keypair plus pinned host identity),
+// threads it — via this package's composeNodes callback — into every node's
+// cloud-init document, and derives the live server specs; the flow then creates
+// the server, retrieves the admin kubeconfig, rewrites its endpoint, and
+// persists it. The live E2E validation stays with the Hetzner system-test lane
+// (#5515 / #4972).
 package k3shetzner

@@ -38,13 +38,17 @@ func NewProvisioner(
 	controlPlanes, agents int,
 	opts v1alpha1.OptionsHetzner,
 ) (*Provisioner, error) {
+	provisioner := &Provisioner{
+		kubernetesVersion: kubernetesVersion,
+	}
+
 	base, err := hetznerbase.NewBase(clusterName, kubeconfigPath, controlPlanes, agents, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create kubeadm × Hetzner base: %w", err)
 	}
 
-	return &Provisioner{
-		Base:              base,
-		kubernetesVersion: kubernetesVersion,
-	}, nil
+	provisioner.Base = base
+	base.Strategy = provisioner
+
+	return provisioner, nil
 }

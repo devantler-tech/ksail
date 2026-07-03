@@ -57,39 +57,39 @@ func GenerateBootstrapMaterial() (BootstrapMaterial, error) {
 	}, nil
 }
 
-// ComposePlan runs the plan composition shared by the provisioners'
-// composePlan callbacks: mint the per-cluster bootstrap material, hand it to
-// the distro-specific composeNodes (which threads it into every node's
-// cloud-init document and returns the per-node [NodeSpec]s), derive the live
-// server specs ([DeriveServerSpecs]), and assemble the [BringUpPlan] the live
-// bring-up runs from. Only the user_data composition differs between distros;
-// everything else lives here once.
-func ComposePlan(
-	clusterName string,
+// PlanComposer builds the composePlan callback [Base.RunCreate] takes from the
+// one piece that differs between the distros — composeNodes, which threads the
+// minted bootstrap material into every node's cloud-init document and returns
+// the per-node [NodeSpec]s. The shared composition lives here once so no
+// provisioner re-writes the wrapper: mint the per-cluster bootstrap material,
+// compose the nodes, derive the live server specs ([DeriveServerSpecs]), and
+// assemble the [BringUpPlan] the live bring-up runs from.
+func PlanComposer(
 	opts v1alpha1.OptionsHetzner,
-	infra ResolvedInfra,
 	remoteKubeconfigPath string,
-	composeNodes func(material BootstrapMaterial) ([]NodeSpec, error),
-) (BringUpPlan, error) {
-	material, err := GenerateBootstrapMaterial()
-	if err != nil {
-		return BringUpPlan{}, fmt.Errorf("generate bootstrap material: %w", err)
-	}
+	composeNodes func(clusterName, token string, material BootstrapMaterial) ([]NodeSpec, error),
+) func(clusterName, token string, infra ResolvedInfra) (BringUpPlan, error) {
+	return func(clusterName, token string, infra ResolvedInfra) (BringUpPlan, error) {
+		material, err := GenerateBootstrapMaterial()
+		if err != nil {
+			return BringUpPlan{}, fmt.Errorf("generate bootstrap material: %w", err)
+		}
 
-	nodes, err := composeNodes(material)
-	if err != nil {
-		return BringUpPlan{}, err
-	}
+		nodes, err := composeNodes(clusterName, token, material)
+		if err != nil {
+			return BringUpPlan{}, err
+		}
 
-	specs, err := DeriveServerSpecs(clusterName, nodes, opts, infra)
-	if err != nil {
-		return BringUpPlan{}, err
-	}
+		specs, err := DeriveServerSpecs(clusterName, nodes, opts, infra)
+		if err != nil {
+			return BringUpPlan{}, err
+		}
 
-	return BringUpPlan{
-		Specs:                specs,
-		Signer:               material.Signer,
-		HostKeyCallback:      material.HostKeyCallback,
-		RemoteKubeconfigPath: remoteKubeconfigPath,
-	}, nil
+		return BringUpPlan{
+			Specs:                specs,
+			Signer:               material.Signer,
+			HostKeyCallback:      material.HostKeyCallback,
+			RemoteKubeconfigPath: remoteKubeconfigPath,
+		}, nil
+	}
 }
