@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,4 +93,44 @@ func TestSetDockerHost_SetsAndRestores(t *testing.T) {
 
 	restore()
 	assert.Equal(t, sentinel, os.Getenv("DOCKER_HOST"))
+}
+
+func TestFetchKubeconfigSecret_NotFoundIsNotReady(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+
+	_, err := nested.FetchKubeconfigSecret(
+		context.Background(), clientset, "k3k-demo", "k3k-demo-kubeconfig", "kubeconfig.yaml",
+	)
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
+}
+
+func TestFetchKubeconfigSecret_EmptyKeyIsNotReady(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "k3k-demo-kubeconfig", Namespace: "k3k-demo"},
+		Data:       map[string][]byte{"other": []byte("x")},
+	})
+
+	_, err := nested.FetchKubeconfigSecret(
+		context.Background(), clientset, "k3k-demo", "k3k-demo-kubeconfig", "kubeconfig.yaml",
+	)
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
+}
+
+func TestFetchKubeconfigSecret_ReturnsData(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "vc-demo", Namespace: "vcluster-demo"},
+		Data:       map[string][]byte{"config": []byte("kubeconfig-bytes")},
+	})
+
+	raw, err := nested.FetchKubeconfigSecret(
+		context.Background(), clientset, "vcluster-demo", "vc-demo", "config",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("kubeconfig-bytes"), raw)
 }

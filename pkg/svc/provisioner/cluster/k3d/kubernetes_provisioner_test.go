@@ -7,13 +7,20 @@ import (
 	"time"
 
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/clientcmd"
 )
+
+// The k3k provisioner must satisfy the operator's Connector capability so component installs
+// run against k3k-provisioned K3s children (#5732).
+var _ clusterprovisioner.Connector = (*k3dprovisioner.K3kProvisioner)(nil)
 
 func TestBuildClusterCR_ServerArgs(t *testing.T) {
 	t.Parallel()
@@ -109,6 +116,146 @@ func TestBuildClusterCR_Version(t *testing.T) {
 
 		assert.Empty(t, cluster.Spec.Version)
 	})
+}
+
+func TestConnectionFor(t *testing.T) {
+	t.Parallel()
+
+	conn := k3dprovisioner.ConnectionFor("nested-k3s")
+
+	assert.Equal(t, "k3k-nested-k3s", conn.Namespace)
+	assert.Equal(t, "k3k-nested-k3s-kubeconfig", conn.SecretName)
+	assert.Equal(t, "https://k3k-nested-k3s-service.k3k-nested-k3s:443", conn.Endpoint)
+}
+
+// k3kPublishedKubeconfig is a minimal valid kubeconfig as the k3k operator publishes it — the
+// server points at the CR's first TLS SAN (127.0.0.1), unreachable from an operator pod.
+const k3kPublishedKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: default
+contexts:
+- context:
+    cluster: default
+    user: default
+  name: default
+current-context: default
+users:
+- name: default
+  user: {}
+`
+
+func newK3kProvisionerWithClientset(
+	t *testing.T, clientset *k8sfake.Clientset,
+) *k3dprovisioner.K3kProvisioner {
+	t.Helper()
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	return provisioner
+}
+
+func TestKubeconfig_NotReadyWhileSecretUnpublished(t *testing.T) {
+	t.Parallel()
+
+	provisioner := newK3kProvisionerWithClientset(t, k8sfake.NewClientset())
+
+	_, err := provisioner.Kubeconfig(context.Background(), "")
+
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
+}
+
+func TestKubeconfig_NotReadyWhileSecretKeyEmpty(t *testing.T) {
+	t.Parallel()
+
+	conn := k3dprovisioner.ConnectionFor("nested-k3s")
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
+	})
+	provisioner := newK3kProvisionerWithClientset(t, clientset)
+
+	_, err := provisioner.Kubeconfig(context.Background(), "")
+
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
+}
+
+func TestKubeconfig_RewritesServerToInClusterServiceEndpoint(t *testing.T) {
+	t.Parallel()
+
+	conn := k3dprovisioner.ConnectionFor("nested-k3s")
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
+		Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+	})
+	provisioner := newK3kProvisionerWithClientset(t, clientset)
+
+	out, err := provisioner.Kubeconfig(context.Background(), "")
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(out)
+	require.NoError(t, err)
+	require.NotEmpty(t, config.Clusters)
+
+	for _, cluster := range config.Clusters {
+		assert.Equal(t, conn.Endpoint, cluster.Server)
+	}
+}
+
+func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {
+	t.Parallel()
+
+	conn := k3dprovisioner.ConnectionFor("from-arg")
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
+		Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+	})
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+	})
+	require.NoError(t, err)
+
+	out, err := provisioner.Kubeconfig(context.Background(), "from-arg")
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(out)
+	require.NoError(t, err)
+
+	for _, cluster := range config.Clusters {
+		assert.Equal(t, conn.Endpoint, cluster.Server)
+	}
+}
+
+func TestKubeconfig_ErrorsWithoutAnyName(t *testing.T) {
+	t.Parallel()
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: k8sfake.NewClientset(),
+	})
+	require.NoError(t, err)
+
+	_, err = provisioner.Kubeconfig(context.Background(), "")
+
+	require.ErrorIs(t, err, clustererr.ErrConfigNil)
+}
+
+func TestKubeconfig_ErrorsWithoutHostClientset(t *testing.T) {
+	t.Parallel()
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		ClusterName: "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	_, err = provisioner.Kubeconfig(context.Background(), "")
+
+	require.ErrorIs(t, err, clustererr.ErrConfigNil)
 }
 
 func TestFirstRunningPodName(t *testing.T) {
