@@ -99,6 +99,7 @@ Dev loop:
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
   logs        Print container logs
+  mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
   rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
@@ -3413,6 +3414,7 @@ Dev loop:
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
   logs        Print container logs
+  mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
   rollout     Manage the rollout of a resource
   watch       Watch for file changes and auto-apply workloads
@@ -3722,6 +3724,50 @@ Flags:
       --pod string         Filter flows by pod-name substring (source or destination)
       --protocol string    Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP)
       --server string      Hubble Relay address to query (default "localhost:4245")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/mirror - 1]
+Mirror a Deployment's inbound traffic to the local machine (read-only).
+
+Resolves the Deployment to a running pod, injects a read-only tap (an ephemeral
+container holding only CAP_NET_RAW), and streams a tcpdump pcap capture of the
+service port over the Kubernetes exec channel — no reverse tunnel, no traffic
+interception, the workload keeps serving untouched.
+
+The capture runs until interrupted (Ctrl-C). By default it is written to
+mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
+for piping into tshark/wireshark.
+
+Ephemeral containers cannot be removed, so an already-injected tap on the
+target pod is reused rather than treated as an error.
+
+Usage:
+  ksail workload mirror <deployment> [flags]
+
+Examples:
+  # Mirror the traffic your app receives on port 8080 into mirror.pcap
+  ksail workload mirror my-app --port 8080
+
+  # Mirror a specific container of a multi-container Deployment in a namespace
+  ksail workload mirror my-app -n prod -c api --port 8080
+
+  # Pipe the live capture straight into tshark
+  ksail workload mirror my-app --port 8080 --output - | tshark -r -
+
+Flags:
+  -c, --container string       Container whose traffic is mirrored (required when the Deployment has several)
+      --context string         Kubeconfig context of the target cluster
+  -h, --help                   help for mirror
+  -n, --namespace string       Namespace of the target Deployment (default "default")
+  -o, --output string          Destination pcap file, or '-' to stream the raw pcap to stdout (default "mirror.pcap")
+  -p, --port int               Service port to capture TCP traffic on (required)
+      --tap-image string       Image the injected tap container runs (default "docker.io/nicolaka/netshoot:v0.16")
+      --tap-timeout duration   How long to wait for the tap container to reach Running (default 1m0s)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"io"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -9,10 +10,13 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // Test exports for unexported workload helpers used by external-package tests.
@@ -368,4 +372,36 @@ func ExportSetFlowObserverFactory(factory func(string) hubble.FlowObserver) func
 	newFlowObserver = factory
 
 	return func() { newFlowObserver = original }
+}
+
+// ExportSetMirrorClients swaps the mirror command's client factory so tests
+// can inject a fake clientset and REST config without a live cluster. It
+// returns a restore function that reinstates the original factory.
+func ExportSetMirrorClients(
+	factory func(string, string) (kubernetes.Interface, *rest.Config, error),
+) func() {
+	original := newMirrorClients
+	newMirrorClients = factory
+
+	return func() { newMirrorClients = original }
+}
+
+// ExportSetRunCaptureSession swaps the mirror command's blocking capture call
+// so tests can substitute the exec-channel stream. It returns a restore
+// function that reinstates the original.
+func ExportSetRunCaptureSession(
+	session func(
+		ctx context.Context,
+		client kubernetes.Interface,
+		config *rest.Config,
+		point *mirror.TapPoint,
+		port int,
+		out io.Writer,
+		opts ...mirror.CaptureSessionOption,
+	) error,
+) func() {
+	original := runCaptureSession
+	runCaptureSession = session
+
+	return func() { runCaptureSession = original }
 }
