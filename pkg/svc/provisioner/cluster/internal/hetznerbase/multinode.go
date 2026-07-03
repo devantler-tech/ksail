@@ -72,22 +72,7 @@ func (b *Base) RunCreateMultiNode(
 ) error {
 	clusterName := b.ResolveName(name)
 
-	exists, err := b.Infra.NodesExist(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("check existing nodes: %w", err)
-	}
-
-	if exists {
-		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
-	}
-
-	// Fail before any paid resource exists when the retrieved kubeconfig would
-	// have nowhere to go.
-	if b.KubeconfigPath == "" {
-		return ErrMissingKubeconfigDestination
-	}
-
-	infra, err := b.EnsureInfrastructure(ctx, clusterName)
+	infra, err := b.guardCreate(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -115,7 +100,19 @@ func (b *Base) RunCreateMultiNode(
 		return err
 	}
 
-	return b.persistInitKubeconfig(ctx, clusterName, initResult)
+	endpoint, persistedPath, err := b.rewriteAndPersistKubeconfig(ctx, clusterName, initResult)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(
+		b.LogWriter,
+		"Cluster %q control plane is up at %s; joining nodes are registering; "+
+			"kubeconfig merged into %q\n",
+		clusterName, endpoint, persistedPath,
+	)
+
+	return nil
 }
 
 // bringUpInitControlPlane composes and brings up the cluster-initialising
@@ -187,39 +184,6 @@ func (b *Base) createJoiningNodes(
 			)
 		}
 	}
-
-	return nil
-}
-
-// persistInitKubeconfig rewrites the init control plane's kubeconfig endpoint to
-// its public IPv4 and merges it into the Base's kubeconfig destination, sharing
-// the single-node path's cleanup-on-failure semantics.
-func (b *Base) persistInitKubeconfig(
-	ctx context.Context,
-	clusterName string,
-	initResult BringUpResult,
-) error {
-	endpoint, err := apiServerEndpoint(initResult.Server)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	kubeconfig, err := rewriteKubeconfigEndpoint(initResult.Kubeconfig, endpoint)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	persistedPath, err := b.persistKubeconfig(kubeconfig)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	_, _ = fmt.Fprintf(
-		b.LogWriter,
-		"Cluster %q control plane is up at %s; joining nodes are registering; "+
-			"kubeconfig merged into %q\n",
-		clusterName, endpoint, persistedPath,
-	)
 
 	return nil
 }

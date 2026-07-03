@@ -358,15 +358,6 @@ func (b *Base) RunCreate(
 ) error {
 	clusterName := b.ResolveName(name)
 
-	exists, err := b.Infra.NodesExist(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("check existing nodes: %w", err)
-	}
-
-	if exists {
-		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
-	}
-
 	// RunCreate is the single-node engine; [Base.Create] routes multi-node
 	// topologies to [Base.RunCreateMultiNode] before reaching here, so these
 	// guards are a defensive backstop for a direct caller.
@@ -378,13 +369,7 @@ func (b *Base) RunCreate(
 		return ErrMultiNodeNotImplemented
 	}
 
-	// Fail before any paid resource exists when the retrieved kubeconfig would
-	// have nowhere to go.
-	if b.KubeconfigPath == "" {
-		return ErrMissingKubeconfigDestination
-	}
-
-	infra, err := b.EnsureInfrastructure(ctx, clusterName)
+	infra, err := b.guardCreate(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -446,6 +431,59 @@ func (b *Base) create(ctx context.Context, name string) error {
 	return b.RunCreate(ctx, name, composePlan, b.Strategy.GenerateToken)
 }
 
+// guardCreate checks a create flow's preconditions and ensures the shared
+// infrastructure, so the single-node ([Base.RunCreate]) and multi-node
+// ([Base.RunCreateMultiNode]) engines share one preamble: the cluster must not
+// already exist ([ErrClusterAlreadyExists]) and must have a kubeconfig
+// destination ([ErrMissingKubeconfigDestination], checked before any paid
+// resource exists), after which the network, firewall, placement group, and SSH
+// key are ensured ([Base.EnsureInfrastructure]).
+func (b *Base) guardCreate(ctx context.Context, clusterName string) (ResolvedInfra, error) {
+	exists, err := b.Infra.NodesExist(ctx, clusterName)
+	if err != nil {
+		return ResolvedInfra{}, fmt.Errorf("check existing nodes: %w", err)
+	}
+
+	if exists {
+		return ResolvedInfra{}, fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
+	}
+
+	if b.KubeconfigPath == "" {
+		return ResolvedInfra{}, ErrMissingKubeconfigDestination
+	}
+
+	return b.EnsureInfrastructure(ctx, clusterName)
+}
+
+// rewriteAndPersistKubeconfig rewrites the retrieved kubeconfig's endpoint to the
+// created server's public IPv4 and merges it into the Base's kubeconfig
+// destination, returning the external endpoint and the persisted path. On any
+// failure it tears the cluster down (cleanup-on-failure) so a cluster whose
+// credentials cannot be written is not left running. It is shared by the
+// single-node and multi-node create flows.
+func (b *Base) rewriteAndPersistKubeconfig(
+	ctx context.Context,
+	clusterName string,
+	result BringUpResult,
+) (string, string, error) {
+	endpoint, err := apiServerEndpoint(result.Server)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	kubeconfig, err := rewriteKubeconfigEndpoint(result.Kubeconfig, endpoint)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	persistedPath, err := b.persistKubeconfig(kubeconfig)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	return endpoint, persistedPath, nil
+}
+
 // bringUpFromPlan runs the live half of the create flow from a composed plan:
 // bring the single node up, rewrite the retrieved kubeconfig's endpoint to the
 // node's public IPv4, and merge it into the Base's kubeconfig destination. The
@@ -474,19 +512,9 @@ func (b *Base) bringUpFromPlan(
 		return err
 	}
 
-	endpoint, err := apiServerEndpoint(result.Server)
+	endpoint, persistedPath, err := b.rewriteAndPersistKubeconfig(ctx, clusterName, result)
 	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	kubeconfig, err := rewriteKubeconfigEndpoint(result.Kubeconfig, endpoint)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	persistedPath, err := b.persistKubeconfig(kubeconfig)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
+		return err
 	}
 
 	_, _ = fmt.Fprintf(
