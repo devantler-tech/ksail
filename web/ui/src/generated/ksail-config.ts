@@ -513,7 +513,7 @@ export interface KSailClusterConfiguration {
          */
         placementGroupFallbackToNone?: boolean;
         /**
-         * Provision a Hetzner floating IP and render it as the stable Kubernetes/Talos API endpoint (endpoint + certificate SANs). Defaults to false. Node-side ownership handover (Talos VIP) must be provided as a machine-config patch until KSail generates it.
+         * Provision a Hetzner floating IP and render it as the stable Kubernetes/Talos API endpoint (endpoint + certificate SANs + a control-plane Talos VIP block for leader ownership handover; the hcloud API token is embedded in the control-plane machine config). Defaults to false.
          */
         floatingIPEnabled?: boolean;
         /**

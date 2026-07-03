@@ -5,11 +5,58 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
+
+// FetchKubeconfigSecret reads the kubeconfig bytes published under key in the named Secret once
+// (no polling — the Connector capability's read path). A not-yet-created Secret (NotFound) and an
+// empty/absent key value are reported as clustererr.ErrKubeconfigNotReady so operator callers can
+// retry; any other API error is wrapped with the Secret's coordinates.
+//
+// This is the shared fetch the K3d (k3k operator) and VCluster (vc-<name>) Connector
+// implementations use; the per-distribution secret name and data key are passed in by the caller.
+func FetchKubeconfigSecret(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace, secretName, key string,
+) ([]byte, error) {
+	raw, err := fetchSecretData(ctx, clientset, namespace, secretName, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(raw) == 0 {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	return raw, nil
+}
+
+// fetchSecretData is the single Get+NotFound+Data[key] step shared by
+// FetchKubeconfigSecret and WaitForKubeconfigSecret. A missing Secret or an
+// absent key yields (nil, nil) — the callers decide whether that means
+// "not ready" or "keep waiting"; any other API error is wrapped with the
+// Secret's coordinates.
+func fetchSecretData(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace, secretName, key string,
+) ([]byte, error) {
+	secret, err := clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get kubeconfig secret %s/%s: %w", namespace, secretName, err)
+	}
+
+	return secret.Data[key], nil
+}
 
 // NamespaceExists reports whether namespace exists on the host cluster. A
 // NotFound result is reported as (false, nil); any other API error is wrapped and
@@ -52,19 +99,12 @@ func WaitForKubeconfigSecret(
 	err := wait.PollUntilContextTimeout(
 		ctx, interval, timeout, true,
 		func(ctx context.Context) (bool, error) {
-			secret, err := clientset.CoreV1().Secrets(namespace).Get(
-				ctx, secretName, metav1.GetOptions{},
-			)
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
+			data, err := fetchSecretData(ctx, clientset, namespace, secretName, key)
 			if err != nil {
-				return false, fmt.Errorf("get kubeconfig secret: %w", err)
+				return false, err
 			}
 
-			data, ok := secret.Data[key]
-			if !ok || len(data) == 0 {
+			if len(data) == 0 {
 				return false, nil
 			}
 

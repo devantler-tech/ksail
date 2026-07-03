@@ -584,6 +584,65 @@ func TestConfigs_WithCertSANs(t *testing.T) {
 	})
 }
 
+func TestConfigs_WithHetznerVIP(t *testing.T) {
+	t.Parallel()
+
+	t.Run("renders the VIP block on control planes only and preserves PKI", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "vip-cluster", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		updated, err := configs.WithHetznerVIP("192.0.2.10", "test-token")
+		require.NoError(t, err)
+
+		devices := updated.ControlPlane().Machine().Network().Devices()
+		require.Len(t, devices, 1)
+		assert.Equal(t, "eth0", devices[0].Interface())
+		assert.True(t, devices[0].DHCP(), "declaring the interface must keep DHCP addressing")
+
+		vip := devices[0].VIPConfig()
+		require.NotNil(t, vip)
+		assert.Equal(t, "192.0.2.10", vip.IP())
+		require.NotNil(t, vip.HCloud())
+		assert.Equal(t, "test-token", vip.HCloud().APIToken())
+
+		// The patch is control-plane-scoped: workers carry no VIP interface.
+		assert.Empty(t, updated.Worker().Machine().Network().Devices())
+
+		// PKI must be preserved across regeneration.
+		assert.Equal(t,
+			configs.ControlPlane().Cluster().IssuingCA().Crt,
+			updated.ControlPlane().Cluster().IssuingCA().Crt,
+		)
+		assert.Equal(t, "vip-cluster", updated.GetClusterName())
+	})
+
+	t.Run("returns same config when vip is empty", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "vip-noop", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		same, err := configs.WithHetznerVIP("", "test-token")
+		require.NoError(t, err)
+		assert.Same(t, configs, same)
+	})
+
+	t.Run("errors when the token is empty", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "vip-no-token", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		_, err = configs.WithHetznerVIP("192.0.2.10", "")
+		require.ErrorIs(t, err, talos.ErrHetznerVIPTokenRequired)
+	})
+}
+
 func TestConfigs_ExtractSecrets(t *testing.T) {
 	t.Parallel()
 

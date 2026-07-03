@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -305,6 +306,54 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// Kubeconfig returns a kubeconfig for the named k3k cluster reachable from inside the host
+// cluster (where the operator runs), with the API server rewritten to the in-cluster k3k server
+// Service endpoint (https://k3k-<name>-service.k3k-<name>:443 — a DNS SAN on the served
+// certificate, see ConnectionFor). The rewrite is required because k3k substitutes the CR's first
+// TLS SAN (127.0.0.1 here) into the published kubeconfig's server URL, which is unreachable from
+// an operator pod. It satisfies the clusterprovisioner.Connector capability and returns
+// clustererr.ErrKubeconfigNotReady while the k3k-<name>-kubeconfig Secret has not been published
+// yet.
+func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	if clusterName == "" {
+		return nil, fmt.Errorf("%w: k3k cluster name not set", clustererr.ErrConfigNil)
+	}
+
+	if p.hostClientset == nil {
+		return nil, fmt.Errorf("%w: host clientset not set", clustererr.ErrConfigNil)
+	}
+
+	conn := ConnectionFor(clusterName)
+
+	raw, err := nested.FetchKubeconfigSecret(
+		ctx, p.hostClientset, conn.Namespace, conn.SecretName, k3kKubeconfigKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("k3k: %w", err)
+	}
+
+	config, err := clientcmd.Load(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse k3k kubeconfig: %w", err)
+	}
+
+	for _, cluster := range config.Clusters {
+		cluster.Server = conn.Endpoint
+	}
+
+	out, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("serialize k3k kubeconfig: %w", err)
+	}
+
+	return out, nil
 }
 
 // connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, rewrites the kubeconfig to
@@ -806,7 +855,7 @@ func (p *K3kProvisioner) waitForKubeconfigSecret(
 	clusterName, namespace string,
 ) ([]byte, error) {
 	// k3k names the kubeconfig secret as k3k-<clusterName>-kubeconfig
-	secretName := fmt.Sprintf("k3k-%s-%s", clusterName, k3kKubeconfigSecretSuffix)
+	secretName := ConnectionFor(clusterName).SecretName
 
 	//nolint:wrapcheck // helper already wraps with "wait for kubeconfig secret" context
 	return nested.WaitForKubeconfigSecret(
