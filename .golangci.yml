@@ -126,6 +126,8 @@ linters:
             - github.com/go-viper/mapstructure/v2
             - github.com/google/go-containerregistry
             - github.com/google/go-github
+            # gopacket/pcapgo is the pure-Go pcap reader for workload mirror capture sessions (#4521).
+            - github.com/gopacket/gopacket
             - github.com/hetznercloud
             - github.com/invopop/jsonschema
             - github.com/Masterminds/semver
