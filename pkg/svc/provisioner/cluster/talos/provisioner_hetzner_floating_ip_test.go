@@ -19,6 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Env-var NAMES the floating-IP tests use for the hcloud token lookup — names,
+// not credentials.
+const (
+	testFloatingIPTokenEnvVar      = "KSAIL_TEST_HCLOUD_TOKEN_FIP"       //nolint:gosec // env var name, not a credential
+	testFloatingIPTokenEnvVarUnset = "KSAIL_TEST_HCLOUD_TOKEN_FIP_UNSET" //nolint:gosec // env var name, not a credential
+)
+
 // TestApplyHetznerDefaults_FloatingIPLocation covers the FloatingIPLocation
 // default separately from TestApplyHetznerDefaults (same pattern as the
 // FallbackLocations test): the floating IP is homed in the cluster's location
@@ -161,14 +168,18 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "203.0.113.5", endpoint.Hostname())
 	assert.NotContains(t, configs.ControlPlane().Cluster().CertSANs(), "192.0.2.10")
+	assert.Empty(t, configs.ControlPlane().Machine().Network().Devices(),
+		"disabled floating IP must render no VIP interface block")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabled verifies the opt-in path:
 // the cluster's floating IP is attached to the first control-plane server and
 // rendered as the endpoint, with the floating IP and every control-plane node
-// IP in the certificate SAN set.
+// IP in the certificate SAN set, and a Talos VIP block on the control-plane
+// machine configs so the elected leader owns the address (no t.Parallel:
+// t.Setenv provides the hcloud token the VIP block embeds).
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
-	t.Parallel()
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
 
 	var assignCalls int32
 
@@ -181,6 +192,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
 		FloatingIPEnabled:  true,
 		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
 	})
 
 	err := provisioner.UpdateConfigsWithEndpointForTest(
@@ -207,6 +219,54 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	assert.Contains(t, sans, "192.0.2.10")
 	assert.Contains(t, sans, "203.0.113.5")
 	assert.Contains(t, sans, "203.0.113.6")
+
+	// Node-side ownership handover: the control-plane configs must carry the
+	// Talos VIP block for the floating IP, with hcloud API management.
+	devices := configs.ControlPlane().Machine().Network().Devices()
+	require.Len(t, devices, 1)
+	assert.Equal(t, "eth0", devices[0].Interface())
+
+	vip := devices[0].VIPConfig()
+	require.NotNil(t, vip)
+	assert.Equal(t, "192.0.2.10", vip.IP())
+	require.NotNil(t, vip.HCloud())
+	assert.Equal(t, "vip-test-token", vip.HCloud().APIToken())
+
+	// Workers claim nothing: the VIP patch is control-plane-scoped.
+	assert.Empty(t, configs.Worker().Machine().Network().Devices())
+}
+
+// TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the
+// enabled path fails loudly when the hcloud token env var is unset — the VIP
+// block cannot manage the floating IP without it — and fails FAST: the token
+// is validated before any hcloud call, so no floating IP is ensured or
+// attached on the way to the error.
+func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
+	t.Parallel()
+
+	var assignCalls int32
+
+	server := floatingIPEndpointTestServer(t, &assignCalls)
+	client := hcloud.NewClient(
+		hcloud.WithToken("test-token"),
+		hcloud.WithEndpoint(server.URL),
+	)
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVarUnset,
+	})
+
+	err := provisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(),
+		hetzner.NewProvider(client),
+		"fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&assignCalls),
+		"missing token must fail before any hcloud assign call")
 }
 
 // TestUpdateConfigsWithEndpoint_NoControlPlanes verifies the guard is
