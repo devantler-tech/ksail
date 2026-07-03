@@ -315,6 +315,10 @@ func TestBuildUserDataHostKeyErrors(t *testing.T) {
 			ED25519Private: "-----BEGIN\x00-----",
 			ED25519Public:  "ssh-ed25519 AAAA host",
 		},
+		"NUL in public": {
+			ED25519Private: private,
+			ED25519Public:  "ssh-ed25519 AAAA\x00host",
+		},
 	}
 
 	for name, hostKeys := range tests {
