@@ -54,14 +54,26 @@ func buildCELEngine(rulesPath string) (*celrules.Engine, error) {
 // are recorded in sink for reporting after the parallel progress group so they
 // do not interleave with its ANSI output. A nil engine (CEL disabled) is a
 // no-op. source names the origin (kustomization dir or file) for attribution.
+//
+// skipKinds names the Kubernetes kinds excluded from validation via
+// --skip-kinds / --skip-secrets (and the ksail.yaml equivalents). Documents
+// whose kind is in that set are skipped before CEL evaluation, so CEL honors the
+// same exclusions kubeconform does and a skipped Secret (or other kind) cannot
+// surface a CEL failure.
 func evaluateCELDocuments(
 	engine *celrules.Engine,
 	data []byte,
 	source string,
+	skipKinds []string,
 	sink *celViolationSink,
 ) error {
 	if engine == nil {
 		return nil
+	}
+
+	skip := make(map[string]struct{}, len(skipKinds))
+	for _, kind := range skipKinds {
+		skip[kind] = struct{}{}
 	}
 
 	var errViolations []string
@@ -70,6 +82,12 @@ func evaluateCELDocuments(
 		obj, ok := decodeDocumentObject(docBytes)
 		if !ok {
 			continue
+		}
+
+		if kind, _ := obj["kind"].(string); kind != "" {
+			if _, skipped := skip[kind]; skipped {
+				continue
+			}
 		}
 
 		for _, violation := range engine.Evaluate(obj) {

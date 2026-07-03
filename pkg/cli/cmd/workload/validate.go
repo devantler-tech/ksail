@@ -741,8 +741,10 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 		return fmt.Errorf("validate manifests: %w", err)
 	}
 
-	// Apply CEL rules to the same rendered/built manifests kubeconform validated.
-	err = evaluateCELDocuments(v.engine, data, kustDir, v.celSink)
+	// Apply CEL rules to the same rendered/built manifests kubeconform validated,
+	// honoring the same kind exclusions (--skip-kinds / --skip-secrets) so a
+	// skipped kind cannot surface a CEL failure.
+	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink)
 	if err != nil {
 		return err
 	}
@@ -865,8 +867,10 @@ func validateFileSilent(
 		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
 
-	// Apply CEL rules to the same content kubeconform validated.
-	err = evaluateCELDocuments(engine, expanded, filePath, celSink)
+	// Apply CEL rules to the same content kubeconform validated, honoring the same
+	// kind exclusions (--skip-kinds / --skip-secrets) so a skipped kind cannot
+	// surface a CEL failure.
+	err = evaluateCELDocuments(engine, expanded, filePath, opts.SkipKinds, celSink)
 	if err != nil {
 		return err
 	}

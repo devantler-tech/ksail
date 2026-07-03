@@ -26,6 +26,24 @@ data:
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "configmap.yaml"), []byte(content), 0o600))
 }
 
+// writeSecret writes a kubeconform-valid Secret in the given namespace into dir.
+// It is used to prove that a kind excluded from validation (Secrets via
+// --skip-secrets, or any kind via --skip-kinds) is not evaluated by CEL either.
+func writeSecret(t *testing.T, dir, namespace string) {
+	t.Helper()
+
+	content := `apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+  namespace: ` + namespace + `
+type: Opaque
+stringData:
+  key: value
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret.yaml"), []byte(content), 0o600))
+}
+
 // writeRulesFile writes a CEL rules file into its own temp directory (kept
 // outside any validated path so it is not itself picked up as a manifest) and
 // returns its path.
@@ -94,6 +112,95 @@ func TestValidateCELRulePasses(t *testing.T) {
 
 	_, err := runValidate(t, dir, "--rules", rules)
 	require.NoError(t, err, "a satisfied CEL rule should pass validation")
+}
+
+// TestValidateCELSkipsSecretByDefault proves a Secret — excluded from validation
+// by the default --skip-secrets — is not evaluated by CEL either, so a rule the
+// Secret would otherwise violate does not fail validation. Regression guard for
+// the CEL path ignoring --skip-secrets/--skip-kinds.
+func TestValidateCELSkipsSecretByDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// The Secret is in the "default" namespace, which the prod-namespace rule
+	// would flag — but --skip-secrets (default true) must exclude it from CEL too.
+	writeSecret(t, dir, "default")
+	rules := writeRulesFile(t, requireProdNamespaceRule)
+
+	_, err := runValidate(t, dir, "--rules", rules)
+	require.NoError(
+		t, err,
+		"a Secret skipped by --skip-secrets must not be evaluated by CEL",
+	)
+}
+
+// TestValidateCELEvaluatesSecretWhenNotSkipped is the paired positive case: with
+// --skip-secrets=false the same Secret IS evaluated, so the rule it violates
+// fails — proving the skip filter (not a blanket exclusion of Secrets) is what
+// governs CEL evaluation.
+func TestValidateCELEvaluatesSecretWhenNotSkipped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSecret(t, dir, "default")
+	rules := writeRulesFile(t, requireProdNamespaceRule)
+
+	_, err := runValidate(t, dir, "--skip-secrets=false", "--rules", rules)
+	require.Error(
+		t, err,
+		"with --skip-secrets=false the Secret must be evaluated by CEL and fail the rule",
+	)
+	require.ErrorContains(t, err, "require-prod-namespace", "the failure should name the rule")
+	require.ErrorContains(
+		t, err, "Secret/default/app-secret",
+		"the failure should be attributed to the Secret",
+	)
+}
+
+// TestValidateCELSkipsKind proves a kind excluded via --skip-kinds is not
+// evaluated by CEL, while a non-skipped resource in the same run still is.
+func TestValidateCELSkipsKind(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// The ConfigMap is skipped via --skip-kinds, so its prod-namespace violation
+	// must not surface.
+	writeConfigMap(t, dir, "default")
+	rules := writeRulesFile(t, requireProdNamespaceRule)
+
+	_, err := runValidate(t, dir, "--skip-kinds", "ConfigMap", "--rules", rules)
+	require.NoError(
+		t, err,
+		"a ConfigMap skipped by --skip-kinds must not be evaluated by CEL",
+	)
+}
+
+// TestValidateCELEvaluatesNonSkippedKindAlongsideSkipped proves the filter is
+// per-kind: a skipped ConfigMap passes while a non-skipped ConfigMap in a
+// different namespace still fails the same rule — i.e. skipping one kind does not
+// silence CEL for the resources that remain.
+func TestValidateCELEvaluatesNonSkippedKindAlongsideSkipped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSecret(t, dir, "default")    // skipped by default --skip-secrets
+	writeConfigMap(t, dir, "default") // NOT skipped — must still fail the rule
+	rules := writeRulesFile(t, requireProdNamespaceRule)
+
+	_, err := runValidate(t, dir, "--rules", rules)
+	require.Error(
+		t, err,
+		"the non-skipped ConfigMap must still be evaluated by CEL and fail",
+	)
+	require.ErrorContains(t, err, "require-prod-namespace", "the failure should name the rule")
+	require.ErrorContains(
+		t, err, "ConfigMap/default/app-config",
+		"the failure should be attributed to the non-skipped ConfigMap",
+	)
+	require.NotContains(
+		t, err.Error(), "Secret/default/app-secret",
+		"the skipped Secret must not appear in the CEL failure",
+	)
 }
 
 func TestValidateWithoutRulesUnchanged(t *testing.T) {
