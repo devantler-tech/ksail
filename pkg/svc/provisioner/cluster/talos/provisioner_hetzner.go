@@ -172,8 +172,9 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		// The VIP patch rendered below needs the hcloud token — validate it
 		// before ensureFloatingIPEndpoint mutates anything cloud-side, so a
 		// missing token fails fast with no floating IP ensured or attached.
-		if _, err := p.hetznerAPIToken(); err != nil {
-			return err
+		_, tokenErr := p.hetznerAPIToken()
+		if tokenErr != nil {
+			return tokenErr
 		}
 
 		floatingEndpoint, sans, err := p.ensureFloatingIPEndpoint(
