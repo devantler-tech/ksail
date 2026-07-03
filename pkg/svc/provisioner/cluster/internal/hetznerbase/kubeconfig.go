@@ -40,6 +40,13 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 		return nil, fmt.Errorf("parse retrieved kubeconfig: %w", err)
 	}
 
+	// clientcmd.Load tolerates empty/partial input (e.g. a file read mid-write
+	// on the node), so guard explicitly — a clusterless kubeconfig would
+	// otherwise be persisted with no endpoint rewritten and no error surfaced.
+	if len(kubeConfig.Clusters) == 0 {
+		return nil, ErrKubeconfigNoClusters
+	}
+
 	for name := range kubeConfig.Clusters {
 		kubeConfig.Clusters[name].Server = endpoint
 	}

@@ -269,3 +269,95 @@ func TestRunCreatePersistFailureCleansUp(t *testing.T) {
 	assert.Contains(t, err.Error(), "merge kubeconfig")
 	assert.Equal(t, 1, infra.deleteNodesCalls)
 }
+
+// preexistingKubeconfig seeds the destination before RunCreate to pin the
+// merge behaviour: existing unrelated entries must survive the persist.
+const preexistingKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://other.example:6443
+  name: other
+contexts:
+- context:
+    cluster: other
+    user: other
+  name: other
+current-context: other
+users:
+- name: other
+  user: {}
+`
+
+func TestRunCreateMergesIntoExistingKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	host, port, hostKey := startBringUpSSHServer(
+		t, pair.Signer.PublicKey(), kubeconfigHandler(1, remoteAdminKubeconfig),
+	)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host), networkID: 11}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	base.KubeconfigPath = filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(base.KubeconfigPath, []byte(preexistingKubeconfig), 0o600))
+
+	composePlan := func(
+		_, _ string,
+		_ hetznerbase.ResolvedInfra,
+	) (hetznerbase.BringUpPlan, error) {
+		return runCreatePlan(pair, hostKey, port), nil
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	require.NoError(t, base.RunCreate(ctx, "", composePlan, staticTokenGenerator))
+
+	// Both the preexisting unrelated cluster and the new rewritten entry
+	// coexist after the merge.
+	merged, err := os.ReadFile(base.KubeconfigPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), "https://other.example:6443")
+	assert.Contains(t, string(merged), "https://"+host+":6443")
+}
+
+// clusterlessKubeconfig parses fine but has no cluster entries — the guard
+// against persisting a kubeconfig read mid-write on the node.
+const clusterlessKubeconfig = `apiVersion: v1
+kind: Config
+`
+
+func TestRunCreateClusterlessKubeconfigFails(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	host, port, hostKey := startBringUpSSHServer(
+		t, pair.Signer.PublicKey(), kubeconfigHandler(1, clusterlessKubeconfig),
+	)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host), networkID: 11}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	base.KubeconfigPath = filepath.Join(t.TempDir(), "kubeconfig")
+
+	composePlan := func(
+		_, _ string,
+		_ hetznerbase.ResolvedInfra,
+	) (hetznerbase.BringUpPlan, error) {
+		return runCreatePlan(pair, hostKey, port), nil
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	err = base.RunCreate(ctx, "", composePlan, staticTokenGenerator)
+	require.ErrorIs(t, err, hetznerbase.ErrKubeconfigNoClusters)
+
+	// Nothing was persisted for the clusterless kubeconfig.
+	_, statErr := os.Stat(base.KubeconfigPath)
+	require.True(t, os.IsNotExist(statErr))
+}

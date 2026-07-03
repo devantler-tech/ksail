@@ -38,6 +38,13 @@ var (
 	// ErrMissingKubeconfigPath is returned by [Base.BringUpNode] when the spec
 	// names no remote kubeconfig path to wait for.
 	ErrMissingKubeconfigPath = errors.New("hetzner: bring-up spec is missing the kubeconfig path")
+
+	// ErrKubeconfigNoClusters is returned when the kubeconfig retrieved from
+	// the node parses but carries no cluster entries (e.g. read mid-write), so
+	// there is nothing to rewrite and it must not be persisted.
+	ErrKubeconfigNoClusters = errors.New(
+		"hetzner: retrieved kubeconfig contains no cluster entries",
+	)
 )
 
 // BringUpPlan is what a provisioner's composePlan callback returns to
