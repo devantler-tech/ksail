@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
@@ -92,7 +93,8 @@ func resolveCoreDistributionName(
 		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig), true
 	case v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
-		v1alpha1.DistributionEKS:
+		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE:
 		return "", false
 	}
 
@@ -106,30 +108,22 @@ func resolveAuxDistributionName(
 	clusterCfg *v1alpha1.Cluster,
 	vclusterConfig *clusterprovisioner.VClusterConfig,
 ) string {
+	kubeContext := clusterCfg.Spec.Cluster.Connection.Context
+
 	switch distribution {
 	case v1alpha1.DistributionVCluster:
+		name := ""
 		if vclusterConfig != nil {
-			if name := strings.TrimSpace(vclusterConfig.GetClusterName()); name != "" {
-				return name
-			}
+			name = vclusterConfig.GetClusterName()
 		}
 
-		return "vcluster-default"
+		return trimOrDefault(name, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
-		ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
-		if name, ok := strings.CutPrefix(ctx, "kwok-"); ok {
-			if name = strings.TrimSpace(name); name != "" {
-				return name
-			}
-		}
-
-		return "kwok-default"
+		return trimOrDefault(parseKWOKContext(kubeContext), "kwok-default")
 	case v1alpha1.DistributionEKS:
-		if name := parseEKSContext(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
-		}
-
-		return "eks-default"
+		return trimOrDefault(parseEKSContext(kubeContext), "eks-default")
+	case v1alpha1.DistributionGKE:
+		return trimOrDefault(parseGKEContext(kubeContext), "gke-default")
 	case v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos:
@@ -137,6 +131,17 @@ func resolveAuxDistributionName(
 	}
 
 	return "ksail"
+}
+
+// parseKWOKContext extracts the cluster name from a KWOK kubeconfig context
+// ("kwok-<name>"). Returns an empty string when the context is not
+// recognisably a KWOK context so the caller can fall back to a default.
+func parseKWOKContext(ctx string) string {
+	if name, ok := strings.CutPrefix(strings.TrimSpace(ctx), "kwok-"); ok {
+		return strings.TrimSpace(name)
+	}
+
+	return ""
 }
 
 func resolveNetworkName(
@@ -154,8 +159,8 @@ func resolveNetworkName(
 		return "vcluster." + trimOrDefault(clusterName, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
 		return "kwok-" + trimOrDefault(clusterName, "kwok-default")
-	case v1alpha1.DistributionEKS:
-		// EKS does not use a local Docker network.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// The managed cloud distributions do not use a local Docker network.
 		return ""
 	default:
 		return ""
@@ -196,6 +201,14 @@ func parseEKSContext(ctx string) string {
 	}
 
 	return strings.TrimSpace(trimmed)
+}
+
+// parseGKEContext extracts the cluster name from a GKE kubeconfig context.
+// Returns an empty string when the context is not recognisably a GKE context
+// so the caller can fall back to a default. The gcloud context contract lives
+// in one place — the gke client package — so this only delegates.
+func parseGKEContext(ctx string) string {
+	return gkeclient.ClusterNameFromContext(ctx)
 }
 
 func newCreateOptions(

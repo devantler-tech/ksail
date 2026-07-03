@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
@@ -20,6 +22,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"google.golang.org/protobuf/encoding/protojson"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
@@ -381,6 +384,8 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheKWOKConfig()
 	case v1alpha1.DistributionEKS:
 		return m.cacheEKSConfig()
+	case v1alpha1.DistributionGKE:
+		return m.cacheGKEConfig()
 	default:
 		return nil
 	}
@@ -737,6 +742,119 @@ func (m *ConfigManager) resolveEKSNameFromContext() string {
 	}
 
 	return "eks-default"
+}
+
+// Default environment variables for the GKE project/location resolution
+// (mirror OptionsGCP's struct-tag defaults).
+const (
+	defaultGCPProjectEnvVar  = "GOOGLE_CLOUD_PROJECT"
+	defaultGCPLocationEnvVar = "GOOGLE_CLOUD_LOCATION"
+)
+
+// cacheGKEConfig caches GKE configuration. The gke.yaml path comes from
+// spec.cluster.distributionConfig (defaulting to "gke.yaml") and, when the
+// file exists, is parsed as a declarative containerpb.Cluster spec (the shape
+// the GKE API's create call consumes). The cluster name is read from the spec
+// when present, with the kubeconfig context as fallback; the project — which
+// is API-call scope, not part of the cluster spec — and a location override
+// resolve from the environment variables named by spec.provider.gcp.
+func (m *ConfigManager) cacheGKEConfig() error {
+	configPath := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = v1alpha1.DefaultGKEDistributionConfig
+	}
+
+	resolvedPath, clusterSpec, err := readGKEConfigSpec(configPath)
+	if err != nil {
+		return err
+	}
+
+	name := clusterSpec.GetName()
+	if name == "" {
+		name = m.resolveGKENameFromContext()
+	}
+
+	location := envValue(
+		m.Config.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar,
+	)
+	if location == "" {
+		location = clusterSpec.GetLocation()
+	}
+
+	m.DistributionConfig.GKE = &clusterprovisioner.GKEConfig{
+		Name: name,
+		Project: envValue(
+			m.Config.Spec.Provider.GCP.ProjectEnvVar, defaultGCPProjectEnvVar,
+		),
+		Location:    location,
+		ConfigPath:  resolvedPath,
+		ClusterSpec: clusterSpec,
+	}
+
+	return nil
+}
+
+// envValue reads the environment variable named by envVar, falling back to
+// fallbackVar when the cluster spec does not name one.
+func envValue(envVar, fallbackVar string) string {
+	if envVar == "" {
+		envVar = fallbackVar
+	}
+
+	return os.Getenv(envVar)
+}
+
+// readGKEConfigSpec reads the gke.yaml at configPath (if it exists) and parses
+// it as a containerpb.Cluster via the proto JSON mapping (YAML keys use the
+// proto3 JSON camelCase names). A missing file returns a nil spec and no error
+// so callers fall back to context-based defaults; inspection-only operations
+// work without a spec, while create requires one and fails clearly without it.
+func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) {
+	_, err := os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, nil
+		}
+
+		return "", nil, fmt.Errorf("failed to stat GKE config file: %w", err)
+	}
+
+	canonical, err := fsutil.EvalCanonicalPath(configPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to canonicalize GKE config path: %w", err)
+	}
+
+	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to read GKE config file: %w", err)
+	}
+
+	jsonData, err := yaml.YAMLToJSON(data)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to parse GKE config file: %w", err)
+	}
+
+	clusterSpec := &containerpb.Cluster{}
+
+	err = protojson.Unmarshal(jsonData, clusterSpec)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to parse GKE cluster spec: %w", err)
+	}
+
+	return canonical, clusterSpec, nil
+}
+
+// resolveGKENameFromContext extracts the cluster name from a GKE kubeconfig
+// context (gcloud convention: gke_<project>_<location>_<name>), falling back
+// to the distribution default when the context is absent or not GKE-shaped.
+// Parsing delegates to the gke client package's single context parser.
+func (m *ConfigManager) resolveGKENameFromContext() string {
+	name := gkeclient.ClusterNameFromContext(m.Config.Spec.Cluster.Connection.Context)
+	if name != "" {
+		return name
+	}
+
+	return "gke-default"
 }
 
 // externalCloudProviderPatches returns Talos patches that enable the external cloud provider.

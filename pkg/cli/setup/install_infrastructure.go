@@ -183,28 +183,46 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionVanilla:
 		return installCloudProviderKind(ctx, clusterCfg)
 	case v1alpha1.DistributionTalos:
-		switch clusterCfg.Spec.Cluster.Provider {
-		case v1alpha1.ProviderDocker:
-			return installMetalLB(ctx, clusterCfg, factories)
-		case v1alpha1.ProviderHetzner:
-			return installHcloudCCM(ctx, clusterCfg, factories)
-		case v1alpha1.ProviderOmni:
-			// Omni manages the machine lifecycle; MetalLB is not applicable
-			return nil
-		case v1alpha1.ProviderAWS:
-			// AWS is not a supported provider for Talos.
-			return nil
-		case v1alpha1.ProviderKubernetes:
-			// Kubernetes provider: no additional load balancer needed.
-			return nil
-		}
+		return installTalosLoadBalancer(ctx, clusterCfg, factories)
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE:
 		// VCluster (Vind) handles LoadBalancer via its own networking.
 		// KWOK is a simulation cluster with no real network dataplane.
 		// EKS relies on AWS Load Balancer Controller (installed separately).
+		// GKE relies on GCP's built-in cloud load balancing.
+		return nil
+	}
+
+	return nil
+}
+
+// installTalosLoadBalancer installs the provider-appropriate load balancer for
+// the Talos distribution: MetalLB on Docker, hcloud CCM on Hetzner; the other
+// providers either manage load balancing themselves or do not support Talos.
+func installTalosLoadBalancer(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	switch clusterCfg.Spec.Cluster.Provider {
+	case v1alpha1.ProviderDocker:
+		return installMetalLB(ctx, clusterCfg, factories)
+	case v1alpha1.ProviderHetzner:
+		return installHcloudCCM(ctx, clusterCfg, factories)
+	case v1alpha1.ProviderOmni:
+		// Omni manages the machine lifecycle; MetalLB is not applicable
+		return nil
+	case v1alpha1.ProviderAWS:
+		// AWS is not a supported provider for Talos.
+		return nil
+	case v1alpha1.ProviderGCP:
+		// GCP is not a supported provider for Talos.
+		return nil
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider: no additional load balancer needed.
 		return nil
 	}
 

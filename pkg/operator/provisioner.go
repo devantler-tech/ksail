@@ -21,6 +21,14 @@ var ErrUnsupportedDistribution = errors.New("unsupported distribution for operat
 // cluster does not override it.
 const defaultAWSRegionEnvVar = "AWS_REGION"
 
+// defaultGCPProjectEnvVar / defaultGCPLocationEnvVar are the environment variables the operator
+// reads the GKE project and location from when the cluster does not name its own
+// (mirrors OptionsGCP's struct-tag defaults).
+const (
+	defaultGCPProjectEnvVar  = "GOOGLE_CLOUD_PROJECT"
+	defaultGCPLocationEnvVar = "GOOGLE_CLOUD_LOCATION"
+)
+
 // BuildProvisioner returns a provisioner for the cluster's distribution and provider. Distribution
 // and Provider follow the API's zero-value convention: an unset distribution means Vanilla and an
 // unset provider means Docker (their default values serialize to empty via `omitzero`). EKS uses
@@ -78,6 +86,10 @@ func resolveProvider(cluster *v1alpha1.Cluster) v1alpha1.Provider {
 		return v1alpha1.ProviderAWS
 	}
 
+	if cluster.Spec.Cluster.Distribution == v1alpha1.DistributionGKE {
+		return v1alpha1.ProviderGCP
+	}
+
 	return v1alpha1.ProviderDocker
 }
 
@@ -119,6 +131,14 @@ func buildDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{
 			EKS: &clusterprovisioner.EKSConfig{Name: name, Region: awsRegion(cluster)},
 		}, nil
+	case v1alpha1.DistributionGKE:
+		return &clusterprovisioner.DistributionConfig{
+			GKE: &clusterprovisioner.GKEConfig{
+				Name:     name,
+				Project:  gcpProject(cluster),
+				Location: gcpLocation(cluster),
+			},
+		}, nil
 	default:
 		// K3s, VCluster, KWOK need only the name (shared with the local `ksail open web` backend).
 		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
@@ -138,13 +158,32 @@ func newTalosConfig(name, kubernetesVersion string) (*talosconfigmanager.Configs
 	return talosconfigmanager.NewDefaultConfigsWithVersionAndName(kubernetesVersion, name)
 }
 
-// awsRegion resolves the EKS region from the environment variable named by the cluster's AWS
-// options (default AWS_REGION). An empty result lets the eksctl client surface a clear error.
-func awsRegion(cluster *v1alpha1.Cluster) string {
-	envVar := cluster.Spec.Provider.AWS.RegionEnvVar
+// resolveEnvVar reads the environment variable named by envVar, falling back to
+// defaultEnvVar when the cluster spec does not name one.
+func resolveEnvVar(envVar, defaultEnvVar string) string {
 	if envVar == "" {
-		envVar = defaultAWSRegionEnvVar
+		envVar = defaultEnvVar
 	}
 
 	return os.Getenv(envVar)
+}
+
+// awsRegion resolves the EKS region from the environment variable named by the cluster's AWS
+// options (default AWS_REGION). An empty result lets the eksctl client surface a clear error.
+func awsRegion(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(cluster.Spec.Provider.AWS.RegionEnvVar, defaultAWSRegionEnvVar)
+}
+
+// gcpProject resolves the GKE project from the environment variable named by the cluster's GCP
+// options (default GOOGLE_CLOUD_PROJECT). An empty result lets the GKE provisioner surface a
+// clear ErrProjectRequired.
+func gcpProject(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(cluster.Spec.Provider.GCP.ProjectEnvVar, defaultGCPProjectEnvVar)
+}
+
+// gcpLocation resolves the GKE location from the environment variable named by the cluster's GCP
+// options (default GOOGLE_CLOUD_LOCATION). An empty result leaves the location unpinned: reads
+// resolve the cluster's own location, while create fails with a clear ErrLocationRequired.
+func gcpLocation(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(cluster.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar)
 }

@@ -100,8 +100,8 @@ func GetNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterNa
 		return "vcluster." + clusterName
 	case v1alpha1.DistributionKWOK:
 		return "kwok-" + clusterName
-	case v1alpha1.DistributionEKS:
-		// EKS does not use a local Docker network.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// The managed cloud distributions do not use a local Docker network.
 		return ""
 	default:
 		return clusterName

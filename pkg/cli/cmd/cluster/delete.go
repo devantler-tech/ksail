@@ -385,20 +385,7 @@ func buildDeletionPreview(
 
 	switch resolved.Provider {
 	case v1alpha1.ProviderDocker:
-		// Collect registry names
-		if preDiscovered != nil {
-			for _, reg := range preDiscovered.Registries {
-				preview.Registries = append(preview.Registries, reg.Name)
-			}
-		}
-
-		// Try to discover cluster node containers
-		preview.Nodes = discoverDockerNodes(cmd, resolved.ClusterName)
-
-		// If this is the last Kind cluster, show shared containers that will be deleted
-		if isKindCluster && countKindClusters(cmd) == 1 {
-			preview.SharedContainers = listCloudProviderKindContainerNames(cmd)
-		}
+		buildDockerDeletionPreview(cmd, resolved, preview, preDiscovered, isKindCluster)
 	case v1alpha1.ProviderHetzner:
 		// For Hetzner, resources follow predictable naming patterns
 		// Note: We can't list actual servers without API access, but we know infrastructure resources
@@ -418,6 +405,11 @@ func buildDeletionPreview(
 		// CloudFormation stacks owning the control plane and managed nodegroups.
 		eksPlaceholder := "(EKS cluster and managed nodegroups for: " + resolved.ClusterName + ")"
 		preview.Servers = []string{eksPlaceholder}
+	case v1alpha1.ProviderGCP:
+		// For GCP/GKE, deletion goes through the GKE API which tears down the
+		// managed control plane and its node pools.
+		gkePlaceholder := "(GKE cluster and node pools for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{gkePlaceholder}
 	case v1alpha1.ProviderKubernetes:
 		// For Kubernetes provider, nested cluster resources (DinD pod, Gateway,
 		// namespace) will be removed from the host cluster.
@@ -426,6 +418,29 @@ func buildDeletionPreview(
 	}
 
 	return preview
+}
+
+// buildDockerDeletionPreview fills the preview with the Docker-provider resources: discovered
+// registries, cluster node containers, and — when the last Kind cluster is being deleted — the
+// shared cloud-provider-kind containers that go with it.
+func buildDockerDeletionPreview(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+	preview *confirm.DeletionPreview,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
+) {
+	if preDiscovered != nil {
+		for _, reg := range preDiscovered.Registries {
+			preview.Registries = append(preview.Registries, reg.Name)
+		}
+	}
+
+	preview.Nodes = discoverDockerNodes(cmd, resolved.ClusterName)
+
+	if isKindCluster && countKindClusters(cmd) == 1 {
+		preview.SharedContainers = listCloudProviderKindContainerNames(cmd)
+	}
 }
 
 // executeDelete performs the cluster deletion operation.

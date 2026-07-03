@@ -383,3 +383,91 @@ func TestResolveEKSNameFromContext(t *testing.T) {
 		})
 	}
 }
+
+// TestReadGKEConfigSpec verifies the gke.yaml cluster-spec reader across
+// missing-file, populated, and malformed cases.
+func TestReadGKEConfigSpec(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing file returns nil spec and no error", func(t *testing.T) {
+		t.Parallel()
+
+		path, spec, err := configmanager.ReadGKEConfigSpecForTest(
+			filepath.Join(t.TempDir(), "absent.yaml"),
+		)
+		require.NoError(t, err)
+		assert.Empty(t, path)
+		assert.Nil(t, spec)
+	})
+
+	t.Run("populated spec is parsed via the proto JSON mapping", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "gke.yaml")
+		writeFileWithParents(t, configPath, "name: my-gke\n"+
+			"location: europe-north1\n"+
+			"nodePools:\n"+
+			"  - name: default\n"+
+			"    initialNodeCount: 1\n")
+
+		path, spec, err := configmanager.ReadGKEConfigSpecForTest(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, "gke.yaml", filepath.Base(path))
+		require.NotNil(t, spec)
+		assert.Equal(t, "my-gke", spec.GetName())
+		assert.Equal(t, "europe-north1", spec.GetLocation())
+		require.Len(t, spec.GetNodePools(), 1)
+		assert.Equal(t, "default", spec.GetNodePools()[0].GetName())
+		assert.Equal(t, int32(1), spec.GetNodePools()[0].GetInitialNodeCount())
+	})
+
+	t.Run("unknown field returns an error", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "gke.yaml")
+		writeFileWithParents(t, configPath, "name: my-gke\nnotAClusterField: true\n")
+
+		_, _, err := configmanager.ReadGKEConfigSpecForTest(configPath)
+		require.Error(t, err)
+	})
+
+	t.Run("malformed YAML returns an error", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "gke.yaml")
+		writeFileWithParents(t, configPath, "name:\n\tmy-gke\n")
+
+		_, _, err := configmanager.ReadGKEConfigSpecForTest(configPath)
+		require.Error(t, err)
+	})
+}
+
+// TestResolveGKENameFromContext verifies GKE cluster-name extraction from a
+// gcloud-convention kubeconfig context, with the default fallback.
+func TestResolveGKENameFromContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		context string
+		want    string
+	}{
+		{name: "empty context returns default", context: "", want: "gke-default"},
+		{
+			name:    "gcloud context extracts trailing name",
+			context: "gke_my-project_europe-north1_my-cluster",
+			want:    "my-cluster",
+		},
+		{name: "non-GKE context returns default", context: "kind-something", want: "gke-default"},
+		{name: "prefix without name returns default", context: "gke_", want: "gke-default"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			mgr := newConfigManagerWithContext(testCase.context)
+			assert.Equal(t, testCase.want, mgr.ResolveGKENameFromContextForTest())
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
@@ -45,6 +46,8 @@ type DistributionConfig struct {
 	KWOK *KWOKConfig
 	// EKS holds the pre-loaded EKS configuration.
 	EKS *EKSConfig
+	// GKE holds the pre-loaded GKE configuration.
+	GKE *GKEConfig
 	// MirrorSpecs holds resolved registry mirror specifications. For the Kubernetes
 	// provider these are applied inside the DinD environment so nested clusters pull
 	// through authenticated, caching mirrors (the host-level CLI mirror stage cannot
@@ -66,6 +69,29 @@ type EKSConfig struct {
 // This implements the ClusterNameProvider interface used by
 // configmanager.GetClusterName.
 func (c *EKSConfig) GetClusterName() string {
+	return c.Name
+}
+
+// GKEConfig holds GKE-specific configuration.
+type GKEConfig struct {
+	// Name is the cluster name (mirrors gke.yaml name when present).
+	Name string
+	// Project is the Google Cloud project ID every GKE call is scoped to.
+	Project string
+	// Location is the GKE location (zone or region). Empty means "not pinned":
+	// reads resolve the cluster's own location, while create requires a value.
+	Location string
+	// ConfigPath is the path to the declarative gke.yaml cluster spec, when present.
+	ConfigPath string
+	// ClusterSpec is the pre-loaded declarative cluster specification parsed
+	// from ConfigPath. Required for create; nil is fine for inspection-only use.
+	ClusterSpec *containerpb.Cluster
+}
+
+// GetClusterName returns the GKE cluster name.
+// This implements the ClusterNameProvider interface used by
+// configmanager.GetClusterName.
+func (c *GKEConfig) GetClusterName() string {
 	return c.Name
 }
 
@@ -122,21 +148,12 @@ type DefaultFactory struct {
 // Create selects the correct distribution provisioner for the KSail cluster configuration.
 // It requires DistributionConfig to be set with the appropriate pre-loaded config.
 func (f DefaultFactory) Create(
-	_ context.Context,
+	ctx context.Context,
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
-	if cluster == nil {
-		return nil, nil, fmt.Errorf(
-			"cluster configuration is required: %w",
-			ErrUnsupportedDistribution,
-		)
-	}
-
-	if f.DistributionConfig == nil {
-		return nil, nil, fmt.Errorf(
-			"distribution config is required: %w",
-			ErrMissingDistributionConfig,
-		)
+	err := f.validateCreateInputs(cluster)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	switch cluster.Spec.Cluster.Distribution {
@@ -152,6 +169,8 @@ func (f DefaultFactory) Create(
 		return f.createKWOKProvisioner(cluster)
 	case v1alpha1.DistributionEKS:
 		return f.createEKSProvisioner(cluster)
+	case v1alpha1.DistributionGKE:
+		return f.createGKEProvisioner(ctx, cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -159,4 +178,24 @@ func (f DefaultFactory) Create(
 			cluster.Spec.Cluster.Distribution,
 		)
 	}
+}
+
+// validateCreateInputs guards Create against a nil cluster and a missing
+// pre-loaded distribution config.
+func (f DefaultFactory) validateCreateInputs(cluster *v1alpha1.Cluster) error {
+	if cluster == nil {
+		return fmt.Errorf(
+			"cluster configuration is required: %w",
+			ErrUnsupportedDistribution,
+		)
+	}
+
+	if f.DistributionConfig == nil {
+		return fmt.Errorf(
+			"distribution config is required: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
+	return nil
 }

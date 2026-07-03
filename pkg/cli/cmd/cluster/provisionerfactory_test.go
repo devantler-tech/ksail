@@ -3,6 +3,8 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -37,6 +39,11 @@ func newFullyPopulatedFactoryContext() *localregistry.Context {
 			Region:     "us-east-1",
 			ConfigPath: "/tmp/eksctl.yaml",
 		},
+		GKEConfig: &clusterprovisioner.GKEConfig{
+			Name:     name,
+			Project:  "test-project",
+			Location: "europe-north1",
+		},
 	}
 }
 
@@ -48,8 +55,17 @@ func newFullyPopulatedFactoryContext() *localregistry.Context {
 // newProvisionerFactory); this test asserts it can construct a provisioner for
 // every Distribution enum value, so adding a distribution without wiring its
 // config here fails loudly.
+//
+//nolint:paralleltest // t.Setenv-injected fake ADC must stay set while the subtests run
 func TestDefaultProvisionerFactory_CoversAllDistributions(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel() (incl. subtests): the GKE path dials the SDK client via
+	// Application Default Credentials, so a fake ADC file is injected with
+	// t.Setenv, which is incompatible with parallel tests.
+	credPath := filepath.Join(t.TempDir(), "adc.json")
+	require.NoError(t, os.WriteFile(credPath, []byte(
+		`{"type":"authorized_user","client_id":"test","client_secret":"test","refresh_token":"test"}`,
+	), 0o600))
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", credPath)
 
 	ctx := newFullyPopulatedFactoryContext()
 	factory := cluster.ExportDefaultProvisionerFactory(ctx)
@@ -57,8 +73,6 @@ func TestDefaultProvisionerFactory_CoversAllDistributions(t *testing.T) {
 	distribution := v1alpha1.DistributionVanilla
 	for _, value := range distribution.ValidValues() {
 		t.Run(value, func(t *testing.T) {
-			t.Parallel()
-
 			clusterCfg := &v1alpha1.Cluster{}
 			clusterCfg.Spec.Cluster.Distribution = v1alpha1.Distribution(value)
 
