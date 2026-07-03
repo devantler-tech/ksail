@@ -102,6 +102,7 @@ func addWorkloadSubcommands(cmd *cobra.Command) {
 	addGroupedCommand(cmd, NewExecCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewForwardCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewLogsCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewMirrorCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewNetworkCmd(), groupDevLoop)
 	addGroupedCommand(cmd, NewRolloutCmd(), groupDevLoop)
 
