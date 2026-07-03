@@ -17,16 +17,6 @@ var (
 	// target cluster already exist, so creation would collide with a running cluster.
 	ErrClusterAlreadyExists = errors.New("hetzner: cluster already exists")
 
-	// ErrLiveBringUpNotImplemented is returned by the provisioners' composePlan
-	// callbacks (see [Base.RunCreate]) after the per-node cloud-init user_data is
-	// composed: deriving the live server specs still needs boot-image resolution
-	// and the bootstrap-material threading tracked by devantler-tech/ksail#5726.
-	// Once a caller returns a complete [BringUpPlan] instead, RunCreate carries the
-	// cluster all the way to a merged kubeconfig.
-	ErrLiveBringUpNotImplemented = errors.New(
-		"hetzner: live cluster bring-up is not yet implemented (tracked by #5726)",
-	)
-
 	// ErrSingleNodePlanExpected is returned by [Base.RunCreate] when a composed
 	// [BringUpPlan] does not carry exactly one server spec. Multi-node topologies
 	// are rejected before composition ([ErrMultiNodeNotImplemented]), so a plan
@@ -316,9 +306,9 @@ func (b *Base) Exists(ctx context.Context, name string) (bool, error) {
 // node's public IPv4, and merge it into the Base's kubeconfig destination. The two
 // steps that differ between the provisioners are supplied as callbacks:
 // generateToken produces the node token, and composePlan composes the per-node
-// cloud-init user_data into server specs plus the bootstrap material (a caller
-// whose spec derivation has not landed yet returns
-// [ErrLiveBringUpNotImplemented] there instead — see devantler-tech/ksail#5726).
+// cloud-init user_data into server specs plus the bootstrap material
+// ([DeriveServerSpecs] and [GenerateBootstrapMaterial] are the shared halves
+// of that composition).
 func (b *Base) RunCreate(
 	ctx context.Context,
 	name string,

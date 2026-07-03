@@ -138,11 +138,11 @@ func TestRunCreateComposePlanErrorPropagates(t *testing.T) {
 		_, _ string,
 		_ hetznerbase.ResolvedInfra,
 	) (hetznerbase.BringUpPlan, error) {
-		return hetznerbase.BringUpPlan{}, hetznerbase.ErrLiveBringUpNotImplemented
+		return hetznerbase.BringUpPlan{}, errBoom
 	}
 
 	err := base.RunCreate(t.Context(), "", composePlan, staticTokenGenerator)
-	require.ErrorIs(t, err, hetznerbase.ErrLiveBringUpNotImplemented)
+	require.ErrorIs(t, err, errBoom)
 	assert.Equal(t, 0, infra.createServerCalls)
 }
 

@@ -12,6 +12,10 @@ import (
 // inject a fake provider in place of the live Hetzner Cloud API.
 type HetznerInfra = hetznerbase.Infra
 
+// HetznerServers exposes the shared server-creation seam so external tests can
+// inject a fake server creator in place of the live Hetzner Cloud API.
+type HetznerServers = hetznerbase.ServerCreator
+
 // TestNode is the exported view of a composed node used by external tests.
 type TestNode struct {
 	Index    int
@@ -37,8 +41,9 @@ func NewProvisionerForTest(
 			ClusterName:   clusterName,
 			ControlPlanes: controlPlanes,
 			Agents:        agents,
-			// A non-empty destination satisfies RunCreate's fail-fast guard; the
-			// gated composePlan stops before anything is persisted there.
+			// A non-empty destination satisfies RunCreate's fail-fast guard; tests
+			// exercising the live bring-up inject their own Servers seam and
+			// destination on the embedded Base.
 			KubeconfigPath: "test-kubeconfig",
 			LogWriter:      logWriter,
 		},
@@ -51,8 +56,9 @@ func NewProvisionerForTest(
 func (p *Provisioner) BuildNodeUserData(
 	clusterName, token, serverURL string,
 	sshAuthorizedKeys []string,
+	hostKeys *cloudinitbootstrap.HostKeys,
 ) ([]TestNode, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, serverURL, sshAuthorizedKeys)
+	nodes, err := p.buildNodeUserData(clusterName, token, serverURL, sshAuthorizedKeys, hostKeys)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +74,16 @@ func (p *Provisioner) BuildNodeUserData(
 	}
 
 	return out, nil
+}
+
+// ComposePlan exposes composePlan to external tests so the full plan
+// composition — bootstrap material, user_data threading, spec derivation — can
+// be asserted without a live bring-up.
+func (p *Provisioner) ComposePlan(
+	clusterName, token string,
+	infra hetznerbase.ResolvedInfra,
+) (hetznerbase.BringUpPlan, error) {
+	return p.composePlan(clusterName, token, infra)
 }
 
 // GenerateNodeToken exposes generateNodeToken to external tests.

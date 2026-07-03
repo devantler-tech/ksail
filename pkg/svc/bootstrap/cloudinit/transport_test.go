@@ -13,7 +13,7 @@ func TestTransportUserDataMatchesBuilder(t *testing.T) {
 
 	commands := []string{"echo hi", "echo bye"}
 
-	got, err := cloudinitbootstrap.New().UserData(commands, nil)
+	got, err := cloudinitbootstrap.New().UserData(commands, nil, nil)
 	require.NoError(t, err)
 
 	want, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{Commands: commands})
@@ -31,7 +31,7 @@ func TestTransportUserDataHonoursPaths(t *testing.T) {
 		LogPath:    "/var/log/custom.log",
 	}
 
-	got, err := transport.UserData([]string{"echo hi"}, nil)
+	got, err := transport.UserData([]string{"echo hi"}, nil, nil)
 	require.NoError(t, err)
 
 	want, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
@@ -47,7 +47,7 @@ func TestTransportUserDataHonoursPaths(t *testing.T) {
 func TestTransportUserDataPropagatesError(t *testing.T) {
 	t.Parallel()
 
-	out, err := cloudinitbootstrap.New().UserData(nil, nil)
+	out, err := cloudinitbootstrap.New().UserData(nil, nil, nil)
 	require.ErrorIs(t, err, cloudinitbootstrap.ErrNoCommands)
 	assert.Empty(t, out)
 }
@@ -58,6 +58,7 @@ func TestTransportUserDataRendersSSHAuthorizedKeys(t *testing.T) {
 	got, err := cloudinitbootstrap.New().UserData(
 		[]string{"echo hi"},
 		[]string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap"},
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -76,7 +77,7 @@ func TestTransportSatisfiesUserDataProvider(t *testing.T) {
 
 	var provider cloudinitbootstrap.UserDataProvider = cloudinitbootstrap.New()
 
-	out, err := provider.UserData([]string{"echo hi"}, nil)
+	out, err := provider.UserData([]string{"echo hi"}, nil, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "#cloud-config")
 }

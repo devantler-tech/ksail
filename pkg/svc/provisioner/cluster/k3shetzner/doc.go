@@ -14,14 +14,11 @@
 // cloud-init is the declarative transport — so it is not used here.
 //
 // This package is the K3s × Hetzner provisioner tracked by
-// devantler-tech/ksail#5512 (epic #3983). The K3s × Hetzner distribution/provider
-// combination stays unselectable until the validation flip (#5514), so the
-// factory wiring exists but the path is gated. The shared create flow
-// ([Provisioner.Create] via hetznerbase) runs the live bring-up — server
-// creation, kubeconfig retrieval, endpoint rewrite, and persistence — once
-// composePlan returns a complete bring-up plan; deriving that plan (boot-image
-// resolution, the bootstrap keypair, pinned host keys) is tracked by #5726, and
-// the live E2E validation stays with the Hetzner system-test lane (#5515 /
-// #4972). Until then [Provisioner.Create] composes the per-node user_data and
-// prepares the infrastructure up to that boundary.
+// devantler-tech/ksail#5512 (epic #3983). The shared create flow
+// ([Provisioner.Create] via hetznerbase) runs the live bring-up end to end:
+// composePlan mints the bootstrap material (client keypair plus pinned host
+// identity), threads it into every node's cloud-init document, and derives the
+// live server specs; the flow then creates the server, retrieves the admin
+// kubeconfig, rewrites its endpoint, and persists it. The live E2E validation
+// stays with the Hetzner system-test lane (#5515 / #4972).
 package k3shetzner

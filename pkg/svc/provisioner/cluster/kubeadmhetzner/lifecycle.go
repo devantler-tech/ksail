@@ -4,20 +4,22 @@ import (
 	"context"
 	"fmt"
 
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	kubeadmbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/kubeadm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
+// remoteKubeconfigPath is where kubeadm writes the admin kubeconfig on the
+// cluster-initialising control plane; the bring-up engine waits for and reads
+// this file after first boot.
+const remoteKubeconfigPath = "/etc/kubernetes/admin.conf"
+
 // Create provisions a kubeadm cluster on Hetzner Cloud. It runs the shared Hetzner
 // create flow ([hetznerbase.Base.RunCreate]) — guard against an existing cluster,
-// reject multi-node topologies, ensure the shared infrastructure, and compose the
-// bring-up plan. Only the node token (generateNodeToken) and the plan composition
-// (composePlan) are kubeadm-specific; they are handed to the shared flow. Deriving
-// the live server specs still needs boot-image resolution and bootstrap-material
-// threading (devantler-tech/ksail#5726), so composePlan stops at the
-// live-bring-up boundary ([ErrLiveBringUpNotImplemented]); the Vanilla × Hetzner
-// combination is unselectable until the validation flip (#5514), so this path is
-// gated either way.
+// reject multi-node topologies, ensure the shared infrastructure, compose the
+// bring-up plan, and run the live bring-up to a merged kubeconfig. Only the node
+// token (generateNodeToken) and the plan composition (composePlan) are
+// kubeadm-specific; they are handed to the shared flow.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	err := p.RunCreate(ctx, name, p.composePlan, generateNodeToken)
 	if err != nil {
@@ -32,8 +34,14 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 // a single control-plane, no-agent cluster (multi-node returns
 // [ErrMultiNodeNotImplemented] before this is called), so the plan carries no
 // APIServerEndpoint. The cluster-wide Kubernetes version selects the package
-// repository track every node installs the kube* components from.
-func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, error) {
+// repository track every node installs the kube* components from;
+// sshAuthorizedKeys and hostKeys deliver the bring-up's bootstrap material
+// (the bootstrap public key and the pinned host identity) into every node.
+func (p *Provisioner) buildNodes(
+	clusterName, token string,
+	sshAuthorizedKeys []string,
+	hostKeys *cloudinitbootstrap.HostKeys,
+) ([]NodeUserData, error) {
 	nodes, err := BuildNodeUserData(Input{
 		ClusterName: clusterName,
 		Plan: kubeadmbootstrap.PlanInput{
@@ -42,6 +50,8 @@ func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, err
 			ControlPlaneCount: p.ControlPlanes,
 			AgentCount:        p.Agents,
 		},
+		SSHAuthorizedKeys: sshAuthorizedKeys,
+		HostKeys:          hostKeys,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("compose node user_data: %w", err)
@@ -50,27 +60,44 @@ func (p *Provisioner) buildNodes(clusterName, token string) ([]NodeUserData, err
 	return nodes, nil
 }
 
-// composePlan composes the kubeadm per-node cloud-init user_data toward the
-// shared create flow's bring-up plan ([hetznerbase.Base.RunCreate]). Deriving
-// the composed user_data into live server specs — boot-image resolution, the
-// bootstrap keypair, and the pinned host keys — is tracked by
-// devantler-tech/ksail#5726, so the composition stops at the live-bring-up
-// boundary.
+// composePlan composes the kubeadm per-node cloud-init user_data into the shared
+// create flow's bring-up plan ([hetznerbase.Base.RunCreate]): it mints the
+// per-cluster bootstrap material ([hetznerbase.GenerateBootstrapMaterial] — the
+// bootstrap client keypair plus the pinned host identity), threads it into every
+// node's cloud-init document, derives the live server specs
+// ([hetznerbase.DeriveServerSpecs]), and returns the complete plan the live
+// bring-up runs from.
 func (p *Provisioner) composePlan(
 	clusterName, token string,
-	_ hetznerbase.ResolvedInfra,
+	infra hetznerbase.ResolvedInfra,
 ) (hetznerbase.BringUpPlan, error) {
-	nodes, err := p.buildNodes(clusterName, token)
+	plan, err := hetznerbase.ComposePlan(
+		clusterName, p.Opts, infra, remoteKubeconfigPath,
+		func(material hetznerbase.BootstrapMaterial) ([]hetznerbase.NodeSpec, error) {
+			nodes, err := p.buildNodes(
+				clusterName, token,
+				[]string{material.AuthorizedKey}, material.HostKeys,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			specs := make([]hetznerbase.NodeSpec, len(nodes))
+			for i, node := range nodes {
+				specs[i] = hetznerbase.NodeSpec{
+					Index:    node.Index,
+					NodeType: nodeType(node.Role),
+					UserData: node.UserData,
+					Labels:   node.Labels,
+				}
+			}
+
+			return specs, nil
+		},
+	)
 	if err != nil {
-		return hetznerbase.BringUpPlan{}, err
+		return hetznerbase.BringUpPlan{}, fmt.Errorf("compose kubeadm bring-up plan: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(
-		p.LogWriter,
-		"Prepared cloud-init bootstrap for %d node(s); deriving live server "+
-			"specs is tracked by #5726\n",
-		len(nodes),
-	)
-
-	return hetznerbase.BringUpPlan{}, hetznerbase.ErrLiveBringUpNotImplemented
+	return plan, nil
 }

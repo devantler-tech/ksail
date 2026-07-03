@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	k3sbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/k3s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 )
@@ -33,12 +34,15 @@ type nodeUserData struct {
 // (the transport), and attaches the Hetzner node labels. It is pure — it performs
 // no I/O and reaches no network — so it is fully unit-testable; serverURL is the
 // address joining nodes register against (empty for a single control-plane node
-// with no agents), and sshAuthorizedKeys are the public keys delivered into every
+// with no agents), sshAuthorizedKeys are the public keys delivered into every
 // node's authorized_keys (nil for none) so the post-provision SSH bootstrap seam
-// can authenticate.
+// can authenticate, and hostKeys is the pre-generated SSH host identity delivered
+// via the cloud-init ssh_keys module (nil to let the node generate its own) so
+// the bootstrap dial can pin the host key.
 func (p *Provisioner) buildNodeUserData(
 	clusterName, token, serverURL string,
 	sshAuthorizedKeys []string,
+	hostKeys *cloudinitbootstrap.HostKeys,
 ) ([]nodeUserData, error) {
 	nodes, err := k3sbootstrap.Plan(k3sbootstrap.PlanInput{
 		Version:           p.version,
@@ -59,7 +63,9 @@ func (p *Provisioner) buildNodeUserData(
 			return nil, fmt.Errorf("render k3s install for node %d: %w", node.Index, renderErr)
 		}
 
-		userData, transportErr := p.transport.UserData([]string{command}, sshAuthorizedKeys)
+		userData, transportErr := p.transport.UserData(
+			[]string{command}, sshAuthorizedKeys, hostKeys,
+		)
 		if transportErr != nil {
 			return nil, fmt.Errorf("build cloud-init for node %d: %w", node.Index, transportErr)
 		}

@@ -7,16 +7,17 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
+// remoteKubeconfigPath is where k3s writes the admin kubeconfig on the
+// cluster-initialising server; the bring-up engine waits for and reads this
+// file after first boot.
+const remoteKubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
+
 // Create provisions a K3s cluster on Hetzner Cloud. It runs the shared Hetzner
 // create flow ([hetznerbase.Base.RunCreate]) — guard against an existing cluster,
-// reject multi-node topologies, ensure the shared infrastructure, and compose the
-// bring-up plan. Only the node token (generateNodeToken) and the plan composition
-// (composePlan) are k3s-specific; they are handed to the shared flow. Deriving the
-// live server specs still needs boot-image resolution and bootstrap-material
-// threading (devantler-tech/ksail#5726), so composePlan stops at the
-// live-bring-up boundary ([ErrLiveBringUpNotImplemented]); the K3s × Hetzner
-// combination is unselectable until the validation flip (#5514), so this path is
-// gated either way.
+// reject multi-node topologies, ensure the shared infrastructure, compose the
+// bring-up plan, and run the live bring-up to a merged kubeconfig. Only the node
+// token (generateNodeToken) and the plan composition (composePlan) are
+// k3s-specific; they are handed to the shared flow.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	err := p.RunCreate(ctx, name, p.composePlan, generateNodeToken)
 	if err != nil {
@@ -26,28 +27,45 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	return nil
 }
 
-// composePlan composes the K3s per-node cloud-init user_data toward the shared
-// create flow's bring-up plan ([hetznerbase.Base.RunCreate]). The single-
-// control-plane path carries no join server URL and no SSH authorized key yet;
-// deriving the composed user_data into live server specs — boot-image
-// resolution, the bootstrap keypair, and the pinned host keys — is tracked by
-// devantler-tech/ksail#5726, so the composition stops at the live-bring-up
-// boundary.
+// composePlan composes the K3s per-node cloud-init user_data into the shared
+// create flow's bring-up plan ([hetznerbase.Base.RunCreate]): it mints the
+// per-cluster bootstrap material ([hetznerbase.GenerateBootstrapMaterial] — the
+// bootstrap client keypair plus the pinned host identity), threads it into every
+// node's cloud-init document, derives the live server specs
+// ([hetznerbase.DeriveServerSpecs]), and returns the complete plan the live
+// bring-up runs from. The single-control-plane path carries no join server URL
+// (multi-node is rejected before composition).
 func (p *Provisioner) composePlan(
 	clusterName, token string,
-	_ hetznerbase.ResolvedInfra,
+	infra hetznerbase.ResolvedInfra,
 ) (hetznerbase.BringUpPlan, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, "", nil)
+	plan, err := hetznerbase.ComposePlan(
+		clusterName, p.Opts, infra, remoteKubeconfigPath,
+		func(material hetznerbase.BootstrapMaterial) ([]hetznerbase.NodeSpec, error) {
+			nodes, err := p.buildNodeUserData(
+				clusterName, token, "",
+				[]string{material.AuthorizedKey}, material.HostKeys,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			specs := make([]hetznerbase.NodeSpec, len(nodes))
+			for i, node := range nodes {
+				specs[i] = hetznerbase.NodeSpec{
+					Index:    node.index,
+					NodeType: nodeType(node.role),
+					UserData: node.userData,
+					Labels:   node.labels,
+				}
+			}
+
+			return specs, nil
+		},
+	)
 	if err != nil {
-		return hetznerbase.BringUpPlan{}, err
+		return hetznerbase.BringUpPlan{}, fmt.Errorf("compose K3s bring-up plan: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(
-		p.LogWriter,
-		"Prepared cloud-init bootstrap for %d node(s); deriving live server "+
-			"specs is tracked by #5726\n",
-		len(nodes),
-	)
-
-	return hetznerbase.BringUpPlan{}, hetznerbase.ErrLiveBringUpNotImplemented
+	return plan, nil
 }
