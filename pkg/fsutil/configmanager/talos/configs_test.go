@@ -505,7 +505,7 @@ func TestConfigs_WithKubernetesVersion(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "1.33.0", rebuilt.KubernetesVersion())
-		assert.Contains(t, rebuilt.ControlPlane().Cluster().APIServer().Image(), ":v1.33.0")
+		assert.Contains(t, rebuilt.ControlPlane().K8sAPIServerConfig().Image(), ":v1.33.0")
 
 		// PKI is preserved so the regenerated config still matches the cluster.
 		assert.Equal(t,
@@ -559,7 +559,7 @@ func TestConfigs_WithCertSANs(t *testing.T) {
 		updated, err := configs.WithCertSANs([]string{"127.0.0.1", "localhost", "5.6.7.8"})
 		require.NoError(t, err)
 
-		sans := updated.ControlPlane().Cluster().CertSANs()
+		sans := updated.ControlPlane().K8sAPIServerConfig().CertSANs()
 		assert.Contains(t, sans, "5.6.7.8")
 		assert.Contains(t, sans, "127.0.0.1")
 

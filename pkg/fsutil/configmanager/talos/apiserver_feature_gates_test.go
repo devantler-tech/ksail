@@ -42,7 +42,7 @@ func TestAPIServerFeatureGatesPatch_AppliesToTalosConfig(t *testing.T) {
 	controlPlane := configs.ControlPlane()
 	require.NotNil(t, controlPlane)
 
-	extraArgs := controlPlane.Cluster().APIServer().ExtraArgs()
+	extraArgs := controlPlane.K8sAPIServerConfig().ExtraArgs()
 
 	// Assert the full map so the patch is verified to set exactly these two
 	// apiserver args and nothing else — a whole-map comparison catches both a

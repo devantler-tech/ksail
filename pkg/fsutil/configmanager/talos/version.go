@@ -128,11 +128,13 @@ func KubernetesVersionFromProvider(provider talosconfig.Provider) string {
 		return ""
 	}
 
-	if cluster := provider.Cluster(); cluster != nil {
-		if apiServer := cluster.APIServer(); apiServer != nil {
-			if tag := extractImageTag(apiServer.Image()); tag != "" {
-				return normalizeKubernetesVersion(tag)
-			}
+	// Talos alpha.2 moved the kube-apiserver settings from cluster.apiServer to the
+	// K8sAPIServerConfig document; read the image tag from there. The bridge returns a
+	// non-nil config even for worker configs (defaulting the image), so the empty-tag
+	// check is what drives the kubelet fallback below, as before.
+	if apiServer := provider.K8sAPIServerConfig(); apiServer != nil {
+		if tag := extractImageTag(apiServer.Image()); tag != "" {
+			return normalizeKubernetesVersion(tag)
 		}
 	}
 

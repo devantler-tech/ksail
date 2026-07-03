@@ -32,8 +32,8 @@ import (
 //	cpConfig := configs.ControlPlane()
 //	workerConfig := configs.Worker()
 //
-//	// Access specific config sections
-//	cniName := cpConfig.Cluster().Network().CNI().Name()
+//	// Access specific config sections (Talos alpha.2 multi-document accessors)
+//	flannelEnabled := cpConfig.K8sFlannelCNIConfig() != nil
 //	kubeletImage := cpConfig.Machine().Kubelet().Image()
 type Configs struct {
 	// Name is the cluster name.
@@ -534,18 +534,22 @@ func installImageFromPatch(content []byte) (string, bool) {
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
 // This is used to determine whether to skip CNI-dependent checks during bootstrap.
+//
+// In the Talos alpha.2 multi-document config model the top-level CNI accessor was
+// removed: Flannel is the only built-in CNI, exposed as a K8sFlannelCNIConfig
+// document, and the machinery bridge returns a nil K8sFlannelCNIConfig whenever the
+// CNI name is not "flannel" (i.e. it is "none"). ksail only ever generates the
+// default Flannel or, via its disable-default-cni patch, "none", so a nil
+// K8sFlannelCNIConfig is exactly the "CNI disabled" case. The K8sNetworkConfig guard
+// preserves the previous behaviour of returning false when the config carries no
+// cluster-network section at all (undeterminable rather than disabled).
 func (c *Configs) IsCNIDisabled() bool {
 	cp := c.ControlPlane()
-	if cp == nil || cp.Cluster() == nil || cp.Cluster().Network() == nil {
+	if cp == nil || cp.K8sNetworkConfig() == nil {
 		return false
 	}
 
-	cni := cp.Cluster().Network().CNI()
-	if cni == nil {
-		return false
-	}
-
-	return cni.Name() == "none"
+	return cp.K8sFlannelCNIConfig() == nil
 }
 
 // IsKubeletCertRotationEnabled returns true if kubelet serving certificate rotation is enabled.
@@ -603,15 +607,20 @@ func (c *Configs) ExtractMirrorHosts() []string {
 
 // NetworkCIDR returns the network CIDR from the cluster configuration.
 // This is extracted from the pod CIDRs in the cluster network settings.
+//
+// In the Talos alpha.2 multi-document config model the pod CIDRs live on the
+// K8sNetworkConfig document and are typed as netip.Prefix rather than string, so the
+// first entry is rendered back with String() to preserve the previous "10.244.0.0/16"
+// form.
 func (c *Configs) NetworkCIDR() string {
 	cp := c.ControlPlane()
-	if cp == nil || cp.Cluster() == nil || cp.Cluster().Network() == nil {
+	if cp == nil || cp.K8sNetworkConfig() == nil {
 		return DefaultNetworkCIDR
 	}
 
-	podCIDRs := cp.Cluster().Network().PodCIDRs()
+	podCIDRs := cp.K8sNetworkConfig().PodCIDRs()
 	if len(podCIDRs) > 0 {
-		return podCIDRs[0]
+		return podCIDRs[0].String()
 	}
 
 	return DefaultNetworkCIDR
