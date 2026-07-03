@@ -929,3 +929,13 @@ func (p *Provisioner) BuildStorageHealthProberOrWarnForTest(
 ) bool {
 	return p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName) != nil
 }
+
+// PublishConnectorKubeconfigForTest exercises the create-time Connector Secret publish with
+// caller-supplied kubeconfig bytes (the seam replaces the live Talos clusterAccess fetch).
+func (p *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
+	ctx context.Context,
+	clusterName string,
+	raw []byte,
+) error {
+	return p.publishConnectorKubeconfig(ctx, clusterName, raw)
+}

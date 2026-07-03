@@ -14,6 +14,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
@@ -21,7 +22,10 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -37,6 +41,7 @@ type KubernetesProvisioner struct {
 	inner            *Provisioner
 	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
+	hostClientset    kubernetes.Interface
 	restConfig       *rest.Config
 	clusterName      string
 	distribution     string
@@ -58,6 +63,9 @@ type KubernetesProvisionerConfig struct {
 	K8sProvider *kubernetesprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
 	DynamicClient dynamic.Interface
+	// HostClientset is the typed client for the host cluster, used to publish the nested
+	// cluster's kubeconfig Secret for the Connector contract.
+	HostClientset kubernetes.Interface
 	// RestConfig is the REST config for port-forwarding to the DinD pod.
 	RestConfig *rest.Config
 	// ClusterName is the nested cluster name.
@@ -92,6 +100,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		inner:            cfg.InnerProvisioner,
 		k8sProvider:      cfg.K8sProvider,
 		dynamicClient:    cfg.DynamicClient,
+		hostClientset:    cfg.HostClientset,
 		restConfig:       cfg.RestConfig,
 		clusterName:      cfg.ClusterName,
 		distribution:     cfg.Distribution,
@@ -308,7 +317,44 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("repoint kubeconfig at exposure address: %w", err)
 	}
 
+	// Publish the kubeconfig as an in-cluster Secret so the operator (Connector contract) can
+	// reach the nested cluster without a DinD-internal or host-only address.
+	raw, err := clusterAccess.Kubeconfig(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch kubeconfig for connector publish: %w", err)
+	}
+
+	err = p.publishConnectorKubeconfig(ctx, clusterName, raw)
+	if err != nil {
+		return fmt.Errorf("publish connector kubeconfig: %w", err)
+	}
+
 	return nil
+}
+
+// Kubeconfig returns a kubeconfig for the named nested Talos cluster reachable from inside the
+// host cluster (where the operator runs). Create publishes it with the API server already
+// rewritten to the in-cluster apiserver Service endpoint (see publishConnectorKubeconfig), so it
+// is served as-published. It satisfies the clusterprovisioner.Connector capability and returns
+// clustererr.ErrKubeconfigNotReady while the talos-<name>-kubeconfig Secret has not been
+// published yet.
+func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
+	clusterName := name
+	if clusterName == "" {
+		clusterName = p.clusterName
+	}
+
+	conn := ConnectionFor(clusterName)
+
+	raw, err := nested.ConnectorKubeconfig(
+		ctx, p.hostClientset, clusterName,
+		conn.Namespace, conn.SecretName, talosKubeconfigKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("talos: %w", err)
+	}
+
+	return raw, nil
 }
 
 // Delete deletes the Talos cluster inside DinD and cleans up host cluster resources.
@@ -394,8 +440,13 @@ func (p *KubernetesProvisioner) prepareExposure(
 		return nil, fmt.Errorf("expose API server: %w", err)
 	}
 
+	// The in-cluster Service DNS names (Connection.CertSANs) are included so the kubeconfig
+	// published for the Connector contract verifies against the served certificate.
 	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
-		[]string{"127.0.0.1", "localhost", exposure.Address},
+		append(
+			[]string{"127.0.0.1", "localhost", exposure.Address},
+			ConnectionFor(clusterName).CertSANs()...,
+		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("add exposure address to cert SANs: %w", err)
@@ -404,6 +455,43 @@ func (p *KubernetesProvisioner) prepareExposure(
 	p.inner.talosConfigs = newConfigs
 
 	return exposure, nil
+}
+
+// publishConnectorKubeconfig publishes the nested cluster's kubeconfig in the exposure namespace
+// under the Connection naming contract, with every server rewritten to the in-cluster apiserver
+// Service endpoint (a cert SAN since prepareExposure — never a DinD-internal address). Kubeconfig()
+// serves this Secret back to the operator as-published.
+func (p *KubernetesProvisioner) publishConnectorKubeconfig(
+	ctx context.Context,
+	clusterName string,
+	raw []byte,
+) error {
+	if p.hostClientset == nil {
+		return fmt.Errorf("%w: host clientset not set", clustererr.ErrConfigNil)
+	}
+
+	conn := ConnectionFor(clusterName)
+
+	rewritten, err := rewriteKubeconfigEndpoint(raw, conn.Endpoint)
+	if err != nil {
+		return fmt.Errorf("rewrite kubeconfig to in-cluster endpoint: %w", err)
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      conn.SecretName,
+			Namespace: conn.Namespace,
+			Labels:    kubernetesprovider.CommonLabels(clusterName),
+		},
+		Data: map[string][]byte{talosKubeconfigKey: rewritten},
+	}
+
+	err = nested.UpsertSecret(ctx, p.hostClientset, secret)
+	if err != nil {
+		return fmt.Errorf("write kubeconfig secret: %w", err)
+	}
+
+	return nil
 }
 
 // discoverMappedPorts returns the host ports the Talos API and Kubernetes API are published on

@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 )
 
 // FetchKubeconfigSecret reads the kubeconfig bytes published under key in the named Secret once
@@ -34,6 +36,72 @@ func FetchKubeconfigSecret(
 	}
 
 	return raw, nil
+}
+
+// ConnectorKubeconfig is the shared Connector read path: it validates the
+// resolved cluster name and host clientset, then fetches the published
+// kubeconfig Secret. Callers resolve the per-distribution connection
+// coordinates (namespace/secret/key) and wrap errors with their
+// distribution label.
+func ConnectorKubeconfig(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName, namespace, secretName, key string,
+) ([]byte, error) {
+	if clusterName == "" {
+		return nil, fmt.Errorf("%w: cluster name not set", clustererr.ErrConfigNil)
+	}
+
+	if clientset == nil {
+		return nil, fmt.Errorf("%w: host clientset not set", clustererr.ErrConfigNil)
+	}
+
+	return FetchKubeconfigSecret(ctx, clientset, namespace, secretName, key)
+}
+
+// UpsertSecret creates secret, or — when it already exists — re-reads the live
+// object and updates that in place so the write carries the current
+// resourceVersion (an Update built from a fresh object would be rejected by
+// the API server's optimistic-concurrency check). Get/Update conflicts with
+// concurrent writers are retried.
+func UpsertSecret(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	secret *corev1.Secret,
+) error {
+	_, err := clientset.CoreV1().Secrets(secret.Namespace).
+		Create(ctx, secret, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+
+	if !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create secret %s/%s: %w", secret.Namespace, secret.Name, err)
+	}
+
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, getErr := clientset.CoreV1().Secrets(secret.Namespace).
+			Get(ctx, secret.Name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get secret %s/%s: %w", secret.Namespace, secret.Name, getErr)
+		}
+
+		existing.Labels = secret.Labels
+		existing.Data = secret.Data
+
+		_, updateErr := clientset.CoreV1().Secrets(secret.Namespace).
+			Update(ctx, existing, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("update secret %s/%s: %w", secret.Namespace, secret.Name, updateErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("upsert secret %s/%s: %w", secret.Namespace, secret.Name, err)
+	}
+
+	return nil
 }
 
 // fetchSecretData is the single Get+NotFound+Data[key] step shared by
