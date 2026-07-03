@@ -167,13 +167,17 @@ func TestMirrorCmdRejectsInvalidPort(t *testing.T) {
 	t.Parallel()
 
 	for _, port := range []string{"0", "-1", "65536"} {
-		cmd := workload.NewMirrorCmd()
-		cmd.SetArgs([]string{mirrorTestDeploy, "--port", port})
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
+		t.Run(port, func(t *testing.T) {
+			t.Parallel()
 
-		err := cmd.Execute()
-		require.ErrorIs(t, err, workload.ErrInvalidMirrorPort, "port %s must be rejected", port)
+			cmd := workload.NewMirrorCmd()
+			cmd.SetArgs([]string{mirrorTestDeploy, "--port", port})
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.ErrorIs(t, err, workload.ErrInvalidMirrorPort, "port %s must be rejected", port)
+		})
 	}
 }
 
