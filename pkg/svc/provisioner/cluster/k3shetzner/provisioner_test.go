@@ -334,14 +334,14 @@ func TestCreateAlreadyExists(t *testing.T) {
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
-func TestCreateMultiNodeNotImplemented(t *testing.T) {
+func TestCreateHAControlPlaneNotImplemented(t *testing.T) {
 	t.Parallel()
 
 	infra := &fakeInfra{}
 	prov := newProvisioner(infra, 3, 0)
 
 	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, k3shetzner.ErrMultiNodeNotImplemented)
+	require.ErrorIs(t, err, k3shetzner.ErrHAControlPlaneNotImplemented)
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 

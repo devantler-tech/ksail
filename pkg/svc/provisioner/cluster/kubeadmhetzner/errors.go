@@ -11,6 +11,12 @@ var (
 	ErrClusterAlreadyExists = hetznerbase.ErrClusterAlreadyExists
 
 	// ErrMultiNodeNotImplemented is returned by [Provisioner.Create] for a kubeadm
-	// topology with joining nodes; see [hetznerbase.ErrMultiNodeNotImplemented].
+	// topology with agents — kubeadm does not yet implement joining-node bring-up;
+	// see [hetznerbase.ErrMultiNodeNotImplemented].
 	ErrMultiNodeNotImplemented = hetznerbase.ErrMultiNodeNotImplemented
+
+	// ErrHAControlPlaneNotImplemented is returned by [Provisioner.Create] for a
+	// kubeadm topology with more than one control plane; see
+	// [hetznerbase.ErrHAControlPlaneNotImplemented].
+	ErrHAControlPlaneNotImplemented = hetznerbase.ErrHAControlPlaneNotImplemented
 )
