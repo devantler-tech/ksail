@@ -87,9 +87,10 @@ func Run(ctx context.Context, opts Options) error {
 		}
 
 		return runDockerHostDebug(ctx, info, opts.NodeName, opts.Args)
-	case v1alpha1.DistributionEKS:
-		// Host-level debug on EKS nodes is not supported via KSail's host-debug
-		// path; users should use SSM/SSH directly against the EC2 instances.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// Host-level debug on managed cloud nodes is not supported via KSail's
+		// host-debug path; users should use the cloud's own access mechanism
+		// (SSM/SSH on EC2, gcloud compute ssh on GCE) directly.
 		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
 	default:
 		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
@@ -393,9 +394,9 @@ func DistributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 		return dockerprovider.LabelSchemeVCluster
 	case v1alpha1.DistributionKWOK:
 		return dockerprovider.LabelSchemeKWOK
-	case v1alpha1.DistributionEKS:
-		// EKS nodes are EC2 instances without Docker labels; fall back to the
-		// default scheme — this path is not used for EKS in practice.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// Managed cloud nodes (EC2/GCE instances) carry no Docker labels; fall
+		// back to the default scheme — this path is not used for them in practice.
 		return dockerprovider.LabelSchemeKind
 	default:
 		return dockerprovider.LabelSchemeKind

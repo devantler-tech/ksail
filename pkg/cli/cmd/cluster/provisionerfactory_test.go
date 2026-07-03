@@ -55,10 +55,12 @@ func newFullyPopulatedFactoryContext() *localregistry.Context {
 // newProvisionerFactory); this test asserts it can construct a provisioner for
 // every Distribution enum value, so adding a distribution without wiring its
 // config here fails loudly.
+//
+//nolint:paralleltest // t.Setenv-injected fake ADC must stay set while the subtests run
 func TestDefaultProvisionerFactory_CoversAllDistributions(t *testing.T) {
-	// No t.Parallel(): the GKE path dials the SDK client via Application
-	// Default Credentials, so a fake ADC file is injected with t.Setenv,
-	// which is incompatible with parallel tests.
+	// No t.Parallel() (incl. subtests): the GKE path dials the SDK client via
+	// Application Default Credentials, so a fake ADC file is injected with
+	// t.Setenv, which is incompatible with parallel tests.
 	credPath := filepath.Join(t.TempDir(), "adc.json")
 	require.NoError(t, os.WriteFile(credPath, []byte(
 		`{"type":"authorized_user","client_id":"test","client_secret":"test","refresh_token":"test"}`,

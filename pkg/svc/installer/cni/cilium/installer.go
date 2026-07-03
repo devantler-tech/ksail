@@ -197,8 +197,9 @@ func (c *Installer) getCiliumValues() map[string]string {
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
-		v1alpha1.DistributionEKS:
-		// Vanilla, K3s, VCluster, KWOK, and EKS use default values.
+		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE:
+		// Vanilla, K3s, VCluster, KWOK, EKS, and GKE use default values.
 	}
 
 	// Add provider-specific values.

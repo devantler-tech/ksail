@@ -170,18 +170,8 @@ func configureInfraProvider(
 		// Store Omni options so the provisioner can route to Omni-specific logic
 		provisioner.WithOmniOptions(omniOpts)
 
-	case v1alpha1.ProviderAWS:
-		return fmt.Errorf("%w: %s (AWS is only supported with the EKS distribution)",
-			ErrUnsupportedProvider, providerType)
-
-	case v1alpha1.ProviderGCP:
-		return fmt.Errorf("%w: %s (GCP is only supported with the GKE distribution)",
-			ErrUnsupportedProvider, providerType)
-
-	case v1alpha1.ProviderKubernetes:
-		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; "+
-			"use the Kubernetes-specific Talos provisioner instead)",
-			ErrUnsupportedProvider, providerType)
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderKubernetes:
+		return unsupportedTalosProviderError(providerType)
 
 	default:
 		return fmt.Errorf("%w: %s (supported: %s, %s, %s)",
@@ -192,6 +182,28 @@ func configureInfraProvider(
 	provisioner.WithInfraProvider(infraProvider)
 
 	return nil
+}
+
+// unsupportedTalosProviderError explains why a known-but-unsupported provider
+// cannot back the Talos distribution, pointing at the supported alternative.
+func unsupportedTalosProviderError(providerType v1alpha1.Provider) error {
+	switch providerType {
+	case v1alpha1.ProviderAWS:
+		return fmt.Errorf("%w: %s (AWS is only supported with the EKS distribution)",
+			ErrUnsupportedProvider, providerType)
+	case v1alpha1.ProviderGCP:
+		return fmt.Errorf("%w: %s (GCP is only supported with the GKE distribution)",
+			ErrUnsupportedProvider, providerType)
+	case v1alpha1.ProviderKubernetes:
+		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; "+
+			"use the Kubernetes-specific Talos provisioner instead)",
+			ErrUnsupportedProvider, providerType)
+	case v1alpha1.ProviderDocker, v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// Supported providers never reach this helper.
+		fallthrough
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedProvider, providerType)
+	}
 }
 
 // createHetznerProvider creates a Hetzner provider and returns the underlying hcloud client.

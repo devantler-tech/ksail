@@ -274,10 +274,10 @@ func TestKSailValidatorDistributionMessagesBuiltFromValidValues(t *testing.T) {
 
 		assert.Equal(
 			t,
-			"Use a supported distribution: Vanilla, K3s, Talos, VCluster, KWOK, EKS",
+			"Use a supported distribution: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE",
 			err.FixSuggestion,
 		)
-		assert.Equal(t, "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS", err.ExpectedValue)
+		assert.Equal(t, "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE", err.ExpectedValue)
 	}
 
 	assert.True(t, found, "Should find distribution validation error")
