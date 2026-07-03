@@ -1,14 +1,17 @@
 package workload
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	k8sutil "github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -16,6 +19,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+// ErrInvalidMirrorPort rejects --port values outside the valid TCP port range.
+var ErrInvalidMirrorPort = errors.New("invalid --port: must be between 1 and 65535")
 
 // defaultTapWaitTimeout bounds how long the mirror waits for the injected tap
 // container to reach Running before giving up.
@@ -27,6 +33,12 @@ const stdoutOutput = "-"
 // defaultMirrorOutput is the pcap file the capture is written to when
 // --output is not given.
 const defaultMirrorOutput = "mirror.pcap"
+
+// maxTCPPort is the highest valid TCP port number.
+const maxTCPPort = 65535
+
+// mirrorOutputDirPerm is the mode nested --output directories are created with.
+const mirrorOutputDirPerm = 0o750
 
 const mirrorCmdLong = `Mirror a Deployment's inbound traffic to the local machine (read-only).
 
@@ -127,6 +139,10 @@ func NewMirrorCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("port")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if opts.port <= 0 || opts.port > maxTCPPort {
+			return fmt.Errorf("%w: got %d", ErrInvalidMirrorPort, opts.port)
+		}
+
 		return runMirrorCommand(cmd, args[0], opts)
 	}
 
@@ -269,7 +285,13 @@ func openMirrorOutput(cmd *cobra.Command, output string) (io.Writer, *os.File, e
 		return cmd.OutOrStdout(), nil, nil
 	}
 
-	file, err := os.Create(output) //nolint:gosec // G304: the path IS the user's --output flag.
+	canonical, err := prepareMirrorOutputPath(output)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	//nolint:gosec // G304: canonicalized via EvalCanonicalPath above.
+	file, err := os.Create(canonical)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create capture file: %w", err)
 	}
@@ -277,17 +299,35 @@ func openMirrorOutput(cmd *cobra.Command, output string) (io.Writer, *os.File, e
 	return file, file, nil
 }
 
+// prepareMirrorOutputPath creates the output's parent directory if needed and
+// canonicalizes the path via EvalCanonicalPath to prevent symlink-escape
+// attacks (canonicalize after MkdirAll so the parent exists for resolution).
+func prepareMirrorOutputPath(outputPath string) (string, error) {
+	outputDir := filepath.Dir(outputPath)
+	if outputDir != "." && outputDir != "" {
+		err := os.MkdirAll(outputDir, mirrorOutputDirPerm)
+		if err != nil {
+			return "", fmt.Errorf("create capture output directory: %w", err)
+		}
+	}
+
+	canonical, err := fsutil.EvalCanonicalPath(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve capture output path %q: %w", outputPath, err)
+	}
+
+	return canonical, nil
+}
+
 // summarizeMirrorFile re-reads the finished capture file and reports how much
 // was captured.
 func summarizeMirrorFile(cmd *cobra.Command, path string) error {
-	file, err := os.Open(path) //nolint:gosec // G304: re-reads the capture file this command just wrote.
+	data, err := fsutil.ReadFileSafe(filepath.Dir(path), path)
 	if err != nil {
-		return fmt.Errorf("open capture file for summary: %w", err)
+		return fmt.Errorf("read capture file for summary: %w", err)
 	}
 
-	defer func() { _ = file.Close() }()
-
-	summary, err := mirror.SummarizeCapture(file)
+	summary, err := mirror.SummarizeCapture(bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("summarize capture: %w", err)
 	}

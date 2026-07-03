@@ -3,6 +3,7 @@ package workload_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -135,8 +136,11 @@ func stubMirrorSession(
 			*ran = true
 
 			_, err := out.Write(pcap)
+			if err != nil {
+				return fmt.Errorf("write pcap to capture output: %w", err)
+			}
 
-			return err
+			return nil
 		},
 	)
 
@@ -157,6 +161,45 @@ func TestMirrorCmdRequiresPort(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "port")
+}
+
+func TestMirrorCmdRejectsInvalidPort(t *testing.T) {
+	t.Parallel()
+
+	for _, port := range []string{"0", "-1", "65536"} {
+		cmd := workload.NewMirrorCmd()
+		cmd.SetArgs([]string{mirrorTestDeploy, "--port", port})
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+
+		err := cmd.Execute()
+		require.ErrorIs(t, err, workload.ErrInvalidMirrorPort, "port %s must be rejected", port)
+	}
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestMirrorCmdCreatesNestedOutputDirectories(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
+	restore, _ := stubMirrorSession(client, testPcapBytes(t))
+	defer restore()
+
+	nested := filepath.Join("captures", "nested", "out.pcap")
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{mirrorTestDeploy, "--port", "8080", "--output", nested})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	_, err := os.Stat(nested)
+	require.NoError(t, err, "nested output directories must be created")
 }
 
 //nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
