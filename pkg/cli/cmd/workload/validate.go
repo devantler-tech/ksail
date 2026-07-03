@@ -19,6 +19,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/celrules"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
@@ -79,6 +80,7 @@ func NewValidateCmd() *cobra.Command {
 		skipHelmRender       bool
 		skipKinds            []string
 		schemaLocations      []string
+		rules                string
 	)
 
 	cmd := &cobra.Command{
@@ -98,6 +100,7 @@ func NewValidateCmd() *cobra.Command {
 					skipHelmRender:       skipHelmRender,
 					skipKinds:            skipKinds,
 					schemaLocations:      schemaLocations,
+					rules:                rules,
 				},
 			)
 		},
@@ -111,6 +114,7 @@ func NewValidateCmd() *cobra.Command {
 		&skipHelmRender,
 		&skipKinds,
 		&schemaLocations,
+		&rules,
 	)
 
 	return cmd
@@ -124,6 +128,7 @@ type validateFlags struct {
 	skipHelmRender       bool
 	skipKinds            []string
 	schemaLocations      []string
+	rules                string
 }
 
 // addValidateFlags registers the flags for the validate command.
@@ -131,6 +136,7 @@ func addValidateFlags(
 	cmd *cobra.Command,
 	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender *bool,
 	skipKinds, schemaLocations *[]string,
+	rules *string,
 ) {
 	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
 	cmd.Flags().BoolVar(strict, "strict", false, "Enable strict validation mode")
@@ -161,6 +167,14 @@ func addValidateFlags(
 		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
 			"absent from the CRDs-catalog, so they are validated against a supplied schema instead "+
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+	)
+	cmd.Flags().StringVar(
+		rules,
+		"rules",
+		"",
+		"Path to a YAML CEL rules file. Each rule's CEL expression is evaluated against every "+
+			"rendered document (bound to the 'object' variable); an error-severity violation fails "+
+			"validation, a warning-severity violation is reported without failing.",
 	)
 }
 
@@ -232,7 +246,15 @@ func runValidateCmd(
 
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
-	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer)
+	// Compile the CEL rules once up front so a malformed rules file fails fast
+	// (before any manifest is processed) rather than silently skipping the rules.
+	// A nil engine means the --rules flag was not given (CEL validation disabled).
+	engine, err := buildCELEngine(flags.rules)
+	if err != nil {
+		return err
+	}
+
+	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine)
 }
 
 // buildValidateRenderer returns a gitopsRenderer when Helm rendering is enabled,
@@ -439,6 +461,7 @@ func validatePath(
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
 	renderer *gitopsRenderer,
+	engine *celrules.Engine,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -450,14 +473,16 @@ func validatePath(
 	if !info.IsDir() {
 		rootDir := filepath.Dir(path)
 
-		return validateFile(ctx, cmd, rootDir, path, kubeconformClient, opts)
+		return validateFile(ctx, cmd, rootDir, path, kubeconformClient, opts, engine)
 	}
 
 	// If it's a directory, walk it to find YAML files and kustomizations
-	return validateDirectory(ctx, cmd, path, kubeconformClient, opts, renderer)
+	return validateDirectory(ctx, cmd, path, kubeconformClient, opts, renderer, engine)
 }
 
-// validateFile validates a single YAML file.
+// validateFile validates a single YAML file, then applies any CEL rules. A
+// single-file input is not part of a parallel progress group, so its own CEL
+// warning sink is reported inline once validation completes.
 func validateFile(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -465,6 +490,7 @@ func validateFile(
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	engine *celrules.Engine,
 ) error {
 	// Only validate YAML files
 	if !isYAMLFile(filePath) {
@@ -478,7 +504,12 @@ func validateFile(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	err := validateFileSilent(ctx, rootDir, filePath, kubeconformClient, opts)
+	sink := &celViolationSink{}
+
+	err := validateFileSilent(ctx, rootDir, filePath, kubeconformClient, opts, engine, sink)
+
+	sink.report(cmd)
+
 	if err != nil {
 		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
@@ -495,6 +526,7 @@ func validateDirectory(
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
 	renderer *gitopsRenderer,
+	engine *celrules.Engine,
 ) error {
 	// Find all kustomizations
 	kustomizations, err := findKustomizations(dirPath)
@@ -518,6 +550,12 @@ func validateDirectory(
 		notify.WithContinueOnError(),
 	}
 
+	// One CEL warning sink for the whole directory: both progress groups feed it,
+	// and it is reported once after they complete so warnings don't interleave
+	// with the ANSI progress display.
+	celSink := &celViolationSink{}
+	defer celSink.report(cmd)
+
 	if len(kustomizations) > 0 {
 		validator := &kustomizationValidator{
 			dirPath:     dirPath,
@@ -526,6 +564,8 @@ func validateDirectory(
 			renderer:    renderer,
 			sink:        &degradationSink{},
 			opts:        opts,
+			engine:      engine,
+			celSink:     celSink,
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
@@ -535,19 +575,45 @@ func validateDirectory(
 	}
 
 	// Validate individual YAML files in parallel with progress display
-	if len(yamlFiles) > 0 {
-		err := runParallelValidation(
-			ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
-			func(taskCtx context.Context, file string) error {
-				return validateFileSilent(
-					taskCtx, dirPath, file, kubeconformClient, opts,
-				)
-			},
-			append(progressOpts, notify.WithCountLabel("files"))...,
-		)
-		if err != nil {
-			return fmt.Errorf("yaml validation failed: %w", err)
-		}
+	err = validateYAMLFiles(
+		ctx, cmd, dirPath, yamlFiles, kubeconformClient, opts, engine, celSink, progressOpts,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateYAMLFiles validates the loose YAML files in a directory in parallel,
+// applying kubeconform and any CEL rules to each. It is a no-op when there are
+// no files. Split from validateDirectory to keep both readably short.
+func validateYAMLFiles(
+	ctx context.Context,
+	cmd *cobra.Command,
+	dirPath string,
+	yamlFiles []string,
+	kubeconformClient *kubeconform.Client,
+	opts *kubeconform.ValidationOptions,
+	engine *celrules.Engine,
+	celSink *celViolationSink,
+	progressOpts []notify.ProgressOption,
+) error {
+	if len(yamlFiles) == 0 {
+		return nil
+	}
+
+	err := runParallelValidation(
+		ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
+		func(taskCtx context.Context, file string) error {
+			return validateFileSilent(
+				taskCtx, dirPath, file, kubeconformClient, opts, engine, celSink,
+			)
+		},
+		append(progressOpts, notify.WithCountLabel("files"))...,
+	)
+	if err != nil {
+		return fmt.Errorf("yaml validation failed: %w", err)
 	}
 
 	return nil
@@ -606,6 +672,8 @@ type kustomizationValidator struct {
 	renderer    *gitopsRenderer // nil → Helm rendering disabled
 	sink        *degradationSink
 	opts        *kubeconform.ValidationOptions
+	engine      *celrules.Engine  // nil → CEL rule validation disabled
+	celSink     *celViolationSink // collects warning-severity CEL violations
 }
 
 // run validates every kustomization directory in parallel and then reports any
@@ -671,6 +739,12 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	err = v.kubeconform.ValidateBytes(ctx, kustDir, data, opts)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
+	}
+
+	// Apply CEL rules to the same rendered/built manifests kubeconform validated.
+	err = evaluateCELDocuments(v.engine, data, kustDir, v.celSink)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -763,13 +837,16 @@ func documentIdentity(doc render.Document) string {
 	return doc.Kind + "/" + doc.Name
 }
 
-// validateFileSilent validates a single YAML file without output (for parallel execution).
+// validateFileSilent validates a single YAML file without output (for parallel
+// execution), then applies any CEL rules to the same Flux-substituted content.
 func validateFileSilent(
 	ctx context.Context,
 	rootDir string,
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	engine *celrules.Engine,
+	celSink *celViolationSink,
 ) error {
 	// Only validate YAML files
 	if !isYAMLFile(filePath) {
@@ -781,14 +858,17 @@ func validateFileSilent(
 		return fmt.Errorf("read file %s: %w", filePath, err)
 	}
 
-	err = kubeconformClient.ValidateBytes(
-		ctx,
-		filePath,
-		fluxsubst.ExpandFluxSubstitutions(data),
-		opts,
-	)
+	expanded := fluxsubst.ExpandFluxSubstitutions(data)
+
+	err = kubeconformClient.ValidateBytes(ctx, filePath, expanded, opts)
 	if err != nil {
 		return fmt.Errorf("validate file %s: %w", filePath, err)
+	}
+
+	// Apply CEL rules to the same content kubeconform validated.
+	err = evaluateCELDocuments(engine, expanded, filePath, celSink)
+	if err != nil {
+		return err
 	}
 
 	return nil
