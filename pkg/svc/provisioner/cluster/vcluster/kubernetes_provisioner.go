@@ -330,25 +330,11 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 
 	conn := ConnectionFor(clusterName)
 
-	secret, err := p.hostClientset.CoreV1().
-		Secrets(conn.Namespace).
-		Get(ctx, conn.SecretName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil, clustererr.ErrKubeconfigNotReady
-	}
-
+	raw, err := nested.FetchKubeconfigSecret(
+		ctx, p.hostClientset, conn.Namespace, conn.SecretName, KubeconfigSecretKey,
+	)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"get vcluster kubeconfig secret %s/%s: %w",
-			conn.Namespace,
-			conn.SecretName,
-			err,
-		)
-	}
-
-	raw := secret.Data[KubeconfigSecretKey]
-	if len(raw) == 0 {
-		return nil, clustererr.ErrKubeconfigNotReady
+		return nil, fmt.Errorf("vcluster: %w", err)
 	}
 
 	config, err := clientcmd.Load(raw)

@@ -332,25 +332,11 @@ func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, e
 
 	conn := ConnectionFor(clusterName)
 
-	secret, err := p.hostClientset.CoreV1().
-		Secrets(conn.Namespace).
-		Get(ctx, conn.SecretName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil, clustererr.ErrKubeconfigNotReady
-	}
-
+	raw, err := nested.FetchKubeconfigSecret(
+		ctx, p.hostClientset, conn.Namespace, conn.SecretName, k3kKubeconfigKey,
+	)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"get k3k kubeconfig secret %s/%s: %w",
-			conn.Namespace,
-			conn.SecretName,
-			err,
-		)
-	}
-
-	raw := secret.Data[k3kKubeconfigKey]
-	if len(raw) == 0 {
-		return nil, clustererr.ErrKubeconfigNotReady
+		return nil, fmt.Errorf("k3k: %w", err)
 	}
 
 	config, err := clientcmd.Load(raw)

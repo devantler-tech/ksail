@@ -5,11 +5,41 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
+
+// FetchKubeconfigSecret reads the kubeconfig bytes published under key in the named Secret once
+// (no polling — the Connector capability's read path). A not-yet-created Secret (NotFound) and an
+// empty/absent key value are reported as clustererr.ErrKubeconfigNotReady so operator callers can
+// retry; any other API error is wrapped with the Secret's coordinates.
+//
+// This is the shared fetch the K3d (k3k operator) and VCluster (vc-<name>) Connector
+// implementations use; the per-distribution secret name and data key are passed in by the caller.
+func FetchKubeconfigSecret(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace, secretName, key string,
+) ([]byte, error) {
+	secret, err := clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get kubeconfig secret %s/%s: %w", namespace, secretName, err)
+	}
+
+	raw := secret.Data[key]
+	if len(raw) == 0 {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	return raw, nil
+}
 
 // NamespaceExists reports whether namespace exists on the host cluster. A
 // NotFound result is reported as (false, nil); any other API error is wrapped and
