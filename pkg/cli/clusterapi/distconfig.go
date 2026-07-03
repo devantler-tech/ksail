@@ -42,8 +42,9 @@ func distributionConfig(
 	}
 
 	if config == nil {
-		// BuildDistributionConfig returns (nil, nil) only for EKS, handled above; any other distribution
-		// without a config is unavailable locally.
+		// BuildDistributionConfig returns (nil, nil) for the caller-specific distributions: EKS is
+		// handled above; GKE is not yet creatable via the local backend (its project/location/spec
+		// resolution ships with the ksail CLI + operator paths first), so it reports unavailable here.
 		return nil, errDistributionUnavailable(distribution)
 	}
 

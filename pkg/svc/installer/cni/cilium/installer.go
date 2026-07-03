@@ -215,9 +215,11 @@ func (c *Installer) getCiliumValues() map[string]string {
 	case v1alpha1.ProviderHetzner,
 		v1alpha1.ProviderOmni,
 		v1alpha1.ProviderAWS,
+		v1alpha1.ProviderGCP,
 		v1alpha1.ProviderKubernetes:
-		// Hetzner, Omni, AWS, and Kubernetes use default values (Cilium is not installed
-		// on EKS by KSail, but if selected it behaves like other cloud providers).
+		// Hetzner, Omni, AWS, GCP, and Kubernetes use default values (Cilium is
+		// not installed on EKS/GKE by KSail, but if selected it behaves like
+		// other cloud providers).
 	}
 
 	return values

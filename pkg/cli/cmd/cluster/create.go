@@ -142,6 +142,7 @@ func defaultProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.De
 			VCluster:    ctx.VClusterConfig,
 			KWOK:        ctx.KWOKConfig,
 			EKS:         ctx.EKSConfig,
+			GKE:         ctx.GKEConfig,
 			MirrorSpecs: ctx.MirrorSpecs,
 		},
 	}
@@ -689,9 +690,10 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return resolveVClusterName(ctx)
 	case v1alpha1.DistributionKWOK:
 		return resolveKWOKName(ctx)
-	case v1alpha1.DistributionEKS:
-		// EKS config is owned by eksctl (eks.yaml) and not cached on the
-		// local registry context; fall back to the cluster-level name.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// EKS/GKE configs are owned by their cloud tooling (eks.yaml/gke.yaml)
+		// and not cached on the local registry context; fall back to the
+		// cluster-level name.
 		return resolveFallbackName(ctx)
 	default:
 		return resolveFallbackName(ctx)

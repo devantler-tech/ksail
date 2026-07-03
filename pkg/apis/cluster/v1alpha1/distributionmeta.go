@@ -116,6 +116,18 @@ var distributionMetaTable = map[Distribution]distributionMeta{
 		csiByDefault:          onlyProviders(ProviderAWS),
 		loadBalancerByDefault: onlyProviders(ProviderAWS),
 	},
+	DistributionGKE: {
+		configFile:         DefaultGKEDistributionConfig,
+		defaultClusterName: "gke-default",
+		// gcloud writes kubeconfig contexts as gke_<project>_<location>_<name>;
+		// project and location are unknown at scaffold time, so only the prefix
+		// is returned — same partial-context trade the EKS suffix makes.
+		contextPrefix:         "gke_",
+		supportedProviders:    []Provider{ProviderGCP},
+		providesStorage:       true,
+		csiByDefault:          onlyProviders(ProviderGCP),
+		loadBalancerByDefault: onlyProviders(ProviderGCP),
+	},
 }
 
 // distributionMetaFor looks up the metadata row for a distribution. The

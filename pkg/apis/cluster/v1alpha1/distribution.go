@@ -20,6 +20,11 @@ const (
 	// Cluster creation is delegated to the eksctl CLI; Upgrade, Delete and nodegroup
 	// scaling are handled via the embedded eksctl Go libraries.
 	DistributionEKS Distribution = "EKS"
+	// DistributionGKE is the Google Kubernetes Engine distribution (managed
+	// Kubernetes on Google Cloud). All lifecycle operations go through the
+	// native Go SDK (cloud.google.com/go/container); Start/Stop scale node
+	// pools via the GCP infrastructure provider.
+	DistributionGKE Distribution = "GKE"
 )
 
 // ValidDistributions returns supported distribution values.
@@ -31,6 +36,7 @@ func ValidDistributions() []Distribution {
 		DistributionVCluster,
 		DistributionKWOK,
 		DistributionEKS,
+		DistributionGKE,
 	}
 }
 

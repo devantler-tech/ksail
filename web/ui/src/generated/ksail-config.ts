@@ -55,16 +55,16 @@ export interface KSailClusterConfiguration {
       };
       /**
        * Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
-       * K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS).
+       * K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud).
        */
-      distribution?: "Vanilla" | "K3s" | "Talos" | "VCluster" | "KWOK" | "EKS";
+      distribution?: "Vanilla" | "K3s" | "Talos" | "VCluster" | "KWOK" | "EKS" | "GKE";
       /**
        * Provider selects the infrastructure that runs the cluster nodes: Docker,
-       * Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing
+       * Hetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing
        * cluster). Each distribution supports a subset of providers; when empty,
        * KSail uses the distribution's default provider.
        */
-      provider?: "Docker" | "Hetzner" | "Omni" | "AWS" | "Kubernetes";
+      provider?: "Docker" | "Hetzner" | "Omni" | "AWS" | "GCP" | "Kubernetes";
       /**
        * CNI selects the Container Network Interface plugin. Default keeps the
        * distribution's built-in CNI; Cilium or Calico install that CNI instead.
@@ -444,7 +444,7 @@ export interface KSailClusterConfiguration {
     };
     /**
      * Provider holds infrastructure-provider-specific options
-     * (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters).
+     * (Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters).
      */
     provider?: {
       /**
@@ -648,6 +648,21 @@ export interface KSailClusterConfiguration {
          * Defaults to "AWS_SESSION_TOKEN".
          */
         sessionTokenEnvVar?: string;
+      };
+      /**
+       * GCP holds options for the Google Cloud provider used by the GKE distribution.
+       */
+      gcp?: {
+        /**
+         * ProjectEnvVar is the environment variable containing the Google Cloud project ID.
+         * Defaults to "GOOGLE_CLOUD_PROJECT".
+         */
+        projectEnvVar?: string;
+        /**
+         * LocationEnvVar is the environment variable containing the GKE location (zone or region).
+         * Defaults to "GOOGLE_CLOUD_LOCATION".
+         */
+        locationEnvVar?: string;
       };
       /**
        * Kubernetes holds options for the Kubernetes provider, which runs nested

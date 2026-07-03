@@ -190,7 +190,7 @@ The `spec` field is a `Spec` object that defines editor, cluster, and workload c
 | ----- | ---- | ------- | ----------- |
 | `editor` | string | – | Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator. |
 | `cluster` | ClusterSpec | – | Cluster configures the Kubernetes cluster KSail manages: distribution, provider, components, and connection settings. |
-| `provider` | ProviderSpec | – | Provider holds infrastructure-provider-specific options (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters). |
+| `provider` | ProviderSpec | – | Provider holds infrastructure-provider-specific options (Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters). |
 | `workload` | WorkloadSpec | – | Workload configures workload management: the manifest source directory, OCI push and validation settings, and GitOps bootstrap options. |
 | `chat` | ChatSpec | – | Chat configures the KSail AI chat assistant. CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it). |
 
@@ -204,8 +204,8 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | ----- | ---- | ------- | ----------- |
 | `distributionConfig` | string | – | Path to the distribution's own configuration file (kind.yaml |
 | `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. CLI-only (local kubeconfig path/context); ignored by the operator. |
-| `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS). |
-| `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |
+| `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud). |
+| `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |
 | `cni` | enum | – | CNI selects the Container Network Interface plugin. Default keeps the distribution's built-in CNI; Cilium or Calico install that CNI instead. |
 | `csi` | enum | – | CSI controls Container Storage Interface support. Default keeps the distribution's behavior; Enabled installs a CSI driver (local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none. |
 | `cdi` | enum | – | CDI controls Container Device Interface support in the container runtime (Default, Enabled, or Disabled). |
@@ -237,6 +237,7 @@ See [Distributions](/concepts/#distributions) for detailed information.
 - `VCluster` – Virtual clusters via [vCluster](https://www.vcluster.com/)
 - `KWOK` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)
 - `EKS` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the `eksctl` CLI on `PATH`)
+- `GKE` – Google Kubernetes Engine via the native Go SDK (requires Google Cloud Application Default Credentials and a project via `GOOGLE_CLOUD_PROJECT`)
 
 #### provider
 
@@ -246,9 +247,10 @@ See [Providers](/concepts/#providers) for more details.
 - `Hetzner` – Run nodes on Hetzner Cloud servers (requires `HCLOUD_TOKEN`)
 - `Omni` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
 - `AWS` – Manage EKS clusters on Amazon Web Services (requires standard AWS SDK credentials)
+- `GCP` – Manage GKE clusters on Google Cloud (requires Application Default Credentials)
 
 > [!NOTE]
-> Hetzner and Omni providers are only supported with the `Talos` distribution. The AWS provider is only supported with the `EKS` distribution.
+> Hetzner and Omni providers are only supported with the `Talos` distribution. The AWS provider is only supported with the `EKS` distribution, and the GCP provider only with the `GKE` distribution.
 
 #### distributionConfig
 
@@ -262,6 +264,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - `VCluster` → `vcluster.yaml`
 - `KWOK` → `kwok/` (directory)
 - `EKS` → `eks.yaml`
+- `GKE` → `gke.yaml` (optional – the GKE API owns the cluster shape)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
 
@@ -373,7 +376,7 @@ The Kubernetes version is set at the top level (`spec.cluster.kubernetesVersion`
 
 - `kubernetesVersion` – Pin the Kubernetes version (e.g. `v1.32.0`). When unset, `cluster update` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned `talos.version`
 
-**Provider options (`spec.provider`):** infrastructure provider options (Hetzner, Omni, AWS, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
+**Provider options (`spec.provider`):** infrastructure provider options (Hetzner, Omni, AWS, GCP, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
 
 **Autoscaler options (`spec.cluster.autoscaler`):** pod and node autoscaling options are documented in the generated [spec.cluster.autoscaler (AutoscalerConfig)](#specclusterautoscaler-autoscalerconfig) sections below.
 
@@ -445,6 +448,7 @@ ProviderSpec defines provider-specific configuration for infrastructure provider
 | `hetzner` | OptionsHetzner | – | Hetzner holds options for the Hetzner Cloud provider. |
 | `omni` | OptionsOmni | – | Omni holds options for the Sidero Omni provider. |
 | `aws` | OptionsAWS | – | AWS holds options for the AWS provider used by the EKS distribution. |
+| `gcp` | OptionsGCP | – | GCP holds options for the Google Cloud provider used by the GKE distribution. |
 | `kubernetes` | OptionsKubernetes | – | Kubernetes holds options for the Kubernetes provider, which runs nested clusters as pods inside an existing host cluster. |
 
 ### spec.provider.hetzner (OptionsHetzner)
@@ -500,6 +504,15 @@ OptionsAWS defines options specific to the AWS cloud provider. Credentials are r
 | `accessKeyIdEnvVar` | string | `AWS_ACCESS_KEY_ID` | AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID. Defaults to "AWS_ACCESS_KEY_ID". |
 | `secretAccessKeyEnvVar` | string | `AWS_SECRET_ACCESS_KEY` | SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key. Defaults to "AWS_SECRET_ACCESS_KEY". |
 | `sessionTokenEnvVar` | string | `AWS_SESSION_TOKEN` | SessionTokenEnvVar is the environment variable containing an AWS session token (used with temporary credentials from STS). Defaults to "AWS_SESSION_TOKEN". |
+
+### spec.provider.gcp (OptionsGCP)
+
+OptionsGCP defines options specific to the Google Cloud provider used by the GKE distribution. Credentials are resolved via Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS / gcloud ADC); the *EnvVar fields let users point KSail at non-standard environment variable names (mirrors the AWS/Hetzner/Omni pattern).
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `projectEnvVar` | string | `GOOGLE_CLOUD_PROJECT` | ProjectEnvVar is the environment variable containing the Google Cloud project ID. Defaults to "GOOGLE_CLOUD_PROJECT". |
+| `locationEnvVar` | string | `GOOGLE_CLOUD_LOCATION` | LocationEnvVar is the environment variable containing the GKE location (zone or region). Defaults to "GOOGLE_CLOUD_LOCATION". |
 
 ### spec.provider.kubernetes (OptionsKubernetes)
 

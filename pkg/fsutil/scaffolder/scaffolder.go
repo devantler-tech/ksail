@@ -517,6 +517,11 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateKWOKConfig(output, force)
 	case v1alpha1.DistributionEKS:
 		return s.generateEKSConfig(output, force)
+	case v1alpha1.DistributionGKE:
+		// GKE has no scaffolded distribution config: gke.yaml is optional
+		// (project/location resolve from the environment, and the GKE API owns
+		// the cluster shape), so nothing is generated.
+		return nil
 	default:
 		return ErrUnknownDistribution
 	}

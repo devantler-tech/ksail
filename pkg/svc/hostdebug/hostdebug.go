@@ -170,9 +170,10 @@ func resolveTalosNodeEndpoint(ctx context.Context, opts Options) (string, error)
 			opts.NodeName,
 			info.Provider,
 		)
-	case v1alpha1.ProviderAWS:
-		// EKS host-level debug is not supported: nodes are AWS EC2 instances
-		// reachable only via SSM/SSH, not via Talos or Docker host debug paths.
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP:
+		// EKS/GKE host-level debug is not supported: nodes are cloud VMs
+		// reachable only via the cloud's own access paths, not via Talos or
+		// Docker host debug.
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider host-level debug is not yet supported.

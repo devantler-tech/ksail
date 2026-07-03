@@ -103,3 +103,11 @@ func (m *ConfigManager) ResolveKWOKNameForTest() string {
 func (m *ConfigManager) ResolveEKSNameFromContextForTest() string {
 	return m.resolveEKSNameFromContext()
 }
+
+// ResolveGKENameFromContextForTest exposes resolveGKENameFromContext for testing.
+func (m *ConfigManager) ResolveGKENameFromContextForTest() string {
+	return m.resolveGKENameFromContext()
+}
+
+// ReadGKEConfigSpecForTest exposes readGKEConfigSpec for testing.
+var ReadGKEConfigSpecForTest = readGKEConfigSpec

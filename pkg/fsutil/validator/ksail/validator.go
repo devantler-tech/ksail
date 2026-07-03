@@ -240,9 +240,9 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getVClusterConfigName()
 	case v1alpha1.DistributionKWOK:
 		return v.getKWOKConfigName()
-	case v1alpha1.DistributionEKS:
-		// EKS config is not provided to the validator (eksctl manages it);
-		// skip distribution-level name validation.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// EKS/GKE configs are not provided to the validator (eksctl / the GKE
+		// API manage them); skip distribution-level name validation.
 		return ""
 	default:
 		return ""
@@ -335,9 +335,11 @@ func (v *Validator) validateCiliumCNI(
 		v.validateK3dCiliumCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosCiliumCNIAlignment(result)
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
 		// VCluster manages its own CNI internally; KWOK simulates all pods;
-		// EKS uses AWS VPC CNI (managed by the cloud). No alignment check needed.
+		// EKS uses AWS VPC CNI and GKE its managed dataplane (cloud-managed).
+		// No alignment check needed.
 	}
 }
 
@@ -353,8 +355,9 @@ func (v *Validator) validateDefaultCNI(
 		v.validateK3dDefaultCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosDefaultCNIAlignment(result)
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
-		// VCluster, KWOK, and EKS manage CNI internally; no alignment check needed.
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		// VCluster, KWOK, EKS, and GKE manage CNI internally; no alignment check needed.
 	}
 }
 
