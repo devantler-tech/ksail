@@ -70,6 +70,14 @@ type Config struct {
 	// would create a server that never bootstraps, so a keys-only Config is
 	// still rejected with [ErrNoCommands].
 	SSHAuthorizedKeys []string
+	// HostKeys is a pre-generated SSH host identity delivered via cloud-init's
+	// `ssh_keys:` module, replacing the host keys the image would otherwise
+	// generate at first boot. Delivering the identity up front lets the SSH
+	// bootstrap client pin the host key (golang.org/x/crypto/ssh.FixedHostKey)
+	// instead of trusting first contact. Optional; when set, both halves are
+	// required (see [ErrInvalidHostKeys]). Like SSHAuthorizedKeys, a host
+	// identity alone does not make a Config renderable ([ErrNoCommands]).
+	HostKeys *HostKeys
 	// ScriptPath overrides where the boot script is written. Optional; defaults to
 	// [DefaultScriptPath]. Must be absolute when set (see [ErrPathNotAbsolute]).
 	ScriptPath string
@@ -114,6 +122,20 @@ type File struct {
 	Content string
 }
 
+// HostKeys is cloud-init's `ssh_keys:` module limited to the ed25519 host
+// identity this package delivers: the private half the node's sshd serves and
+// the matching public half a bootstrap client pins. ed25519 matches the
+// bootstrap keypair the ssh bootstrap package generates.
+type HostKeys struct {
+	// ED25519Private is the PEM-encoded ed25519 private host key. Required when
+	// HostKeys is set; spans multiple lines, no NUL byte (see
+	// [ErrInvalidHostKeys]).
+	ED25519Private string
+	// ED25519Public is the single-line (authorized_keys-style) public host key.
+	// Required when HostKeys is set (see [ErrInvalidHostKeys]).
+	ED25519Public string
+}
+
 // cloudConfig is the subset of the cloud-init schema this package emits. It is
 // marshalled to YAML and prefixed with the `#cloud-config` header. Every field
 // is omitempty so a command-only Config renders exactly as it did before the
@@ -124,8 +146,19 @@ type cloudConfig struct {
 	Apt        *aptConfig  `yaml:"apt,omitempty"`
 	Packages   []string    `yaml:"packages,omitempty"`
 	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ssh_authorized_keys".
-	SSHAuthorizedKeys []string   `yaml:"ssh_authorized_keys,omitempty"`
-	RunCmd            [][]string `yaml:"runcmd,omitempty"`
+	SSHAuthorizedKeys []string `yaml:"ssh_authorized_keys,omitempty"`
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ssh_keys".
+	SSHKeys *sshKeysConfig `yaml:"ssh_keys,omitempty"`
+	RunCmd  [][]string     `yaml:"runcmd,omitempty"`
+}
+
+// sshKeysConfig is cloud-init's `ssh_keys:` module, limited to the ed25519
+// host identity this package emits (see [HostKeys]).
+type sshKeysConfig struct {
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ed25519_private".
+	ED25519Private string `yaml:"ed25519_private"`
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ed25519_public".
+	ED25519Public string `yaml:"ed25519_public"`
 }
 
 // writeFile is one entry of cloud-init's write_files module: a file dropped onto
@@ -186,12 +219,14 @@ type directives struct {
 	sources  map[string]aptSource
 	files    []writeFile
 	sshKeys  []string
+	hostKeys *sshKeysConfig
 }
 
 // empty reports whether there is nothing to render — no command, package, apt
-// source, or file. SSH authorized keys are deliberately excluded: a keys-only
-// document would create a server that never bootstraps, so keys alone don't
-// make a Config renderable (see [Config.SSHAuthorizedKeys]).
+// source, or file. SSH authorized keys and the host identity are deliberately
+// excluded: a keys-only document would create a server that never bootstraps,
+// so keys alone don't make a Config renderable (see
+// [Config.SSHAuthorizedKeys]).
 func (d directives) empty() bool {
 	return len(d.commands) == 0 &&
 		len(d.packages) == 0 &&
@@ -227,12 +262,22 @@ func (cfg Config) validate() (directives, error) {
 		return directives{}, err
 	}
 
+	var hostKeys *sshKeysConfig
+
+	if cfg.HostKeys != nil {
+		hostKeys, err = cfg.validatedHostKeys()
+		if err != nil {
+			return directives{}, err
+		}
+	}
+
 	dirs := directives{
 		commands: commands,
 		packages: packages,
 		sources:  sources,
 		files:    files,
 		sshKeys:  sshKeys,
+		hostKeys: hostKeys,
 	}
 	if dirs.empty() {
 		return directives{}, ErrNoCommands
@@ -263,6 +308,24 @@ func (cfg Config) validatedSSHAuthorizedKeys() ([]string, error) {
 	return keys, nil
 }
 
+// validatedHostKeys returns cfg's (non-nil) host identity as the rendered
+// ssh_keys module. Both halves are required together; the public half must be
+// a single line; neither may contain a NUL byte.
+func (cfg Config) validatedHostKeys() (*sshKeysConfig, error) {
+	private := cfg.HostKeys.ED25519Private
+	public := cfg.HostKeys.ED25519Public
+
+	if strings.TrimSpace(private) == "" || strings.TrimSpace(public) == "" {
+		return nil, ErrInvalidHostKeys
+	}
+
+	if strings.ContainsRune(private, '\x00') || strings.ContainsAny(public, "\n\x00") {
+		return nil, ErrInvalidHostKeys
+	}
+
+	return &sshKeysConfig{ED25519Private: private, ED25519Public: public}, nil
+}
+
 // buildDoc assembles the cloud-config from already-validated directives. Files
 // are written first, then apt sources and packages, then (when there are
 // commands) the boot script and the runcmd that executes it — matching
@@ -273,6 +336,7 @@ func (cfg Config) buildDoc(dirs directives) (cloudConfig, error) {
 		WriteFiles:        dirs.files,
 		Packages:          dirs.packages,
 		SSHAuthorizedKeys: dirs.sshKeys,
+		SSHKeys:           dirs.hostKeys,
 	}
 
 	if len(dirs.sources) > 0 {

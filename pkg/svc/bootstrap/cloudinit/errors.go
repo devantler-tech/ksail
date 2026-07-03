@@ -35,6 +35,15 @@ var (
 		"cloud-init: an SSH authorized key must be a single line with no NUL byte",
 	)
 
+	// ErrInvalidHostKeys is returned when [Config.HostKeys] is set but incomplete
+	// (either half blank), the public half is not a single line, or either half
+	// contains a NUL byte. Delivering only half an identity would leave the node
+	// serving one host key while the client pins another, so both halves are
+	// required together.
+	ErrInvalidHostKeys = errors.New(
+		"cloud-init: host keys need both the PEM private half and a single-line public half",
+	)
+
 	// ErrInvalidAptSource is returned when an [AptSource] has a blank or multi-line
 	// Name or Source, a Name containing a path separator, a Key containing a NUL
 	// byte, or a Name that duplicates another source's. cloud-init keys the sources

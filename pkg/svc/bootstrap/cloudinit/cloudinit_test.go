@@ -26,8 +26,15 @@ type parsedConfig struct {
 	} `yaml:"apt"`
 	Packages []string `yaml:"packages"`
 	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
-	SSHAuthorizedKeys []string   `yaml:"ssh_authorized_keys"`
-	RunCmd            [][]string `yaml:"runcmd"`
+	SSHAuthorizedKeys []string `yaml:"ssh_authorized_keys"`
+	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
+	SSHKeys struct {
+		//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
+		ED25519Private string `yaml:"ed25519_private"`
+		//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
+		ED25519Public string `yaml:"ed25519_public"`
+	} `yaml:"ssh_keys"`
+	RunCmd [][]string `yaml:"runcmd"`
 }
 
 // parse asserts the document carries the cloud-config header and is valid YAML,
@@ -244,6 +251,81 @@ func TestBuildUserDataSSHKeyErrors(t *testing.T) {
 				SSHAuthorizedKeys: []string{key},
 			})
 			require.ErrorIs(t, err, cloudinitbootstrap.ErrInvalidSSHAuthorizedKey)
+		})
+	}
+}
+
+func TestBuildUserDataRendersHostKeys(t *testing.T) {
+	t.Parallel()
+
+	private := "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+		HostKeys: &cloudinitbootstrap.HostKeys{
+			ED25519Private: private,
+			ED25519Public:  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA host",
+		},
+	})
+	require.NoError(t, err)
+
+	cfg := parse(t, userData)
+	assert.Equal(t, private, cfg.SSHKeys.ED25519Private)
+	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA host", cfg.SSHKeys.ED25519Public)
+}
+
+func TestBuildUserDataOmitsHostKeysWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		Commands: []string{"echo hi"},
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, userData, "ssh_keys:")
+}
+
+func TestBuildUserDataHostKeysOnlyRejected(t *testing.T) {
+	t.Parallel()
+
+	// A host identity with nothing to run would create a server that never
+	// bootstraps, so an identity-only Config is rejected like an empty one.
+	_, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+		HostKeys: &cloudinitbootstrap.HostKeys{
+			ED25519Private: "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+			ED25519Public:  "ssh-ed25519 AAAA host",
+		},
+	})
+	require.ErrorIs(t, err, cloudinitbootstrap.ErrNoCommands)
+}
+
+func TestBuildUserDataHostKeyErrors(t *testing.T) {
+	t.Parallel()
+
+	private := "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
+
+	tests := map[string]cloudinitbootstrap.HostKeys{
+		"missing private": {ED25519Public: "ssh-ed25519 AAAA host"},
+		"missing public":  {ED25519Private: private},
+		"multi-line public": {
+			ED25519Private: private,
+			ED25519Public:  "ssh-ed25519 AAAA\nhost",
+		},
+		"NUL in private": {
+			ED25519Private: "-----BEGIN\x00-----",
+			ED25519Public:  "ssh-ed25519 AAAA host",
+		},
+	}
+
+	for name, hostKeys := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
+				Commands: []string{"echo hi"},
+				HostKeys: &hostKeys,
+			})
+			require.ErrorIs(t, err, cloudinitbootstrap.ErrInvalidHostKeys)
 		})
 	}
 }
