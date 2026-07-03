@@ -385,6 +385,7 @@ func TestNewProvisionerMissingToken(t *testing.T) {
 
 	_, err := kubeadmhetzner.NewProvisioner(
 		testClusterName,
+		"test-kubeconfig",
 		testVersion,
 		1,
 		0,
@@ -399,6 +400,7 @@ func TestNewProvisionerSucceeds(t *testing.T) {
 
 	prov, err := kubeadmhetzner.NewProvisioner(
 		testClusterName,
+		"test-kubeconfig",
 		testVersion,
 		1,
 		0,

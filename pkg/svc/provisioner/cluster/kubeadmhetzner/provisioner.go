@@ -30,13 +30,15 @@ type Provisioner struct {
 // Hetzner factory constructs its provider. kubernetesVersion is the Kubernetes
 // release the nodes install (e.g. "v1.31.0"), which selects the community package
 // repository track; controlPlanes and agents are the node counts; clusterName is
-// the default cluster name used when an operation is called with an empty name.
+// the default cluster name used when an operation is called with an empty name;
+// kubeconfigPath is the local kubeconfig file a successful bring-up merges the
+// admin kubeconfig into.
 func NewProvisioner(
-	clusterName, kubernetesVersion string,
+	clusterName, kubeconfigPath, kubernetesVersion string,
 	controlPlanes, agents int,
 	opts v1alpha1.OptionsHetzner,
 ) (*Provisioner, error) {
-	base, err := hetznerbase.NewBase(clusterName, controlPlanes, agents, opts)
+	base, err := hetznerbase.NewBase(clusterName, kubeconfigPath, controlPlanes, agents, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create kubeadm × Hetzner base: %w", err)
 	}
