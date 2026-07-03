@@ -194,6 +194,25 @@ func TestRunCreateMultiNodeComposeJoinErrorCleansUp(t *testing.T) {
 	assert.Equal(t, 1, infra.deleteNodesCalls)
 }
 
+func TestRunCreateMultiNodeComposeInitErrorFailsFast(t *testing.T) {
+	t.Parallel()
+
+	// Composing the init control plane fails before any server is created, so the
+	// engine fails fast: no server is provisioned and there is nothing to tear
+	// down. Cleanup-on-failure only runs once the control plane is up (as the
+	// missing-private-IP and compose-join cases above assert), so a compose-init
+	// failure must NOT trigger it.
+	base, infra, strategy, material, _ := newMultiNodeBase(t, true)
+	strategy.composeInitErr = errBoom
+
+	err := base.RunCreateMultiNode(t.Context(), "", strategy, material)
+	require.ErrorIs(t, err, errBoom)
+	// No servers were created and no cleanup ran — the failure is before any
+	// paid resource exists.
+	assert.Equal(t, 0, infra.createServerCalls)
+	assert.Equal(t, 0, infra.deleteNodesCalls)
+}
+
 func TestRunCreateMultiNodeAlreadyExists(t *testing.T) {
 	t.Parallel()
 
