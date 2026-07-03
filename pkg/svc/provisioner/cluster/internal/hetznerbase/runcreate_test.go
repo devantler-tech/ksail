@@ -357,6 +357,10 @@ func TestRunCreateClusterlessKubeconfigFails(t *testing.T) {
 	err = base.RunCreate(ctx, "", composePlan, staticTokenGenerator)
 	require.ErrorIs(t, err, hetznerbase.ErrKubeconfigNoClusters)
 
+	// Cleanup-on-failure applies to this post-bring-up guard too: the created
+	// node is torn down like in the parse- and persist-failure cases.
+	assert.Equal(t, 1, infra.deleteNodesCalls)
+
 	// Nothing was persisted for the clusterless kubeconfig.
 	_, statErr := os.Stat(base.KubeconfigPath)
 	require.True(t, os.IsNotExist(statErr))
