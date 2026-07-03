@@ -158,37 +158,32 @@ func newTalosConfig(name, kubernetesVersion string) (*talosconfigmanager.Configs
 	return talosconfigmanager.NewDefaultConfigsWithVersionAndName(kubernetesVersion, name)
 }
 
-// awsRegion resolves the EKS region from the environment variable named by the cluster's AWS
-// options (default AWS_REGION). An empty result lets the eksctl client surface a clear error.
-func awsRegion(cluster *v1alpha1.Cluster) string {
-	envVar := cluster.Spec.Provider.AWS.RegionEnvVar
+// resolveEnvVar reads the environment variable named by envVar, falling back to
+// defaultEnvVar when the cluster spec does not name one.
+func resolveEnvVar(envVar, defaultEnvVar string) string {
 	if envVar == "" {
-		envVar = defaultAWSRegionEnvVar
+		envVar = defaultEnvVar
 	}
 
 	return os.Getenv(envVar)
+}
+
+// awsRegion resolves the EKS region from the environment variable named by the cluster's AWS
+// options (default AWS_REGION). An empty result lets the eksctl client surface a clear error.
+func awsRegion(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(cluster.Spec.Provider.AWS.RegionEnvVar, defaultAWSRegionEnvVar)
 }
 
 // gcpProject resolves the GKE project from the environment variable named by the cluster's GCP
 // options (default GOOGLE_CLOUD_PROJECT). An empty result lets the GKE provisioner surface a
 // clear ErrProjectRequired.
 func gcpProject(cluster *v1alpha1.Cluster) string {
-	envVar := cluster.Spec.Provider.GCP.ProjectEnvVar
-	if envVar == "" {
-		envVar = defaultGCPProjectEnvVar
-	}
-
-	return os.Getenv(envVar)
+	return resolveEnvVar(cluster.Spec.Provider.GCP.ProjectEnvVar, defaultGCPProjectEnvVar)
 }
 
 // gcpLocation resolves the GKE location from the environment variable named by the cluster's GCP
 // options (default GOOGLE_CLOUD_LOCATION). An empty result leaves the location unpinned: reads
 // resolve the cluster's own location, while create fails with a clear ErrLocationRequired.
 func gcpLocation(cluster *v1alpha1.Cluster) string {
-	envVar := cluster.Spec.Provider.GCP.LocationEnvVar
-	if envVar == "" {
-		envVar = defaultGCPLocationEnvVar
-	}
-
-	return os.Getenv(envVar)
+	return resolveEnvVar(cluster.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar)
 }

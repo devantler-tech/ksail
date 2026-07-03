@@ -202,6 +202,7 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE,
 	}
 
 	for _, d := range allDefaults {

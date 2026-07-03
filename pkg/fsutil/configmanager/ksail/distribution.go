@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
@@ -773,7 +774,7 @@ func (m *ConfigManager) cacheGKEConfig() error {
 		name = m.resolveGKENameFromContext()
 	}
 
-	location := m.envValue(
+	location := envValue(
 		m.Config.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar,
 	)
 	if location == "" {
@@ -782,7 +783,7 @@ func (m *ConfigManager) cacheGKEConfig() error {
 
 	m.DistributionConfig.GKE = &clusterprovisioner.GKEConfig{
 		Name: name,
-		Project: m.envValue(
+		Project: envValue(
 			m.Config.Spec.Provider.GCP.ProjectEnvVar, defaultGCPProjectEnvVar,
 		),
 		Location:    location,
@@ -795,7 +796,7 @@ func (m *ConfigManager) cacheGKEConfig() error {
 
 // envValue reads the environment variable named by envVar, falling back to
 // fallbackVar when the cluster spec does not name one.
-func (m *ConfigManager) envValue(envVar, fallbackVar string) string {
+func envValue(envVar, fallbackVar string) string {
 	if envVar == "" {
 		envVar = fallbackVar
 	}
@@ -846,12 +847,11 @@ func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) 
 // resolveGKENameFromContext extracts the cluster name from a GKE kubeconfig
 // context (gcloud convention: gke_<project>_<location>_<name>), falling back
 // to the distribution default when the context is absent or not GKE-shaped.
+// Parsing delegates to the gke client package's single context parser.
 func (m *ConfigManager) resolveGKENameFromContext() string {
-	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
-	if rest, ok := strings.CutPrefix(ctx, "gke_"); ok {
-		if idx := strings.LastIndex(rest, "_"); idx >= 0 && idx+1 < len(rest) {
-			return rest[idx+1:]
-		}
+	name := gkeclient.ClusterNameFromContext(m.Config.Spec.Cluster.Connection.Context)
+	if name != "" {
+		return name
 	}
 
 	return "gke-default"

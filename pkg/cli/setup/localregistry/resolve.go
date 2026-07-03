@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
@@ -202,28 +203,12 @@ func parseEKSContext(ctx string) string {
 	return strings.TrimSpace(trimmed)
 }
 
-// gkeContextSegments is the number of "_"-separated segments after the "gke_"
-// prefix in a gcloud-produced kubeconfig context: project, location, name.
-const gkeContextSegments = 3
-
 // parseGKEContext extracts the cluster name from a GKE kubeconfig context.
-// gcloud-produced contexts look like "gke_<project>_<location>_<name>".
 // Returns an empty string when the context is not recognisably a GKE context
-// so the caller can fall back to a default.
+// so the caller can fall back to a default. The gcloud context contract lives
+// in one place — the gke client package — so this only delegates.
 func parseGKEContext(ctx string) string {
-	ctx = strings.TrimSpace(ctx)
-
-	rest, ok := strings.CutPrefix(ctx, "gke_")
-	if !ok {
-		return ""
-	}
-
-	parts := strings.Split(rest, "_")
-	if len(parts) < gkeContextSegments {
-		return ""
-	}
-
-	return strings.TrimSpace(parts[len(parts)-1])
+	return gkeclient.ClusterNameFromContext(ctx)
 }
 
 func newCreateOptions(
