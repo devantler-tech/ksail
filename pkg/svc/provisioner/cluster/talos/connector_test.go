@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -183,6 +185,49 @@ func TestPublishConnectorKubeconfig_UpdatesExistingSecret(t *testing.T) {
 		Get(context.Background(), conn.SecretName, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.NotEqual(t, []byte("stale"), secret.Data["kubeconfig.yaml"])
+}
+
+// The update path must write through the LIVE object so the API server's
+// optimistic-concurrency check sees the current resourceVersion — an Update
+// built from a freshly constructed Secret would carry none and be rejected
+// (the fake clientset tolerates that, so assert on the submitted object).
+func TestPublishConnectorKubeconfig_UpdateCarriesLiveResourceVersion(t *testing.T) {
+	t.Parallel()
+
+	conn := talosprovisioner.ConnectionFor(talosConnectorTestCluster)
+	clientset := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            conn.SecretName,
+			Namespace:       conn.Namespace,
+			ResourceVersion: "42",
+		},
+		Data: map[string][]byte{"kubeconfig.yaml": []byte("stale")},
+	})
+
+	var submittedResourceVersion string
+
+	clientset.PrependReactor(
+		"update", "secrets",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			update, ok := action.(k8stesting.UpdateAction)
+			require.True(t, ok)
+
+			updated, ok := update.GetObject().(*corev1.Secret)
+			require.True(t, ok)
+
+			submittedResourceVersion = updated.ResourceVersion
+
+			return false, nil, nil
+		},
+	)
+
+	provisioner := newTalosKubernetesProvisionerWithClientset(t, clientset)
+
+	err := provisioner.PublishConnectorKubeconfigForTest(
+		context.Background(), talosConnectorTestCluster, []byte(talosFetchedKubeconfig),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "42", submittedResourceVersion)
 }
 
 func TestPublishConnectorKubeconfig_ErrorsWhenClientsetNil(t *testing.T) {

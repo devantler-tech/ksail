@@ -23,7 +23,6 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -345,18 +344,11 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 		clusterName = p.clusterName
 	}
 
-	if clusterName == "" {
-		return nil, fmt.Errorf("%w: talos cluster name not set", clustererr.ErrConfigNil)
-	}
-
-	if p.hostClientset == nil {
-		return nil, fmt.Errorf("%w: host clientset not set", clustererr.ErrConfigNil)
-	}
-
 	conn := ConnectionFor(clusterName)
 
-	raw, err := nested.FetchKubeconfigSecret(
-		ctx, p.hostClientset, conn.Namespace, conn.SecretName, talosKubeconfigKey,
+	raw, err := nested.ConnectorKubeconfig(
+		ctx, p.hostClientset, clusterName,
+		conn.Namespace, conn.SecretName, talosKubeconfigKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("talos: %w", err)
@@ -494,17 +486,9 @@ func (p *KubernetesProvisioner) publishConnectorKubeconfig(
 		Data: map[string][]byte{talosKubeconfigKey: rewritten},
 	}
 
-	_, err = p.hostClientset.CoreV1().
-		Secrets(conn.Namespace).
-		Create(ctx, secret, metav1.CreateOptions{})
-	if apierrors.IsAlreadyExists(err) {
-		_, err = p.hostClientset.CoreV1().
-			Secrets(conn.Namespace).
-			Update(ctx, secret, metav1.UpdateOptions{})
-	}
-
+	err = nested.UpsertSecret(ctx, p.hostClientset, secret)
 	if err != nil {
-		return fmt.Errorf("write kubeconfig secret %s/%s: %w", conn.Namespace, conn.SecretName, err)
+		return fmt.Errorf("write kubeconfig secret: %w", err)
 	}
 
 	return nil

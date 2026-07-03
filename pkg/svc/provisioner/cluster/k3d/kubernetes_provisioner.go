@@ -322,18 +322,11 @@ func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, e
 		clusterName = name
 	}
 
-	if clusterName == "" {
-		return nil, fmt.Errorf("%w: k3k cluster name not set", clustererr.ErrConfigNil)
-	}
-
-	if p.hostClientset == nil {
-		return nil, fmt.Errorf("%w: host clientset not set", clustererr.ErrConfigNil)
-	}
-
 	conn := ConnectionFor(clusterName)
 
-	raw, err := nested.FetchKubeconfigSecret(
-		ctx, p.hostClientset, conn.Namespace, conn.SecretName, k3kKubeconfigKey,
+	raw, err := nested.ConnectorKubeconfig(
+		ctx, p.hostClientset, clusterName,
+		conn.Namespace, conn.SecretName, k3kKubeconfigKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("k3k: %w", err)
