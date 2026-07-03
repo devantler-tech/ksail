@@ -112,6 +112,16 @@ spec:
                                 strategy for the cluster autoscaler.
                               type: string
                             type: array
+                          ignoreDaemonsetsUtilization:
+                            description: |-
+                              IgnoreDaemonsetsUtilization excludes DaemonSet pods from a node's
+                              resource-utilization calculation when the autoscaler decides whether a node
+                              is unneeded (upstream --ignore-daemonsets-utilization, off by default). Set
+                              this when every DaemonSet is a system component whose per-node overhead
+                              should not, on its own, keep an otherwise-empty node above the scale-down
+                              threshold — otherwise heavy node agents (CNI, storage, observability) can
+                              pin every autoscaler node as "utilized" and prevent scale-down entirely.
+                            type: boolean
                           maxNodesTotal:
                             description: |-
                               MaxNodesTotal caps the total number of nodes in the cluster
@@ -190,6 +200,28 @@ spec:
                               ScaleDownUnneededTime is how long a node must be unneeded before it is
                               eligible for scale down (e.g. "10m").
                             type: string
+                          skipNodesWithLocalStorage:
+                            description: |-
+                              SkipNodesWithLocalStorage controls whether the Cluster Autoscaler refuses to
+                              scale down a node that runs a pod with local storage (emptyDir, hostPath, or
+                              a local PersistentVolume). Upstream defaults to true (never remove such
+                              nodes). Set false to allow scale-down of nodes whose only local storage is
+                              ephemeral scratch — required for overflow nodes to ever drain, since
+                              emptyDir is pervasive. A pointer so an explicit false is preserved and only
+                              an unset value inherits the upstream default. Ignored unless the node
+                              autoscaler is installed (Talos on Hetzner with enabled: true).
+                            type: boolean
+                          skipNodesWithSystemPods:
+                            description: |-
+                              SkipNodesWithSystemPods controls whether the Cluster Autoscaler refuses to
+                              scale down a node that runs a non-DaemonSet kube-system pod without a
+                              controlling PodDisruptionBudget. Upstream defaults to true. Set false to let
+                              overflow nodes hosting movable system Deployments (metrics-server, CSI
+                              controllers, relays) drain — verify those components tolerate eviction and
+                              carry PDBs. A pointer so an explicit false is preserved and only an unset
+                              value inherits the upstream default. Ignored unless the node autoscaler is
+                              installed (Talos on Hetzner with enabled: true).
+                            type: boolean
                         type: object
                       pod:
                         description: Pod configures pod-level autoscaling (horizontal

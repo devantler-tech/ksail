@@ -265,6 +265,18 @@ export interface KSailClusterConfiguration {
            * Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)
            */
           capacityBuffers?: boolean;
+          /**
+           * Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization, off by default). Enable this when DaemonSets are system components (CNI, CSI, observability, security agents) whose per-node overhead should not keep an otherwise-empty node above the scale-down utilization threshold. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true).
+           */
+          ignoreDaemonsetsUtilization?: boolean;
+          /**
+           * Whether the Cluster Autoscaler refuses to scale down a node running a pod with local storage (emptyDir, hostPath, or a local PersistentVolume). Upstream --skip-nodes-with-local-storage defaults to true. Set false to let nodes whose only local storage is ephemeral scratch (emptyDir) be removed — required for overflow nodes to drain, since emptyDir is pervasive. Ensure durable data lives on real PVCs first. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true).
+           */
+          skipNodesWithLocalStorage?: boolean;
+          /**
+           * Whether the Cluster Autoscaler refuses to scale down a node running a non-DaemonSet kube-system pod that has no controlling PodDisruptionBudget. Upstream --skip-nodes-with-system-pods defaults to true. Set false to let overflow nodes hosting movable system Deployments drain — confirm those components tolerate eviction and carry PDBs first. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true).
+           */
+          skipNodesWithSystemPods?: boolean;
         };
       };
       /**

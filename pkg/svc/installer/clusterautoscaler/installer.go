@@ -148,6 +148,18 @@ type chartExtraArgs struct {
 	// see no values drift.
 	CapacityBufferControllerEnabled   bool `json:"capacity-buffer-controller-enabled,omitempty"`
 	CapacityBufferPodInjectionEnabled bool `json:"capacity-buffer-pod-injection-enabled,omitempty"`
+	// IgnoreDaemonsetsUtilization drops DaemonSet pods from a node's utilization
+	// when the autoscaler evaluates it for scale-down (upstream
+	// --ignore-daemonsets-utilization). omitempty keeps it out of the rendered
+	// values unless enabled, so existing releases see no values drift.
+	IgnoreDaemonsetsUtilization bool `json:"ignore-daemonsets-utilization,omitempty"`
+	// SkipNodesWithLocalStorage and SkipNodesWithSystemPods mirror the upstream
+	// flags of the same name (both default true). They are pointers so a nil
+	// (unset) value leaves the flag out of the rendered values — inheriting the
+	// autoscaler default — while an explicit true/false is rendered verbatim
+	// (omitempty drops only the nil pointer, never a non-nil *bool to false).
+	SkipNodesWithLocalStorage *bool `json:"skip-nodes-with-local-storage,omitempty"`
+	SkipNodesWithSystemPods   *bool `json:"skip-nodes-with-system-pods,omitempty"`
 	// KubeAPIContentType forces the autoscaler's Kubernetes client to negotiate the
 	// given content type. capacity-buffers require application/json: the CapacityBuffer
 	// controller's client would otherwise negotiate protobuf (the autoscaler default for
@@ -281,13 +293,16 @@ func buildChartValues(
 		CloudProvider:     "hetzner",
 		AutoscalingGroups: groups,
 		ExtraArgs: chartExtraArgs{
-			Expander:              expandersToHelmValue(cfg.Expander),
-			ScaleDownUnneededTime: scaleDownTime,
-			MaxNodesTotal:         cfg.MaxNodesTotal,
-			ScaleDownAfterAdd:     "5m",
-			ScaleDownAfterDelete:  "2m",
-			OkTotalUnreadyCount:   defaultOkTotalUnreadyCount,
-			V:                     "4",
+			Expander:                    expandersToHelmValue(cfg.Expander),
+			ScaleDownUnneededTime:       scaleDownTime,
+			MaxNodesTotal:               cfg.MaxNodesTotal,
+			ScaleDownAfterAdd:           "5m",
+			ScaleDownAfterDelete:        "2m",
+			OkTotalUnreadyCount:         defaultOkTotalUnreadyCount,
+			V:                           "4",
+			IgnoreDaemonsetsUtilization: cfg.IgnoreDaemonsetsUtilization,
+			SkipNodesWithLocalStorage:   cfg.SkipNodesWithLocalStorage,
+			SkipNodesWithSystemPods:     cfg.SkipNodesWithSystemPods,
 		},
 		ExtraEnv:        extraEnv,
 		ExtraEnvSecrets: buildExtraEnvSecrets(),
