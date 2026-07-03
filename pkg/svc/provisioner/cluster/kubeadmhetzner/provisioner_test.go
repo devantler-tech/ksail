@@ -283,17 +283,22 @@ func TestCreateAlreadyExists(t *testing.T) {
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
-func TestCreateMultiNodeNotImplemented(t *testing.T) {
+func TestCreateHAControlPlaneNotImplemented(t *testing.T) {
 	t.Parallel()
 
 	infra := &fakeInfra{}
 	prov := newProvisioner(infra, 3, 0)
 
 	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, kubeadmhetzner.ErrMultiNodeNotImplemented)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
+// TestCreateAgentsAreMultiNode pins that the kubeadm × Hetzner provisioner does
+// not yet implement joining-node bring-up: it does not satisfy
+// hetznerbase.MultiNodeComposer, so a topology with agents is rejected before
+// any infrastructure is created (kubeadm's join-endpoint threading is a later
+// increment of #5755).
 func TestCreateAgentsAreMultiNode(t *testing.T) {
 	t.Parallel()
 
