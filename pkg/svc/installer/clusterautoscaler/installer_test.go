@@ -649,6 +649,113 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 	require.NoError(t, err)
 }
 
+// TestClusterAutoscalerInstaller_ValuesYaml_IgnoreDaemonsetsUtilization verifies
+// that the ignore-daemonsets-utilization extraArg is rendered only when the knob
+// is enabled, and omitted (upstream default) otherwise so existing releases see
+// no values drift.
+func TestClusterAutoscalerInstaller_ValuesYaml_IgnoreDaemonsetsUtilization(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enabled renders the flag", func(t *testing.T) {
+		t.Parallel()
+		assertAutoscalerValuesYaml(t,
+			v1alpha1.NodeAutoscalerConfig{IgnoreDaemonsetsUtilization: true},
+			[]string{"ignore-daemonsets-utilization: true"}, nil)
+	})
+
+	t.Run("disabled omits the flag", func(t *testing.T) {
+		t.Parallel()
+		assertAutoscalerValuesYaml(t,
+			v1alpha1.NodeAutoscalerConfig{IgnoreDaemonsetsUtilization: false},
+			nil, []string{"ignore-daemonsets-utilization"})
+	})
+}
+
+// assertAutoscalerValuesYaml installs with cfg and asserts the rendered chart
+// ValuesYaml contains every wantContain substring and none of the wantOmit ones.
+func assertAutoscalerValuesYaml(
+	t *testing.T,
+	cfg v1alpha1.NodeAutoscalerConfig,
+	wantContain, wantOmit []string,
+) {
+	t.Helper()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			for _, want := range wantContain {
+				assert.Contains(t, spec.ValuesYaml, want)
+			}
+
+			for _, omit := range wantOmit {
+				assert.NotContains(t, spec.ValuesYaml, omit)
+			}
+
+			return true
+		})).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Second, cfg, false, true, true,
+	)
+	require.NoError(t, err)
+	require.NoError(t, installer.Install(context.Background()))
+}
+
+// TestClusterAutoscalerInstaller_ValuesYaml_SkipNodesFlags verifies that the
+// skip-nodes-with-local-storage / skip-nodes-with-system-pods pointer knobs are
+// omitted when nil (inheriting the upstream default true) and rendered verbatim
+// when set to an explicit true or false.
+func TestClusterAutoscalerInstaller_ValuesYaml_SkipNodesFlags(t *testing.T) {
+	t.Parallel()
+
+	ptr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name                   string
+		localStore, systemPods *bool
+		wantContain, wantOmit  []string
+	}{
+		{
+			name:     "nil omits both flags",
+			wantOmit: []string{"skip-nodes-with-local-storage", "skip-nodes-with-system-pods"},
+		},
+		{
+			name:       "explicit false renders both",
+			localStore: ptr(false),
+			systemPods: ptr(false),
+			wantContain: []string{
+				"skip-nodes-with-local-storage: false",
+				"skip-nodes-with-system-pods: false",
+			},
+		},
+		{
+			name:       "explicit true renders both",
+			localStore: ptr(true),
+			systemPods: ptr(true),
+			wantContain: []string{
+				"skip-nodes-with-local-storage: true",
+				"skip-nodes-with-system-pods: true",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			assertAutoscalerValuesYaml(t, v1alpha1.NodeAutoscalerConfig{
+				SkipNodesWithLocalStorage: test.localStore,
+				SkipNodesWithSystemPods:   test.systemPods,
+			}, test.wantContain, test.wantOmit)
+		})
+	}
+}
+
 // TestClusterAutoscalerInstaller_ValuesYaml_CapacityBuffers verifies that
 // enabling capacityBuffers renders the two feature flags, the buffer
 // controller's RBAC rules (CapacityBuffer CRs plus the Deployment and
