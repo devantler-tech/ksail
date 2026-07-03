@@ -238,7 +238,9 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the
 // enabled path fails loudly when the hcloud token env var is unset — the VIP
-// block cannot manage the floating IP without it.
+// block cannot manage the floating IP without it — and fails FAST: the token
+// is validated before any hcloud call, so no floating IP is ensured or
+// attached on the way to the error.
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 	t.Parallel()
 
@@ -263,6 +265,8 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
 	)
 	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&assignCalls),
+		"missing token must fail before any hcloud assign call")
 }
 
 // TestUpdateConfigsWithEndpoint_NoControlPlanes verifies the guard is

@@ -169,6 +169,13 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 	var certSANs []string
 
 	if p.hetznerOpts.FloatingIPEnabled {
+		// The VIP patch rendered below needs the hcloud token — validate it
+		// before ensureFloatingIPEndpoint mutates anything cloud-side, so a
+		// missing token fails fast with no floating IP ensured or attached.
+		if _, err := p.hetznerAPIToken(); err != nil {
+			return err
+		}
+
 		floatingEndpoint, sans, err := p.ensureFloatingIPEndpoint(
 			ctx, hzProvider, clusterName, controlPlaneServers,
 		)
