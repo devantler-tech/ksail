@@ -17,16 +17,6 @@ var (
 	// target cluster already exist, so creation would collide with a running cluster.
 	ErrClusterAlreadyExists = errors.New("hetzner: cluster already exists")
 
-	// ErrLiveBringUpNotImplemented is returned by the provisioners' composePlan
-	// callbacks (see [Base.RunCreate]) after the per-node cloud-init user_data is
-	// composed: deriving the live server specs still needs boot-image resolution
-	// and the bootstrap-material threading tracked by devantler-tech/ksail#5726.
-	// Once a caller returns a complete [BringUpPlan] instead, RunCreate carries the
-	// cluster all the way to a merged kubeconfig.
-	ErrLiveBringUpNotImplemented = errors.New(
-		"hetzner: live cluster bring-up is not yet implemented (tracked by #5726)",
-	)
-
 	// ErrSingleNodePlanExpected is returned by [Base.RunCreate] when a composed
 	// [BringUpPlan] does not carry exactly one server spec. Multi-node topologies
 	// are rejected before composition ([ErrMultiNodeNotImplemented]), so a plan
@@ -134,6 +124,29 @@ type Base struct {
 	KubeconfigPath string
 	// LogWriter receives the provisioner's progress output.
 	LogWriter io.Writer
+	// Strategy supplies the distro-specific halves of the create flow ([Create]):
+	// per-node composition, the remote kubeconfig path, the distribution label,
+	// and the node-token generator. Each provisioner sets itself here at
+	// construction so it inherits [Create] by embedding *Base.
+	Strategy CreateStrategy
+}
+
+// CreateStrategy is the distribution-specific seam [Base.Create] composes with
+// the shared Hetzner create flow: only these four pieces differ between the k3s
+// and kubeadm provisioners, so each implements this interface and hands itself
+// to its embedded [Base].
+type CreateStrategy interface {
+	// ComposeNodes threads the minted bootstrap material into the distribution's
+	// per-node cloud-init user_data and projects it onto the shared [NodeSpec]s.
+	ComposeNodes(clusterName, token string, material BootstrapMaterial) ([]NodeSpec, error)
+	// RemoteKubeconfigPath is where the distribution writes its admin kubeconfig
+	// on the cluster-initialising node.
+	RemoteKubeconfigPath() string
+	// DistroLabel labels the distribution in the create flow's error context
+	// (e.g. "K3s × Hetzner").
+	DistroLabel() string
+	// GenerateToken produces the cluster's shared node/join token.
+	GenerateToken() (string, error)
 }
 
 // NewBase constructs a Base, building the Hetzner provider from opts (resolving the
@@ -316,9 +329,9 @@ func (b *Base) Exists(ctx context.Context, name string) (bool, error) {
 // node's public IPv4, and merge it into the Base's kubeconfig destination. The two
 // steps that differ between the provisioners are supplied as callbacks:
 // generateToken produces the node token, and composePlan composes the per-node
-// cloud-init user_data into server specs plus the bootstrap material (a caller
-// whose spec derivation has not landed yet returns
-// [ErrLiveBringUpNotImplemented] there instead — see devantler-tech/ksail#5726).
+// cloud-init user_data into server specs plus the bootstrap material
+// ([DeriveServerSpecs] and [GenerateBootstrapMaterial] are the shared halves
+// of that composition).
 func (b *Base) RunCreate(
 	ctx context.Context,
 	name string,
@@ -362,6 +375,23 @@ func (b *Base) RunCreate(
 	}
 
 	return b.bringUpFromPlan(ctx, clusterName, plan)
+}
+
+// Create runs the whole create flow shared by both provisioners, so neither
+// re-writes it: it wires the embedded [CreateStrategy]'s per-node composition
+// into the shared plan composition ([PlanComposer]) and runs [Base.RunCreate],
+// wrapping a failure with the strategy's distribution label. Each provisioner
+// gets this method by embedding *Base; the distro-specific pieces come from the
+// Strategy it sets at construction.
+func (b *Base) Create(ctx context.Context, name string) error {
+	composePlan := PlanComposer(b.Opts, b.Strategy.RemoteKubeconfigPath(), b.Strategy.ComposeNodes)
+
+	err := b.RunCreate(ctx, name, composePlan, b.Strategy.GenerateToken)
+	if err != nil {
+		return fmt.Errorf("provision %s cluster: %w", b.Strategy.DistroLabel(), err)
+	}
+
+	return nil
 }
 
 // bringUpFromPlan runs the live half of the create flow from a composed plan:

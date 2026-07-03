@@ -10,11 +10,6 @@ var (
 	// the target K3s cluster already exist; see [hetznerbase.ErrClusterAlreadyExists].
 	ErrClusterAlreadyExists = hetznerbase.ErrClusterAlreadyExists
 
-	// ErrLiveBringUpNotImplemented is returned by [Provisioner.Create] at the
-	// live-bring-up boundary, after the K3s per-node cloud-init user_data is composed;
-	// see [hetznerbase.ErrLiveBringUpNotImplemented] and devantler-tech/ksail#5515.
-	ErrLiveBringUpNotImplemented = hetznerbase.ErrLiveBringUpNotImplemented
-
 	// ErrMultiNodeNotImplemented is returned by [Provisioner.Create] for a K3s
 	// topology with joining nodes; see [hetznerbase.ErrMultiNodeNotImplemented].
 	ErrMultiNodeNotImplemented = hetznerbase.ErrMultiNodeNotImplemented

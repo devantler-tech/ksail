@@ -34,9 +34,14 @@ type Input struct {
 	// SSHAuthorizedKeys are public keys delivered into every node's
 	// authorized_keys via cloud-init (see [cloudinitbootstrap.Config]) so the
 	// post-provision SSH bootstrap seam can authenticate. Optional; the live
-	// bring-up composition (#5515) generates the bootstrap keypair and threads
-	// its public half through here.
+	// bring-up composition generates the bootstrap keypair and threads its
+	// public half through here.
 	SSHAuthorizedKeys []string
+	// HostKeys is the pre-generated SSH host identity delivered into every node
+	// via the cloud-init ssh_keys module (see [cloudinitbootstrap.HostKeys]) so
+	// the bootstrap SSH dial can pin the host key instead of trusting first use.
+	// Optional; nil lets the node generate its own host keys at first boot.
+	HostKeys *cloudinitbootstrap.HostKeys
 }
 
 // NodeUserData pairs a planned node with the cloud-init user_data that bootstraps
@@ -144,6 +149,7 @@ func buildNodeCloudInit(
 		Files:             append(toCloudInitFiles(install.Files), containerdFile),
 		Commands:          install.Commands,
 		SSHAuthorizedKeys: input.SSHAuthorizedKeys,
+		HostKeys:          input.HostKeys,
 	})
 	if err != nil {
 		return "", fmt.Errorf("build cloud-init for node %d: %w", node.Index, err)

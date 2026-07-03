@@ -10,10 +10,12 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 	kubeadmhetzner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kubeadmhetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // testVersion and testClusterName are declared in userdata_test.go (same test
@@ -169,16 +171,105 @@ func TestBuildNodesMissingVersion(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCreateReturnsLiveBringUpBoundary(t *testing.T) {
+// fakeServers is a test double for the server-creation seam the bring-up
+// engine uses.
+type fakeServers struct {
+	createErr error
+	lastOpts  hetzner.CreateServerOpts
+	calls     int
+}
+
+func (f *fakeServers) CreateServer(
+	_ context.Context,
+	opts hetzner.CreateServerOpts,
+) (*hcloud.Server, error) {
+	f.calls++
+	f.lastOpts = opts
+
+	return nil, f.createErr
+}
+
+// staticFakeServersCheck asserts the test double satisfies the injected seam.
+var _ kubeadmhetzner.HetznerServers = (*fakeServers)(nil)
+
+func TestComposePlanDerivesCompleteSingleNodePlan(t *testing.T) {
+	t.Parallel()
+
+	prov := kubeadmhetzner.NewProvisionerForTest(
+		&fakeInfra{},
+		testClusterName,
+		testVersion,
+		1,
+		0,
+		v1alpha1.OptionsHetzner{
+			ControlPlaneServerType: "cx23",
+			WorkerServerType:       "cx33",
+			Location:               "fsn1",
+		},
+		io.Discard,
+	)
+
+	plan, err := prov.ComposePlan(
+		testClusterName, "abcdef.0123456789abcdef",
+		hetznerbase.ResolvedInfra{
+			NetworkID:        100,
+			FirewallID:       200,
+			PlacementGroupID: 300,
+			SSHKeyID:         400,
+		},
+	)
+	require.NoError(t, err)
+
+	// The single control-plane spec is fully derived: name, per-role server
+	// type, stock boot image, and the resolved infrastructure placement.
+	require.Len(t, plan.Specs, 1)
+	spec := plan.Specs[0]
+	assert.Equal(t, "test-cluster-controlplane-0", spec.Name)
+	assert.Equal(t, "cx23", spec.ServerType)
+	assert.Equal(t, hetznerbase.DefaultImageName, spec.ImageName)
+	assert.Equal(t, "fsn1", spec.Location)
+	assert.Equal(t, int64(100), spec.NetworkID)
+	assert.Equal(t, []int64{200}, spec.FirewallIDs)
+	assert.Equal(t, int64(300), spec.PlacementGroupID)
+	assert.Equal(t, int64(400), spec.SSHKeyID)
+
+	// The bootstrap public key and the pre-generated host identity are
+	// delivered via cloud-init, and the plan carries their counterparts (the
+	// dialing signer and the pinning host-key callback).
+	require.NotNil(t, plan.Signer)
+
+	authorizedKey := strings.TrimSpace(
+		string(gossh.MarshalAuthorizedKey(plan.Signer.PublicKey())),
+	)
+
+	assert.Contains(t, spec.UserData, "ssh_authorized_keys:")
+	assert.Contains(t, spec.UserData, authorizedKey)
+	assert.Contains(t, spec.UserData, "ssh_keys:")
+	assert.Contains(t, spec.UserData, "ed25519_private:")
+	assert.NotNil(t, plan.HostKeyCallback)
+
+	assert.Equal(t, "/etc/kubernetes/admin.conf", plan.RemoteKubeconfigPath)
+}
+
+func TestCreateServerCreationFailureSurfaces(t *testing.T) {
 	t.Parallel()
 
 	infra := &fakeInfra{}
+	servers := &fakeServers{createErr: errBoom}
 	prov := newProvisioner(infra, 1, 0)
+	prov.Servers = servers
 
 	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, kubeadmhetzner.ErrLiveBringUpNotImplemented)
+	require.ErrorIs(t, err, errBoom)
 	assert.Equal(t, 1, infra.ensureNetworkCalls)
 	assert.Equal(t, testClusterName, infra.lastClusterName)
+
+	// The composed spec reached the server-creation seam fully derived; a
+	// failed creation leaves nothing to clean up.
+	assert.Equal(t, 1, servers.calls)
+	assert.Equal(t, "test-cluster-controlplane-0", servers.lastOpts.Name)
+	assert.NotEmpty(t, servers.lastOpts.UserData)
+	assert.Equal(t, 0, infra.deleteNodesCalls)
 }
 
 func TestCreateAlreadyExists(t *testing.T) {
