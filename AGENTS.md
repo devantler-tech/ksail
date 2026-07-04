@@ -376,7 +376,10 @@ dependency order and is THE regeneration command. The artifacts, for reference:
 `docs/src/content/docs/configuration/declarative-configuration.mdx` (`go generate ./docs/...`),
 `pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
 (`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
-after schemas). See also `.github/instructions/`.
+after schemas). `THIRD_PARTY_LICENSES` is generated separately by `make licenses`
+(scripts/gen-third-party-licenses; deterministic output, CI self-heals drift on module-graph
+changes — a new dependency without a bundled license file must be manually verified and recorded
+in `scripts/gen-third-party-licenses/verified_unknown.go`). See also `.github/instructions/`.
 **Shared machine / autonomous worktrees:** only create/inspect/delete
 clusters you created; build throwaway binaries to `/tmp` (not `./ksail`) to avoid polluting the
 worktree. Maintainers building locally should still use the standard `make build` (`go build -o

@@ -3,7 +3,7 @@ SHELL := /bin/bash
 DESKTOP_DIR := desktop
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//' || echo dev)
 
-.PHONY: help ui build test desktop desktop-app generate
+.PHONY: help ui build test desktop desktop-app generate licenses
 
 help: ## Show available targets.
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -24,6 +24,9 @@ desktop-app: ui ## Build the macOS KSail.app bundle (macOS only); output: ./KSai
 
 test: ## Run the Go unit tests.
 	go test ./...
+
+licenses: ## Regenerate THIRD_PARTY_LICENSES from both Go module graphs (root + desktop/). Requires go-licenses (go install github.com/google/go-licenses/v2@v2.0.1).
+	go run ./scripts/gen-third-party-licenses
 
 generate: ## Regenerate ALL generated artifacts (JSON schema, CRD/deepcopy, reference docs, chat docs, mocks, web UI types). Ordering matters: schema before web UI types, docs before chat docs.
 	go generate ./schemas/... ./pkg/apis/...
