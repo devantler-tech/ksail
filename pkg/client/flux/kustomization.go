@@ -26,12 +26,14 @@ const ReconcileExcludeAnnotation = "ksail.devantler.tech/reconcile-exclude"
 // It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
 // yet created, API server temporarily unavailable).
 func (r *Reconciler) TriggerKustomizationReconciliation(ctx context.Context) error {
-	return triggerReconciliationWithRetry(
+	_, err := triggerReconciliationWithRetry(
 		ctx,
 		r.kustomizationClient(),
 		rootKustomizationName,
 		"flux kustomization",
 	)
+
+	return err
 }
 
 // TriggerNamedKustomizationReconciliation triggers reconciliation for a specific
@@ -41,12 +43,14 @@ func (r *Reconciler) TriggerNamedKustomizationReconciliation(
 	ctx context.Context,
 	name string,
 ) error {
-	return triggerReconciliationWithRetry(
+	_, err := triggerReconciliationWithRetry(
 		ctx,
 		r.kustomizationClient(),
 		name,
 		"flux kustomization "+name,
 	)
+
+	return err
 }
 
 // KustomizationInfo holds the name, spec.path, and dependency information
