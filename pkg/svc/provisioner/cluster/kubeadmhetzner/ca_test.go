@@ -166,17 +166,15 @@ func TestGenerateClusterPKIServiceAccountKeypairMatchesKubeadmEncodings(t *testi
 	pki, err := kubeadmhetzner.GenerateClusterPKI()
 	require.NoError(t, err)
 
-	// kubeadm writes sa.key as PKCS#8 and sa.pub as PKIX; any other encoding
-	// would make kube-controller-manager reject the pre-seeded pair.
+	// kubeadm writes RSA sa.key as PKCS#1 ("RSA PRIVATE KEY" — pkiutil.WriteKey
+	// → keyutil.MarshalPrivateKeyToPEM) and sa.pub as PKIX; any other encoding
+	// would diverge from kubeadm's on-disk format for the pre-seeded pair.
 	keyBlock, _ := pem.Decode(pki.ServiceAccount.KeyPEM)
 	require.NotNil(t, keyBlock)
-	require.Equal(t, "PRIVATE KEY", keyBlock.Type)
+	require.Equal(t, "RSA PRIVATE KEY", keyBlock.Type)
 
-	parsedKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	rsaKey, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
 	require.NoError(t, err)
-
-	rsaKey, isRSAKey := parsedKey.(*rsa.PrivateKey)
-	require.True(t, isRSAKey)
 	assert.Equal(t, 2048, rsaKey.N.BitLen())
 
 	pubBlock, _ := pem.Decode(pki.ServiceAccount.PubPEM)

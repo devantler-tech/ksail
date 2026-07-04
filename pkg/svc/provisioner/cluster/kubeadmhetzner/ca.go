@@ -227,18 +227,13 @@ func mintCA(commonName string) (CertKeyPair, *x509.Certificate, error) {
 }
 
 // generateServiceAccountKeys generates the service-account token signing
-// keypair in kubeadm's own encodings: sa.key is a PKCS#8 private key and
-// sa.pub a PKIX public key.
+// keypair in kubeadm's own encodings: sa.key is a PKCS#1 RSA private key
+// (kubeadm's pkiutil.WriteKey → keyutil.MarshalPrivateKeyToPEM emits RSA keys
+// as "RSA PRIVATE KEY" blocks) and sa.pub a PKIX public key.
 func generateServiceAccountKeys() (ServiceAccountKeys, error) {
 	key, err := rsa.GenerateKey(rand.Reader, caKeyBits)
 	if err != nil {
 		return ServiceAccountKeys{}, fmt.Errorf("generate service-account key: %w", err)
-	}
-
-	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		// Unreachable in practice: an RSA key always marshals to PKCS#8.
-		return ServiceAccountKeys{}, fmt.Errorf("marshal service-account key: %w", err)
 	}
 
 	pubDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
@@ -248,7 +243,9 @@ func generateServiceAccountKeys() (ServiceAccountKeys, error) {
 	}
 
 	return ServiceAccountKeys{
-		KeyPEM: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}),
+		KeyPEM: pem.EncodeToMemory(
+			&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)},
+		),
 		PubPEM: pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER}),
 	}, nil
 }

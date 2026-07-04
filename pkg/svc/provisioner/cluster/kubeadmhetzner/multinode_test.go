@@ -44,10 +44,6 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 	assert.Equal(t, 0, spec.Index)
 	assert.Equal(t, hetzner.NodeTypeControlPlane, spec.NodeType)
 	assert.True(t, strings.HasPrefix(spec.UserData, "#cloud-config"))
-	assert.Contains(t, spec.UserData, "BEGIN CERTIFICATE")
-	assert.Contains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
-	assert.Contains(t, spec.UserData, "BEGIN PRIVATE KEY", "sa.key must be seeded (PKCS#8)")
-	assert.Contains(t, spec.UserData, "BEGIN PUBLIC KEY", "sa.pub must be seeded (PKIX)")
 	assert.Contains(t, spec.UserData, testJoinName)
 	assert.Contains(t, spec.UserData, "kubeadm init")
 	assert.NotContains(t, spec.UserData, "kubeadm join")
@@ -55,19 +51,47 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 	// The full shared PKI — not just the cluster CA — lands at kubeadm's
 	// canonical paths, so the whole cluster identity is fixed before boot and a
 	// later HA increment can seed the same material onto additional control
-	// planes (kubeadm's manual certificate distribution).
-	for _, path := range []string{
-		"/etc/kubernetes/pki/ca.crt",
-		"/etc/kubernetes/pki/ca.key",
-		"/etc/kubernetes/pki/front-proxy-ca.crt",
-		"/etc/kubernetes/pki/front-proxy-ca.key",
-		"/etc/kubernetes/pki/etcd/ca.crt",
-		"/etc/kubernetes/pki/etcd/ca.key",
-		"/etc/kubernetes/pki/sa.key",
-		"/etc/kubernetes/pki/sa.pub",
+	// planes (kubeadm's manual certificate distribution). Each path is tied to
+	// its own write_files entry's mode and PEM block type, so a field swap in
+	// pkiSeedFiles (a key under a cert path, or a world-readable private key)
+	// fails here rather than on the booted node.
+	for _, seeded := range []struct {
+		path        string
+		permissions string
+		pemHeader   string
+	}{
+		{"/etc/kubernetes/pki/ca.crt", "0644", "BEGIN CERTIFICATE"},
+		{"/etc/kubernetes/pki/ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
+		{"/etc/kubernetes/pki/front-proxy-ca.crt", "0644", "BEGIN CERTIFICATE"},
+		{"/etc/kubernetes/pki/front-proxy-ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
+		{"/etc/kubernetes/pki/etcd/ca.crt", "0644", "BEGIN CERTIFICATE"},
+		{"/etc/kubernetes/pki/etcd/ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
+		{"/etc/kubernetes/pki/sa.key", "0600", "BEGIN RSA PRIVATE KEY"},
+		{"/etc/kubernetes/pki/sa.pub", "0644", "BEGIN PUBLIC KEY"},
 	} {
-		assert.Contains(t, spec.UserData, path)
+		entry := writeFilesEntry(t, spec.UserData, seeded.path)
+		assert.Contains(t, entry, seeded.permissions, seeded.path)
+		assert.Contains(t, entry, seeded.pemHeader, seeded.path)
 	}
+}
+
+// writeFilesEntry extracts the single write_files entry for path from the
+// rendered cloud-init user data: the slice from its `path:` line up to the
+// next entry's `path:` line (or the document end). Field order within an
+// entry is path → permissions → content, so the slice carries exactly that
+// entry's mode and content.
+func writeFilesEntry(t *testing.T, userData, path string) string {
+	t.Helper()
+
+	start := strings.Index(userData, "path: "+path)
+	require.NotEqual(t, -1, start, "write_files entry for %s not found", path)
+
+	entry := userData[start:]
+	if next := strings.Index(entry[1:], "path: /"); next != -1 {
+		entry = entry[:next+1]
+	}
+
+	return entry
 }
 
 // TestComposeJoiningNodesPinsJoinNameAndCA pins the join compose contract:
