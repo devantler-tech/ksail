@@ -39,6 +39,15 @@ var (
 // stream-origin skipping, and ambiguous-identity dropping) without a full render run.
 var ExportAttributionFromDocuments = attributionFromDocuments //nolint:gochecknoglobals // test export
 
+// ExportDocumentIdentityFromObject exposes documentIdentityFromObject so external-package
+// tests can assert the Kind/Namespace/Name identity derivation used to attribute CEL
+// rule violations.
+var ExportDocumentIdentityFromObject = documentIdentityFromObject //nolint:gochecknoglobals // test export
+
+// ExportDecodeDocumentObject exposes decodeDocumentObject so external-package tests can
+// assert the empty/non-mapping document skipping used before CEL evaluation.
+var ExportDecodeDocumentObject = decodeDocumentObject //nolint:gochecknoglobals // test export
+
 // ExportDebounceState is an exported type alias for the workloadwatch debounce
 // state. The debounce/poll machinery moved to pkg/svc/workloadwatch; the shims
 // below delegate to its exported API so existing command-package tests keep
