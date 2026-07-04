@@ -221,6 +221,11 @@ type ValidationConfig struct {
 
 	// HelmRender controls whether HelmReleases are rendered before validation.
 	HelmRender *bool `json:"helmRender,omitzero" jsonschema_description:"Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."` //nolint:lll
+
+	// Rules is the path to a YAML CEL rules file evaluated during validation, so
+	// rule validation can be a turnkey CI gate declared once in ksail.yaml rather
+	// than requiring --rules on every invocation. The --rules flag overrides it.
+	Rules string `json:"rules,omitzero" jsonschema_description:"Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules."` //nolint:lll
 }
 
 // ScanConfig defines configuration for the workload scan command, letting

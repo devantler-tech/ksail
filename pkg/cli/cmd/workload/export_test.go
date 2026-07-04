@@ -165,6 +165,19 @@ func ExportCanonicalizeSchemaLocations(locations []string) []string {
 	return canonicalizeSchemaLocations(locations)
 }
 
+// ExportResolveCELRulesPath exposes resolveCELRulesPath so external tests can
+// assert the --rules flag > spec.workload.validation.rules > "" precedence
+// without running a full validate.
+func ExportResolveCELRulesPath(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	rulesFlag string,
+) string {
+	return resolveCELRulesPath(cmd, cfg, configFound, loadErr, rulesFlag)
+}
+
 // ExportScanSettings mirrors the resolved scan settings for external tests.
 type ExportScanSettings struct {
 	Frameworks          []string

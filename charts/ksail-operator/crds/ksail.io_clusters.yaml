@@ -1062,6 +1062,12 @@ spec:
                         description: HelmRender controls whether HelmReleases are
                           rendered before validation.
                         type: boolean
+                      rules:
+                        description: |-
+                          Rules is the path to a YAML CEL rules file evaluated during validation, so
+                          rule validation can be a turnkey CI gate declared once in ksail.yaml rather
+                          than requiring --rules on every invocation. The --rules flag overrides it.
+                        type: string
                       schemaLocations:
                         description: |-
                           SchemaLocations lists additional kubeconform schema locations (local
