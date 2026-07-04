@@ -35,10 +35,10 @@ var (
 	)
 
 	// ErrMultiNodeNotImplemented is returned by [Base.Create] for a topology with
-	// agents when the distribution's strategy does not yet implement the joining-node
-	// bring-up ([MultiNodeComposer]) — currently the kubeadm × Hetzner provisioner,
-	// whose bootstrap has no API-server-endpoint threading yet. The two-phase join
-	// sequencing is tracked by devantler-tech/ksail#5755.
+	// agents when the distribution's strategy does not yet implement the
+	// joining-node bring-up ([MultiNodeComposer]). Both current Hetzner
+	// distributions (k3s and kubeadm) implement it, so this guards any future
+	// strategy added without join sequencing (see devantler-tech/ksail#5755).
 	ErrMultiNodeNotImplemented = errors.New(
 		"hetzner: multi-node bring-up is not yet implemented for this distribution (tracked by #5755)",
 	)
@@ -392,8 +392,8 @@ func (b *Base) RunCreate(
 // wires the embedded [CreateStrategy]'s per-node composition into the shared plan
 // composition ([PlanComposer]) and runs [Base.RunCreate]; a topology with agents
 // runs the two-phase multi-node bring-up ([Base.RunCreateMultiNode]) when the
-// strategy implements [MultiNodeComposer] (currently k3s), and is rejected
-// otherwise. High-availability (multiple control planes) is a later increment.
+// strategy implements [MultiNodeComposer] (k3s and kubeadm both do), and is
+// rejected otherwise. High-availability (multiple control planes) is a later increment.
 // Each provisioner gets this method by embedding *Base; the distro-specific
 // pieces come from the Strategy it sets at construction.
 func (b *Base) Create(ctx context.Context, name string) error {
