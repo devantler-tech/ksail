@@ -160,7 +160,9 @@ func (r *Reconciler) checkOCIRepositoryStatus(
 	}
 
 	if !reconcileRequestHandled(ociRepo, expectedReconcileToken) {
-		return false, nil
+		// Transient: keep waiting, but record the real cause so a timeout points at
+		// the unserved push rather than the generic not-ready error.
+		return false, ErrOCIRepositoryReconcileNotHandled
 	}
 
 	conditions := reconciler.ParseConditions(ociRepo)
@@ -171,7 +173,7 @@ func (r *Reconciler) checkOCIRepositoryStatus(
 	// triggered the reconcile; the empty-token path keeps its condition-only
 	// behaviour.
 	if expectedReconcileToken != "" && reconcileInProgress(conditions) {
-		return false, nil
+		return false, ErrOCIRepositoryReconcileInProgress
 	}
 
 	return evaluateOCIRepositoryConditions(conditions)

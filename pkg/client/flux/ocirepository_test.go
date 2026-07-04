@@ -151,7 +151,8 @@ func TestWaitForOCIRepositoryReadyGatesOnHandledToken(t *testing.T) {
 			err := reconcilerClient.WaitForOCIRepositoryReady(
 				context.Background(), 200*time.Millisecond, "tok-1",
 			)
-			require.Error(t, err)
+			// The timeout must surface the real cause, not the generic not-ready error.
+			require.ErrorIs(t, err, flux.ErrOCIRepositoryReconcileNotHandled)
 		},
 	)
 
@@ -170,7 +171,7 @@ func TestWaitForOCIRepositoryReadyGatesOnHandledToken(t *testing.T) {
 			err := reconcilerClient.WaitForOCIRepositoryReady(
 				context.Background(), 200*time.Millisecond, "tok-1",
 			)
-			require.Error(t, err)
+			require.ErrorIs(t, err, flux.ErrOCIRepositoryReconcileInProgress)
 		},
 	)
 }
