@@ -74,3 +74,11 @@ var ErrOperationNotSupported = errors.New("operation not supported")
 // ErrKubeconfigNotReady is returned by a Connector when the provisioned cluster's kubeconfig has
 // not been published yet, signalling the caller to retry later.
 var ErrKubeconfigNotReady = errors.New("provisioned cluster kubeconfig not ready")
+
+// ErrKubeconfigContextMissing is returned when a named context (or the cluster it references) is
+// absent from a kubeconfig being minified for publication.
+var ErrKubeconfigContextMissing = errors.New("kubeconfig context not found")
+
+// ErrKubeconfigPublishInvalid is returned when a kubeconfig Secret publish is asked to run without a
+// host clientset or with empty kubeconfig data.
+var ErrKubeconfigPublishInvalid = errors.New("invalid kubeconfig publish request")
