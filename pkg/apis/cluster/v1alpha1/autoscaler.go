@@ -44,6 +44,32 @@ type NodeAutoscalerConfig struct {
 	// headroom as virtual (pod-less) chunks — a native replacement for
 	// low-priority balloon-pod overprovisioning.
 	CapacityBuffers bool `json:"capacityBuffers,omitzero" jsonschema:"description=Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
+	// IgnoreDaemonsetsUtilization excludes DaemonSet pods from a node's
+	// resource-utilization calculation when the autoscaler decides whether a node
+	// is unneeded (upstream --ignore-daemonsets-utilization, off by default). Set
+	// this when every DaemonSet is a system component whose per-node overhead
+	// should not, on its own, keep an otherwise-empty node above the scale-down
+	// threshold — otherwise heavy node agents (CNI, storage, observability) can
+	// pin every autoscaler node as "utilized" and prevent scale-down entirely.
+	IgnoreDaemonsetsUtilization bool `json:"ignoreDaemonsetsUtilization,omitzero" jsonschema_description:"Exclude DaemonSet pods from a node's resource-utilization calculation when the Cluster Autoscaler decides whether a node is unneeded (upstream --ignore-daemonsets-utilization, off by default). Enable this when DaemonSets are system components (CNI, CSI, observability, security agents) whose per-node overhead should not keep an otherwise-empty node above the scale-down utilization threshold. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)."` //nolint:lll
+	// SkipNodesWithLocalStorage controls whether the Cluster Autoscaler refuses to
+	// scale down a node that runs a pod with local storage (emptyDir, hostPath, or
+	// a local PersistentVolume). Upstream defaults to true (never remove such
+	// nodes). Set false to allow scale-down of nodes whose only local storage is
+	// ephemeral scratch — required for overflow nodes to ever drain, since
+	// emptyDir is pervasive. A pointer so an explicit false is preserved and only
+	// an unset value inherits the upstream default. Ignored unless the node
+	// autoscaler is installed (Talos on Hetzner with enabled: true).
+	SkipNodesWithLocalStorage *bool `json:"skipNodesWithLocalStorage,omitzero" jsonschema_description:"Whether the Cluster Autoscaler refuses to scale down a node running a pod with local storage (emptyDir, hostPath, or a local PersistentVolume). Upstream --skip-nodes-with-local-storage defaults to true. Set false to let nodes whose only local storage is ephemeral scratch (emptyDir) be removed — required for overflow nodes to drain, since emptyDir is pervasive. Ensure durable data lives on real PVCs first. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)."` //nolint:lll
+	// SkipNodesWithSystemPods controls whether the Cluster Autoscaler refuses to
+	// scale down a node that runs a non-DaemonSet kube-system pod without a
+	// controlling PodDisruptionBudget. Upstream defaults to true. Set false to let
+	// overflow nodes hosting movable system Deployments (metrics-server, CSI
+	// controllers, relays) drain — verify those components tolerate eviction and
+	// carry PDBs. A pointer so an explicit false is preserved and only an unset
+	// value inherits the upstream default. Ignored unless the node autoscaler is
+	// installed (Talos on Hetzner with enabled: true).
+	SkipNodesWithSystemPods *bool `json:"skipNodesWithSystemPods,omitzero" jsonschema_description:"Whether the Cluster Autoscaler refuses to scale down a node running a non-DaemonSet kube-system pod that has no controlling PodDisruptionBudget. Upstream --skip-nodes-with-system-pods defaults to true. Set false to let overflow nodes hosting movable system Deployments drain — confirm those components tolerate eviction and carry PDBs first. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)."` //nolint:lll
 }
 
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.

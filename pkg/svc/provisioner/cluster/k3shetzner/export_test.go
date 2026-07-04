@@ -61,7 +61,11 @@ func (p *Provisioner) BuildNodeUserData(
 	sshAuthorizedKeys []string,
 	hostKeys *cloudinitbootstrap.HostKeys,
 ) ([]TestNode, error) {
-	nodes, err := p.buildNodeUserData(clusterName, token, serverURL, sshAuthorizedKeys, hostKeys)
+	nodes, err := p.buildNodeUserData(
+		clusterName, token, serverURL,
+		p.ControlPlanes, p.Agents,
+		sshAuthorizedKeys, hostKeys,
+	)
 	if err != nil {
 		return nil, err
 	}

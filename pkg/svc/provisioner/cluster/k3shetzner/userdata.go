@@ -34,21 +34,24 @@ type nodeUserData struct {
 // (the transport), and attaches the Hetzner node labels. It is pure — it performs
 // no I/O and reaches no network — so it is fully unit-testable; serverURL is the
 // address joining nodes register against (empty for a single control-plane node
-// with no agents), sshAuthorizedKeys are the public keys delivered into every
-// node's authorized_keys (nil for none) so the post-provision SSH bootstrap seam
-// can authenticate, and hostKeys is the pre-generated SSH host identity delivered
-// via the cloud-init ssh_keys module (nil to let the node generate its own) so
-// the bootstrap dial can pin the host key.
+// with no agents), controlPlanes and agents are the node counts to plan (passed
+// explicitly so the two-phase multi-node flow can compose the init node and the
+// joining nodes separately), sshAuthorizedKeys are the public keys delivered into
+// every node's authorized_keys (nil for none) so the post-provision SSH bootstrap
+// seam can authenticate, and hostKeys is the pre-generated SSH host identity
+// delivered via the cloud-init ssh_keys module (nil to let the node generate its
+// own) so the bootstrap dial can pin the host key.
 func (p *Provisioner) buildNodeUserData(
 	clusterName, token, serverURL string,
+	controlPlanes, agents int,
 	sshAuthorizedKeys []string,
 	hostKeys *cloudinitbootstrap.HostKeys,
 ) ([]nodeUserData, error) {
 	nodes, err := k3sbootstrap.Plan(k3sbootstrap.PlanInput{
 		Version:           p.version,
 		Token:             token,
-		ControlPlaneCount: p.ControlPlanes,
-		AgentCount:        p.Agents,
+		ControlPlaneCount: controlPlanes,
+		AgentCount:        agents,
 		ServerURL:         serverURL,
 	})
 	if err != nil {

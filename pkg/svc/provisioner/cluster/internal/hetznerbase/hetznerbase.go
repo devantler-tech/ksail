@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -33,13 +34,21 @@ var (
 		"hetzner: no kubeconfig destination path is configured",
 	)
 
-	// ErrMultiNodeNotImplemented is returned by [Base.RunCreate] for a topology with
-	// joining nodes (more than one control-plane node, or any agent). Joining nodes
-	// register against the first node's address, which is only known once that node
-	// is running, so multi-node bring-up requires the runtime sequencing tracked by
-	// devantler-tech/ksail#5515.
+	// ErrMultiNodeNotImplemented is returned by [Base.Create] for a topology with
+	// agents when the distribution's strategy does not yet implement the joining-node
+	// bring-up ([MultiNodeComposer]) — currently the kubeadm × Hetzner provisioner,
+	// whose bootstrap has no API-server-endpoint threading yet. The two-phase join
+	// sequencing is tracked by devantler-tech/ksail#5755.
 	ErrMultiNodeNotImplemented = errors.New(
-		"hetzner: multi-node bring-up is not yet implemented (tracked by #5515)",
+		"hetzner: multi-node bring-up is not yet implemented for this distribution (tracked by #5755)",
+	)
+
+	// ErrHAControlPlaneNotImplemented is returned by [Base.Create] for a topology with
+	// more than one control-plane node. Additional control planes join the cluster's
+	// etcd, which needs quorum-aware ordering beyond the single-control-plane +
+	// agents path; it is a later increment of devantler-tech/ksail#5755.
+	ErrHAControlPlaneNotImplemented = errors.New(
+		"hetzner: high-availability (multi-control-plane) bring-up is not yet implemented (tracked by #5755)",
 	)
 )
 
@@ -129,6 +138,15 @@ type Base struct {
 	// and the node-token generator. Each provisioner sets itself here at
 	// construction so it inherits [Create] by embedding *Base.
 	Strategy CreateStrategy
+	// BringUpPort is the SSH port the multi-node bring-up dials on a created node;
+	// empty means the standard port 22 (the production default — stock OS images
+	// run sshd there). The single-node path threads its port through the composed
+	// [BringUpPlan] instead; this field lets the multi-node engine, which composes
+	// internally, be exercised against a non-standard port.
+	BringUpPort string
+	// BringUpPollInterval is the delay between the multi-node bring-up's probes for
+	// a node's admin kubeconfig; zero means [DefaultKubeconfigPollInterval].
+	BringUpPollInterval time.Duration
 }
 
 // CreateStrategy is the distribution-specific seam [Base.Create] composes with
@@ -340,26 +358,18 @@ func (b *Base) RunCreate(
 ) error {
 	clusterName := b.ResolveName(name)
 
-	exists, err := b.Infra.NodesExist(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("check existing nodes: %w", err)
+	// RunCreate is the single-node engine; [Base.Create] routes multi-node
+	// topologies to [Base.RunCreateMultiNode] before reaching here, so these
+	// guards are a defensive backstop for a direct caller.
+	if b.ControlPlanes > 1 {
+		return ErrHAControlPlaneNotImplemented
 	}
 
-	if exists {
-		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
-	}
-
-	if b.ControlPlanes > 1 || b.Agents > 0 {
+	if b.Agents > 0 {
 		return ErrMultiNodeNotImplemented
 	}
 
-	// Fail before any paid resource exists when the retrieved kubeconfig would
-	// have nowhere to go.
-	if b.KubeconfigPath == "" {
-		return ErrMissingKubeconfigDestination
-	}
-
-	infra, err := b.EnsureInfrastructure(ctx, clusterName)
+	infra, err := b.guardCreate(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -378,20 +388,100 @@ func (b *Base) RunCreate(
 }
 
 // Create runs the whole create flow shared by both provisioners, so neither
-// re-writes it: it wires the embedded [CreateStrategy]'s per-node composition
-// into the shared plan composition ([PlanComposer]) and runs [Base.RunCreate],
-// wrapping a failure with the strategy's distribution label. Each provisioner
-// gets this method by embedding *Base; the distro-specific pieces come from the
-// Strategy it sets at construction.
+// re-writes it. It routes by topology: the single-control-plane, no-agent path
+// wires the embedded [CreateStrategy]'s per-node composition into the shared plan
+// composition ([PlanComposer]) and runs [Base.RunCreate]; a topology with agents
+// runs the two-phase multi-node bring-up ([Base.RunCreateMultiNode]) when the
+// strategy implements [MultiNodeComposer] (currently k3s), and is rejected
+// otherwise. High-availability (multiple control planes) is a later increment.
+// Each provisioner gets this method by embedding *Base; the distro-specific
+// pieces come from the Strategy it sets at construction.
 func (b *Base) Create(ctx context.Context, name string) error {
-	composePlan := PlanComposer(b.Opts, b.Strategy.RemoteKubeconfigPath(), b.Strategy.ComposeNodes)
-
-	err := b.RunCreate(ctx, name, composePlan, b.Strategy.GenerateToken)
+	err := b.create(ctx, name)
 	if err != nil {
 		return fmt.Errorf("provision %s cluster: %w", b.Strategy.DistroLabel(), err)
 	}
 
 	return nil
+}
+
+// create dispatches to the single-node or multi-node engine by topology; its
+// error is wrapped with the distribution label by [Base.Create].
+func (b *Base) create(ctx context.Context, name string) error {
+	if b.ControlPlanes > 1 {
+		return ErrHAControlPlaneNotImplemented
+	}
+
+	if b.Agents > 0 {
+		composer, ok := b.Strategy.(MultiNodeComposer)
+		if !ok {
+			return ErrMultiNodeNotImplemented
+		}
+
+		material, err := GenerateBootstrapMaterial()
+		if err != nil {
+			return fmt.Errorf("generate bootstrap material: %w", err)
+		}
+
+		return b.RunCreateMultiNode(ctx, name, composer, material)
+	}
+
+	composePlan := PlanComposer(b.Opts, b.Strategy.RemoteKubeconfigPath(), b.Strategy.ComposeNodes)
+
+	return b.RunCreate(ctx, name, composePlan, b.Strategy.GenerateToken)
+}
+
+// guardCreate checks a create flow's preconditions and ensures the shared
+// infrastructure, so the single-node ([Base.RunCreate]) and multi-node
+// ([Base.RunCreateMultiNode]) engines share one preamble: the cluster must not
+// already exist ([ErrClusterAlreadyExists]) and must have a kubeconfig
+// destination ([ErrMissingKubeconfigDestination], checked before any paid
+// resource exists), after which the network, firewall, placement group, and SSH
+// key are ensured ([Base.EnsureInfrastructure]).
+func (b *Base) guardCreate(ctx context.Context, clusterName string) (ResolvedInfra, error) {
+	exists, err := b.Infra.NodesExist(ctx, clusterName)
+	if err != nil {
+		return ResolvedInfra{}, fmt.Errorf("check existing nodes: %w", err)
+	}
+
+	if exists {
+		return ResolvedInfra{}, fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
+	}
+
+	if b.KubeconfigPath == "" {
+		return ResolvedInfra{}, ErrMissingKubeconfigDestination
+	}
+
+	return b.EnsureInfrastructure(ctx, clusterName)
+}
+
+// rewriteAndPersistKubeconfig rewrites the retrieved kubeconfig's endpoint to the
+// created server's public IPv4 and merges it into the Base's kubeconfig
+// destination, returning the external endpoint and the persisted path. On any
+// failure it tears the cluster down (cleanup-on-failure) so a cluster whose
+// credentials cannot be written is not left running. It is shared by the
+// single-node and multi-node create flows.
+func (b *Base) rewriteAndPersistKubeconfig(
+	ctx context.Context,
+	clusterName string,
+	result BringUpResult,
+) (string, string, error) {
+	endpoint, err := apiServerEndpoint(result.Server)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	kubeconfig, err := rewriteKubeconfigEndpoint(result.Kubeconfig, endpoint)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	persistedPath, err := b.persistKubeconfig(kubeconfig)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	return endpoint, persistedPath, nil
 }
 
 // bringUpFromPlan runs the live half of the create flow from a composed plan:
@@ -422,19 +512,9 @@ func (b *Base) bringUpFromPlan(
 		return err
 	}
 
-	endpoint, err := apiServerEndpoint(result.Server)
+	endpoint, persistedPath, err := b.rewriteAndPersistKubeconfig(ctx, clusterName, result)
 	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	kubeconfig, err := rewriteKubeconfigEndpoint(result.Kubeconfig, endpoint)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
-	}
-
-	persistedPath, err := b.persistKubeconfig(kubeconfig)
-	if err != nil {
-		return b.cleanUpFailedBringUp(ctx, clusterName, err)
+		return err
 	}
 
 	_, _ = fmt.Fprintf(

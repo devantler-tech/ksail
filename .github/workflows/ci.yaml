@@ -270,7 +270,7 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@061b345a7351b0caf23055caea63ccd08b75e20e # v8.0.0
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@5aa2657f976103d716f585266a0fa4e964594df2 # v9.0.0
     permissions:
       contents: write
       issues: write
@@ -1370,7 +1370,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@061b345a7351b0caf23055caea63ccd08b75e20e # v8.0.0
+      - uses: devantler-tech/actions/aggregate-job-checks@5aa2657f976103d716f585266a0fa4e964594df2 # v9.0.0
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}

@@ -1887,6 +1887,10 @@ workload_write
         },
         "type": "array"
       },
+      "rules": {
+        "description": "Path to a YAML CEL rules file... (applies to: validate)",
+        "type": "string"
+      },
       "save-config": {
         "description": "If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged...",
         "type": "boolean"
