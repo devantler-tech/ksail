@@ -69,6 +69,31 @@ func ExtractContextKubeconfig(path, contextName string) ([]byte, error) {
 	return raw, nil
 }
 
+// PublishConnectorKubeconfig extracts the nested cluster's single-context kubeconfig from the
+// shared host kubeconfig at kubeconfigPath and publishes it as a Secret under the Connection
+// naming contract (namespace/secretName/key), so the operator's Connector can read it back. It is
+// the shared publish flow for the DinD-based distributions (Kind, KWOK), whose on-disk kubeconfig
+// is already pointed at the operator-reachable exposure address; it is published as-is after
+// minifying. Idempotent: re-provisioning a cluster of the same name refreshes the credentials.
+func PublishConnectorKubeconfig(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	key, kubeconfigPath, contextName, namespace, secretName string,
+	labels map[string]string,
+) error {
+	raw, err := ExtractContextKubeconfig(kubeconfigPath, contextName)
+	if err != nil {
+		return fmt.Errorf("extract nested kubeconfig: %w", err)
+	}
+
+	err = PublishKubeconfigSecret(ctx, clientset, namespace, secretName, key, raw, labels)
+	if err != nil {
+		return fmt.Errorf("publish kubeconfig secret: %w", err)
+	}
+
+	return nil
+}
+
 // PublishKubeconfigSecret upserts a Secret named secretName in namespace holding
 // data under key. It is the write half of the Connector contract for DinD-based
 // distributions (Kind, KWOK): the nested cluster's kubeconfig is written to a

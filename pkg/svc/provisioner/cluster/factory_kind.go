@@ -159,18 +159,12 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 
 	provisioner, err := kindprovisioner.NewKubernetesProvisioner(
 		kindprovisioner.KubernetesProvisionerConfig{
-			KindConfig:       kindConfig,
-			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostClientset:    hostClient,
-			K8sProvider:      k8sProvider,
-			DynamicClient:    dynClient,
-			RestConfig:       restConfig,
-			ClusterName:      clusterName,
-			Distribution:     string(cluster.Spec.Cluster.Distribution),
-			GatewayClassName: opts.GatewayClassName,
-			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
-			Persistence:      opts.Persistence,
+			DinDProvisionerConfig: buildDinDProvisionerConfig(
+				cluster, opts, hostClient, restConfig, dynClient, k8sProvider, clusterName,
+			),
+			KindConfig:    kindConfig,
+			HostContext:   resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			APIServerPort: kubernetesprovider.DinDAPIServerPort,
 		},
 	)
 	if err != nil {

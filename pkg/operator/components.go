@@ -42,7 +42,7 @@ var installOrder = []string{
 //
 // Child access is obtained through the provisioner's optional clusterprovisioner.Connector
 // capability: provisioners that can hand back an operator-reachable kubeconfig (the nested
-// Kubernetes-provider distributions — vCluster, k3k, Talos, and Kind — publish one) get their
+// Kubernetes-provider distributions — vCluster, k3k, Talos, Kind, and KWOK — publish one) get their
 // components installed; others are a no-op until they implement Connector.
 //
 // The returned applied is false when installation was skipped (no Connector), so the reconciler can

@@ -36,32 +36,16 @@ type KubernetesProvisioner struct {
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
 type KubernetesProvisionerConfig struct {
+	// DinDProvisionerConfig holds the host-cluster wiring shared with the KWOK DinD provisioner.
+	kubernetesprovider.DinDProvisionerConfig
+
 	// KindConfig is the Kind cluster configuration.
 	KindConfig *v1alpha4.Cluster
-	// KubeconfigPath is the path to the nested cluster's kubeconfig.
-	KubeconfigPath string
-	// HostClientset is the Kubernetes clientset for the host cluster, used to publish and read the
-	// nested cluster's kubeconfig Secret for the operator Connector contract.
-	HostClientset kubernetes.Interface
-	// K8sProvider is the Kubernetes infrastructure provider.
-	K8sProvider *kubernetesprovider.Provider
-	// DynamicClient is the dynamic client for Gateway API resources.
-	DynamicClient dynamic.Interface
-	// RestConfig is the REST config for port-forwarding to the DinD pod.
-	RestConfig *rest.Config
-	// ClusterName is the nested cluster name.
-	ClusterName string
-	// Distribution is the distribution name (for labels).
-	Distribution string
-	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
-	GatewayClassName string
 	// HostContext is the explicitly-configured host kubeconfig context (empty = resolved from
 	// the kubeconfig's current-context).
 	HostContext string
 	// APIServerPort is the port the nested API server listens on.
 	APIServerPort int32
-	// Persistence holds PVC configuration for the DinD Docker data directory.
-	Persistence v1alpha1.KubernetesPersistence
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps Kind with DinD lifecycle.
@@ -243,29 +227,22 @@ func (p *KubernetesProvisioner) finalizeKubeconfig(
 	return nil
 }
 
-// publishConnectorKubeconfig minifies the shared host kubeconfig down to the nested Kind cluster's
-// context and publishes it as a Secret in the DinD namespace under the Connection naming contract,
-// so Kubeconfig() can serve it back to the operator. The on-disk kubeconfig is already pointed at the
-// operator-reachable exposure address (a cert SAN), so it is published as-is after minifying. The
-// write is idempotent, so re-creating a cluster of the same name refreshes the credentials in place.
+// publishConnectorKubeconfig publishes the nested Kind cluster's kubeconfig under its Connection
+// naming contract so Kubeconfig() can serve it back to the operator (see
+// nested.PublishConnectorKubeconfig for the shared DinD publish flow).
 func (p *KubernetesProvisioner) publishConnectorKubeconfig(
 	ctx context.Context,
 	target string,
 ) error {
 	conn := ConnectionFor(target)
 
-	raw, err := nested.ExtractContextKubeconfig(p.kubeconfigPath, conn.ContextName)
-	if err != nil {
-		return fmt.Errorf("extract nested kubeconfig: %w", err)
-	}
-
-	err = nested.PublishKubeconfigSecret(
-		ctx, p.hostClientset,
-		conn.Namespace, conn.SecretName, kindKubeconfigKey,
-		raw, kubernetesprovider.CommonLabels(target),
+	err := nested.PublishConnectorKubeconfig(
+		ctx, p.hostClientset, kindKubeconfigKey, p.kubeconfigPath,
+		conn.ContextName, conn.Namespace, conn.SecretName,
+		kubernetesprovider.CommonLabels(target),
 	)
 	if err != nil {
-		return fmt.Errorf("publish kubeconfig secret: %w", err)
+		return fmt.Errorf("kind: %w", err)
 	}
 
 	return nil
