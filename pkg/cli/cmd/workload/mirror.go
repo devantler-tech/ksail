@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,6 +23,9 @@ import (
 
 // ErrInvalidMirrorPort rejects --port values outside the valid TCP port range.
 var ErrInvalidMirrorPort = errors.New("invalid --port: must be between 1 and 65535")
+
+// ErrInvalidMirrorReplayTarget rejects --to values that are not host:port.
+var ErrInvalidMirrorReplayTarget = errors.New("invalid --to: must be host:port")
 
 // defaultTapWaitTimeout bounds how long the mirror waits for the injected tap
 // container to reach Running before giving up.
@@ -51,6 +55,13 @@ The capture runs until interrupted (Ctrl-C). By default it is written to
 mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
 for piping into tshark/wireshark.
 
+With --to, the mirrored inbound TCP payloads are additionally replayed LIVE to
+a locally-running process (one local connection per mirrored flow) while the
+capture runs — the dev-loop bridge: your local service receives the same
+requests the cluster workload is serving. Replay is one-way by design: the
+local process's responses are read and discarded, nothing flows back into the
+cluster.
+
 Ephemeral containers cannot be removed, so an already-injected tap on the
 target pod is reused rather than treated as an error.`
 
@@ -61,7 +72,10 @@ const mirrorCmdExample = `  # Mirror the traffic your app receives on port 8080 
   ksail workload mirror my-app -n prod -c api --port 8080
 
   # Pipe the live capture straight into tshark
-  ksail workload mirror my-app --port 8080 --output - | tshark -r -`
+  ksail workload mirror my-app --port 8080 --output - | tshark -r -
+
+  # Replay the mirrored requests live to the copy running on your machine
+  ksail workload mirror my-app --port 8080 --to localhost:8080`
 
 // newMirrorClients builds the Kubernetes clientset and REST config the mirror
 // command talks to the cluster with. It is a package-level seam so tests can
@@ -91,12 +105,21 @@ var newMirrorClients = func(
 //nolint:gochecknoglobals // Test seam: lets tests stub the exec-channel capture stream.
 var runCaptureSession = mirror.RunCaptureSession
 
+// newLiveReplay builds the live replay sink for --to; a package-level seam so
+// tests can inject a capturing dialer.
+//
+//nolint:gochecknoglobals // Test seam: lets tests observe replayed connections.
+var newLiveReplay = func(address string, port int) (*mirror.LiveReplay, error) {
+	return mirror.NewLiveReplay(address, port)
+}
+
 // mirrorOptions carries the mirror command's flag values into the run function.
 type mirrorOptions struct {
 	namespace  string
 	container  string
 	port       int
 	output     string
+	replayTo   string
 	tapImage   string
 	tapTimeout time.Duration
 	context    string
@@ -129,6 +152,8 @@ func NewMirrorCmd() *cobra.Command {
 		"Service port to capture TCP traffic on (required)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", defaultMirrorOutput,
 		"Destination pcap file, or '-' to stream the raw pcap to stdout")
+	cmd.Flags().StringVar(&opts.replayTo, "to", "",
+		"Local address (host:port) the mirrored inbound TCP payloads are replayed to, live")
 	cmd.Flags().StringVar(&opts.tapImage, "tap-image", mirror.DefaultTapImage,
 		"Image the injected tap container runs")
 	cmd.Flags().DurationVar(&opts.tapTimeout, "tap-timeout", defaultTapWaitTimeout,
@@ -141,6 +166,13 @@ func NewMirrorCmd() *cobra.Command {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if opts.port <= 0 || opts.port > maxTCPPort {
 			return fmt.Errorf("%w: got %d", ErrInvalidMirrorPort, opts.port)
+		}
+
+		if opts.replayTo != "" {
+			_, _, err := net.SplitHostPort(opts.replayTo)
+			if err != nil {
+				return fmt.Errorf("%w: got %q", ErrInvalidMirrorReplayTarget, opts.replayTo)
+			}
 		}
 
 		return runMirrorCommand(cmd, args[0], opts)
@@ -248,6 +280,15 @@ func captureToOutput(
 		return err
 	}
 
+	out, replay, err := setupLiveReplay(cmd, opts, out)
+	if err != nil {
+		if file != nil {
+			_ = file.Close()
+		}
+
+		return err
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "capturing TCP traffic on port %d — press Ctrl-C to stop",
@@ -259,13 +300,7 @@ func captureToOutput(
 		cmd.Context(), client, restConfig, point, opts.port, out,
 	)
 
-	if file != nil {
-		closeErr := file.Close()
-		if captureErr == nil && closeErr != nil {
-			captureErr = fmt.Errorf("close capture file: %w", closeErr)
-		}
-	}
-
+	captureErr = finishCapture(captureErr, replay, file)
 	if captureErr != nil {
 		return fmt.Errorf("capture session: %w", captureErr)
 	}
@@ -275,6 +310,52 @@ func captureToOutput(
 	}
 
 	return summarizeMirrorFile(cmd, file.Name())
+}
+
+// setupLiveReplay tees the capture stream into a live replay sink when --to
+// is set; without it the capture writer passes through untouched.
+func setupLiveReplay(
+	cmd *cobra.Command,
+	opts mirrorOptions,
+	out io.Writer,
+) (io.Writer, *mirror.LiveReplay, error) {
+	if opts.replayTo == "" {
+		return out, nil, nil
+	}
+
+	replay, err := newLiveReplay(opts.replayTo, opts.port)
+	if err != nil {
+		return nil, nil, fmt.Errorf("start live replay: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "replaying mirrored inbound traffic to %s",
+		Args:    []any{opts.replayTo},
+		Writer:  cmd.ErrOrStderr(),
+	})
+
+	return io.MultiWriter(out, replay), replay, nil
+}
+
+// finishCapture drains the replay sink and closes the capture file, keeping
+// the first error in capture → replay → file-close precedence.
+func finishCapture(captureErr error, replay *mirror.LiveReplay, file *os.File) error {
+	if replay != nil {
+		replayErr := replay.Close()
+		if captureErr == nil && replayErr != nil {
+			captureErr = fmt.Errorf("live replay: %w", replayErr)
+		}
+	}
+
+	if file != nil {
+		closeErr := file.Close()
+		if captureErr == nil && closeErr != nil {
+			captureErr = fmt.Errorf("close capture file: %w", closeErr)
+		}
+	}
+
+	return captureErr
 }
 
 // openMirrorOutput opens the capture destination: the command's stdout for

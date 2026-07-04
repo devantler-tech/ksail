@@ -427,3 +427,15 @@ func ExportSetRunCaptureSession(
 
 	return func() { runCaptureSession = original }
 }
+
+// ExportSetNewLiveReplay swaps how the mirror command builds its --to live
+// replay sink so tests can inject a capturing dialer. It returns a restore
+// function that reinstates the original.
+func ExportSetNewLiveReplay(
+	factory func(address string, port int) (*mirror.LiveReplay, error),
+) func() {
+	original := newLiveReplay
+	newLiveReplay = factory
+
+	return func() { newLiveReplay = original }
+}
