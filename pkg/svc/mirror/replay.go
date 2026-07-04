@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
@@ -23,9 +24,21 @@ var ErrReplayPendingOverflow = errors.New(
 	"replay flow dropped an out-of-order segment (pending buffer full)",
 )
 
+// ErrReplayTruncatedCapture is returned by Close when the pcap stream ended
+// in the middle of a packet record — the capture was cut off, so the tail of
+// the mirrored traffic may be missing.
+var ErrReplayTruncatedCapture = errors.New(
+	"pcap stream ended mid-packet (truncated capture)",
+)
+
 // maxPendingSegments bounds how many out-of-order TCP segments a single flow
 // buffers while waiting for the gap to fill.
 const maxPendingSegments = 256
+
+// defaultReplayWriteTimeout bounds each write to the local process so a
+// stalled local reader cannot block the parser goroutine — and through the
+// pipe, the capture itself — indefinitely.
+const defaultReplayWriteTimeout = 5 * time.Second
 
 // ReplayDialer opens the local connection a mirrored flow is replayed into.
 // It is a seam so tests can capture the dialed connections.
@@ -35,7 +48,8 @@ type ReplayDialer func(network, address string) (net.Conn, error)
 type ReplayOption func(*replayConfig)
 
 type replayConfig struct {
-	dial ReplayDialer
+	dial         ReplayDialer
+	writeTimeout time.Duration
 }
 
 // WithReplayDialer overrides how the replay dials the local address.
@@ -45,6 +59,17 @@ func WithReplayDialer(dial ReplayDialer) ReplayOption {
 	return func(cfg *replayConfig) {
 		if dial != nil {
 			cfg.dial = dial
+		}
+	}
+}
+
+// WithReplayWriteTimeout overrides the per-write deadline on local
+// connections. Production code leaves the default; tests use a short timeout
+// to exercise the stalled-local-reader path quickly.
+func WithReplayWriteTimeout(timeout time.Duration) ReplayOption {
+	return func(cfg *replayConfig) {
+		if timeout > 0 {
+			cfg.writeTimeout = timeout
 		}
 	}
 }
@@ -69,9 +94,10 @@ func WithReplayDialer(dial ReplayDialer) ReplayOption {
 // stops the capture: the affected flow is dropped, the first such error is
 // remembered, and Close returns it so the command can surface what went wrong.
 type LiveReplay struct {
-	address string
-	port    int
-	dial    ReplayDialer
+	address      string
+	port         int
+	dial         ReplayDialer
+	writeTimeout time.Duration
 
 	writer *io.PipeWriter
 	done   chan struct{}
@@ -99,20 +125,21 @@ func NewLiveReplay(address string, port int, opts ...ReplayOption) (*LiveReplay,
 		return nil, fmt.Errorf("%w: %d", ErrInvalidCapturePort, port)
 	}
 
-	cfg := replayConfig{dial: net.Dial}
+	cfg := replayConfig{dial: net.Dial, writeTimeout: defaultReplayWriteTimeout}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	reader, writer := io.Pipe()
 	replay := &LiveReplay{
-		address:  address,
-		port:     port,
-		dial:     cfg.dial,
-		writer:   writer,
-		done:     make(chan struct{}),
-		mu:       sync.Mutex{},
-		firstErr: nil,
+		address:      address,
+		port:         port,
+		dial:         cfg.dial,
+		writeTimeout: cfg.writeTimeout,
+		writer:       writer,
+		done:         make(chan struct{}),
+		mu:           sync.Mutex{},
+		firstErr:     nil,
 	}
 
 	go replay.run(reader)
@@ -180,7 +207,17 @@ func (r *LiveReplay) run(reader *io.PipeReader) {
 
 	for {
 		data, _, err := pcapReader.ReadPacketData()
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		if errors.Is(err, io.EOF) {
+			return
+		}
+
+		// A stream ending mid-packet is a truncated capture, not a clean
+		// shutdown: remember it so Close surfaces it (the pipe is already
+		// closed at this point, so failing the pipe alone would be silent).
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			r.recordErr(ErrReplayTruncatedCapture)
+			_ = reader.CloseWithError(ErrReplayTruncatedCapture)
+
 			return
 		}
 
@@ -241,12 +278,15 @@ func (r *LiveReplay) handlePacket(
 // dropped while the capture (and every other flow) continues.
 func (r *LiveReplay) newFlow() *replayFlow {
 	flow := &replayFlow{
-		conn:        nil,
-		record:      r.recordErr,
-		next:        0,
-		initialized: false,
-		pending:     make(map[uint32][]byte),
-		finished:    false,
+		conn:         nil,
+		record:       r.recordErr,
+		writeTimeout: r.writeTimeout,
+		next:         0,
+		initialized:  false,
+		pending:      make(map[uint32][]byte),
+		finSeen:      false,
+		finPoint:     0,
+		finished:     false,
 	}
 
 	conn, err := r.dial("tcp", r.address)
@@ -270,12 +310,15 @@ func (r *LiveReplay) newFlow() *replayFlow {
 // connection: in-order delivery, bounded buffering of out-of-order segments,
 // retransmissions dropped, overlaps trimmed.
 type replayFlow struct {
-	conn   net.Conn
-	record func(error)
+	conn         net.Conn
+	record       func(error)
+	writeTimeout time.Duration
 
 	next        uint32
 	initialized bool
 	pending     map[uint32][]byte
+	finSeen     bool
+	finPoint    uint32
 	finished    bool
 }
 
@@ -300,7 +343,18 @@ func (f *replayFlow) handleSegment(segment *layers.TCP) {
 		f.consume(sequence, segment.Payload)
 	}
 
-	if segment.FIN || segment.RST {
+	// A FIN consumes sequence space AFTER its payload, so an out-of-order
+	// FIN must not close the flow while earlier segments are still pending:
+	// remember its close point and finish only once delivery reaches it.
+	// An RST is an immediate abort — pending data is gone by definition.
+	if segment.FIN && !f.finSeen {
+		f.finSeen = true
+		//nolint:gosec // G115: a TCP segment is far below 2^32 bytes.
+		f.finPoint = sequence + uint32(len(segment.Payload))
+	}
+
+	//nolint:gosec // G115: two's-complement wraparound distance is intentional.
+	if segment.RST || (f.finSeen && int32(f.finPoint-f.next) <= 0) {
 		f.finished = true
 	}
 }
@@ -316,7 +370,14 @@ func (f *replayFlow) consume(sequence uint32, payload []byte) {
 	case distance == 0:
 		f.deliver(payload)
 	case distance > 0:
-		if len(f.pending) >= maxPendingSegments {
+		existing, exists := f.pending[sequence]
+		if exists && len(existing) >= len(payload) {
+			// A shorter duplicate must not replace a longer buffered
+			// segment — that would silently drop the longer one's tail.
+			break
+		}
+
+		if !exists && len(f.pending) >= maxPendingSegments {
 			f.record(ErrReplayPendingOverflow)
 
 			return
@@ -336,28 +397,51 @@ func (f *replayFlow) consume(sequence uint32, payload []byte) {
 	f.flushPending()
 }
 
-// flushPending delivers buffered segments that have become contiguous.
+// flushPending delivers buffered segments that have become deliverable: an
+// exact continuation of the replayed prefix, or one that now overlaps it
+// (only the still-new tail is delivered). Delivery advances f.next, which can
+// make further buffered segments deliverable, so it loops until a pass makes
+// no progress.
 func (f *replayFlow) flushPending() {
 	for {
-		payload, ready := f.pending[f.next]
-		if !ready {
-			return
+		progressed := false
+
+		for start, payload := range f.pending {
+			//nolint:gosec // G115: two's-complement wraparound distance is intentional.
+			distance := int32(start - f.next)
+			if distance > 0 {
+				continue
+			}
+
+			delete(f.pending, start)
+
+			overlap := -distance
+			if int(overlap) < len(payload) {
+				f.deliver(payload[overlap:])
+
+				progressed = true
+			}
 		}
 
-		delete(f.pending, f.next)
-		f.deliver(payload)
+		if !progressed {
+			return
+		}
 	}
 }
 
 // deliver writes in-order payload to the local connection and advances the
-// expected sequence number. A local write failure drops the connection (the
-// flow's remaining bytes are discarded) but never stops the capture.
+// expected sequence number. Each write carries a deadline so a local process
+// that accepts but stops reading cannot stall the parser (and, through the
+// pipe, the capture). A local write failure or timeout drops the connection
+// (the flow's remaining bytes are discarded) but never stops the capture.
 func (f *replayFlow) deliver(payload []byte) {
 	f.next += uint32(len(payload)) //nolint:gosec // G115: a TCP segment is far below 2^32 bytes.
 
 	if f.conn == nil {
 		return
 	}
+
+	_ = f.conn.SetWriteDeadline(time.Now().Add(f.writeTimeout))
 
 	_, err := f.conn.Write(payload)
 	if err != nil {

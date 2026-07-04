@@ -430,6 +430,58 @@ func TestMirrorCmdReplaysToLocalAddress(t *testing.T) {
 }
 
 //nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestMirrorCmdReplaysWhileStreamingToStdout(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
+	pcap := replayTestPcap(t)
+
+	restore, _ := stubMirrorSession(client, pcap)
+	defer restore()
+
+	received := make(chan string, 1)
+
+	restoreReplay := workload.ExportSetNewLiveReplay(
+		func(address string, port int) (*mirror.LiveReplay, error) {
+			return mirror.NewLiveReplay(address, port, mirror.WithReplayDialer(
+				func(_, _ string) (net.Conn, error) {
+					clientConn, serverConn := net.Pipe()
+
+					go func() {
+						data, _ := io.ReadAll(serverConn)
+						received <- string(data)
+					}()
+
+					return clientConn, nil
+				},
+			))
+		},
+	)
+	defer restoreReplay()
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--port", "8080", "--output", "-", "--to", "localhost:9999",
+	})
+
+	var out, errOut bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+
+	require.NoError(t, cmd.Execute())
+
+	// The tee must feed BOTH sinks: the raw pcap stream to stdout (the
+	// tshark-piping path) and the inbound payload to the replay connection.
+	assert.Contains(t, out.String(), string(pcap), "stdout must carry the raw pcap stream")
+	assert.Equal(t, "ping", <-received, "the local connection must receive the inbound payload")
+
+	_, err := os.Stat(filepath.Join(".", "mirror.pcap"))
+	require.ErrorIs(t, err, os.ErrNotExist, "stdout mode must not create a capture file")
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
 func TestMirrorCmdSurfacesReplayDialFailure(t *testing.T) {
 	t.Chdir(t.TempDir())
 

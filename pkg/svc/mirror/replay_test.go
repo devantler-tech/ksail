@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -305,6 +306,126 @@ func TestLiveReplayFailsWritesOnMalformedStream(t *testing.T) {
 	require.Error(t, writeErr, "writes must fail once the parser stopped on a malformed stream")
 
 	_ = replay.Close()
+}
+
+func TestLiveReplayHoldsFinUntilGapFills(t *testing.T) {
+	t.Parallel()
+
+	dial, collect := recordingDialer(t)
+
+	// The FIN arrives before the payload that precedes it in sequence order:
+	// the flow must stay open until the gap fills, then deliver and finish.
+	pcap := buildReplayPcap(t,
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 100, syn: true},
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 113, fin: true},
+		replaySegment{
+			srcPort: 40000,
+			dstPort: replayTestPort,
+			seq:     101,
+			payload: []byte("hello world!"),
+		},
+	)
+
+	require.NoError(t, runReplay(t, dial, pcap))
+	assert.Equal(t, []string{"hello world!"}, collect())
+}
+
+func TestLiveReplayFlushesOverlappingPendingTail(t *testing.T) {
+	t.Parallel()
+
+	dial, collect := recordingDialer(t)
+
+	// The buffered segment (seq 107, "world") starts BEFORE where the
+	// in-order segment (seq 101, "hello wor") advances the stream to (110):
+	// its still-new tail ("ld") must be delivered, not stranded.
+	pcap := buildReplayPcap(t,
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 100, syn: true},
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 107, payload: []byte("world")},
+		replaySegment{
+			srcPort: 40000,
+			dstPort: replayTestPort,
+			seq:     101,
+			payload: []byte("hello wor"),
+		},
+	)
+
+	require.NoError(t, runReplay(t, dial, pcap))
+	assert.Equal(t, []string{"hello world"}, collect())
+}
+
+func TestLiveReplayKeepsLongerBufferedSegmentOverShorterDuplicate(t *testing.T) {
+	t.Parallel()
+
+	dial, collect := recordingDialer(t)
+
+	// A shorter retransmission of an already-buffered segment must not
+	// replace the longer copy — its tail would be lost.
+	pcap := buildReplayPcap(t,
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 100, syn: true},
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 107, payload: []byte("world")},
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 107, payload: []byte("wor")},
+		replaySegment{
+			srcPort: 40000,
+			dstPort: replayTestPort,
+			seq:     101,
+			payload: []byte("hello wor"),
+		},
+	)
+
+	require.NoError(t, runReplay(t, dial, pcap))
+	assert.Equal(t, []string{"hello world"}, collect())
+}
+
+func TestLiveReplaySurfacesTruncatedCapture(t *testing.T) {
+	t.Parallel()
+
+	dial, _ := recordingDialer(t)
+
+	pcap := buildReplayPcap(t,
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 100, syn: true},
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 101, payload: []byte("data")},
+	)
+
+	// Cut into the last packet record: a capture that ends mid-packet is
+	// truncated input, not a clean shutdown.
+	err := runReplay(t, dial, pcap[:len(pcap)-5])
+	require.ErrorIs(t, err, mirror.ErrReplayTruncatedCapture)
+}
+
+func TestLiveReplayTimesOutStalledLocalWrites(t *testing.T) {
+	t.Parallel()
+
+	// A local process that accepts the connection but never reads: without
+	// a write deadline the parser goroutine would block forever.
+	dial := func(_, _ string) (net.Conn, error) {
+		client, _ := net.Pipe()
+
+		return client, nil
+	}
+
+	replay, err := mirror.NewLiveReplay(
+		replayTestAddress,
+		replayTestPort,
+		mirror.WithReplayDialer(dial),
+		mirror.WithReplayWriteTimeout(50*time.Millisecond),
+	)
+	require.NoError(t, err)
+
+	pcap := buildReplayPcap(
+		t,
+		replaySegment{srcPort: 40000, dstPort: replayTestPort, seq: 100, syn: true},
+		replaySegment{
+			srcPort: 40000,
+			dstPort: replayTestPort,
+			seq:     101,
+			payload: []byte("stalled"),
+		},
+	)
+
+	_, writeErr := replay.Write(pcap)
+	require.NoError(t, writeErr)
+
+	require.ErrorIs(t, replay.Close(), os.ErrDeadlineExceeded)
 }
 
 func TestLiveReplayValidatesArguments(t *testing.T) {
