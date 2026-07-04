@@ -3,6 +3,7 @@ package kubeadmhetzner
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	kubeadmbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/kubeadm"
@@ -147,10 +148,15 @@ func (p *Provisioner) ComposeJoiningNodes(
 // hostsPinCommand renders the first-boot command that pins the cluster's stable
 // join name to the init control plane's private address in /etc/hosts, making
 // the name the joining node's kubeadm configuration dials resolvable — durably,
-// so the kubelet's post-join API connections keep resolving it too. Both
-// interpolated values are provisioner-controlled: the address is a formatted
-// [net.IP] and the name is the cluster's Hetzner-accepted (RFC-1123) server
-// name plus a fixed suffix, so neither can carry shell metacharacters.
+// so the kubelet's post-join API connections keep resolving it too. The payload
+// is single-quoted with embedded quotes escaped, so shell safety holds here
+// regardless of what the name-composition path upstream accepted.
 func hostsPinCommand(joinAddress net.IP, joinName string) string {
-	return "echo '" + joinAddress.String() + " " + joinName + "' >> /etc/hosts"
+	return "echo " + shellSingleQuote(joinAddress.String()+" "+joinName) + " >> /etc/hosts"
+}
+
+// shellSingleQuote wraps s in single quotes, escaping any embedded single
+// quote, so the result splices into a shell command as one literal word.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

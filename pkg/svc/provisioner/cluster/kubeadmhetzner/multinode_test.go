@@ -89,6 +89,12 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 		joinAt := strings.Index(spec.UserData, "kubeadm join")
 		require.NotEqual(t, -1, joinAt)
 		assert.Less(t, pinAt, joinAt, "the /etc/hosts pin must precede `kubeadm join`")
+
+		// The CA private key is seeded onto the init control plane only; a
+		// joiner carrying it (or its PKI path) would leak the cluster identity
+		// to every worker.
+		assert.NotContains(t, spec.UserData, "/etc/kubernetes/pki/ca.key",
+			"joining nodes must never receive the cluster CA private key")
 	}
 }
 
