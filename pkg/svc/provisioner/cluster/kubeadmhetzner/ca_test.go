@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"testing"
+	"time"
 
 	kubeadmbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/kubeadm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kubeadmhetzner"
@@ -43,6 +44,13 @@ func TestGenerateClusterCAReturnsACASigningCertificate(t *testing.T) {
 	assert.True(t, cert.BasicConstraintsValid)
 	assert.Equal(t, "kubernetes", cert.Subject.CommonName)
 	assert.NotZero(t, cert.KeyUsage&x509.KeyUsageCertSign)
+
+	// The CA is long-lived (kubeadm mints its own with a ten-year lifetime); pin
+	// the window so an accidental short expiry — which would silently break joins
+	// once the CA lapses — is caught here.
+	window := cert.NotAfter.Sub(cert.NotBefore)
+	assert.Greater(t, window, 9*365*24*time.Hour)
+	assert.Less(t, window, 11*365*24*time.Hour)
 }
 
 func TestGenerateClusterCAKeyBelongsToTheCertificate(t *testing.T) {
@@ -57,6 +65,10 @@ func TestGenerateClusterCAKeyBelongsToTheCertificate(t *testing.T) {
 
 	key, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
 	require.NoError(t, err)
+
+	// Pin the modulus size (kubeadm's own CA is RSA-2048) so a key-size downgrade
+	// in ca.go is caught rather than silently weakening the cluster CA.
+	assert.Equal(t, 2048, key.N.BitLen())
 
 	certPubKey, ok := parseCACertificate(t, clusterCA.CertPEM).PublicKey.(*rsa.PublicKey)
 	require.True(t, ok)
