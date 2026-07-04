@@ -23,7 +23,7 @@ var ErrNoPrivateIPv4 = errors.New(
 // flow ([Base.RunCreateMultiNode]) needs the init control plane composed on its
 // own (before any address is known) and the joining nodes composed afterwards
 // against the init control plane's resolved private address — a distribution
-// whose bootstrap cannot yet thread that join endpoint (kubeadm) simply does not
+// whose bootstrap cannot yet thread that join endpoint simply does not
 // implement this, and a topology with agents is rejected before any resource is
 // created. See devantler-tech/ksail#5755.
 type MultiNodeComposer interface {

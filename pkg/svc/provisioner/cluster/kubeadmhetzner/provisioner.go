@@ -22,6 +22,14 @@ type Provisioner struct {
 	*hetznerbase.Base
 
 	kubernetesVersion string
+
+	// clusterCA is the pre-seeded cluster CA minted by
+	// [Provisioner.ComposeInitNode] and consumed by
+	// [Provisioner.ComposeJoiningNodes] within one two-phase create — the only
+	// state the multi-node flow threads between its two compose calls. Nil until
+	// an init node has been composed; a provisioner instance drives at most one
+	// create, matching the shared flow's ordering guarantee.
+	clusterCA *ClusterCA
 }
 
 // NewProvisioner constructs a kubeadm × Hetzner provisioner. It builds the shared

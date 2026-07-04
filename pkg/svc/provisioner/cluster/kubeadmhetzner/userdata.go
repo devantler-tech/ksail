@@ -2,6 +2,7 @@ package kubeadmhetzner
 
 import (
 	"fmt"
+	"slices"
 
 	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	containerdbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/containerd"
@@ -42,6 +43,15 @@ type Input struct {
 	// the bootstrap SSH dial can pin the host key instead of trusting first use.
 	// Optional; nil lets the node generate its own host keys at first boot.
 	HostKeys *cloudinitbootstrap.HostKeys
+	// ServerInitFiles are extra files delivered only to the cluster-initialising
+	// control plane — e.g. the pre-seeded cluster CA ([ClusterCA]) the two-phase
+	// multi-node flow fixes the cluster identity with. Optional.
+	ServerInitFiles []cloudinitbootstrap.File
+	// JoinPrelude are commands run on every joining node before its install
+	// commands — e.g. pinning the stable join name to the init control plane's
+	// resolved private address in /etc/hosts, which must happen before `kubeadm
+	// join` dials it. Optional; ignored on the cluster-initialising control plane.
+	JoinPrelude []string
 }
 
 // NodeUserData pairs a planned node with the cloud-init user_data that bootstraps
@@ -143,11 +153,23 @@ func buildNodeCloudInit(
 		return "", fmt.Errorf("render install for node %d: %w", node.Index, err)
 	}
 
+	files := append(toCloudInitFiles(install.Files), containerdFile)
+	commands := install.Commands
+
+	// The per-role extras: the init control plane receives the pre-seeded cluster
+	// identity files; a joining node runs the join prelude (e.g. the /etc/hosts
+	// pin of the stable join name) before its install commands reach `kubeadm join`.
+	if node.Config.Role == kubeadmbootstrap.RoleServerInit {
+		files = append(files, input.ServerInitFiles...)
+	} else if len(input.JoinPrelude) > 0 {
+		commands = append(slices.Clone(input.JoinPrelude), commands...)
+	}
+
 	userData, err := cloudinitbootstrap.BuildUserData(cloudinitbootstrap.Config{
 		AptSources:        toCloudInitAptSources(install.AptSources),
 		Packages:          install.Packages,
-		Files:             append(toCloudInitFiles(install.Files), containerdFile),
-		Commands:          install.Commands,
+		Files:             files,
+		Commands:          commands,
 		SSHAuthorizedKeys: input.SSHAuthorizedKeys,
 		HostKeys:          input.HostKeys,
 	})

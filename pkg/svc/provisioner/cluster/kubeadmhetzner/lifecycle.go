@@ -19,11 +19,11 @@ const remoteKubeconfigPath = "/etc/kubernetes/admin.conf"
 // pieces below.
 
 // buildNodes composes the ordered per-node cloud-init user_data for the cluster's
-// topology via [BuildNodeUserData]. In the current increment it is only reached for
-// a single control-plane, no-agent cluster (multi-node returns
-// [ErrMultiNodeNotImplemented] before this is called), so the plan carries no
-// APIServerEndpoint. The cluster-wide Kubernetes version selects the package
-// repository track every node installs the kube* components from;
+// topology via [BuildNodeUserData]. It is only reached on the single-node create
+// path (a topology with agents is routed to the two-phase multi-node flow via
+// [Provisioner.ComposeInitNode] / [Provisioner.ComposeJoiningNodes]), so the plan
+// carries no APIServerEndpoint. The cluster-wide Kubernetes version selects the
+// package repository track every node installs the kube* components from;
 // sshAuthorizedKeys and hostKeys deliver the bring-up's bootstrap material
 // (the bootstrap public key and the pinned host identity) into every node.
 func (p *Provisioner) buildNodes(
@@ -64,6 +64,12 @@ func (p *Provisioner) ComposeNodes(
 		return nil, err
 	}
 
+	return nodeSpecsFrom(nodes), nil
+}
+
+// nodeSpecsFrom projects the kubeadm composer's per-node user_data onto the
+// shared [hetznerbase.NodeSpec]s both create engines derive server specs from.
+func nodeSpecsFrom(nodes []NodeUserData) []hetznerbase.NodeSpec {
 	return hetznerbase.NodeSpecsFrom(nodes, func(node NodeUserData) hetznerbase.NodeSpec {
 		return hetznerbase.NodeSpec{
 			Index:    node.Index,
@@ -71,7 +77,7 @@ func (p *Provisioner) ComposeNodes(
 			UserData: node.UserData,
 			Labels:   node.Labels,
 		}
-	}), nil
+	})
 }
 
 // RemoteKubeconfigPath reports where kubeadm writes the admin kubeconfig,

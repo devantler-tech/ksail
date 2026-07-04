@@ -1,0 +1,156 @@
+package kubeadmhetzner
+
+import (
+	"fmt"
+	"net"
+
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
+	kubeadmbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/kubeadm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
+)
+
+// kubeadmAPIPort is the port the kubeadm API server serves on — the standard
+// Kubernetes secure port a joining node's discovery dials.
+const kubeadmAPIPort = "6443"
+
+// joinNameSuffix completes the cluster's stable join name (see [JoinName]). The
+// reserved-for-internal-use ".internal" TLD guarantees the name never collides
+// with a public DNS zone.
+const joinNameSuffix = "-api.ksail.internal"
+
+// Where the pre-seeded cluster CA lands on the cluster-initialising control
+// plane. kubeadm reuses an existing CA at its canonical PKI paths instead of
+// minting its own, which is what fixes the cluster identity to the material
+// [GenerateClusterCA] produced at compose time. The certificate is public
+// (world-readable, like kubeadm's own); the key is owner-only.
+const (
+	caCertPath        = "/etc/kubernetes/pki/ca.crt"
+	caCertPermissions = "0644"
+	caKeyPath         = "/etc/kubernetes/pki/ca.key"
+	caKeyPermissions  = "0600"
+)
+
+// staticMultiNodeComposerCheck asserts at compile time that *Provisioner
+// implements the optional [hetznerbase.MultiNodeComposer] capability, so the
+// shared create flow routes a kubeadm topology with agents to the two-phase
+// bring-up instead of rejecting it.
+var _ hetznerbase.MultiNodeComposer = (*Provisioner)(nil)
+
+// JoinName returns the cluster's stable join name: the DNS name the joining
+// nodes dial the cluster-initialising control plane by, and the extra SAN its
+// API-server serving certificate carries.
+//
+// # Why a name and not the IP
+//
+// A joining node registers against the init control plane's *private-network*
+// IPv4, which Hetzner assigns only when that server is created — after every
+// node's kubeadm configuration (and thus the init node's certificate SAN list)
+// has been composed. The IP therefore cannot appear in the serving certificate,
+// and a joiner dialing it raw would fail TLS hostname verification after token
+// discovery. A compose-time-stable NAME closes the gap from both sides: the
+// init node's certificate carries it up front (kubeadm renders CertSANs into
+// the serving cert), and each joining node pins it to the resolved private
+// address in /etc/hosts (see [hostsPinCommand]) before `kubeadm join` dials it.
+// No extra cloud resource (pre-allocated/floating IP) and no boot-time
+// certificate mutation is needed, and the same name is the natural
+// ControlPlaneEndpoint for the later HA increment.
+func JoinName(clusterName string) string {
+	return clusterName + joinNameSuffix
+}
+
+// ComposeInitNode composes the single cluster-initialising kubeadm control
+// plane (bootstrap index 0), satisfying [hetznerbase.MultiNodeComposer]. It
+// mints the cluster's CA ([GenerateClusterCA]) and seeds it into the node's
+// PKI directory so the cluster identity — and the discovery hash the joining
+// nodes pin — is fixed before any server boots; the node's API-server
+// certificate additionally carries the cluster's stable join name as a SAN
+// (see [JoinName]). The generated CA is retained on the Provisioner for
+// [Provisioner.ComposeJoiningNodes], which the shared flow always calls after
+// this within one create.
+func (p *Provisioner) ComposeInitNode(
+	clusterName, token string,
+	material hetznerbase.BootstrapMaterial,
+) (hetznerbase.NodeSpec, error) {
+	clusterCA, err := GenerateClusterCA()
+	if err != nil {
+		return hetznerbase.NodeSpec{}, err
+	}
+
+	p.clusterCA = &clusterCA
+
+	// A reduced single-node plan: the init node's own configuration is identical
+	// in every topology (the join settings apply only to joining nodes), and the
+	// full plan cannot be expanded yet — its join endpoint resolves at run time.
+	nodes, err := BuildNodeUserData(Input{
+		ClusterName: clusterName,
+		Plan: kubeadmbootstrap.PlanInput{
+			Token:             token,
+			KubernetesVersion: p.kubernetesVersion,
+			CertSANs:          []string{JoinName(clusterName)},
+			ControlPlaneCount: 1,
+			AgentCount:        0,
+		},
+		SSHAuthorizedKeys: []string{material.AuthorizedKey},
+		HostKeys:          material.HostKeys,
+		ServerInitFiles: []cloudinitbootstrap.File{
+			{Path: caCertPath, Permissions: caCertPermissions, Content: string(clusterCA.CertPEM)},
+			{Path: caKeyPath, Permissions: caKeyPermissions, Content: string(clusterCA.KeyPEM)},
+		},
+	})
+	if err != nil {
+		return hetznerbase.NodeSpec{}, fmt.Errorf("compose init control-plane node: %w", err)
+	}
+
+	return nodeSpecsFrom(nodes)[0], nil
+}
+
+// ComposeJoiningNodes composes the kubeadm agents that register against the
+// init control plane reachable at joinAddress (its private-network IPv4),
+// satisfying [hetznerbase.MultiNodeComposer]. It plans the full topology so the
+// joining nodes keep their global bootstrap indices, threads the stable join
+// name (pinned to joinAddress in each node's /etc/hosts) and the pre-seeded
+// CA's discovery hash into their JoinConfigurations, and returns only the
+// joining nodes — the init node at index 0 is already up.
+func (p *Provisioner) ComposeJoiningNodes(
+	clusterName, token string,
+	joinAddress net.IP,
+	material hetznerbase.BootstrapMaterial,
+) ([]hetznerbase.NodeSpec, error) {
+	if p.clusterCA == nil {
+		return nil, ErrJoiningNodesComposedFirst
+	}
+
+	joinName := JoinName(clusterName)
+
+	nodes, err := BuildNodeUserData(Input{
+		ClusterName: clusterName,
+		Plan: kubeadmbootstrap.PlanInput{
+			Token:             token,
+			KubernetesVersion: p.kubernetesVersion,
+			CertSANs:          []string{joinName},
+			ControlPlaneCount: p.ControlPlanes,
+			AgentCount:        p.Agents,
+			APIServerEndpoint: net.JoinHostPort(joinName, kubeadmAPIPort),
+			CACertHashes:      []string{p.clusterCA.DiscoveryHash},
+		},
+		SSHAuthorizedKeys: []string{material.AuthorizedKey},
+		HostKeys:          material.HostKeys,
+		JoinPrelude:       []string{hostsPinCommand(joinAddress, joinName)},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compose joining nodes: %w", err)
+	}
+
+	return nodeSpecsFrom(nodes)[1:], nil
+}
+
+// hostsPinCommand renders the first-boot command that pins the cluster's stable
+// join name to the init control plane's private address in /etc/hosts, making
+// the name the joining node's kubeadm configuration dials resolvable — durably,
+// so the kubelet's post-join API connections keep resolving it too. Both
+// interpolated values are provisioner-controlled: the address is a formatted
+// [net.IP] and the name is the cluster's Hetzner-accepted (RFC-1123) server
+// name plus a fixed suffix, so neither can carry shell metacharacters.
+func hostsPinCommand(joinAddress net.IP, joinName string) string {
+	return "echo '" + joinAddress.String() + " " + joinName + "' >> /etc/hosts"
+}

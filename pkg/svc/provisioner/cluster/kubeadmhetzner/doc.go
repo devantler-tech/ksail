@@ -11,10 +11,12 @@
 //   - cloudinitbootstrap marshals the whole install into a #cloud-config document —
 //     the declarative, SSH-free delivery seam attached to each server's user_data.
 //
-// This is the user_data-composition slice of the Hetzner × Vanilla provisioning
-// work (devantler-tech/ksail#5513, epic #3983). The Hetzner server lifecycle
-// (network, firewall, placement group, server create/delete) and the run-time join
-// sequencing that depends on the first control plane's address are provided by the
-// provisioner that consumes this composer — a later increment, mirroring how
-// k3shetzner wraps its own user_data builder.
+// This is the Hetzner × Vanilla provisioning work of devantler-tech/ksail#5513
+// (epic #3983). The Hetzner server lifecycle (network, firewall, placement group,
+// server create/delete) comes from the shared hetznerbase engine, and the run-time
+// two-phase join sequencing (devantler-tech/ksail#5755) is implemented in
+// multinode.go: the cluster identity is a pre-seeded CA (ca.go) fixed at compose
+// time, and the joining nodes dial a compose-time-stable join name whose
+// resolution each node pins to the init control plane's private address at first
+// boot — see [JoinName] for why a name rather than the IP.
 package kubeadmhetzner
