@@ -145,7 +145,18 @@ scripts/gen-third-party-licenses/verified_unknown.go):
 `, rule, rule)
 
 	for _, module := range modules {
-		entry := verified[module]
+		entry, ok := verified[module]
+		if !ok {
+			// checkUnknowns guarantees every Unknown module is verified before
+			// render runs; surface an invariant violation instead of emitting
+			// an empty "Verified: ()" line that reads as vetted.
+			fmt.Fprintf(builder,
+				"  - %s\n    Verified: UNVERIFIED — generator invariant violated\n",
+				module)
+
+			continue
+		}
+
 		fmt.Fprintf(builder, "  - %s\n    Verified: %s (%s)\n", module, entry.license, entry.url)
 	}
 

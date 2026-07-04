@@ -32,62 +32,65 @@ type verification struct {
 // verified licenses. Most entries are false negatives: the repository ships a
 // LICENSE at its root that go-licenses cannot discover at the sub-package
 // level (the same set CI's `go-licenses check --ignore` flags document).
+// Sibling packages of one repository share a single verification via
+// verifyAll — the verification was performed once against that repository.
 func verifiedUnknown() map[string]verification {
-	return map[string]verification{
-		"github.com/alibabacloud-go/cr-20160607/client": {apache2, urlAlibabaCR},
+	out := map[string]verification{
+		"github.com/alibabacloud-go/cr-20160607/client": {license: apache2, url: urlAlibabaCR},
 		modJSONCanonicalizer: {
-			apache2,
-			"https://github.com/cyberphone/json-canonicalization",
+			license: apache2,
+			url:     "https://github.com/cyberphone/json-canonicalization",
 		},
-		"github.com/deitch/magic/pkg/magic": {
-			apache2,
-			urlDeitchMagic,
-		},
-		"github.com/deitch/magic/pkg/magic/internal": {
-			apache2,
-			urlDeitchMagic,
-		},
-		"github.com/deitch/magic/pkg/magic/parser": {
-			apache2,
-			urlDeitchMagic,
-		},
-		"github.com/in-toto/attestation/go/predicates/provenance/v02": {
-			apache2,
-			urlAttestation,
-		},
-		"github.com/in-toto/attestation/go/predicates/provenance/v1": {
-			apache2,
-			urlAttestation,
-		},
-		"github.com/in-toto/attestation/go/v1": {
-			apache2,
-			urlAttestation,
-		},
-		"github.com/in-toto/in-toto-golang/in_toto":                        {apache2, urlInToto},
-		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common": {apache2, urlInToto},
-		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1":   {apache2, urlInToto},
-		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2":   {apache2, urlInToto},
-		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1":     {apache2, urlInToto},
 		"github.com/inconshreveable/go-update": {
-			apache2, "https://github.com/inconshreveable/go-update",
+			license: apache2, url: "https://github.com/inconshreveable/go-update",
 		},
 		"github.com/loft-sh/admin-apis/pkg/licenseapi": {
-			apache2, "https://github.com/loft-sh/admin-apis",
+			license: apache2, url: "https://github.com/loft-sh/admin-apis",
 		},
 		modExternalTypes: {
-			"None published — risk-accepted; upstream license request filed at " +
+			license: "None published — risk-accepted; upstream license request filed at " +
 				"https://github.com/loft-sh/vcluster/issues/4039",
-			"https://github.com/loft-sh/external-types",
+			url: "https://github.com/loft-sh/external-types",
 		},
-		"github.com/segmentio/asm/ascii":                {mit, urlSegmentio},
-		"github.com/segmentio/asm/base64":               {mit, urlSegmentio},
-		"github.com/segmentio/asm/cpu":                  {mit, urlSegmentio},
-		"github.com/segmentio/asm/cpu/arm":              {mit, urlSegmentio},
-		"github.com/segmentio/asm/cpu/arm64":            {mit, urlSegmentio},
-		"github.com/segmentio/asm/cpu/cpuid":            {mit, urlSegmentio},
-		"github.com/segmentio/asm/cpu/x86":              {mit, urlSegmentio},
-		"github.com/segmentio/asm/internal/unsafebytes": {mit, urlSegmentio},
-		"github.com/segmentio/asm/keyset":               {mit, urlSegmentio},
+	}
+
+	verifyAll(out, verification{license: apache2, url: urlDeitchMagic},
+		"github.com/deitch/magic/pkg/magic",
+		"github.com/deitch/magic/pkg/magic/internal",
+		"github.com/deitch/magic/pkg/magic/parser",
+	)
+	verifyAll(out, verification{license: apache2, url: urlAttestation},
+		"github.com/in-toto/attestation/go/predicates/provenance/v02",
+		"github.com/in-toto/attestation/go/predicates/provenance/v1",
+		"github.com/in-toto/attestation/go/v1",
+	)
+	verifyAll(out, verification{license: apache2, url: urlInToto},
+		"github.com/in-toto/in-toto-golang/in_toto",
+		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common",
+		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1",
+		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2",
+		"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1",
+	)
+	verifyAll(out, verification{license: mit, url: urlSegmentio},
+		"github.com/segmentio/asm/ascii",
+		"github.com/segmentio/asm/base64",
+		"github.com/segmentio/asm/cpu",
+		"github.com/segmentio/asm/cpu/arm",
+		"github.com/segmentio/asm/cpu/arm64",
+		"github.com/segmentio/asm/cpu/cpuid",
+		"github.com/segmentio/asm/cpu/x86",
+		"github.com/segmentio/asm/internal/unsafebytes",
+		"github.com/segmentio/asm/keyset",
+	)
+
+	return out
+}
+
+// verifyAll records one repository-level verification for every listed
+// package import path.
+func verifyAll(dst map[string]verification, entry verification, pkgs ...string) {
+	for _, pkg := range pkgs {
+		dst[pkg] = entry
 	}
 }
 

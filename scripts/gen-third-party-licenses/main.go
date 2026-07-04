@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const ownModulePrefix = "github.com/devantler-tech/ksail"
@@ -49,20 +50,31 @@ var errUnverifiedUnknown = errors.New(
 
 var errNoLicenseFile = errors.New("no module license file found")
 
+// generationTimeout bounds the whole run (go-licenses walks both module
+// graphs and reads the module cache; a wedged subprocess must not hang a
+// local `make licenses` forever — CI has its own job-level timeout).
+const generationTimeout = 15 * time.Minute
+
 type dependency struct {
+	// module is the import path exactly as go-licenses csv emits it — for
+	// modules whose license lives at a sub-package level this is a PACKAGE
+	// import path (e.g. github.com/segmentio/asm/ascii), not the module root.
 	module  string
 	license string
 }
 
 func main() {
-	err := run(context.Background())
+	err := run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gen-third-party-licenses: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context) error {
+func run() error {
+	ctx, cancel := context.WithTimeout(context.Background(), generationTimeout)
+	defer cancel()
+
 	repoRoot, err := findRepoRoot(ctx)
 	if err != nil {
 		return err

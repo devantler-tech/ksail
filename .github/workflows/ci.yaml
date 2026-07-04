@@ -269,6 +269,9 @@ jobs:
               - 'desktop/go.sum'
               - 'scripts/gen-third-party-licenses/**'
               - 'THIRD_PARTY_LICENSES'
+              # The verify-licenses job's own behaviour lives in this file
+              # (same pattern as the go filter above).
+              - '.github/workflows/ci.yaml'
             calico-cni:
               # The Calico installer derives the tigera-operator chart version
               # from the calico/node image tag in this Dockerfile (see
