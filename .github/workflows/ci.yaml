@@ -591,55 +591,26 @@ jobs:
             not included in the originating commit.
           delete-branch: true
 
-  license-check:
-    name: 🔍 License Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
+  dependency-review:
+    name: 🛡️ Dependency Review
+    # Replaces the retired go-licenses `license-check` job (maintainer direction on
+    # #5787/#5788): the GHAS-native Dependency Review action gates dependency
+    # licenses on the PR diff instead of custom tooling. The deny-list is a 1:1
+    # SPDX port of go-licenses' `forbidden` category (the old job ran
+    # --disallowed_types=forbidden), so the license policy is unchanged. The old
+    # job's --ignore list is intentionally NOT ported: those entries worked around
+    # go-licenses' sub-package license-discovery false-positives, while Dependency
+    # Review reads the dependency graph. Deps with no detectable license (e.g.
+    # github.com/loft-sh/external-types, upstream license request
+    # https://github.com/loft-sh/vcluster/issues/4039) surface as warnings —
+    # the action is fail-open on undetected licenses by design.
+    if: github.event_name == 'pull_request'
+    uses: devantler-tech/actions/.github/workflows/dependency-review.yaml@5aa2657f976103d716f585266a0fa4e964594df2 # v9.0.0
     permissions:
       contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-
-      - name: 📦 Install go-licenses
-        run: go install github.com/google/go-licenses/v2@v2.0.1
-
-      - name: 🔍 Check dependency licenses
-        run: |
-          # Most --ignore flags below exclude transitive dependencies whose
-          # licenses DO exist at the repository root but are not discoverable by
-          # go-licenses at the sub-package level (false-positive "license not
-          # found" errors).
-          #
-          # EXCEPTION — risk-accepted, NOT a false-positive:
-          #   github.com/loft-sh/external-types ships no LICENSE file at all. It
-          #   is pulled in transitively via github.com/loft-sh/vcluster. Risk-
-          #   accepted for now so the vcluster bump is not blocked; an upstream
-          #   license request is filed at
-          #   https://github.com/loft-sh/vcluster/issues/4039. Re-evaluate and
-          #   drop this ignore once a LICENSE is published upstream.
-          go-licenses check ./... \
-            --disallowed_types=forbidden \
-            --ignore github.com/devantler-tech/ksail/v7 \
-            --ignore github.com/spdx/tools-golang \
-            --ignore github.com/in-toto/in-toto-golang \
-            --ignore github.com/in-toto/attestation \
-            --ignore github.com/inconshreveable/go-update \
-            --ignore github.com/loft-sh/admin-apis \
-            --ignore github.com/segmentio/asm \
-            --ignore github.com/alibabacloud-go/cr-20160607 \
-            --ignore github.com/cyberphone/json-canonicalization \
-            --ignore github.com/deitch/magic \
-            --ignore github.com/loft-sh/external-types
+    with:
+      warn-only: false
+      deny-licenses: "AGPL-1.0-only,AGPL-1.0-or-later,AGPL-3.0-only,AGPL-3.0-or-later,CC-BY-NC-1.0,CC-BY-NC-2.0,CC-BY-NC-2.5,CC-BY-NC-3.0,CC-BY-NC-4.0,CC-BY-NC-ND-1.0,CC-BY-NC-ND-2.0,CC-BY-NC-ND-2.5,CC-BY-NC-ND-3.0,CC-BY-NC-ND-4.0,CC-BY-NC-SA-1.0,CC-BY-NC-SA-2.0,CC-BY-NC-SA-2.5,CC-BY-NC-SA-3.0,CC-BY-NC-SA-4.0,WTFPL"
 
   home-isolation:
     name: 🏠 Home Isolation Guard
@@ -985,7 +956,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [changes, license-check, build-artifact, wait-for-validate-go]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
@@ -1032,7 +1003,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes, license-check, build-artifact, wait-for-validate-go]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
@@ -1088,7 +1059,6 @@ jobs:
     needs:
       [
         changes,
-        license-check,
         build-artifact,
         warm-helm-cache,
         warm-mirror-cache,
@@ -1356,7 +1326,7 @@ jobs:
         warm-helm-cache,
         warm-mirror-cache,
         system-test-docker,
-        license-check,
+        dependency-review,
         home-isolation,
         audit-docs,
         audit-vsce,
@@ -1383,7 +1353,7 @@ jobs:
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
             ${{ needs.system-test-docker.result }}
-            ${{ needs.license-check.result }}
+            ${{ needs.dependency-review.result }}
             ${{ needs.home-isolation.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
