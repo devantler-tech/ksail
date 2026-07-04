@@ -148,7 +148,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 	// while cluster.Name may be empty with --name flag.
 	clusterName := kindConfig.Name
 
-	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -161,6 +161,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 		kindprovisioner.KubernetesProvisionerConfig{
 			KindConfig:       kindConfig,
 			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:    hostClient,
 			K8sProvider:      k8sProvider,
 			DynamicClient:    dynClient,
 			RestConfig:       restConfig,
