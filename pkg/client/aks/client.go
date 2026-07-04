@@ -126,7 +126,7 @@ func (c *Client) CreateCluster(
 	response, err := poller.PollUntilDone(ctx, c.pollOptions())
 	if err != nil {
 		return armcontainerservice.ManagedCluster{},
-			fmt.Errorf("wait for cluster %q creation: %w", name, err)
+			fmt.Errorf("%w: wait for cluster %q creation: %w", ErrOperationFailed, name, err)
 	}
 
 	return response.ManagedCluster, nil
@@ -142,7 +142,7 @@ func (c *Client) DeleteCluster(ctx context.Context, resourceGroup, name string) 
 
 	_, err = poller.PollUntilDone(ctx, c.pollOptions())
 	if err != nil {
-		return fmt.Errorf("wait for cluster %q deletion: %w", name, err)
+		return fmt.Errorf("%w: wait for cluster %q deletion: %w", ErrOperationFailed, name, err)
 	}
 
 	return nil
@@ -219,7 +219,10 @@ func collectPages[T any](
 // SetAgentPoolCount resizes the named agent pool to count nodes and blocks
 // until the operation completes. It re-submits the pool's current definition
 // with only the count changed, per ARM create-or-update semantics — the
-// primitive Stop (count 0) and Start (restore count) build on.
+// primitive Stop (count 0) and Start (restore count) build on. ARM has no
+// partial PATCH for agent pools, so this get-then-resubmit flow is
+// last-writer-wins on the whole pool object: concurrent edits to other pool
+// fields between the Get and the resubmit are silently overwritten.
 func (c *Client) SetAgentPoolCount(
 	ctx context.Context,
 	resourceGroup, clusterName, poolName string,
@@ -246,7 +249,9 @@ func (c *Client) SetAgentPoolCount(
 
 	_, err = poller.PollUntilDone(ctx, c.pollOptions())
 	if err != nil {
-		return fmt.Errorf("wait for agent pool %q resize: %w", poolName, err)
+		return fmt.Errorf(
+			"%w: wait for agent pool %q resize: %w", ErrOperationFailed, poolName, err,
+		)
 	}
 
 	return nil

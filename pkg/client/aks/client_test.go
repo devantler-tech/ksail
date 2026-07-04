@@ -131,6 +131,7 @@ func TestCreateClusterSurfacesOperationError(t *testing.T) {
 				errResp azfake.ErrorResponder
 			)
 
+			resp.AddNonTerminalResponse(http.StatusOK, nil)
 			resp.SetTerminalError(http.StatusConflict, "QuotaExceeded")
 
 			return resp, errResp
@@ -141,6 +142,7 @@ func TestCreateClusterSurfacesOperationError(t *testing.T) {
 		t.Context(), testResourceGroup, testClusterName, armcontainerservice.ManagedCluster{},
 	)
 
+	require.ErrorIs(t, err, aks.ErrOperationFailed)
 	require.ErrorContains(t, err, "QuotaExceeded")
 	require.ErrorContains(t, err, testClusterName)
 }
@@ -521,6 +523,39 @@ func TestSetAgentPoolCountRejectsPoolWithoutProperties(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, aks.ErrAgentPoolPropertiesMissing)
+}
+
+func TestSetAgentPoolCountSurfacesOperationError(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{AgentPoolsServer: fake.AgentPoolsServer{
+		Get: threeNodePoolGet,
+		BeginCreateOrUpdate: func(
+			_ context.Context, _, _, _ string,
+			_ armcontainerservice.AgentPool,
+			_ *armcontainerservice.AgentPoolsClientBeginCreateOrUpdateOptions,
+		) (
+			azfake.PollerResponder[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.PollerResponder[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.AddNonTerminalResponse(http.StatusOK, nil)
+			resp.SetTerminalError(http.StatusConflict, "OperationNotAllowed")
+
+			return resp, errResp
+		},
+	}}
+
+	err := newTestClient(t, factory).SetAgentPoolCount(
+		t.Context(), testResourceGroup, testClusterName, testPoolName, 5,
+	)
+
+	require.ErrorIs(t, err, aks.ErrOperationFailed)
+	require.ErrorContains(t, err, testPoolName)
 }
 
 func TestSetAgentPoolCountWrapsGetError(t *testing.T) {

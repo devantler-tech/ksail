@@ -7,6 +7,12 @@ import "errors"
 // subscription, so a client without one could never issue a valid call.
 var ErrMissingSubscriptionID = errors.New("azure subscription ID must not be empty")
 
+// ErrOperationFailed is returned when a long-running AKS operation (cluster
+// create/delete, agent-pool resize) completes unsuccessfully, so callers can
+// detect the failure path with errors.Is regardless of which operation it
+// came from — mirroring the gke client's sentinel.
+var ErrOperationFailed = errors.New("aks: cluster operation failed")
+
 // ErrAgentPoolPropertiesMissing is returned by SetAgentPoolCount when the
 // fetched agent pool carries no properties object to update. The management
 // API always populates properties on a live pool, so this signals a malformed
