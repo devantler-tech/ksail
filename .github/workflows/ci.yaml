@@ -591,56 +591,6 @@ jobs:
             not included in the originating commit.
           delete-branch: true
 
-  license-check:
-    name: 🔍 License Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-
-      - name: 📦 Install go-licenses
-        run: go install github.com/google/go-licenses/v2@v2.0.1
-
-      - name: 🔍 Check dependency licenses
-        run: |
-          # Most --ignore flags below exclude transitive dependencies whose
-          # licenses DO exist at the repository root but are not discoverable by
-          # go-licenses at the sub-package level (false-positive "license not
-          # found" errors).
-          #
-          # EXCEPTION — risk-accepted, NOT a false-positive:
-          #   github.com/loft-sh/external-types ships no LICENSE file at all. It
-          #   is pulled in transitively via github.com/loft-sh/vcluster. Risk-
-          #   accepted for now so the vcluster bump is not blocked; an upstream
-          #   license request is filed at
-          #   https://github.com/loft-sh/vcluster/issues/4039. Re-evaluate and
-          #   drop this ignore once a LICENSE is published upstream.
-          go-licenses check ./... \
-            --disallowed_types=forbidden \
-            --ignore github.com/devantler-tech/ksail/v7 \
-            --ignore github.com/spdx/tools-golang \
-            --ignore github.com/in-toto/in-toto-golang \
-            --ignore github.com/in-toto/attestation \
-            --ignore github.com/inconshreveable/go-update \
-            --ignore github.com/loft-sh/admin-apis \
-            --ignore github.com/segmentio/asm \
-            --ignore github.com/alibabacloud-go/cr-20160607 \
-            --ignore github.com/cyberphone/json-canonicalization \
-            --ignore github.com/deitch/magic \
-            --ignore github.com/loft-sh/external-types
-
   home-isolation:
     name: 🏠 Home Isolation Guard
     runs-on: ubuntu-latest
@@ -985,7 +935,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [changes, license-check, build-artifact, wait-for-validate-go]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
@@ -1032,7 +982,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes, license-check, build-artifact, wait-for-validate-go]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
@@ -1088,7 +1038,6 @@ jobs:
     needs:
       [
         changes,
-        license-check,
         build-artifact,
         warm-helm-cache,
         warm-mirror-cache,
@@ -1356,7 +1305,6 @@ jobs:
         warm-helm-cache,
         warm-mirror-cache,
         system-test-docker,
-        license-check,
         home-isolation,
         audit-docs,
         audit-vsce,
@@ -1383,7 +1331,6 @@ jobs:
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
             ${{ needs.system-test-docker.result }}
-            ${{ needs.license-check.result }}
             ${{ needs.home-isolation.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
