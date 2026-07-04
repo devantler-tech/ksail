@@ -162,6 +162,7 @@ func (r *LiveReplay) run(reader *io.PipeReader) {
 	defer close(r.done)
 
 	flows := make(map[string]*replayFlow)
+
 	defer func() {
 		for _, flow := range flows {
 			flow.close()
