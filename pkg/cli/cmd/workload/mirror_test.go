@@ -475,7 +475,13 @@ func TestMirrorCmdReplaysWhileStreamingToStdout(t *testing.T) {
 	// The tee must feed BOTH sinks: the raw pcap stream to stdout (the
 	// tshark-piping path) and the inbound payload to the replay connection.
 	assert.Contains(t, out.String(), string(pcap), "stdout must carry the raw pcap stream")
-	assert.Equal(t, "ping", <-received, "the local connection must receive the inbound payload")
+
+	select {
+	case data := <-received:
+		assert.Equal(t, "ping", data, "the local connection must receive the inbound payload")
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the replay connection to deliver the inbound payload")
+	}
 
 	_, err := os.Stat(filepath.Join(".", "mirror.pcap"))
 	require.ErrorIs(t, err, os.ErrNotExist, "stdout mode must not create a capture file")
