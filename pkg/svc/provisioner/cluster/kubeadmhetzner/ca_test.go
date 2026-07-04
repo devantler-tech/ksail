@@ -114,6 +114,86 @@ func TestGenerateClusterCADiscoveryHashIsAcceptedByTheJoinRenderer(t *testing.T)
 	require.NoError(t, err)
 }
 
+// requireSigningCA asserts pair is a valid self-signed signing CA with the
+// given subject common name whose PEM key belongs to its certificate — the
+// contract kubeadm requires of every CA it reuses instead of minting.
+func requireSigningCA(t *testing.T, pair kubeadmhetzner.CertKeyPair, commonName string) {
+	t.Helper()
+
+	cert := parseCACertificate(t, pair.CertPEM)
+
+	assert.True(t, cert.IsCA)
+	assert.True(t, cert.BasicConstraintsValid)
+	assert.Equal(t, commonName, cert.Subject.CommonName)
+	assert.NotZero(t, cert.KeyUsage&x509.KeyUsageCertSign)
+
+	keyBlock, _ := pem.Decode(pair.KeyPEM)
+	require.NotNil(t, keyBlock)
+	require.Equal(t, "RSA PRIVATE KEY", keyBlock.Type)
+
+	key, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	require.NoError(t, err)
+
+	certPubKey, ok := cert.PublicKey.(*rsa.PublicKey)
+	require.True(t, ok)
+	assert.True(t, key.PublicKey.Equal(certPubKey))
+}
+
+func TestGenerateClusterPKIMintsTheAuxiliaryCAs(t *testing.T) {
+	t.Parallel()
+
+	pki, err := kubeadmhetzner.GenerateClusterPKI()
+	require.NoError(t, err)
+
+	// The cluster CA keeps the GenerateClusterCA contract (CN + pinned hash).
+	assert.Equal(t, "kubernetes", parseCACertificate(t, pki.CA.CertPEM).Subject.CommonName)
+	assert.NotEmpty(t, pki.CA.DiscoveryHash)
+
+	// kubeadm reuses front-proxy and etcd CAs only under their own CNs.
+	requireSigningCA(t, pki.FrontProxyCA, "front-proxy-ca")
+	requireSigningCA(t, pki.EtcdCA, "etcd-ca")
+
+	// Each authority must be its own identity: sharing a key between the CAs
+	// would let a certificate minted under one chain validate under another.
+	assert.NotEqual(t, pki.CA.KeyPEM, pki.FrontProxyCA.KeyPEM)
+	assert.NotEqual(t, pki.CA.KeyPEM, pki.EtcdCA.KeyPEM)
+	assert.NotEqual(t, pki.FrontProxyCA.KeyPEM, pki.EtcdCA.KeyPEM)
+}
+
+func TestGenerateClusterPKIServiceAccountKeypairMatchesKubeadmEncodings(t *testing.T) {
+	t.Parallel()
+
+	pki, err := kubeadmhetzner.GenerateClusterPKI()
+	require.NoError(t, err)
+
+	// kubeadm writes sa.key as PKCS#8 and sa.pub as PKIX; any other encoding
+	// would make kube-controller-manager reject the pre-seeded pair.
+	keyBlock, _ := pem.Decode(pki.ServiceAccount.KeyPEM)
+	require.NotNil(t, keyBlock)
+	require.Equal(t, "PRIVATE KEY", keyBlock.Type)
+
+	parsedKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	require.NoError(t, err)
+
+	rsaKey, isRSAKey := parsedKey.(*rsa.PrivateKey)
+	require.True(t, isRSAKey)
+	assert.Equal(t, 2048, rsaKey.N.BitLen())
+
+	pubBlock, _ := pem.Decode(pki.ServiceAccount.PubPEM)
+	require.NotNil(t, pubBlock)
+	require.Equal(t, "PUBLIC KEY", pubBlock.Type)
+
+	parsedPub, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)
+	require.NoError(t, err)
+
+	rsaPub, isRSAPub := parsedPub.(*rsa.PublicKey)
+	require.True(t, isRSAPub)
+
+	// sa.pub must be the public half of sa.key, or token verification would
+	// reject every token the controller manager signs.
+	assert.True(t, rsaKey.PublicKey.Equal(rsaPub))
+}
+
 func TestGenerateClusterCAProducesADistinctCAEachTime(t *testing.T) {
 	t.Parallel()
 

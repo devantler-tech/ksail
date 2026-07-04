@@ -19,16 +19,24 @@ const kubeadmAPIPort = "6443"
 // with a public DNS zone.
 const joinNameSuffix = "-api.ksail.internal"
 
-// Where the pre-seeded cluster CA lands on the cluster-initialising control
-// plane. kubeadm reuses an existing CA at its canonical PKI paths instead of
-// minting its own, which is what fixes the cluster identity to the material
-// [GenerateClusterCA] produced at compose time. The certificate is public
-// (world-readable, like kubeadm's own); the key is owner-only.
+// Where the pre-seeded shared PKI lands on the cluster-initialising control
+// plane. kubeadm reuses existing material at its canonical PKI paths instead
+// of minting its own, which is what fixes the cluster identity to the material
+// [GenerateClusterPKI] produced at compose time. Certificates and the
+// service-account public key are public (world-readable, like kubeadm's own);
+// private keys are owner-only.
 const (
 	caCertPath        = "/etc/kubernetes/pki/ca.crt"
 	caCertPermissions = "0644"
 	caKeyPath         = "/etc/kubernetes/pki/ca.key"
 	caKeyPermissions  = "0600"
+
+	frontProxyCACertPath  = "/etc/kubernetes/pki/front-proxy-ca.crt"
+	frontProxyCAKeyPath   = "/etc/kubernetes/pki/front-proxy-ca.key"
+	etcdCACertPath        = "/etc/kubernetes/pki/etcd/ca.crt"
+	etcdCAKeyPath         = "/etc/kubernetes/pki/etcd/ca.key"
+	serviceAccountKeyPath = "/etc/kubernetes/pki/sa.key"
+	serviceAccountPubPath = "/etc/kubernetes/pki/sa.pub"
 )
 
 // staticMultiNodeComposerCheck asserts at compile time that *Provisioner
@@ -61,23 +69,24 @@ func JoinName(clusterName string) string {
 
 // ComposeInitNode composes the single cluster-initialising kubeadm control
 // plane (bootstrap index 0), satisfying [hetznerbase.MultiNodeComposer]. It
-// mints the cluster's CA ([GenerateClusterCA]) and seeds it into the node's
-// PKI directory so the cluster identity — and the discovery hash the joining
-// nodes pin — is fixed before any server boots; the node's API-server
-// certificate additionally carries the cluster's stable join name as a SAN
-// (see [JoinName]). The generated CA is retained on the Provisioner for
-// [Provisioner.ComposeJoiningNodes], which the shared flow always calls after
-// this within one create.
+// mints the cluster's full shared PKI ([GenerateClusterPKI] — cluster CA,
+// front-proxy CA, etcd CA, service-account keypair) and seeds it into the
+// node's PKI directory so the whole cluster identity — and the discovery hash
+// the joining nodes pin — is fixed before any server boots; the node's
+// API-server certificate additionally carries the cluster's stable join name
+// as a SAN (see [JoinName]). The generated PKI is retained on the Provisioner
+// for [Provisioner.ComposeJoiningNodes], which the shared flow always calls
+// after this within one create.
 func (p *Provisioner) ComposeInitNode(
 	clusterName, token string,
 	material hetznerbase.BootstrapMaterial,
 ) (hetznerbase.NodeSpec, error) {
-	clusterCA, err := GenerateClusterCA()
+	clusterPKI, err := GenerateClusterPKI()
 	if err != nil {
 		return hetznerbase.NodeSpec{}, err
 	}
 
-	p.clusterCA = &clusterCA
+	p.clusterPKI = &clusterPKI
 
 	// A reduced single-node plan: the init node's own configuration is identical
 	// in every topology (the join settings apply only to joining nodes), and the
@@ -93,16 +102,54 @@ func (p *Provisioner) ComposeInitNode(
 		},
 		SSHAuthorizedKeys: []string{material.AuthorizedKey},
 		HostKeys:          material.HostKeys,
-		ServerInitFiles: []cloudinitbootstrap.File{
-			{Path: caCertPath, Permissions: caCertPermissions, Content: string(clusterCA.CertPEM)},
-			{Path: caKeyPath, Permissions: caKeyPermissions, Content: string(clusterCA.KeyPEM)},
-		},
+		ServerInitFiles:   pkiSeedFiles(clusterPKI),
 	})
 	if err != nil {
 		return hetznerbase.NodeSpec{}, fmt.Errorf("compose init control-plane node: %w", err)
 	}
 
 	return nodeSpecsFrom(nodes)[0], nil
+}
+
+// pkiSeedFiles maps the pre-generated shared PKI onto the cloud-init files the
+// cluster-initialising control plane seeds at kubeadm's canonical paths.
+// Certificates and the service-account public key are world-readable (matching
+// kubeadm's own permissions); private keys are owner-only.
+func pkiSeedFiles(clusterPKI ClusterPKI) []cloudinitbootstrap.File {
+	return []cloudinitbootstrap.File{
+		{Path: caCertPath, Permissions: caCertPermissions, Content: string(clusterPKI.CA.CertPEM)},
+		{Path: caKeyPath, Permissions: caKeyPermissions, Content: string(clusterPKI.CA.KeyPEM)},
+		{
+			Path:        frontProxyCACertPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.FrontProxyCA.CertPEM),
+		},
+		{
+			Path:        frontProxyCAKeyPath,
+			Permissions: caKeyPermissions,
+			Content:     string(clusterPKI.FrontProxyCA.KeyPEM),
+		},
+		{
+			Path:        etcdCACertPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.EtcdCA.CertPEM),
+		},
+		{
+			Path:        etcdCAKeyPath,
+			Permissions: caKeyPermissions,
+			Content:     string(clusterPKI.EtcdCA.KeyPEM),
+		},
+		{
+			Path:        serviceAccountKeyPath,
+			Permissions: caKeyPermissions,
+			Content:     string(clusterPKI.ServiceAccount.KeyPEM),
+		},
+		{
+			Path:        serviceAccountPubPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.ServiceAccount.PubPEM),
+		},
+	}
 }
 
 // ComposeJoiningNodes composes the kubeadm agents that register against the
@@ -117,7 +164,7 @@ func (p *Provisioner) ComposeJoiningNodes(
 	joinAddress net.IP,
 	material hetznerbase.BootstrapMaterial,
 ) ([]hetznerbase.NodeSpec, error) {
-	if p.clusterCA == nil {
+	if p.clusterPKI == nil {
 		return nil, ErrJoiningNodesComposedFirst
 	}
 
@@ -132,7 +179,7 @@ func (p *Provisioner) ComposeJoiningNodes(
 			ControlPlaneCount: p.ControlPlanes,
 			AgentCount:        p.Agents,
 			APIServerEndpoint: net.JoinHostPort(joinName, kubeadmAPIPort),
-			CACertHashes:      []string{p.clusterCA.DiscoveryHash},
+			CACertHashes:      []string{p.clusterPKI.CA.DiscoveryHash},
 		},
 		SSHAuthorizedKeys: []string{material.AuthorizedKey},
 		HostKeys:          material.HostKeys,

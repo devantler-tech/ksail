@@ -22,7 +22,7 @@ var (
 
 // ErrJoiningNodesComposedFirst is returned by
 // [Provisioner.ComposeJoiningNodes] when it is called before
-// [Provisioner.ComposeInitNode] has minted the cluster CA — the two-phase flow
+// [Provisioner.ComposeInitNode] has minted the cluster PKI — the two-phase flow
 // guarantees the init compose runs first, so hitting this means the composer
 // was driven outside that flow.
 var ErrJoiningNodesComposedFirst = errors.New(

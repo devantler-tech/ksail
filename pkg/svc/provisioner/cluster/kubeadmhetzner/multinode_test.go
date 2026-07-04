@@ -44,13 +44,30 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 	assert.Equal(t, 0, spec.Index)
 	assert.Equal(t, hetzner.NodeTypeControlPlane, spec.NodeType)
 	assert.True(t, strings.HasPrefix(spec.UserData, "#cloud-config"))
-	assert.Contains(t, spec.UserData, "/etc/kubernetes/pki/ca.crt")
-	assert.Contains(t, spec.UserData, "/etc/kubernetes/pki/ca.key")
 	assert.Contains(t, spec.UserData, "BEGIN CERTIFICATE")
 	assert.Contains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
+	assert.Contains(t, spec.UserData, "BEGIN PRIVATE KEY", "sa.key must be seeded (PKCS#8)")
+	assert.Contains(t, spec.UserData, "BEGIN PUBLIC KEY", "sa.pub must be seeded (PKIX)")
 	assert.Contains(t, spec.UserData, testJoinName)
 	assert.Contains(t, spec.UserData, "kubeadm init")
 	assert.NotContains(t, spec.UserData, "kubeadm join")
+
+	// The full shared PKI — not just the cluster CA — lands at kubeadm's
+	// canonical paths, so the whole cluster identity is fixed before boot and a
+	// later HA increment can seed the same material onto additional control
+	// planes (kubeadm's manual certificate distribution).
+	for _, path := range []string{
+		"/etc/kubernetes/pki/ca.crt",
+		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.crt",
+		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.crt",
+		"/etc/kubernetes/pki/etcd/ca.key",
+		"/etc/kubernetes/pki/sa.key",
+		"/etc/kubernetes/pki/sa.pub",
+	} {
+		assert.Contains(t, spec.UserData, path)
+	}
 }
 
 // TestComposeJoiningNodesPinsJoinNameAndCA pins the join compose contract:
@@ -90,11 +107,17 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 		require.NotEqual(t, -1, joinAt)
 		assert.Less(t, pinAt, joinAt, "the /etc/hosts pin must precede `kubeadm join`")
 
-		// The CA private key is seeded onto the init control plane only; a
-		// joiner carrying it (or its PKI path) would leak the cluster identity
-		// to every worker.
-		assert.NotContains(t, spec.UserData, "/etc/kubernetes/pki/ca.key",
-			"joining nodes must never receive the cluster CA private key")
+		// The private PKI material is seeded onto the init control plane only;
+		// a worker carrying any of it would leak the cluster identity.
+		for _, path := range []string{
+			"/etc/kubernetes/pki/ca.key",
+			"/etc/kubernetes/pki/front-proxy-ca.key",
+			"/etc/kubernetes/pki/etcd/ca.key",
+			"/etc/kubernetes/pki/sa.key",
+		} {
+			assert.NotContains(t, spec.UserData, path,
+				"joining nodes must never receive private PKI material")
+		}
 	}
 }
 
