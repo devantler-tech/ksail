@@ -124,12 +124,18 @@ func handleTransientError(
 // when Flux controllers are concurrently updating the same resource status.  This
 // prevents the retry loop from running for the full apiAvailabilityTimeout when the
 // cluster has many HelmReleases or kustomizations.
+//
+// It returns the reconcile-request token (the value written to the
+// reconcile.fluxcd.io/requestedAt annotation). Once the source controller
+// processes the request it mirrors this token into status.lastHandledReconcileAt,
+// so a caller can wait for its own request to be handled — rather than trusting a
+// stale Ready condition from a prior reconcile (see WaitForOCIRepositoryReady).
 func triggerReconciliationWithRetry(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
 	resourceName string,
 	resourceDescription string,
-) error {
+) (string, error) {
 	// Create a timeout context for the entire retry operation.
 	waitCtx, cancel := context.WithTimeout(ctx, apiAvailabilityTimeout)
 	defer cancel()
@@ -137,11 +143,13 @@ func triggerReconciliationWithRetry(
 	ticker := time.NewTicker(apiAvailabilityPollInterval)
 	defer ticker.Stop()
 
-	// Build the merge patch once; the timestamp is set at trigger time.
+	// Build the merge patch once; the timestamp is set at trigger time. The token
+	// is returned so callers can match it against status.lastHandledReconcileAt.
+	token := time.Now().Format(time.RFC3339Nano)
 	patch := fmt.Appendf(nil,
 		`{"metadata":{"annotations":{%q:%q}}}`,
 		reconcileAnnotationKey,
-		time.Now().Format(time.RFC3339Nano),
+		token,
 	)
 
 	var lastErr error
@@ -155,10 +163,10 @@ func triggerReconciliationWithRetry(
 		err := waitCtx.Err()
 		if err != nil {
 			if lastErr != nil {
-				return timeoutWaitingError(resourceDescription, lastErr, err)
+				return "", timeoutWaitingError(resourceDescription, lastErr, err)
 			}
 
-			return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
+			return "", fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 		}
 
 		_, err = client.Patch(
@@ -169,7 +177,7 @@ func triggerReconciliationWithRetry(
 			metav1.PatchOptions{},
 		)
 		if err == nil {
-			return nil
+			return token, nil
 		}
 
 		if isTransientAPIError(err) {
@@ -177,12 +185,12 @@ func triggerReconciliationWithRetry(
 
 			retryErr := handleTransientError(waitCtx, ticker, resourceDescription, lastErr)
 			if retryErr != nil {
-				return retryErr
+				return "", retryErr
 			}
 
 			continue
 		}
 
-		return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
+		return "", fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 	}
 }

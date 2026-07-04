@@ -38,3 +38,6 @@ var EvaluateOCIRepositoryConditions = evaluateOCIRepositoryConditions
 
 // OCITimeoutError exports ociTimeoutError for testing.
 var OCITimeoutError = ociTimeoutError
+
+// ReconcileRequestHandled exports reconcileRequestHandled for testing.
+var ReconcileRequestHandled = reconcileRequestHandled
