@@ -17,6 +17,7 @@ import (
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -32,6 +33,7 @@ const kwokContainerRestartDelay = 3 * time.Second
 type KubernetesProvisioner struct {
 	*Provisioner
 
+	hostClientset    kubernetes.Interface
 	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
@@ -50,6 +52,9 @@ type KubernetesProvisionerConfig struct {
 	ConfigPath string
 	// KubeconfigPath is the path to the nested cluster's kubeconfig.
 	KubeconfigPath string
+	// HostClientset is the Kubernetes clientset for the host cluster, used to publish and read the
+	// nested cluster's kubeconfig Secret for the operator Connector contract.
+	HostClientset kubernetes.Interface
 	// K8sProvider is the Kubernetes infrastructure provider.
 	K8sProvider *kubernetesprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
@@ -81,6 +86,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
+		hostClientset:    cfg.HostClientset,
 		k8sProvider:      cfg.K8sProvider,
 		dynamicClient:    cfg.DynamicClient,
 		restConfig:       cfg.RestConfig,
@@ -247,6 +253,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	err = p.rewriteKubeconfig(name, exposure.ServerURL())
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
+	}
+
+	// Step 13: Publish the nested cluster's kubeconfig as a host-cluster Secret so the operator's
+	// Connector can install components into the child cluster (see connector.go).
+	err = p.publishConnectorKubeconfig(ctx, target)
+	if err != nil {
+		return fmt.Errorf("publish connector kubeconfig: %w", err)
 	}
 
 	return nil
@@ -590,6 +603,34 @@ func (p *KubernetesProvisioner) restartContainersInDinD(
 
 	// Give the containers a moment to start up
 	time.Sleep(kwokContainerRestartDelay)
+
+	return nil
+}
+
+// publishConnectorKubeconfig minifies the shared host kubeconfig down to the nested KWOK cluster's
+// context and publishes it as a Secret in the DinD namespace under the Connection naming contract,
+// so Kubeconfig() can serve it back to the operator. The on-disk kubeconfig is already pointed at the
+// operator-reachable exposure address (a cert SAN), so it is published as-is after minifying. The
+// write is idempotent, so re-creating a cluster of the same name refreshes the credentials in place.
+func (p *KubernetesProvisioner) publishConnectorKubeconfig(
+	ctx context.Context,
+	target string,
+) error {
+	conn := ConnectionFor(target)
+
+	raw, err := nested.ExtractContextKubeconfig(p.kubeconfigPath, conn.ContextName)
+	if err != nil {
+		return fmt.Errorf("extract nested kubeconfig: %w", err)
+	}
+
+	err = nested.PublishKubeconfigSecret(
+		ctx, p.hostClientset,
+		conn.Namespace, conn.SecretName, kwokKubeconfigKey,
+		raw, kubernetesprovider.CommonLabels(target),
+	)
+	if err != nil {
+		return fmt.Errorf("publish kubeconfig secret: %w", err)
+	}
 
 	return nil
 }

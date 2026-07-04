@@ -41,7 +41,7 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -56,6 +56,7 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 			Name:             kwokConfig.Name,
 			ConfigPath:       kwokConfig.ConfigPath,
 			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:    hostClient,
 			K8sProvider:      k8sProvider,
 			DynamicClient:    dynClient,
 			RestConfig:       restConfig,
