@@ -119,3 +119,29 @@ func buildKubernetesInfra(
 
 	return hostClient, restConfig, dynClient, k8sProvider, nil
 }
+
+// buildDinDProvisionerConfig assembles the host-cluster wiring shared by the DinD-based nested
+// provisioners (Kind, KWOK) from the resolved cluster, options, clients and provider. Both
+// distributions embed the result in their provisioner config, so building it here keeps the two
+// factories from drifting.
+func buildDinDProvisionerConfig(
+	cluster *v1alpha1.Cluster,
+	opts v1alpha1.OptionsKubernetes,
+	hostClient kubernetes.Interface,
+	restConfig *rest.Config,
+	dynClient dynamic.Interface,
+	k8sProvider *kubernetesprovider.Provider,
+	clusterName string,
+) kubernetesprovider.DinDProvisionerConfig {
+	return kubernetesprovider.DinDProvisionerConfig{
+		KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+		HostClientset:    hostClient,
+		K8sProvider:      k8sProvider,
+		DynamicClient:    dynClient,
+		RestConfig:       restConfig,
+		ClusterName:      clusterName,
+		Distribution:     string(cluster.Spec.Cluster.Distribution),
+		GatewayClassName: opts.GatewayClassName,
+		Persistence:      opts.Persistence,
+	}
+}

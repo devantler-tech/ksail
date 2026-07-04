@@ -28,6 +28,12 @@ const (
 	// cluster ("kwok-<name>"). The create-time publish minifies the shared host kubeconfig down to
 	// this single context before storing it in the Secret.
 	kwokContextPrefix = "kwok-"
+	// kwokDistributionPrefix is the distribution prefix in the kubeconfig Secret name
+	// ("kwok-<name>-kubeconfig", mirroring kind/talos/k3k's "<distribution>-<name>-kubeconfig"). It
+	// is kept distinct from kwokContextPrefix — the two happen to share a value today but name
+	// separate concepts (kwokctl's context prefix vs. the Secret naming scheme), so one can change
+	// without silently shifting the other.
+	kwokDistributionPrefix = "kwok-"
 )
 
 // Connection holds the in-hub coordinates for a named nested KWOK cluster: the namespace and
@@ -50,8 +56,13 @@ type Connection struct {
 // Kubeconfig(), so the namespace/secret/context contract is derived in exactly one place.
 func ConnectionFor(name string) Connection {
 	return Connection{
-		Namespace:   kubernetesprovider.NamespaceName(name),
-		SecretName:  fmt.Sprintf("%s%s-%s", kwokContextPrefix, name, kwokKubeconfigSecretSuffix),
+		Namespace: kubernetesprovider.NamespaceName(name),
+		SecretName: fmt.Sprintf(
+			"%s%s-%s",
+			kwokDistributionPrefix,
+			name,
+			kwokKubeconfigSecretSuffix,
+		),
 		ContextName: kwokContextPrefix + name,
 	}
 }

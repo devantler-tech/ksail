@@ -53,17 +53,11 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 
 	provisioner, err := kwokprovisioner.NewKubernetesProvisioner(
 		kwokprovisioner.KubernetesProvisionerConfig{
-			Name:             kwokConfig.Name,
-			ConfigPath:       kwokConfig.ConfigPath,
-			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostClientset:    hostClient,
-			K8sProvider:      k8sProvider,
-			DynamicClient:    dynClient,
-			RestConfig:       restConfig,
-			ClusterName:      clusterName,
-			Distribution:     string(cluster.Spec.Cluster.Distribution),
-			GatewayClassName: opts.GatewayClassName,
-			Persistence:      opts.Persistence,
+			DinDProvisionerConfig: buildDinDProvisionerConfig(
+				cluster, opts, hostClient, restConfig, dynClient, k8sProvider, clusterName,
+			),
+			Name:       kwokConfig.Name,
+			ConfigPath: kwokConfig.ConfigPath,
 		},
 	)
 	if err != nil {
