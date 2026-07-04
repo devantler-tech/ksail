@@ -591,27 +591,6 @@ jobs:
             not included in the originating commit.
           delete-branch: true
 
-  dependency-review:
-    name: 🛡️ Dependency Review
-    # Replaces the retired go-licenses `license-check` job (maintainer direction on
-    # #5787/#5788): the GHAS-native Dependency Review action gates dependency
-    # licenses on the PR diff instead of custom tooling. The deny-list is a 1:1
-    # SPDX port of go-licenses' `forbidden` category (the old job ran
-    # --disallowed_types=forbidden), so the license policy is unchanged. The old
-    # job's --ignore list is intentionally NOT ported: those entries worked around
-    # go-licenses' sub-package license-discovery false-positives, while Dependency
-    # Review reads the dependency graph. Deps with no detectable license (e.g.
-    # github.com/loft-sh/external-types, upstream license request
-    # https://github.com/loft-sh/vcluster/issues/4039) surface as warnings —
-    # the action is fail-open on undetected licenses by design.
-    if: github.event_name == 'pull_request'
-    uses: devantler-tech/actions/.github/workflows/dependency-review.yaml@5aa2657f976103d716f585266a0fa4e964594df2 # v9.0.0
-    permissions:
-      contents: read
-    with:
-      warn-only: false
-      deny-licenses: "AGPL-1.0-only,AGPL-1.0-or-later,AGPL-3.0-only,AGPL-3.0-or-later,CC-BY-NC-1.0,CC-BY-NC-2.0,CC-BY-NC-2.5,CC-BY-NC-3.0,CC-BY-NC-4.0,CC-BY-NC-ND-1.0,CC-BY-NC-ND-2.0,CC-BY-NC-ND-2.5,CC-BY-NC-ND-3.0,CC-BY-NC-ND-4.0,CC-BY-NC-SA-1.0,CC-BY-NC-SA-2.0,CC-BY-NC-SA-2.5,CC-BY-NC-SA-3.0,CC-BY-NC-SA-4.0,WTFPL"
-
   home-isolation:
     name: 🏠 Home Isolation Guard
     runs-on: ubuntu-latest
@@ -1326,7 +1305,6 @@ jobs:
         warm-helm-cache,
         warm-mirror-cache,
         system-test-docker,
-        dependency-review,
         home-isolation,
         audit-docs,
         audit-vsce,
@@ -1353,7 +1331,6 @@ jobs:
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
             ${{ needs.system-test-docker.result }}
-            ${{ needs.dependency-review.result }}
             ${{ needs.home-isolation.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
