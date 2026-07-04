@@ -21,18 +21,18 @@ byte-identically).
 
 LICENSE SUMMARY
 ------------------------------------------------------------
-  Apache-2.0: 355 module(s)
+  Apache-2.0: 360 module(s)
   BSD-0-Clause: 1 module(s)
-  BSD-2-Clause: 20 module(s)
+  BSD-2-Clause: 22 module(s)
   BSD-3-Clause: 109 module(s)
   CC0-1.0: 1 module(s)
   ISC: 3 module(s)
-  MIT: 287 module(s)
-  MPL-2.0: 40 module(s)
+  MIT: 291 module(s)
+  MPL-2.0: 42 module(s)
   Unknown (verified, see notes): 25 module(s)
   Unlicense: 3 module(s)
   XZ: 1 module(s)
-  Total: 845 module(s)
+  Total: 858 module(s)
 
 LICENSE ELECTIONS AND CLASSIFICATION NOTES
 ------------------------------------------------------------
@@ -146,9 +146,11 @@ Modules:
   - github.com/containerd/ttrpc
   - github.com/containerd/typeurl/v2
   - github.com/containernetworking/cni
+  - github.com/containernetworking/plugins/pkg
   - github.com/containers/libtrust
   - github.com/containers/ocicrypt
   - github.com/containers/storage
+  - github.com/coreos/go-iptables/iptables
   - github.com/coreos/go-oidc/v3/oidc
   - github.com/coreos/go-semver/semver
   - github.com/coreos/go-systemd/v22
@@ -314,6 +316,8 @@ Modules:
   - github.com/transparency-dev/formats/log
   - github.com/transparency-dev/merkle
   - github.com/vbatts/go-mtree/pkg/govis
+  - github.com/vishvananda/netlink
+  - github.com/vishvananda/netns
   - github.com/wagoodman/go-presenter
   - github.com/xanzy/ssh-agent
   - github.com/xeipuuv/gojsonpointer
@@ -395,6 +399,7 @@ Modules:
   - sigs.k8s.io/gateway-api/apis/v1
   - sigs.k8s.io/json
   - sigs.k8s.io/kind/pkg
+  - sigs.k8s.io/knftables
   - sigs.k8s.io/kustomize/api
   - sigs.k8s.io/kustomize/kyaml
   - sigs.k8s.io/kwok
@@ -637,10 +642,12 @@ Modules:
   - github.com/cli/safeexec
   - github.com/digitorus/timestamp
   - github.com/emirpasic/gods
+  - github.com/godbus/dbus/v5
   - github.com/gorilla/websocket
   - github.com/huaweicloud/huaweicloud-sdk-go-v3
   - github.com/karrick/godirwalk
   - github.com/magiconair/properties
+  - github.com/moby/sys/capability
   - github.com/nwaples/rardecode/v2
   - github.com/pkg/browser
   - github.com/pkg/errors
@@ -983,6 +990,7 @@ Modules:
   - github.com/agnivade/levenshtein
   - github.com/alecthomas/chroma/v2
   - github.com/alecthomas/participle/v2/lexer
+  - github.com/alexflint/go-filemutex
   - github.com/anchore/go-homedir
   - github.com/anchore/go-lzo
   - github.com/anchore/go-rpmdb/pkg
@@ -1051,6 +1059,7 @@ Modules:
   - github.com/fatih/color
   - github.com/felixge/fgprof
   - github.com/felixge/httpsnoop
+  - github.com/florianl/go-tc
   - github.com/francoispqt/gojay
   - github.com/fvbommel/sortorder
   - github.com/fxamacker/cbor/v2
@@ -1098,6 +1107,7 @@ Modules:
   - github.com/jmoiron/sqlx
   - github.com/johnfercher/go-tree/node
   - github.com/johnfercher/maroto/v2
+  - github.com/josharian/native
   - github.com/jsimonetti/rtnetlink/v2
   - github.com/json-iterator/go
   - github.com/jung-kurt/gofpdf
@@ -1134,13 +1144,16 @@ Modules:
   - github.com/mattn/go-isatty
   - github.com/mattn/go-runewidth
   - github.com/mdlayher/ethtool
+  - github.com/mdlayher/genetlink
   - github.com/mdlayher/netlink
+  - github.com/mdlayher/socket
   - github.com/mgutz/ansi
   - github.com/mholt/archives
   - github.com/mikefarah/yq/v4/pkg/yqlib
   - github.com/mitchellh/colorstring
   - github.com/mitchellh/copystructure
   - github.com/mitchellh/go-homedir
+  - github.com/mitchellh/go-testing-interface
   - github.com/mitchellh/go-wordwrap
   - github.com/mitchellh/hashstructure/v2
   - github.com/mitchellh/mapstructure
@@ -1152,7 +1165,6 @@ Modules:
   - github.com/muesli/cancelreader
   - github.com/muesli/reflow
   - github.com/muesli/termenv
-  - github.com/ncruces/go-strftime
   - github.com/neticdk/go-stdlib/diff
   - github.com/nxadm/tail
   - github.com/nxadm/tail/ratelimiter
@@ -1227,7 +1239,6 @@ Modules:
   - github.com/yuin/goldmark
   - github.com/yuin/goldmark-emoji
   - github.com/zalando/go-keyring
-  - github.com/zalando/go-keyring/internal/shellescape
   - github.com/zclconf/go-cty/cty
   - go.etcd.io/bbolt
   - go.uber.org/atomic
@@ -1280,9 +1291,11 @@ Modules:
   - github.com/hashicorp/errwrap
   - github.com/hashicorp/go-cleanhttp
   - github.com/hashicorp/go-getter
+  - github.com/hashicorp/go-getter/v2
   - github.com/hashicorp/go-multierror
   - github.com/hashicorp/go-retryablehttp
   - github.com/hashicorp/go-rootcerts
+  - github.com/hashicorp/go-safetemp
   - github.com/hashicorp/go-secure-stdlib/parseutil
   - github.com/hashicorp/go-secure-stdlib/strutil
   - github.com/hashicorp/go-sockaddr
