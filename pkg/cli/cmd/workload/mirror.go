@@ -2,9 +2,11 @@ package workload
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,6 +24,9 @@ import (
 
 // ErrInvalidMirrorPort rejects --port values outside the valid TCP port range.
 var ErrInvalidMirrorPort = errors.New("invalid --port: must be between 1 and 65535")
+
+// ErrInvalidMirrorTo rejects --to values that are not a host:port pair.
+var ErrInvalidMirrorTo = errors.New("invalid --to: must be host:port")
 
 // defaultTapWaitTimeout bounds how long the mirror waits for the injected tap
 // container to reach Running before giving up.
@@ -51,6 +56,11 @@ The capture runs until interrupted (Ctrl-C). By default it is written to
 mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
 for piping into tshark/wireshark.
 
+With --to host:port the mirrored inbound TCP payloads are additionally replayed
+LIVE to a locally-running process while the capture runs — one local connection
+per mirrored client connection, delivered in order. Replay is one-way: the
+local process's responses are discarded, nothing flows back into the cluster.
+
 Ephemeral containers cannot be removed, so an already-injected tap on the
 target pod is reused rather than treated as an error.`
 
@@ -61,7 +71,10 @@ const mirrorCmdExample = `  # Mirror the traffic your app receives on port 8080 
   ksail workload mirror my-app -n prod -c api --port 8080
 
   # Pipe the live capture straight into tshark
-  ksail workload mirror my-app --port 8080 --output - | tshark -r -`
+  ksail workload mirror my-app --port 8080 --output - | tshark -r -
+
+  # Replay the mirrored requests live to the service running on your machine
+  ksail workload mirror my-app --port 8080 --to localhost:8080`
 
 // newMirrorClients builds the Kubernetes clientset and REST config the mirror
 // command talks to the cluster with. It is a package-level seam so tests can
@@ -91,12 +104,19 @@ var newMirrorClients = func(
 //nolint:gochecknoglobals // Test seam: lets tests stub the exec-channel capture stream.
 var runCaptureSession = mirror.RunCaptureSession
 
+// runReplaySession is the blocking live-replay call the mirror command drives
+// for --to; a package-level seam so tests can observe the replayed stream.
+//
+//nolint:gochecknoglobals // Test seam: lets tests stub the local replay sink.
+var runReplaySession = mirror.ReplayCapture
+
 // mirrorOptions carries the mirror command's flag values into the run function.
 type mirrorOptions struct {
 	namespace  string
 	container  string
 	port       int
 	output     string
+	replayTo   string
 	tapImage   string
 	tapTimeout time.Duration
 	context    string
@@ -129,6 +149,8 @@ func NewMirrorCmd() *cobra.Command {
 		"Service port to capture TCP traffic on (required)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", defaultMirrorOutput,
 		"Destination pcap file, or '-' to stream the raw pcap to stdout")
+	cmd.Flags().StringVar(&opts.replayTo, "to", "",
+		"Local address (host:port) to live-replay the mirrored inbound TCP payloads to")
 	cmd.Flags().StringVar(&opts.tapImage, "tap-image", mirror.DefaultTapImage,
 		"Image the injected tap container runs")
 	cmd.Flags().DurationVar(&opts.tapTimeout, "tap-timeout", defaultTapWaitTimeout,
@@ -141,6 +163,13 @@ func NewMirrorCmd() *cobra.Command {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if opts.port <= 0 || opts.port > maxTCPPort {
 			return fmt.Errorf("%w: got %d", ErrInvalidMirrorPort, opts.port)
+		}
+
+		if opts.replayTo != "" {
+			_, _, err := net.SplitHostPort(opts.replayTo)
+			if err != nil {
+				return fmt.Errorf("%w: got %q", ErrInvalidMirrorTo, opts.replayTo)
+			}
 		}
 
 		return runMirrorCommand(cmd, args[0], opts)
@@ -255,9 +284,7 @@ func captureToOutput(
 		Writer:  cmd.ErrOrStderr(),
 	})
 
-	captureErr := runCaptureSession(
-		cmd.Context(), client, restConfig, point, opts.port, out,
-	)
+	captureErr := runMirrorSession(cmd, client, restConfig, point, opts, out)
 
 	if file != nil {
 		closeErr := file.Close()
@@ -275,6 +302,80 @@ func captureToOutput(
 	}
 
 	return summarizeMirrorFile(cmd, file.Name())
+}
+
+// runMirrorSession runs the blocking capture session, plain when --to is not
+// given, else with the live replay sink teed off the pcap stream.
+func runMirrorSession(
+	cmd *cobra.Command,
+	client kubernetes.Interface,
+	restConfig *rest.Config,
+	point *mirror.TapPoint,
+	opts mirrorOptions,
+	out io.Writer,
+) error {
+	if opts.replayTo == "" {
+		return runCaptureSession(cmd.Context(), client, restConfig, point, opts.port, out)
+	}
+
+	return runCaptureWithReplay(cmd, client, restConfig, point, opts, out)
+}
+
+// runCaptureWithReplay tees the live pcap stream into a replay sink that
+// delivers the mirrored inbound TCP payloads to --to while the capture runs.
+// A replay failure cancels the capture (reported as the session error); a
+// capture failure wins over a secondary replay error.
+func runCaptureWithReplay(
+	cmd *cobra.Command,
+	client kubernetes.Interface,
+	restConfig *rest.Config,
+	point *mirror.TapPoint,
+	opts mirrorOptions,
+	out io.Writer,
+) error {
+	sessionCtx, cancelSession := context.WithCancel(cmd.Context())
+	defer cancelSession()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "replaying mirrored inbound TCP payloads to %s",
+		Args:    []any{opts.replayTo},
+		Writer:  cmd.ErrOrStderr(),
+	})
+
+	pipeReader, pipeWriter := io.Pipe()
+	replayErrCh := make(chan error, 1)
+
+	go func() {
+		replayErr := runReplaySession(sessionCtx, pipeReader, opts.port, opts.replayTo)
+		if replayErr != nil {
+			cancelSession()
+		}
+
+		// Keep draining so capture writes into the tee never block after the
+		// replay side stopped early.
+		_, _ = io.Copy(io.Discard, pipeReader)
+
+		replayErrCh <- replayErr
+	}()
+
+	captureErr := runCaptureSession(
+		sessionCtx, client, restConfig, point, opts.port, io.MultiWriter(out, pipeWriter),
+	)
+
+	_ = pipeWriter.Close()
+
+	replayErr := <-replayErrCh
+
+	if captureErr != nil {
+		return captureErr
+	}
+
+	if replayErr != nil {
+		return fmt.Errorf("replay session: %w", replayErr)
+	}
+
+	return nil
 }
 
 // openMirrorOutput opens the capture destination: the command's stdout for

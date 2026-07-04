@@ -17,6 +17,11 @@ The capture runs until interrupted (Ctrl-C). By default it is written to
 mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
 for piping into tshark/wireshark.
 
+With --to host:port the mirrored inbound TCP payloads are additionally replayed
+LIVE to a locally-running process while the capture runs — one local connection
+per mirrored client connection, delivered in order. Replay is one-way: the
+local process's responses are discarded, nothing flows back into the cluster.
+
 Ephemeral containers cannot be removed, so an already-injected tap on the
 target pod is reused rather than treated as an error.
 
@@ -33,6 +38,9 @@ Examples:
   # Pipe the live capture straight into tshark
   ksail workload mirror my-app --port 8080 --output - | tshark -r -
 
+  # Replay the mirrored requests live to the service running on your machine
+  ksail workload mirror my-app --port 8080 --to localhost:8080
+
 Flags:
   -c, --container string       Container whose traffic is mirrored (required when the Deployment has several)
       --context string         Kubeconfig context of the target cluster
@@ -41,6 +49,7 @@ Flags:
   -p, --port int               Service port to capture TCP traffic on (required)
       --tap-image string       Image the injected tap container runs (default "docker.io/nicolaka/netshoot:v0.16")
       --tap-timeout duration   How long to wait for the tap container to reach Running (default 1m0s)
+      --to string              Local address (host:port) to live-replay the mirrored inbound TCP payloads to
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
