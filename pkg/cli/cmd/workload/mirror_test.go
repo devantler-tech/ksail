@@ -3,8 +3,11 @@ package workload_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,6 +34,9 @@ const (
 	mirrorTestPod       = "my-app-1"
 	mirrorTestContainer = "app"
 )
+
+// errMirrorReplayDialRefused is the static dial failure the --to tests inject.
+var errMirrorReplayDialRefused = errors.New("connection refused")
 
 // mirrorSelectorLabels is the label set the test Deployment selects on.
 func mirrorSelectorLabels() map[string]string {
@@ -324,4 +330,132 @@ func gopacketCaptureInfo(length int) gopacket.CaptureInfo {
 		CaptureLength: length,
 		Length:        length,
 	}
+}
+
+// replayTestPcap builds a one-flow LINUX_SLL2 pcap stream whose inbound
+// payload is "ping" on port 8080, for the --to replay tests.
+func replayTestPcap(t *testing.T) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	writer := pcapgo.NewWriter(&buf)
+	require.NoError(t, writer.WriteFileHeader(262144, layers.LinkTypeLinuxSLL2))
+
+	ipLayer := &layers.IPv4{
+		Version:  4,
+		TTL:      64,
+		Protocol: layers.IPProtocolTCP,
+		SrcIP:    net.IPv4(10, 0, 0, 1),
+		DstIP:    net.IPv4(10, 0, 0, 2),
+	}
+	tcpLayer := &layers.TCP{
+		SrcPort: 40000,
+		DstPort: 8080,
+		Seq:     1,
+		Window:  65535,
+	}
+	require.NoError(t, tcpLayer.SetNetworkLayerForChecksum(ipLayer))
+
+	serialized := gopacket.NewSerializeBuffer()
+	require.NoError(t, gopacket.SerializeLayers(
+		serialized,
+		gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true},
+		ipLayer, tcpLayer, gopacket.Payload([]byte("ping")),
+	))
+
+	packet := make([]byte, 20+len(serialized.Bytes()))
+	binary.BigEndian.PutUint16(packet[0:2], 0x0800) // EtherType: IPv4
+	binary.BigEndian.PutUint16(packet[8:10], 1)     // ARPHRD_ETHER
+	packet[11] = 6
+	copy(packet[20:], serialized.Bytes())
+
+	require.NoError(t, writer.WritePacket(gopacketCaptureInfo(len(packet)), packet))
+
+	return buf.Bytes()
+}
+
+func TestMirrorCmdRejectsInvalidReplayTarget(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{mirrorTestDeploy, "--port", "8080", "--to", "not-an-address"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, workload.ErrInvalidMirrorReplayTarget)
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestMirrorCmdReplaysToLocalAddress(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
+	restore, _ := stubMirrorSession(client, replayTestPcap(t))
+	defer restore()
+
+	received := make(chan string, 1)
+
+	restoreReplay := workload.ExportSetNewLiveReplay(
+		func(address string, port int) (*mirror.LiveReplay, error) {
+			return mirror.NewLiveReplay(address, port, mirror.WithReplayDialer(
+				func(_, _ string) (net.Conn, error) {
+					clientConn, serverConn := net.Pipe()
+
+					go func() {
+						data, _ := io.ReadAll(serverConn)
+						received <- string(data)
+					}()
+
+					return clientConn, nil
+				},
+			))
+		},
+	)
+	defer restoreReplay()
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{mirrorTestDeploy, "--port", "8080", "--to", "localhost:9999"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "replaying mirrored inbound traffic to localhost:9999")
+	assert.Equal(t, "ping", <-received, "the local connection must receive the inbound payload")
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
+func TestMirrorCmdSurfacesReplayDialFailure(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
+	restore, _ := stubMirrorSession(client, replayTestPcap(t))
+	defer restore()
+
+	restoreReplay := workload.ExportSetNewLiveReplay(
+		func(address string, port int) (*mirror.LiveReplay, error) {
+			return mirror.NewLiveReplay(address, port, mirror.WithReplayDialer(
+				func(_, _ string) (net.Conn, error) {
+					return nil, errMirrorReplayDialRefused
+				},
+			))
+		},
+	)
+	defer restoreReplay()
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{mirrorTestDeploy, "--port", "8080", "--to", "localhost:9999"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "live replay")
+	assert.Contains(t, err.Error(), "connection refused")
 }

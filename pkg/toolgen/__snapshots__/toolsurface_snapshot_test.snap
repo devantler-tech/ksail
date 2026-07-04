@@ -1278,6 +1278,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, delete, install, reconcile, rollout_status, scale)",
         "type": "string"
       },
+      "to": {
+        "description": "Local address (host:port) the mirrored inbound TCP payloads are replayed to, live (applies to: mirror)",
+        "type": "string"
+      },
       "to-revision": {
         "default": 0,
         "description": "The revision to rollback to. Default to 0 (last revision). (applies to: rollout_undo)",

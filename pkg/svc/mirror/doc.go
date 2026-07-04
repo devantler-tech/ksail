@@ -42,9 +42,11 @@
 //     Increments so far: [SelectTapPoint] (pick the concrete pod and container),
 //     [InjectTap]/[WaitForTap] (the ephemeral tap container), the capture
 //     spec ([CaptureCommand] + the hardened NET_RAW-only security context),
-//     and the capture session ([RunCaptureSession] streaming the pcap bytes
+//     the capture session ([RunCaptureSession] streaming the pcap bytes
 //     over the exec channel + [SummarizeCapture] reading them locally with
-//     the pure-Go pcapgo reader).
+//     the pure-Go pcapgo reader), and local delivery ([LiveReplay] parsing
+//     the stream live and replaying the inbound TCP payloads to the
+//     developer's local port — the mirror bridge's last mile).
 //
 //     Capture design (#4521): passive pcap via CAP_NET_RAW — tcpdump execed in
 //     the tap container, pcap on stdout over the already-embedded exec channel.
