@@ -17,10 +17,8 @@ func (f DefaultFactory) createKindProvisioner(
 ) (Provisioner, any, error) {
 	// Hetzner provider: native kubeadm (upstream Kubernetes) on Hetzner Cloud
 	// servers — the Vanilla distribution's server implementation, mirroring the
-	// k3s × Hetzner path. The Vanilla × Hetzner combination stays unselectable
-	// until the validation flip (#5514), so this path is gated; see the
-	// kubeadmhetzner package. It needs no Kind config, so it dispatches before the
-	// Kind-config requirement below.
+	// k3s × Hetzner path; see the kubeadmhetzner package. It needs no Kind
+	// config, so it dispatches before the Kind-config requirement below.
 	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
 		return createKubeadmHetznerProvisioner(cluster)
 	}
