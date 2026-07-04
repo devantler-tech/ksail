@@ -103,6 +103,31 @@ users:
 	require.ErrorIs(t, err, clustererr.ErrKubeconfigContextMissing)
 }
 
+func TestExtractContextKubeconfig_MissingAuthInfo(t *testing.T) {
+	t.Parallel()
+
+	// The context references a user that is not defined; the minified kubeconfig
+	// would otherwise silently omit it and fail later with a generic auth error.
+	path := writeKubeconfig(t, `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: nested
+contexts:
+- context:
+    cluster: nested
+    user: gone
+  name: nested
+current-context: nested
+users: []
+`)
+
+	_, err := nested.ExtractContextKubeconfig(path, "nested")
+
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigContextMissing)
+}
+
 func TestExtractContextKubeconfig_MissingFile(t *testing.T) {
 	t.Parallel()
 

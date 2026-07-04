@@ -46,7 +46,15 @@ func ExtractContextKubeconfig(path, contextName string) ([]byte, error) {
 	minified := clientcmdapi.NewConfig()
 	minified.Clusters[kubeContext.Cluster] = cluster
 
-	if authInfo, ok := config.AuthInfos[kubeContext.AuthInfo]; ok {
+	if kubeContext.AuthInfo != "" {
+		authInfo, hasAuthInfo := config.AuthInfos[kubeContext.AuthInfo]
+		if !hasAuthInfo {
+			return nil, fmt.Errorf(
+				"%w: auth info %q for context %q not found in %s",
+				clustererr.ErrKubeconfigContextMissing, kubeContext.AuthInfo, contextName, path,
+			)
+		}
+
 		minified.AuthInfos[kubeContext.AuthInfo] = authInfo
 	}
 
