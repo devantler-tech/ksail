@@ -48,6 +48,23 @@ func newFakeOCIRepositoryReadiness(lastHandledReconcileAt string) *unstructured.
 	return repo
 }
 
+// newFakeReconcilingOCIRepository builds the root OCIRepository with Ready=True
+// but also a Reconciling=True condition and a handled reconcile token — the shape
+// the source controller reports mid-reconcile, when it has acknowledged our
+// request but not yet served the new artifact (so Ready still reflects the prior
+// revision). WaitForOCIRepositoryReady must NOT trust this Ready (bug #5717).
+func newFakeReconcilingOCIRepository(lastHandledReconcileAt string) *unstructured.Unstructured {
+	repo := newFakeOCIRepositoryReadiness(lastHandledReconcileAt)
+
+	status, _ := repo.Object["status"].(map[string]any)
+	status[statusConditions] = []any{
+		map[string]any{"type": conditionTypeReady, "status": statusTrue},
+		map[string]any{"type": conditionTypeReconciling, "status": statusTrue},
+	}
+
+	return repo
+}
+
 func TestReconcileRequestHandled(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +154,96 @@ func TestWaitForOCIRepositoryReadyGatesOnHandledToken(t *testing.T) {
 			require.Error(t, err)
 		},
 	)
+
+	t.Run(
+		"handled token still reconciling times out (does not trust mid-reconcile Ready)",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// The controller has acknowledged our request (token matches) but is still
+			// reconciling, so Ready=True reflects the prior artifact. The wait must keep
+			// waiting rather than trusting the stale Ready (bug #5717).
+			reconcilerClient := newTestFluxReconcilerWithSources(
+				newFakeReconcilingOCIRepository("tok-1"),
+			)
+
+			err := reconcilerClient.WaitForOCIRepositoryReady(
+				context.Background(), 200*time.Millisecond, "tok-1",
+			)
+			require.Error(t, err)
+		},
+	)
+}
+
+func TestWaitForOCIRepositoryReadyWaitsForReconcileToSettle(t *testing.T) {
+	t.Parallel()
+
+	// The source has handled our request but is still reconciling on the first
+	// poll (Ready is the prior revision's), then settles (Reconciling cleared) —
+	// the wait must block through the reconciling poll and succeed only once the
+	// object settles (bug #5717).
+	reconciling := newFakeReconcilingOCIRepository("tok-1")
+	settled := newFakeOCIRepositoryReadiness("tok-1")
+
+	reconcilerClient := newTestFluxReconcilerWithSources(reconciling)
+
+	var polls atomic.Int32
+
+	fakeClient, ok := reconcilerClient.Dynamic.(*dynamicfake.FakeDynamicClient)
+	require.True(t, ok, "expected a fake dynamic client")
+
+	fakeClient.PrependReactor(
+		"get", "ocirepositories",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			if polls.Add(1) <= 1 {
+				return true, reconciling, nil
+			}
+
+			return true, settled, nil
+		},
+	)
+
+	err := reconcilerClient.WaitForOCIRepositoryReady(context.Background(), 5*time.Second, "tok-1")
+	require.NoError(t, err)
+	assert.GreaterOrEqual(
+		t, polls.Load(), int32(2), "should have polled through the reconciling status",
+	)
+}
+
+func TestReconcileInProgress(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		conditions []reconciler.Condition
+		want       bool
+	}{
+		{name: "no conditions is not reconciling", conditions: nil, want: false},
+		{
+			name:       "reconciling true is in progress",
+			conditions: []reconciler.Condition{{Type: "Reconciling", Status: "True"}},
+			want:       true,
+		},
+		{
+			name:       "reconciling false is settled",
+			conditions: []reconciler.Condition{{Type: "Reconciling", Status: "False"}},
+			want:       false,
+		},
+		{
+			name:       "only ready present is settled",
+			conditions: []reconciler.Condition{{Type: "Ready", Status: "True"}},
+			want:       false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := flux.ReconcileInProgress(testCase.conditions)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
 }
 
 func TestWaitForOCIRepositoryReadyWaitsForHandledThenReady(t *testing.T) {

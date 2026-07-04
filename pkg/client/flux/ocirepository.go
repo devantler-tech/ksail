@@ -45,11 +45,13 @@ func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) (st
 //
 // expectedReconcileToken is the value returned by
 // TriggerOCIRepositoryReconciliation. When non-empty, readiness additionally
-// requires status.lastHandledReconcileAt to equal it — proving the source
-// controller has processed *this* reconcile request (and therefore served the
-// just-pushed artifact) rather than reporting a Ready condition left over from a
-// previous reconcile of a stale revision (bug #5717). An empty token preserves
-// the prior condition-only behaviour for callers that did not just trigger.
+// requires that this reconcile request has been handled
+// (status.lastHandledReconcileAt == token) AND has finished (no Reconciling=True
+// condition) — proving the source controller has processed *this* request and
+// served the just-pushed artifact, rather than reporting a Ready condition left
+// over from a previous reconcile of a stale revision (bug #5717). An empty token
+// preserves the prior condition-only behaviour for callers that did not just
+// trigger.
 func (r *Reconciler) WaitForOCIRepositoryReady(
 	ctx context.Context,
 	timeout time.Duration,
@@ -138,10 +140,15 @@ func (r *Reconciler) ociRepositoryClient() dynamic.ResourceInterface {
 // checkOCIRepositoryStatus checks if the OCIRepository has successfully fetched an artifact.
 //
 // When expectedReconcileToken is non-empty the resource must first have handled
-// that specific reconcile request (status.lastHandledReconcileAt == token) before
-// its Ready condition is trusted; otherwise a Ready left over from a previous
-// reconcile of a stale revision would be accepted before the just-pushed artifact
-// is ingested (bug #5717).
+// that specific reconcile request (status.lastHandledReconcileAt == token) AND
+// have finished reconciling it (no Reconciling=True condition) before its Ready
+// condition is trusted. status.lastHandledReconcileAt is only an *acknowledgement*
+// — the source controller records it when it picks up the request but keeps the
+// prior Ready=True until the reconcile completes, so gating on the token alone
+// would accept a Ready left over from a previous reconcile of a stale revision
+// before the just-pushed artifact is ingested (bug #5717). Requiring the
+// Reconciling condition to have cleared mirrors `flux reconcile --wait`, which
+// waits for the object to settle before reporting it ready.
 func (r *Reconciler) checkOCIRepositoryStatus(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
@@ -156,7 +163,18 @@ func (r *Reconciler) checkOCIRepositoryStatus(
 		return false, nil
 	}
 
-	return evaluateOCIRepositoryConditions(reconciler.ParseConditions(ociRepo))
+	conditions := reconciler.ParseConditions(ociRepo)
+
+	// A handled request that is still reconciling means the controller has only
+	// acknowledged our trigger, not finished serving the new artifact — keep
+	// waiting rather than trusting the stale Ready (#5717). Only enforced when we
+	// triggered the reconcile; the empty-token path keeps its condition-only
+	// behaviour.
+	if expectedReconcileToken != "" && reconcileInProgress(conditions) {
+		return false, nil
+	}
+
+	return evaluateOCIRepositoryConditions(conditions)
 }
 
 // reconcileRequestHandled reports whether the resource's
@@ -176,6 +194,21 @@ func reconcileRequestHandled(
 	)
 
 	return handled == expectedReconcileToken
+}
+
+// reconcileInProgress reports whether the resource carries a Reconciling=True
+// condition — i.e. the source controller is mid-reconcile and any Ready
+// condition still reflects the previous artifact. Flux adds this condition while
+// reconciling and removes it once the object settles, so its absence (together
+// with a handled reconcile token) marks the triggered reconcile as complete.
+func reconcileInProgress(conditions []reconciler.Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == conditionTypeReconciling {
+			return cond.Status == conditionStatusTrue
+		}
+	}
+
+	return false
 }
 
 // evaluateOCIRepositoryConditions evaluates conditions to determine readiness.

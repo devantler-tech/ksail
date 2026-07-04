@@ -28,10 +28,11 @@ var (
 // Condition type and status constants shared across the OCIRepository,
 // Kustomization, and HelmRelease readiness evaluators.
 const (
-	conditionTypeReady   = "Ready"
-	conditionTypeStalled = "Stalled"
-	conditionStatusTrue  = "True"
-	conditionStatusFalse = "False"
+	conditionTypeReady       = "Ready"
+	conditionTypeStalled     = "Stalled"
+	conditionTypeReconciling = "Reconciling"
+	conditionStatusTrue      = "True"
+	conditionStatusFalse     = "False"
 )
 
 // Reconciler handles Flux reconciliation operations.

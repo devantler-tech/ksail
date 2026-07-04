@@ -41,3 +41,6 @@ var OCITimeoutError = ociTimeoutError
 
 // ReconcileRequestHandled exports reconcileRequestHandled for testing.
 var ReconcileRequestHandled = reconcileRequestHandled
+
+// ReconcileInProgress exports reconcileInProgress for testing.
+var ReconcileInProgress = reconcileInProgress
