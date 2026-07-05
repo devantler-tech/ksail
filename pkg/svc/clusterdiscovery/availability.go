@@ -61,14 +61,7 @@ func (d *Discoverer) providerAvailability(
 	case v1alpha1.ProviderGCP:
 		return d.gcpAvailability()
 	case v1alpha1.ProviderAzure:
-		// Azure discovery (credential probing + cluster listing) lands with
-		// the AKS discovery follow-up; until then Azure is not offered for
-		// discovery.
-		return Availability{
-			Provider:  prov,
-			Available: false,
-			Reason:    "Azure discovery is not wired yet",
-		}
+		return d.azureAvailability()
 	case v1alpha1.ProviderKubernetes:
 		return kubernetesAvailability()
 	default:
@@ -183,6 +176,28 @@ func (d *Discoverer) gcpAvailability() Availability {
 	}
 
 	return Availability{Provider: v1alpha1.ProviderGCP, Available: true}
+}
+
+// azureAvailability requires an Azure subscription (every ARM call is subscription-scoped) and a
+// credential source the SDK's DefaultAzureCredential chain can resolve.
+func (d *Discoverer) azureAvailability() Availability {
+	subscriptionAvailability := d.requireCredentials(
+		v1alpha1.ProviderAzure,
+		credentials.AzureSubscriptionID,
+	)
+	if !subscriptionAvailability.Available {
+		return subscriptionAvailability
+	}
+
+	if !azureCredentialPresent() {
+		return Availability{
+			Provider:  v1alpha1.ProviderAzure,
+			Available: false,
+			Reason:    "Azure credentials are not configured (az login or AZURE_* variables)",
+		}
+	}
+
+	return Availability{Provider: v1alpha1.ProviderAzure, Available: true}
 }
 
 // kubernetesAvailability reports the nested-Kubernetes provider as available when a host kubeconfig

@@ -104,6 +104,8 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 		credentials.AWSProfile:            false,
 		credentials.GCPProject:            false,
 		credentials.GCPLocation:           false,
+		credentials.AzureSubscriptionID:   false,
+		credentials.AzureResourceGroup:    false,
 		credentials.Key("unknown.key"):    false,
 	}
 
@@ -133,6 +135,8 @@ func TestProviderFor_MapsEveryKey(t *testing.T) {
 		credentials.AWSSessionToken:       string(v1alpha1.ProviderAWS),
 		credentials.GCPProject:            string(v1alpha1.ProviderGCP),
 		credentials.GCPLocation:           string(v1alpha1.ProviderGCP),
+		credentials.AzureSubscriptionID:   string(v1alpha1.ProviderAzure),
+		credentials.AzureResourceGroup:    string(v1alpha1.ProviderAzure),
 		credentials.CopilotToken:          "GitHub Copilot",
 		credentials.Key("unknown.key"):    "",
 	}
@@ -156,6 +160,8 @@ func TestLabel_NamesEveryKey(t *testing.T) {
 		credentials.AWSSessionToken:       "Session token",
 		credentials.GCPProject:            "Project ID",
 		credentials.GCPLocation:           "Location",
+		credentials.AzureSubscriptionID:   "Subscription ID",
+		credentials.AzureResourceGroup:    "Resource group",
 		credentials.CopilotToken:          "Token",
 	}
 
