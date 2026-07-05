@@ -58,20 +58,11 @@ func podWithTapStatus(state corev1.ContainerState) *corev1.Pod {
 func TestInjectTapDefaults(t *testing.T) {
 	t.Parallel()
 
-	clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+	name, tap := injectIntoFreshPod(t, func(clientset *k8sfake.Clientset) (string, error) {
+		return mirror.InjectTap(t.Context(), clientset, newTapPoint())
+	})
 
-	name, err := mirror.InjectTap(t.Context(), clientset, newTapPoint())
-
-	require.NoError(t, err)
 	assert.Equal(t, mirror.TapContainerName, name)
-
-	pod, err := clientset.CoreV1().
-		Pods(testNamespace).
-		Get(t.Context(), "api-0", metav1.GetOptions{})
-	require.NoError(t, err)
-	require.Len(t, pod.Spec.EphemeralContainers, 1)
-
-	tap := pod.Spec.EphemeralContainers[0]
 	assert.Equal(t, mirror.TapContainerName, tap.Name)
 	assert.Equal(t, mirror.DefaultTapImage, tap.Image)
 	assert.Equal(t, []string{"sleep", "infinity"}, tap.Command)
