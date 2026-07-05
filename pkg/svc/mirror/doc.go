@@ -62,12 +62,17 @@
 //     the local process and return its responses. Unlike mirror mode, responses
 //     must flow back into the cluster, so intercept needs a reverse tunnel: the
 //     one bidirectional exec byte stream (SPDY stdin+stdout) must carry many
-//     concurrent intercepted connections at once. The foundation increment is
-//     the multiplexing wire format — [Frame], [WriteFrame], and [ReadFrame] —
-//     a self-framing, length-prefixed codec that tags each chunk with a
-//     StreamID so the mux/demux (a later increment) can present each
-//     intercepted connection as its own stream. Steering (iptables/NET_ADMIN in
-//     the tap container) and the in-cluster intercept agent follow.
+//     concurrent intercepted connections at once. Increments so far: the
+//     multiplexing wire format ([Frame], [WriteFrame], [ReadFrame]) — a
+//     self-framing, length-prefixed codec tagging each chunk with a StreamID;
+//     the mux itself ([NewTunnelSession], presenting each intercepted
+//     connection as its own [TunnelStream]); and the steering seams per the
+//     #5839 design — the iptables NAT REDIRECT rule builder
+//     ([SteeringRedirect]) and the separately-injected steering agent
+//     container ([InjectSteer]/[WaitForSteer], NET_ADMIN-only — deliberately a
+//     SECOND container, never an upgrade of the NET_RAW tap, so mirror and
+//     intercept stay independently runnable). The conn↔stream pump and the
+//     CLI wiring follow.
 //
 //   - Phase 3 — environment & volume projection: run the local process with the
 //     target pod's env vars and mounted volumes/secrets for cluster-equivalent
