@@ -57,6 +57,19 @@ Requires Kubernetes 1.27+ and Helm 3.8+.
 
 Distributions that run nested inside the host cluster (VCluster, K3s) work out of the box. Docker-based distributions (Vanilla/Kind, K3d) need the host Docker socket mounted via `operator.dockerSocket.enabled=true` — this is privileged and single-node, so prefer nested distributions in-cluster. See the [Kubernetes (Nested) provider](/providers/kubernetes/) for how nested clusters run as pods.
 
+## Component Installation
+
+The operator reconciles the *full* `Cluster` spec, not just the bare cluster. After a cluster is provisioned it installs the components you declared — CNI, CSI, CDI, metrics-server, cert-manager, load-balancer, policy-engine, and the GitOps engine — into the child cluster, in order:
+
+1. **CNI** first, so pods can schedule.
+2. **Infrastructure** — CSI, CDI, metrics-server, cert-manager, load-balancer, policy-engine.
+3. **GitOps engine** (Flux or ArgoCD) last.
+
+Installation is idempotent and gated, so a steady reconcile does not re-run Helm every tick: the operator records a `last-applied-components` baseline and re-applies only when the component-relevant spec changes. Progress is reported in a **`ComponentsReady`** status condition and a per-component `status.components` summary the [web UI](#enabling-the-web-ui) renders. A component that fails to install marks the cluster **`Degraded`** with `ComponentsReady=False` and requeues — it does **not** fail provisioning, and it retries as the child API becomes reachable. Components you later flip off (to `None`/`Default`) are uninstalled from the recorded baseline.
+
+> [!NOTE]
+> Component installation needs the operator to reach the child cluster's API. It does so for **nested** distributions (VCluster, K3s/k3k, Kind, KWOK, Talos running as pods), **cloud** distributions (EKS, GKE, AKS), and **Hetzner**. A cluster whose kubeconfig is bound to the local **Docker** network (Kind/K3d under the Docker provider) is provisioned but unreachable from the operator pod, so component installation is **skipped** for it (the operator logs this) — install its components with the KSail CLI instead.
+
 ## Enabling the Web UI
 
 ```bash
