@@ -86,6 +86,7 @@ func (tunnelEchoExecutor) StreamWithContext(
 	options remotecommand.StreamOptions,
 ) error {
 	peer := mirror.NewTunnelSession(options.Stdin, options.Stdout, mirror.TunnelRoleServer)
+
 	defer func() { _ = peer.Close() }()
 
 	stream, err := peer.AcceptStream(ctx)
@@ -181,6 +182,7 @@ func TestExecTransportBidirectionalEcho(t *testing.T) {
 	defer cancel()
 
 	transport := newExecTransport(ctx, t, &echoExecutor{})
+
 	defer func() { _ = transport.Close() }()
 
 	payload := []byte("ping-pong")
@@ -205,9 +207,11 @@ func TestExecTransportBacksTunnelSession(t *testing.T) {
 	defer cancel()
 
 	transport := newExecTransport(ctx, t, tunnelEchoExecutor{})
+
 	defer func() { _ = transport.Close() }()
 
 	session := mirror.NewTunnelSession(transport, transport, mirror.TunnelRoleClient)
+
 	defer func() { _ = session.Close() }()
 
 	stream, err := session.OpenStream()
@@ -245,8 +249,8 @@ func TestExecTransportCloseUnblocksRead(t *testing.T) {
 	defer cancel()
 
 	transport := newExecTransport(ctx, t, &echoExecutor{})
-
 	readReturned := make(chan error, 1)
+
 	go func() {
 		_, err := transport.Read(make([]byte, 8))
 		readReturned <- err

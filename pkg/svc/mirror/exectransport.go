@@ -93,6 +93,9 @@ func OpenExecTransport(
 		return nil, fmt.Errorf("create exec transport executor: %w", err)
 	}
 
+	// cancel is stored on the transport and invoked in Close (the type's
+	// io.Closer contract requires Close); gosec G118 cannot track that transfer.
+	//nolint:gosec // G118: cancel is owned by the transport and called in Close().
 	streamCtx, cancel := context.WithCancel(ctx)
 	stdinReader, stdinWriter := io.Pipe()
 	stdoutReader, stdoutWriter := io.Pipe()
