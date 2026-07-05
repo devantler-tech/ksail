@@ -33,6 +33,17 @@ type ClusterClient interface {
 		ctx context.Context,
 		resourceGroup string,
 	) ([]*armcontainerservice.ManagedCluster, error)
+	// GetCluster fetches the named managed cluster's definition.
+	GetCluster(
+		ctx context.Context,
+		resourceGroup, name string,
+	) (armcontainerservice.ManagedCluster, error)
+	// GetClusterUserCredentials fetches the named managed cluster's user
+	// kubeconfig as served by ARM.
+	GetClusterUserCredentials(
+		ctx context.Context,
+		resourceGroup, name string,
+	) ([]byte, error)
 }
 
 // staticClusterClientCheck asserts at compile time that the production aks

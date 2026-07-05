@@ -161,6 +161,31 @@ func (c *Client) GetCluster(
 	return response.ManagedCluster, nil
 }
 
+// GetClusterUserCredentials fetches the named managed cluster's user
+// kubeconfig via the ARM ListClusterUserCredentials API, returning the first
+// kubeconfig payload the response carries. For clusters with local accounts
+// the payload embeds a client certificate and is usable as-is; for AAD-only
+// clusters (local accounts disabled) ARM instead returns an exec-plugin
+// (kubelogin) kubeconfig, which only authenticates where that plugin is
+// installed.
+func (c *Client) GetClusterUserCredentials(
+	ctx context.Context,
+	resourceGroup, name string,
+) ([]byte, error) {
+	response, err := c.managedClusters.ListClusterUserCredentials(ctx, resourceGroup, name, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list cluster %q user credentials: %w", name, err)
+	}
+
+	for _, kubeconfig := range response.Kubeconfigs {
+		if kubeconfig != nil && len(kubeconfig.Value) > 0 {
+			return kubeconfig.Value, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: cluster %q", ErrNoKubeconfig, name)
+}
+
 // ListClusters lists the managed clusters in the given resource group, or —
 // when resourceGroup is empty — across the whole subscription (the AKS
 // counterpart to gke's all-locations wildcard).

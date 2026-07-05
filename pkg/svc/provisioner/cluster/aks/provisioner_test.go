@@ -36,18 +36,31 @@ type deleteCall struct {
 	name          string
 }
 
+// clusterCall records one cluster-scoped read (GetCluster /
+// GetClusterUserCredentials) the provisioner made.
+type clusterCall struct {
+	resourceGroup string
+	name          string
+}
+
 // fakeClusterClient implements the provisioner's ClusterClient seam with
 // injectable behaviour per operation, recording every call it receives.
 type fakeClusterClient struct {
-	creates []createCall
-	deletes []deleteCall
-	lists   []string
+	creates     []createCall
+	deletes     []deleteCall
+	lists       []string
+	gets        []clusterCall
+	credentials []clusterCall
 
-	createErr error
-	deleteErr error
-	listErr   error
+	createErr      error
+	deleteErr      error
+	listErr        error
+	getErr         error
+	credentialsErr error
 
-	clusters []*armcontainerservice.ManagedCluster
+	clusters   []*armcontainerservice.ManagedCluster
+	cluster    armcontainerservice.ManagedCluster
+	kubeconfig []byte
 }
 
 func (f *fakeClusterClient) CreateCluster(
@@ -80,6 +93,24 @@ func (f *fakeClusterClient) ListClusters(
 	f.lists = append(f.lists, resourceGroup)
 
 	return f.clusters, f.listErr
+}
+
+func (f *fakeClusterClient) GetCluster(
+	_ context.Context,
+	resourceGroup, name string,
+) (armcontainerservice.ManagedCluster, error) {
+	f.gets = append(f.gets, clusterCall{resourceGroup: resourceGroup, name: name})
+
+	return f.cluster, f.getErr
+}
+
+func (f *fakeClusterClient) GetClusterUserCredentials(
+	_ context.Context,
+	resourceGroup, name string,
+) ([]byte, error) {
+	f.credentials = append(f.credentials, clusterCall{resourceGroup: resourceGroup, name: name})
+
+	return f.kubeconfig, f.credentialsErr
 }
 
 // fakeProvider records Start/Stop delegation without touching real
