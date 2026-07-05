@@ -808,34 +808,47 @@ func envValue(envVar, fallbackVar string) string {
 	return os.Getenv(envVar)
 }
 
-// readGKEConfigSpec reads the gke.yaml at configPath (if it exists) and parses
-// it as a containerpb.Cluster via the proto JSON mapping (YAML keys use the
-// proto3 JSON camelCase names). A missing file returns a nil spec and no error
-// so callers fall back to context-based defaults; inspection-only operations
-// work without a spec, while create requires one and fails clearly without it.
-func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) {
+// readCloudConfigJSON stats and reads the cloud distribution config at
+// configPath, converting its YAML to JSON for the caller's spec unmarshaller.
+// A missing file returns ("", nil, nil) so callers fall back to context-based
+// defaults; kind names the distribution in error messages.
+func readCloudConfigJSON(configPath, kind string) (string, []byte, error) {
 	_, err := os.Stat(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil, nil
 		}
 
-		return "", nil, fmt.Errorf("failed to stat GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to stat %s config file: %w", kind, err)
 	}
 
 	canonical, err := fsutil.EvalCanonicalPath(configPath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to canonicalize GKE config path: %w", err)
+		return "", nil, fmt.Errorf("failed to canonicalize %s config path: %w", kind, err)
 	}
 
 	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to read GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to read %s config file: %w", kind, err)
 	}
 
 	jsonData, err := yaml.YAMLToJSON(data)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to parse GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to parse %s config file: %w", kind, err)
+	}
+
+	return canonical, jsonData, nil
+}
+
+// readGKEConfigSpec reads the gke.yaml at configPath (if it exists) and parses
+// it as a containerpb.Cluster via the proto JSON mapping (YAML keys use the
+// proto3 JSON camelCase names). A missing file returns a nil spec and no error
+// so callers fall back to context-based defaults; inspection-only operations
+// work without a spec, while create requires one and fails clearly without it.
+func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) {
+	canonical, jsonData, err := readCloudConfigJSON(configPath, "GKE")
+	if err != nil || jsonData == nil {
+		return canonical, nil, err
 	}
 
 	clusterSpec := &containerpb.Cluster{}
@@ -918,28 +931,9 @@ func (m *ConfigManager) cacheAKSConfig() error {
 // inspection-only operations work without a spec, while create requires one
 // and fails clearly without it.
 func readAKSConfigSpec(configPath string) (string, *armcontainerservice.ManagedCluster, error) {
-	_, err := os.Stat(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil, nil
-		}
-
-		return "", nil, fmt.Errorf("failed to stat AKS config file: %w", err)
-	}
-
-	canonical, err := fsutil.EvalCanonicalPath(configPath)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to canonicalize AKS config path: %w", err)
-	}
-
-	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read AKS config file: %w", err)
-	}
-
-	jsonData, err := yaml.YAMLToJSON(data)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to parse AKS config file: %w", err)
+	canonical, jsonData, err := readCloudConfigJSON(configPath, "AKS")
+	if err != nil || jsonData == nil {
+		return canonical, nil, err
 	}
 
 	clusterSpec := &armcontainerservice.ManagedCluster{}
