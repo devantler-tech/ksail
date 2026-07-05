@@ -151,6 +151,10 @@ func (t *ExecTransport) Close() error {
 // the intended way to stop the stream and is normalised to a clean shutdown.
 func (t *ExecTransport) run(ctx context.Context, executor CaptureExecutor) {
 	defer close(t.done)
+	// Release the WithCancel child unconditionally: when the stream ends on its
+	// own (Close never called) the child would otherwise stay registered on the
+	// parent until it cancels. cancel is idempotent, so this is safe alongside Close.
+	defer t.cancel()
 
 	streamErr := executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  t.stdinReader,
