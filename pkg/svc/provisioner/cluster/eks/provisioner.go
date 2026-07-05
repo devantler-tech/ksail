@@ -3,6 +3,7 @@ package eksprovisioner
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -31,6 +32,23 @@ type Provisioner struct {
 	// infraProvider is the AWS provider used for Start/Stop semantics
 	// (nodegroup scale). Optional: if nil, Start/Stop return an error.
 	infraProvider provider.Provider
+	// awsClient serves the Connector capability (DescribeCluster + token
+	// minting via the AWS SDK). Injected in tests; lazily resolved from the
+	// operator's AWS credentials otherwise.
+	awsClient AWSClusterAPI
+	// awsMu guards the lazy awsClient resolution.
+	awsMu sync.Mutex
+}
+
+// Option customises a Provisioner beyond the required constructor arguments.
+type Option func(*Provisioner)
+
+// WithAWSClusterAPI injects the AWS-SDK-backed client the Connector
+// capability uses, letting tests substitute a fake.
+func WithAWSClusterAPI(api AWSClusterAPI) Option {
+	return func(p *Provisioner) {
+		p.awsClient = api
+	}
 }
 
 // NewProvisioner builds a Provisioner. The eksctl client must be non-nil;
@@ -39,18 +57,27 @@ func NewProvisioner(
 	name, region, configPath string,
 	client *eksctl.Client,
 	infraProvider provider.Provider,
+	opts ...Option,
 ) (*Provisioner, error) {
 	if client == nil {
 		return nil, ErrClientRequired
 	}
 
-	return &Provisioner{
+	provisioner := &Provisioner{
 		name:          name,
 		region:        region,
 		configPath:    configPath,
 		client:        client,
 		infraProvider: infraProvider,
-	}, nil
+		awsClient:     nil,
+		awsMu:         sync.Mutex{},
+	}
+
+	for _, opt := range opts {
+		opt(provisioner)
+	}
+
+	return provisioner, nil
 }
 
 // SetProvider sets the infrastructure provider used by Start/Stop.
