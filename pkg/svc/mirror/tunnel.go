@@ -95,9 +95,13 @@ func checkFrameLength(frameType FrameType, length uint32) error {
 // (unknown type, oversized Data payload, or a control frame with a payload) is
 // rejected before anything is written.
 func WriteFrame(writer io.Writer, frame Frame) error {
-	// len is non-negative and, for a valid Data frame, well under 2^32;
-	// checkFrameLength rejects anything over MaxTunnelPayload next.
-	length := uint32(len(frame.Payload)) //nolint:gosec // G115: len fits uint32.
+	// Bound the payload on the un-narrowed int first: narrowing an oversized
+	// length to uint32 could wrap into range and desync header from payload.
+	if len(frame.Payload) > MaxTunnelPayload {
+		return fmt.Errorf("%w: %d bytes", ErrTunnelFrameTooLarge, len(frame.Payload))
+	}
+
+	length := uint32(len(frame.Payload)) //nolint:gosec // G115: bounded above.
 
 	err := checkFrameLength(frame.Type, length)
 	if err != nil {
