@@ -145,3 +145,30 @@ func buildDinDProvisionerConfig(
 		Persistence:      opts.Persistence,
 	}
 }
+
+// connectorHub resolves the hub clientset and namespace for provisioners whose Connector
+// capability publishes the child kubeconfig as a hub Secret (the Hetzner server distributions).
+// It is best-effort by design: inside a pod (the KSail operator) the in-cluster ServiceAccount
+// is the hub; outside one (the CLI flow) there is no hub, so it returns nil and those
+// provisioners skip the publish.
+func connectorHub() (kubernetes.Interface, string) {
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, ""
+	}
+
+	clientset, _, _, err := clientsFromRESTConfig(restConfig)
+	if err != nil {
+		return nil, ""
+	}
+
+	namespace := k8s.InClusterNamespace()
+	if namespace == "" {
+		// In-cluster config resolved, so the ServiceAccount namespace file exists in
+		// practice; "default" is a defensive fallback, mirroring the operator's own
+		// host-cluster registration.
+		namespace = "default"
+	}
+
+	return clientset, namespace
+}
