@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/gcp"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"golang.org/x/oauth2"
 )
 
 // Provisioner manages Google Kubernetes Engine clusters via the native Go SDK.
@@ -35,6 +36,21 @@ type Provisioner struct {
 	// infraProvider is the GCP provider used for Start/Stop semantics
 	// (node-pool scale). Optional: if nil, Start/Stop return an error.
 	infraProvider provider.Provider
+	// tokenSource mints bearer tokens for Kubeconfig. Nil means Google
+	// application default credentials are resolved at call time; tests
+	// inject a static source.
+	tokenSource oauth2.TokenSource
+}
+
+// Option customises a Provisioner beyond the required constructor arguments.
+type Option func(*Provisioner)
+
+// WithTokenSource injects the OAuth token source Kubeconfig mints bearer
+// tokens from, letting tests avoid Google application default credentials.
+func WithTokenSource(source oauth2.TokenSource) Option {
+	return func(p *Provisioner) {
+		p.tokenSource = source
+	}
 }
 
 // NewProvisioner builds a Provisioner. The GKE client must be non-nil and the
@@ -45,6 +61,7 @@ func NewProvisioner(
 	clusterSpec *containerpb.Cluster,
 	client *gke.Client,
 	infraProvider provider.Provider,
+	opts ...Option,
 ) (*Provisioner, error) {
 	if client == nil {
 		return nil, ErrClientRequired
@@ -54,14 +71,21 @@ func NewProvisioner(
 		return nil, ErrProjectRequired
 	}
 
-	return &Provisioner{
+	provisioner := &Provisioner{
 		name:          name,
 		project:       project,
 		location:      location,
 		clusterSpec:   clusterSpec,
 		client:        client,
 		infraProvider: infraProvider,
-	}, nil
+		tokenSource:   nil,
+	}
+
+	for _, opt := range opts {
+		opt(provisioner)
+	}
+
+	return provisioner, nil
 }
 
 // SetProvider sets the infrastructure provider used by Start/Stop.
