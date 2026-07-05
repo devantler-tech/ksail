@@ -170,7 +170,8 @@ func configureInfraProvider(
 		// Store Omni options so the provisioner can route to Omni-specific logic
 		provisioner.WithOmniOptions(omniOpts)
 
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderKubernetes:
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure,
+		v1alpha1.ProviderKubernetes:
 		return unsupportedTalosProviderError(providerType)
 
 	default:
@@ -193,6 +194,9 @@ func unsupportedTalosProviderError(providerType v1alpha1.Provider) error {
 			ErrUnsupportedProvider, providerType)
 	case v1alpha1.ProviderGCP:
 		return fmt.Errorf("%w: %s (GCP is only supported with the GKE distribution)",
+			ErrUnsupportedProvider, providerType)
+	case v1alpha1.ProviderAzure:
+		return fmt.Errorf("%w: %s (Azure is only supported with the AKS distribution)",
 			ErrUnsupportedProvider, providerType)
 	case v1alpha1.ProviderKubernetes:
 		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; "+

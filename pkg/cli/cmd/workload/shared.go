@@ -218,7 +218,7 @@ func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
 //nolint:staticcheck // "GitOps" is a proper noun and must be capitalized
 var errGitOpsEngineRequired = errors.New(
 	"A GitOps engine must be enabled to reconcile workloads; " +
-		"enable it with '--gitops-engine Flux|ArgoCD' during cluster init or " +
+		"enable it with '--gitops-engine Flux|ArgoCD' during project init or " +
 		"set 'spec.cluster.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 

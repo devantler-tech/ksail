@@ -274,10 +274,14 @@ func TestKSailValidatorDistributionMessagesBuiltFromValidValues(t *testing.T) {
 
 		assert.Equal(
 			t,
-			"Use a supported distribution: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE",
+			"Use a supported distribution: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE, AKS",
 			err.FixSuggestion,
 		)
-		assert.Equal(t, "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE", err.ExpectedValue)
+		assert.Equal(
+			t,
+			"one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE, AKS",
+			err.ExpectedValue,
+		)
 	}
 
 	assert.True(t, found, "Should find distribution validation error")
@@ -312,6 +316,9 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 	case v1alpha1.DistributionGKE:
 		distributionConfigFile = "gke.yaml"
 		contextName = "gke_my-project_europe-north1_gke-default" // Sample context name
+	case v1alpha1.DistributionAKS:
+		distributionConfigFile = "aks.yaml"
+		contextName = "aks-default" // Sample context name (az names contexts after the cluster)
 	default:
 		distributionConfigFile = "cluster.yaml"
 		contextName = "ksail"

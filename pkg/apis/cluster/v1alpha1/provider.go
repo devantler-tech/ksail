@@ -21,6 +21,8 @@ const (
 	ProviderAWS Provider = "AWS"
 	// ProviderGCP runs GKE managed Kubernetes clusters on Google Cloud.
 	ProviderGCP Provider = "GCP"
+	// ProviderAzure runs AKS managed Kubernetes clusters on Microsoft Azure.
+	ProviderAzure Provider = "Azure"
 	// ProviderKubernetes runs cluster nodes as pods inside an existing Kubernetes cluster.
 	// Supports all Docker-based distributions (Vanilla, K3s, Talos, VCluster) via either
 	// direct pod execution (K3s) or Docker-in-Docker (Kind, Talos, VCluster).
@@ -36,6 +38,7 @@ func ValidProviders() []Provider {
 		ProviderOmni,
 		ProviderAWS,
 		ProviderGCP,
+		ProviderAzure,
 		ProviderKubernetes,
 	}
 }
@@ -88,10 +91,11 @@ func DefaultProviderForDistribution(distribution Distribution) Provider {
 	return supported[0]
 }
 
-// IsCloud returns true if the provider is a cloud provider (Hetzner, Omni, AWS, or GCP).
+// IsCloud returns true if the provider is a cloud provider (Hetzner, Omni, AWS, GCP, or Azure).
 // Cloud providers run nodes on remote servers and cannot access local Docker infrastructure.
 func (p *Provider) IsCloud() bool {
-	return *p == ProviderHetzner || *p == ProviderOmni || *p == ProviderAWS || *p == ProviderGCP
+	return *p == ProviderHetzner || *p == ProviderOmni ||
+		*p == ProviderAWS || *p == ProviderGCP || *p == ProviderAzure
 }
 
 // NeedsLocalDocker returns true if the provider requires a local Docker daemon

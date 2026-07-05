@@ -198,8 +198,9 @@ func (c *Installer) getCiliumValues() map[string]string {
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
-		v1alpha1.DistributionGKE:
-		// Vanilla, K3s, VCluster, KWOK, EKS, and GKE use default values.
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
+		// Vanilla, K3s, VCluster, KWOK, EKS, GKE, and AKS use default values.
 	}
 
 	// Add provider-specific values.
@@ -217,10 +218,11 @@ func (c *Installer) getCiliumValues() map[string]string {
 		v1alpha1.ProviderOmni,
 		v1alpha1.ProviderAWS,
 		v1alpha1.ProviderGCP,
+		v1alpha1.ProviderAzure,
 		v1alpha1.ProviderKubernetes:
-		// Hetzner, Omni, AWS, GCP, and Kubernetes use default values (Cilium is
-		// not installed on EKS/GKE by KSail, but if selected it behaves like
-		// other cloud providers).
+		// Hetzner, Omni, AWS, GCP, Azure, and Kubernetes use default values
+		// (Cilium is not installed on EKS/GKE/AKS by KSail, but if selected it
+		// behaves like other cloud providers).
 	}
 
 	return values

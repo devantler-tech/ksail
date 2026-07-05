@@ -145,6 +145,100 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 	}
 }
 
+// TestComposeInitNodeAdvertisesControlPlaneEndpointForHA pins the HA half of
+// the init compose contract: a multi-control-plane topology advertises the
+// stable join name as the cluster's controlPlaneEndpoint — which kubeadm
+// requires before any control-plane join — and pins that name to loopback in
+// /etc/hosts BEFORE `kubeadm init` writes it into the node's own kubeconfigs.
+// A single-control-plane topology keeps no endpoint and no local pin, so the
+// existing flow is unchanged.
+func TestComposeInitNodeAdvertisesControlPlaneEndpointForHA(t *testing.T) {
+	t.Parallel()
+
+	haProv := newProvisioner(&fakeInfra{}, 3, 1)
+
+	haSpec, err := haProv.ComposeInitNode(
+		testClusterName, "abcdef.0123456789abcdef", composeBootstrapMaterial(),
+	)
+	require.NoError(t, err)
+
+	localPin := "echo '127.0.0.1 " + testJoinName + "' >> /etc/hosts"
+
+	assert.Contains(t, haSpec.UserData, "controlPlaneEndpoint")
+	assert.Contains(t, haSpec.UserData, testJoinName+":6443")
+	assert.Contains(t, haSpec.UserData, localPin)
+
+	pinAt := strings.Index(haSpec.UserData, localPin)
+	initAt := strings.Index(haSpec.UserData, "kubeadm init")
+	require.NotEqual(t, -1, initAt)
+	assert.Less(t, pinAt, initAt, "the local /etc/hosts pin must precede `kubeadm init`")
+
+	singleProv := newProvisioner(&fakeInfra{}, 1, 2)
+
+	singleSpec, err := singleProv.ComposeInitNode(
+		testClusterName, "abcdef.0123456789abcdef", composeBootstrapMaterial(),
+	)
+	require.NoError(t, err)
+
+	assert.NotContains(t, singleSpec.UserData, "controlPlaneEndpoint")
+	assert.NotContains(t, singleSpec.UserData, localPin)
+}
+
+// TestComposeJoiningNodesComposesAdditionalControlPlanes pins the HA join
+// compose contract: with controlPlanes > 1 the joiners are the additional
+// control planes first (control-plane joins carrying the full pre-seeded
+// shared PKI — kubeadm's manual certificate distribution), then the agents,
+// which must never receive private cluster-identity material.
+func TestComposeJoiningNodesComposesAdditionalControlPlanes(t *testing.T) {
+	t.Parallel()
+
+	prov := newProvisioner(&fakeInfra{}, 3, 1)
+
+	_, err := prov.ComposeInitNode(
+		testClusterName, "abcdef.0123456789abcdef", composeBootstrapMaterial(),
+	)
+	require.NoError(t, err)
+
+	specs, err := prov.ComposeJoiningNodes(
+		testClusterName, "abcdef.0123456789abcdef",
+		net.ParseIP("10.0.1.5"), composeBootstrapMaterial(),
+	)
+	require.NoError(t, err)
+	require.Len(t, specs, 3)
+
+	privatePKIPaths := []string{
+		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.key",
+		"/etc/kubernetes/pki/sa.key",
+	}
+
+	for index, spec := range specs[:2] {
+		assert.Equal(t, index+1, spec.Index)
+		assert.Equal(t, hetzner.NodeTypeControlPlane, spec.NodeType)
+		assert.Contains(t, spec.UserData, "controlPlane", "a control-plane joiner must join as one")
+		assert.Contains(t, spec.UserData, "kubeadm join")
+		assert.Contains(t, spec.UserData,
+			"&& touch "+prov.ControlPlaneJoinCompletePath(),
+			"a control-plane joiner must chain the join-complete sentinel the "+
+				"serialised bring-up polls for")
+
+		for _, path := range privatePKIPaths {
+			assert.Contains(t, spec.UserData, path,
+				"a control-plane joiner needs the shared PKI before `kubeadm join --control-plane`")
+		}
+	}
+
+	agent := specs[2]
+	assert.Equal(t, 3, agent.Index)
+	assert.Equal(t, hetzner.NodeTypeWorker, agent.NodeType)
+
+	for _, path := range privatePKIPaths {
+		assert.NotContains(t, agent.UserData, path,
+			"agents must never receive private PKI material")
+	}
+}
+
 // TestComposeJoiningNodesRequiresInitFirst pins that composing joining nodes
 // without a prior init compose is refused: the joiners pin the CA minted during
 // the init compose, so out-of-order composition has no identity to pin.

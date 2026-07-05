@@ -119,6 +119,18 @@ func TestBuildDistributionConfigGKEIsCallerSpecific(t *testing.T) {
 	assert.Nil(t, config, "GKE must be built by the caller, not the shared builder")
 }
 
+// TestBuildDistributionConfigAKSIsCallerSpecific asserts AKS returns (nil, nil) so each backend
+// builds its own AKSConfig (env-var-resolved subscription/resource group + optional aks.yaml spec).
+func TestBuildDistributionConfigAKSIsCallerSpecific(t *testing.T) {
+	t.Parallel()
+
+	config, err := clusterprovisioner.BuildDistributionConfig(
+		clusterWith(v1alpha1.DistributionAKS), buildClusterName, false,
+	)
+	require.NoError(t, err)
+	assert.Nil(t, config, "AKS must be built by the caller, not the shared builder")
+}
+
 // TestBuildDistributionConfigUnsupportedDistribution asserts an unknown distribution surfaces the
 // shared unsupported-distribution sentinel.
 func TestBuildDistributionConfigUnsupportedDistribution(t *testing.T) {

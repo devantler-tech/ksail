@@ -94,7 +94,8 @@ func resolveCoreDistributionName(
 	case v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
-		v1alpha1.DistributionGKE:
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
 		return "", false
 	}
 
@@ -124,6 +125,9 @@ func resolveAuxDistributionName(
 		return trimOrDefault(parseEKSContext(kubeContext), "eks-default")
 	case v1alpha1.DistributionGKE:
 		return trimOrDefault(parseGKEContext(kubeContext), "gke-default")
+	case v1alpha1.DistributionAKS:
+		// az aks get-credentials names the context after the cluster itself.
+		return trimOrDefault(kubeContext, "aks-default")
 	case v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos:
@@ -159,7 +163,7 @@ func resolveNetworkName(
 		return "vcluster." + trimOrDefault(clusterName, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
 		return "kwok-" + trimOrDefault(clusterName, "kwok-default")
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		// The managed cloud distributions do not use a local Docker network.
 		return ""
 	default:

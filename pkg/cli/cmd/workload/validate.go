@@ -793,9 +793,10 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	}
 
 	// Apply CEL rules to the same rendered/built manifests kubeconform validated,
-	// honoring the same kind exclusions (--skip-kinds / --skip-secrets) so a
-	// skipped kind cannot surface a CEL failure.
-	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink)
+	// honoring the same kind exclusions (--skip-kinds / --skip-secrets) and the
+	// same render-provenance attribution, so a skipped kind cannot surface a CEL
+	// failure and a rendered document's violation is traced to its HelmRelease.
+	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink, opts.Attribution)
 	if err != nil {
 		return err
 	}
@@ -920,8 +921,11 @@ func validateFileSilent(
 
 	// Apply CEL rules to the same content kubeconform validated, honoring the same
 	// kind exclusions (--skip-kinds / --skip-secrets) so a skipped kind cannot
-	// surface a CEL failure.
-	err = evaluateCELDocuments(engine, expanded, filePath, opts.SkipKinds, celSink)
+	// surface a CEL failure. Loose files carry no render provenance, so
+	// opts.Attribution is nil here and descriptions are unchanged.
+	err = evaluateCELDocuments(
+		engine, expanded, filePath, opts.SkipKinds, celSink, opts.Attribution,
+	)
 	if err != nil {
 		return err
 	}

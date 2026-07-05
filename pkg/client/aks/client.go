@@ -219,7 +219,9 @@ func collectPages[T any](
 // SetAgentPoolCount resizes the named agent pool to count nodes and blocks
 // until the operation completes. It re-submits the pool's current definition
 // with only the count changed, per ARM create-or-update semantics — the
-// primitive Stop (count 0) and Start (restore count) build on. ARM has no
+// primitive an exact-size restore builds on (whole-cluster stop/start uses
+// [Client.StopCluster]/[Client.StartCluster] instead: system agent pools
+// cannot be resized to zero). ARM has no
 // partial PATCH for agent pools, so this get-then-resubmit flow is
 // last-writer-wins on the whole pool object: concurrent edits to other pool
 // fields between the Get and the resubmit are silently overwritten.
@@ -252,6 +254,40 @@ func (c *Client) SetAgentPoolCount(
 		return fmt.Errorf(
 			"%w: wait for agent pool %q resize: %w", ErrOperationFailed, poolName, err,
 		)
+	}
+
+	return nil
+}
+
+// StartCluster starts a stopped managed cluster (control plane and agent
+// pools) and blocks until the operation completes.
+func (c *Client) StartCluster(ctx context.Context, resourceGroup, name string) error {
+	poller, err := c.managedClusters.BeginStart(ctx, resourceGroup, name, nil)
+	if err != nil {
+		return fmt.Errorf("start cluster %q: %w", name, err)
+	}
+
+	_, err = poller.PollUntilDone(ctx, c.pollOptions())
+	if err != nil {
+		return fmt.Errorf("%w: wait for cluster %q start: %w", ErrOperationFailed, name, err)
+	}
+
+	return nil
+}
+
+// StopCluster stops the managed cluster — Azure's supported way to halt AKS
+// node costs: the control plane and every agent pool deallocate while the
+// cluster's state and configuration are kept (a GKE-style resize-to-zero is
+// rejected for system agent pools). Blocks until the operation completes.
+func (c *Client) StopCluster(ctx context.Context, resourceGroup, name string) error {
+	poller, err := c.managedClusters.BeginStop(ctx, resourceGroup, name, nil)
+	if err != nil {
+		return fmt.Errorf("stop cluster %q: %w", name, err)
+	}
+
+	_, err = poller.PollUntilDone(ctx, c.pollOptions())
+	if err != nil {
+		return fmt.Errorf("%w: wait for cluster %q stop: %w", ErrOperationFailed, name, err)
 	}
 
 	return nil

@@ -36,6 +36,9 @@ type fakeInfra struct {
 	listErr            error
 	createServerErr    error
 	createdServer      *hcloud.Server
+	// onCreateServer, when set, observes each CreateServer call (multi-node
+	// sequencing tests interleave it with SSH-probe observations).
+	onCreateServer func(hetzner.CreateServerOpts)
 
 	networkID        int64
 	firewallID       int64
@@ -120,6 +123,10 @@ func (f *fakeInfra) CreateServer(
 ) (*hcloud.Server, error) {
 	f.createServerCalls++
 	f.lastServerOpts = opts
+
+	if f.onCreateServer != nil {
+		f.onCreateServer(opts)
+	}
 
 	return f.createdServer, f.createServerErr
 }

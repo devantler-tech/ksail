@@ -18,6 +18,9 @@ const (
 	// DefaultGKEDistributionConfig is the default GKE distribution configuration filename
 	// (declarative containerpb.Cluster spec submitted to the GKE API on create).
 	DefaultGKEDistributionConfig = "gke.yaml"
+	// DefaultAKSDistributionConfig is the default AKS distribution configuration filename
+	// (declarative armcontainerservice.ManagedCluster spec submitted to the AKS API on create).
+	DefaultAKSDistributionConfig = "aks.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file

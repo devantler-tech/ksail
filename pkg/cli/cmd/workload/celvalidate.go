@@ -60,12 +60,18 @@ func buildCELEngine(rulesPath string) (*celrules.Engine, error) {
 // whose kind is in that set are skipped before CEL evaluation, so CEL honors the
 // same exclusions kubeconform does and a skipped Secret (or other kind) cannot
 // surface a CEL failure.
+//
+// attribution is the same resource-identity→source map kubeconform failures use
+// (ValidationOptions.Attribution); when the violating document's identity is
+// present, the source layer is appended to the description. A nil map (loose
+// files, --skip-helm-render) leaves descriptions unchanged.
 func evaluateCELDocuments(
 	engine *celrules.Engine,
 	data []byte,
 	source string,
 	skipKinds []string,
 	sink *celViolationSink,
+	attribution map[string]string,
 ) error {
 	if engine == nil {
 		return nil
@@ -91,7 +97,7 @@ func evaluateCELDocuments(
 		}
 
 		for _, violation := range engine.Evaluate(obj) {
-			described := describeCELViolation(violation, obj, source)
+			described := describeCELViolation(violation, obj, source, attribution)
 
 			if violation.Severity == celrules.SeverityWarning {
 				sink.add(described)
@@ -133,17 +139,36 @@ func decodeDocumentObject(docBytes []byte) (map[string]any, bool) {
 
 // describeCELViolation renders a single violation with its rule name, the
 // offending document's identity (Kind/Namespace/Name when derivable), and the
-// source manifest, so a failure points at the exact resource and layer.
-func describeCELViolation(violation celrules.Violation, obj map[string]any, source string) string {
+// source manifest, so a failure points at the exact resource and layer. When
+// attribution carries an entry for the identity, the source descriptor is
+// appended as " (from <source>)" — the same tag kubeconform failures carry — so
+// a violation in a multi-layer render is traced to the HelmRelease that
+// produced it. Appending keeps existing description substrings intact for
+// callers that match on them.
+func describeCELViolation(
+	violation celrules.Violation,
+	obj map[string]any,
+	source string,
+	attribution map[string]string,
+) string {
 	identity := documentIdentityFromObject(obj)
-	if identity != "" {
+	if identity == "" {
 		return fmt.Sprintf(
-			"rule %q violated by %s (in %s): %s",
-			violation.Rule, identity, source, violation.Message,
+			"rule %q violated (in %s): %s",
+			violation.Rule, source, violation.Message,
 		)
 	}
 
-	return fmt.Sprintf("rule %q violated (in %s): %s", violation.Rule, source, violation.Message)
+	described := fmt.Sprintf(
+		"rule %q violated by %s (in %s): %s",
+		violation.Rule, identity, source, violation.Message,
+	)
+
+	if layer := attribution[identity]; layer != "" {
+		described += " (from " + layer + ")"
+	}
+
+	return described
 }
 
 // documentIdentityFromObject builds "Kind/Namespace/Name" (or "Kind/Name" for

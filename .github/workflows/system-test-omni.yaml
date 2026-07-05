@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       init:
-        description: "Run ksail cluster init before create"
+        description: "Run ksail project init before create"
         required: false
         type: boolean
         default: true
