@@ -14,7 +14,7 @@ import (
 // All operations delegate to pkg/client/eksctl.Client, which in turn shells
 // out to the eksctl binary. The provisioner holds the declarative
 // eksctl.yaml path so Create/Delete can be driven from the same source of
-// truth scaffolded by ksail cluster init.
+// truth scaffolded by ksail project init.
 type Provisioner struct {
 	// name is the cluster name derived from the ksail.yaml / eksctl.yaml.
 	name string

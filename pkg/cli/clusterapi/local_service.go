@@ -290,7 +290,7 @@ func (s *Service) Get(
 
 // isSafeClusterName reports whether name is valid for the local backend: non-empty and DNS-1123
 // compliant per KSail's shared cluster-name rule (v1alpha1.ValidateClusterName — the same check
-// `ksail cluster init` and the JSON schema enforce, so the web UI and CLI agree on valid names).
+// `ksail project init` and the JSON schema enforce, so the web UI and CLI agree on valid names).
 // DNS-1123 names are single path components, so this also blocks path traversal where the name
 // becomes a filesystem path downstream (~/.kwok/clusters/<name>, Docker container names). The local
 // service always needs an explicit name, so empty is rejected here even though the config loader

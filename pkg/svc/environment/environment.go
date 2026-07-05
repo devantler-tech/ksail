@@ -100,7 +100,7 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 // The connection `context:` (e.g. `admin@<env>` for Talos, `kind-<env>` for Kind)
 // is deliberately NOT rewritten here: its format is distribution-specific, so
 // repointing it correctly needs the distribution. [DeriveContextRewrite] provides
-// that distribution-aware rewrite, which the `cluster add-environment` command
+// that distribution-aware rewrite, which the `project add-environment` command
 // appends to this set once it has resolved the source environment's distribution.
 // Keeping the two separate lets this foundation stay distribution-agnostic.
 func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {

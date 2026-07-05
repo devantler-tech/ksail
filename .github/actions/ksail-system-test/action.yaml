@@ -25,11 +25,11 @@ inputs:
     required: false
     default: "Docker"
   args:
-    description: Additional arguments for cluster init/create
+    description: Additional arguments for project init/create
     required: false
     default: ""
   init:
-    description: Whether to run ksail cluster init before create
+    description: Whether to run ksail project init before create
     required: false
     default: "false"
   test-workload-image:
