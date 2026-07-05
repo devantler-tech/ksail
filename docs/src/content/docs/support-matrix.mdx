@@ -7,14 +7,16 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution     | Docker | Kubernetes | Hetzner | Omni | AWS   |
-| ---------------- | ------ | ---------- | ------- | ---- | ----- |
-| Vanilla (Kind)   | ✅     | ✅         | ❌      | ❌   | ❌    |
-| K3s (K3d)        | ✅     | ✅         | ❌      | ❌   | ❌    |
-| Talos            | ✅     | ✅         | ✅      | ✅   | ❌    |
-| VCluster (Vind)  | ✅     | ✅         | ❌      | ❌   | ❌    |
-| KWOK (kwokctl)   | ✅     | ✅         | ❌      | ❌   | ❌    |
-| EKS              | ❌     | ❌         | ❌      | ❌   | 🚧¹⁰ |
+| Distribution     | Docker | Kubernetes | Hetzner | Omni | AWS   | GCP   | Azure |
+| ---------------- | ------ | ---------- | ------- | ---- | ----- | ----- | ----- |
+| Vanilla (Kind)   | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
+| K3s (K3d)        | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
+| Talos            | ✅     | ✅         | ✅      | ✅   | ❌    | ❌    | ❌    |
+| VCluster (Vind)  | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
+| KWOK (kwokctl)   | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
+| EKS              | ❌     | ❌         | ❌      | ❌   | 🚧¹⁰ | ❌    | ❌    |
+| GKE              | ❌     | ❌         | ❌      | ❌   | ❌    | ✅¹³  | ❌    |
+| AKS              | ❌     | ❌         | ❌      | ❌   | ❌    | ❌    | ✅¹⁴  |
 
 **Notes:**
 
@@ -23,6 +25,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `125127` for Talos 1.12.4; for ARM, look up the matching ISO ID in the Hetzner Cloud Console — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/omni/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - ¹⁰ AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; `ksail cluster create` is not yet functional for EKS
+- ¹³ GCP provider requires Application Default Credentials plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` — see [GCP Provider](/providers/gcp/) for setup details; cluster lifecycle (create/delete/start/stop/list/info) is supported, and GKE's managed CNI/CSI/LoadBalancer/metrics ship with the cluster
+- ¹⁴ Azure provider requires `DefaultAzureCredential`-resolvable credentials plus `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` — see [Azure Provider](/providers/azure/) for setup details; cluster lifecycle (create/delete/start/stop/list/info) is supported, and AKS's managed CNI/CSI/LoadBalancer/metrics ship with the cluster
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 - KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
 

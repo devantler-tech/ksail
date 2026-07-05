@@ -38,6 +38,15 @@ const (
 	AWSSecretAccessKey Key = "aws.secretAccessKey"
 	// AWSSessionToken is the AWS session token (for temporary credentials).
 	AWSSessionToken Key = "aws.sessionToken"
+	// GCPProject is the Google Cloud project ID used for GKE operations.
+	GCPProject Key = "gcp.project"
+	// GCPLocation is the GKE location (zone or region); empty means all locations.
+	GCPLocation Key = "gcp.location"
+	// AzureSubscriptionID is the Azure subscription ID used for AKS operations.
+	AzureSubscriptionID Key = "azure.subscriptionId"
+	// AzureResourceGroup is the Azure resource group hosting AKS clusters; empty means the whole
+	// subscription.
+	AzureResourceGroup Key = "azure.resourceGroup"
 	// CopilotToken is the GitHub Copilot token the AI assistant authenticates with. Not a cloud
 	// provider, but resolved the same way (secure store override, otherwise the environment) so it can
 	// be configured from the Settings page instead of only via the environment.
@@ -48,13 +57,17 @@ const (
 // provider option structs (and the omni provider package); credentials_test asserts they stay in
 // sync so this package does not pull the heavyweight provider clients into every importer.
 const (
-	defaultOmniEndpointEnvVar    = "OMNI_ENDPOINT"
-	defaultOmniServiceAccountKey = "OMNI_SERVICE_ACCOUNT_KEY"
-	defaultAWSRegionEnvVar       = "AWS_REGION"
-	defaultAWSProfileEnvVar      = "AWS_PROFILE"
-	defaultAWSAccessKeyIDEnvVar  = "AWS_ACCESS_KEY_ID"
-	defaultAWSSecretAccessEnvVar = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // env var NAME, not a secret
-	defaultAWSSessionTokenEnvVar = "AWS_SESSION_TOKEN"     //nolint:gosec // env var NAME, not a secret
+	defaultOmniEndpointEnvVar       = "OMNI_ENDPOINT"
+	defaultOmniServiceAccountKey    = "OMNI_SERVICE_ACCOUNT_KEY"
+	defaultAWSRegionEnvVar          = "AWS_REGION"
+	defaultAWSProfileEnvVar         = "AWS_PROFILE"
+	defaultAWSAccessKeyIDEnvVar     = "AWS_ACCESS_KEY_ID"
+	defaultAWSSecretAccessEnvVar    = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // env var NAME, not a secret
+	defaultAWSSessionTokenEnvVar    = "AWS_SESSION_TOKEN"     //nolint:gosec // env var NAME, not a secret
+	defaultGCPProjectEnvVar         = "GOOGLE_CLOUD_PROJECT"
+	defaultGCPLocationEnvVar        = "GOOGLE_CLOUD_LOCATION"
+	defaultAzureSubscriptionEnvVar  = "AZURE_SUBSCRIPTION_ID"
+	defaultAzureResourceGroupEnvVar = "AZURE_RESOURCE_GROUP"
 	// defaultCopilotTokenEnvVar is the primary variable webchat.copilotToken() reads first (it also
 	// falls back to COPILOT_TOKEN); using it as the default keeps a stored token resolvable via Overlay.
 	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
@@ -74,6 +87,10 @@ func AllKeys() []Key {
 		AWSAccessKeyID,
 		AWSSecretAccessKey,
 		AWSSessionToken,
+		GCPProject,
+		GCPLocation,
+		AzureSubscriptionID,
+		AzureResourceGroup,
 		CopilotToken,
 	}
 }
@@ -90,6 +107,10 @@ func DefaultEnvVar(key Key) string {
 		AWSAccessKeyID:        defaultAWSAccessKeyIDEnvVar,
 		AWSSecretAccessKey:    defaultAWSSecretAccessEnvVar,
 		AWSSessionToken:       defaultAWSSessionTokenEnvVar,
+		GCPProject:            defaultGCPProjectEnvVar,
+		GCPLocation:           defaultGCPLocationEnvVar,
+		AzureSubscriptionID:   defaultAzureSubscriptionEnvVar,
+		AzureResourceGroup:    defaultAzureResourceGroupEnvVar,
 		CopilotToken:          defaultCopilotTokenEnvVar,
 	}[key]
 }

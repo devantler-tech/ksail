@@ -161,6 +161,138 @@ func TestAvailability_AWSRequiresBothStaticKeys(t *testing.T) {
 	assert.True(t, bothKeys.Available, "a complete static key pair must enable AWS")
 }
 
+func TestAvailability_GCPRequiresProject(t *testing.T) {
+	t.Parallel()
+
+	// The project check short-circuits before any host credential-file probe, so this stays
+	// deterministic regardless of the machine's real gcloud setup.
+	got := availabilityFor(
+		(&clusterdiscovery.Discoverer{Resolver: mapResolver{}}).
+			Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderGCP}),
+		v1alpha1.ProviderGCP,
+	)
+	assert.False(t, got.Available)
+	assert.Contains(t, got.Reason, "GOOGLE_CLOUD_PROJECT")
+}
+
+// TestAvailability_GCPRequiresADC verifies a project alone (no GOOGLE_APPLICATION_CREDENTIALS, no
+// gcloud well-known ADC file) does not mark GCP available. HOME is pointed at an empty temp dir so
+// the well-known-file check is deterministic.
+func TestAvailability_GCPRequiresADC(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
+	projectOnly := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.GCPProject: "my-project"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderGCP}),
+		v1alpha1.ProviderGCP,
+	)
+	assert.False(t, projectOnly.Available, "a project without ADC must not enable GCP")
+	assert.Contains(t, projectOnly.Reason, "Application Default Credentials")
+
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "adc.json"))
+
+	withADC := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.GCPProject: "my-project"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderGCP}),
+		v1alpha1.ProviderGCP,
+	)
+	assert.True(t, withADC.Available, "a project plus ADC must enable GCP")
+}
+
+// TestAvailability_GCPWellKnownADCFile verifies the gcloud well-known ADC file alone (no
+// GOOGLE_APPLICATION_CREDENTIALS variable) satisfies the credential probe.
+func TestAvailability_GCPWellKnownADCFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
+	adcPath := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(adcPath), 0o750))
+	require.NoError(t, os.WriteFile(adcPath, []byte("{}"), 0o600))
+
+	got := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.GCPProject: "my-project"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderGCP}),
+		v1alpha1.ProviderGCP,
+	)
+	assert.True(t, got.Available, "the gcloud well-known ADC file must enable GCP")
+}
+
+func TestAvailability_AzureRequiresSubscription(t *testing.T) {
+	t.Parallel()
+
+	// The subscription check short-circuits before any host credential-file probe, so this stays
+	// deterministic regardless of the machine's real Azure setup.
+	got := availabilityFor(
+		(&clusterdiscovery.Discoverer{Resolver: mapResolver{}}).
+			Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAzure}),
+		v1alpha1.ProviderAzure,
+	)
+	assert.False(t, got.Available)
+	assert.Contains(t, got.Reason, "AZURE_SUBSCRIPTION_ID")
+}
+
+// TestAvailability_AzureRequiresCredential verifies a subscription alone (no AZURE_CLIENT_ID /
+// AZURE_TENANT_ID, no Azure CLI profile) does not mark Azure available. HOME is pointed at an empty
+// temp dir so the CLI-profile check is deterministic.
+func TestAvailability_AzureRequiresCredential(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AZURE_CLIENT_ID", "")
+	t.Setenv("AZURE_TENANT_ID", "")
+
+	subscriptionOnly := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.AzureSubscriptionID: "00000000-0000-0000-0000-000000000000"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAzure}),
+		v1alpha1.ProviderAzure,
+	)
+	assert.False(
+		t,
+		subscriptionOnly.Available,
+		"a subscription without a credential must not enable Azure",
+	)
+	assert.Contains(t, subscriptionOnly.Reason, "Azure credentials")
+
+	t.Setenv("AZURE_TENANT_ID", "11111111-1111-1111-1111-111111111111")
+
+	withEnvCredential := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.AzureSubscriptionID: "00000000-0000-0000-0000-000000000000"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAzure}),
+		v1alpha1.ProviderAzure,
+	)
+	assert.True(
+		t,
+		withEnvCredential.Available,
+		"a subscription plus environment credentials must enable Azure",
+	)
+}
+
+// TestAvailability_AzureCLIProfile verifies the Azure CLI profile file alone (no AZURE_*
+// environment credentials) satisfies the credential probe.
+func TestAvailability_AzureCLIProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AZURE_CLIENT_ID", "")
+	t.Setenv("AZURE_TENANT_ID", "")
+
+	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(profilePath), 0o750))
+	require.NoError(t, os.WriteFile(profilePath, []byte("{}"), 0o600))
+
+	got := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			Resolver: mapResolver{credentials.AzureSubscriptionID: "00000000-0000-0000-0000-000000000000"},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAzure}),
+		v1alpha1.ProviderAzure,
+	)
+	assert.True(t, got.Available, "the Azure CLI profile must enable Azure")
+}
+
 func TestAvailability_KubernetesRequiresHostKubeconfig(t *testing.T) {
 	t.Setenv("KSAIL_HOST_KUBECONFIG", "/definitely/not/a/real/kubeconfig")
 

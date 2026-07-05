@@ -3,12 +3,42 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
+
+const (
+	// podNamespaceEnvVar is the downward-API environment variable deployments set
+	// with the pod's own namespace.
+	podNamespaceEnvVar = "POD_NAMESPACE"
+	// serviceAccountNamespaceFile is the projected file holding the pod's
+	// namespace; the fallback when the downward-API env var is not set.
+	serviceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+)
+
+// InClusterNamespace resolves the namespace the current process's pod runs in:
+// the POD_NAMESPACE downward-API env var, falling back to the projected
+// ServiceAccount namespace file. It returns "" when neither is available
+// (running outside a cluster); callers pick their own default.
+func InClusterNamespace() string {
+	if namespace := os.Getenv(podNamespaceEnvVar); namespace != "" {
+		return namespace
+	}
+
+	data, err := os.ReadFile(serviceAccountNamespaceFile)
+	if err == nil {
+		if namespace := strings.TrimSpace(string(data)); namespace != "" {
+			return namespace
+		}
+	}
+
+	return ""
+}
 
 // PSSLabels returns the Pod Security Standards admission labels
 // (pod-security.kubernetes.io/{enforce,audit,warn}) for the given level.

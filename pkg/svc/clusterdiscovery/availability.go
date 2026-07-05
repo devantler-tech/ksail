@@ -59,22 +59,9 @@ func (d *Discoverer) providerAvailability(
 	case v1alpha1.ProviderAWS:
 		return d.awsAvailability()
 	case v1alpha1.ProviderGCP:
-		// GCP discovery (credential probing + cluster listing) lands with
-		// ksail#5728 part 3; until then GCP is not offered for discovery.
-		return Availability{
-			Provider:  prov,
-			Available: false,
-			Reason:    "GCP discovery is not wired yet",
-		}
+		return d.gcpAvailability()
 	case v1alpha1.ProviderAzure:
-		// Azure discovery (credential probing + cluster listing) lands with
-		// the AKS discovery follow-up; until then Azure is not offered for
-		// discovery.
-		return Availability{
-			Provider:  prov,
-			Available: false,
-			Reason:    "Azure discovery is not wired yet",
-		}
+		return d.azureAvailability()
 	case v1alpha1.ProviderKubernetes:
 		return kubernetesAvailability()
 	default:
@@ -170,6 +157,47 @@ func (d *Discoverer) awsAvailability() Availability {
 	}
 
 	return Availability{Provider: v1alpha1.ProviderAWS, Available: true}
+}
+
+// gcpAvailability requires a Google Cloud project (every GKE API call is project-scoped) and
+// Application Default Credentials for the SDK to authenticate with.
+func (d *Discoverer) gcpAvailability() Availability {
+	projectAvailability := d.requireCredentials(v1alpha1.ProviderGCP, credentials.GCPProject)
+	if !projectAvailability.Available {
+		return projectAvailability
+	}
+
+	if !gcpADCPresent() {
+		return Availability{
+			Provider:  v1alpha1.ProviderGCP,
+			Available: false,
+			Reason:    "Google Cloud Application Default Credentials are not configured",
+		}
+	}
+
+	return Availability{Provider: v1alpha1.ProviderGCP, Available: true}
+}
+
+// azureAvailability requires an Azure subscription (every ARM call is subscription-scoped) and a
+// credential source the SDK's DefaultAzureCredential chain can resolve.
+func (d *Discoverer) azureAvailability() Availability {
+	subscriptionAvailability := d.requireCredentials(
+		v1alpha1.ProviderAzure,
+		credentials.AzureSubscriptionID,
+	)
+	if !subscriptionAvailability.Available {
+		return subscriptionAvailability
+	}
+
+	if !azureCredentialPresent() {
+		return Availability{
+			Provider:  v1alpha1.ProviderAzure,
+			Available: false,
+			Reason:    "Azure credentials are not configured (az login or AZURE_* variables)",
+		}
+	}
+
+	return Availability{Provider: v1alpha1.ProviderAzure, Available: true}
 }
 
 // kubernetesAvailability reports the nested-Kubernetes provider as available when a host kubeconfig

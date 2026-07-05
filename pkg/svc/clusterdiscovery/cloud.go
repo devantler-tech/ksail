@@ -8,11 +8,15 @@ import (
 	"path/filepath"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	aksclient "github.com/devantler-tech/ksail/v7/pkg/client/aks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
+	azureprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/azure"
+	gcpprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/gcp"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
@@ -99,6 +103,77 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 	return clustersWithDistribution(names, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS), nil
 }
 
+// listGCP lists GKE clusters. It skips silently unless GCP appears configured (a project plus
+// Application Default Credentials), so the common no-GCP case costs nothing and never emits a
+// warning.
+func (d *Discoverer) listGCP(ctx context.Context) ([]Cluster, error) {
+	lister := d.GCP
+	if lister == nil {
+		if !d.gcpConfigured() {
+			return nil, nil
+		}
+
+		client, err := gkeclient.NewClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("create GKE client: %w", err)
+		}
+
+		defer func() { _ = client.Close() }()
+
+		provider, err := gcpprovider.NewProvider(
+			client,
+			d.resolver().Value(credentials.GCPProject),
+			d.resolver().Value(credentials.GCPLocation),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create GCP provider: %w", err)
+		}
+
+		lister = provider
+	}
+
+	names, err := lister.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query GKE: %w", err)
+	}
+
+	return clustersWithDistribution(names, v1alpha1.DistributionGKE, v1alpha1.ProviderGCP), nil
+}
+
+// listAzure lists AKS clusters. It skips silently unless Azure appears configured (a subscription
+// plus a resolvable credential source), so the common no-Azure case costs nothing and never emits
+// a warning.
+func (d *Discoverer) listAzure(ctx context.Context) ([]Cluster, error) {
+	lister := d.Azure
+	if lister == nil {
+		if !d.azureConfigured() {
+			return nil, nil
+		}
+
+		client, err := aksclient.NewClient(d.resolver().Value(credentials.AzureSubscriptionID))
+		if err != nil {
+			return nil, fmt.Errorf("create AKS client: %w", err)
+		}
+
+		provider, err := azureprovider.NewProvider(
+			client,
+			d.resolver().Value(credentials.AzureResourceGroup),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create Azure provider: %w", err)
+		}
+
+		lister = provider
+	}
+
+	names, err := lister.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query AKS: %w", err)
+	}
+
+	return clustersWithDistribution(names, v1alpha1.DistributionAKS, v1alpha1.ProviderAzure), nil
+}
+
 // listKubernetes lists clusters nested inside a host Kubernetes cluster. With no reachable host
 // kubeconfig it skips silently.
 func (d *Discoverer) listKubernetes(ctx context.Context) ([]Cluster, error) {
@@ -173,6 +248,68 @@ func (d *Discoverer) awsConfigured() bool {
 	}
 
 	return false
+}
+
+// gcpConfigured reports whether GCP appears set up for GKE discovery: a project ID (which the GKE
+// API scopes every list call to) plus Application Default Credentials. The project check comes
+// first so an unset project skips without touching the host's credential files.
+func (d *Discoverer) gcpConfigured() bool {
+	if d.resolver().Value(credentials.GCPProject) == "" {
+		return false
+	}
+
+	return gcpADCPresent()
+}
+
+// gcpADCPresent reports whether Google Application Default Credentials appear available: the
+// GOOGLE_APPLICATION_CREDENTIALS variable is set, or gcloud's well-known ADC file exists. This is
+// a presence probe only — the SDK performs the real credential resolution when a client is built.
+func gcpADCPresent() bool {
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
+		return true
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+
+	_, statErr := os.Stat(
+		filepath.Join(home, ".config", "gcloud", "application_default_credentials.json"),
+	)
+
+	return statErr == nil
+}
+
+// azureConfigured reports whether Azure appears set up for AKS discovery: a subscription ID (which
+// every ARM list call is scoped to) plus a credential source. The subscription check comes first so
+// an unset subscription skips without touching the host's credential files.
+func (d *Discoverer) azureConfigured() bool {
+	if d.resolver().Value(credentials.AzureSubscriptionID) == "" {
+		return false
+	}
+
+	return azureCredentialPresent()
+}
+
+// azureCredentialPresent reports whether a credential source for the SDK's DefaultAzureCredential
+// chain appears available: environment credentials (AZURE_CLIENT_ID / AZURE_TENANT_ID), or an
+// Azure CLI profile under ~/.azure. This is a presence probe only — the SDK performs the real
+// credential resolution when a client is built (managed-identity-only environments can still list
+// by injecting a lister or setting the environment variables).
+func azureCredentialPresent() bool {
+	if os.Getenv("AZURE_CLIENT_ID") != "" || os.Getenv("AZURE_TENANT_ID") != "" {
+		return true
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+
+	_, statErr := os.Stat(filepath.Join(home, ".azure", "azureProfile.json"))
+
+	return statErr == nil
 }
 
 // eksctlAvailable reports whether the eksctl binary (which the AWS provider shells out to) is on

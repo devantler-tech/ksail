@@ -177,6 +177,8 @@ export default defineConfig({
                 { label: "VCluster", link: "/distributions/vcluster/" },
                 { label: "KWOK (kwokctl)", link: "/distributions/kwok/" },
                 { label: "EKS", link: "/distributions/eks/" },
+                { label: "GKE", link: "/distributions/gke/" },
+                { label: "AKS", link: "/distributions/aks/" },
               ],
             },
             {
@@ -187,6 +189,8 @@ export default defineConfig({
                 { label: "Hetzner", link: "/providers/hetzner/" },
                 { label: "Omni (Sidero)", link: "/providers/omni/" },
                 { label: "AWS", link: "/providers/aws/" },
+                { label: "GCP", link: "/providers/gcp/" },
+                { label: "Azure", link: "/providers/azure/" },
               ],
             },
             { label: "Support Matrix", link: "/support-matrix/" },

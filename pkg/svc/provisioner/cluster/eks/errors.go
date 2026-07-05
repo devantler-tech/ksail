@@ -9,3 +9,7 @@ var ErrClientRequired = errors.New("eksctl client is required")
 // supplied. The binary wrapper always accepts -f <config> rather than an
 // inline spec, so the caller must point at a config file.
 var ErrConfigPathRequired = errors.New("eksctl config path is required")
+
+// ErrClusterNameRequired is returned when a cluster-scoped call has neither
+// a caller-supplied name nor a configured default to act on.
+var ErrClusterNameRequired = errors.New("eks cluster name is required")

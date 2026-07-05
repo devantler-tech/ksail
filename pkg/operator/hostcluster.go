@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,17 +27,9 @@ import (
 // destination, Headlamp's "main" context).
 const HostClusterName = "host"
 
-const (
-	// podNamespaceEnvVar is the downward-API environment variable the Helm chart sets with the
-	// operator pod's namespace.
-	podNamespaceEnvVar = "POD_NAMESPACE"
-	// serviceAccountNamespaceFile is the projected file holding the pod's namespace; the fallback
-	// when the downward-API env var is not set.
-	serviceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	// defaultHostClusterNamespace is the last-resort namespace for the host registration, used when
-	// the operator runs outside a cluster (e.g. local development against a kubeconfig).
-	defaultHostClusterNamespace = "default"
-)
+// defaultHostClusterNamespace is the last-resort namespace for the host registration, used when
+// the operator runs outside a cluster (e.g. local development against a kubeconfig).
+const defaultHostClusterNamespace = "default"
 
 // Bounded retry for the startup registration: the API server may briefly refuse writes right after
 // the operator starts (e.g. webhook or cache warm-up), so transient failures are retried.
@@ -56,18 +47,11 @@ var ErrHostClusterNameTaken = errors.New(
 )
 
 // HostClusterNamespace resolves the namespace the host Cluster resource is registered in: the
-// operator's own namespace from the POD_NAMESPACE downward-API env var, falling back to the
-// projected ServiceAccount namespace file, then "default" (running outside a cluster).
+// operator's own namespace (POD_NAMESPACE downward-API env var, then the projected ServiceAccount
+// namespace file — see k8s.InClusterNamespace), then "default" (running outside a cluster).
 func HostClusterNamespace() string {
-	if namespace := os.Getenv(podNamespaceEnvVar); namespace != "" {
+	if namespace := k8s.InClusterNamespace(); namespace != "" {
 		return namespace
-	}
-
-	data, err := os.ReadFile(serviceAccountNamespaceFile)
-	if err == nil {
-		if namespace := strings.TrimSpace(string(data)); namespace != "" {
-			return namespace
-		}
 	}
 
 	return defaultHostClusterNamespace
