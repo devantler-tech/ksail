@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/client/aks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -257,22 +256,16 @@ func (p *Provider) clusterResourceGroup(
 		return "", translateClientErr(err)
 	}
 
-	for _, cluster := range clusters {
-		if cluster == nil || derefString(cluster.Name) != clusterName {
-			continue
-		}
-
-		resourceID, parseErr := arm.ParseResourceID(derefString(cluster.ID))
-		if parseErr != nil {
-			return "", fmt.Errorf(
-				"parse ARM ID of cluster %s: %w", clusterName, parseErr,
-			)
-		}
-
-		return resourceID.ResourceGroupName, nil
+	group, found, err := aks.FindClusterResourceGroup(clusters, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("resolve cluster resource group: %w", err)
 	}
 
-	return "", fmt.Errorf("%w: %s", provider.ErrClusterNotFound, clusterName)
+	if !found {
+		return "", fmt.Errorf("%w: %s", provider.ErrClusterNotFound, clusterName)
+	}
+
+	return group, nil
 }
 
 // agentPools unwraps a cluster's agent-pool profiles, tolerating the

@@ -3,8 +3,8 @@ package aksprovisioner
 import (
 	"context"
 	"fmt"
+	"slices"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/client/aks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -200,28 +200,22 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 }
 
 // Exists reports whether a cluster with the given name (or the provisioner
-// default) exists. Implemented via ListClusters + membership check because
-// GetCluster reports a missing cluster as an ARM ResourceNotFound error,
-// which is harder to classify reliably than an empty list result — the same
-// trade the GKE and EKS provisioners make.
+// default) exists, as membership in [Provisioner.List] — GetCluster reports a
+// missing cluster as an ARM ResourceNotFound error, which is harder to
+// classify reliably than an empty list result (the same trade the GKE and
+// EKS provisioners make).
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := p.resolveName(name)
 	if target == "" {
 		return false, nil
 	}
 
-	clusters, err := p.client.ListClusters(ctx, p.resourceGroup)
+	names, err := p.List(ctx)
 	if err != nil {
-		return false, fmt.Errorf("aks list clusters: %w", err)
+		return false, err
 	}
 
-	for _, cluster := range clusters {
-		if cluster != nil && cluster.Name != nil && *cluster.Name == target {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return slices.Contains(names, target), nil
 }
 
 // resolveName returns the caller-supplied name when set, otherwise falls
@@ -251,22 +245,14 @@ func (p *Provisioner) resolveResourceGroup(
 		return "", fmt.Errorf("resolve cluster resource group: %w", err)
 	}
 
-	for _, cluster := range clusters {
-		if cluster == nil || cluster.Name == nil || *cluster.Name != clusterName {
-			continue
-		}
-
-		if cluster.ID == nil {
-			continue
-		}
-
-		resourceID, parseErr := arm.ParseResourceID(*cluster.ID)
-		if parseErr != nil {
-			return "", fmt.Errorf("parse ARM ID of cluster %s: %w", clusterName, parseErr)
-		}
-
-		return resourceID.ResourceGroupName, nil
+	group, found, err := aks.FindClusterResourceGroup(clusters, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("resolve cluster resource group: %w", err)
 	}
 
-	return "", fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	if !found {
+		return "", fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	}
+
+	return group, nil
 }
