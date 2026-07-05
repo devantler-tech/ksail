@@ -394,10 +394,10 @@ func CreateMinimalProvisionerForProvider(
 
 		return provisioner, nil
 
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP:
-		// AWS and GCP only support their managed distributions (EKS/GKE), which
-		// are not docker-based and cannot be produced by the minimal
-		// multi-provisioner path; their lifecycle goes through the factory.
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
+		// AWS, GCP, and Azure only support their managed distributions
+		// (EKS/GKE/AKS), which are not docker-based and cannot be produced by
+		// the minimal multi-provisioner path; their lifecycle goes through the factory.
 		return nil, fmt.Errorf(
 			"%w: %s provider is only supported via its managed distribution",
 			clusterprovisioner.ErrUnsupportedProvider,

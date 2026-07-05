@@ -143,6 +143,23 @@ func TestBuildDistributionConfig_GKE(t *testing.T) {
 	assert.Equal(t, "europe-north1", config.GKE.Location)
 }
 
+func TestBuildDistributionConfig_AKS(t *testing.T) {
+	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionAKS)
+	cluster.Spec.Provider.Azure.SubscriptionIDEnvVar = "KSAIL_TEST_AZURE_SUBSCRIPTION"
+	cluster.Spec.Provider.Azure.ResourceGroupEnvVar = "KSAIL_TEST_AZURE_RG"
+
+	t.Setenv("KSAIL_TEST_AZURE_SUBSCRIPTION", "my-subscription")
+	t.Setenv("KSAIL_TEST_AZURE_RG", "my-rg")
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.AKS)
+	assert.Equal(t, "c1", config.AKS.Name)
+	assert.Equal(t, "my-subscription", config.AKS.SubscriptionID)
+	assert.Equal(t, "my-rg", config.AKS.ResourceGroup)
+}
+
 func TestBuildDistributionConfig_Unsupported(t *testing.T) {
 	t.Parallel()
 
@@ -179,5 +196,12 @@ func TestResolveProvider(t *testing.T) {
 		t,
 		v1alpha1.ProviderGCP,
 		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionGKE)),
+	)
+
+	// AKS defaults to Azure, its only provider.
+	assert.Equal(
+		t,
+		v1alpha1.ProviderAzure,
+		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionAKS)),
 	)
 }

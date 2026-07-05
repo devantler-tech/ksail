@@ -471,3 +471,94 @@ func TestResolveGKENameFromContext(t *testing.T) {
 		})
 	}
 }
+
+// TestReadAKSConfigSpec verifies the aks.yaml cluster-spec reader across
+// missing-file, populated, unknown-field, and malformed cases.
+func TestReadAKSConfigSpec(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing file returns nil spec and no error", func(t *testing.T) {
+		t.Parallel()
+
+		path, spec, err := configmanager.ReadAKSConfigSpecForTest(
+			filepath.Join(t.TempDir(), "absent.yaml"),
+		)
+		require.NoError(t, err)
+		assert.Empty(t, path)
+		assert.Nil(t, spec)
+	})
+
+	t.Run("populated spec is parsed via the ARM JSON mapping", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "aks.yaml")
+		writeFileWithParents(t, configPath, "name: my-aks\n"+
+			"location: swedencentral\n"+
+			"properties:\n"+
+			"  agentPoolProfiles:\n"+
+			"    - name: default\n"+
+			"      count: 1\n")
+
+		path, spec, err := configmanager.ReadAKSConfigSpecForTest(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, "aks.yaml", filepath.Base(path))
+		require.NotNil(t, spec)
+		require.NotNil(t, spec.Name)
+		assert.Equal(t, "my-aks", *spec.Name)
+		require.NotNil(t, spec.Location)
+		assert.Equal(t, "swedencentral", *spec.Location)
+		require.NotNil(t, spec.Properties)
+		require.Len(t, spec.Properties.AgentPoolProfiles, 1)
+		require.NotNil(t, spec.Properties.AgentPoolProfiles[0].Name)
+		assert.Equal(t, "default", *spec.Properties.AgentPoolProfiles[0].Name)
+	})
+
+	t.Run("unknown field is tolerated by the ARM unmarshaler", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "aks.yaml")
+		writeFileWithParents(t, configPath, "name: my-aks\nnotAClusterField: true\n")
+
+		_, spec, err := configmanager.ReadAKSConfigSpecForTest(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, spec)
+		require.NotNil(t, spec.Name)
+		assert.Equal(t, "my-aks", *spec.Name)
+	})
+
+	t.Run("malformed YAML returns an error", func(t *testing.T) {
+		t.Parallel()
+
+		configPath := filepath.Join(t.TempDir(), "aks.yaml")
+		writeFileWithParents(t, configPath, "name:\n\tmy-aks\n")
+
+		_, _, err := configmanager.ReadAKSConfigSpecForTest(configPath)
+		require.Error(t, err)
+	})
+}
+
+// TestResolveAKSNameFromContext verifies AKS cluster-name resolution from the
+// kubeconfig context (az aks get-credentials names the context after the
+// cluster itself), with the default fallback.
+func TestResolveAKSNameFromContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		context string
+		want    string
+	}{
+		{name: "empty context returns default", context: "", want: "aks-default"},
+		{name: "context is the cluster name", context: "my-aks", want: "my-aks"},
+		{name: "whitespace context returns default", context: "   ", want: "aks-default"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			mgr := newConfigManagerWithContext(testCase.context)
+			assert.Equal(t, testCase.want, mgr.ResolveAKSNameFromContextForTest())
+		})
+	}
+}

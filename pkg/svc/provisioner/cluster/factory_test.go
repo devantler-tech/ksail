@@ -97,6 +97,13 @@ func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 			errorIs:            clusterprovisioner.ErrMissingDistributionConfig,
 		},
 		{
+			name:               "aks without config returns error",
+			distribution:       v1alpha1.DistributionAKS,
+			distributionConfig: &clusterprovisioner.DistributionConfig{},
+			expectError:        true,
+			errorIs:            clusterprovisioner.ErrMissingDistributionConfig,
+		},
+		{
 			name:         "unsupported distribution returns error",
 			distribution: v1alpha1.Distribution("unknown"),
 			distributionConfig: &clusterprovisioner.DistributionConfig{

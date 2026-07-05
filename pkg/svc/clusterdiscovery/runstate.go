@@ -72,7 +72,7 @@ func dockerLabelScheme(
 		return dockerprovider.LabelSchemeVCluster, true
 	case v1alpha1.DistributionKWOK:
 		return dockerprovider.LabelSchemeKWOK, true
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		return "", false
 	default:
 		return "", false

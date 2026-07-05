@@ -199,7 +199,8 @@ const distributionDetails = `See [Distributions](/concepts/#distributions) for d
 - ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)
 - ` + bt + `KWOK` + bt + ` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)
 - ` + bt + `EKS` + bt + ` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the ` + bt + `eksctl` + bt + ` CLI on ` + bt + `PATH` + bt + `)
-- ` + bt + `GKE` + bt + ` – Google Kubernetes Engine via the native Go SDK (requires Google Cloud Application Default Credentials and a project via ` + bt + `GOOGLE_CLOUD_PROJECT` + bt + `)`
+- ` + bt + `GKE` + bt + ` – Google Kubernetes Engine via the native Go SDK (requires Google Cloud Application Default Credentials and a project via ` + bt + `GOOGLE_CLOUD_PROJECT` + bt + `)
+- ` + bt + `AKS` + bt + ` – Azure Kubernetes Service via the native Go SDK (requires Azure credentials and a subscription via ` + bt + `AZURE_SUBSCRIPTION_ID` + bt + `)`
 
 // providerDetails provides prose after the provider enum list.
 const providerDetails = `See [Providers](/concepts/#providers) for more details.
@@ -209,9 +210,10 @@ const providerDetails = `See [Providers](/concepts/#providers) for more details.
 - ` + bt + `Omni` + bt + ` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
 - ` + bt + `AWS` + bt + ` – Manage EKS clusters on Amazon Web Services (requires standard AWS SDK credentials)
 - ` + bt + `GCP` + bt + ` – Manage GKE clusters on Google Cloud (requires Application Default Credentials)
+- ` + bt + `Azure` + bt + ` – Manage AKS clusters on Microsoft Azure (requires DefaultAzureCredential-compatible credentials)
 
 > [!NOTE]
-> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution. The AWS provider is only supported with the ` + bt + `EKS` + bt + ` distribution, and the GCP provider only with the ` + bt + `GKE` + bt + ` distribution.`
+> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution. The AWS provider is only supported with the ` + bt + `EKS` + bt + ` distribution, the GCP provider only with the ` + bt + `GKE` + bt + ` distribution, and the Azure provider only with the ` + bt + `AKS` + bt + ` distribution.`
 
 // configDistributionProse describes the distributionConfig field.
 const configDistributionProse = `#### distributionConfig
@@ -227,6 +229,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - ` + bt + `KWOK` + bt + ` → ` + bt + `kwok/` + bt + ` (directory)
 - ` + bt + `EKS` + bt + ` → ` + bt + `eks.yaml` + bt + `
 - ` + bt + `GKE` + bt + ` → ` + bt + `gke.yaml` + bt + ` (optional – the GKE API owns the cluster shape)
+- ` + bt + `AKS` + bt + ` → ` + bt + `aks.yaml` + bt + ` (optional – the AKS API owns the cluster shape)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.`
 

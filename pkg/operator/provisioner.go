@@ -29,6 +29,14 @@ const (
 	defaultGCPLocationEnvVar = "GOOGLE_CLOUD_LOCATION"
 )
 
+// defaultAzureSubscriptionIDEnvVar / defaultAzureResourceGroupEnvVar are the environment variables
+// the operator reads the AKS subscription and resource group from when the cluster does not name
+// its own (mirrors OptionsAzure's struct-tag defaults).
+const (
+	defaultAzureSubscriptionIDEnvVar = "AZURE_SUBSCRIPTION_ID"
+	defaultAzureResourceGroupEnvVar  = "AZURE_RESOURCE_GROUP"
+)
+
 // BuildProvisioner returns a provisioner for the cluster's distribution and provider. Distribution
 // and Provider follow the API's zero-value convention: an unset distribution means Vanilla and an
 // unset provider means Docker (their default values serialize to empty via `omitzero`). EKS uses
@@ -90,6 +98,10 @@ func resolveProvider(cluster *v1alpha1.Cluster) v1alpha1.Provider {
 		return v1alpha1.ProviderGCP
 	}
 
+	if cluster.Spec.Cluster.Distribution == v1alpha1.DistributionAKS {
+		return v1alpha1.ProviderAzure
+	}
+
 	return v1alpha1.ProviderDocker
 }
 
@@ -139,6 +151,14 @@ func buildDistributionConfig(
 				Location: gcpLocation(cluster),
 			},
 		}, nil
+	case v1alpha1.DistributionAKS:
+		return &clusterprovisioner.DistributionConfig{
+			AKS: &clusterprovisioner.AKSConfig{
+				Name:           name,
+				SubscriptionID: azureSubscriptionID(cluster),
+				ResourceGroup:  azureResourceGroup(cluster),
+			},
+		}, nil
 	default:
 		// K3s, VCluster, KWOK need only the name (shared with the local `ksail open web` backend).
 		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
@@ -186,4 +206,22 @@ func gcpProject(cluster *v1alpha1.Cluster) string {
 // resolve the cluster's own location, while create fails with a clear ErrLocationRequired.
 func gcpLocation(cluster *v1alpha1.Cluster) string {
 	return resolveEnvVar(cluster.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar)
+}
+
+// azureSubscriptionID resolves the AKS subscription from the environment variable named by the
+// cluster's Azure options (default AZURE_SUBSCRIPTION_ID). An empty result lets the AKS client
+// surface a clear ErrSubscriptionRequired.
+func azureSubscriptionID(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(
+		cluster.Spec.Provider.Azure.SubscriptionIDEnvVar, defaultAzureSubscriptionIDEnvVar,
+	)
+}
+
+// azureResourceGroup resolves the AKS resource group from the environment variable named by the
+// cluster's Azure options (default AZURE_RESOURCE_GROUP). An empty result leaves the resource
+// group unpinned: reads resolve the cluster's own group, while create fails clearly without one.
+func azureResourceGroup(cluster *v1alpha1.Cluster) string {
+	return resolveEnvVar(
+		cluster.Spec.Provider.Azure.ResourceGroupEnvVar, defaultAzureResourceGroupEnvVar,
+	)
 }

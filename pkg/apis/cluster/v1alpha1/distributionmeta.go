@@ -128,6 +128,16 @@ var distributionMetaTable = map[Distribution]distributionMeta{
 		csiByDefault:          onlyProviders(ProviderGCP),
 		loadBalancerByDefault: onlyProviders(ProviderGCP),
 	},
+	DistributionAKS: {
+		configFile:         DefaultAKSDistributionConfig,
+		defaultClusterName: "aks-default",
+		// az aks get-credentials names the kubeconfig context after the
+		// cluster itself, so no prefix or suffix applies.
+		supportedProviders:    []Provider{ProviderAzure},
+		providesStorage:       true,
+		csiByDefault:          onlyProviders(ProviderAzure),
+		loadBalancerByDefault: onlyProviders(ProviderAzure),
+	},
 }
 
 // distributionMetaFor looks up the metadata row for a distribution. The
