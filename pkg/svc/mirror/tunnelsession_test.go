@@ -340,8 +340,11 @@ func TestTunnelSession_AcceptHonoursContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestTunnelSession_DuplicateOpenTearsDownSession(t *testing.T) {
-	t.Parallel()
+// newFeedSession creates a server-role session whose inbound frames the test
+// hand-crafts through the returned pipe writer; outbound frames are
+// discarded. Shared by the protocol-error tests.
+func newFeedSession(t *testing.T) (*mirror.TunnelSession, *io.PipeWriter) {
+	t.Helper()
 
 	feedReader, feedWriter := io.Pipe()
 	session := mirror.NewTunnelSession(feedReader, io.Discard, mirror.TunnelRoleServer)
@@ -349,6 +352,14 @@ func TestTunnelSession_DuplicateOpenTearsDownSession(t *testing.T) {
 	t.Cleanup(func() {
 		_ = session.Close()
 	})
+
+	return session, feedWriter
+}
+
+func TestTunnelSession_DuplicateOpenTearsDownSession(t *testing.T) {
+	t.Parallel()
+
+	session, feedWriter := newFeedSession(t)
 
 	openFrame := mirror.Frame{StreamID: 1, Type: mirror.FrameOpen, Payload: nil}
 
@@ -364,12 +375,7 @@ func TestTunnelSession_DuplicateOpenTearsDownSession(t *testing.T) {
 func TestTunnelSession_DataForUnknownStreamIsDropped(t *testing.T) {
 	t.Parallel()
 
-	feedReader, feedWriter := io.Pipe()
-	session := mirror.NewTunnelSession(feedReader, io.Discard, mirror.TunnelRoleServer)
-
-	t.Cleanup(func() {
-		_ = session.Close()
-	})
+	session, feedWriter := newFeedSession(t)
 
 	go func() {
 		_ = mirror.WriteFrame(feedWriter, mirror.Frame{
@@ -392,12 +398,7 @@ func TestTunnelSession_DataForUnknownStreamIsDropped(t *testing.T) {
 func TestTunnelSession_PeerEOFTearsDownCleanly(t *testing.T) {
 	t.Parallel()
 
-	feedReader, feedWriter := io.Pipe()
-	session := mirror.NewTunnelSession(feedReader, io.Discard, mirror.TunnelRoleServer)
-
-	t.Cleanup(func() {
-		_ = session.Close()
-	})
+	session, feedWriter := newFeedSession(t)
 
 	require.NoError(t, feedWriter.Close())
 
@@ -408,12 +409,7 @@ func TestTunnelSession_PeerEOFTearsDownCleanly(t *testing.T) {
 func TestTunnelSession_TransportErrorSurfacesOnErr(t *testing.T) {
 	t.Parallel()
 
-	feedReader, feedWriter := io.Pipe()
-	session := mirror.NewTunnelSession(feedReader, io.Discard, mirror.TunnelRoleServer)
-
-	t.Cleanup(func() {
-		_ = session.Close()
-	})
+	session, feedWriter := newFeedSession(t)
 
 	require.NoError(t, feedWriter.CloseWithError(errTransportTorn))
 

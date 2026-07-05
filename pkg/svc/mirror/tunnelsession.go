@@ -213,7 +213,12 @@ func (s *TunnelSession) readLoop() {
 
 		err = s.dispatch(frame)
 		if err != nil {
-			loopErr = err
+			// A dispatch parked on the accept queue unblocks through the
+			// closing channel during a deliberate Close; that is a clean
+			// shutdown, not a loop failure.
+			if !s.isClosing() {
+				loopErr = err
+			}
 
 			break
 		}
