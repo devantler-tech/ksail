@@ -59,7 +59,15 @@
 //     cluster.
 //
 //   - Phase 2 — intercept: steer a subset (or all) of the Deployment's traffic to
-//     the local process and return its responses.
+//     the local process and return its responses. Unlike mirror mode, responses
+//     must flow back into the cluster, so intercept needs a reverse tunnel: the
+//     one bidirectional exec byte stream (SPDY stdin+stdout) must carry many
+//     concurrent intercepted connections at once. The foundation increment is
+//     the multiplexing wire format — [Frame], [WriteFrame], and [ReadFrame] —
+//     a self-framing, length-prefixed codec that tags each chunk with a
+//     StreamID so the mux/demux (a later increment) can present each
+//     intercepted connection as its own stream. Steering (iptables/NET_ADMIN in
+//     the tap container) and the in-cluster intercept agent follow.
 //
 //   - Phase 3 — environment & volume projection: run the local process with the
 //     target pod's env vars and mounted volumes/secrets for cluster-equivalent
