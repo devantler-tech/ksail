@@ -106,6 +106,7 @@ type Context struct {
 	KWOKConfig     *clusterprovisioner.KWOKConfig
 	EKSConfig      *clusterprovisioner.EKSConfig
 	GKEConfig      *clusterprovisioner.GKEConfig
+	AKSConfig      *clusterprovisioner.AKSConfig
 	// MirrorSpecs holds resolved registry mirror specifications for the Kubernetes
 	// provider. The nested provisioner sets these up inside the DinD environment so
 	// nested clusters pull through authenticated, caching mirrors. Nil for other
@@ -126,6 +127,7 @@ func NewContextFromConfigManager(cfgManager *ksailconfigmanager.ConfigManager) *
 		KWOKConfig:     distConfig.KWOK,
 		EKSConfig:      distConfig.EKS,
 		GKEConfig:      distConfig.GKE,
+		AKSConfig:      distConfig.AKS,
 	}
 }
 

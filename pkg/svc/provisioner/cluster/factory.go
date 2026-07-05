@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/container/apiv1/containerpb"
+	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
@@ -48,6 +49,8 @@ type DistributionConfig struct {
 	EKS *EKSConfig
 	// GKE holds the pre-loaded GKE configuration.
 	GKE *GKEConfig
+	// AKS holds the pre-loaded AKS configuration.
+	AKS *AKSConfig
 	// MirrorSpecs holds resolved registry mirror specifications. For the Kubernetes
 	// provider these are applied inside the DinD environment so nested clusters pull
 	// through authenticated, caching mirrors (the host-level CLI mirror stage cannot
@@ -92,6 +95,30 @@ type GKEConfig struct {
 // This implements the ClusterNameProvider interface used by
 // configmanager.GetClusterName.
 func (c *GKEConfig) GetClusterName() string {
+	return c.Name
+}
+
+// AKSConfig holds AKS-specific configuration.
+type AKSConfig struct {
+	// Name is the cluster name (mirrors aks.yaml name when present).
+	Name string
+	// SubscriptionID is the Azure subscription every AKS call is scoped to.
+	SubscriptionID string
+	// ResourceGroup is the Azure resource group hosting the cluster. Empty
+	// means "not pinned": reads resolve the cluster's own resource group via
+	// a subscription-wide list, while create requires a value.
+	ResourceGroup string
+	// ConfigPath is the path to the declarative aks.yaml cluster spec, when present.
+	ConfigPath string
+	// ClusterSpec is the pre-loaded declarative cluster specification parsed
+	// from ConfigPath. Required for create; nil is fine for inspection-only use.
+	ClusterSpec *armcontainerservice.ManagedCluster
+}
+
+// GetClusterName returns the AKS cluster name.
+// This implements the ClusterNameProvider interface used by
+// configmanager.GetClusterName.
+func (c *AKSConfig) GetClusterName() string {
 	return c.Name
 }
 
@@ -167,10 +194,32 @@ func (f DefaultFactory) Create(
 		return f.createVClusterProvisioner(cluster)
 	case v1alpha1.DistributionKWOK:
 		return f.createKWOKProvisioner(cluster)
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
+		return f.createManagedProvisioner(ctx, cluster)
+	default:
+		return nil, "", fmt.Errorf(
+			"%w: %s",
+			ErrUnsupportedDistribution,
+			cluster.Spec.Cluster.Distribution,
+		)
+	}
+}
+
+// createManagedProvisioner routes the managed cloud distributions (EKS, GKE,
+// AKS) to their provisioner constructors — split from Create to keep its
+// distribution switch within the complexity budget.
+func (f DefaultFactory) createManagedProvisioner(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	//nolint:exhaustive // Create routes only the managed cloud distributions here.
+	switch cluster.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionEKS:
 		return f.createEKSProvisioner(cluster)
 	case v1alpha1.DistributionGKE:
 		return f.createGKEProvisioner(ctx, cluster)
+	case v1alpha1.DistributionAKS:
+		return f.createAKSProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",

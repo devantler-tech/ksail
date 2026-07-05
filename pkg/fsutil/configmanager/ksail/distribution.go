@@ -1,6 +1,7 @@
 package configmanager
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/container/apiv1/containerpb"
+	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	gkeclient "github.com/devantler-tech/ksail/v7/pkg/client/gke"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -386,6 +388,8 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheEKSConfig()
 	case v1alpha1.DistributionGKE:
 		return m.cacheGKEConfig()
+	case v1alpha1.DistributionAKS:
+		return m.cacheAKSConfig()
 	default:
 		return nil
 	}
@@ -804,34 +808,47 @@ func envValue(envVar, fallbackVar string) string {
 	return os.Getenv(envVar)
 }
 
-// readGKEConfigSpec reads the gke.yaml at configPath (if it exists) and parses
-// it as a containerpb.Cluster via the proto JSON mapping (YAML keys use the
-// proto3 JSON camelCase names). A missing file returns a nil spec and no error
-// so callers fall back to context-based defaults; inspection-only operations
-// work without a spec, while create requires one and fails clearly without it.
-func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) {
+// readCloudConfigJSON stats and reads the cloud distribution config at
+// configPath, converting its YAML to JSON for the caller's spec unmarshaller.
+// A missing file returns ("", nil, nil) so callers fall back to context-based
+// defaults; kind names the distribution in error messages.
+func readCloudConfigJSON(configPath, kind string) (string, []byte, error) {
 	_, err := os.Stat(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil, nil
 		}
 
-		return "", nil, fmt.Errorf("failed to stat GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to stat %s config file: %w", kind, err)
 	}
 
 	canonical, err := fsutil.EvalCanonicalPath(configPath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to canonicalize GKE config path: %w", err)
+		return "", nil, fmt.Errorf("failed to canonicalize %s config path: %w", kind, err)
 	}
 
 	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to read GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to read %s config file: %w", kind, err)
 	}
 
 	jsonData, err := yaml.YAMLToJSON(data)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to parse GKE config file: %w", err)
+		return "", nil, fmt.Errorf("failed to parse %s config file: %w", kind, err)
+	}
+
+	return canonical, jsonData, nil
+}
+
+// readGKEConfigSpec reads the gke.yaml at configPath (if it exists) and parses
+// it as a containerpb.Cluster via the proto JSON mapping (YAML keys use the
+// proto3 JSON camelCase names). A missing file returns a nil spec and no error
+// so callers fall back to context-based defaults; inspection-only operations
+// work without a spec, while create requires one and fails clearly without it.
+func readGKEConfigSpec(configPath string) (string, *containerpb.Cluster, error) {
+	canonical, jsonData, err := readCloudConfigJSON(configPath, "GKE")
+	if err != nil || jsonData == nil {
+		return canonical, nil, err
 	}
 
 	clusterSpec := &containerpb.Cluster{}
@@ -855,6 +872,90 @@ func (m *ConfigManager) resolveGKENameFromContext() string {
 	}
 
 	return "gke-default"
+}
+
+// Default environment variables for the Azure subscription/resource-group
+// resolution (mirror OptionsAzure's struct-tag defaults).
+const (
+	defaultAzureSubscriptionIDEnvVar = "AZURE_SUBSCRIPTION_ID"
+	defaultAzureResourceGroupEnvVar  = "AZURE_RESOURCE_GROUP"
+)
+
+// cacheAKSConfig caches AKS configuration. The aks.yaml path comes from
+// spec.cluster.distributionConfig (defaulting to "aks.yaml") and, when the
+// file exists, is parsed as a declarative armcontainerservice.ManagedCluster
+// spec (the shape the AKS API's create call consumes). The cluster name is
+// read from the spec when present, with the kubeconfig context as fallback;
+// the subscription and resource group — which are API-call scope, not part of
+// the cluster spec — resolve from the environment variables named by
+// spec.provider.azure.
+func (m *ConfigManager) cacheAKSConfig() error {
+	configPath := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = v1alpha1.DefaultAKSDistributionConfig
+	}
+
+	resolvedPath, clusterSpec, err := readAKSConfigSpec(configPath)
+	if err != nil {
+		return err
+	}
+
+	name := ""
+	if clusterSpec != nil && clusterSpec.Name != nil {
+		name = *clusterSpec.Name
+	}
+
+	if name == "" {
+		name = m.resolveAKSNameFromContext()
+	}
+
+	m.DistributionConfig.AKS = &clusterprovisioner.AKSConfig{
+		Name: name,
+		SubscriptionID: envValue(
+			m.Config.Spec.Provider.Azure.SubscriptionIDEnvVar, defaultAzureSubscriptionIDEnvVar,
+		),
+		ResourceGroup: envValue(
+			m.Config.Spec.Provider.Azure.ResourceGroupEnvVar, defaultAzureResourceGroupEnvVar,
+		),
+		ConfigPath:  resolvedPath,
+		ClusterSpec: clusterSpec,
+	}
+
+	return nil
+}
+
+// readAKSConfigSpec reads the aks.yaml at configPath (if it exists) and parses
+// it as an armcontainerservice.ManagedCluster via the ARM SDK's JSON mapping
+// (YAML keys use the ARM API's camelCase names). A missing file returns a nil
+// spec and no error so callers fall back to context-based defaults;
+// inspection-only operations work without a spec, while create requires one
+// and fails clearly without it.
+func readAKSConfigSpec(configPath string) (string, *armcontainerservice.ManagedCluster, error) {
+	canonical, jsonData, err := readCloudConfigJSON(configPath, "AKS")
+	if err != nil || jsonData == nil {
+		return canonical, nil, err
+	}
+
+	clusterSpec := &armcontainerservice.ManagedCluster{}
+
+	err = json.Unmarshal(jsonData, clusterSpec)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to parse AKS cluster spec: %w", err)
+	}
+
+	return canonical, clusterSpec, nil
+}
+
+// resolveAKSNameFromContext falls back to the kubeconfig context for the
+// cluster name — az aks get-credentials names the context after the cluster
+// itself — and to the distribution default when no context is configured.
+func (m *ConfigManager) resolveAKSNameFromContext() string {
+	name := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	if name != "" {
+		return name
+	}
+
+	return "aks-default"
 }
 
 // externalCloudProviderPatches returns Talos patches that enable the external cloud provider.

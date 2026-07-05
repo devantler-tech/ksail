@@ -13,14 +13,14 @@ import (
 
 // SimpleDistributionConfig returns a DistributionConfig for the distributions whose configuration is
 // fully determined by the cluster name (K3s, VCluster, KWOK). It returns nil for distributions that
-// need caller-specific construction (Vanilla, Talos, EKS, GKE), letting callers handle those themselves.
-// This is shared by the operator and the local `ksail open web` backend so the name-only mappings live in
-// one place.
+// need caller-specific construction (Vanilla, Talos, EKS, GKE, AKS), letting callers handle those
+// themselves. This is shared by the operator and the local `ksail open web` backend so the name-only
+// mappings live in one place.
 func SimpleDistributionConfig(
 	distribution v1alpha1.Distribution,
 	name string,
 ) *DistributionConfig {
-	//nolint:exhaustive // Vanilla, Talos, EKS, and GKE need caller-specific construction (return nil).
+	//nolint:exhaustive // Vanilla, Talos, EKS, GKE, and AKS need caller-specific construction (return nil).
 	switch distribution {
 	case v1alpha1.DistributionK3s:
 		return &DistributionConfig{K3d: k3dconfigmanager.NewK3dSimpleConfig(name, "", "")}
@@ -49,8 +49,8 @@ func SimpleDistributionConfig(
 // EKS is intentionally NOT handled here: the local backend renders an on-disk eksctl.yaml under
 // ~/.ksail/clusters (with path-containment hardening) while the operator builds an in-memory config
 // without a path, and the region is resolved from a backend-specific env var. BuildDistributionConfig
-// returns (nil, nil) for EKS and GKE so each caller builds its own EKSConfig/GKEConfig; any other
-// unsupported distribution returns clustererr.ErrUnsupportedDistribution.
+// returns (nil, nil) for EKS, GKE, and AKS so each caller builds its own EKSConfig/GKEConfig/
+// AKSConfig; any other unsupported distribution returns clustererr.ErrUnsupportedDistribution.
 //
 // name is the already-resolved provisioned cluster name (the operator's controller.ProvisionedName or
 // the local cluster name) so this package does not depend on either caller.
@@ -76,6 +76,10 @@ func BuildDistributionConfig(
 		// GKE is backend-specific (env-var-resolved project/location + optional gke.yaml spec);
 		// the caller builds it — same contract as EKS.
 		return nil, nil //nolint:nilnil // (nil, nil) signals "GKE is caller-specific" (see doc).
+	case v1alpha1.DistributionAKS:
+		// AKS is backend-specific (env-var-resolved subscription/resource group + optional
+		// aks.yaml spec); the caller builds it — same contract as EKS and GKE.
+		return nil, nil //nolint:nilnil // (nil, nil) signals "AKS is caller-specific" (see doc).
 	case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
 		config := SimpleDistributionConfig(distribution, name)
 		if config != nil {

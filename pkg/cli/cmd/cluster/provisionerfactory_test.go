@@ -44,6 +44,11 @@ func newFullyPopulatedFactoryContext() *localregistry.Context {
 			Project:  "test-project",
 			Location: "europe-north1",
 		},
+		AKSConfig: &clusterprovisioner.AKSConfig{
+			Name:           name,
+			SubscriptionID: "test-subscription",
+			ResourceGroup:  "test-rg",
+		},
 	}
 }
 

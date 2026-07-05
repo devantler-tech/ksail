@@ -395,6 +395,23 @@ type OptionsGCP struct {
 	LocationEnvVar string `default:"GOOGLE_CLOUD_LOCATION" json:"locationEnvVar,omitzero"`
 }
 
+// OptionsAzure defines options specific to the Microsoft Azure provider used
+// by the AKS distribution. Credentials are resolved via the Azure SDK's
+// DefaultAzureCredential chain (environment, managed identity, Azure CLI);
+// the *EnvVar fields let users point KSail at non-standard environment
+// variable names (mirrors the AWS/GCP/Hetzner/Omni pattern).
+type OptionsAzure struct {
+	// SubscriptionIDEnvVar is the environment variable containing the Azure subscription ID.
+	// Defaults to "AZURE_SUBSCRIPTION_ID".
+	SubscriptionIDEnvVar string `default:"AZURE_SUBSCRIPTION_ID" json:"subscriptionIdEnvVar,omitzero"`
+	// ResourceGroupEnvVar is the environment variable containing the Azure resource group
+	// that hosts the cluster. Defaults to "AZURE_RESOURCE_GROUP". When neither the
+	// environment variable nor a configured value provides a resource group, cluster-scoped
+	// calls resolve it from the cluster's ARM ID via a subscription-wide list, and Create
+	// requires it explicitly.
+	ResourceGroupEnvVar string `default:"AZURE_RESOURCE_GROUP" json:"resourceGroupEnvVar,omitzero"`
+}
+
 // OptionsKubernetes defines options specific to the Kubernetes provider.
 // The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster.
 // It uses Gateway API (TCPRoute) to expose the nested cluster's API server.

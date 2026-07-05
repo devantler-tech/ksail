@@ -66,6 +66,15 @@ func (d *Discoverer) providerAvailability(
 			Available: false,
 			Reason:    "GCP discovery is not wired yet",
 		}
+	case v1alpha1.ProviderAzure:
+		// Azure discovery (credential probing + cluster listing) lands with
+		// the AKS discovery follow-up; until then Azure is not offered for
+		// discovery.
+		return Availability{
+			Provider:  prov,
+			Available: false,
+			Reason:    "Azure discovery is not wired yet",
+		}
 	case v1alpha1.ProviderKubernetes:
 		return kubernetesAvailability()
 	default:

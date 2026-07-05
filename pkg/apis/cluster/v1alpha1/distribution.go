@@ -25,6 +25,11 @@ const (
 	// native Go SDK (cloud.google.com/go/container); Start/Stop scale node
 	// pools via the GCP infrastructure provider.
 	DistributionGKE Distribution = "GKE"
+	// DistributionAKS is the Azure Kubernetes Service distribution (managed
+	// Kubernetes on Microsoft Azure). All lifecycle operations go through the
+	// native Go SDK (armcontainerservice); Start/Stop delegate to the managed
+	// cluster's native start/stop via the Azure infrastructure provider.
+	DistributionAKS Distribution = "AKS"
 )
 
 // ValidDistributions returns supported distribution values.
@@ -37,6 +42,7 @@ func ValidDistributions() []Distribution {
 		DistributionKWOK,
 		DistributionEKS,
 		DistributionGKE,
+		DistributionAKS,
 	}
 }
 

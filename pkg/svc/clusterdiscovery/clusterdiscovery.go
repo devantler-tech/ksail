@@ -221,6 +221,11 @@ func (d *Discoverer) listProvider(
 		// GCP cluster listing lands with ksail#5728 part 3; until then GCP
 		// clusters are not discoverable.
 		return nil, fmt.Errorf("%w: %s", clustererr.ErrUnsupportedProvider, prov)
+	case v1alpha1.ProviderAzure:
+		// Azure cluster listing lands with the AKS discovery follow-up (same
+		// deliberate gating as GCP); until then Azure clusters are not
+		// discoverable.
+		return nil, fmt.Errorf("%w: %s", clustererr.ErrUnsupportedProvider, prov)
 	case v1alpha1.ProviderKubernetes:
 		return d.listKubernetes(ctx)
 	default:
@@ -323,6 +328,8 @@ func emptyDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{EKS: &clusterprovisioner.EKSConfig{}}
 	case v1alpha1.DistributionGKE:
 		return &clusterprovisioner.DistributionConfig{GKE: &clusterprovisioner.GKEConfig{}}
+	case v1alpha1.DistributionAKS:
+		return &clusterprovisioner.DistributionConfig{AKS: &clusterprovisioner.AKSConfig{}}
 	case v1alpha1.DistributionVanilla:
 		return &clusterprovisioner.DistributionConfig{Kind: &v1alpha4.Cluster{}}
 	default:

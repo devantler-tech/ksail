@@ -67,16 +67,18 @@ func enumSpecs() []enumSpec {
 func clusterEnumSpecs() []enumSpec {
 	return []enumSpec{
 		{
-			typeName:   "Distribution",
-			newValue:   func() enumValue { return new(v1alpha1.Distribution) },
-			values:     []string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS", "GKE"},
+			typeName: "Distribution",
+			newValue: func() enumValue { return new(v1alpha1.Distribution) },
+			values: []string{
+				"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS", "GKE", "AKS",
+			},
 			defaultsTo: v1alpha1.DistributionVanilla,
 			invalidErr: v1alpha1.ErrInvalidDistribution,
 		},
 		{
 			typeName:   "Provider",
 			newValue:   func() enumValue { return new(v1alpha1.Provider) },
-			values:     []string{"Docker", "Hetzner", "Omni", "AWS", "GCP", "Kubernetes"},
+			values:     []string{"Docker", "Hetzner", "Omni", "AWS", "GCP", "Azure", "Kubernetes"},
 			defaultsTo: v1alpha1.ProviderDocker,
 			invalidErr: v1alpha1.ErrInvalidProvider,
 		},
