@@ -130,7 +130,7 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 // MintToken mints the standard EKS bearer token for the named cluster: a
 // presigned STS GetCallerIdentity URL carrying the cluster-binding header,
 // base64url-encoded under the k8s-aws-v1 prefix. The token inherits the
-// presigner's credentials and is valid for tokenExpirySeconds.
+// presigner's credentials and is valid for presignExpirySeconds.
 func (c *Client) MintToken(ctx context.Context, clusterName string) (string, error) {
 	request, err := c.presigner.PresignGetCallerIdentity(
 		ctx,

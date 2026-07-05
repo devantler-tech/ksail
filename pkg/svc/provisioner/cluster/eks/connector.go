@@ -74,6 +74,13 @@ func (p *Provisioner) Kubeconfig(ctx context.Context, name string) ([]byte, erro
 // from a described cluster, returning clustererr.ErrKubeconfigNotReady until
 // an ACTIVE cluster serves both.
 func clusterConnection(name string, cluster *ekstypes.Cluster) (string, []byte, error) {
+	if cluster == nil {
+		return "", nil, fmt.Errorf(
+			"%w: eks cluster %q has no payload",
+			clustererr.ErrKubeconfigNotReady, name,
+		)
+	}
+
 	endpoint := aws.ToString(cluster.Endpoint)
 
 	var caCertificate string

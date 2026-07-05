@@ -130,6 +130,10 @@ func TestKubeconfigNotReadyWhileProvisioning(t *testing.T) {
 			},
 		},
 		{
+			name:    "nil cluster payload",
+			cluster: nil,
+		},
+		{
 			name:    "active without endpoint",
 			cluster: activeCluster("", caBase64),
 		},
