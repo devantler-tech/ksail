@@ -400,6 +400,8 @@ func TestExists_ReportsMembership(t *testing.T) {
 	exists, err = provisioner.Exists(t.Context(), "missing")
 	require.NoError(t, err)
 	assert.False(t, exists)
+	assert.Equal(t, []string{testGroup, testGroup}, fake.lists,
+		"a pinned resource group scopes every membership list")
 }
 
 func TestExists_EmptyTargetIsFalseWithoutCalls(t *testing.T) {
