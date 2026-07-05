@@ -1,6 +1,6 @@
 ---
 title: Choose your setup
-description: Pick the right KSail distribution and infrastructure provider for your goal — a decision aid across Vanilla, K3s, Talos, VCluster, KWOK, and EKS.
+description: Pick the right KSail distribution and infrastructure provider for your goal — a decision aid across Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE, and AKS.
 ---
 
 KSail separates **what** Kubernetes you run (the *distribution*) from **where** its nodes run (the
@@ -18,6 +18,8 @@ the [Support Matrix](/support-matrix/).
 | Isolate teams or feature branches cheaply | **VCluster** | Virtual clusters inside one host — low overhead, strong isolation |
 | Scale-test controllers or the API server | **KWOK** | Simulates thousands of nodes with near-zero resource cost |
 | Managed Kubernetes on AWS | **EKS** | Managed control plane on AWS (scaffolding today; provisioning coming) |
+| Managed Kubernetes on Google Cloud | **GKE** | Managed control plane on Google Cloud, declarative `gke.yaml` spec |
+| Managed Kubernetes on Azure | **AKS** | Managed control plane on Azure, declarative `aks.yaml` spec |
 
 ## Distributions at a glance
 
@@ -29,6 +31,8 @@ the [Support Matrix](/support-matrix/).
 | [VCluster](/distributions/vcluster/) | Vind | Multi-tenancy, feature branches, CI isolation | Docker, Kubernetes |
 | [KWOK](/distributions/kwok/) | kwokctl | Simulation, scale & controller testing | Docker, Kubernetes |
 | [EKS](/distributions/eks/) | eksctl | Managed Kubernetes on AWS | AWS |
+| [GKE](/distributions/gke/) | Google Cloud SDK | Managed Kubernetes on Google Cloud | GCP |
+| [AKS](/distributions/aks/) | Azure SDK | Managed Kubernetes on Azure | Azure |
 
 ## Providers at a glance
 
@@ -42,6 +46,8 @@ containers); **Talos** additionally runs on real or virtual cloud infrastructure
 | [Hetzner](/providers/hetzner/) | Hetzner Cloud servers | Affordable real cloud clusters (Talos) |
 | [Omni (Sidero)](/providers/omni/) | Talos nodes via Sidero Omni | Managing Talos through the Omni SaaS |
 | [AWS](/providers/aws/) | Managed EKS | Managed Kubernetes on Amazon Web Services |
+| [GCP](/providers/gcp/) | Managed GKE | Managed Kubernetes on Google Cloud |
+| [Azure](/providers/azure/) | Managed AKS | Managed Kubernetes on Microsoft Azure |
 
 ## How distribution and provider combine
 
