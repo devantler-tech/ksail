@@ -689,3 +689,37 @@ func TestStopClusterSurfacesOperationError(t *testing.T) {
 	require.ErrorContains(t, err, "StopInProgress")
 	require.ErrorContains(t, err, testClusterName)
 }
+
+// TestStartClusterSurfacesOperationError pins the ErrOperationFailed wrap on
+// the start wrapper's PollUntilDone path, mirroring the stop-side test.
+func TestStartClusterSurfacesOperationError(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		BeginStart: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientBeginStartOptions,
+		) (
+			azfake.PollerResponder[armcontainerservice.ManagedClustersClientStartResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.PollerResponder[armcontainerservice.ManagedClustersClientStartResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.AddNonTerminalResponse(http.StatusAccepted, nil)
+			resp.SetTerminalError(http.StatusConflict, "StartInProgress")
+
+			return resp, errResp
+		},
+	}}
+
+	err := newTestClient(t, factory).StartCluster(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.ErrorIs(t, err, aks.ErrOperationFailed)
+	require.ErrorContains(t, err, "StartInProgress")
+	require.ErrorContains(t, err, testClusterName)
+}
