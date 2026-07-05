@@ -3,6 +3,7 @@ package gkeprovisioner
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/client/gke"
@@ -37,9 +38,11 @@ type Provisioner struct {
 	// (node-pool scale). Optional: if nil, Start/Stop return an error.
 	infraProvider provider.Provider
 	// tokenSource mints bearer tokens for Kubeconfig. Nil means Google
-	// application default credentials are resolved at call time; tests
-	// inject a static source.
+	// application default credentials are resolved (and cached) on first
+	// use; tests inject a static source.
 	tokenSource oauth2.TokenSource
+	// tokenMu guards the lazy tokenSource resolution.
+	tokenMu sync.Mutex
 }
 
 // Option customises a Provisioner beyond the required constructor arguments.

@@ -20,6 +20,11 @@ type failingTokenSource struct{}
 
 func (failingTokenSource) Token() (*oauth2.Token, error) { return nil, errBoom }
 
+// staticTokenSource is the happy-path token source tests inject.
+func staticTokenSource() oauth2.TokenSource {
+	return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"})
+}
+
 // caPEM is the raw CA material tests round-trip through the base64 field the
 // GKE API serves.
 func caPEM() []byte { return []byte("test-ca-pem") }
@@ -72,8 +77,7 @@ func TestKubeconfigBuildsOperatorUsableConfig(t *testing.T) {
 			), nil
 		},
 	}
-	source := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"})
-	provisioner := newConnectorProvisioner(t, fake, "europe-west1", source)
+	provisioner := newConnectorProvisioner(t, fake, "europe-west1", staticTokenSource())
 
 	raw, err := provisioner.Kubeconfig(t.Context(), "")
 	require.NoError(t, err)
@@ -127,10 +131,7 @@ func TestKubeconfigNotReadyWhileProvisioning(t *testing.T) {
 					return testCase.cluster, nil
 				},
 			}
-			provisioner := newConnectorProvisioner(
-				t, fake, "europe-west1",
-				oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}),
-			)
+			provisioner := newConnectorProvisioner(t, fake, "europe-west1", staticTokenSource())
 
 			_, err := provisioner.Kubeconfig(t.Context(), "")
 			require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
@@ -146,10 +147,7 @@ func TestKubeconfigClusterNotFoundAcrossLocations(t *testing.T) {
 			return listResponse(), nil
 		},
 	}
-	provisioner := newConnectorProvisioner(
-		t, fake, "",
-		oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}),
-	)
+	provisioner := newConnectorProvisioner(t, fake, "", staticTokenSource())
 
 	_, err := provisioner.Kubeconfig(t.Context(), "gke-default")
 	require.ErrorIs(t, err, gkeprovisioner.ErrClusterNotFound)
@@ -160,8 +158,10 @@ func TestKubeconfigPropagatesGetClusterError(t *testing.T) {
 
 	// getFunc left nil: the fake's GetCluster fails with errBoom.
 	provisioner := newConnectorProvisioner(
-		t, &fakeClusterManager{}, "europe-west1",
-		oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}),
+		t,
+		&fakeClusterManager{},
+		"europe-west1",
+		staticTokenSource(),
 	)
 
 	_, err := provisioner.Kubeconfig(t.Context(), "")
@@ -192,10 +192,7 @@ func TestKubeconfigRejectsMalformedClusterCA(t *testing.T) {
 			return runningCluster("203.0.113.10", "not-base64!"), nil
 		},
 	}
-	provisioner := newConnectorProvisioner(
-		t, fake, "europe-west1",
-		oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}),
-	)
+	provisioner := newConnectorProvisioner(t, fake, "europe-west1", staticTokenSource())
 
 	_, err := provisioner.Kubeconfig(t.Context(), "")
 	require.ErrorContains(t, err, "decoding gke cluster CA certificate")

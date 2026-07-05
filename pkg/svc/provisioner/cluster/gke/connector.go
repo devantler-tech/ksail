@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -70,17 +71,14 @@ func (p *Provisioner) Kubeconfig(ctx context.Context, name string) ([]byte, erro
 
 // accessToken mints a bearer token from the injected token source, falling
 // back to Google application default credentials (workload identity or a
-// mounted service-account key in the operator pod).
+// mounted service-account key in the operator pod). The resolved default
+// source is cached so credential discovery (env/file checks, metadata-server
+// probing) runs once, not on every reconcile; a failed discovery is not
+// cached, so a transient ADC error is retried on the next call.
 func (p *Provisioner) accessToken(ctx context.Context) (string, error) {
-	source := p.tokenSource
-
-	if source == nil {
-		var err error
-
-		source, err = google.DefaultTokenSource(ctx, cloudPlatformScope)
-		if err != nil {
-			return "", fmt.Errorf("resolving google default credentials: %w", err)
-		}
+	source, err := p.resolveTokenSource(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	token, err := source.Token()
@@ -89,6 +87,26 @@ func (p *Provisioner) accessToken(ctx context.Context) (string, error) {
 	}
 
 	return token.AccessToken, nil
+}
+
+// resolveTokenSource returns the injected token source, lazily resolving and
+// caching Google application default credentials when none was injected.
+func (p *Provisioner) resolveTokenSource(ctx context.Context) (oauth2.TokenSource, error) {
+	p.tokenMu.Lock()
+	defer p.tokenMu.Unlock()
+
+	if p.tokenSource != nil {
+		return p.tokenSource, nil
+	}
+
+	source, err := google.DefaultTokenSource(ctx, cloudPlatformScope)
+	if err != nil {
+		return nil, fmt.Errorf("resolving google default credentials: %w", err)
+	}
+
+	p.tokenSource = source
+
+	return source, nil
 }
 
 // writeKubeconfig serializes a single-context kubeconfig for the given
