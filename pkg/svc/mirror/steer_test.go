@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -268,6 +270,55 @@ func TestWaitForSteerTimeout(t *testing.T) {
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, mirror.ErrSteerTerminated)
+}
+
+func TestWaitForEphemeralContainerRetriesTransientGetError(t *testing.T) {
+	t.Parallel()
+
+	// A momentary apiserver error must not abort the wait: the poll keeps
+	// going and succeeds once a later Get returns the Running pod.
+	pod := podWithSteerStatus(corev1.ContainerState{Running: &corev1.ContainerStateRunning{}})
+	clientset := k8sfake.NewClientset(pod)
+
+	failed := false
+
+	clientset.PrependReactor("get", "pods",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			if failed {
+				return false, nil, nil
+			}
+
+			failed = true
+
+			return true, nil, apierrors.NewServerTimeout(
+				schema.GroupResource{Resource: "pods"}, "get", 1,
+			)
+		})
+
+	err := mirror.WaitForSteer(t.Context(), clientset, newTapPoint(), time.Second)
+
+	require.NoError(t, err)
+	assert.True(t, failed, "expected the transient Get error to have fired")
+}
+
+func TestWaitForEphemeralContainerPropagatesTerminalGetError(t *testing.T) {
+	t.Parallel()
+
+	// A terminal error (here forbidden) must surface its own cause, not be
+	// swallowed into a timeout.
+	clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+
+	clientset.PrependReactor("get", "pods",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Resource: "pods"}, "api-0", errUpdateFailed,
+			)
+		})
+
+	err := mirror.WaitForSteer(t.Context(), clientset, newTapPoint(), time.Second)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "forbidden")
 }
 
 func TestWaitForSteerIgnoresTapStatus(t *testing.T) {

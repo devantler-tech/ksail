@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -112,7 +113,9 @@ func injectEphemeralContainer(
 // point's pod reports Running, the container terminates (the kind's terminated
 // error, with its exit code), or timeout elapses. A pod without a matching
 // container status yet is simply polled again — the kubelet adds the status
-// asynchronously after injection.
+// asynchronously after injection. A transient pod read (a momentary apiserver
+// timeout, throttle, or 5xx) keeps polling rather than aborting the wait; a
+// persistent read failure surfaces its own cause once the deadline elapses.
 func waitForEphemeralContainer(
 	ctx context.Context,
 	client kubernetes.Interface,
@@ -131,6 +134,11 @@ func waitForEphemeralContainer(
 				Pods(point.Namespace).
 				Get(ctx, point.Pod, metav1.GetOptions{})
 			if err != nil {
+				if isTransientGetError(err) {
+					// Keep polling — the outer timeout bounds the wait.
+					return false, nil
+				}
+
 				return false, fmt.Errorf(
 					"getting pod %q in %s: %w",
 					point.Pod,
@@ -150,6 +158,20 @@ func waitForEphemeralContainer(
 	}
 
 	return nil
+}
+
+// isTransientGetError reports whether a pod Get error is a momentary
+// server-side condition worth retrying (an apiserver timeout, a throttle, an
+// internal 5xx, or the service being briefly unavailable) rather than a
+// terminal one. Terminal errors — a genuinely absent pod, an RBAC denial, a
+// malformed request — propagate so the wait fails fast with its real cause
+// instead of masquerading as a timeout.
+func isTransientGetError(err error) bool {
+	return apierrors.IsServerTimeout(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsInternalError(err) ||
+		apierrors.IsServiceUnavailable(err)
 }
 
 // ephemeralContainerRunning reports whether the pod's kind container is
