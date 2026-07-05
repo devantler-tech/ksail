@@ -83,6 +83,10 @@ func TestValidateCELErrorViolationFails(t *testing.T) {
 		t, err, "resources must be in the prod namespace",
 		"the rule message should surface",
 	)
+	require.NotContains(
+		t, err.Error(), "(from HelmRelease",
+		"a non-rendered document carries no HelmRelease-layer attribution",
+	)
 }
 
 func TestValidateCELWarningViolationDoesNotFail(t *testing.T) {
@@ -257,6 +261,10 @@ func TestValidateCELErrorViolationOnRenderedManifest(t *testing.T) {
 	require.Error(t, err, "a CEL rule should evaluate the rendered manifests")
 	require.ErrorContains(
 		t, err, "forbid-configmaps", "the rendered-output violation should name the rule",
+	)
+	require.ErrorContains(
+		t, err, "(from HelmRelease flux-system/app)",
+		"the rendered-output violation should carry HelmRelease-layer attribution",
 	)
 }
 
