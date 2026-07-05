@@ -71,7 +71,7 @@ func TestBuildSystemContext_WithCLIHelp(t *testing.T) {
 	t.Parallel()
 
 	result, err := chat.BuildSystemContext(chat.SystemContextConfig{
-		CLIHelp: "ksail cluster init [flags]",
+		CLIHelp: "ksail project init [flags]",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -81,7 +81,7 @@ func TestBuildSystemContext_WithCLIHelp(t *testing.T) {
 		t.Error("expected <cli_help> tag in output")
 	}
 
-	if !strings.Contains(result, "ksail cluster init") {
+	if !strings.Contains(result, "ksail project init") {
 		t.Error("expected CLI help content in output")
 	}
 }
@@ -544,7 +544,7 @@ func TestBuildSystemSections_WithCLIHelp(t *testing.T) {
 	t.Parallel()
 
 	sections := chat.BuildSystemSections(chat.SystemContextConfig{
-		CLIHelp: "ksail cluster init [flags]",
+		CLIHelp: "ksail project init [flags]",
 	})
 
 	section, ok := sections[copilot.SectionCustomInstructions]
@@ -556,7 +556,7 @@ func TestBuildSystemSections_WithCLIHelp(t *testing.T) {
 		t.Error("expected <cli_help> tag in custom instructions content")
 	}
 
-	if !strings.Contains(section.Content, "ksail cluster init") {
+	if !strings.Contains(section.Content, "ksail project init") {
 		t.Error("expected CLI help content in custom instructions")
 	}
 }

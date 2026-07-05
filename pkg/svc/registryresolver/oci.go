@@ -19,7 +19,7 @@ var ErrExternalRegistryCredentialsIncomplete = errors.New(
 	"external registry credentials are incomplete: username is set but password is empty\n" +
 		"  - ensure the token environment variable (e.g. GITHUB_TOKEN) is exported in the current environment\n" +
 		"  - configure the external registry in your cluster config (spec.cluster.localRegistry.registry in ksail.yaml),\n" +
-		"    for example via: ksail cluster init --local-registry 'user:token@host/repo'",
+		"    for example via: ksail project init --local-registry 'user:token@host/repo'",
 )
 
 // External-registry push retry configuration.

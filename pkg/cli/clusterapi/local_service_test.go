@@ -561,7 +561,7 @@ func TestCreateValidatesInput(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 
 	// A name that is a safe path component but not DNS-1123 (uppercase, underscore) is rejected at the
-	// trust boundary, matching `ksail cluster init` and blocking path-traversal-shaped names.
+	// trust boundary, matching `ksail project init` and blocking path-traversal-shaped names.
 	_, err = service.Create(
 		context.Background(),
 		clusterFor("Invalid_Name", v1alpha1.DistributionVCluster),

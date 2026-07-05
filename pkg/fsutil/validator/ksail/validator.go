@@ -498,7 +498,7 @@ func (v *Validator) validateTalosCiliumCNIAlignment(result *validator.Validation
 			Field:   cniFieldPath,
 			Message: "Cilium CNI requires cluster.network.cni.name to be 'none' in Talos configuration",
 			FixSuggestion: "Add a disable-default-cni.yaml patch to your talos/cluster directory with " +
-				"'cluster.network.cni.name: none', or run 'ksail cluster init --cni Cilium'",
+				"'cluster.network.cni.name: none', or run 'ksail project init --cni Cilium'",
 		})
 	}
 }

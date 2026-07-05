@@ -19,7 +19,7 @@ const defaultFlowCount = 20
 // Cilium CNI, since Hubble flow observability requires Cilium.
 var ErrCNINotCilium = errors.New(
 	"network observability requires the Cilium CNI; " +
-		"set 'spec.cluster.cni: Cilium' in ksail.yaml (or '--cni Cilium' at cluster init)",
+		"set 'spec.cluster.cni: Cilium' in ksail.yaml (or '--cni Cilium' at project init)",
 )
 
 // newFlowObserver builds the Hubble flow observer the network command uses.

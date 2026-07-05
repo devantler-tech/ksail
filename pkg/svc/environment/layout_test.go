@@ -32,7 +32,7 @@ func TestDeriveMultiClusterLayout_SeedsBaseAndOverlay(t *testing.T) {
 func TestDeriveMultiClusterLayout_OverlayPathMatchesAddEnvironmentConvention(t *testing.T) {
 	t.Parallel()
 
-	// The overlay must live at clusters/<env>/ so `cluster add-environment --from
+	// The overlay must live at clusters/<env>/ so `project add-environment --from
 	// <env>` (which clones <sourceDir>/clusters/<from>/) has an overlay to clone.
 	files, err := environment.DeriveMultiClusterLayout("staging")
 	require.NoError(t, err)
