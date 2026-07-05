@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -236,4 +237,224 @@ func TestRunCreateMultiNodeMissingKubeconfigDestinationFailsFast(t *testing.T) {
 	require.ErrorIs(t, err, hetznerbase.ErrMissingKubeconfigDestination)
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 	assert.Equal(t, 0, infra.createServerCalls)
+}
+
+// testSentinelPath is the join-complete sentinel the fake HA strategy exposes;
+// testSentinelProbe is the FileExists command the engine's wait issues for it.
+const (
+	testSentinelPath  = "/var/lib/fake/join-complete"
+	testSentinelProbe = "test -f '/var/lib/fake/join-complete'"
+)
+
+// testHAControlPlaneJoiners is the additional-control-plane count the HA
+// multi-node engine tests bring up alongside the init control plane and the
+// [testMultiNodeAgents] agents.
+const testHAControlPlaneJoiners = 2
+
+// fakeHAMultiNodeStrategy upgrades the multi-node fake to an
+// [hetznerbase.HAControlPlaneComposer]: its joining nodes are the additional
+// control planes first, then the agents — mirroring the real composers' order.
+type fakeHAMultiNodeStrategy struct {
+	fakeMultiNodeStrategy
+
+	controlPlaneJoiners int
+	sentinelPath        string
+}
+
+func (f *fakeHAMultiNodeStrategy) SupportsHAControlPlanes() {}
+
+func (f *fakeHAMultiNodeStrategy) ControlPlaneJoinCompletePath() string { return f.sentinelPath }
+
+func (f *fakeHAMultiNodeStrategy) ComposeJoiningNodes(
+	_, _ string,
+	joinAddress net.IP,
+	_ hetznerbase.BootstrapMaterial,
+) ([]hetznerbase.NodeSpec, error) {
+	f.receivedJoinAddress = joinAddress
+
+	specs := make([]hetznerbase.NodeSpec, 0, f.controlPlaneJoiners+f.agents)
+
+	for index := 1; index <= f.controlPlaneJoiners; index++ {
+		specs = append(specs, hetznerbase.NodeSpec{
+			Index:    index,
+			NodeType: hetzner.NodeTypeControlPlane,
+			UserData: "#cloud-config\n",
+		})
+	}
+
+	for index := 1; index <= f.agents; index++ {
+		specs = append(specs, hetznerbase.NodeSpec{
+			Index:    f.controlPlaneJoiners + index,
+			NodeType: hetzner.NodeTypeWorker,
+			UserData: "#cloud-config\n",
+		})
+	}
+
+	return specs, nil
+}
+
+// eventLog records the interleaving of server creations (engine goroutine) and
+// sentinel probes (in-process SSH server goroutines) under one mutex, so the
+// serialisation assertion is race-free.
+type eventLog struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (l *eventLog) add(event string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.events = append(l.events, event)
+}
+
+func (l *eventLog) list() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return append([]string(nil), l.events...)
+}
+
+// newHAMultiNodeBase wires a Base whose strategy composes additional control
+// planes, against an SSH server that answers the init node's kubeconfig
+// protocol and reports the join-complete sentinel via sentinelHandler.
+func newHAMultiNodeBase(
+	t *testing.T,
+	log *eventLog,
+	sentinelHandler func() (string, uint32),
+) (*hetznerbase.Base, *fakeInfra, *fakeHAMultiNodeStrategy, hetznerbase.BootstrapMaterial) {
+	t.Helper()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	kubeconfig := kubeconfigHandler(0, remoteAdminKubeconfig)
+	host, port, hostKey := startBringUpSSHServer(
+		t, pair.Signer.PublicKey(),
+		func(command string) (string, uint32) {
+			if command == testSentinelProbe {
+				return sentinelHandler()
+			}
+
+			return kubeconfig(command)
+		},
+	)
+
+	server := serverWithPublicIPv4(host)
+	server.PrivateNet = []hcloud.ServerPrivateNet{{IP: net.ParseIP(testJoinPrivateIP)}}
+
+	infra := &fakeInfra{createdServer: server, networkID: 11}
+	infra.onCreateServer = func(opts hetzner.CreateServerOpts) { log.add("create:" + opts.Name) }
+
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	base.ControlPlanes = 1 + testHAControlPlaneJoiners
+	base.Agents = testMultiNodeAgents
+	base.KubeconfigPath = filepath.Join(t.TempDir(), "kubeconfig")
+	base.BringUpPort = port
+	base.BringUpPollInterval = testPollInterval
+
+	strategy := &fakeHAMultiNodeStrategy{
+		fakeMultiNodeStrategy: fakeMultiNodeStrategy{
+			kubeconfigPath: testKubeconfigPath,
+			agents:         testMultiNodeAgents,
+		},
+		controlPlaneJoiners: testHAControlPlaneJoiners,
+		sentinelPath:        testSentinelPath,
+	}
+	base.Strategy = strategy
+
+	material := hetznerbase.BootstrapMaterial{
+		Signer:          pair.Signer,
+		AuthorizedKey:   pair.AuthorizedKey,
+		HostKeyCallback: gossh.FixedHostKey(hostKey),
+	}
+
+	return base, infra, strategy, material
+}
+
+// nodeName derives the server name the engine gives clusterName's node, so the
+// serialisation assertion matches on real creation events.
+func nodeName(t *testing.T, clusterName, nodeType string, index int) string {
+	t.Helper()
+
+	name, err := hetzner.NodeName(clusterName, nodeType, index)
+	require.NoError(t, err)
+
+	return name
+}
+
+func TestRunCreateMultiNodeSerialisesControlPlaneJoins(t *testing.T) {
+	t.Parallel()
+
+	log := &eventLog{}
+	base, infra, strategy, material := newHAMultiNodeBase(
+		t, log,
+		func() (string, uint32) {
+			log.add("join-complete-probe")
+
+			return "", 0
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	require.NoError(t, base.RunCreateMultiNode(ctx, "", strategy, material))
+
+	clusterName := base.ClusterName
+	controlPlane := hetzner.NodeTypeControlPlane
+	worker := hetzner.NodeTypeWorker
+
+	// Each control-plane joiner's join completion is observed BEFORE the next
+	// joining node is created; the agents follow without any join wait.
+	assert.Equal(t, []string{
+		"create:" + nodeName(t, clusterName, controlPlane, 0),
+		"create:" + nodeName(t, clusterName, controlPlane, 1),
+		"join-complete-probe",
+		"create:" + nodeName(t, clusterName, controlPlane, 2),
+		"join-complete-probe",
+		"create:" + nodeName(t, clusterName, worker, 3),
+		"create:" + nodeName(t, clusterName, worker, 4),
+	}, log.list())
+
+	assert.Equal(t, 0, infra.deleteNodesCalls)
+}
+
+func TestRunCreateMultiNodeControlPlaneJoinNeverCompletesCleansUp(t *testing.T) {
+	t.Parallel()
+
+	log := &eventLog{}
+	base, infra, strategy, material := newHAMultiNodeBase(
+		t, log,
+		func() (string, uint32) { return "", errExitNotFound }, // sentinel never appears
+	)
+
+	ctx, cancel := context.WithTimeout(t.Context(), testFailFastBudget)
+	defer cancel()
+
+	err := base.RunCreateMultiNode(ctx, "", strategy, material)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "wait for control-plane joiner")
+	// Only the init control plane and the first (stuck) joiner were created —
+	// the wedged join blocked every later node — and cleanup-on-failure ran.
+	assert.Equal(t, 2, infra.createServerCalls)
+	assert.Equal(t, 1, infra.deleteNodesCalls)
+}
+
+func TestRunCreateMultiNodeEmptyJoinSentinelCleansUp(t *testing.T) {
+	t.Parallel()
+
+	log := &eventLog{}
+	base, infra, strategy, material := newHAMultiNodeBase(
+		t, log,
+		func() (string, uint32) { return "", 0 },
+	)
+	strategy.sentinelPath = ""
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	err := base.RunCreateMultiNode(ctx, "", strategy, material)
+	require.ErrorIs(t, err, hetznerbase.ErrMissingControlPlaneJoinSentinel)
+	assert.Equal(t, 1, infra.deleteNodesCalls)
 }

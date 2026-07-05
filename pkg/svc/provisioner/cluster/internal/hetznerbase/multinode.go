@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 
+	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -16,6 +18,13 @@ import (
 // private IP means the network placement did not take and the join would fail.
 var ErrNoPrivateIPv4 = errors.New(
 	"hetzner: cluster-initialising control plane has no private-network IPv4 for joining nodes",
+)
+
+// ErrMissingControlPlaneJoinSentinel is returned by [Base.RunCreateMultiNode]
+// when an [HAControlPlaneComposer] supplies no join-complete sentinel path for
+// its control-plane joiners — without one their joins cannot be serialised.
+var ErrMissingControlPlaneJoinSentinel = errors.New(
+	"hetzner: control-plane join-complete sentinel path is empty",
 )
 
 // MultiNodeComposer is the optional capability a distribution's [CreateStrategy]
@@ -63,6 +72,14 @@ type HAControlPlaneComposer interface {
 	// distribution declares — by implementing this — that its ComposeJoiningNodes
 	// output is correct for additional control planes, not only agents.
 	SupportsHAControlPlanes()
+
+	// ControlPlaneJoinCompletePath returns the remote file path whose existence
+	// marks a joining control plane's bootstrap complete — a file the
+	// distribution's first boot writes only after its join command succeeded
+	// (never a file the join writes part-way, which would report completion
+	// while etcd membership is still changing). [Base.RunCreateMultiNode] polls
+	// it over SSH to serialise control-plane joins.
+	ControlPlaneJoinCompletePath() string
 }
 
 // RunCreateMultiNode runs the two-phase Hetzner create flow for a cluster with
@@ -81,13 +98,15 @@ type HAControlPlaneComposer interface {
 // takes an already-composed plan) so the SSH bring-up is testable with an
 // in-process server.
 //
-// Joining nodes are created and left to register asynchronously — the cluster is
+// Agents are created and left to register asynchronously — the cluster is
 // usable once the control plane serves the API and its kubeconfig is retrieved;
 // end-to-end join success is validated by the live smoke tests
 // (devantler-tech/ksail#5515) once the Hetzner CI lane (#4972) is restored.
-// Additional control planes currently register concurrently like agents, which
-// can race etcd member addition; serialising their joins is the final HA
-// increment (devantler-tech/ksail#5796).
+// Additional control planes are serialised instead: each control-plane joiner's
+// join-complete sentinel ([HAControlPlaneComposer.ControlPlaneJoinCompletePath])
+// is awaited over SSH before the next joining node is created, because
+// concurrent control-plane joins race etcd member addition
+// (devantler-tech/ksail#5818).
 func (b *Base) RunCreateMultiNode(
 	ctx context.Context,
 	name string,
@@ -171,9 +190,11 @@ func (b *Base) bringUpInitControlPlane(
 }
 
 // createJoiningNodes composes the joining nodes against the init control plane's
-// private-network address and creates them. They bootstrap and register
-// asynchronously, so it does not wait for a kubeconfig from them; a creation
-// failure tears the whole cluster down.
+// private-network address and creates them. Agents bootstrap and register
+// asynchronously, so it does not wait for a kubeconfig from them; a
+// control-plane joiner's join-complete sentinel is awaited before the next
+// joining node is created (etcd member addition must not be raced). A creation
+// or join failure tears the whole cluster down.
 func (b *Base) createJoiningNodes(
 	ctx context.Context,
 	clusterName string,
@@ -198,8 +219,10 @@ func (b *Base) createJoiningNodes(
 		return b.cleanUpFailedBringUp(ctx, clusterName, err)
 	}
 
-	for _, spec := range joinSpecs {
-		_, createErr := b.Servers.CreateServer(ctx, spec)
+	haComposer, _ := composer.(HAControlPlaneComposer)
+
+	for index, spec := range joinSpecs {
+		server, createErr := b.Servers.CreateServer(ctx, spec)
 		if createErr != nil {
 			return b.cleanUpFailedBringUp(
 				ctx,
@@ -207,9 +230,59 @@ func (b *Base) createJoiningNodes(
 				fmt.Errorf("create joining node %q: %w", spec.Name, createErr),
 			)
 		}
+
+		// joinSpecs is derived 1:1 in order from joinNodes, so the node's role
+		// travels by index.
+		if haComposer == nil || joinNodes[index].NodeType != hetzner.NodeTypeControlPlane {
+			continue
+		}
+
+		waitErr := b.waitForControlPlaneJoin(ctx, server, material, haComposer)
+		if waitErr != nil {
+			return b.cleanUpFailedBringUp(
+				ctx,
+				clusterName,
+				fmt.Errorf("wait for control-plane joiner %q: %w", spec.Name, waitErr),
+			)
+		}
 	}
 
 	return nil
+}
+
+// waitForControlPlaneJoin dials the created control-plane joiner over SSH with
+// the cluster's bootstrap material and waits for its join-complete sentinel, so
+// the next joining node is not created while this one's etcd member addition is
+// still in flight.
+func (b *Base) waitForControlPlaneJoin(
+	ctx context.Context,
+	server *hcloud.Server,
+	material BootstrapMaterial,
+	haComposer HAControlPlaneComposer,
+) error {
+	sentinelPath := haComposer.ControlPlaneJoinCompletePath()
+	if sentinelPath == "" {
+		return ErrMissingControlPlaneJoinSentinel
+	}
+
+	addr, err := publicSSHAddr(server, b.BringUpPort)
+	if err != nil {
+		return err
+	}
+
+	client, err := sshbootstrap.DialWithRetry(ctx, sshbootstrap.Options{
+		Addr:            addr,
+		User:            bootstrapUser,
+		Signer:          material.Signer,
+		HostKeyCallback: material.HostKeyCallback,
+	}, 0)
+	if err != nil {
+		return fmt.Errorf("dial bootstrap SSH at %s: %w", addr, err)
+	}
+
+	defer func() { _ = client.Close() }()
+
+	return waitForRemoteFile(ctx, client, sentinelPath, b.BringUpPollInterval)
 }
 
 // privateIPv4 returns the created server's first private-network IPv4, or
