@@ -71,8 +71,10 @@
 //     ([SteeringRedirect]) and the separately-injected steering agent
 //     container ([InjectSteer]/[WaitForSteer], NET_ADMIN-only — deliberately a
 //     SECOND container, never an upgrade of the NET_RAW tap, so mirror and
-//     intercept stay independently runnable). The conn↔stream pump and the
-//     CLI wiring follow.
+//     intercept stay independently runnable); and the conn↔stream pump
+//     bridging the two ([Pump], with [ForwardRedirected] accepting redirected
+//     connections agent-side and [ServeIntercepted] dialing the local process
+//     ksail-side). The CLI wiring follows.
 //
 //   - Phase 3 — environment & volume projection: run the local process with the
 //     target pod's env vars and mounted volumes/secrets for cluster-equivalent
