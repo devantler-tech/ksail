@@ -24,7 +24,7 @@ The Azure provider creates managed [Azure Kubernetes Service (AKS)](https://azur
    export AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
    export AZURE_RESOURCE_GROUP=my-resource-group
    ```
-   Creating a cluster requires the resource group. For inspection-only operations (list, info, delete, start, stop) KSail can resolve the resource group from the cluster's ARM ID via a subscription-wide search when the variable is unset.
+   Creating a cluster requires the resource group. For operations on an existing cluster — read-only ones (list, info) and lifecycle ones (start, stop, delete) — KSail can resolve the resource group from the cluster's ARM ID via a subscription-wide search when the variable is unset.
 4. **Docker** — required locally for the `ksail` CLI
 
 ## Configuration

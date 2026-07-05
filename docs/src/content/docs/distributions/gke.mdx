@@ -58,7 +58,7 @@ nodePools:
     initialNodeCount: 1
 ```
 
-Creating a cluster **requires** this file; inspection-only operations (`list`, `info`, `start`, `stop`, `delete`) work without it. Unknown fields are rejected, so the file stays in lockstep with the GKE API. Store it next to `ksail.yaml`, or point `spec.cluster.distributionConfig` at a custom path.
+Creating a cluster **requires** this file; operations on an existing cluster — read-only ones (`list`, `info`) and lifecycle ones (`start`, `stop`, `delete`) — work without it. Unknown fields are rejected, so the file stays in lockstep with the GKE API. Store it next to `ksail.yaml`, or point `spec.cluster.distributionConfig` at a custom path.
 
 ### 3. Set Credentials and Create the Cluster
 
