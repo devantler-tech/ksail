@@ -69,15 +69,24 @@ func deadlined(t *testing.T, conn net.Conn) {
 	require.NoError(t, conn.SetDeadline(time.Now().Add(testTimeout)))
 }
 
-// failingHalf is a ReadWriteCloser whose reads fail immediately, simulating a
-// torn transport under one pumped half.
+// failingHalf is a ReadWriteCloser whose reads (and, when writeErr is set,
+// writes) fail immediately, simulating a torn transport.
 type failingHalf struct {
-	readErr error
+	readErr  error
+	writeErr error
 }
 
-func (f *failingHalf) Read([]byte) (int, error)    { return 0, f.readErr }
-func (f *failingHalf) Write(p []byte) (int, error) { return len(p), nil }
-func (f *failingHalf) Close() error                { return nil }
+func (f *failingHalf) Read([]byte) (int, error) { return 0, f.readErr }
+
+func (f *failingHalf) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+
+	return len(p), nil
+}
+
+func (f *failingHalf) Close() error { return nil }
 
 func TestPump_CopiesBothDirectionsAndTearsDownOnEOF(t *testing.T) {
 	t.Parallel()
@@ -185,8 +194,40 @@ func TestForwardRedirected_ReturnsNilWhenTheSessionIsClosed(t *testing.T) {
 		forwardDone <- mirror.ForwardRedirected(context.Background(), listener, server)
 	}()
 
+	// No connection ever arrives: ending the session must unblock the parked
+	// Accept by itself.
 	require.NoError(t, client.Close())
 	require.NoError(t, server.Close())
+
+	select {
+	case forwardErr := <-forwardDone:
+		require.NoError(t, forwardErr)
+	case <-time.After(testTimeout):
+		t.Fatal("forward loop did not stop after the session closed")
+	}
+}
+
+func TestForwardRedirected_AFailedStreamOpenClosesTheConnection(t *testing.T) {
+	t.Parallel()
+
+	// A session whose transport reads block (the session stays alive) while
+	// every write fails, so opening a stream fails without the session ending.
+	blockedReader, _ := io.Pipe()
+
+	t.Cleanup(func() { _ = blockedReader.Close() })
+
+	session := mirror.NewTunnelSession(
+		blockedReader, &failingHalf{writeErr: errTransportTorn}, mirror.TunnelRoleServer,
+	)
+
+	t.Cleanup(func() { _ = session.Close() })
+
+	listener := newPipeListener()
+	forwardDone := make(chan error, 1)
+
+	go func() {
+		forwardDone <- mirror.ForwardRedirected(context.Background(), listener, session)
+	}()
 
 	clusterSide, redirected := net.Pipe()
 	deadlined(t, clusterSide)
@@ -194,9 +235,9 @@ func TestForwardRedirected_ReturnsNilWhenTheSessionIsClosed(t *testing.T) {
 
 	select {
 	case forwardErr := <-forwardDone:
-		require.NoError(t, forwardErr)
+		require.ErrorIs(t, forwardErr, errTransportTorn)
 	case <-time.After(testTimeout):
-		t.Fatal("forward loop did not stop after the session closed")
+		t.Fatal("forward loop did not stop after a failed stream open")
 	}
 
 	// The connection that could not become a stream is closed, not leaked.

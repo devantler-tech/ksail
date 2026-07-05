@@ -52,14 +52,15 @@ func copyDirection(results chan<- error, dst io.Writer, src io.Reader) {
 // ForwardRedirected is the steering agent's side of intercept: it accepts each
 // connection the iptables REDIRECT delivers to the listener, opens one tunnel
 // stream for it, and pumps the two together. It blocks until the context is
-// cancelled (returns nil — the deliberate stop closes the listener), the
-// session closes (returns nil — the tunnel ending is the session owner's event
-// to inspect via [TunnelSession.Err]), or the listener fails (returns the
-// error). Cancellation also tears down every active pump, and all pumps are
-// drained before it returns.
+// cancelled (returns nil), the session ends (returns nil — the tunnel ending
+// is the session owner's event to inspect via [TunnelSession.Err]), or the
+// listener fails (returns the error). Both stop signals close the listener so
+// a parked Accept notices them without another connection having to arrive.
+// Cancellation also tears down every active pump, and all pumps are drained
+// before it returns.
 func ForwardRedirected(ctx context.Context, listener net.Listener, session *TunnelSession) error {
-	stopClosing := context.AfterFunc(ctx, func() { _ = listener.Close() })
-	defer stopClosing()
+	stopWatch := unblockAcceptOnStop(ctx, session, listener)
+	defer stopWatch()
 
 	pumps := &sync.WaitGroup{}
 	defer pumps.Wait()
@@ -67,7 +68,7 @@ func ForwardRedirected(ctx context.Context, listener net.Listener, session *Tunn
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			if ctx.Err() != nil {
+			if stopRequested(ctx, session, err) {
 				return nil
 			}
 
@@ -78,7 +79,7 @@ func ForwardRedirected(ctx context.Context, listener net.Listener, session *Tunn
 		if err != nil {
 			_ = conn.Close()
 
-			if ctx.Err() != nil || errors.Is(err, ErrTunnelSessionClosed) {
+			if stopRequested(ctx, session, err) {
 				return nil
 			}
 
@@ -88,6 +89,49 @@ func ForwardRedirected(ctx context.Context, listener net.Listener, session *Tunn
 		pumps.Go(func() {
 			pumpUntilDone(ctx, conn, stream)
 		})
+	}
+}
+
+// unblockAcceptOnStop closes the listener when either stop signal fires — the
+// context ending or the tunnel session ending — so a parked Accept notices a
+// stop without another connection having to arrive. The returned stop
+// function releases the watcher once the accept loop has returned.
+func unblockAcceptOnStop(
+	ctx context.Context,
+	session *TunnelSession,
+	listener net.Listener,
+) func() {
+	watchDone := make(chan struct{})
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = listener.Close()
+		case <-session.Done():
+			_ = listener.Close()
+		case <-watchDone:
+		}
+	}()
+
+	return func() { close(watchDone) }
+}
+
+// stopRequested reports whether an accept-loop failure was caused by a stop
+// signal — the context ending or the session ending — rather than being a
+// genuine failure.
+func stopRequested(ctx context.Context, session *TunnelSession, err error) bool {
+	return ctx.Err() != nil || sessionEnded(session) || errors.Is(err, ErrTunnelSessionClosed)
+}
+
+// sessionEnded reports whether the session's demux loop has exited — the
+// signal the listener watcher acts on, so an Accept it unblocked can tell a
+// session end from a genuine listener failure.
+func sessionEnded(session *TunnelSession) bool {
+	select {
+	case <-session.Done():
+		return true
+	default:
+		return false
 	}
 }
 
