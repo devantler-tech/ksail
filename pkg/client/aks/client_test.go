@@ -321,6 +321,100 @@ func TestGetClusterWrapsError(t *testing.T) {
 	require.ErrorContains(t, err, "ResourceNotFound")
 }
 
+// userCredentialsFactory wires the fake ListClusterUserCredentials endpoint to
+// serve the given credential entries.
+func userCredentialsFactory(
+	kubeconfigs []*armcontainerservice.CredentialResult,
+) *fake.ServerFactory {
+	return &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		ListClusterUserCredentials: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientListClusterUserCredentialsOptions,
+		) (
+			azfake.Responder[armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.Responder[armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.SetResponse(
+				http.StatusOK,
+				armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse{
+					CredentialResults: armcontainerservice.CredentialResults{
+						Kubeconfigs: kubeconfigs,
+					},
+				},
+				nil,
+			)
+
+			return resp, errResp
+		},
+	}}
+}
+
+func TestGetClusterUserCredentialsReturnsFirstKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	kubeconfig := []byte("apiVersion: v1\nkind: Config\n")
+	name := "clusterUser"
+	factory := userCredentialsFactory([]*armcontainerservice.CredentialResult{
+		nil,
+		{Name: &name, Value: nil},
+		{Name: &name, Value: kubeconfig},
+	})
+
+	raw, err := newTestClient(t, factory).GetClusterUserCredentials(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, kubeconfig, raw)
+}
+
+func TestGetClusterUserCredentialsRejectsEmptyResponse(t *testing.T) {
+	t.Parallel()
+
+	factory := userCredentialsFactory(nil)
+
+	_, err := newTestClient(t, factory).GetClusterUserCredentials(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.ErrorIs(t, err, aks.ErrNoKubeconfig)
+}
+
+func TestGetClusterUserCredentialsWrapsError(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		ListClusterUserCredentials: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientListClusterUserCredentialsOptions,
+		) (
+			azfake.Responder[armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.Responder[armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			errResp.SetResponseError(http.StatusNotFound, "ResourceNotFound")
+
+			return resp, errResp
+		},
+	}}
+
+	_, err := newTestClient(t, factory).GetClusterUserCredentials(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.ErrorContains(t, err, "user credentials")
+	require.ErrorContains(t, err, "ResourceNotFound")
+}
+
 func TestListClustersAcrossSubscriptionDrainsAllPages(t *testing.T) {
 	t.Parallel()
 

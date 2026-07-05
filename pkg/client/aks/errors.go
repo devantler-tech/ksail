@@ -18,3 +18,9 @@ var ErrOperationFailed = errors.New("aks: cluster operation failed")
 // API always populates properties on a live pool, so this signals a malformed
 // or partial API response rather than a caller mistake.
 var ErrAgentPoolPropertiesMissing = errors.New("agent pool has no properties to update")
+
+// ErrNoKubeconfig is returned by GetClusterUserCredentials when the
+// credentials response carries no kubeconfig payload. ARM always returns at
+// least one kubeconfig for a provisioned cluster, so this signals a malformed
+// or partial API response rather than a caller mistake.
+var ErrNoKubeconfig = errors.New("aks cluster credentials carry no kubeconfig")
