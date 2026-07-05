@@ -1,0 +1,80 @@
+---
+title: Azure Provider
+description: Deploy managed Azure Kubernetes Service (AKS) clusters with KSail using the Azure provider and the DefaultAzureCredential chain.
+---
+
+The Azure provider creates managed [Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/products/kubernetes-service) clusters via the Azure SDK. It is the only provider available for the [AKS distribution](/distributions/aks/).
+
+> [!NOTE]
+> The Azure provider only supports the **AKS** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
+
+## Prerequisites
+
+1. **Azure subscription** — with permissions to create AKS clusters and their managed infrastructure
+2. **Azure credentials** — resolved via the Azure SDK's `DefaultAzureCredential` chain (environment variables, managed identity, workload identity, or Azure CLI login):
+   ```bash
+   az login
+   # or service-principal environment variables:
+   export AZURE_CLIENT_ID=...
+   export AZURE_TENANT_ID=...
+   export AZURE_CLIENT_SECRET=...
+   ```
+3. **Subscription and resource group** — exported in the environment:
+   ```bash
+   export AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
+   export AZURE_RESOURCE_GROUP=my-resource-group
+   ```
+   Creating a cluster requires the resource group. For inspection-only operations (list, info, delete, start, stop) KSail can resolve the resource group from the cluster's ARM ID via a subscription-wide search when the variable is unset.
+4. **Docker** — required locally for the `ksail` CLI
+
+## Configuration
+
+### ksail.yaml Reference
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: aks-default
+spec:
+  cluster:
+    distribution: AKS
+    provider: Azure
+```
+
+By default KSail reads the subscription from `AZURE_SUBSCRIPTION_ID` and the resource group from `AZURE_RESOURCE_GROUP`. If your environment uses different variable names, point KSail at them:
+
+```yaml
+spec:
+  provider:
+    azure:
+      subscriptionIdEnvVar: MY_SUBSCRIPTION_VAR # defaults to AZURE_SUBSCRIPTION_ID
+      resourceGroupEnvVar: MY_RESOURCE_GROUP_VAR # defaults to AZURE_RESOURCE_GROUP
+```
+
+The cluster shape (agent pools, versions, networking) lives in `aks.yaml` — see the [AKS distribution guide](/distributions/aks/) for the configuration reference.
+
+## Characteristics
+
+| Property               | Value                                   |
+| ---------------------- | --------------------------------------- |
+| Supported distribution | AKS                                     |
+| Infrastructure type    | Cloud (managed Microsoft Azure)         |
+| Local registries       | ❌ Not supported                        |
+| Local mirrors          | ❌ Not supported (use external URLs)    |
+| CNI                    | Azure CNI (provided)                    |
+| CSI                    | Azure Disk CSI driver (provided)        |
+| LoadBalancer support   | Built-in (Azure-managed)                |
+| Start/Stop             | AKS native cluster stop/start (deallocates the whole cluster, state kept) |
+
+## Limitations
+
+- Cloud provider — local Docker containers (mirrors, registries) are inaccessible from the cluster
+- Only one distribution is supported: **AKS**
+- Cloud clusters incur Azure charges while running
+
+## Related
+
+- [AKS Distribution](/distributions/aks/)
+- [Support Matrix](/support-matrix/)
