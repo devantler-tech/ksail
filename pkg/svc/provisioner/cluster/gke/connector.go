@@ -7,10 +7,9 @@ import (
 
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kubeconfigwriter"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // cloudPlatformScope is the OAuth scope GKE accepts for cluster API access;
@@ -61,12 +60,17 @@ func (p *Provisioner) Kubeconfig(ctx context.Context, name string) ([]byte, erro
 		return nil, err
 	}
 
-	return writeKubeconfig(
+	raw, err := kubeconfigwriter.Write(
 		fmt.Sprintf("gke_%s_%s_%s", p.project, location, target),
 		"https://"+endpoint,
 		certificateAuthority,
 		token,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("gke kubeconfig: %w", err)
+	}
+
+	return raw, nil
 }
 
 // accessToken mints a bearer token from the injected token source, falling
@@ -107,27 +111,4 @@ func (p *Provisioner) resolveTokenSource(ctx context.Context) (oauth2.TokenSourc
 	p.tokenSource = source
 
 	return source, nil
-}
-
-// writeKubeconfig serializes a single-context kubeconfig for the given
-// server, CA, and bearer token.
-func writeKubeconfig(contextName, server string, caData []byte, token string) ([]byte, error) {
-	config := clientcmdapi.NewConfig()
-	config.Clusters[contextName] = &clientcmdapi.Cluster{
-		Server:                   server,
-		CertificateAuthorityData: caData,
-	}
-	config.AuthInfos[contextName] = &clientcmdapi.AuthInfo{Token: token}
-	config.Contexts[contextName] = &clientcmdapi.Context{
-		Cluster:  contextName,
-		AuthInfo: contextName,
-	}
-	config.CurrentContext = contextName
-
-	raw, err := clientcmd.Write(*config)
-	if err != nil {
-		return nil, fmt.Errorf("serializing gke kubeconfig: %w", err)
-	}
-
-	return raw, nil
 }
