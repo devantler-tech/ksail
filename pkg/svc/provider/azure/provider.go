@@ -134,12 +134,9 @@ func (p *Provider) ListNodes(
 	ctx context.Context,
 	clusterName string,
 ) ([]provider.NodeInfo, error) {
-	cluster, err := p.getCluster(ctx, clusterName)
-	if err != nil {
-		return nil, err
-	}
+	_, nodes, err := p.clusterNodes(ctx, clusterName)
 
-	return agentPoolInfos(cluster, clusterName), nil
+	return nodes, err
 }
 
 // ListAllClusters returns the names of all AKS clusters in the configured
@@ -189,12 +186,10 @@ func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
-	cluster, err := p.getCluster(ctx, clusterName)
+	cluster, nodes, err := p.clusterNodes(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
-
-	nodes := agentPoolInfos(cluster, clusterName)
 
 	status := provider.BuildClusterStatus(nodes, agentPoolReadyState)
 	if status == nil {
@@ -212,6 +207,22 @@ func (p *Provider) GetClusterStatus(
 // with (empty when operating subscription-wide).
 func (p *Provider) ResourceGroup() string {
 	return p.resourceGroup
+}
+
+// clusterNodes is the shared fetch-and-collapse behind ListNodes and
+// GetClusterStatus: it fetches the cluster once and maps its agent pools to
+// NodeInfo entries, returning the cluster too for callers that need more of
+// it (e.g. the API-server FQDN).
+func (p *Provider) clusterNodes(
+	ctx context.Context,
+	clusterName string,
+) (armcontainerservice.ManagedCluster, []provider.NodeInfo, error) {
+	cluster, err := p.getCluster(ctx, clusterName)
+	if err != nil {
+		return armcontainerservice.ManagedCluster{}, nil, err
+	}
+
+	return cluster, agentPoolInfos(cluster, clusterName), nil
 }
 
 // getCluster is the shared cluster fetch that guards against nil clients and
