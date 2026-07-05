@@ -57,6 +57,15 @@ var (
 // (kubeadm's manual certificate distribution).
 func (p *Provisioner) SupportsHAControlPlanes() {}
 
+// ControlPlaneJoinCompletePath returns the sentinel the kubeadm first-boot
+// bootstrap writes once its `kubeadm join` command succeeded, satisfying
+// [hetznerbase.HAControlPlaneComposer]: the shared flow polls it over SSH to
+// serialise control-plane joins — kubeadm's etcd member addition must not be
+// raced by a concurrently-joining control plane.
+func (p *Provisioner) ControlPlaneJoinCompletePath() string {
+	return kubeadmbootstrap.BootstrapSentinelPath
+}
+
 // JoinName returns the cluster's stable join name: the DNS name the joining
 // nodes dial the cluster-initialising control plane by, and the extra SAN its
 // API-server serving certificate carries.

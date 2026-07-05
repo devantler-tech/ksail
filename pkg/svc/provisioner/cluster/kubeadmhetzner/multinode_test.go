@@ -218,6 +218,10 @@ func TestComposeJoiningNodesComposesAdditionalControlPlanes(t *testing.T) {
 		assert.Equal(t, hetzner.NodeTypeControlPlane, spec.NodeType)
 		assert.Contains(t, spec.UserData, "controlPlane", "a control-plane joiner must join as one")
 		assert.Contains(t, spec.UserData, "kubeadm join")
+		assert.Contains(t, spec.UserData,
+			"&& touch "+prov.ControlPlaneJoinCompletePath(),
+			"a control-plane joiner must chain the join-complete sentinel the "+
+				"serialised bring-up polls for")
 
 		for _, path := range privatePKIPaths {
 			assert.Contains(t, spec.UserData, path,
