@@ -303,15 +303,15 @@ func (b *Base) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("check network: %w", err)
 	}
 
-	if !networkExists {
-		return nil
+	if networkExists {
+		err = b.Infra.DeleteNodes(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
 	}
 
-	err = b.Infra.DeleteNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("delete nodes: %w", err)
-	}
-
+	// Clean the published Connector Secret on BOTH paths — a retry after the infra
+	// is already gone must not orphan the credential in the hub namespace.
 	err = b.deleteConnectorKubeconfig(ctx, clusterName)
 	if err != nil {
 		// The cluster itself is gone; a leftover Secret must not fail the delete.

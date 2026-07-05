@@ -2,6 +2,7 @@ package clusterprovisioner
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -159,6 +160,15 @@ func connectorHub() (kubernetes.Interface, string) {
 
 	clientset, _, _, err := clientsFromRESTConfig(restConfig)
 	if err != nil {
+		// In-cluster config resolved, so this is NOT the expected outside-a-pod
+		// case: the hub wiring itself broke. Say so — a silent nil here disables
+		// the Connector publish with no diagnostic trail.
+		slog.Warn(
+			"connector hub: in-cluster config resolved but building the hub clientset failed; "+
+				"connector kubeconfig publishing is disabled",
+			"error", err,
+		)
+
 		return nil, ""
 	}
 

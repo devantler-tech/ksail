@@ -2,6 +2,7 @@ package hetznerbase_test
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -190,4 +191,20 @@ func TestDeleteConnectorKubeconfig_SkipsWithoutHub(t *testing.T) {
 	err := base.DeleteConnectorKubeconfigForTest(context.Background(), connectorTestCluster)
 
 	require.NoError(t, err)
+}
+
+func TestDelete_CleansConnectorSecretWhenNetworkAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(publishedSecret([]byte("kubeconfig")))
+	base := newConnectorBase(clientset)
+	base.Infra = &fakeInfra{networkExists: false}
+	base.LogWriter = io.Discard
+
+	err := base.Delete(context.Background(), connectorTestCluster)
+	require.NoError(t, err)
+
+	// The retry-after-teardown path must not orphan the credential Secret.
+	_, err = base.Kubeconfig(context.Background(), connectorTestCluster)
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
 }

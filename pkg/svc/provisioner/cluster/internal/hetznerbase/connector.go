@@ -3,12 +3,15 @@ package hetznerbase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -19,6 +22,14 @@ const (
 	// Secret ("<prefix>-<name>-kubeconfig", mirroring the nested distributions'
 	// "<distribution>-<name>-kubeconfig" convention).
 	connectorSecretSuffix = "kubeconfig"
+	// connectorPublishSteps / connectorPublishBaseDelay / connectorPublishFactor
+	// bound the retry around the hub Secret upsert. The publish runs at the very
+	// end of a paid bring-up whose failure path tears the cluster down, so a
+	// transient hub API blip must be absorbed here; only a persistent failure —
+	// the operator could never reach the child anyway — is worth the teardown.
+	connectorPublishSteps     = 4
+	connectorPublishBaseDelay = 250 * time.Millisecond
+	connectorPublishFactor    = 2.0
 )
 
 // connectorSecretName is the single source of truth for the Connector kubeconfig
@@ -72,7 +83,18 @@ func (b *Base) publishConnectorKubeconfig(
 		Data: map[string][]byte{connectorKubeconfigKey: kubeconfig},
 	}
 
-	err := nested.UpsertSecret(ctx, b.Hub, secret)
+	// Retry any error with backoff: UpsertSecret itself only retries update
+	// conflicts, and the caller's failure path destroys the just-provisioned
+	// servers — too drastic for a transient hub API failure.
+	backoff := wait.Backoff{
+		Steps:    connectorPublishSteps,
+		Duration: connectorPublishBaseDelay,
+		Factor:   connectorPublishFactor,
+	}
+
+	err := retry.OnError(backoff, func(error) bool { return true }, func() error {
+		return nested.UpsertSecret(ctx, b.Hub, secret)
+	})
 	if err != nil {
 		return fmt.Errorf("publish connector kubeconfig: %w", err)
 	}
