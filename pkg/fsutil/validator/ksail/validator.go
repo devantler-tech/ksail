@@ -240,9 +240,9 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getVClusterConfigName()
 	case v1alpha1.DistributionKWOK:
 		return v.getKWOKConfigName()
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
-		// EKS/GKE configs are not provided to the validator (eksctl / the GKE
-		// API manage them); skip distribution-level name validation.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
+		// EKS/GKE/AKS configs are not provided to the validator (eksctl / the
+		// cloud APIs manage them); skip distribution-level name validation.
 		return ""
 	default:
 		return ""
@@ -336,10 +336,10 @@ func (v *Validator) validateCiliumCNI(
 	case v1alpha1.DistributionTalos:
 		v.validateTalosCiliumCNIAlignment(result)
 	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK,
-		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		// VCluster manages its own CNI internally; KWOK simulates all pods;
-		// EKS uses AWS VPC CNI and GKE its managed dataplane (cloud-managed).
-		// No alignment check needed.
+		// EKS uses AWS VPC CNI, GKE its managed dataplane, and AKS Azure CNI
+		// (all cloud-managed). No alignment check needed.
 	}
 }
 
@@ -356,8 +356,8 @@ func (v *Validator) validateDefaultCNI(
 	case v1alpha1.DistributionTalos:
 		v.validateTalosDefaultCNIAlignment(result)
 	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK,
-		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
-		// VCluster, KWOK, EKS, and GKE manage CNI internally; no alignment check needed.
+		v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
+		// VCluster, KWOK, EKS, GKE, and AKS manage CNI internally; no alignment check needed.
 	}
 }
 
@@ -498,7 +498,7 @@ func (v *Validator) validateTalosCiliumCNIAlignment(result *validator.Validation
 			Field:   cniFieldPath,
 			Message: "Cilium CNI requires cluster.network.cni.name to be 'none' in Talos configuration",
 			FixSuggestion: "Add a disable-default-cni.yaml patch to your talos/cluster directory with " +
-				"'cluster.network.cni.name: none', or run 'ksail cluster init --cni Cilium'",
+				"'cluster.network.cni.name: none', or run 'ksail project init --cni Cilium'",
 		})
 	}
 }

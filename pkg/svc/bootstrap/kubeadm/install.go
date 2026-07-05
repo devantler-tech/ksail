@@ -15,6 +15,19 @@ const ConfigPath = "/etc/kubernetes/ksail/kubeadm-config.yaml"
 // the shared bootstrap token, so it is root read/write only.
 const configPermissions = "0600"
 
+// sentinelDir is the ksail-managed directory the bootstrap-completion sentinel
+// lands in; it is created by the same first-boot command that writes the
+// sentinel.
+const sentinelDir = "/var/lib/ksail"
+
+// BootstrapSentinelPath is the file the node's first-boot bootstrap writes after
+// its kubeadm command succeeded — the reliable "bootstrap finished" signal a
+// live bring-up polls for over SSH. For a joining control plane this marks
+// `kubeadm join --control-plane` complete, including etcd member addition; none
+// of kubeadm's own files can stand in for it (admin.conf, for one, is written
+// during the control-plane-prepare phase, before the etcd member is added).
+const BootstrapSentinelPath = sentinelDir + "/bootstrap-complete"
+
 // packageRepoBaseURL is the base of the Kubernetes community (pkgs.k8s.io) package
 // repository. A node installs the kube* components from the stable channel of its
 // pinned minor track, e.g. .../core:/stable:/v1.31/deb/.
@@ -191,7 +204,9 @@ func RenderInstall(cfg InstallConfig) (Install, error) {
 // bootstrapCommands returns the ordered first-boot commands for role: enable the
 // container runtime, pin the kube* packages so an unattended upgrade cannot break
 // the control plane mid-cluster, then run the role's kubeadm bootstrap command
-// against the dropped config.
+// against the dropped config. The bootstrap command chains the completion
+// sentinel (`&&`, so it is written only when kubeadm succeeded) — see
+// [BootstrapSentinelPath].
 func bootstrapCommands(role Role) []string {
 	bootstrap := "kubeadm init --config " + ConfigPath
 	if role != RoleServerInit {
@@ -201,7 +216,7 @@ func bootstrapCommands(role Role) []string {
 	return []string{
 		"systemctl enable --now " + containerdPackage,
 		"apt-mark hold " + strings.Join(kubePackages(), " "),
-		bootstrap,
+		bootstrap + " && mkdir -p " + sentinelDir + " && touch " + BootstrapSentinelPath,
 	}
 }
 

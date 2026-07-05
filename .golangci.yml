@@ -173,6 +173,19 @@ linters:
             # Google Cloud dependency graph.
             - cloud.google.com/go/container
             - github.com/googleapis/gax-go
+            # github.com/Azure/azure-sdk-for-go is the official native AKS SDK backing
+            # pkg/client/aks (cluster lifecycle for the AKS provider, #4510):
+            # armcontainerservice for the management plane, azcore/azidentity for
+            # transport and the DefaultAzureCredential chain.
+            - github.com/Azure/azure-sdk-for-go
+            # github.com/aws/aws-sdk-go-v2 is the official native AWS SDK backing
+            # pkg/client/eks (EKS control-plane reads + bearer-token minting for the
+            # operator Connector, #5825): service/eks for DescribeCluster, service/sts
+            # for the presigned GetCallerIdentity token, smithy-go for the signed
+            # headers that bind it to a cluster. Already linked transitively via the
+            # go-containerregistry ECR credential stack.
+            - github.com/aws/aws-sdk-go-v2
+            - github.com/aws/smithy-go
             - filippo.io/age
             - golang.design/x
             # x/crypto/ssh backs pkg/svc/bootstrap/ssh — the post-provision

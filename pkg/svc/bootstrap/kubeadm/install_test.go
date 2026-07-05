@@ -92,7 +92,8 @@ func TestRenderInstallServerInitBootstrapsWithInit(t *testing.T) {
 	assert.Equal(t, []string{
 		"systemctl enable --now containerd",
 		"apt-mark hold kubelet kubeadm kubectl",
-		"kubeadm init --config " + kubeadmbootstrap.ConfigPath,
+		"kubeadm init --config " + kubeadmbootstrap.ConfigPath +
+			" && mkdir -p /var/lib/ksail && touch " + kubeadmbootstrap.BootstrapSentinelPath,
 	}, install.Commands)
 }
 
@@ -112,9 +113,11 @@ func TestRenderInstallJoiningNodesBootstrapWithJoin(t *testing.T) {
 
 		require.NotEmpty(t, install.Commands)
 		assert.Equal(t,
-			"kubeadm join --config "+kubeadmbootstrap.ConfigPath,
+			"kubeadm join --config "+kubeadmbootstrap.ConfigPath+
+				" && mkdir -p /var/lib/ksail && touch "+kubeadmbootstrap.BootstrapSentinelPath,
 			install.Commands[len(install.Commands)-1],
-			"a joining node (%q) runs `kubeadm join`, not `kubeadm init`",
+			"a joining node (%q) runs `kubeadm join`, not `kubeadm init`, and chains "+
+				"the completion sentinel so it appears only on success",
 			role,
 		)
 	}

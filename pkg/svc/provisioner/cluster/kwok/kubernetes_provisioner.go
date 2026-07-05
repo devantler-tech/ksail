@@ -17,6 +17,7 @@ import (
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -32,6 +33,7 @@ const kwokContainerRestartDelay = 3 * time.Second
 type KubernetesProvisioner struct {
 	*Provisioner
 
+	hostClientset    kubernetes.Interface
 	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
@@ -44,26 +46,13 @@ type KubernetesProvisioner struct {
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
 type KubernetesProvisionerConfig struct {
+	// DinDProvisionerConfig holds the host-cluster wiring shared with the Kind DinD provisioner.
+	kubernetesprovider.DinDProvisionerConfig
+
 	// Name is the KWOK cluster name passed to kwokctl.
 	Name string
 	// ConfigPath is the optional path to a kwok.yaml configuration file.
 	ConfigPath string
-	// KubeconfigPath is the path to the nested cluster's kubeconfig.
-	KubeconfigPath string
-	// K8sProvider is the Kubernetes infrastructure provider.
-	K8sProvider *kubernetesprovider.Provider
-	// DynamicClient is the dynamic client for Gateway API resources.
-	DynamicClient dynamic.Interface
-	// RestConfig is the REST config for port-forwarding to the DinD pod.
-	RestConfig *rest.Config
-	// ClusterName is the nested cluster name (used for namespace, labels).
-	ClusterName string
-	// Distribution is the distribution name (for labels).
-	Distribution string
-	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
-	GatewayClassName string
-	// Persistence holds PVC configuration for the DinD Docker data directory.
-	Persistence v1alpha1.KubernetesPersistence
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps KWOK with DinD lifecycle.
@@ -81,6 +70,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
+		hostClientset:    cfg.HostClientset,
 		k8sProvider:      cfg.K8sProvider,
 		dynamicClient:    cfg.DynamicClient,
 		restConfig:       cfg.RestConfig,
@@ -247,6 +237,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	err = p.rewriteKubeconfig(name, exposure.ServerURL())
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
+	}
+
+	// Step 13: Publish the nested cluster's kubeconfig as a host-cluster Secret so the operator's
+	// Connector can install components into the child cluster (see connector.go).
+	err = p.publishConnectorKubeconfig(ctx, target)
+	if err != nil {
+		return fmt.Errorf("publish connector kubeconfig: %w", err)
 	}
 
 	return nil
@@ -590,6 +587,27 @@ func (p *KubernetesProvisioner) restartContainersInDinD(
 
 	// Give the containers a moment to start up
 	time.Sleep(kwokContainerRestartDelay)
+
+	return nil
+}
+
+// publishConnectorKubeconfig publishes the nested KWOK cluster's kubeconfig under its Connection
+// naming contract so Kubeconfig() can serve it back to the operator (see
+// nested.PublishConnectorKubeconfig for the shared DinD publish flow).
+func (p *KubernetesProvisioner) publishConnectorKubeconfig(
+	ctx context.Context,
+	target string,
+) error {
+	conn := ConnectionFor(target)
+
+	err := nested.PublishConnectorKubeconfig(
+		ctx, p.hostClientset, kwokKubeconfigKey, p.kubeconfigPath,
+		conn.ContextName, conn.Namespace, conn.SecretName,
+		kubernetesprovider.CommonLabels(target),
+	)
+	if err != nil {
+		return fmt.Errorf("kwok: %w", err)
+	}
 
 	return nil
 }

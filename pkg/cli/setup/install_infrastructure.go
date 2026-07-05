@@ -188,11 +188,12 @@ func InstallLoadBalancerSilent(
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
 	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS,
-		v1alpha1.DistributionGKE:
+		v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		// VCluster (Vind) handles LoadBalancer via its own networking.
 		// KWOK is a simulation cluster with no real network dataplane.
 		// EKS relies on AWS Load Balancer Controller (installed separately).
 		// GKE relies on GCP's built-in cloud load balancing.
+		// AKS relies on Azure's built-in cloud load balancing.
 		return nil
 	}
 
@@ -220,6 +221,9 @@ func installTalosLoadBalancer(
 		return nil
 	case v1alpha1.ProviderGCP:
 		// GCP is not a supported provider for Talos.
+		return nil
+	case v1alpha1.ProviderAzure:
+		// Azure is not a supported provider for Talos.
 		return nil
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider: no additional load balancer needed.

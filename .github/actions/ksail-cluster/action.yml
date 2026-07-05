@@ -12,10 +12,10 @@ inputs:
     description: "Infrastructure provider (Docker, Hetzner, Omni). Cloud providers require credentials via env vars: HCLOUD_TOKEN for Hetzner, OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT for Omni."
     default: "Docker"
   args:
-    description: "Additional CLI arguments passed to cluster init (and create when init is skipped)"
+    description: "Additional CLI arguments passed to project init (and create when init is skipped)"
     default: ""
   init:
-    description: "Whether to run ksail cluster init before create"
+    description: "Whether to run ksail project init before create"
     default: "true"
   ksail-version:
     description: "KSail version to install (e.g. '5.55.0') or 'latest'"
@@ -308,7 +308,7 @@ runs:
         set -o pipefail
         mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
-        ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
+        ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'

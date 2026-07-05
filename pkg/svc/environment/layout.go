@@ -55,7 +55,7 @@ type LayoutFile struct {
 // DeriveMultiClusterLayout returns the files for a multi-cluster GitOps source
 // tree: a shared base at clusters/base/ plus one per-environment overlay at
 // clusters/<envName>/ that references the base. It is the pure, filesystem-free
-// foundation of the multi-cluster mode for cluster init — the structured
+// foundation of the multi-cluster mode for project init — the structured
 // counterpart to [DeriveRewrites] for the clone path — so the layout can be
 // asserted in isolation before a later increment threads it through the
 // scaffolder and an init flag.
@@ -65,7 +65,7 @@ type LayoutFile struct {
 // — server-side, not in the source tree); the user fills clusters/base/ with the
 // shared workload. The environment overlay references the base via the sibling
 // path ../base, so adding a second environment is a [CloneOverlay] of an existing
-// clusters/<env>/ overlay — the layout the cluster add-environment command
+// clusters/<env>/ overlay — the layout the project add-environment command
 // already expects.
 //
 // envName is validated with [v1alpha1.ValidateClusterName] (defence in depth

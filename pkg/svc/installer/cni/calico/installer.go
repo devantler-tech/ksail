@@ -335,8 +335,9 @@ func (c *Installer) getCalicoValues() map[string]string {
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
-		v1alpha1.DistributionGKE:
-		// Vanilla, K3s, VCluster, KWOK, EKS, and GKE use default values.
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
+		// Vanilla, K3s, VCluster, KWOK, EKS, GKE, and AKS use default values.
 	}
 
 	return values

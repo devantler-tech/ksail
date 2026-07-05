@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -26,7 +27,11 @@ const (
 // TriggerOCIRepositoryReconciliation triggers OCIRepository reconciliation without waiting.
 // It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
 // yet created, API server temporarily unavailable).
-func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) error {
+//
+// It returns the reconcile-request token written to the resource; pass it to
+// WaitForOCIRepositoryReady so the wait gates on this request being handled (via
+// status.lastHandledReconcileAt) rather than trusting a stale Ready condition.
+func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) (string, error) {
 	return triggerReconciliationWithRetry(
 		ctx,
 		r.ociRepositoryClient(),
@@ -37,7 +42,21 @@ func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) err
 
 // WaitForOCIRepositoryReady waits for the OCIRepository to be ready.
 // If timeout is zero or negative, the default ociRepositoryReadyTimeout is used.
-func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time.Duration) error {
+//
+// expectedReconcileToken is the value returned by
+// TriggerOCIRepositoryReconciliation. When non-empty, readiness additionally
+// requires that this reconcile request has been handled
+// (status.lastHandledReconcileAt == token) AND has finished (no Reconciling=True
+// condition) — proving the source controller has processed *this* request and
+// served the just-pushed artifact, rather than reporting a Ready condition left
+// over from a previous reconcile of a stale revision (bug #5717). An empty token
+// preserves the prior condition-only behaviour for callers that did not just
+// trigger.
+func (r *Reconciler) WaitForOCIRepositoryReady(
+	ctx context.Context,
+	timeout time.Duration,
+	expectedReconcileToken string,
+) error {
 	if timeout <= 0 {
 		timeout = ociRepositoryReadyTimeout
 	}
@@ -53,7 +72,9 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time
 	ociRepoClient := r.ociRepositoryClient()
 
 	for {
-		ready, err := r.pollOCIRepositoryStatus(timeoutCtx, ociRepoClient, &lastErr)
+		ready, err := r.pollOCIRepositoryStatus(
+			timeoutCtx, ociRepoClient, expectedReconcileToken, &lastErr,
+		)
 		if err != nil {
 			return err
 		}
@@ -76,6 +97,7 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time
 func (r *Reconciler) pollOCIRepositoryStatus(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
+	expectedReconcileToken string,
 	lastErr *error,
 ) (bool, error) {
 	err := ctx.Err()
@@ -83,7 +105,7 @@ func (r *Reconciler) pollOCIRepositoryStatus(
 		return false, ociTimeoutError(*lastErr)
 	}
 
-	ready, err := r.checkOCIRepositoryStatus(ctx, client)
+	ready, err := r.checkOCIRepositoryStatus(ctx, client, expectedReconcileToken)
 	if err != nil {
 		if isPermanentOCIError(err) {
 			return false, err
@@ -116,16 +138,79 @@ func (r *Reconciler) ociRepositoryClient() dynamic.ResourceInterface {
 }
 
 // checkOCIRepositoryStatus checks if the OCIRepository has successfully fetched an artifact.
+//
+// When expectedReconcileToken is non-empty the resource must first have handled
+// that specific reconcile request (status.lastHandledReconcileAt == token) AND
+// have finished reconciling it (no Reconciling=True condition) before its Ready
+// condition is trusted. status.lastHandledReconcileAt is only an *acknowledgement*
+// — the source controller records it when it picks up the request but keeps the
+// prior Ready=True until the reconcile completes, so gating on the token alone
+// would accept a Ready left over from a previous reconcile of a stale revision
+// before the just-pushed artifact is ingested (bug #5717). Requiring the
+// Reconciling condition to have cleared mirrors `flux reconcile --wait`, which
+// waits for the object to settle before reporting it ready.
 func (r *Reconciler) checkOCIRepositoryStatus(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
+	expectedReconcileToken string,
 ) (bool, error) {
 	ociRepo, err := client.Get(ctx, rootOCIRepositoryName, metav1.GetOptions{})
 	if err != nil {
 		return false, fmt.Errorf("get flux oci repository: %w", err)
 	}
 
-	return evaluateOCIRepositoryConditions(reconciler.ParseConditions(ociRepo))
+	if !reconcileRequestHandled(ociRepo, expectedReconcileToken) {
+		// Transient: keep waiting, but record the real cause so a timeout points at
+		// the unserved push rather than the generic not-ready error.
+		return false, ErrOCIRepositoryReconcileNotHandled
+	}
+
+	conditions := reconciler.ParseConditions(ociRepo)
+
+	// A handled request that is still reconciling means the controller has only
+	// acknowledged our trigger, not finished serving the new artifact — keep
+	// waiting rather than trusting the stale Ready (#5717). Only enforced when we
+	// triggered the reconcile; the empty-token path keeps its condition-only
+	// behaviour.
+	if expectedReconcileToken != "" && reconcileInProgress(conditions) {
+		return false, ErrOCIRepositoryReconcileInProgress
+	}
+
+	return evaluateOCIRepositoryConditions(conditions)
+}
+
+// reconcileRequestHandled reports whether the resource's
+// status.lastHandledReconcileAt matches the token we requested. An empty token
+// (no fresh trigger) is always considered handled so the condition-only path is
+// preserved.
+func reconcileRequestHandled(
+	resource *unstructured.Unstructured,
+	expectedReconcileToken string,
+) bool {
+	if expectedReconcileToken == "" {
+		return true
+	}
+
+	handled, _, _ := unstructured.NestedString(
+		resource.Object, "status", "lastHandledReconcileAt",
+	)
+
+	return handled == expectedReconcileToken
+}
+
+// reconcileInProgress reports whether the resource carries a Reconciling=True
+// condition — i.e. the source controller is mid-reconcile and any Ready
+// condition still reflects the previous artifact. Flux adds this condition while
+// reconciling and removes it once the object settles, so its absence (together
+// with a handled reconcile token) marks the triggered reconcile as complete.
+func reconcileInProgress(conditions []reconciler.Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == conditionTypeReconciling {
+			return cond.Status == conditionStatusTrue
+		}
+	}
+
+	return false
 }
 
 // evaluateOCIRepositoryConditions evaluates conditions to determine readiness.

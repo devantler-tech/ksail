@@ -19,6 +19,22 @@ var (
 	ErrOCIRepositoryNotReady = errors.New(
 		"flux OCIRepository is not ready - ensure you have pushed an artifact with 'ksail workload push'",
 	)
+	// ErrOCIRepositoryReconcileNotHandled is recorded while the source controller
+	// has not yet handled the reconcile request we triggered. Surfaced on timeout
+	// so the cause — the just-pushed artifact was never served — is visible instead
+	// of the generic not-ready error.
+	ErrOCIRepositoryReconcileNotHandled = errors.New(
+		"flux OCIRepository has not handled the triggered reconcile request - " +
+			"the pushed artifact was not served before the timeout",
+	)
+	// ErrOCIRepositoryReconcileInProgress is recorded while the source controller
+	// is still reconciling the request we triggered (Reconciling=True), so its
+	// Ready condition still reflects the previous artifact. Surfaced on timeout for
+	// the same diagnostic reason as ErrOCIRepositoryReconcileNotHandled.
+	ErrOCIRepositoryReconcileInProgress = errors.New(
+		"flux OCIRepository is still reconciling the triggered request - " +
+			"the pushed artifact was not served before the timeout",
+	)
 	// ErrKustomizationFailed is returned when the Kustomization reconciliation fails.
 	ErrKustomizationFailed = errors.New(
 		"flux kustomization reconciliation failed - check the Kustomization status and Flux controller logs for details",
@@ -28,10 +44,11 @@ var (
 // Condition type and status constants shared across the OCIRepository,
 // Kustomization, and HelmRelease readiness evaluators.
 const (
-	conditionTypeReady   = "Ready"
-	conditionTypeStalled = "Stalled"
-	conditionStatusTrue  = "True"
-	conditionStatusFalse = "False"
+	conditionTypeReady       = "Ready"
+	conditionTypeStalled     = "Stalled"
+	conditionTypeReconciling = "Reconciling"
+	conditionStatusTrue      = "True"
+	conditionStatusFalse     = "False"
 )
 
 // Reconciler handles Flux reconciliation operations.

@@ -324,7 +324,11 @@ func reconcileFlux(
 	// Sub-phase 1: OCI source reconciliation
 	writeActivityNotification("reconciling oci source...", writer)
 
-	err = fluxReconciler.TriggerOCIRepositoryReconciliation(deadlineCtx)
+	// The token proves the source controller has handled *this* request before
+	// its Ready condition is trusted — otherwise a stale Ready from a prior
+	// reconcile is accepted before the just-pushed artifact is ingested, and
+	// kustomization readiness then races the ingest (bug #5717).
+	ociReconcileToken, err := fluxReconciler.TriggerOCIRepositoryReconciliation(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("trigger oci repository reconciliation: %w", err)
 	}
@@ -341,7 +345,9 @@ func reconcileFlux(
 	err = ociGroup.Run(deadlineCtx, notify.ProgressTask{
 		Name: "flux-system",
 		Fn: func(ctx context.Context) error {
-			return fluxReconciler.WaitForOCIRepositoryReady(ctx, time.Until(deadline))
+			return fluxReconciler.WaitForOCIRepositoryReady(
+				ctx, time.Until(deadline), ociReconcileToken,
+			)
 		},
 	})
 	if err != nil {

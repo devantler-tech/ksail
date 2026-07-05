@@ -55,16 +55,17 @@ export interface KSailClusterConfiguration {
       };
       /**
        * Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
-       * K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud).
+       * K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud),
+       * or AKS (Azure).
        */
-      distribution?: "Vanilla" | "K3s" | "Talos" | "VCluster" | "KWOK" | "EKS" | "GKE";
+      distribution?: "Vanilla" | "K3s" | "Talos" | "VCluster" | "KWOK" | "EKS" | "GKE" | "AKS";
       /**
        * Provider selects the infrastructure that runs the cluster nodes: Docker,
-       * Hetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing
-       * cluster). Each distribution supports a subset of providers; when empty,
-       * KSail uses the distribution's default provider.
+       * Hetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an
+       * existing cluster). Each distribution supports a subset of providers; when
+       * empty, KSail uses the distribution's default provider.
        */
-      provider?: "Docker" | "Hetzner" | "Omni" | "AWS" | "GCP" | "Kubernetes";
+      provider?: "Docker" | "Hetzner" | "Omni" | "AWS" | "GCP" | "Azure" | "Kubernetes";
       /**
        * CNI selects the Container Network Interface plugin. Default keeps the
        * distribution's built-in CNI; Cilium or Calico install that CNI instead.
@@ -456,7 +457,7 @@ export interface KSailClusterConfiguration {
     };
     /**
      * Provider holds infrastructure-provider-specific options
-     * (Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters).
+     * (Hetzner, Omni, AWS, GCP, Azure, and the Kubernetes provider for nested clusters).
      */
     provider?: {
       /**
@@ -677,6 +678,24 @@ export interface KSailClusterConfiguration {
         locationEnvVar?: string;
       };
       /**
+       * Azure holds options for the Microsoft Azure provider used by the AKS distribution.
+       */
+      azure?: {
+        /**
+         * SubscriptionIDEnvVar is the environment variable containing the Azure subscription ID.
+         * Defaults to "AZURE_SUBSCRIPTION_ID".
+         */
+        subscriptionIdEnvVar?: string;
+        /**
+         * ResourceGroupEnvVar is the environment variable containing the Azure resource group
+         * that hosts the cluster. Defaults to "AZURE_RESOURCE_GROUP". When neither the
+         * environment variable nor a configured value provides a resource group, cluster-scoped
+         * calls resolve it from the cluster's ARM ID via a subscription-wide list, and Create
+         * requires it explicitly.
+         */
+        resourceGroupEnvVar?: string;
+      };
+      /**
        * Kubernetes holds options for the Kubernetes provider, which runs nested
        * clusters as pods inside an existing host cluster.
        */
@@ -831,6 +850,10 @@ export interface KSailClusterConfiguration {
          * Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render.
          */
         helmRender?: boolean;
+        /**
+         * Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules.
+         */
+        rules?: string;
       };
       /**
        * Configuration for the workload scan command (Kubescape exceptions, frameworks, compliance threshold) so 'ksail workload scan' (no args) can act as a turnkey CI gate.

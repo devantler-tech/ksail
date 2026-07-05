@@ -1,8 +1,35 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package kwokprovisioner
 
+import (
+	"context"
+
+	"k8s.io/client-go/kubernetes"
+)
+
 // KwokControllerImageVersionForTest exposes kwokControllerImageVersion for unit testing.
 const KwokControllerImageVersionForTest = kwokControllerImageVersion
+
+// NewKubernetesProvisionerForConnectorTest builds a minimal KubernetesProvisioner exercising only
+// the operator Connector paths (publish + read): the host clientset, the nested cluster name
+// (resolved through the embedded Provisioner), and the on-disk kubeconfig path. It skips the DinD
+// infra the full NewKubernetesProvisioner wires, which a Connector unit test does not need.
+func NewKubernetesProvisionerForConnectorTest(
+	clientset kubernetes.Interface, clusterName, kubeconfigPath string,
+) *KubernetesProvisioner {
+	return &KubernetesProvisioner{
+		Provisioner:    &Provisioner{name: clusterName},
+		hostClientset:  clientset,
+		kubeconfigPath: kubeconfigPath,
+	}
+}
+
+// PublishConnectorKubeconfigForTest exposes publishConnectorKubeconfig for unit testing.
+func (p *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
+	ctx context.Context, target string,
+) error {
+	return p.publishConnectorKubeconfig(ctx, target)
+}
 
 // IsTransientCreateErrorForTest exposes isTransientCreateError for unit testing.
 var IsTransientCreateErrorForTest = isTransientCreateError

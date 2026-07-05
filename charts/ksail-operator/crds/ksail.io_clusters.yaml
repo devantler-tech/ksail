@@ -289,7 +289,8 @@ spec:
                   distribution:
                     description: |-
                       Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
-                      K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud).
+                      K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud),
+                      or AKS (Azure).
                     type: string
                   distributionConfig:
                     description: |-
@@ -414,9 +415,9 @@ spec:
                   provider:
                     description: |-
                       Provider selects the infrastructure that runs the cluster nodes: Docker,
-                      Hetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing
-                      cluster). Each distribution supports a subset of providers; when empty,
-                      KSail uses the distribution's default provider.
+                      Hetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an
+                      existing cluster). Each distribution supports a subset of providers; when
+                      empty, KSail uses the distribution's default provider.
                     type: string
                   sops:
                     description: |-
@@ -537,7 +538,7 @@ spec:
                       imageVerification:
                         description: |-
                           ImageVerification enables scaffolding of a Talos ImageVerificationConfig document
-                          during cluster init. When Enabled, generates an image-verification.yaml template
+                          during project init. When Enabled, generates an image-verification.yaml template
                           in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
                           and public key verification rules. Requires Talos 1.13+.
 
@@ -632,7 +633,7 @@ spec:
               provider:
                 description: |-
                   Provider holds infrastructure-provider-specific options
-                  (Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters).
+                  (Hetzner, Omni, AWS, GCP, Azure, and the Kubernetes provider for nested clusters).
                 properties:
                   aws:
                     description: AWS holds options for the AWS provider used by the
@@ -664,6 +665,24 @@ spec:
                           SessionTokenEnvVar is the environment variable containing an AWS session token
                           (used with temporary credentials from STS).
                           Defaults to "AWS_SESSION_TOKEN".
+                        type: string
+                    type: object
+                  azure:
+                    description: Azure holds options for the Microsoft Azure provider
+                      used by the AKS distribution.
+                    properties:
+                      resourceGroupEnvVar:
+                        description: |-
+                          ResourceGroupEnvVar is the environment variable containing the Azure resource group
+                          that hosts the cluster. Defaults to "AZURE_RESOURCE_GROUP". When neither the
+                          environment variable nor a configured value provides a resource group, cluster-scoped
+                          calls resolve it from the cluster's ARM ID via a subscription-wide list, and Create
+                          requires it explicitly.
+                        type: string
+                      subscriptionIdEnvVar:
+                        description: |-
+                          SubscriptionIDEnvVar is the environment variable containing the Azure subscription ID.
+                          Defaults to "AZURE_SUBSCRIPTION_ID".
                         type: string
                     type: object
                   gcp:
@@ -1062,6 +1081,12 @@ spec:
                         description: HelmRender controls whether HelmReleases are
                           rendered before validation.
                         type: boolean
+                      rules:
+                        description: |-
+                          Rules is the path to a YAML CEL rules file evaluated during validation, so
+                          rule validation can be a turnkey CI gate declared once in ksail.yaml rather
+                          than requiring --rules on every invocation. The --rules flag overrides it.
+                        type: string
                       schemaLocations:
                         description: |-
                           SchemaLocations lists additional kubeconform schema locations (local

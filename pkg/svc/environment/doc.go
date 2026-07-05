@@ -1,4 +1,4 @@
-// Package environment is the foundation for `ksail cluster add-environment
+// Package environment is the foundation for `ksail project add-environment
 // <name> --from <env>`, which clones an existing cluster environment overlay so
 // adding an environment to a multi-cluster ksail repository stops being a manual
 // `cp -R k8s/clusters/<env> k8s/clusters/<new>` + hand-edit recipe. It is part of
@@ -39,6 +39,6 @@
 //     k8s/clusters/<from>/** to k8s/clusters/<name>/** honouring fsutil's
 //     force/skip semantics, with SOPS *.enc.yaml copied as-is (ksail#5567).
 //   - Next: the ksail.<env>.yaml root-config repoint (name, context, config
-//     paths), the cobra `cluster add-environment` command, and its
+//     paths), the cobra `project add-environment` command, and its
 //     generated-artifact refresh (cli-flags docs, help/toolgen snapshots).
 package environment

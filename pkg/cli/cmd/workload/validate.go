@@ -174,7 +174,8 @@ func addValidateFlags(
 		"",
 		"Path to a YAML CEL rules file. Each rule's CEL expression is evaluated against every "+
 			"rendered document (bound to the 'object' variable); an error-severity violation fails "+
-			"validation, a warning-severity violation is reported without failing.",
+			"validation, a warning-severity violation is reported without failing. "+
+			"Overrides spec.workload.validation.rules from ksail.yaml.",
 	)
 }
 
@@ -248,8 +249,12 @@ func runValidateCmd(
 
 	// Compile the CEL rules once up front so a malformed rules file fails fast
 	// (before any manifest is processed) rather than silently skipping the rules.
-	// A nil engine means the --rules flag was not given (CEL validation disabled).
-	engine, err := buildCELEngine(flags.rules)
+	// The path comes from --rules or, when the flag is empty, from
+	// spec.workload.validation.rules in ksail.yaml. A nil engine means neither was
+	// set (CEL validation disabled).
+	rulesPath := resolveCELRulesPath(cmd, cfg, configFound, loadErr, flags.rules)
+
+	engine, err := buildCELEngine(rulesPath)
 	if err != nil {
 		return err
 	}
@@ -409,6 +414,52 @@ func configuredSchemaLocations(
 	}
 
 	return cfg.Spec.Workload.Validation.SchemaLocations
+}
+
+// configuredRules returns the configured spec.workload.validation.rules from the
+// single config load, or "" when no config file is found or the field is unset. A
+// config file that exists but failed to load does not fail validation but emits a
+// warning so the omission is not silent (mirrors configuredSkipKinds).
+func configuredRules(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) string {
+	if loadErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "could not read spec.workload.validation.rules from ksail.yaml: %v",
+			Args:    []any{loadErr},
+			Writer:  cmd.ErrOrStderr(),
+		})
+
+		return ""
+	}
+
+	if !configFound {
+		return ""
+	}
+
+	return cfg.Spec.Workload.Validation.Rules
+}
+
+// resolveCELRulesPath returns the effective CEL rules file path: the --rules flag
+// takes precedence (single-file semantics, unlike the merge used for skipKinds and
+// schemaLocations), falling back to spec.workload.validation.rules from ksail.yaml
+// when the flag is empty.
+func resolveCELRulesPath(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	rulesFlag string,
+) string {
+	if rulesFlag != "" {
+		return rulesFlag
+	}
+
+	return configuredRules(cmd, cfg, configFound, loadErr)
 }
 
 // canonicalizeSchemaLocations resolves local filesystem schema locations to real,
@@ -742,9 +793,10 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	}
 
 	// Apply CEL rules to the same rendered/built manifests kubeconform validated,
-	// honoring the same kind exclusions (--skip-kinds / --skip-secrets) so a
-	// skipped kind cannot surface a CEL failure.
-	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink)
+	// honoring the same kind exclusions (--skip-kinds / --skip-secrets) and the
+	// same render-provenance attribution, so a skipped kind cannot surface a CEL
+	// failure and a rendered document's violation is traced to its HelmRelease.
+	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink, opts.Attribution)
 	if err != nil {
 		return err
 	}
@@ -869,8 +921,11 @@ func validateFileSilent(
 
 	// Apply CEL rules to the same content kubeconform validated, honoring the same
 	// kind exclusions (--skip-kinds / --skip-secrets) so a skipped kind cannot
-	// surface a CEL failure.
-	err = evaluateCELDocuments(engine, expanded, filePath, opts.SkipKinds, celSink)
+	// surface a CEL failure. Loose files carry no render provenance, so
+	// opts.Attribution is nil here and descriptions are unchanged.
+	err = evaluateCELDocuments(
+		engine, expanded, filePath, opts.SkipKinds, celSink, opts.Attribution,
+	)
 	if err != nil {
 		return err
 	}

@@ -87,10 +87,11 @@ func Run(ctx context.Context, opts Options) error {
 		}
 
 		return runDockerHostDebug(ctx, info, opts.NodeName, opts.Args)
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		// Host-level debug on managed cloud nodes is not supported via KSail's
 		// host-debug path; users should use the cloud's own access mechanism
-		// (SSM/SSH on EC2, gcloud compute ssh on GCE) directly.
+		// (SSM/SSH on EC2, gcloud compute ssh on GCE, az vmss run-command on
+		// Azure) directly.
 		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
 	default:
 		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
@@ -171,8 +172,8 @@ func resolveTalosNodeEndpoint(ctx context.Context, opts Options) (string, error)
 			opts.NodeName,
 			info.Provider,
 		)
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP:
-		// EKS/GKE host-level debug is not supported: nodes are cloud VMs
+	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
+		// EKS/GKE/AKS host-level debug is not supported: nodes are cloud VMs
 		// reachable only via the cloud's own access paths, not via Talos or
 		// Docker host debug.
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
@@ -394,9 +395,9 @@ func DistributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 		return dockerprovider.LabelSchemeVCluster
 	case v1alpha1.DistributionKWOK:
 		return dockerprovider.LabelSchemeKWOK
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
-		// Managed cloud nodes (EC2/GCE instances) carry no Docker labels; fall
-		// back to the default scheme — this path is not used for them in practice.
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
+		// Managed cloud nodes (EC2/GCE/Azure instances) carry no Docker labels;
+		// fall back to the default scheme — this path is not used for them in practice.
 		return dockerprovider.LabelSchemeKind
 	default:
 		return dockerprovider.LabelSchemeKind

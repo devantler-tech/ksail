@@ -42,9 +42,11 @@
 //     Increments so far: [SelectTapPoint] (pick the concrete pod and container),
 //     [InjectTap]/[WaitForTap] (the ephemeral tap container), the capture
 //     spec ([CaptureCommand] + the hardened NET_RAW-only security context),
-//     and the capture session ([RunCaptureSession] streaming the pcap bytes
+//     the capture session ([RunCaptureSession] streaming the pcap bytes
 //     over the exec channel + [SummarizeCapture] reading them locally with
-//     the pure-Go pcapgo reader).
+//     the pure-Go pcapgo reader), and local delivery ([LiveReplay] parsing
+//     the stream live and replaying the inbound TCP payloads to the
+//     developer's local port — the mirror bridge's last mile).
 //
 //     Capture design (#4521): passive pcap via CAP_NET_RAW — tcpdump execed in
 //     the tap container, pcap on stdout over the already-embedded exec channel.
@@ -57,7 +59,15 @@
 //     cluster.
 //
 //   - Phase 2 — intercept: steer a subset (or all) of the Deployment's traffic to
-//     the local process and return its responses.
+//     the local process and return its responses. Unlike mirror mode, responses
+//     must flow back into the cluster, so intercept needs a reverse tunnel: the
+//     one bidirectional exec byte stream (SPDY stdin+stdout) must carry many
+//     concurrent intercepted connections at once. The foundation increment is
+//     the multiplexing wire format — [Frame], [WriteFrame], and [ReadFrame] —
+//     a self-framing, length-prefixed codec that tags each chunk with a
+//     StreamID so the mux/demux (a later increment) can present each
+//     intercepted connection as its own stream. Steering (iptables/NET_ADMIN in
+//     the tap container) and the in-cluster intercept agent follow.
 //
 //   - Phase 3 — environment & volume projection: run the local process with the
 //     target pod's env vars and mounted volumes/secrets for cluster-equivalent

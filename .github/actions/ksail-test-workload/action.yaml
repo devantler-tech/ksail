@@ -24,7 +24,7 @@ inputs:
     required: false
     default: ""
   args:
-    description: Additional arguments passed to cluster init/create (used to detect --gitops-engine)
+    description: Additional arguments passed to project init/create (used to detect --gitops-engine)
     required: false
     default: ""
   gitops-path:

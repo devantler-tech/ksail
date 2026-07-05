@@ -138,13 +138,14 @@ func TestDiscover_DockerListErrorSkippedSilently(t *testing.T) {
 	assert.Empty(t, failures, "per-distribution list errors are swallowed, not surfaced")
 }
 
-func TestDiscover_CloudProvidersMapToTalosAndEKS(t *testing.T) {
+func TestDiscover_CloudProvidersMapToTheirDistributions(t *testing.T) {
 	t.Parallel()
 
 	discoverer := &clusterdiscovery.Discoverer{
 		Hetzner: fakeLister{names: []string{"prod"}},
 		Omni:    fakeLister{names: []string{"omni-prod"}},
 		AWS:     fakeLister{names: []string{"eks-1"}},
+		GCP:     fakeLister{names: []string{"gke-1"}},
 		Kubernetes: fakeKubeLister{
 			infos: []kubernetesprovider.ClusterInfo{{Name: "nested", Distribution: "K3s"}},
 		},
@@ -154,6 +155,7 @@ func TestDiscover_CloudProvidersMapToTalosAndEKS(t *testing.T) {
 		v1alpha1.ProviderHetzner,
 		v1alpha1.ProviderOmni,
 		v1alpha1.ProviderAWS,
+		v1alpha1.ProviderGCP,
 		v1alpha1.ProviderKubernetes,
 	})
 
@@ -170,6 +172,7 @@ func TestDiscover_CloudProvidersMapToTalosAndEKS(t *testing.T) {
 			Provider:     v1alpha1.ProviderOmni,
 		},
 		{Name: "eks-1", Distribution: v1alpha1.DistributionEKS, Provider: v1alpha1.ProviderAWS},
+		{Name: "gke-1", Distribution: v1alpha1.DistributionGKE, Provider: v1alpha1.ProviderGCP},
 		{
 			Name:         "nested",
 			Distribution: v1alpha1.DistributionK3s,
@@ -198,7 +201,8 @@ func TestDiscover_SkipsCloudProvidersWithoutCredentials(t *testing.T) {
 	t.Parallel()
 
 	// No injected listers + empty resolver + eksctl reported missing => every cloud provider skips
-	// silently regardless of the host's real environment.
+	// silently regardless of the host's real environment (GCP's project check short-circuits
+	// before its host credential-file probe).
 	discoverer := &clusterdiscovery.Discoverer{
 		Resolver: emptyResolver{},
 		LookPath: lookPathMissing,
@@ -208,6 +212,7 @@ func TestDiscover_SkipsCloudProvidersWithoutCredentials(t *testing.T) {
 		v1alpha1.ProviderHetzner,
 		v1alpha1.ProviderOmni,
 		v1alpha1.ProviderAWS,
+		v1alpha1.ProviderGCP,
 	})
 
 	assert.Empty(t, clusters)
@@ -306,6 +311,7 @@ func TestProviderSets(t *testing.T) {
 
 	assert.Subset(t, clusterdiscovery.AllProviders(), clusterdiscovery.DefaultProviders())
 	assert.Contains(t, clusterdiscovery.AllProviders(), v1alpha1.ProviderAWS)
+	assert.Contains(t, clusterdiscovery.AllProviders(), v1alpha1.ProviderGCP)
 	assert.Contains(t, clusterdiscovery.AllProviders(), v1alpha1.ProviderKubernetes)
 	assert.Len(t, clusterdiscovery.LocalDistributions(), 5)
 }

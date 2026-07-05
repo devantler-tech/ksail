@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,8 +24,10 @@ func newKubernetesProvisionerForTest(
 
 	prov, err := kwokprovisioner.NewKubernetesProvisioner(
 		kwokprovisioner.KubernetesProvisionerConfig{
-			Name:           name,
-			KubeconfigPath: kubeconfigPath,
+			DinDProvisionerConfig: kubernetesprovider.DinDProvisionerConfig{
+				KubeconfigPath: kubeconfigPath,
+			},
+			Name: name,
 		},
 	)
 	require.NoError(t, err)

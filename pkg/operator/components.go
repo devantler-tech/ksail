@@ -41,9 +41,9 @@ var installOrder = []string{
 // the same installer factory the CLI uses. It satisfies controller.ComponentInstaller.
 //
 // Child access is obtained through the provisioner's optional clusterprovisioner.Connector
-// capability: provisioners that can hand back an operator-reachable kubeconfig (today: VCluster on
-// the Kubernetes provider) get their components installed; others are a no-op until they implement
-// Connector (see design/operator-component-lifecycle.md).
+// capability: provisioners that can hand back an operator-reachable kubeconfig (the nested
+// Kubernetes-provider distributions — vCluster, k3k, Talos, Kind, and KWOK — publish one) get their
+// components installed; others are a no-op until they implement Connector.
 //
 // The returned applied is false when installation was skipped (no Connector), so the reconciler can
 // report ComponentsReady=Unknown rather than a misleading True. It is true once a Connector exists,

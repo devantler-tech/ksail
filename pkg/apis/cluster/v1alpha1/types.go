@@ -56,7 +56,7 @@ type Spec struct {
 	// provider, components, and connection settings.
 	Cluster ClusterSpec `json:"cluster,omitzero"`
 	// Provider holds infrastructure-provider-specific options
-	// (Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters).
+	// (Hetzner, Omni, AWS, GCP, Azure, and the Kubernetes provider for nested clusters).
 	Provider ProviderSpec `json:"provider,omitzero"`
 	// Workload configures workload management: the manifest source directory,
 	// OCI push and validation settings, and GitOps bootstrap options.
@@ -78,6 +78,8 @@ type ProviderSpec struct {
 	AWS OptionsAWS `json:"aws,omitzero"`
 	// GCP holds options for the Google Cloud provider used by the GKE distribution.
 	GCP OptionsGCP `json:"gcp,omitzero"`
+	// Azure holds options for the Microsoft Azure provider used by the AKS distribution.
+	Azure OptionsAzure `json:"azure,omitzero"`
 	// Kubernetes holds options for the Kubernetes provider, which runs nested
 	// clusters as pods inside an existing host cluster.
 	Kubernetes OptionsKubernetes `json:"kubernetes,omitzero"`
@@ -95,12 +97,13 @@ type ClusterSpec struct {
 	// CLI-only (local kubeconfig path/context); ignored by the operator.
 	Connection Connection `json:"connection,omitzero"`
 	// Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
-	// K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud).
+	// K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud),
+	// or AKS (Azure).
 	Distribution Distribution `json:"distribution,omitzero"`
 	// Provider selects the infrastructure that runs the cluster nodes: Docker,
-	// Hetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing
-	// cluster). Each distribution supports a subset of providers; when empty,
-	// KSail uses the distribution's default provider.
+	// Hetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an
+	// existing cluster). Each distribution supports a subset of providers; when
+	// empty, KSail uses the distribution's default provider.
 	Provider Provider `json:"provider,omitzero"`
 	// CNI selects the Container Network Interface plugin. Default keeps the
 	// distribution's built-in CNI; Cilium or Calico install that CNI instead.
@@ -221,6 +224,11 @@ type ValidationConfig struct {
 
 	// HelmRender controls whether HelmReleases are rendered before validation.
 	HelmRender *bool `json:"helmRender,omitzero" jsonschema_description:"Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."` //nolint:lll
+
+	// Rules is the path to a YAML CEL rules file evaluated during validation, so
+	// rule validation can be a turnkey CI gate declared once in ksail.yaml rather
+	// than requiring --rules on every invocation. The --rules flag overrides it.
+	Rules string `json:"rules,omitzero" jsonschema_description:"Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules."` //nolint:lll
 }
 
 // ScanConfig defines configuration for the workload scan command, letting

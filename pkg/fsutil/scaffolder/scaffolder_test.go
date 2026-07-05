@@ -1016,6 +1016,8 @@ func generateDistributionContent(
 		// EKS config is snapshotted via the scaffolder's eks.yaml generation
 	case v1alpha1.DistributionGKE:
 		// GKE has no scaffolded distribution config file to snapshot
+	case v1alpha1.DistributionAKS:
+		// AKS has no scaffolded distribution config file to snapshot
 	}
 }
 
@@ -1066,7 +1068,7 @@ func minimalDistributionConfigFile(distribution v1alpha1.Distribution) string {
 		return "kwok"
 	case v1alpha1.DistributionEKS:
 		return "eks.yaml"
-	case v1alpha1.DistributionGKE, v1alpha1.DistributionVanilla:
+	case v1alpha1.DistributionGKE, v1alpha1.DistributionAKS, v1alpha1.DistributionVanilla:
 		return ""
 	default:
 		return ""

@@ -35,20 +35,23 @@ var (
 	)
 
 	// ErrMultiNodeNotImplemented is returned by [Base.Create] for a topology with
-	// agents when the distribution's strategy does not yet implement the joining-node
-	// bring-up ([MultiNodeComposer]) — currently the kubeadm × Hetzner provisioner,
-	// whose bootstrap has no API-server-endpoint threading yet. The two-phase join
-	// sequencing is tracked by devantler-tech/ksail#5755.
+	// agents when the distribution's strategy does not yet implement the
+	// joining-node bring-up ([MultiNodeComposer]). Both current Hetzner
+	// distributions (k3s and kubeadm) implement it, so this guards any future
+	// strategy added without join sequencing (see devantler-tech/ksail#5755).
 	ErrMultiNodeNotImplemented = errors.New(
 		"hetzner: multi-node bring-up is not yet implemented for this distribution (tracked by #5755)",
 	)
 
 	// ErrHAControlPlaneNotImplemented is returned by [Base.Create] for a topology with
-	// more than one control-plane node. Additional control planes join the cluster's
-	// etcd, which needs quorum-aware ordering beyond the single-control-plane +
-	// agents path; it is a later increment of devantler-tech/ksail#5755.
+	// more than one control-plane node when the distribution's strategy does not
+	// implement the [HAControlPlaneComposer] capability: additional control planes
+	// join the cluster's etcd, whose distribution-specific mechanics (kubeadm's
+	// manual certificate distribution vs k3s' embedded etcd) each distribution
+	// lifts in its own increment of devantler-tech/ksail#5796 (epic #3983).
 	ErrHAControlPlaneNotImplemented = errors.New(
-		"hetzner: high-availability (multi-control-plane) bring-up is not yet implemented (tracked by #5755)",
+		"hetzner: high-availability (multi-control-plane) bring-up is not yet implemented" +
+			" for this distribution (tracked by #5796)",
 	)
 )
 
@@ -390,10 +393,12 @@ func (b *Base) RunCreate(
 // Create runs the whole create flow shared by both provisioners, so neither
 // re-writes it. It routes by topology: the single-control-plane, no-agent path
 // wires the embedded [CreateStrategy]'s per-node composition into the shared plan
-// composition ([PlanComposer]) and runs [Base.RunCreate]; a topology with agents
-// runs the two-phase multi-node bring-up ([Base.RunCreateMultiNode]) when the
-// strategy implements [MultiNodeComposer] (currently k3s), and is rejected
-// otherwise. High-availability (multiple control planes) is a later increment.
+// composition ([PlanComposer]) and runs [Base.RunCreate]; a topology with joining
+// nodes runs the two-phase multi-node bring-up ([Base.RunCreateMultiNode]) when
+// the strategy implements [MultiNodeComposer] (k3s and kubeadm both do), and is
+// rejected otherwise. A multi-control-plane (high-availability) topology
+// additionally requires the [HAControlPlaneComposer] capability (kubeadm only)
+// and is rejected per-distribution otherwise.
 // Each provisioner gets this method by embedding *Base; the distro-specific
 // pieces come from the Strategy it sets at construction.
 func (b *Base) Create(ctx context.Context, name string) error {
@@ -409,10 +414,12 @@ func (b *Base) Create(ctx context.Context, name string) error {
 // error is wrapped with the distribution label by [Base.Create].
 func (b *Base) create(ctx context.Context, name string) error {
 	if b.ControlPlanes > 1 {
-		return ErrHAControlPlaneNotImplemented
+		if _, ok := b.Strategy.(HAControlPlaneComposer); !ok {
+			return ErrHAControlPlaneNotImplemented
+		}
 	}
 
-	if b.Agents > 0 {
+	if b.ControlPlanes > 1 || b.Agents > 0 {
 		composer, ok := b.Strategy.(MultiNodeComposer)
 		if !ok {
 			return ErrMultiNodeNotImplemented

@@ -150,9 +150,8 @@ func (f DefaultFactory) createK3dProvisioner(
 		return f.createK3dKubernetesProvisioner(cluster)
 	}
 
-	// Hetzner provider: native k3s on Hetzner Cloud servers. The K3s × Hetzner
-	// combination is unselectable until the validation flip (#5514), so this path
-	// is gated; see the k3shetzner package.
+	// Hetzner provider: native k3s on Hetzner Cloud servers; see the
+	// k3shetzner package.
 	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
 		return createK3sHetznerProvisioner(cluster)
 	}
@@ -195,7 +194,7 @@ func (f DefaultFactory) createK3dProvisioner(
 		fileInfo, err := os.Stat(absTemplatePath)
 		if err != nil {
 			return nil, nil, fmt.Errorf(
-				"k3d image verification template not found at %q; run 'ksail cluster init' to generate it: %w",
+				"k3d image verification template not found at %q; run 'ksail project init' to generate it: %w",
 				absTemplatePath,
 				err,
 			)
@@ -203,7 +202,7 @@ func (f DefaultFactory) createK3dProvisioner(
 
 		if !fileInfo.Mode().IsRegular() {
 			return nil, nil, fmt.Errorf(
-				"%w: %s; remove it and re-run 'ksail cluster init'",
+				"%w: %s; remove it and re-run 'ksail project init'",
 				ErrImageVerificationTemplateNotRegularFile,
 				absTemplatePath,
 			)

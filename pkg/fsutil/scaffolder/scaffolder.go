@@ -522,6 +522,11 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		// (project/location resolve from the environment, and the GKE API owns
 		// the cluster shape), so nothing is generated.
 		return nil
+	case v1alpha1.DistributionAKS:
+		// AKS has no scaffolded distribution config: aks.yaml is optional
+		// (subscription/resource group resolve from the environment, and the
+		// AKS API owns the cluster shape), so nothing is generated.
+		return nil
 	default:
 		return ErrUnknownDistribution
 	}

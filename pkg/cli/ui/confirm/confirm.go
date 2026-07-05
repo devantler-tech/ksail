@@ -122,6 +122,10 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		// The GKE API owns the managed control plane and node pools, so only a
 		// human-readable placeholder is surfaced rather than GCP resource names.
 		writeResourceList(&previewText, "GKE Resources:", preview.Servers)
+	case v1alpha1.ProviderAzure:
+		// The AKS API owns the managed control plane and agent pools, so only a
+		// human-readable placeholder is surfaced rather than Azure resource names.
+		writeResourceList(&previewText, "AKS Resources:", preview.Servers)
 	case v1alpha1.ProviderKubernetes:
 		writeResourceList(&previewText, "Kubernetes Resources:", preview.Servers)
 	}

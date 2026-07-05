@@ -188,6 +188,27 @@
                   }
                 }
               }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "AKS"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Azure"
+                    ]
+                  }
+                }
+              }
             }
           ],
           "properties": {
@@ -224,9 +245,10 @@
                 "VCluster",
                 "KWOK",
                 "EKS",
-                "GKE"
+                "GKE",
+                "AKS"
               ],
-              "description": "Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),\nK3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), or GKE (Google Cloud)."
+              "description": "Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),\nK3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud),\nor AKS (Azure)."
             },
             "provider": {
               "type": "string",
@@ -236,9 +258,10 @@
                 "Omni",
                 "AWS",
                 "GCP",
+                "Azure",
                 "Kubernetes"
               ],
-              "description": "Provider selects the infrastructure that runs the cluster nodes: Docker,\nHetzner, Omni, AWS, GCP, or Kubernetes (nested clusters inside an existing\ncluster). Each distribution supports a subset of providers; when empty,\nKSail uses the distribution's default provider."
+              "description": "Provider selects the infrastructure that runs the cluster nodes: Docker,\nHetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an\nexisting cluster). Each distribution supports a subset of providers; when\nempty, KSail uses the distribution's default provider."
             },
             "cni": {
               "type": "string",
@@ -913,6 +936,21 @@
               "type": "object",
               "description": "GCP holds options for the Google Cloud provider used by the GKE distribution."
             },
+            "azure": {
+              "properties": {
+                "subscriptionIdEnvVar": {
+                  "type": "string",
+                  "description": "SubscriptionIDEnvVar is the environment variable containing the Azure subscription ID.\nDefaults to \"AZURE_SUBSCRIPTION_ID\"."
+                },
+                "resourceGroupEnvVar": {
+                  "type": "string",
+                  "description": "ResourceGroupEnvVar is the environment variable containing the Azure resource group\nthat hosts the cluster. Defaults to \"AZURE_RESOURCE_GROUP\". When neither the\nenvironment variable nor a configured value provides a resource group, cluster-scoped\ncalls resolve it from the cluster's ARM ID via a subscription-wide list, and Create\nrequires it explicitly."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Azure holds options for the Microsoft Azure provider used by the AKS distribution."
+            },
             "kubernetes": {
               "properties": {
                 "kubeconfig": {
@@ -970,7 +1008,7 @@
           },
           "additionalProperties": false,
           "type": "object",
-          "description": "Provider holds infrastructure-provider-specific options\n(Hetzner, Omni, AWS, GCP, and the Kubernetes provider for nested clusters)."
+          "description": "Provider holds infrastructure-provider-specific options\n(Hetzner, Omni, AWS, GCP, Azure, and the Kubernetes provider for nested clusters)."
         },
         "workload": {
           "properties": {
@@ -1083,6 +1121,10 @@
                 "helmRender": {
                   "type": "boolean",
                   "description": "Render HelmReleases (Kustomize + Helm) before 'ksail workload validate' so the actually-applied manifests are validated rather than the opaque HelmRelease CR. Charts are resolved from the OCIRepository/HelmRepository sources in the same directory and rendered in-process; releases that cannot be rendered offline fall back to validating the CR. Defaults to true. Override per-run with --skip-helm-render."
+                },
+                "rules": {
+                  "type": "string",
+                  "description": "Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules."
                 }
               },
               "additionalProperties": false,

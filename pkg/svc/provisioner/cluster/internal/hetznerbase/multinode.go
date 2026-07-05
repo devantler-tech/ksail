@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 
+	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -18,12 +20,19 @@ var ErrNoPrivateIPv4 = errors.New(
 	"hetzner: cluster-initialising control plane has no private-network IPv4 for joining nodes",
 )
 
+// ErrMissingControlPlaneJoinSentinel is returned by [Base.RunCreateMultiNode]
+// when an [HAControlPlaneComposer] supplies no join-complete sentinel path for
+// its control-plane joiners — without one their joins cannot be serialised.
+var ErrMissingControlPlaneJoinSentinel = errors.New(
+	"hetzner: control-plane join-complete sentinel path is empty",
+)
+
 // MultiNodeComposer is the optional capability a distribution's [CreateStrategy]
 // implements once it can bring up joining nodes. The two-phase multi-node create
 // flow ([Base.RunCreateMultiNode]) needs the init control plane composed on its
 // own (before any address is known) and the joining nodes composed afterwards
 // against the init control plane's resolved private address — a distribution
-// whose bootstrap cannot yet thread that join endpoint (kubeadm) simply does not
+// whose bootstrap cannot yet thread that join endpoint simply does not
 // implement this, and a topology with agents is rejected before any resource is
 // created. See devantler-tech/ksail#5755.
 type MultiNodeComposer interface {
@@ -31,13 +40,14 @@ type MultiNodeComposer interface {
 	// (bootstrap index 0). It carries no join endpoint — it initialises the
 	// cluster the joining nodes later register against.
 	ComposeInitNode(clusterName, token string, material BootstrapMaterial) (NodeSpec, error)
-	// ComposeJoiningNodes composes the joining nodes (agents; additional control
-	// planes are a later increment) that register against the control plane
-	// reachable at joinAddress — the init node's private-network IPv4. The
-	// distribution forms its own registration URL from joinAddress (both k3s and
-	// kubeadm serve the API on the standard secure port). The returned specs carry
-	// their global bootstrap indices (>= 1) so their server names stay distinct
-	// from the init node's.
+	// ComposeJoiningNodes composes the joining nodes that register against the
+	// control plane reachable at joinAddress — the init node's private-network
+	// IPv4. For every distribution that means the agents; a distribution that
+	// also implements [HAControlPlaneComposer] composes its additional control
+	// planes here too. The distribution forms its own registration URL from joinAddress
+	// (both k3s and kubeadm serve the API on the standard secure port). The
+	// returned specs carry their global bootstrap indices (>= 1) so their server
+	// names stay distinct from the init node's.
 	ComposeJoiningNodes(
 		clusterName, token string,
 		joinAddress net.IP,
@@ -45,8 +55,36 @@ type MultiNodeComposer interface {
 	) ([]NodeSpec, error)
 }
 
-// RunCreateMultiNode runs the two-phase Hetzner create flow for a single
-// control-plane cluster with joining nodes (agents): guard against an existing
+// HAControlPlaneComposer is the optional capability a distribution's
+// [MultiNodeComposer] additionally implements once its compose halves handle a
+// multi-control-plane (high-availability) topology: the init node advertises a
+// stable control-plane endpoint and [MultiNodeComposer.ComposeJoiningNodes]
+// composes the additional control planes as control-plane joiners alongside the
+// agents. [Base.Create] rejects controlPlanes > 1 with
+// [ErrHAControlPlaneNotImplemented] for any strategy that does not implement
+// this — the guard is per-distribution because the join mechanics differ:
+// kubeadm's manual certificate distribution supports it, while k3s needs its own
+// embedded-etcd increment (see devantler-tech/ksail#5796).
+type HAControlPlaneComposer interface {
+	MultiNodeComposer
+
+	// SupportsHAControlPlanes marks the capability; it performs no work. A
+	// distribution declares — by implementing this — that its ComposeJoiningNodes
+	// output is correct for additional control planes, not only agents.
+	SupportsHAControlPlanes()
+
+	// ControlPlaneJoinCompletePath returns the remote file path whose existence
+	// marks a joining control plane's bootstrap complete — a file the
+	// distribution's first boot writes only after its join command succeeded
+	// (never a file the join writes part-way, which would report completion
+	// while etcd membership is still changing). [Base.RunCreateMultiNode] polls
+	// it over SSH to serialise control-plane joins.
+	ControlPlaneJoinCompletePath() string
+}
+
+// RunCreateMultiNode runs the two-phase Hetzner create flow for a cluster with
+// joining nodes (agents and — for an [HAControlPlaneComposer] strategy —
+// additional control planes): guard against an existing
 // cluster, ensure the shared infrastructure, then (1) bring up the
 // cluster-initialising control plane and read its admin kubeconfig, and (2)
 // compose the joining nodes against the control plane's private-network address
@@ -60,10 +98,15 @@ type MultiNodeComposer interface {
 // takes an already-composed plan) so the SSH bring-up is testable with an
 // in-process server.
 //
-// Joining nodes are created and left to register asynchronously — the cluster is
+// Agents are created and left to register asynchronously — the cluster is
 // usable once the control plane serves the API and its kubeconfig is retrieved;
 // end-to-end join success is validated by the live smoke tests
 // (devantler-tech/ksail#5515) once the Hetzner CI lane (#4972) is restored.
+// Additional control planes are serialised instead: each control-plane joiner's
+// join-complete sentinel ([HAControlPlaneComposer.ControlPlaneJoinCompletePath])
+// is awaited over SSH before the next joining node is created, because
+// concurrent control-plane joins race etcd member addition
+// (devantler-tech/ksail#5818).
 func (b *Base) RunCreateMultiNode(
 	ctx context.Context,
 	name string,
@@ -147,9 +190,11 @@ func (b *Base) bringUpInitControlPlane(
 }
 
 // createJoiningNodes composes the joining nodes against the init control plane's
-// private-network address and creates them. They bootstrap and register
-// asynchronously, so it does not wait for a kubeconfig from them; a creation
-// failure tears the whole cluster down.
+// private-network address and creates them. Agents bootstrap and register
+// asynchronously, so it does not wait for a kubeconfig from them; a
+// control-plane joiner's join-complete sentinel is awaited before the next
+// joining node is created (etcd member addition must not be raced). A creation
+// or join failure tears the whole cluster down.
 func (b *Base) createJoiningNodes(
 	ctx context.Context,
 	clusterName string,
@@ -174,8 +219,10 @@ func (b *Base) createJoiningNodes(
 		return b.cleanUpFailedBringUp(ctx, clusterName, err)
 	}
 
-	for _, spec := range joinSpecs {
-		_, createErr := b.Servers.CreateServer(ctx, spec)
+	haComposer, _ := composer.(HAControlPlaneComposer)
+
+	for index, spec := range joinSpecs {
+		server, createErr := b.Servers.CreateServer(ctx, spec)
 		if createErr != nil {
 			return b.cleanUpFailedBringUp(
 				ctx,
@@ -183,9 +230,59 @@ func (b *Base) createJoiningNodes(
 				fmt.Errorf("create joining node %q: %w", spec.Name, createErr),
 			)
 		}
+
+		// joinSpecs is derived 1:1 in order from joinNodes, so the node's role
+		// travels by index.
+		if haComposer == nil || joinNodes[index].NodeType != hetzner.NodeTypeControlPlane {
+			continue
+		}
+
+		waitErr := b.waitForControlPlaneJoin(ctx, server, material, haComposer)
+		if waitErr != nil {
+			return b.cleanUpFailedBringUp(
+				ctx,
+				clusterName,
+				fmt.Errorf("wait for control-plane joiner %q: %w", spec.Name, waitErr),
+			)
+		}
 	}
 
 	return nil
+}
+
+// waitForControlPlaneJoin dials the created control-plane joiner over SSH with
+// the cluster's bootstrap material and waits for its join-complete sentinel, so
+// the next joining node is not created while this one's etcd member addition is
+// still in flight.
+func (b *Base) waitForControlPlaneJoin(
+	ctx context.Context,
+	server *hcloud.Server,
+	material BootstrapMaterial,
+	haComposer HAControlPlaneComposer,
+) error {
+	sentinelPath := haComposer.ControlPlaneJoinCompletePath()
+	if sentinelPath == "" {
+		return ErrMissingControlPlaneJoinSentinel
+	}
+
+	addr, err := publicSSHAddr(server, b.BringUpPort)
+	if err != nil {
+		return err
+	}
+
+	client, err := sshbootstrap.DialWithRetry(ctx, sshbootstrap.Options{
+		Addr:            addr,
+		User:            bootstrapUser,
+		Signer:          material.Signer,
+		HostKeyCallback: material.HostKeyCallback,
+	}, 0)
+	if err != nil {
+		return fmt.Errorf("dial bootstrap SSH at %s: %w", addr, err)
+	}
+
+	defer func() { _ = client.Close() }()
+
+	return waitForRemoteFile(ctx, client, sentinelPath, b.BringUpPollInterval)
 }
 
 // privateIPv4 returns the created server's first private-network IPv4, or

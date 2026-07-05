@@ -283,32 +283,37 @@ func TestCreateAlreadyExists(t *testing.T) {
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
-func TestCreateHAControlPlaneNotImplemented(t *testing.T) {
+// TestCreateHATopologyRoutesToMultiNodeBringUp pins that a multi-control-plane
+// kubeadm topology is no longer rejected wholesale: the strategy implements
+// [hetznerbase.HAControlPlaneComposer], so Create routes it to the shared
+// two-phase multi-node engine. The engine is exercised up to the first server
+// creation (the init control plane), whose composed spec proves the HA compose
+// ran; the erroring seam then surfaces, keeping the test hermetic.
+func TestCreateHATopologyRoutesToMultiNodeBringUp(t *testing.T) {
 	t.Parallel()
 
 	infra := &fakeInfra{}
+	servers := &fakeServers{createErr: errBoom}
 	prov := newProvisioner(infra, 3, 0)
+	prov.Servers = servers
 
 	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
-	assert.Equal(t, 0, infra.ensureNetworkCalls)
+	require.ErrorIs(t, err, errBoom)
+	require.NotErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
+
+	// The guard no longer fires before the shared preamble: the infrastructure
+	// was ensured and the init control plane's fully-composed spec reached the
+	// server-creation seam carrying the stable controlPlaneEndpoint.
+	assert.Equal(t, 1, infra.ensureNetworkCalls)
+	assert.Equal(t, 1, servers.calls)
+	assert.Equal(t, "test-cluster-controlplane-0", servers.lastOpts.Name)
+	assert.Contains(t, servers.lastOpts.UserData, "controlPlaneEndpoint: "+testJoinName+":6443")
 }
 
-// TestCreateAgentsAreMultiNode pins that the kubeadm × Hetzner provisioner does
-// not yet implement joining-node bring-up: it does not satisfy
-// hetznerbase.MultiNodeComposer, so a topology with agents is rejected before
-// any infrastructure is created (kubeadm's join-endpoint threading is a later
-// increment of #5755).
-func TestCreateAgentsAreMultiNode(t *testing.T) {
-	t.Parallel()
-
-	infra := &fakeInfra{}
-	prov := newProvisioner(infra, 1, 2)
-
-	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, kubeadmhetzner.ErrMultiNodeNotImplemented)
-	assert.Equal(t, 0, infra.ensureNetworkCalls)
-}
+// The provisioner now satisfies hetznerbase.MultiNodeComposer (multinode.go's
+// compile-time check), so a topology with agents routes to the shared two-phase
+// bring-up instead of being rejected; the compose halves of that flow are pinned
+// by multinode_test.go and the engine by the hetznerbase package's own tests.
 
 func TestCreateNodesExistError(t *testing.T) {
 	t.Parallel()

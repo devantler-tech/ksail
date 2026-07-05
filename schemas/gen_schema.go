@@ -111,7 +111,7 @@ func customizeSchema(schema *jsonschema.Schema) error {
 
 		// Clear required everywhere (all fields use omitzero). The root spec is
 		// deliberately NOT required: the runtime treats an absent spec as
-		// all-defaults, and `ksail cluster init` scaffolds a ksail.yaml without
+		// all-defaults, and `ksail project init` scaffolds a ksail.yaml without
 		// a spec key, so the published schema must accept that output.
 		s.Required = nil
 

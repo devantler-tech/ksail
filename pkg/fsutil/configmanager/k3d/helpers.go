@@ -92,7 +92,7 @@ func ResolveClusterName(
 const ContainerdConfigTemplatePath = "/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl"
 
 // DefaultImageVerifierDir is the default directory for the K3d containerd config template
-// relative to the project root. The template file is generated during `ksail cluster init`
+// relative to the project root. The template file is generated during `ksail project init`
 // when image verification is enabled for the K3s distribution.
 const DefaultImageVerifierDir = "k3d/containerd"
 

@@ -118,6 +118,20 @@ func TestGeneratedSchema(t *testing.T) {
 		assertEnum(t, apiProp, []string{"ksail.io/v1alpha1"})
 	})
 
+	testClusterEnums(t, schema)
+
+	testNoRequiredFields(t, schema)
+	testFieldDescriptions(t, schema)
+	testMetadataNameConstraints(t, schema)
+	testDeprecatedAliases(t, schema)
+	testDistributionProviderConstraints(t, schema)
+}
+
+// testClusterEnums asserts the distribution and provider enum surfaces carry
+// every supported value.
+func testClusterEnums(t *testing.T, schema map[string]any) {
+	t.Helper()
+
 	t.Run("distribution enum", func(t *testing.T) {
 		t.Parallel()
 
@@ -127,7 +141,7 @@ func TestGeneratedSchema(t *testing.T) {
 		assertEnum(
 			t,
 			distProp,
-			[]string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS", "GKE"},
+			[]string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS", "GKE", "AKS"},
 		)
 	})
 
@@ -137,14 +151,12 @@ func TestGeneratedSchema(t *testing.T) {
 		cluster := mustNestedProp(t, schema, specKey, clusterKey)
 		props := mustMap(t, cluster["properties"], "cluster.properties")
 		prov := mustMap(t, props["provider"], "provider")
-		assertEnum(t, prov, []string{"Docker", "Hetzner", "Omni", "AWS", "GCP", "Kubernetes"})
+		assertEnum(
+			t,
+			prov,
+			[]string{"Docker", "Hetzner", "Omni", "AWS", "GCP", "Azure", "Kubernetes"},
+		)
 	})
-
-	testNoRequiredFields(t, schema)
-	testFieldDescriptions(t, schema)
-	testMetadataNameConstraints(t, schema)
-	testDeprecatedAliases(t, schema)
-	testDistributionProviderConstraints(t, schema)
 }
 
 // testFieldDescriptions asserts the Go doc comments flowed into descriptions
@@ -236,7 +248,7 @@ func testDistributionProviderConstraints(t *testing.T, schema map[string]any) {
 			t.Fatalf("expected spec.cluster allOf to be an array, got %T", cluster["allOf"])
 		}
 
-		const wantBranches = 7
+		const wantBranches = 8
 		if len(allOf) != wantBranches {
 			t.Fatalf("spec.cluster allOf has %d branches, want %d", len(allOf), wantBranches)
 		}
@@ -245,6 +257,7 @@ func testDistributionProviderConstraints(t *testing.T, schema map[string]any) {
 
 		assertEnum(t, providersByDistribution["EKS"], []string{"AWS"})
 		assertEnum(t, providersByDistribution["GKE"], []string{"GCP"})
+		assertEnum(t, providersByDistribution["AKS"], []string{"Azure"})
 		assertEnum(
 			t,
 			providersByDistribution["Talos"],

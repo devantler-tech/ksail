@@ -17,10 +17,8 @@ func (f DefaultFactory) createKindProvisioner(
 ) (Provisioner, any, error) {
 	// Hetzner provider: native kubeadm (upstream Kubernetes) on Hetzner Cloud
 	// servers — the Vanilla distribution's server implementation, mirroring the
-	// k3s × Hetzner path. The Vanilla × Hetzner combination stays unselectable
-	// until the validation flip (#5514), so this path is gated; see the
-	// kubeadmhetzner package. It needs no Kind config, so it dispatches before the
-	// Kind-config requirement below.
+	// k3s × Hetzner path; see the kubeadmhetzner package. It needs no Kind
+	// config, so it dispatches before the Kind-config requirement below.
 	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
 		return createKubeadmHetznerProvisioner(cluster)
 	}
@@ -148,7 +146,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 	// while cluster.Name may be empty with --name flag.
 	clusterName := kindConfig.Name
 
-	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -159,17 +157,12 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 
 	provisioner, err := kindprovisioner.NewKubernetesProvisioner(
 		kindprovisioner.KubernetesProvisionerConfig{
-			KindConfig:       kindConfig,
-			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
-			K8sProvider:      k8sProvider,
-			DynamicClient:    dynClient,
-			RestConfig:       restConfig,
-			ClusterName:      clusterName,
-			Distribution:     string(cluster.Spec.Cluster.Distribution),
-			GatewayClassName: opts.GatewayClassName,
-			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
-			Persistence:      opts.Persistence,
+			DinDProvisionerConfig: buildDinDProvisionerConfig(
+				cluster, opts, hostClient, restConfig, dynClient, k8sProvider, clusterName,
+			),
+			KindConfig:    kindConfig,
+			HostContext:   resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			APIServerPort: kubernetesprovider.DinDAPIServerPort,
 		},
 	)
 	if err != nil {

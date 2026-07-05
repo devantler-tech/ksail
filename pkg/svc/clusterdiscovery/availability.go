@@ -59,12 +59,15 @@ func (d *Discoverer) providerAvailability(
 	case v1alpha1.ProviderAWS:
 		return d.awsAvailability()
 	case v1alpha1.ProviderGCP:
-		// GCP discovery (credential probing + cluster listing) lands with
-		// ksail#5728 part 3; until then GCP is not offered for discovery.
+		return d.gcpAvailability()
+	case v1alpha1.ProviderAzure:
+		// Azure discovery (credential probing + cluster listing) lands with
+		// the AKS discovery follow-up; until then Azure is not offered for
+		// discovery.
 		return Availability{
 			Provider:  prov,
 			Available: false,
-			Reason:    "GCP discovery is not wired yet",
+			Reason:    "Azure discovery is not wired yet",
 		}
 	case v1alpha1.ProviderKubernetes:
 		return kubernetesAvailability()
@@ -161,6 +164,25 @@ func (d *Discoverer) awsAvailability() Availability {
 	}
 
 	return Availability{Provider: v1alpha1.ProviderAWS, Available: true}
+}
+
+// gcpAvailability requires a Google Cloud project (every GKE API call is project-scoped) and
+// Application Default Credentials for the SDK to authenticate with.
+func (d *Discoverer) gcpAvailability() Availability {
+	projectAvailability := d.requireCredentials(v1alpha1.ProviderGCP, credentials.GCPProject)
+	if !projectAvailability.Available {
+		return projectAvailability
+	}
+
+	if !gcpADCPresent() {
+		return Availability{
+			Provider:  v1alpha1.ProviderGCP,
+			Available: false,
+			Reason:    "Google Cloud Application Default Credentials are not configured",
+		}
+	}
+
+	return Availability{Provider: v1alpha1.ProviderGCP, Available: true}
 }
 
 // kubernetesAvailability reports the nested-Kubernetes provider as available when a host kubeconfig

@@ -410,6 +410,11 @@ func buildDeletionPreview(
 		// managed control plane and its node pools.
 		gkePlaceholder := "(GKE cluster and node pools for: " + resolved.ClusterName + ")"
 		preview.Servers = []string{gkePlaceholder}
+	case v1alpha1.ProviderAzure:
+		// For Azure/AKS, deletion goes through the AKS API which tears down the
+		// managed control plane and its agent pools.
+		aksPlaceholder := "(AKS cluster and agent pools for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{aksPlaceholder}
 	case v1alpha1.ProviderKubernetes:
 		// For Kubernetes provider, nested cluster resources (DinD pod, Gateway,
 		// namespace) will be removed from the host cluster.

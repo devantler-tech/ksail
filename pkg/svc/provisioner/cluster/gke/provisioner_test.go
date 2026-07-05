@@ -25,6 +25,7 @@ type fakeClusterManager struct {
 	createFunc func(*containerpb.CreateClusterRequest) (*containerpb.Operation, error)
 	deleteFunc func(*containerpb.DeleteClusterRequest) (*containerpb.Operation, error)
 	listFunc   func(*containerpb.ListClustersRequest) (*containerpb.ListClustersResponse, error)
+	getFunc    func(*containerpb.GetClusterRequest) (*containerpb.Cluster, error)
 }
 
 func (f *fakeClusterManager) CreateCluster(
@@ -45,10 +46,14 @@ func (f *fakeClusterManager) DeleteCluster(
 
 func (f *fakeClusterManager) GetCluster(
 	_ context.Context,
-	_ *containerpb.GetClusterRequest,
+	req *containerpb.GetClusterRequest,
 	_ ...gax.CallOption,
 ) (*containerpb.Cluster, error) {
-	return nil, errBoom
+	if f.getFunc == nil {
+		return nil, errBoom
+	}
+
+	return f.getFunc(req)
 }
 
 func (f *fakeClusterManager) ListClusters(

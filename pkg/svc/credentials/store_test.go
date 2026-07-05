@@ -102,6 +102,8 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 		credentials.OmniEndpoint:          false,
 		credentials.AWSRegion:             false,
 		credentials.AWSProfile:            false,
+		credentials.GCPProject:            false,
+		credentials.GCPLocation:           false,
 		credentials.Key("unknown.key"):    false,
 	}
 
@@ -129,6 +131,8 @@ func TestProviderFor_MapsEveryKey(t *testing.T) {
 		credentials.AWSAccessKeyID:        string(v1alpha1.ProviderAWS),
 		credentials.AWSSecretAccessKey:    string(v1alpha1.ProviderAWS),
 		credentials.AWSSessionToken:       string(v1alpha1.ProviderAWS),
+		credentials.GCPProject:            string(v1alpha1.ProviderGCP),
+		credentials.GCPLocation:           string(v1alpha1.ProviderGCP),
 		credentials.CopilotToken:          "GitHub Copilot",
 		credentials.Key("unknown.key"):    "",
 	}
@@ -150,6 +154,8 @@ func TestLabel_NamesEveryKey(t *testing.T) {
 		credentials.AWSAccessKeyID:        "Access key ID",
 		credentials.AWSSecretAccessKey:    "Secret access key",
 		credentials.AWSSessionToken:       "Session token",
+		credentials.GCPProject:            "Project ID",
+		credentials.GCPLocation:           "Location",
 		credentials.CopilotToken:          "Token",
 	}
 
