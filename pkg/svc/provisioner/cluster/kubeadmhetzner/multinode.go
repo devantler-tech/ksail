@@ -42,8 +42,20 @@ const (
 // staticMultiNodeComposerCheck asserts at compile time that *Provisioner
 // implements the optional [hetznerbase.MultiNodeComposer] capability, so the
 // shared create flow routes a kubeadm topology with agents to the two-phase
-// bring-up instead of rejecting it.
-var _ hetznerbase.MultiNodeComposer = (*Provisioner)(nil)
+// bring-up instead of rejecting it — and the [hetznerbase.HAControlPlaneComposer]
+// capability, so a multi-control-plane topology routes there too.
+var (
+	_ hetznerbase.MultiNodeComposer      = (*Provisioner)(nil)
+	_ hetznerbase.HAControlPlaneComposer = (*Provisioner)(nil)
+)
+
+// SupportsHAControlPlanes marks the kubeadm strategy as able to compose a
+// multi-control-plane topology, satisfying [hetznerbase.HAControlPlaneComposer]:
+// [Provisioner.ComposeInitNode] advertises the stable join name as the cluster's
+// controlPlaneEndpoint and [Provisioner.ComposeJoiningNodes] composes the
+// additional control planes as control-plane joiners carrying the shared PKI
+// (kubeadm's manual certificate distribution).
+func (p *Provisioner) SupportsHAControlPlanes() {}
 
 // JoinName returns the cluster's stable join name: the DNS name the joining
 // nodes dial the cluster-initialising control plane by, and the extra SAN its
@@ -88,21 +100,43 @@ func (p *Provisioner) ComposeInitNode(
 
 	p.clusterPKI = &clusterPKI
 
+	joinName := JoinName(clusterName)
+
+	// A multi-control-plane cluster needs a stable controlPlaneEndpoint at init —
+	// kubeadm refuses control-plane joins without one — and the natural endpoint
+	// is the stable join name the joiners already dial. kubeadm writes the
+	// endpoint into the init node's own kubeconfigs (admin.conf, kubelet.conf),
+	// so the name must resolve locally before `kubeadm init` runs: it is pinned
+	// to loopback, which the API server serves (it binds all interfaces) and TLS
+	// accepts (verification is against the name, a SAN, not the address).
+	// Single-control-plane topologies keep no endpoint so their flow is unchanged.
+	var (
+		controlPlaneEndpoint string
+		serverInitPrelude    []string
+	)
+
+	if p.ControlPlanes > 1 {
+		controlPlaneEndpoint = net.JoinHostPort(joinName, kubeadmAPIPort)
+		serverInitPrelude = []string{hostsPinCommand(net.ParseIP("127.0.0.1"), joinName)}
+	}
+
 	// A reduced single-node plan: the init node's own configuration is identical
 	// in every topology (the join settings apply only to joining nodes), and the
 	// full plan cannot be expanded yet — its join endpoint resolves at run time.
 	nodes, err := BuildNodeUserData(Input{
 		ClusterName: clusterName,
 		Plan: kubeadmbootstrap.PlanInput{
-			Token:             token,
-			KubernetesVersion: p.kubernetesVersion,
-			CertSANs:          []string{JoinName(clusterName)},
-			ControlPlaneCount: 1,
-			AgentCount:        0,
+			Token:                token,
+			KubernetesVersion:    p.kubernetesVersion,
+			ControlPlaneEndpoint: controlPlaneEndpoint,
+			CertSANs:             []string{joinName},
+			ControlPlaneCount:    1,
+			AgentCount:           0,
 		},
 		SSHAuthorizedKeys: []string{material.AuthorizedKey},
 		HostKeys:          material.HostKeys,
 		ServerInitFiles:   pkiSeedFiles(clusterPKI),
+		ServerInitPrelude: serverInitPrelude,
 	})
 	if err != nil {
 		return hetznerbase.NodeSpec{}, fmt.Errorf("compose init control-plane node: %w", err)
@@ -152,12 +186,15 @@ func pkiSeedFiles(clusterPKI ClusterPKI) []cloudinitbootstrap.File {
 	}
 }
 
-// ComposeJoiningNodes composes the kubeadm agents that register against the
-// init control plane reachable at joinAddress (its private-network IPv4),
-// satisfying [hetznerbase.MultiNodeComposer]. It plans the full topology so the
-// joining nodes keep their global bootstrap indices, threads the stable join
-// name (pinned to joinAddress in each node's /etc/hosts) and the pre-seeded
-// CA's discovery hash into their JoinConfigurations, and returns only the
+// ComposeJoiningNodes composes the kubeadm joining nodes — additional control
+// planes first, then agents — that register against the init control plane
+// reachable at joinAddress (its private-network IPv4), satisfying
+// [hetznerbase.MultiNodeComposer]. It plans the full topology so the joining
+// nodes keep their global bootstrap indices, threads the stable join name
+// (pinned to joinAddress in each node's /etc/hosts) and the pre-seeded CA's
+// discovery hash into their JoinConfigurations, seeds the shared PKI onto the
+// control-plane joiners only (kubeadm's manual certificate distribution — an
+// agent never carries private cluster-identity material), and returns only the
 // joining nodes — the init node at index 0 is already up.
 func (p *Provisioner) ComposeJoiningNodes(
 	clusterName, token string,
@@ -183,6 +220,7 @@ func (p *Provisioner) ComposeJoiningNodes(
 		},
 		SSHAuthorizedKeys: []string{material.AuthorizedKey},
 		HostKeys:          material.HostKeys,
+		ServerJoinFiles:   pkiSeedFiles(*p.clusterPKI),
 		JoinPrelude:       []string{hostsPinCommand(joinAddress, joinName)},
 	})
 	if err != nil {

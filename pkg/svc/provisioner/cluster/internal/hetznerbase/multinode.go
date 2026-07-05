@@ -31,13 +31,14 @@ type MultiNodeComposer interface {
 	// (bootstrap index 0). It carries no join endpoint — it initialises the
 	// cluster the joining nodes later register against.
 	ComposeInitNode(clusterName, token string, material BootstrapMaterial) (NodeSpec, error)
-	// ComposeJoiningNodes composes the joining nodes (agents; additional control
-	// planes are a later increment) that register against the control plane
-	// reachable at joinAddress — the init node's private-network IPv4. The
-	// distribution forms its own registration URL from joinAddress (both k3s and
-	// kubeadm serve the API on the standard secure port). The returned specs carry
-	// their global bootstrap indices (>= 1) so their server names stay distinct
-	// from the init node's.
+	// ComposeJoiningNodes composes the joining nodes that register against the
+	// control plane reachable at joinAddress — the init node's private-network
+	// IPv4. For every distribution that means the agents; a distribution that
+	// also implements [HAControlPlaneComposer] composes its additional control
+	// planes here too. The distribution forms its own registration URL from joinAddress
+	// (both k3s and kubeadm serve the API on the standard secure port). The
+	// returned specs carry their global bootstrap indices (>= 1) so their server
+	// names stay distinct from the init node's.
 	ComposeJoiningNodes(
 		clusterName, token string,
 		joinAddress net.IP,
@@ -45,8 +46,28 @@ type MultiNodeComposer interface {
 	) ([]NodeSpec, error)
 }
 
-// RunCreateMultiNode runs the two-phase Hetzner create flow for a single
-// control-plane cluster with joining nodes (agents): guard against an existing
+// HAControlPlaneComposer is the optional capability a distribution's
+// [MultiNodeComposer] additionally implements once its compose halves handle a
+// multi-control-plane (high-availability) topology: the init node advertises a
+// stable control-plane endpoint and [MultiNodeComposer.ComposeJoiningNodes]
+// composes the additional control planes as control-plane joiners alongside the
+// agents. [Base.Create] rejects controlPlanes > 1 with
+// [ErrHAControlPlaneNotImplemented] for any strategy that does not implement
+// this — the guard is per-distribution because the join mechanics differ:
+// kubeadm's manual certificate distribution supports it, while k3s needs its own
+// embedded-etcd increment (see devantler-tech/ksail#5796).
+type HAControlPlaneComposer interface {
+	MultiNodeComposer
+
+	// SupportsHAControlPlanes marks the capability; it performs no work. A
+	// distribution declares — by implementing this — that its ComposeJoiningNodes
+	// output is correct for additional control planes, not only agents.
+	SupportsHAControlPlanes()
+}
+
+// RunCreateMultiNode runs the two-phase Hetzner create flow for a cluster with
+// joining nodes (agents and — for an [HAControlPlaneComposer] strategy —
+// additional control planes): guard against an existing
 // cluster, ensure the shared infrastructure, then (1) bring up the
 // cluster-initialising control plane and read its admin kubeconfig, and (2)
 // compose the joining nodes against the control plane's private-network address
@@ -64,6 +85,9 @@ type MultiNodeComposer interface {
 // usable once the control plane serves the API and its kubeconfig is retrieved;
 // end-to-end join success is validated by the live smoke tests
 // (devantler-tech/ksail#5515) once the Hetzner CI lane (#4972) is restored.
+// Additional control planes currently register concurrently like agents, which
+// can race etcd member addition; serialising their joins is the final HA
+// increment (devantler-tech/ksail#5796).
 func (b *Base) RunCreateMultiNode(
 	ctx context.Context,
 	name string,
