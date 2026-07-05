@@ -587,3 +587,105 @@ func TestSetAgentPoolCountWrapsGetError(t *testing.T) {
 	require.ErrorContains(t, err, "get agent pool")
 	require.ErrorContains(t, err, "AgentPoolNotFound")
 }
+
+// TestStartClusterWaitsForOperation pins the start wrapper's LRO handling:
+// BeginStart is polled to completion before the call returns.
+func TestStartClusterWaitsForOperation(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		BeginStart: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientBeginStartOptions,
+		) (
+			azfake.PollerResponder[armcontainerservice.ManagedClustersClientStartResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.PollerResponder[armcontainerservice.ManagedClustersClientStartResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.AddNonTerminalResponse(http.StatusAccepted, nil)
+			resp.SetTerminalResponse(
+				http.StatusOK, armcontainerservice.ManagedClustersClientStartResponse{}, nil,
+			)
+
+			return resp, errResp
+		},
+	}}
+
+	err := newTestClient(t, factory).StartCluster(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.NoError(t, err)
+}
+
+// TestStopClusterWaitsForOperation pins the stop wrapper's LRO handling.
+func TestStopClusterWaitsForOperation(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		BeginStop: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientBeginStopOptions,
+		) (
+			azfake.PollerResponder[armcontainerservice.ManagedClustersClientStopResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.PollerResponder[armcontainerservice.ManagedClustersClientStopResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.AddNonTerminalResponse(http.StatusAccepted, nil)
+			resp.SetTerminalResponse(
+				http.StatusOK, armcontainerservice.ManagedClustersClientStopResponse{}, nil,
+			)
+
+			return resp, errResp
+		},
+	}}
+
+	err := newTestClient(t, factory).StopCluster(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.NoError(t, err)
+}
+
+// TestStopClusterSurfacesOperationError pins the ErrOperationFailed wrap on
+// the stop wrapper's PollUntilDone path (a non-terminal page first, so the
+// failure surfaces during the wait rather than at BeginStop).
+func TestStopClusterSurfacesOperationError(t *testing.T) {
+	t.Parallel()
+
+	factory := &fake.ServerFactory{ManagedClustersServer: fake.ManagedClustersServer{
+		BeginStop: func(
+			_ context.Context, _, _ string,
+			_ *armcontainerservice.ManagedClustersClientBeginStopOptions,
+		) (
+			azfake.PollerResponder[armcontainerservice.ManagedClustersClientStopResponse],
+			azfake.ErrorResponder,
+		) {
+			var (
+				resp    azfake.PollerResponder[armcontainerservice.ManagedClustersClientStopResponse]
+				errResp azfake.ErrorResponder
+			)
+
+			resp.AddNonTerminalResponse(http.StatusAccepted, nil)
+			resp.SetTerminalError(http.StatusConflict, "StopInProgress")
+
+			return resp, errResp
+		},
+	}}
+
+	err := newTestClient(t, factory).StopCluster(
+		t.Context(), testResourceGroup, testClusterName,
+	)
+
+	require.ErrorIs(t, err, aks.ErrOperationFailed)
+	require.ErrorContains(t, err, "StopInProgress")
+	require.ErrorContains(t, err, testClusterName)
+}

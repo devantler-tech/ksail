@@ -25,7 +25,7 @@ const agentPoolReadyState = "Succeeded"
 // ClusterClient is the slice of the pkg/client/aks surface the provider
 // drives. It is the provider's test seam: the aks client has no injectable
 // manager (its own tests fake the ARM transport), so the provider narrows the
-// dependency to the three calls it makes instead.
+// dependency to the calls it makes instead.
 type ClusterClient interface {
 	// GetCluster fetches one managed cluster in a resource group.
 	GetCluster(
@@ -38,12 +38,10 @@ type ClusterClient interface {
 		ctx context.Context,
 		resourceGroup string,
 	) ([]*armcontainerservice.ManagedCluster, error)
-	// SetAgentPoolCount resizes one agent pool of a cluster.
-	SetAgentPoolCount(
-		ctx context.Context,
-		resourceGroup, clusterName, poolName string,
-		count int32,
-	) error
+	// StartCluster starts a stopped managed cluster.
+	StartCluster(ctx context.Context, resourceGroup, name string) error
+	// StopCluster stops a running managed cluster.
+	StopCluster(ctx context.Context, resourceGroup, name string) error
 }
 
 // staticClusterClientCheck asserts at compile time that the production aks
@@ -70,55 +68,47 @@ func NewProvider(client ClusterClient, resourceGroup string) (*Provider, error) 
 	return &Provider{client: client, resourceGroup: resourceGroup}, nil
 }
 
-// StartNodes resizes every agent pool of the cluster back to at least one
-// node: the pool's current count when it still has one, its autoscaler
-// minimum when one is configured, and one node otherwise.
-//
-// AKS does not preserve a creation-time count on the agent-pool profile (the
-// profile's Count is the live size, zero after StopNodes), so unlike GKE
-// there is no initial count to restore — the resize is re-asserted for every
-// pool, which the API treats as a no-op when the pool is already at that
-// size. The provisioner — which has the ksail.yaml spec — is responsible for
-// restoring an exact desired size when needed.
+// StartNodes starts a stopped cluster via AKS's native start, the
+// counterpart of [Provider.StopNodes]. A cluster already running is left
+// alone, keeping the call idempotent (ARM rejects starting a running
+// cluster).
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	pools, resourceGroup, err := p.agentPoolsForScale(ctx, clusterName)
+	resourceGroup, cluster, err := p.clusterWithGroup(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	for _, pool := range pools {
-		target := max(derefInt32(pool.Count), derefInt32(pool.MinCount), 1)
+	if powerCode(cluster) == armcontainerservice.CodeRunning {
+		return nil
+	}
 
-		err = p.client.SetAgentPoolCount(
-			ctx, resourceGroup, clusterName, derefString(pool.Name), target,
-		)
-		if err != nil {
-			return fmt.Errorf(
-				"start nodes: resize agent pool %s: %w", derefString(pool.Name), err,
-			)
-		}
+	err = p.client.StartCluster(ctx, resourceGroup, clusterName)
+	if err != nil {
+		return fmt.Errorf("start cluster %s: %w", clusterName, err)
 	}
 
 	return nil
 }
 
-// StopNodes resizes every agent pool of the cluster to zero nodes. The AKS
-// control plane keeps running (and billing) but all node costs stop.
+// StopNodes stops the cluster via AKS's native stop — Azure's supported way
+// to halt node costs. Unlike the gcp provider's pool-resize stop, agent pools
+// cannot be resized to zero on AKS (system pools require at least one node),
+// so the whole cluster — control plane included — deallocates while its state
+// and configuration are kept. A cluster already stopped is left alone,
+// keeping the call idempotent (ARM rejects stopping a stopped cluster).
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	pools, resourceGroup, err := p.agentPoolsForScale(ctx, clusterName)
+	resourceGroup, cluster, err := p.clusterWithGroup(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	for _, pool := range pools {
-		err = p.client.SetAgentPoolCount(
-			ctx, resourceGroup, clusterName, derefString(pool.Name), 0,
-		)
-		if err != nil {
-			return fmt.Errorf(
-				"stop nodes: resize agent pool %s: %w", derefString(pool.Name), err,
-			)
-		}
+	if powerCode(cluster) == armcontainerservice.CodeStopped {
+		return nil
+	}
+
+	err = p.client.StopCluster(ctx, resourceGroup, clusterName)
+	if err != nil {
+		return fmt.Errorf("stop cluster %s: %w", clusterName, err)
 	}
 
 	return nil
@@ -217,7 +207,7 @@ func (p *Provider) clusterNodes(
 	ctx context.Context,
 	clusterName string,
 ) (armcontainerservice.ManagedCluster, []provider.NodeInfo, error) {
-	cluster, err := p.getCluster(ctx, clusterName)
+	_, cluster, err := p.clusterWithGroup(ctx, clusterName)
 	if err != nil {
 		return armcontainerservice.ManagedCluster{}, nil, err
 	}
@@ -225,56 +215,29 @@ func (p *Provider) clusterNodes(
 	return cluster, agentPoolInfos(cluster, clusterName), nil
 }
 
-// getCluster is the shared cluster fetch that guards against nil clients and
-// translates client errors into the provider sentinels.
-func (p *Provider) getCluster(
+// clusterWithGroup is the shared cluster fetch that guards against nil
+// clients, resolves the resource group the cluster lives in, and translates
+// client errors into the provider sentinels — the prelude of every
+// cluster-scoped operation.
+func (p *Provider) clusterWithGroup(
 	ctx context.Context,
 	clusterName string,
-) (armcontainerservice.ManagedCluster, error) {
+) (string, armcontainerservice.ManagedCluster, error) {
 	if p.client == nil {
-		return armcontainerservice.ManagedCluster{}, provider.ErrProviderUnavailable
+		return "", armcontainerservice.ManagedCluster{}, provider.ErrProviderUnavailable
 	}
 
 	resourceGroup, err := p.clusterResourceGroup(ctx, clusterName)
 	if err != nil {
-		return armcontainerservice.ManagedCluster{}, err
+		return "", armcontainerservice.ManagedCluster{}, err
 	}
 
 	cluster, err := p.client.GetCluster(ctx, resourceGroup, clusterName)
 	if err != nil {
-		return armcontainerservice.ManagedCluster{}, translateClientErr(err)
+		return "", armcontainerservice.ManagedCluster{}, translateClientErr(err)
 	}
 
-	return cluster, nil
-}
-
-// agentPoolsForScale is the shared prelude for StartNodes and StopNodes that
-// fetches the cluster's agent pools (and the resource group they live in) and
-// classifies an empty result as provider.ErrNoNodes.
-func (p *Provider) agentPoolsForScale(
-	ctx context.Context,
-	clusterName string,
-) ([]*armcontainerservice.ManagedClusterAgentPoolProfile, string, error) {
-	if p.client == nil {
-		return nil, "", provider.ErrProviderUnavailable
-	}
-
-	resourceGroup, err := p.clusterResourceGroup(ctx, clusterName)
-	if err != nil {
-		return nil, "", err
-	}
-
-	cluster, err := p.client.GetCluster(ctx, resourceGroup, clusterName)
-	if err != nil {
-		return nil, "", translateClientErr(err)
-	}
-
-	pools := agentPools(cluster)
-	if len(pools) == 0 {
-		return nil, "", provider.ErrNoNodes
-	}
-
-	return pools, resourceGroup, nil
+	return resourceGroup, cluster, nil
 }
 
 // clusterResourceGroup resolves the resource group a cluster-scoped call
@@ -364,19 +327,22 @@ func translateClientErr(err error) error {
 	return err
 }
 
+// powerCode unwraps a cluster's power state, mapping any missing level of
+// the optional chain to the empty code (neither running nor stopped, so the
+// idempotence short-circuits never fire on it and the native call decides).
+func powerCode(cluster armcontainerservice.ManagedCluster) armcontainerservice.Code {
+	if cluster.Properties == nil || cluster.Properties.PowerState == nil ||
+		cluster.Properties.PowerState.Code == nil {
+		return ""
+	}
+
+	return *cluster.Properties.PowerState.Code
+}
+
 // derefString unwraps the SDK's optional string fields, mapping nil to "".
 func derefString(value *string) string {
 	if value == nil {
 		return ""
-	}
-
-	return *value
-}
-
-// derefInt32 unwraps the SDK's optional int32 fields, mapping nil to zero.
-func derefInt32(value *int32) int32 {
-	if value == nil {
-		return 0
 	}
 
 	return *value

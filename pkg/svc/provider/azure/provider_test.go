@@ -2,6 +2,7 @@ package azure_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -19,26 +20,29 @@ const (
 	testResourceGroup = "rg-dev"
 )
 
-// resizeCall records one SetAgentPoolCount invocation the provider made.
-type resizeCall struct {
+// errBoom is a sentinel used to assert error propagation from the client seam.
+var errBoom = errors.New("boom")
+
+// powerCall records one StartCluster/StopCluster invocation the provider made.
+type powerCall struct {
 	resourceGroup string
 	cluster       string
-	pool          string
-	count         int32
 }
 
 // fakeClusterClient scripts the azure.ClusterClient seam: it serves the
-// configured clusters for Get/List and records resizes, mirroring the gcp
-// provider's fakeClusterManager.
+// configured clusters for Get/List and records the native stop/start calls,
+// mirroring the gcp provider's fakeClusterManager.
 type fakeClusterClient struct {
 	clusters []*armcontainerservice.ManagedCluster
 
-	getErr  error
-	listErr error
-	sizeErr error
+	getErr   error
+	listErr  error
+	startErr error
+	stopErr  error
 
 	lastGetResourceGroup string
-	resizes              []resizeCall
+	starts               []powerCall
+	stops                []powerCall
 }
 
 func (f *fakeClusterClient) GetCluster(
@@ -74,21 +78,28 @@ func (f *fakeClusterClient) ListClusters(
 	return f.clusters, nil
 }
 
-func (f *fakeClusterClient) SetAgentPoolCount(
+func (f *fakeClusterClient) StartCluster(
 	_ context.Context,
-	resourceGroup, clusterName, poolName string,
-	count int32,
+	resourceGroup, name string,
 ) error {
-	if f.sizeErr != nil {
-		return f.sizeErr
+	if f.startErr != nil {
+		return f.startErr
 	}
 
-	f.resizes = append(f.resizes, resizeCall{
-		resourceGroup: resourceGroup,
-		cluster:       clusterName,
-		pool:          poolName,
-		count:         count,
-	})
+	f.starts = append(f.starts, powerCall{resourceGroup: resourceGroup, cluster: name})
+
+	return nil
+}
+
+func (f *fakeClusterClient) StopCluster(
+	_ context.Context,
+	resourceGroup, name string,
+) error {
+	if f.stopErr != nil {
+		return f.stopErr
+	}
+
+	f.stops = append(f.stops, powerCall{resourceGroup: resourceGroup, cluster: name})
 
 	return nil
 }
@@ -122,8 +133,22 @@ func managedCluster(
 		Properties: &armcontainerservice.ManagedClusterProperties{
 			Fqdn:              new(name + ".hcp.westeurope.azmk8s.io"),
 			AgentPoolProfiles: pools,
+			PowerState: &armcontainerservice.PowerState{
+				Code: new(armcontainerservice.CodeRunning),
+			},
 		},
 	}
+}
+
+// stoppedCluster returns a managedCluster whose power state reads Stopped.
+func stoppedCluster(
+	name string,
+	pools ...*armcontainerservice.ManagedClusterAgentPoolProfile,
+) *armcontainerservice.ManagedCluster {
+	cluster := managedCluster(name, pools...)
+	cluster.Properties.PowerState.Code = new(armcontainerservice.CodeStopped)
+
+	return cluster
 }
 
 // agentPool assembles an agent-pool profile in the given provisioning state.
@@ -206,73 +231,123 @@ func TestListNodesUnknownClusterWithoutResourceGroupIsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrClusterNotFound)
 }
 
-// TestStartNodesRestoresAtLeastOneNode pins the start targets: a stopped pool
-// (count zero) is restored to one node, a pool with an autoscaler minimum to
-// that minimum, and a running pool has its current size re-asserted — the
-// idempotent re-assert the design locked (AKS preserves no creation-time
-// count on the profile).
-func TestStartNodesRestoresAtLeastOneNode(t *testing.T) {
-	t.Parallel()
-
-	autoscaled := agentPool("autoscaled", 0, "Succeeded")
-	autoscaled.MinCount = new(int32(3))
-
-	fake := &fakeClusterClient{clusters: []*armcontainerservice.ManagedCluster{
-		managedCluster(
-			testCluster,
-			agentPool("stopped", 0, "Succeeded"),
-			autoscaled,
-			agentPool("running", 5, "Succeeded"),
-		),
-	}}
-	prov := newProvider(t, fake, testResourceGroup)
-
-	err := prov.StartNodes(context.Background(), testCluster)
-	require.NoError(t, err)
-
-	require.Len(t, fake.resizes, 3)
-	assert.Equal(t, resizeCall{testResourceGroup, testCluster, "stopped", 1}, fake.resizes[0])
-	assert.Equal(t, resizeCall{testResourceGroup, testCluster, "autoscaled", 3}, fake.resizes[1])
-	assert.Equal(t, resizeCall{testResourceGroup, testCluster, "running", 5}, fake.resizes[2])
-}
-
-// TestStopNodesResizesPoolsToZero pins the stop semantics: every pool is
-// resized to zero nodes (the control plane stays up; node costs stop).
-func TestStopNodesResizesPoolsToZero(t *testing.T) {
+// TestStopNodesStopsARunningCluster pins the stop semantics: a running
+// cluster is stopped via AKS's native whole-cluster stop (system agent pools
+// cannot be resized to zero, so there is no pool-resize path), targeting the
+// resolved resource group.
+func TestStopNodesStopsARunningCluster(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeClusterClient{clusters: []*armcontainerservice.ManagedCluster{
-		managedCluster(
-			testCluster,
-			agentPool("system", 1, "Succeeded"),
-			agentPool("user", 3, "Succeeded"),
-		),
+		managedCluster(testCluster, agentPool("system", 1, "Succeeded")),
 	}}
 	prov := newProvider(t, fake, testResourceGroup)
 
 	err := prov.StopNodes(context.Background(), testCluster)
 	require.NoError(t, err)
 
-	require.Len(t, fake.resizes, 2)
-
-	for _, resize := range fake.resizes {
-		assert.Equal(t, int32(0), resize.count)
-	}
+	assert.Equal(t, []powerCall{{testResourceGroup, testCluster}}, fake.stops)
+	assert.Empty(t, fake.starts)
 }
 
-// TestStartStopNodesRequirePools pins that scaling a cluster without agent
-// pools is classified as provider.ErrNoNodes rather than silently succeeding.
-func TestStartStopNodesRequirePools(t *testing.T) {
+// TestStopNodesAlreadyStoppedIsNoOp pins the idempotence: ARM rejects
+// stopping a stopped cluster, so the provider short-circuits on the power
+// state instead of surfacing that conflict.
+func TestStopNodesAlreadyStoppedIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeClusterClient{clusters: []*armcontainerservice.ManagedCluster{
-		managedCluster(testCluster),
+		stoppedCluster(testCluster, agentPool("system", 1, "Succeeded")),
 	}}
 	prov := newProvider(t, fake, testResourceGroup)
 
-	require.ErrorIs(t, prov.StartNodes(context.Background(), testCluster), provider.ErrNoNodes)
-	require.ErrorIs(t, prov.StopNodes(context.Background(), testCluster), provider.ErrNoNodes)
-	assert.Empty(t, fake.resizes)
+	err := prov.StopNodes(context.Background(), testCluster)
+	require.NoError(t, err)
+	assert.Empty(t, fake.stops)
+}
+
+// TestStartNodesStartsAStoppedCluster pins the start semantics: a stopped
+// cluster is started via AKS's native whole-cluster start.
+func TestStartNodesStartsAStoppedCluster(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterClient{clusters: []*armcontainerservice.ManagedCluster{
+		stoppedCluster(testCluster, agentPool("system", 1, "Succeeded")),
+	}}
+	prov := newProvider(t, fake, testResourceGroup)
+
+	err := prov.StartNodes(context.Background(), testCluster)
+	require.NoError(t, err)
+
+	assert.Equal(t, []powerCall{{testResourceGroup, testCluster}}, fake.starts)
+	assert.Empty(t, fake.stops)
+}
+
+// TestStartNodesAlreadyRunningIsNoOp pins the idempotence on the start side.
+func TestStartNodesAlreadyRunningIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterClient{clusters: []*armcontainerservice.ManagedCluster{
+		managedCluster(testCluster, agentPool("system", 1, "Succeeded")),
+	}}
+	prov := newProvider(t, fake, testResourceGroup)
+
+	err := prov.StartNodes(context.Background(), testCluster)
+	require.NoError(t, err)
+	assert.Empty(t, fake.starts)
+}
+
+// TestStopNodesPropagatesStopError pins the negative path: a failing native
+// stop surfaces to the caller instead of being swallowed.
+func TestStopNodesPropagatesStopError(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterClient{
+		clusters: []*armcontainerservice.ManagedCluster{
+			managedCluster(testCluster, agentPool("system", 1, "Succeeded")),
+		},
+		stopErr: errBoom,
+	}
+	prov := newProvider(t, fake, testResourceGroup)
+
+	err := prov.StopNodes(context.Background(), testCluster)
+	require.ErrorIs(t, err, errBoom)
+}
+
+// TestStartNodesPropagatesStartError pins the start-side negative path.
+func TestStartNodesPropagatesStartError(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeClusterClient{
+		clusters: []*armcontainerservice.ManagedCluster{
+			stoppedCluster(testCluster, agentPool("system", 1, "Succeeded")),
+		},
+		startErr: errBoom,
+	}
+	prov := newProvider(t, fake, testResourceGroup)
+
+	err := prov.StartNodes(context.Background(), testCluster)
+	require.ErrorIs(t, err, errBoom)
+}
+
+// TestListAllClustersPropagatesListError pins the listing negative path.
+func TestListAllClustersPropagatesListError(t *testing.T) {
+	t.Parallel()
+
+	prov := newProvider(t, &fakeClusterClient{listErr: errBoom}, testResourceGroup)
+
+	_, err := prov.ListAllClusters(context.Background())
+	require.ErrorIs(t, err, errBoom)
+}
+
+// TestListNodesPropagatesGetError pins the cluster-fetch negative path.
+func TestListNodesPropagatesGetError(t *testing.T) {
+	t.Parallel()
+
+	prov := newProvider(t, &fakeClusterClient{getErr: errBoom}, testResourceGroup)
+
+	_, err := prov.ListNodes(context.Background(), testCluster)
+	require.ErrorIs(t, err, errBoom)
 }
 
 // TestGetClusterStatusAggregatesPools pins the status aggregation: a cluster
@@ -375,7 +450,8 @@ func TestDeleteNodesIsNoOp(t *testing.T) {
 	prov := newProvider(t, fake, testResourceGroup)
 
 	require.NoError(t, prov.DeleteNodes(context.Background(), testCluster))
-	assert.Empty(t, fake.resizes)
+	assert.Empty(t, fake.stops)
+	assert.Empty(t, fake.starts)
 }
 
 // TestResourceGroupAccessor pins the configured-resource-group accessor.
