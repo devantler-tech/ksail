@@ -236,22 +236,11 @@ func (p *Provisioner) resolveResourceGroup(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
-	if p.resourceGroup != "" {
-		return p.resourceGroup, nil
-	}
-
-	clusters, err := p.client.ListClusters(ctx, "")
+	group, err := aks.ResolveClusterResourceGroup(
+		ctx, p.client, clusterName, p.resourceGroup, ErrClusterNotFound,
+	)
 	if err != nil {
-		return "", fmt.Errorf("resolve cluster resource group: %w", err)
-	}
-
-	group, found, err := aks.FindClusterResourceGroup(clusters, clusterName)
-	if err != nil {
-		return "", fmt.Errorf("resolve cluster resource group: %w", err)
-	}
-
-	if !found {
-		return "", fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+		return "", fmt.Errorf("resolve resource group of %s: %w", clusterName, err)
 	}
 
 	return group, nil
