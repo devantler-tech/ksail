@@ -38,6 +38,10 @@ const (
 	AWSSecretAccessKey Key = "aws.secretAccessKey"
 	// AWSSessionToken is the AWS session token (for temporary credentials).
 	AWSSessionToken Key = "aws.sessionToken"
+	// GCPProject is the Google Cloud project ID used for GKE operations.
+	GCPProject Key = "gcp.project"
+	// GCPLocation is the GKE location (zone or region); empty means all locations.
+	GCPLocation Key = "gcp.location"
 	// CopilotToken is the GitHub Copilot token the AI assistant authenticates with. Not a cloud
 	// provider, but resolved the same way (secure store override, otherwise the environment) so it can
 	// be configured from the Settings page instead of only via the environment.
@@ -55,6 +59,8 @@ const (
 	defaultAWSAccessKeyIDEnvVar  = "AWS_ACCESS_KEY_ID"
 	defaultAWSSecretAccessEnvVar = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // env var NAME, not a secret
 	defaultAWSSessionTokenEnvVar = "AWS_SESSION_TOKEN"     //nolint:gosec // env var NAME, not a secret
+	defaultGCPProjectEnvVar      = "GOOGLE_CLOUD_PROJECT"
+	defaultGCPLocationEnvVar     = "GOOGLE_CLOUD_LOCATION"
 	// defaultCopilotTokenEnvVar is the primary variable webchat.copilotToken() reads first (it also
 	// falls back to COPILOT_TOKEN); using it as the default keeps a stored token resolvable via Overlay.
 	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
@@ -74,6 +80,8 @@ func AllKeys() []Key {
 		AWSAccessKeyID,
 		AWSSecretAccessKey,
 		AWSSessionToken,
+		GCPProject,
+		GCPLocation,
 		CopilotToken,
 	}
 }
@@ -90,6 +98,8 @@ func DefaultEnvVar(key Key) string {
 		AWSAccessKeyID:        defaultAWSAccessKeyIDEnvVar,
 		AWSSecretAccessKey:    defaultAWSSecretAccessEnvVar,
 		AWSSessionToken:       defaultAWSSessionTokenEnvVar,
+		GCPProject:            defaultGCPProjectEnvVar,
+		GCPLocation:           defaultGCPLocationEnvVar,
 		CopilotToken:          defaultCopilotTokenEnvVar,
 	}[key]
 }

@@ -137,7 +137,7 @@ func IsSecret(key Key) bool {
 	case HetznerToken, OmniServiceAccountKey, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken,
 		CopilotToken:
 		return true
-	case OmniEndpoint, AWSRegion, AWSProfile:
+	case OmniEndpoint, AWSRegion, AWSProfile, GCPProject, GCPLocation:
 		return false
 	default:
 		return false
@@ -158,6 +158,8 @@ func ProviderFor(key Key) string {
 		return string(v1alpha1.ProviderOmni)
 	case AWSRegion, AWSProfile, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken:
 		return string(v1alpha1.ProviderAWS)
+	case GCPProject, GCPLocation:
+		return string(v1alpha1.ProviderGCP)
 	case CopilotToken:
 		return copilotGroup
 	default:
@@ -177,6 +179,8 @@ func Label(key Key) string {
 		AWSAccessKeyID:        "Access key ID",
 		AWSSecretAccessKey:    "Secret access key",
 		AWSSessionToken:       "Session token",
+		GCPProject:            "Project ID",
+		GCPLocation:           "Location",
 		CopilotToken:          "Token",
 	}
 
