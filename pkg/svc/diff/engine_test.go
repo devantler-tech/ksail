@@ -1618,7 +1618,8 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 			Expander: v1alpha1.AutoscalerExpanderList{
 				v1alpha1.AutoscalerExpanderPrice,
 			},
-			ScaleDownUnneededTime: "10m",
+			ScaleDownUnneededTime:         "10m",
+			ScaleDownUtilizationThreshold: "0.7",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 			},
@@ -1647,6 +1648,14 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.scaleDownUnneededTime",
 		"", "10m", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		"cluster.autoscaler.node.scaleDownUtilizationThreshold",
+		"",
+		"0.7",
+		clusterupdate.ChangeCategoryInPlace,
+	)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
 		"", "Added", clusterupdate.ChangeCategoryInPlace)
 	// "Disabled" is the defaultVal substituted when old spec has zero-value PodAutoscalerHorizontal.

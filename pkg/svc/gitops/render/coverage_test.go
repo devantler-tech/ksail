@@ -155,26 +155,28 @@ func TestBuildChartSpecDeepMergesValues(t *testing.T) {
 	assert.Contains(t, spec.ValuesYaml, "type: LoadBalancer")
 }
 
-// TestBuildChartSpecValuesFromTargetPathSkipped verifies targetPath references
-// are skipped (not merged) until support is added.
-func TestBuildChartSpecValuesFromTargetPathSkipped(t *testing.T) {
+// TestBuildChartSpecValuesFromTargetPathMergesWithInline verifies a targetPath
+// reference is injected at its path without clobbering inline spec.values.
+func TestBuildChartSpecValuesFromTargetPathMergesWithInline(t *testing.T) {
 	t.Parallel()
 
 	helmRelease := chartRefRelease()
 	helmRelease.Spec.Values = &apiextensionsv1.JSON{Raw: []byte(`{"keep":true}`)}
 	helmRelease.Spec.ValuesFrom = []fluxmeta.ValuesReference{
-		{Kind: "ConfigMap", Name: "extra", TargetPath: "some.path"},
+		{Kind: "ConfigMap", Name: "extra", ValuesKey: "env", TargetPath: "some.path"},
 	}
 
 	sources := ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"})
 	sources.ConfigMaps = map[string]map[string]string{
-		"flux-system/extra": {"values.yaml": "ignored: true"},
+		"flux-system/extra": {"env": "prod"},
 	}
 
 	spec := resolveSpec(t, helmRelease, sources)
 
-	assert.Contains(t, spec.ValuesYaml, "keep: true")
-	assert.NotContains(t, spec.ValuesYaml, "ignored")
+	values := unmarshalValues(t, spec.ValuesYaml)
+	assert.Equal(t, true, values["keep"])
+	some, _ := values["some"].(map[string]any)
+	assert.Equal(t, "prod", some["path"])
 }
 
 // TestApplyOCIRepositoryNoReference covers an OCIRepository without a ref.

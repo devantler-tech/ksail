@@ -1049,9 +1049,10 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"extraArgs": map[string]any{
-			"expander":                 "price",
-			"max-nodes-total":          float64(10),
-			"scale-down-unneeded-time": "10m",
+			"expander":                         "price",
+			"max-nodes-total":                  float64(10),
+			"scale-down-unneeded-time":         "10m",
+			"scale-down-utilization-threshold": "0.4",
 		},
 		"autoscalingGroups": []any{
 			map[string]any{
@@ -1072,6 +1073,7 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 	assert.Equal(t, v1alpha1.AutoscalerExpanderList{v1alpha1.AutoscalerExpanderPrice}, cfg.Expander)
 	assert.Equal(t, int32(10), cfg.MaxNodesTotal)
 	assert.Equal(t, "10m", cfg.ScaleDownUnneededTime)
+	assert.Equal(t, "0.4", cfg.ScaleDownUtilizationThreshold)
 	require.Len(t, cfg.Pools, 1)
 	assert.Equal(t, "autoscale-small", cfg.Pools[0].Name)
 	assert.Equal(t, "cx23", cfg.Pools[0].ServerType)
