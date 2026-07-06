@@ -3,6 +3,7 @@ package environment
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -74,6 +75,15 @@ func DeriveEnvironments(repoRoot string, load ConfigLoader) ([]Environment, erro
 
 		cfg, loadErr := load(entry.Name())
 		if loadErr != nil {
+			// A malformed config is not a usable environment and must not hide the
+			// rest, but leave a debug trace so a missing environment entry is
+			// troubleshootable rather than silently absent.
+			slog.Default().Debug(
+				"skipping unloadable environment config",
+				"file", entry.Name(),
+				"error", loadErr,
+			)
+
 			continue
 		}
 
