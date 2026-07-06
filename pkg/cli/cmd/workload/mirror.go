@@ -126,18 +126,33 @@ type mirrorOptions struct {
 	context    string
 }
 
-// NewMirrorCmd creates the workload mirror command (issue #4521, Phase 1
-// mirror-only mode): it wires the pkg/svc/mirror primitives — resolve, tap
-// selection, tap injection, capture session, summary — into one dev-loop
-// command.
-func NewMirrorCmd() *cobra.Command {
-	opts := mirrorOptions{}
+// deploymentCmdMeta carries the per-command metadata newDeploymentCmd needs to
+// build a Deployment-targeting dev-loop command.
+type deploymentCmdMeta struct {
+	use            string
+	short          string
+	long           string
+	example        string
+	containerUsage string
+}
 
+// targetFlagRefs points the shared namespace/container/context flags at a
+// command's own option fields.
+type targetFlagRefs struct {
+	namespace *string
+	container *string
+	context   *string
+}
+
+// newDeploymentCmd builds a dev-loop command that targets a single Deployment,
+// wiring the namespace/container/context flags every such command shares (mirror
+// and intercept). The caller adds its own command-specific flags and RunE.
+func newDeploymentCmd(meta deploymentCmdMeta, refs targetFlagRefs) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "mirror <deployment>",
-		Short:        "Mirror a Deployment's inbound traffic locally (read-only pcap capture)",
-		Long:         mirrorCmdLong,
-		Example:      mirrorCmdExample,
+		Use:          meta.use,
+		Short:        meta.short,
+		Long:         meta.long,
+		Example:      meta.example,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		Annotations: map[string]string{
@@ -145,10 +160,30 @@ func NewMirrorCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&opts.namespace, "namespace", "n", "default",
+	cmd.Flags().StringVarP(refs.namespace, "namespace", "n", "default",
 		"Namespace of the target Deployment")
-	cmd.Flags().StringVarP(&opts.container, "container", "c", "",
-		"Container whose traffic is mirrored (required when the Deployment has several)")
+	cmd.Flags().StringVarP(refs.container, "container", "c", "", meta.containerUsage)
+	cmd.Flags().StringVar(refs.context, "context", "",
+		"Kubeconfig context of the target cluster")
+
+	return cmd
+}
+
+// NewMirrorCmd creates the workload mirror command (issue #4521, Phase 1
+// mirror-only mode): it wires the pkg/svc/mirror primitives — resolve, tap
+// selection, tap injection, capture session, summary — into one dev-loop
+// command.
+func NewMirrorCmd() *cobra.Command {
+	opts := mirrorOptions{}
+
+	cmd := newDeploymentCmd(deploymentCmdMeta{
+		use:            "mirror <deployment>",
+		short:          "Mirror a Deployment's inbound traffic locally (read-only pcap capture)",
+		long:           mirrorCmdLong,
+		example:        mirrorCmdExample,
+		containerUsage: "Container whose traffic is mirrored (required when the Deployment has several)",
+	}, targetFlagRefs{&opts.namespace, &opts.container, &opts.context})
+
 	cmd.Flags().IntVarP(&opts.port, "port", "p", 0,
 		"Service port to capture TCP traffic on (required)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", defaultMirrorOutput,
@@ -159,8 +194,6 @@ func NewMirrorCmd() *cobra.Command {
 		"Image the injected tap container runs")
 	cmd.Flags().DurationVar(&opts.tapTimeout, "tap-timeout", defaultTapWaitTimeout,
 		"How long to wait for the tap container to reach Running")
-	cmd.Flags().StringVar(&opts.context, "context", "",
-		"Kubeconfig context of the target cluster")
 
 	_ = cmd.MarkFlagRequired("port")
 

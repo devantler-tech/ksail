@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -149,22 +148,14 @@ type interceptOptions struct {
 func NewInterceptCmd() *cobra.Command {
 	opts := interceptOptions{}
 
-	cmd := &cobra.Command{
-		Use:          "intercept <deployment>",
-		Short:        "Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)",
-		Long:         interceptCmdLong,
-		Example:      interceptCmdExample,
-		Args:         cobra.ExactArgs(1),
-		SilenceUsage: true,
-		Annotations: map[string]string{
-			annotations.AnnotationPermission: permissionWrite,
-		},
-	}
+	cmd := newDeploymentCmd(deploymentCmdMeta{
+		use:            "intercept <deployment>",
+		short:          "Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)",
+		long:           interceptCmdLong,
+		example:        interceptCmdExample,
+		containerUsage: "Container whose traffic is intercepted (required when the Deployment has several)",
+	}, targetFlagRefs{&opts.namespace, &opts.container, &opts.context})
 
-	cmd.Flags().StringVarP(&opts.namespace, "namespace", "n", "default",
-		"Namespace of the target Deployment")
-	cmd.Flags().StringVarP(&opts.container, "container", "c", "",
-		"Container whose traffic is intercepted (required when the Deployment has several)")
 	cmd.Flags().IntVarP(&opts.localPort, "local-port", "l", 0,
 		"Local port the intercepted inbound traffic is forwarded to (required)")
 	cmd.Flags().StringArrayVar(&opts.steerCommand, "steer-command", nil,
@@ -173,8 +164,6 @@ func NewInterceptCmd() *cobra.Command {
 		"Image the injected steering container runs (must carry the agent binary and iptables)")
 	cmd.Flags().DurationVar(&opts.steerTimeout, "wait-timeout", defaultSteerWaitTimeout,
 		"How long to wait for the steering container to reach Running")
-	cmd.Flags().StringVar(&opts.context, "context", "",
-		"Kubeconfig context of the target cluster")
 
 	_ = cmd.MarkFlagRequired("local-port")
 	_ = cmd.MarkFlagRequired("steer-command")
