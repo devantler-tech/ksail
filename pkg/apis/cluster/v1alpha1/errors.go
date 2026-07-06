@@ -129,6 +129,12 @@ var ErrInvalidPoolTaint = errors.New("invalid pool taint")
 // ErrInvalidMaxNodesTotal is returned when MaxNodesTotal is negative.
 var ErrInvalidMaxNodesTotal = errors.New("invalid maxNodesTotal")
 
+// ErrInvalidScaleDownUtilizationThreshold is returned when
+// ScaleDownUtilizationThreshold is not a decimal ratio in the range [0.0, 1.0].
+var ErrInvalidScaleDownUtilizationThreshold = errors.New(
+	"invalid scaleDownUtilizationThreshold: must be a decimal ratio between 0.0 and 1.0",
+)
+
 // ErrInvalidServerLimit is returned when ServerLimit is negative.
 var ErrInvalidServerLimit = errors.New("invalid serverLimit")
 

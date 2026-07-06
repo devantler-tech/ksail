@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -377,12 +378,40 @@ func ValidateAutoscalerConfig(
 		return ErrAutoscalerEnabledNoPools
 	}
 
+	thresholdErr := validateScaleDownUtilizationThreshold(autoscaler)
+	if thresholdErr != nil {
+		return thresholdErr
+	}
+
 	err := validateNodePools(autoscaler.Pools)
 	if err != nil {
 		return err
 	}
 
 	return validateHetznerCapacity(cluster, provider, autoscaler)
+}
+
+// validateScaleDownUtilizationThreshold rejects a ScaleDownUtilizationThreshold
+// that is not a decimal ratio in [0.0, 1.0]. An empty value is valid — it inherits
+// the upstream cluster-autoscaler default (0.5). Validating at ksail.yaml apply time
+// surfaces a typo (e.g. "abc" or "2.0") immediately instead of as a cluster-autoscaler
+// crash-loop once the chart is installed.
+func validateScaleDownUtilizationThreshold(autoscaler *NodeAutoscalerConfig) error {
+	raw := autoscaler.ScaleDownUtilizationThreshold
+	if raw == "" {
+		return nil
+	}
+
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return fmt.Errorf("%w: %q", ErrInvalidScaleDownUtilizationThreshold, raw)
+	}
+
+	if value < 0.0 || value > 1.0 {
+		return fmt.Errorf("%w: %q", ErrInvalidScaleDownUtilizationThreshold, raw)
+	}
+
+	return nil
 }
 
 // validateHetznerCapacity checks that the reachable total node count stays within

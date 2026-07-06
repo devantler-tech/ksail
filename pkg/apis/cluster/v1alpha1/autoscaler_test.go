@@ -937,6 +937,69 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: v1alpha1.ErrInvalidMaxNodesTotal,
 		},
 		{
+			name: "scaleDownUtilizationThreshold: non-numeric is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:                       v1alpha1.NodeAutoscalerEnabledEnabled,
+						ScaleDownUtilizationThreshold: "abc",
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: v1alpha1.ErrInvalidScaleDownUtilizationThreshold,
+		},
+		{
+			name: "scaleDownUtilizationThreshold: out-of-range is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:                       v1alpha1.NodeAutoscalerEnabledEnabled,
+						ScaleDownUtilizationThreshold: "1.5",
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: v1alpha1.ErrInvalidScaleDownUtilizationThreshold,
+		},
+		{
+			name: "scaleDownUtilizationThreshold: valid ratio passes",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:                       v1alpha1.NodeAutoscalerEnabledEnabled,
+						ScaleDownUtilizationThreshold: "0.65",
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
 			name: "capacity guard: negative serverLimit is invalid",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,
