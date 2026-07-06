@@ -857,3 +857,153 @@ func TestCreateDefaultsEKSProviderToAWS(t *testing.T) {
 		t.Fatal("factory was never asked to build the EKS cluster with a defaulted AWS provider")
 	}
 }
+
+// clusterNamed returns a pointer to the cluster with the given name in the list, or nil if absent.
+func clusterNamed(list *v1alpha1.ClusterList, name string) *v1alpha1.Cluster {
+	for i := range list.Items {
+		if list.Items[i].Name == name {
+			return &list.Items[i]
+		}
+	}
+
+	return nil
+}
+
+// TestListSurfacesUnmanagedKubeconfigContexts checks that List surfaces a kubeconfig context ksail did
+// not provision as an unmanaged cluster (marked, with its endpoint), while a context that maps to a
+// discovered cluster is listed once and never re-surfaced as unmanaged.
+func TestListSurfacesUnmanagedKubeconfigContexts(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: colleague
+  cluster:
+    server: https://cluster.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: colleague-cluster
+  context:
+    cluster: colleague
+    user: colleague
+users:
+- name: kind-dev
+  user: {}
+- name: colleague
+  user: {}
+`), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+
+	// The managed cluster (context kind-dev detects to the discovered "dev") is listed once and is not
+	// re-surfaced as unmanaged.
+	managed := clusterNamed(list, devClusterName)
+	require.NotNil(t, managed, "the discovered cluster must still be listed")
+	assert.False(t, managed.IsUnmanaged(), "a discovered cluster must not be flagged unmanaged")
+
+	// The kubeconfig-only context is surfaced, clearly marked unmanaged, with its endpoint.
+	unmanaged := clusterNamed(list, "colleague-cluster")
+	require.NotNil(t, unmanaged, "an unmanaged kubeconfig context must be surfaced")
+	assert.True(t, unmanaged.IsUnmanaged())
+	assert.Equal(t, "true", unmanaged.Annotations[v1alpha1.UnmanagedAnnotation])
+	assert.Equal(t, "https://cluster.example.com:6443", unmanaged.Status.Endpoint)
+	assert.Empty(t, unmanaged.Spec.Cluster.Distribution,
+		"an unmanaged cluster has no ksail-known distribution")
+
+	require.Len(t, unmanaged.Status.Conditions, 1)
+	condition := unmanaged.Status.Conditions[0]
+	assert.Equal(t, "Ready", condition.Type)
+	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, "Unmanaged", condition.Reason)
+}
+
+// TestListSortsManagedAndUnmanagedGlobally checks that the merged managed+unmanaged list is sorted by
+// name as a whole, not just within each block — an unmanaged kubeconfig context alphabetically before
+// the managed cluster appears before it, and one after appears after it. Without the global sort the
+// unmanaged block is simply appended after the managed block, so an earlier-sorting unmanaged cluster
+// would wrongly trail a later-sorting managed one.
+func TestListSortsManagedAndUnmanagedGlobally(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	// The managed cluster is "dev"; add unmanaged contexts on either alphabetical side of it.
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: aaa
+  cluster:
+    server: https://aaa.example.com:6443
+- name: zzz
+  cluster:
+    server: https://zzz.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: aaa-cluster
+  context:
+    cluster: aaa
+    user: aaa
+- name: zzz-cluster
+  context:
+    cluster: zzz
+    user: zzz
+users:
+- name: kind-dev
+  user: {}
+- name: aaa
+  user: {}
+- name: zzz
+  user: {}
+`), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.Name)
+	}
+
+	// "aaa-cluster" (unmanaged) < "dev" (managed) < "zzz-cluster" (unmanaged): the combined list is
+	// globally alphabetical, not the managed block followed by the unmanaged block.
+	assert.Equal(t, []string{"aaa-cluster", devClusterName, "zzz-cluster"}, names)
+}
+
+// TestListWithoutKubeconfigSurfacesNoUnmanaged checks that when no kubeconfig is readable, List
+// synthesizes no unmanaged clusters (newTestService points the kubeconfig at nowhere).
+func TestListWithoutKubeconfigSurfacesNoUnmanaged(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, list.Items, 1)
+	assert.False(t, list.Items[0].IsUnmanaged())
+}

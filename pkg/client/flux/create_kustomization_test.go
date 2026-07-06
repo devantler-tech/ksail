@@ -1,9 +1,11 @@
 package flux_test
 
 import (
+	"bytes"
 	"maps"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,6 +53,9 @@ func TestNewCreateKustomizationCmd(t *testing.T) {
 
 	dependsOnFlag := kustomizationCmd.Flags().Lookup("depends-on")
 	require.NotNil(t, dependsOnFlag)
+
+	ignorePathsFlag := kustomizationCmd.Flags().Lookup("ignore-paths")
+	require.NotNil(t, ignorePathsFlag)
 }
 
 func kustomizationExportTestsBasic() map[string]testCase {
@@ -139,6 +144,15 @@ func kustomizationExportTestsAdvanced() map[string]testCase {
 				flagExportKust: "true",
 			},
 		},
+		"export with ignore paths": {
+			args: []string{"podinfo"},
+			flags: map[string]string{
+				"source":       sourceGitRepository,
+				"path":         pathKustomize,
+				"ignore-paths": "/spec/replicas",
+				flagExportKust: "true",
+			},
+		},
 	}
 }
 
@@ -159,6 +173,50 @@ func TestCreateKustomization_Export(t *testing.T) {
 			runFluxCommandTest(t, []string{"kustomization"}, testCase)
 		})
 	}
+}
+
+func TestCreateKustomization_ExportIgnorePaths(t *testing.T) {
+	t.Parallel()
+
+	var outBuf bytes.Buffer
+
+	createCmd := setupFluxCommand(&outBuf)
+	createCmd.SetArgs([]string{
+		"kustomization", "podinfo",
+		"--source", sourceGitRepository,
+		"--path", pathKustomize,
+		"--ignore-paths", "/spec/replicas,/metadata/labels",
+		"--" + flagExportKust,
+	})
+
+	require.NoError(t, createCmd.Execute())
+
+	output := outBuf.String()
+	require.Contains(t, output, "ignore:")
+	require.Contains(t, output, "paths:")
+	require.Contains(t, output, "- /spec/replicas")
+	require.Contains(t, output, "- /metadata/labels")
+	// The unscoped rule must not emit a target selector.
+	require.NotContains(t, output, "target:")
+}
+
+func TestCreateKustomization_InvalidIgnorePath(t *testing.T) {
+	t.Parallel()
+
+	var outBuf bytes.Buffer
+
+	createCmd := setupFluxCommand(&outBuf)
+	createCmd.SetArgs([]string{
+		"kustomization", "podinfo",
+		"--source", sourceGitRepository,
+		"--ignore-paths", "spec/replicas",
+		"--" + flagExportKust,
+	})
+
+	err := createCmd.Execute()
+	require.Error(t, err)
+	require.ErrorIs(t, err, flux.ErrInvalidIgnorePath)
+	require.Contains(t, err.Error(), "spec/replicas")
 }
 
 func TestCreateKustomization_MissingRequiredSource(t *testing.T) {
