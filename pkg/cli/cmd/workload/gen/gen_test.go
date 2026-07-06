@@ -586,6 +586,37 @@ func TestGenHelmReleaseInvalidCRDsPolicy(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid kind")
 }
 
+func TestGenHelmReleaseWithPostRenderStrategy(t *testing.T) {
+	t.Parallel()
+
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
+		"podinfo",
+		"--source=HelmRepository/podinfo",
+		"--chart=podinfo",
+		"--post-render-strategy=nohooks",
+		"--export",
+	})
+
+	require.NoError(t, err)
+	require.Contains(t, errOutput, "generated HelmRelease")
+	snaps.MatchSnapshot(t, output)
+}
+
+func TestGenHelmReleaseInvalidPostRenderStrategy(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
+		"webapp",
+		"--source=HelmRepository/charts",
+		"--chart=webapp",
+		"--post-render-strategy=bogus",
+		"--export",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid kind")
+}
+
 func TestGenHelmReleaseWithoutExport(t *testing.T) {
 	t.Parallel()
 

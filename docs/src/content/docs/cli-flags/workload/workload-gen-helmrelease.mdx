@@ -77,6 +77,7 @@ Flags:
       --interval duration              reconciliation interval (default 1m0s)
       --kubeconfig-secret-ref string   KubeConfig secret reference for remote reconciliation
   -n, --namespace string               namespace scope for the HelmRelease (default "default")
+      --post-render-strategy string    post-render strategy for sending hooks to post-renderers (nohooks, combined, separate); leave unset to use the controller default
       --release-name string            name used for the Helm release
       --service-account string         service account name to impersonate
       --source string                  source that contains the chart (HelmRepository/name, GitRepository/name, Bucket/name)
