@@ -3,11 +3,7 @@ title: AWS Provider
 description: Deploy managed Amazon EKS clusters with KSail using the AWS provider and eksctl.
 ---
 
-import { Badge } from '@astrojs/starlight/components';
-
-<Badge text="Coming Soon" variant="caution" /> The AWS provider is scaffolded and `ksail project init` is available, but `ksail cluster create` is not yet functional. Full provisioner support is landing in a follow-up release.
-
-The AWS provider will create managed [Amazon EKS](https://aws.amazon.com/eks/) clusters via [eksctl](https://eksctl.io/) once full provisioner support lands. Today, it is available for scaffolding configuration via `ksail project init` and is the only provider available for the [EKS distribution](/distributions/eks/).
+The AWS provider creates and manages managed [Amazon EKS](https://aws.amazon.com/eks/) clusters via [eksctl](https://eksctl.io/). It supports the full cluster lifecycle (`create`, `delete`, `start`, `stop`, `list`, `info`) and is the only provider available for the [EKS distribution](/distributions/eks/).
 
 > [!NOTE]
 > The AWS provider only supports the **EKS** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
