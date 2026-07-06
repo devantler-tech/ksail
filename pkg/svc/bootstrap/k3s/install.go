@@ -15,6 +15,30 @@ const installScriptURL = "https://get.k3s.io"
 // (RoleServerInit and RoleServer); agents use the literal "agent".
 const subcommandServer = "server"
 
+// sentinelDir is the ksail-managed directory the join-complete sentinel lands
+// in; it is created by the same first-boot command that writes the sentinel. It
+// matches the kubeadm path's directory so an operator finds ksail's bootstrap
+// markers in one place regardless of distribution.
+const sentinelDir = "/var/lib/ksail"
+
+// ServerJoinCompleteSentinelPath is the file an additional control-plane server
+// (RoleServer) writes once it has joined the cluster's embedded etcd and its
+// local API server reports ready — the reliable "control-plane join finished"
+// signal the shared Hetzner bring-up polls over SSH to serialise HA joins.
+//
+// Unlike kubeadm's synchronous `kubeadm join`, the k3s install script starts
+// k3s asynchronously and returns before etcd membership is established, so the
+// sentinel is gated behind a readiness poll (see [serverJoinCompleteTail]) and
+// never written by the install command alone — a file written part-way would
+// report completion while etcd membership is still changing, exactly what
+// [Render] must avoid for a joining server.
+const ServerJoinCompleteSentinelPath = sentinelDir + "/k3s-server-join-complete"
+
+// readinessPollSeconds is how long the joining server's readiness gate sleeps
+// between local /readyz probes. Five seconds keeps the etcd-join serialisation
+// responsive without hammering the freshly-joined API server.
+const readinessPollSeconds = "5"
+
 // Role identifies how a node joins the cluster. The first control-plane node
 // initialises the cluster (RoleServerInit); further control-plane nodes
 // (RoleServer) and workers (RoleAgent) join an existing one via its ServerURL.
@@ -81,8 +105,36 @@ func Render(cfg InstallConfig) (string, error) {
 	}
 
 	env, subcommand, args := cfg.invocation()
+	command := assembleCommand(env, subcommand, args)
 
-	return assembleCommand(env, subcommand, args), nil
+	// An additional control-plane server joins the cluster's embedded etcd; the
+	// shared Hetzner create flow serialises those joins by polling a completion
+	// sentinel over SSH before creating the next joiner (concurrent joins race
+	// etcd member addition). The install command above starts k3s asynchronously
+	// and returns before the join settles, so this server's first boot must
+	// publish the sentinel only after a readiness gate confirms it is a healthy
+	// member — never right after the install returns. The init server and agents
+	// are never polled (init readiness is confirmed by the kubeconfig fetch;
+	// agents register asynchronously), so their command is unchanged.
+	if cfg.Role == RoleServer {
+		command += " && " + serverJoinCompleteTail()
+	}
+
+	return command, nil
+}
+
+// serverJoinCompleteTail renders the shell tail a joining control-plane server
+// appends after its install command: block until the node's local API server
+// reports ready — `/readyz` fails until this node's etcd member is added and in
+// quorum, so it is a truthful "joined and healthy" gate — then publish the
+// completion sentinel. The whole tail is chained with && so a failed install or
+// a readiness gate that never succeeds never writes a false completion marker.
+// `k3s kubectl` resolves the node's own admin kubeconfig, so the probe needs no
+// external configuration.
+func serverJoinCompleteTail() string {
+	return "until k3s kubectl get --raw='/readyz' >/dev/null 2>&1; do sleep " +
+		readinessPollSeconds + "; done && mkdir -p " + sentinelDir +
+		" && touch " + ServerJoinCompleteSentinelPath
 }
 
 // invocation maps a validated cfg to the environment assignments, k3s

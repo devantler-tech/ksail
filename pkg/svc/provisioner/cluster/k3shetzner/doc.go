@@ -13,6 +13,13 @@
 // the joining nodes. SSH-based remote execution is intentionally out of scope —
 // cloud-init is the declarative transport — so it is not used here.
 //
+// A multi-control-plane (high-availability) topology is supported: the
+// provisioner implements [hetznerbase.HAControlPlaneComposer], so the additional
+// control-plane servers join the init server's embedded etcd (via `--server`) and
+// the shared flow serialises their joins by polling each one's readiness-gated
+// join-complete sentinel — no manual certificate distribution is needed, unlike
+// the kubeadm path (devantler-tech/ksail#5854).
+//
 // This package is the K3s × Hetzner provisioner tracked by
 // devantler-tech/ksail#5512 (epic #3983). The shared create flow
 // ([Provisioner.Create] via hetznerbase) runs the live bring-up end to end:
