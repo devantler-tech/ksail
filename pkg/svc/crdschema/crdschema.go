@@ -296,26 +296,13 @@ func writeSchema(destDir string, schema versionSchema) error {
 
 // yamlFiles returns every .yaml/.yml file under root (which may be a single file).
 func yamlFiles(root string) ([]string, error) {
-	var files []string
-
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if entry.IsDir() {
-			return nil
-		}
-
+	files, err := fsutil.WalkFiles(root, func(path string, _ fs.DirEntry) (bool, error) {
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".yaml" || ext == ".yml" {
-			files = append(files, path)
-		}
 
-		return nil
+		return ext == ".yaml" || ext == ".yml", nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("walk %s: %w", root, err)
+		return nil, fmt.Errorf("collect YAML files: %w", err)
 	}
 
 	return files, nil
