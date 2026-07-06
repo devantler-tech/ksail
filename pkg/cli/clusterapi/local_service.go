@@ -248,11 +248,40 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 
 	sort.Strings(names)
 
+	// Load the kubeconfig once and share it: both the endpoint map and the unmanaged-cluster synthesis
+	// read the same contexts, and List is polled frequently by the UI — a single read avoids parsing
+	// the file twice per request and any TOCTOU skew between the two views.
+	kubeconfig := s.loadKubeconfig()
+
 	// Endpoints come from the kubeconfig's contexts (no cluster round-trips), so the UI can show a
 	// real API server URL for clusters that have one instead of an empty status field.
-	endpoints := s.clusterEndpoints()
+	endpoints := clusterEndpoints(kubeconfig)
 
+	items := managedClusterItems(names, merged, endpoints)
+
+	// Surface kubeconfig contexts ksail did not provision as unmanaged clusters (marked, never hidden
+	// and never shown as a normal managed cluster), so read/operate surfaces can see them within limits
+	// while ksail-only operations are refused.
+	items = append(items, unmanagedClusters(kubeconfig, merged)...)
+
+	// Sort the merged managed+unmanaged list globally by name so the surface order stays alphabetically
+	// stable (the managed block and the unmanaged block are each sorted, but appending one after the
+	// other would otherwise leave the combined list unsorted). Names are unique across the two groups —
+	// contextIsManaged excludes any context that matches a managed cluster — so the sort never collides.
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+
+	return &v1alpha1.ClusterList{Items: items}, nil
+}
+
+// managedClusterItems builds the Cluster list for the ksail-managed clusters, in the given name order,
+// attaching each cluster's kubeconfig endpoint and its status condition.
+func managedClusterItems(
+	names []string,
+	merged map[string]listEntry,
+	endpoints map[string]string,
+) []v1alpha1.Cluster {
 	items := make([]v1alpha1.Cluster, 0, len(names))
+
 	for _, name := range names {
 		entry := merged[name]
 		cluster := newCluster(name, entry.distribution, entry.provider, entry.phase)
@@ -266,7 +295,7 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 		items = append(items, cluster)
 	}
 
-	return &v1alpha1.ClusterList{Items: items}, nil
+	return items
 }
 
 // Get returns a single local cluster. The namespace is ignored (clusters are keyed by name).
