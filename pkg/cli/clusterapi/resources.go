@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // Ensure the local backend exposes the read-only resource browser and the safe write actions via the
@@ -101,14 +102,28 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
 }
 
-// clusterEndpoints maps every cluster name detectable from the kubeconfig's contexts to its API
-// server URL, so List can report a real endpoint for local/discovered clusters (the operator surface
-// observes it during reconciliation instead). Best-effort and offline (one file read, no cluster
-// round-trips): an unreadable kubeconfig yields no endpoints. The first context detected for a name
-// wins, matching contextForCluster.
-func (s *Service) clusterEndpoints() map[string]string {
+// loadKubeconfig reads the user's kubeconfig once, best-effort and offline. List calls it a single
+// time and shares the parsed config with both clusterEndpoints and unmanagedClusters, so the file is
+// read and YAML-parsed once per List (not once per helper) and both helpers observe the SAME snapshot
+// — closing the TOCTOU window where two independent reads could otherwise mix contexts from a
+// kubeconfig that changed between them. An unreadable kubeconfig yields nil, which both helpers treat
+// as "no contexts".
+func (s *Service) loadKubeconfig() *clientcmdapi.Config {
 	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
 	if err != nil {
+		return nil
+	}
+
+	return config
+}
+
+// clusterEndpoints maps every cluster name detectable from the kubeconfig's contexts to its API
+// server URL, so List can report a real endpoint for local/discovered clusters (the operator surface
+// observes it during reconciliation instead). Best-effort and offline (no cluster round-trips): a nil
+// config (unreadable kubeconfig) yields no endpoints. The first context detected for a name wins,
+// matching contextForCluster.
+func clusterEndpoints(config *clientcmdapi.Config) map[string]string {
+	if config == nil {
 		return nil
 	}
 
@@ -139,11 +154,13 @@ func (s *Service) clusterEndpoints() map[string]string {
 // see clusters that exist in the user's kubeconfig but were not provisioned by ksail (a managed
 // EKS/GKE/AKS cluster, a kubeadm cluster, a colleague's cluster) so read/operate surfaces can work
 // against them within limits while ksail-only operations are refused. Best-effort and offline, exactly
-// like clusterEndpoints: one file read, no cluster round-trips, and an unreadable kubeconfig yields
-// none. Contexts are emitted in sorted order so the list is stable.
-func (s *Service) unmanagedClusters(managed map[string]listEntry) []v1alpha1.Cluster {
-	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
-	if err != nil {
+// like clusterEndpoints: no cluster round-trips, and a nil config (unreadable kubeconfig) yields none.
+// Contexts are emitted in sorted order so the list is stable.
+func unmanagedClusters(
+	config *clientcmdapi.Config,
+	managed map[string]listEntry,
+) []v1alpha1.Cluster {
+	if config == nil {
 		return nil
 	}
 

@@ -931,6 +931,68 @@ users:
 	assert.Equal(t, "Unmanaged", condition.Reason)
 }
 
+// TestListSortsManagedAndUnmanagedGlobally checks that the merged managed+unmanaged list is sorted by
+// name as a whole, not just within each block — an unmanaged kubeconfig context alphabetically before
+// the managed cluster appears before it, and one after appears after it. Without the global sort the
+// unmanaged block is simply appended after the managed block, so an earlier-sorting unmanaged cluster
+// would wrongly trail a later-sorting managed one.
+func TestListSortsManagedAndUnmanagedGlobally(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	// The managed cluster is "dev"; add unmanaged contexts on either alphabetical side of it.
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: aaa
+  cluster:
+    server: https://aaa.example.com:6443
+- name: zzz
+  cluster:
+    server: https://zzz.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: aaa-cluster
+  context:
+    cluster: aaa
+    user: aaa
+- name: zzz-cluster
+  context:
+    cluster: zzz
+    user: zzz
+users:
+- name: kind-dev
+  user: {}
+- name: aaa
+  user: {}
+- name: zzz
+  user: {}
+`), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.Name)
+	}
+
+	// "aaa-cluster" (unmanaged) < "dev" (managed) < "zzz-cluster" (unmanaged): the combined list is
+	// globally alphabetical, not the managed block followed by the unmanaged block.
+	assert.Equal(t, []string{"aaa-cluster", devClusterName, "zzz-cluster"}, names)
+}
+
 // TestListWithoutKubeconfigSurfacesNoUnmanaged checks that when no kubeconfig is readable, List
 // synthesizes no unmanaged clusters (newTestService points the kubeconfig at nowhere).
 func TestListWithoutKubeconfigSurfacesNoUnmanaged(t *testing.T) {
