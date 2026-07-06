@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
@@ -320,5 +322,71 @@ data:
 	// Verify it has the correct type
 	if output.Len() == 0 {
 		t.Fatal("expected non-empty buffer")
+	}
+}
+
+// writeConfigMapKustomization writes a minimal ConfigMap kustomization into dir.
+func writeConfigMapKustomization(t *testing.T, dir, name string) {
+	t.Helper()
+
+	configMapYAML := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + name +
+		"\n  namespace: default\ndata:\n  key: value\n"
+
+	err := os.WriteFile(filepath.Join(dir, "configmap.yaml"), []byte(configMapYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write configmap: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(dir, "kustomization.yaml"),
+		[]byte(simpleConfigMapKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write kustomization: %v", err)
+	}
+}
+
+// TestBuild_ConcurrentBuildsNoRace runs many builds concurrently to guard the
+// kyaml openapi builtin-schema global against a lazy-first-init data race. It
+// fails under `go test -race` if concurrent builds race that global (they did
+// before the warmSchema pre-init). See #5858.
+func TestBuild_ConcurrentBuildsNoRace(t *testing.T) {
+	t.Parallel()
+
+	const builders = 16
+
+	dirs := make([]string, builders)
+	for i := range dirs {
+		dir := t.TempDir()
+		writeConfigMapKustomization(t, dir, "cm-"+strconv.Itoa(i))
+		dirs[i] = dir
+	}
+
+	client := kustomize.NewClient()
+	ctx := context.Background()
+
+	errCh := make(chan error, builders)
+
+	var waitGroup sync.WaitGroup
+
+	waitGroup.Add(builders)
+
+	for _, dir := range dirs {
+		go func() {
+			defer waitGroup.Done()
+
+			_, err := client.Build(ctx, dir)
+			if err != nil {
+				errCh <- err
+			}
+		}()
+	}
+
+	waitGroup.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent build failed: %v", err)
 	}
 }
