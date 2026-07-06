@@ -3,6 +3,7 @@ package clusterapi
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -111,10 +112,33 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 func (s *Service) loadKubeconfig() *clientcmdapi.Config {
 	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
 	if err != nil {
+		// Best-effort: a missing kubeconfig is normal, but a malformed one would otherwise silently
+		// yield zero endpoints and zero unmanaged clusters with no trail — log at debug so the cause is
+		// discoverable without changing the nil return contract.
+		slog.Debug("load kubeconfig for cluster list",
+			"path", s.kubeconfigPath(), "error", err)
+
 		return nil
 	}
 
 	return config
+}
+
+// endpointForContext resolves the API server URL for a kubeconfig context, or "" when the context or
+// its cluster is absent. Shared by clusterEndpoints and unmanagedClusters so the two-step
+// context -> cluster -> server lookup and its nil checks live in one place.
+func endpointForContext(config *clientcmdapi.Config, contextName string) string {
+	kubeContext, contextExists := config.Contexts[contextName]
+	if !contextExists {
+		return ""
+	}
+
+	cluster, clusterExists := config.Clusters[kubeContext.Cluster]
+	if !clusterExists {
+		return ""
+	}
+
+	return cluster.Server
 }
 
 // clusterEndpoints maps every cluster name detectable from the kubeconfig's contexts to its API
@@ -129,19 +153,19 @@ func clusterEndpoints(config *clientcmdapi.Config) map[string]string {
 
 	endpoints := make(map[string]string, len(config.Contexts))
 
-	for contextName, kubeContext := range config.Contexts {
+	for contextName := range config.Contexts {
 		_, name, detectErr := clusterdetector.DetectDistributionFromContext(contextName)
 		if detectErr != nil {
 			continue
 		}
 
-		cluster, ok := config.Clusters[kubeContext.Cluster]
-		if !ok || cluster.Server == "" {
+		server := endpointForContext(config, contextName)
+		if server == "" {
 			continue
 		}
 
 		if _, exists := endpoints[name]; !exists {
-			endpoints[name] = cluster.Server
+			endpoints[name] = server
 		}
 	}
 
@@ -178,14 +202,7 @@ func unmanagedClusters(
 			continue
 		}
 
-		endpoint := ""
-
-		if kubeContext, ok := config.Contexts[contextName]; ok {
-			if cluster, ok := config.Clusters[kubeContext.Cluster]; ok {
-				endpoint = cluster.Server
-			}
-		}
-
+		endpoint := endpointForContext(config, contextName)
 		items = append(items, newUnmanagedCluster(contextName, endpoint))
 	}
 
