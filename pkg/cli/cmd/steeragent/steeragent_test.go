@@ -16,7 +16,10 @@ import (
 
 const waitTimeout = 2 * time.Second
 
-var errListenNotExpected = errors.New("seam must not be called")
+var (
+	errListenNotExpected = errors.New("seam must not be called")
+	errBoom              = errors.New("boom")
+)
 
 // fakeTransport is an in-memory ReadWriteCloser whose Read blocks until Close,
 // standing in for the exec channel without a live peer.
@@ -172,6 +175,32 @@ func TestRunForTest_RejectsInvalidPorts(t *testing.T) {
 		})
 	if err == nil {
 		t.Fatal("expected a validation error for a zero service port")
+	}
+}
+
+func TestRunForTest_PropagatesListenError(t *testing.T) {
+	t.Parallel()
+
+	err := steeragent.RunForTest(context.Background(), 8080, 19000, newFakeTransport(),
+		func(context.Context, int) (net.Listener, error) { return nil, errBoom },
+		func(context.Context, string, ...string) error {
+			t.Error("runner must not be called when the listener fails to open")
+
+			return nil
+		})
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("expected the wrapped listen error, got %v", err)
+	}
+}
+
+func TestRunForTest_PropagatesInstallError(t *testing.T) {
+	t.Parallel()
+
+	err := steeragent.RunForTest(context.Background(), 8080, 19000, newFakeTransport(),
+		func(context.Context, int) (net.Listener, error) { return newBlockingListener(), nil },
+		func(context.Context, string, ...string) error { return errBoom })
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("expected the wrapped install error, got %v", err)
 	}
 }
 
