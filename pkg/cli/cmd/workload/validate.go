@@ -223,53 +223,22 @@ func runValidateCmd(
 	// Create kubeconform client
 	kubeconformClient := kubeconform.NewClient()
 
-	// Build validation options
-	validationOpts := &kubeconform.ValidationOptions{
-		Strict:               flags.strict,
-		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+	// Assemble validation options (skip-kinds, schema locations, and — when
+	// --include-crd-schemas is set — schemas derived from in-tree CRDs). cleanup
+	// removes any temporary CRD-schema directory once validation completes.
+	validationOpts, cleanup, err := buildValidationOptions(
+		cmd,
+		cfg,
+		configFound,
+		loadErr,
+		flags,
+		path,
+	)
+	if err != nil {
+		return err
 	}
 
-	if flags.skipSecrets {
-		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
-	}
-
-	// Additional kinds to skip come from the --skip-kinds flag and from
-	// spec.workload.validation.skipKinds in ksail.yaml. This lets a repo opt out
-	// of validating CRDs whose CRDs-catalog schema is stale or missing (which
-	// kubeconform would otherwise reject as "additional properties not allowed").
-	validationOpts.SkipKinds = append(validationOpts.SkipKinds, flags.skipKinds...)
-	validationOpts.SkipKinds = append(
-		validationOpts.SkipKinds,
-		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
-	)
-
-	// Additional schema locations come from the --schema-location flag and from
-	// spec.workload.validation.schemaLocations in ksail.yaml. They let a repo
-	// validate CRDs absent from the CRDs-catalog against a supplied schema rather
-	// than skipping the kind via --skip-kinds. Local filesystem locations are
-	// canonicalized (see canonicalizeSchemaLocations) so validation reads the
-	// intended schema tree; URLs and kubeconform path templates pass through.
-	suppliedSchemaLocations := slices.Concat(
-		flags.schemaLocations,
-		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
-	)
-	validationOpts.SchemaLocations = append(
-		validationOpts.SchemaLocations,
-		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
-	)
-
-	// When --include-crd-schemas is set, derive kubeconform schemas from any
-	// CustomResourceDefinition manifests in the path so custom resources whose CRD
-	// ships in the repo are validated instead of skipped. The derived schemas live
-	// in a temp directory that is removed after validation completes.
-	if flags.includeCRDSchemas {
-		cleanup, err := addCRDSchemas(cmd, path, validationOpts)
-		if err != nil {
-			return err
-		}
-
-		defer cleanup()
-	}
+	defer cleanup()
 
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
@@ -286,6 +255,62 @@ func runValidateCmd(
 	}
 
 	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine)
+}
+
+// buildValidationOptions assembles the kubeconform validation options from the
+// flags and ksail.yaml config: skip-kinds (--skip-kinds + spec.workload.validation
+// .skipKinds), schema locations (--schema-location + the configured locations), and
+// — when --include-crd-schemas is set — schemas derived from CustomResourceDefinition
+// manifests in the path so custom resources whose CRD ships in the repo are validated
+// instead of skipped. It returns the options plus a cleanup func (always non-nil,
+// safe to defer) that removes any temporary CRD-schema directory.
+func buildValidationOptions(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flags validateFlags,
+	path string,
+) (*kubeconform.ValidationOptions, func(), error) {
+	validationOpts := &kubeconform.ValidationOptions{
+		Strict:               flags.strict,
+		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+	}
+
+	if flags.skipSecrets {
+		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
+	}
+
+	validationOpts.SkipKinds = append(validationOpts.SkipKinds, flags.skipKinds...)
+	validationOpts.SkipKinds = append(
+		validationOpts.SkipKinds,
+		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
+	)
+
+	// Local filesystem locations are canonicalized (see canonicalizeSchemaLocations)
+	// so validation reads the intended schema tree; URLs and kubeconform path
+	// templates pass through.
+	suppliedSchemaLocations := slices.Concat(
+		flags.schemaLocations,
+		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
+	)
+	validationOpts.SchemaLocations = append(
+		validationOpts.SchemaLocations,
+		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
+	)
+
+	cleanup := func() {}
+
+	if flags.includeCRDSchemas {
+		crdCleanup, err := addCRDSchemas(cmd, path, validationOpts)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		cleanup = crdCleanup
+	}
+
+	return validationOpts, cleanup, nil
 }
 
 // addCRDSchemas derives kubeconform schemas from CustomResourceDefinition
