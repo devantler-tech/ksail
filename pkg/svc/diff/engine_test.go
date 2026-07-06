@@ -1332,6 +1332,86 @@ func TestEngine_AutoscalerNodeCapacityBuffersChange(t *testing.T) {
 		"false", "true", clusterupdate.ChangeCategoryInPlace)
 }
 
+func TestEngine_AutoscalerNodeIgnoreDaemonsetsUtilizationChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Node.IgnoreDaemonsetsUtilization = true
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler node ignoreDaemonsetsUtilization change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges,
+		"cluster.autoscaler.node.ignoreDaemonsetsUtilization",
+		"false", "true", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerNodeSkipNodesWithLocalStorageChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	disabled := false
+	// The unset (nil) old value inherits the upstream default true, so setting it
+	// explicitly false must surface as a true→false in-place change.
+	newer.Autoscaler.Node.SkipNodesWithLocalStorage = &disabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler node skipNodesWithLocalStorage change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges,
+		"cluster.autoscaler.node.skipNodesWithLocalStorage",
+		"true", "false", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerNodeSkipNodesWithSystemPodsChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	disabled := false
+	newer.Autoscaler.Node.SkipNodesWithSystemPods = &disabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler node skipNodesWithSystemPods change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges,
+		"cluster.autoscaler.node.skipNodesWithSystemPods",
+		"true", "false", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerNodeSkipNodesUnsetNoChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	// Both nil (unset) → both compare as the upstream default true → no change.
+	enabled := true
+	newer.Autoscaler.Node.SkipNodesWithLocalStorage = &enabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.InPlaceChanges {
+		if change.Field == "cluster.autoscaler.node.skipNodesWithLocalStorage" {
+			t.Fatalf("nil→true skipNodesWithLocalStorage should not change, got %+v", change)
+		}
+	}
+}
+
 func TestEngine_AutoscalerExpanderChange(t *testing.T) {
 	t.Parallel()
 

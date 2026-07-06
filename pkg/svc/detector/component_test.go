@@ -1109,6 +1109,72 @@ func TestDetectNodeAutoscaler_CapacityBuffers(t *testing.T) {
 		"capacity-buffer-controller-enabled extraArg should round-trip to CapacityBuffers")
 }
 
+func TestDetectNodeAutoscaler_SkipNodesAndDaemonsets(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(map[string]any{
+		"extraArgs": map[string]any{
+			"ignore-daemonsets-utilization": true,
+			"skip-nodes-with-local-storage": false,
+			"skip-nodes-with-system-pods":   true,
+		},
+	}, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.IgnoreDaemonsetsUtilization,
+		"ignore-daemonsets-utilization extraArg should round-trip to IgnoreDaemonsetsUtilization")
+	require.NotNil(t, cfg.SkipNodesWithLocalStorage,
+		"an explicit skip-nodes-with-local-storage should round-trip to a non-nil pointer")
+	assert.False(t, *cfg.SkipNodesWithLocalStorage,
+		"skip-nodes-with-local-storage=false should round-trip to a *false pointer")
+	require.NotNil(t, cfg.SkipNodesWithSystemPods,
+		"an explicit skip-nodes-with-system-pods should round-trip to a non-nil pointer")
+	assert.True(t, *cfg.SkipNodesWithSystemPods,
+		"skip-nodes-with-system-pods=true should round-trip to a *true pointer")
+}
+
+func TestDetectNodeAutoscaler_SkipNodesUnsetStayNil(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(map[string]any{
+		"extraArgs": map[string]any{},
+	}, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.False(t, cfg.IgnoreDaemonsetsUtilization,
+		"an absent ignore-daemonsets-utilization should leave the zero value (false)")
+	assert.Nil(t, cfg.SkipNodesWithLocalStorage,
+		"an absent skip-nodes-with-local-storage should leave a nil pointer (upstream default)")
+	assert.Nil(t, cfg.SkipNodesWithSystemPods,
+		"an absent skip-nodes-with-system-pods should leave a nil pointer (upstream default)")
+}
+
 func TestDetectNodeAutoscaler_NotInstalled(t *testing.T) {
 	t.Parallel()
 
