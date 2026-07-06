@@ -2,11 +2,20 @@ package flux
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// ErrInvalidIgnorePath is returned when an --ignore-paths entry is not an
+// RFC 6901 JSON Pointer (which always starts with '/').
+var ErrInvalidIgnorePath = errors.New(
+	"--ignore-paths entries must be RFC 6901 JSON Pointers starting with '/'",
 )
 
 type kustomizationFlags struct {
@@ -19,6 +28,7 @@ type kustomizationFlags struct {
 	export          bool
 	wait            bool
 	dependsOn       []string
+	ignorePaths     []string
 }
 
 func (c *Client) newCreateKustomizationCmd() *cobra.Command {
@@ -66,6 +76,9 @@ func (c *Client) newCreateKustomizationCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&flags.export, "export", false, "export in YAML format to stdout")
 	cmd.Flags().
 		StringSliceVar(&flags.dependsOn, "depends-on", nil, "Kustomization that must be ready before this one")
+	cmd.Flags().
+		StringSliceVar(&flags.ignorePaths, "ignore-paths", nil,
+			"JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas")
 
 	_ = cmd.MarkFlagRequired("source")
 
@@ -77,6 +90,11 @@ func (c *Client) createKustomization(
 	name, namespace string,
 	flags *kustomizationFlags,
 ) error {
+	err := validateIgnorePaths(flags.ignorePaths)
+	if err != nil {
+		return err
+	}
+
 	sourceKind, sourceName, sourceNs := parseSourceRef(
 		flags.sourceKind,
 		flags.sourceName,
@@ -133,4 +151,23 @@ func (c *Client) applyKustomizationOptions(
 			},
 		)
 	}
+
+	if len(flags.ignorePaths) > 0 {
+		// A rule without a target applies its paths to every object the
+		// Kustomization manages (upstream API semantics); targeted rules are a
+		// separate increment.
+		kustomization.Spec.Ignore = []kustomizev1.IgnoreRule{
+			{Paths: flags.ignorePaths},
+		}
+	}
+}
+
+func validateIgnorePaths(paths []string) error {
+	for _, path := range paths {
+		if !strings.HasPrefix(path, "/") {
+			return fmt.Errorf("%w: %q", ErrInvalidIgnorePath, path)
+		}
+	}
+
+	return nil
 }
