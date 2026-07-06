@@ -63,8 +63,9 @@ type MultiNodeComposer interface {
 // agents. [Base.Create] rejects controlPlanes > 1 with
 // [ErrHAControlPlaneNotImplemented] for any strategy that does not implement
 // this — the guard is per-distribution because the join mechanics differ:
-// kubeadm's manual certificate distribution supports it, while k3s needs its own
-// embedded-etcd increment (see devantler-tech/ksail#5796).
+// kubeadm's manual certificate distribution (devantler-tech/ksail#5796) and
+// k3s's embedded etcd (devantler-tech/ksail#5854) each implement it their own
+// way.
 type HAControlPlaneComposer interface {
 	MultiNodeComposer
 
