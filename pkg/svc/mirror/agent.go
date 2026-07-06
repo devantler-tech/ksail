@@ -57,9 +57,10 @@ type SteerCommandRunner func(ctx context.Context, name string, args ...string) e
 // It blocks until ctx is cancelled or the tunnel session ends (both return
 // nil, matching [ForwardRedirected]) or the listener fails (returns the error).
 // The rule teardown runs on a context detached from ctx and time-bounded, so a
-// cancelled agent still cleans up; if the forwarding result was otherwise nil,
-// a teardown failure surfaces as the returned error so a dangling REDIRECT rule
-// on an ephemeral pod is observable rather than silent.
+// cancelled agent still cleans up; a teardown failure is joined onto any
+// forwarding error (via [errors.Join]) and surfaced as the returned error, so a
+// dangling REDIRECT rule on an ephemeral pod is observable rather than silent —
+// even when forwarding failed too.
 func RunSteerAgent(
 	ctx context.Context,
 	transport io.ReadWriteCloser,
@@ -84,8 +85,12 @@ func RunSteerAgent(
 
 	defer func() {
 		teardownErr := removeSteeringRule(ctx, redirect, runner)
-		if teardownErr != nil && err == nil {
-			err = teardownErr
+		if teardownErr != nil {
+			// Join rather than only surfacing teardown when forwarding
+			// succeeded: a teardown failure that coincides with a forwarding
+			// failure still leaves a dangling REDIRECT rule on an ephemeral
+			// pod, so both must be observable, not just the first.
+			err = errors.Join(err, teardownErr)
 		}
 	}()
 

@@ -18,7 +18,21 @@ import (
 var (
 	errSteerInstallDenied  = errors.New("iptables: permission denied")
 	errSteerTeardownDenied = errors.New("iptables: delete denied")
+	errForwardBroken       = errors.New("accept: connection reset")
 )
+
+// failingListener is a net.Listener whose Accept fails immediately with a
+// non-stop error, driving ForwardRedirected's genuine-failure path so a
+// forwarding failure can be paired with a teardown failure in tests.
+type failingListener struct{ err error }
+
+func (l *failingListener) Accept() (net.Conn, error) { return nil, l.err }
+
+func (l *failingListener) Close() error { return nil }
+
+func (l *failingListener) Addr() net.Addr {
+	return &net.UnixAddr{Name: "ksail-steer-failing", Net: "unix"}
+}
 
 // recordingRunner is a fake SteerCommandRunner: it records every command it is
 // asked to run and can be told to fail whenever a given iptables action
@@ -152,6 +166,30 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	cancel()
 
 	require.ErrorIs(t, <-agentDone, errSteerTeardownDenied)
+	assert.True(t, runner.sawAction("-D"), "teardown should have been attempted")
+}
+
+func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
+	t.Parallel()
+
+	// Forwarding fails (the listener's Accept errors with a non-stop error)
+	// AND teardown fails: the dangling-rule teardown error must not be
+	// swallowed by the forwarding error — both surface via errors.Join.
+	runner := &recordingRunner{failOn: "-D", err: errSteerTeardownDenied}
+	agentTransport, _ := net.Pipe()
+	listener := &failingListener{err: errForwardBroken}
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+
+	err := mirror.RunSteerAgent(
+		context.Background(),
+		agentTransport,
+		listener,
+		redirect,
+		runner.run,
+	)
+
+	require.ErrorIs(t, err, errForwardBroken, "the forwarding failure must surface")
+	require.ErrorIs(t, err, errSteerTeardownDenied, "the teardown failure must surface too")
 	assert.True(t, runner.sawAction("-D"), "teardown should have been attempted")
 }
 
