@@ -1831,6 +1831,10 @@ workload_write
         "description": "The containerPort that this deployment exposes. (applies to: gen_deployment)",
         "type": "integer"
       },
+      "post-render-strategy": {
+        "description": "post-render strategy for sending hooks to post-renderers (nohooks, combined, separate); leave unset to use the controller default (applies to: gen_helmrelease)",
+        "type": "string"
+      },
       "preemption-policy": {
         "default": "PreemptLowerPriority",
         "description": "preemption-policy is the policy for preempting pods with lower priority. (applies to: gen_priorityclass)",
