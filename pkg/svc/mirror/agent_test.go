@@ -8,13 +8,17 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var errSteerInstallDenied = errors.New("iptables: permission denied")
+var (
+	errSteerInstallDenied  = errors.New("iptables: permission denied")
+	errSteerTeardownDenied = errors.New("iptables: delete denied")
+)
 
 // recordingRunner is a fake SteerCommandRunner: it records every command it is
 // asked to run and can be told to fail whenever a given iptables action
@@ -122,6 +126,32 @@ func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 	require.ErrorIs(t, err, errSteerInstallDenied)
 	assert.True(t, runner.sawAction("-I"), "install should have been attempted")
 	assert.False(t, runner.sawAction("-D"), "nothing is installed, so nothing is torn down")
+}
+
+func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
+	t.Parallel()
+
+	// The forwarding result is nil (ctx cancel), but the delete rule fails —
+	// a dangling REDIRECT on an ephemeral pod must not vanish silently.
+	runner := &recordingRunner{failOn: "-D", err: errSteerTeardownDenied}
+	agentTransport, _ := net.Pipe()
+	listener := newPipeListener()
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	agentDone := make(chan error, 1)
+	go func() {
+		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
+	}()
+
+	installed := func() bool { return runner.sawAction("-I") }
+	require.Eventually(t, installed, time.Second, time.Millisecond,
+		"the redirect rule should be installed before teardown")
+	cancel()
+
+	require.ErrorIs(t, <-agentDone, errSteerTeardownDenied)
+	assert.True(t, runner.sawAction("-D"), "teardown should have been attempted")
 }
 
 func TestRunSteerAgent_RejectsAnInvalidRedirect(t *testing.T) {

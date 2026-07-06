@@ -57,15 +57,17 @@ type SteerCommandRunner func(ctx context.Context, name string, args ...string) e
 // It blocks until ctx is cancelled or the tunnel session ends (both return
 // nil, matching [ForwardRedirected]) or the listener fails (returns the error).
 // The rule teardown runs on a context detached from ctx and time-bounded, so a
-// cancelled agent still cleans up.
+// cancelled agent still cleans up; if the forwarding result was otherwise nil,
+// a teardown failure surfaces as the returned error so a dangling REDIRECT rule
+// on an ephemeral pod is observable rather than silent.
 func RunSteerAgent(
 	ctx context.Context,
 	transport io.ReadWriteCloser,
 	listener net.Listener,
 	redirect SteeringRedirect,
 	runner SteerCommandRunner,
-) error {
-	err := checkSteerAgentInputs(transport, listener, runner)
+) (err error) {
+	err = checkSteerAgentInputs(transport, listener, runner)
 	if err != nil {
 		return err
 	}
@@ -80,7 +82,12 @@ func RunSteerAgent(
 		return fmt.Errorf("installing the steering redirect rule: %w", err)
 	}
 
-	defer removeSteeringRule(ctx, redirect, runner)
+	defer func() {
+		teardownErr := removeSteeringRule(ctx, redirect, runner)
+		if teardownErr != nil && err == nil {
+			err = teardownErr
+		}
+	}()
 
 	session := NewTunnelSession(transport, transport, TunnelRoleServer)
 
@@ -114,18 +121,28 @@ func checkSteerAgentInputs(
 
 // removeSteeringRule runs the redirect's delete rule on a context detached from
 // the agent's own — the agent stops precisely because ctx was cancelled, so
-// reusing it would kill the teardown command before it could undo the rule.
-// The removal is best-effort: a failure to build or run the delete leaves the
-// agent's primary result untouched (there is nothing better to do from a dying
-// container than try).
-func removeSteeringRule(ctx context.Context, redirect SteeringRedirect, runner SteerCommandRunner) {
+// reusing it would kill the teardown command before it could undo the rule. It
+// returns the build-or-run failure rather than swallowing it: an ephemeral
+// container cannot be removed, so a rule the container failed to delete has no
+// future cleanup path, and [RunSteerAgent] surfaces the error so the dangling
+// REDIRECT is observable.
+func removeSteeringRule(
+	ctx context.Context,
+	redirect SteeringRedirect,
+	runner SteerCommandRunner,
+) error {
 	deleteArgs, err := redirect.DeleteArgs()
 	if err != nil {
-		return
+		return fmt.Errorf("building the steering teardown rule: %w", err)
 	}
 
 	teardownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), steerTeardownTimeout)
 	defer cancel()
 
-	_ = runner(teardownCtx, steerIptablesBinary, deleteArgs...)
+	err = runner(teardownCtx, steerIptablesBinary, deleteArgs...)
+	if err != nil {
+		return fmt.Errorf("removing the steering redirect rule: %w", err)
+	}
+
+	return nil
 }
