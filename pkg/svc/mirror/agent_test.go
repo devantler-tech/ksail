@@ -141,6 +141,7 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	agentDone := make(chan error, 1)
+
 	go func() {
 		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
 	}()
