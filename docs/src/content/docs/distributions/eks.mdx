@@ -134,7 +134,7 @@ EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>
 
 - EKS is a cloud distribution — **local mirror registries and local registry containers are not supported**. Use external registry URLs (e.g., `docker.io=https://registry-1.docker.io`)
 - EKS only supports the **AWS provider** — the Docker, Hetzner, and Omni providers are not available
-- The control plane keeps running (and billing) while nodegroups are stopped — use `ksail cluster delete` to stop all charges
+- The control plane keeps running (and billing) while nodegroups are stopped — use `ksail cluster delete` to tear down the cluster and stop its cluster-related charges (resources provisioned by workloads, such as load balancers or persistent volumes, may need separate cleanup)
 - KSail-managed component installation (CNI/CSI/GitOps/security add-ons beyond eksctl's built-ins) and `ksail cluster update` for EKS are still in progress; see [Support Matrix](/support-matrix/)
 
 ## Related
