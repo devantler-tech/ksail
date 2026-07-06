@@ -266,6 +266,11 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 		items = append(items, cluster)
 	}
 
+	// Surface kubeconfig contexts ksail did not provision as unmanaged clusters (marked, never hidden
+	// and never shown as a normal managed cluster), so read/operate surfaces can see them within limits
+	// while ksail-only operations are refused.
+	items = append(items, s.unmanagedClusters(merged)...)
+
 	return &v1alpha1.ClusterList{Items: items}, nil
 }
 

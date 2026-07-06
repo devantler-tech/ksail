@@ -3,10 +3,13 @@ package clusterapi
 import (
 	"context"
 	"fmt"
+	"sort"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -128,4 +131,93 @@ func (s *Service) clusterEndpoints() map[string]string {
 	}
 
 	return endpoints
+}
+
+// unmanagedClusters synthesizes a Cluster for every kubeconfig context that does NOT correspond to a
+// cluster ksail already lists (discovered via an infrastructure provider or tracked as an in-flight
+// job — the keys of managed), flagged unmanaged via the ksail.io/unmanaged annotation. It lets ksail
+// see clusters that exist in the user's kubeconfig but were not provisioned by ksail (a managed
+// EKS/GKE/AKS cluster, a kubeadm cluster, a colleague's cluster) so read/operate surfaces can work
+// against them within limits while ksail-only operations are refused. Best-effort and offline, exactly
+// like clusterEndpoints: one file read, no cluster round-trips, and an unreadable kubeconfig yields
+// none. Contexts are emitted in sorted order so the list is stable.
+func (s *Service) unmanagedClusters(managed map[string]listEntry) []v1alpha1.Cluster {
+	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
+	if err != nil {
+		return nil
+	}
+
+	contextNames := make([]string, 0, len(config.Contexts))
+	for contextName := range config.Contexts {
+		contextNames = append(contextNames, contextName)
+	}
+
+	sort.Strings(contextNames)
+
+	items := make([]v1alpha1.Cluster, 0, len(contextNames))
+
+	for _, contextName := range contextNames {
+		if contextIsManaged(contextName, managed) {
+			continue
+		}
+
+		endpoint := ""
+
+		if kubeContext, ok := config.Contexts[contextName]; ok {
+			if cluster, ok := config.Clusters[kubeContext.Cluster]; ok {
+				endpoint = cluster.Server
+			}
+		}
+
+		items = append(items, newUnmanagedCluster(contextName, endpoint))
+	}
+
+	return items
+}
+
+// contextIsManaged reports whether a kubeconfig context corresponds to a cluster ksail already lists,
+// so unmanagedClusters does not re-surface it. A context maps to a managed cluster when its
+// ksail-detected name — or, when detection fails, the raw context name — is a key in the managed set.
+// Detection is what List uses to key discovered clusters (via clusterEndpoints), so matching on it
+// keeps a managed cluster from appearing twice (once managed, once as an unmanaged context).
+func contextIsManaged(contextName string, managed map[string]listEntry) bool {
+	if _, ok := managed[contextName]; ok {
+		return true
+	}
+
+	_, name, err := clusterdetector.DetectDistributionFromContext(contextName)
+	if err == nil {
+		if _, ok := managed[name]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+// newUnmanagedCluster builds the Cluster ksail surfaces for a kubeconfig context it does not manage.
+// It is keyed by the context name, carries the ksail.io/unmanaged=true annotation (the stable marker
+// every surface reads), and reports a Ready=False/reason=Unmanaged condition — reusing the same
+// "Ready" condition the web UI already renders for stopped clusters, so an unmanaged cluster is never
+// shown green/normal even before a surface adds a dedicated badge. Distribution and provider are left
+// empty: without a ksail spec they are unknown.
+func newUnmanagedCluster(contextName, endpoint string) v1alpha1.Cluster {
+	cluster := v1alpha1.Cluster{}
+	cluster.Name = contextName
+	cluster.Namespace = localNamespace
+	cluster.Annotations = map[string]string{v1alpha1.UnmanagedAnnotation: "true"}
+	cluster.Status.Endpoint = endpoint
+	cluster.Status.Conditions = []metav1.Condition{unmanagedCondition()}
+
+	return cluster
+}
+
+// unmanagedCondition is the Ready=False condition attached to an unmanaged (kubeconfig-only) cluster.
+func unmanagedCondition() metav1.Condition {
+	return metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Unmanaged",
+		Message: "Cluster is present in the kubeconfig but not managed by ksail",
+	}
 }

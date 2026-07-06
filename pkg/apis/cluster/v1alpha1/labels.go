@@ -36,6 +36,21 @@ const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 // user cannot forge it.
 const LastAppliedComponentsAnnotation = "ksail.io/last-applied-components"
 
+// UnmanagedAnnotation marks a Cluster that ksail surfaces from the user's kubeconfig but does not
+// manage: it was found as a kubeconfig context that no ksail infrastructure provider discovered, so
+// ksail never provisioned it and has no spec to drive it. Its value is the string "true". It lets
+// every surface (CLI, web UI, desktop app) show such clusters clearly marked as unmanaged and refuse
+// ksail-only operations (lifecycle, component install, GitOps, reprovision) on them, rather than
+// hiding them or presenting them as normal managed clusters. It lives here, beside the other reserved
+// ksail.io/* identifiers, so every consumer keys off one definition.
+const UnmanagedAnnotation = "ksail.io/unmanaged"
+
+// IsUnmanaged reports whether this Cluster was surfaced from the kubeconfig without being managed by
+// ksail (see UnmanagedAnnotation). ksail-only operations are unavailable for such clusters.
+func (c *Cluster) IsUnmanaged() bool {
+	return c.Annotations[UnmanagedAnnotation] == "true"
+}
+
 // IsHostCluster reports whether this Cluster resource is the operator's self-registration of the
 // cluster it runs on (see HostClusterLabel).
 func (c *Cluster) IsHostCluster() bool {
