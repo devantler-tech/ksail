@@ -2,6 +2,7 @@ package workload
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -205,24 +206,14 @@ func runMirrorCommand(cmd *cobra.Command, deployment string, opts mirrorOptions)
 }
 
 // resolveTapPoint resolves the Deployment to the concrete (pod, container) the
-// tap attaches to.
+// tap attaches to, via the shared injection-point resolver.
 func resolveTapPoint(
 	cmd *cobra.Command,
 	client kubernetes.Interface,
 	deployment string,
 	opts mirrorOptions,
 ) (*mirror.TapPoint, error) {
-	target, err := mirror.ResolveTarget(cmd.Context(), client, opts.namespace, deployment)
-	if err != nil {
-		return nil, fmt.Errorf("resolve mirror target: %w", err)
-	}
-
-	point, err := mirror.SelectTapPoint(target, opts.container)
-	if err != nil {
-		return nil, fmt.Errorf("select tap point: %w", err)
-	}
-
-	return point, nil
+	return resolveInjectionPoint(cmd.Context(), client, opts.namespace, opts.container, deployment)
 }
 
 // ensureTap injects the read-only tap into the tap point's pod — reusing an
@@ -234,35 +225,19 @@ func ensureTap(
 	point *mirror.TapPoint,
 	opts mirrorOptions,
 ) error {
-	_, err := mirror.InjectTap(
-		cmd.Context(), client, point, mirror.WithTapImage(opts.tapImage),
-	)
-
-	switch {
-	case errors.Is(err, mirror.ErrTapAlreadyInjected):
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "reusing the tap already injected on pod %s",
-			Args:    []any{point.Pod},
-			Writer:  cmd.OutOrStdout(),
-		})
-	case err != nil:
-		return fmt.Errorf("inject tap: %w", err)
-	default:
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "injected read-only tap into pod %s (container %s)",
-			Args:    []any{point.Pod, point.Container},
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	err = mirror.WaitForTap(cmd.Context(), client, point, opts.tapTimeout)
-	if err != nil {
-		return fmt.Errorf("wait for tap: %w", err)
-	}
-
-	return nil
+	return injectAndWait(cmd, point, ephemeralInjector{
+		inject: func(ctx context.Context) (string, error) {
+			return mirror.InjectTap(ctx, client, point, mirror.WithTapImage(opts.tapImage))
+		},
+		wait: func(ctx context.Context) error {
+			return mirror.WaitForTap(ctx, client, point, opts.tapTimeout)
+		},
+		alreadyErr:  mirror.ErrTapAlreadyInjected,
+		reuseMsg:    "reusing the tap already injected on pod %s",
+		injectedMsg: "injected read-only tap into pod %s (container %s)",
+		injectVerb:  "inject tap",
+		waitVerb:    "wait for tap",
+	})
 }
 
 // captureToOutput runs the blocking capture session into the configured

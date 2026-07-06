@@ -439,3 +439,22 @@ func ExportSetNewLiveReplay(
 
 	return func() { newLiveReplay = original }
 }
+
+// ExportSetRunInterceptSession swaps the intercept command's blocking
+// steering-tunnel call so tests can substitute the tunnel without a live
+// cluster. It returns a restore function that reinstates the original.
+func ExportSetRunInterceptSession(
+	session func(
+		ctx context.Context,
+		client kubernetes.Interface,
+		config *rest.Config,
+		point *mirror.TapPoint,
+		steerCommand []string,
+		localPort int,
+	) error,
+) func() {
+	original := runInterceptSession
+	runInterceptSession = session
+
+	return func() { runInterceptSession = original }
+}
