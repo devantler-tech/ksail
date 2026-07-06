@@ -632,6 +632,10 @@ func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[strin
 		cfg.ScaleDownUnneededTime = scaleDown
 	}
 
+	if threshold, ok := args["scale-down-utilization-threshold"].(string); ok {
+		cfg.ScaleDownUtilizationThreshold = threshold
+	}
+
 	// The installer renders both capacity-buffer flags together; the controller
 	// flag is the canonical marker for the capacityBuffers option. An absent key
 	// means the feature is off (the installer omits the flags when disabled).

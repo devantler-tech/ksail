@@ -135,11 +135,16 @@ type autoscalingGroup struct {
 type chartExtraArgs struct {
 	Expander              string `json:"expander"`
 	ScaleDownUnneededTime string `json:"scale-down-unneeded-time"`
-	MaxNodesTotal         int32  `json:"max-nodes-total,omitempty"`
-	ScaleDownAfterAdd     string `json:"scale-down-delay-after-add"`
-	ScaleDownAfterDelete  string `json:"scale-down-delay-after-delete"`
-	OkTotalUnreadyCount   int    `json:"ok-total-unready-count"`
-	V                     string `json:"v"`
+	// ScaleDownUtilizationThreshold mirrors the upstream
+	// --scale-down-utilization-threshold flag (default 0.5). omitempty keeps it out
+	// of the rendered values unless set, so an unset value inherits the upstream
+	// default and existing releases see no values drift.
+	ScaleDownUtilizationThreshold string `json:"scale-down-utilization-threshold,omitempty"`
+	MaxNodesTotal                 int32  `json:"max-nodes-total,omitempty"`
+	ScaleDownAfterAdd             string `json:"scale-down-delay-after-add"`
+	ScaleDownAfterDelete          string `json:"scale-down-delay-after-delete"`
+	OkTotalUnreadyCount           int    `json:"ok-total-unready-count"`
+	V                             string `json:"v"`
 	// CapacityBufferControllerEnabled and CapacityBufferPodInjectionEnabled toggle
 	// the upstream capacity-buffers feature (Cluster Autoscaler 1.34+, off by
 	// default): the CapacityBuffer controller and the pod-list processor that
@@ -293,16 +298,17 @@ func buildChartValues(
 		CloudProvider:     "hetzner",
 		AutoscalingGroups: groups,
 		ExtraArgs: chartExtraArgs{
-			Expander:                    expandersToHelmValue(cfg.Expander),
-			ScaleDownUnneededTime:       scaleDownTime,
-			MaxNodesTotal:               cfg.MaxNodesTotal,
-			ScaleDownAfterAdd:           "5m",
-			ScaleDownAfterDelete:        "2m",
-			OkTotalUnreadyCount:         defaultOkTotalUnreadyCount,
-			V:                           "4",
-			IgnoreDaemonsetsUtilization: cfg.IgnoreDaemonsetsUtilization,
-			SkipNodesWithLocalStorage:   cfg.SkipNodesWithLocalStorage,
-			SkipNodesWithSystemPods:     cfg.SkipNodesWithSystemPods,
+			Expander:                      expandersToHelmValue(cfg.Expander),
+			ScaleDownUnneededTime:         scaleDownTime,
+			ScaleDownUtilizationThreshold: cfg.ScaleDownUtilizationThreshold,
+			MaxNodesTotal:                 cfg.MaxNodesTotal,
+			ScaleDownAfterAdd:             "5m",
+			ScaleDownAfterDelete:          "2m",
+			OkTotalUnreadyCount:           defaultOkTotalUnreadyCount,
+			V:                             "4",
+			IgnoreDaemonsetsUtilization:   cfg.IgnoreDaemonsetsUtilization,
+			SkipNodesWithLocalStorage:     cfg.SkipNodesWithLocalStorage,
+			SkipNodesWithSystemPods:       cfg.SkipNodesWithSystemPods,
 		},
 		ExtraEnv:        extraEnv,
 		ExtraEnvSecrets: buildExtraEnvSecrets(),

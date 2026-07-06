@@ -108,6 +108,7 @@ func skippedAutoscalerPoolFields() []string {
 		"Cluster.Autoscaler.Node.Pools[].Taints[].Key",
 		"Cluster.Autoscaler.Node.Pools[].Taints[].Value",
 		"Cluster.Autoscaler.Node.ScaleDownUnneededTime",
+		"Cluster.Autoscaler.Node.ScaleDownUtilizationThreshold",
 		"Provider.Hetzner.AutoscalerNodePoolNames[]",
 		"Provider.Hetzner.AutoscalerNodePools[].Labels[]",
 		"Provider.Hetzner.AutoscalerNodePools[].Location",
