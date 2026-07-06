@@ -26,6 +26,12 @@ func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Clu
 		return nil
 	}
 
+	isManaged := func(name string) bool {
+		_, ok := managed[name]
+
+		return ok
+	}
+
 	contextNames := make([]string, 0, len(config.Contexts))
 	for contextName := range config.Contexts {
 		contextNames = append(contextNames, contextName)
@@ -36,7 +42,7 @@ func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Clu
 	unmanaged := make([]Cluster, 0, len(contextNames))
 
 	for _, contextName := range contextNames {
-		if contextIsManaged(contextName, managed) {
+		if ContextIsManaged(contextName, isManaged) {
 			continue
 		}
 
@@ -49,21 +55,20 @@ func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Clu
 	return unmanaged
 }
 
-// contextIsManaged reports whether a kubeconfig context corresponds to a cluster already discovered,
-// so DiscoverUnmanaged does not re-surface it. A context maps to a managed cluster when its
-// ksail-detected name — or, when detection fails, the raw context name — is a key in managed. Both
+// ContextIsManaged reports whether a kubeconfig context corresponds to a cluster already discovered,
+// so an unmanaged-cluster synthesizer does not re-surface it. A context maps to a managed cluster when
+// its ksail-detected name — or, when detection fails, the raw context name — satisfies isManaged. Both
 // keys are checked because a Docker cluster's context ("kind-dev") detects to its ksail name ("dev"),
-// which is what discovery keys the cluster by.
-func contextIsManaged(contextName string, managed map[string]struct{}) bool {
-	if _, ok := managed[contextName]; ok {
+// which is what discovery keys the cluster by. Shared by the CLI's DiscoverUnmanaged and the web-UI
+// model (pkg/cli/clusterapi) so the dedup rule lives in exactly one place.
+func ContextIsManaged(contextName string, isManaged func(name string) bool) bool {
+	if isManaged(contextName) {
 		return true
 	}
 
 	_, name, err := clusterdetector.DetectDistributionFromContext(contextName)
-	if err == nil {
-		if _, ok := managed[name]; ok {
-			return true
-		}
+	if err == nil && isManaged(name) {
+		return true
 	}
 
 	return false

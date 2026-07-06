@@ -8,6 +8,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -198,7 +199,13 @@ func unmanagedClusters(
 	items := make([]v1alpha1.Cluster, 0, len(contextNames))
 
 	for _, contextName := range contextNames {
-		if contextIsManaged(contextName, managed) {
+		// The dedup rule (raw context name OR ksail-detected name in the managed set) is shared with
+		// the CLI's cluster list via clusterdiscovery.ContextIsManaged, so both surfaces stay aligned.
+		if clusterdiscovery.ContextIsManaged(contextName, func(name string) bool {
+			_, ok := managed[name]
+
+			return ok
+		}) {
 			continue
 		}
 
@@ -207,26 +214,6 @@ func unmanagedClusters(
 	}
 
 	return items
-}
-
-// contextIsManaged reports whether a kubeconfig context corresponds to a cluster ksail already lists,
-// so unmanagedClusters does not re-surface it. A context maps to a managed cluster when its
-// ksail-detected name — or, when detection fails, the raw context name — is a key in the managed set.
-// Detection is what List uses to key discovered clusters (via clusterEndpoints), so matching on it
-// keeps a managed cluster from appearing twice (once managed, once as an unmanaged context).
-func contextIsManaged(contextName string, managed map[string]listEntry) bool {
-	if _, ok := managed[contextName]; ok {
-		return true
-	}
-
-	_, name, err := clusterdetector.DetectDistributionFromContext(contextName)
-	if err == nil {
-		if _, ok := managed[name]; ok {
-			return true
-		}
-	}
-
-	return false
 }
 
 // newUnmanagedCluster builds the Cluster ksail surfaces for a kubeconfig context it does not manage.
