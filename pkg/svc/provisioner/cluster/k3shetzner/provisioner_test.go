@@ -334,15 +334,19 @@ func TestCreateAlreadyExists(t *testing.T) {
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
-func TestCreateHAControlPlaneNotImplemented(t *testing.T) {
+func TestSupportsHAControlPlanes(t *testing.T) {
 	t.Parallel()
 
-	infra := &fakeInfra{}
-	prov := newProvisioner(infra, 3, 0)
+	// The provisioner advertises the HA capability, so the shared create flow no
+	// longer rejects a multi-control-plane K3s topology. The sentinel it exposes is
+	// the readiness-gated join-complete marker the flow polls to serialise joins.
+	var haComposer hetznerbase.HAControlPlaneComposer = newProvisioner(&fakeInfra{}, 3, 0)
 
-	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, k3shetzner.ErrHAControlPlaneNotImplemented)
-	assert.Equal(t, 0, infra.ensureNetworkCalls)
+	haComposer.SupportsHAControlPlanes()
+	assert.Equal(t,
+		"/var/lib/ksail/k3s-server-join-complete",
+		haComposer.ControlPlaneJoinCompletePath(),
+	)
 }
 
 func TestCreateNodesExistError(t *testing.T) {

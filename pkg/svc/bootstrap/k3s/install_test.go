@@ -46,7 +46,9 @@ func TestRenderValid(t *testing.T) {
 				"--disable 'servicelb' --disable 'traefik' --write-kubeconfig-mode '0644'",
 		},
 		{
-			name: "additional server joins via --server",
+			// A joining control-plane server appends a readiness gate and the
+			// join-complete sentinel so the shared bring-up can serialise HA joins.
+			name: "additional server joins via --server and publishes the join sentinel",
 			cfg: k3sbootstrap.InstallConfig{
 				Version:   "v1.30.2+k3s1",
 				Role:      k3sbootstrap.RoleServer,
@@ -55,7 +57,9 @@ func TestRenderValid(t *testing.T) {
 			},
 			want: "script=\"$(curl -sfL 'https://get.k3s.io')\" && printf '%s' \"$script\" | " +
 				"INSTALL_K3S_VERSION='v1.30.2+k3s1' " +
-				"K3S_TOKEN='secret' sh -s - server --server 'https://10.0.0.2:6443'",
+				"K3S_TOKEN='secret' sh -s - server --server 'https://10.0.0.2:6443'" +
+				" && until k3s kubectl get --raw='/readyz' >/dev/null 2>&1; do sleep 5; done" +
+				" && mkdir -p /var/lib/ksail && touch /var/lib/ksail/k3s-server-join-complete",
 		},
 		{
 			name: "agent joins via K3S_URL",

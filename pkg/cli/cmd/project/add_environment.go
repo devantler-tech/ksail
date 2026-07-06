@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -164,7 +165,7 @@ func resolveAddEnvironmentParams(
 
 	srcCfg, err := loadSourceConfig(cmd, srcName)
 	if err != nil {
-		return addEnvironmentParams{}, err
+		return addEnvironmentParams{}, enrichSourceConfigError(cmd, repoRoot, err)
 	}
 
 	distribution := srcCfg.Spec.Cluster.Distribution
@@ -226,8 +227,14 @@ func repoRelativeSourceDir(repoRoot, sourceDir string) (string, error) {
 // distribution-specific config (e.g. Talos PKI) are skipped because the clone only
 // needs the structured identity, not a provisioning-ready config.
 func loadSourceConfig(cmd *cobra.Command, srcName string) (*v1alpha1.Cluster, error) {
-	configFile := "ksail." + srcName + ".yaml"
+	return loadEnvironmentConfig(cmd, "ksail."+srcName+".yaml")
+}
 
+// loadEnvironmentConfig loads a single ksail.<name>.yaml root config by file name.
+// It is the shared loader behind loadSourceConfig and the environment.ConfigLoader
+// that enrichSourceConfigError feeds to DeriveEnvironments, so both resolve a config
+// the same silent, validation-skipping way.
+func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Cluster, error) {
 	manager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
 
 	cfg, err := manager.Load(configmanager.LoadOptions{
@@ -240,6 +247,29 @@ func loadSourceConfig(cmd *cobra.Command, srcName string) (*v1alpha1.Cluster, er
 	}
 
 	return cfg, nil
+}
+
+// enrichSourceConfigError augments a --from load failure with the environments
+// actually declared in the workspace, so a mistyped source reports what is
+// available instead of only that its config file was missing. It preserves the
+// cause's error chain (ErrSourceConfigLoad) and returns it unchanged when discovery
+// fails or finds no other environments.
+func enrichSourceConfigError(cmd *cobra.Command, repoRoot string, cause error) error {
+	loader := func(configFile string) (*v1alpha1.Cluster, error) {
+		return loadEnvironmentConfig(cmd, configFile)
+	}
+
+	envs, err := environment.DeriveEnvironments(repoRoot, loader)
+	if err != nil || len(envs) == 0 {
+		return cause
+	}
+
+	names := make([]string, 0, len(envs))
+	for _, env := range envs {
+		names = append(names, env.Name)
+	}
+
+	return fmt.Errorf("%w (available environments: %s)", cause, strings.Join(names, ", "))
 }
 
 // cloneEnvironment derives the structured rewrites and clones the source overlay

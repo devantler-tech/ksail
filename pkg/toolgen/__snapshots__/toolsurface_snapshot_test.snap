@@ -906,6 +906,13 @@ workload_write
         "description": "Treat \"resource not found\" as a successful delete. Defaults to \"true\" when --all is specified. (applies to: delete)",
         "type": "boolean"
       },
+      "ignore-paths": {
+        "description": "JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas (applies to: create_kustomization)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "image": {
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_cronjob, create_deployment, create_job, debug)",
         "type": "string"
