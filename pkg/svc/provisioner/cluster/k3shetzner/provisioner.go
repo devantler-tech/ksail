@@ -50,8 +50,7 @@ func NewProvisioner(
 	}
 
 	provisioner.Base = base
-	base.Strategy = provisioner
-	base.ConnectorSecretPrefix = connectorSecretPrefix
+	base.Wire(provisioner, connectorSecretPrefix)
 
 	return provisioner, nil
 }

@@ -211,6 +211,16 @@ func NewBase(
 	}, nil
 }
 
+// Wire finalises a freshly built Base for a distribution provisioner: it records the
+// distro-specific create [CreateStrategy] and the Connector Secret prefix. Call it
+// once, immediately after [NewBase], passing the constructed provisioner as strategy —
+// the wiring step both distributions' NewProvisioner constructors delegate to instead
+// of open-coding it (which jscpd flagged as a near-identical clone).
+func (b *Base) Wire(strategy CreateStrategy, connectorSecretPrefix string) {
+	b.Strategy = strategy
+	b.ConnectorSecretPrefix = connectorSecretPrefix
+}
+
 // ResolveName returns name when non-empty, otherwise the Base's configured default
 // cluster name, matching the Provisioner interface's "empty name means use config
 // default" contract.
