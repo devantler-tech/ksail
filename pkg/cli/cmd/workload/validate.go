@@ -18,6 +18,7 @@ import (
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/celrules"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
@@ -78,6 +79,7 @@ func NewValidateCmd() *cobra.Command {
 		strict               bool
 		ignoreMissingSchemas bool
 		skipHelmRender       bool
+		includeCRDSchemas    bool
 		skipKinds            []string
 		schemaLocations      []string
 		rules                string
@@ -98,6 +100,7 @@ func NewValidateCmd() *cobra.Command {
 					strict:               strict,
 					ignoreMissingSchemas: ignoreMissingSchemas,
 					skipHelmRender:       skipHelmRender,
+					includeCRDSchemas:    includeCRDSchemas,
 					skipKinds:            skipKinds,
 					schemaLocations:      schemaLocations,
 					rules:                rules,
@@ -112,6 +115,7 @@ func NewValidateCmd() *cobra.Command {
 		&strict,
 		&ignoreMissingSchemas,
 		&skipHelmRender,
+		&includeCRDSchemas,
 		&skipKinds,
 		&schemaLocations,
 		&rules,
@@ -126,6 +130,7 @@ type validateFlags struct {
 	strict               bool
 	ignoreMissingSchemas bool
 	skipHelmRender       bool
+	includeCRDSchemas    bool
 	skipKinds            []string
 	schemaLocations      []string
 	rules                string
@@ -134,7 +139,7 @@ type validateFlags struct {
 // addValidateFlags registers the flags for the validate command.
 func addValidateFlags(
 	cmd *cobra.Command,
-	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender *bool,
+	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender, includeCRDSchemas *bool,
 	skipKinds, schemaLocations *[]string,
 	rules *string,
 ) {
@@ -167,6 +172,14 @@ func addValidateFlags(
 		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
 			"absent from the CRDs-catalog, so they are validated against a supplied schema instead "+
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+	)
+	cmd.Flags().BoolVar(
+		includeCRDSchemas,
+		"include-crd-schemas",
+		false,
+		"Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that "+
+			"custom resources whose CRD ships in the repo are validated instead of skipped "+
+			"(off by default; a CRD that cannot be converted is warned and skipped)",
 	)
 	cmd.Flags().StringVar(
 		rules,
@@ -245,6 +258,19 @@ func runValidateCmd(
 		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
 	)
 
+	// When --include-crd-schemas is set, derive kubeconform schemas from any
+	// CustomResourceDefinition manifests in the path so custom resources whose CRD
+	// ships in the repo are validated instead of skipped. The derived schemas live
+	// in a temp directory that is removed after validation completes.
+	if flags.includeCRDSchemas {
+		cleanup, err := addCRDSchemas(cmd, path, validationOpts)
+		if err != nil {
+			return err
+		}
+
+		defer cleanup()
+	}
+
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
 	// Compile the CEL rules once up front so a malformed rules file fails fast
@@ -260,6 +286,46 @@ func runValidateCmd(
 	}
 
 	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine)
+}
+
+// addCRDSchemas derives kubeconform schemas from CustomResourceDefinition
+// manifests under path into a temporary directory, appends that directory as a
+// schema location on opts, and warns about any CRD that could not be converted. It
+// returns a cleanup function (always non-nil, safe to defer) that removes the
+// temporary directory once validation has completed.
+func addCRDSchemas(
+	cmd *cobra.Command,
+	path string,
+	opts *kubeconform.ValidationOptions,
+) (func(), error) {
+	tempDir, err := os.MkdirTemp("", "ksail-crd-schemas-")
+	if err != nil {
+		return nil, fmt.Errorf("create CRD schema directory: %w", err)
+	}
+
+	cleanup := func() { _ = os.RemoveAll(tempDir) }
+
+	result, err := crdschema.Materialize(path, tempDir)
+	if err != nil {
+		cleanup()
+
+		return nil, fmt.Errorf("derive CRD schemas: %w", err)
+	}
+
+	for _, warning := range result.Warnings {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "skipped CRD schema: %s",
+			Args:    []any{warning.String()},
+			Writer:  cmd.ErrOrStderr(),
+		})
+	}
+
+	if result.Written > 0 {
+		opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
+	}
+
+	return cleanup, nil
 }
 
 // buildValidateRenderer returns a gitopsRenderer when Helm rendering is enabled,
