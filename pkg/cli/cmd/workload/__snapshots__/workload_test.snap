@@ -953,6 +953,7 @@ Flags:
       --depends-on strings        Kustomization that must be ready before this one
       --export                    export in YAML format to stdout
   -h, --help                      help for kustomization
+      --ignore-paths strings      JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas
       --interval duration         reconciliation interval (default 1m0s)
       --path string               path to the directory containing a kustomization.yaml file (default "./")
       --prune                     enable garbage collection
