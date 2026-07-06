@@ -214,6 +214,68 @@ spec:
 	require.Contains(t, result.Warnings[0].Reason, "spec.group")
 }
 
+func TestMaterialize_RejectsPathTraversalInCRDFields(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		crd string
+		// escaped is a path (relative to dest) that must NOT be created — the
+		// location the schema would land at if the traversal guard were absent.
+		escaped string
+	}{
+		"group escapes dest": {
+			crd: `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: evil.example.com
+spec:
+  group: "../escape"
+  names:
+    kind: Evil
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+`,
+			escaped: filepath.Join("..", "escape", "evil_v1.json"),
+		},
+		"version name escapes dest": {
+			crd: `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: evil.example.com
+spec:
+  group: example.com
+  names:
+    kind: Evil
+  versions:
+    - name: "../../evil"
+      schema:
+        openAPIV3Schema:
+          type: object
+`,
+			escaped: filepath.Join("example.com", "..", "..", "evil_../../evil.json"),
+		},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			root := writeTree(t, map[string]string{"evil.yaml": testCase.crd})
+			dest := t.TempDir()
+
+			result, err := crdschema.Materialize(root, dest)
+			require.NoError(t, err)
+			require.Equal(t, 0, result.Written)
+			require.Len(t, result.Warnings, 1)
+			require.Contains(t, result.Warnings[0].Reason, "safe path component")
+			require.NoFileExists(t, filepath.Join(dest, testCase.escaped))
+		})
+	}
+}
+
 func TestMaterialize_NonexistentRootErrors(t *testing.T) {
 	t.Parallel()
 

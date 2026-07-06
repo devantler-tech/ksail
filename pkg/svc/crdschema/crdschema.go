@@ -190,38 +190,64 @@ func schemasFromCRD(doc []byte) (string, []versionSchema, []Warning) {
 		return crd.Name, nil, []Warning{{Reason: "CRD is missing spec.group or spec.names.kind"}}
 	}
 
+	if unsafePathComponent(group) || unsafePathComponent(kind) {
+		return crd.Name, nil, []Warning{{
+			Reason: fmt.Sprintf(
+				"spec.group %q or spec.names.kind %q is not a safe path component", group, kind),
+		}}
+	}
+
 	var (
 		schemas  []versionSchema
 		warnings []Warning
 	)
 
 	for _, version := range crd.Spec.Versions {
-		if version.Schema == nil || version.Schema.OpenAPIV3Schema == nil {
-			warnings = append(warnings, Warning{
-				Reason: fmt.Sprintf("version %q has no openAPIV3Schema", version.Name),
-			})
+		schema, warning := schemaForVersion(group, kind, version)
+		if warning != nil {
+			warnings = append(warnings, *warning)
 
 			continue
 		}
 
-		schema, convErr := convertSchema(version.Schema.OpenAPIV3Schema)
-		if convErr != nil {
-			warnings = append(warnings, Warning{
-				Reason: fmt.Sprintf("version %q: %s", version.Name, convErr.Error()),
-			})
-
-			continue
-		}
-
-		schemas = append(schemas, versionSchema{
-			group:   group,
-			kind:    strings.ToLower(kind),
-			version: version.Name,
-			schema:  schema,
-		})
+		schemas = append(schemas, *schema)
 	}
 
 	return crd.Name, schemas, warnings
+}
+
+// schemaForVersion converts a single CRD version into a kubeconform schema. It
+// returns exactly one of a schema or a Warning: a Warning when the version name is
+// not a safe path component, carries no openAPIV3Schema, or cannot be converted.
+func schemaForVersion(
+	group, kind string,
+	version apiextensionsv1.CustomResourceDefinitionVersion,
+) (*versionSchema, *Warning) {
+	if unsafePathComponent(version.Name) {
+		return nil, &Warning{
+			Reason: fmt.Sprintf("version %q is not a safe path component", version.Name),
+		}
+	}
+
+	if version.Schema == nil || version.Schema.OpenAPIV3Schema == nil {
+		return nil, &Warning{
+			Reason: fmt.Sprintf("version %q has no openAPIV3Schema", version.Name),
+		}
+	}
+
+	schema, convErr := convertSchema(version.Schema.OpenAPIV3Schema)
+	if convErr != nil {
+		return nil, &Warning{
+			Reason: fmt.Sprintf("version %q: %s", version.Name, convErr.Error()),
+		}
+	}
+
+	return &versionSchema{
+		group:   group,
+		kind:    strings.ToLower(kind),
+		version: version.Name,
+		schema:  schema,
+	}, nil
 }
 
 // convertSchema serializes a CRD openAPIV3Schema into a kubeconform-consumable JSON
@@ -272,6 +298,15 @@ func injectField(props map[string]any, name string, def map[string]any) {
 	if _, ok := props[name]; !ok {
 		props[name] = def
 	}
+}
+
+// unsafePathComponent reports whether s cannot be used verbatim as a single path
+// element — it is empty, a current/parent-directory reference, or contains a path
+// separator. schemasFromCRD rejects a CRD whose group/kind/version trips this so a
+// crafted manifest cannot make writeSchema traverse outside destDir. Valid
+// Kubernetes group/kind/version names never contain these, so real CRDs pass.
+func unsafePathComponent(s string) bool {
+	return s == "" || s == "." || s == ".." || strings.ContainsAny(s, `/\`)
 }
 
 // writeSchema writes one version's schema under destDir as
