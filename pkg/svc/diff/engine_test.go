@@ -1398,7 +1398,8 @@ func TestEngine_AutoscalerNodeSkipNodesUnsetNoChange(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	// Both nil (unset) → both compare as the upstream default true → no change.
+	// old nil (unset → upstream default true) vs newer explicit true → both
+	// effectively true → no change.
 	enabled := true
 	newer.Autoscaler.Node.SkipNodesWithLocalStorage = &enabled
 
