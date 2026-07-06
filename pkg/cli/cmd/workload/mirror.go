@@ -2,6 +2,7 @@ package workload
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -125,18 +126,33 @@ type mirrorOptions struct {
 	context    string
 }
 
-// NewMirrorCmd creates the workload mirror command (issue #4521, Phase 1
-// mirror-only mode): it wires the pkg/svc/mirror primitives — resolve, tap
-// selection, tap injection, capture session, summary — into one dev-loop
-// command.
-func NewMirrorCmd() *cobra.Command {
-	opts := mirrorOptions{}
+// deploymentCmdMeta carries the per-command metadata newDeploymentCmd needs to
+// build a Deployment-targeting dev-loop command.
+type deploymentCmdMeta struct {
+	use            string
+	short          string
+	long           string
+	example        string
+	containerUsage string
+}
 
+// targetFlagRefs points the shared namespace/container/context flags at a
+// command's own option fields.
+type targetFlagRefs struct {
+	namespace *string
+	container *string
+	context   *string
+}
+
+// newDeploymentCmd builds a dev-loop command that targets a single Deployment,
+// wiring the namespace/container/context flags every such command shares (mirror
+// and intercept). The caller adds its own command-specific flags and RunE.
+func newDeploymentCmd(meta deploymentCmdMeta, refs targetFlagRefs) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "mirror <deployment>",
-		Short:        "Mirror a Deployment's inbound traffic locally (read-only pcap capture)",
-		Long:         mirrorCmdLong,
-		Example:      mirrorCmdExample,
+		Use:          meta.use,
+		Short:        meta.short,
+		Long:         meta.long,
+		Example:      meta.example,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		Annotations: map[string]string{
@@ -144,10 +160,30 @@ func NewMirrorCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&opts.namespace, "namespace", "n", "default",
+	cmd.Flags().StringVarP(refs.namespace, "namespace", "n", "default",
 		"Namespace of the target Deployment")
-	cmd.Flags().StringVarP(&opts.container, "container", "c", "",
-		"Container whose traffic is mirrored (required when the Deployment has several)")
+	cmd.Flags().StringVarP(refs.container, "container", "c", "", meta.containerUsage)
+	cmd.Flags().StringVar(refs.context, "context", "",
+		"Kubeconfig context of the target cluster")
+
+	return cmd
+}
+
+// NewMirrorCmd creates the workload mirror command (issue #4521, Phase 1
+// mirror-only mode): it wires the pkg/svc/mirror primitives — resolve, tap
+// selection, tap injection, capture session, summary — into one dev-loop
+// command.
+func NewMirrorCmd() *cobra.Command {
+	opts := mirrorOptions{}
+
+	cmd := newDeploymentCmd(deploymentCmdMeta{
+		use:            "mirror <deployment>",
+		short:          "Mirror a Deployment's inbound traffic locally (read-only pcap capture)",
+		long:           mirrorCmdLong,
+		example:        mirrorCmdExample,
+		containerUsage: "Container whose traffic is mirrored (required when the Deployment has several)",
+	}, targetFlagRefs{&opts.namespace, &opts.container, &opts.context})
+
 	cmd.Flags().IntVarP(&opts.port, "port", "p", 0,
 		"Service port to capture TCP traffic on (required)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", defaultMirrorOutput,
@@ -158,8 +194,6 @@ func NewMirrorCmd() *cobra.Command {
 		"Image the injected tap container runs")
 	cmd.Flags().DurationVar(&opts.tapTimeout, "tap-timeout", defaultTapWaitTimeout,
 		"How long to wait for the tap container to reach Running")
-	cmd.Flags().StringVar(&opts.context, "context", "",
-		"Kubeconfig context of the target cluster")
 
 	_ = cmd.MarkFlagRequired("port")
 
@@ -205,24 +239,14 @@ func runMirrorCommand(cmd *cobra.Command, deployment string, opts mirrorOptions)
 }
 
 // resolveTapPoint resolves the Deployment to the concrete (pod, container) the
-// tap attaches to.
+// tap attaches to, via the shared injection-point resolver.
 func resolveTapPoint(
 	cmd *cobra.Command,
 	client kubernetes.Interface,
 	deployment string,
 	opts mirrorOptions,
 ) (*mirror.TapPoint, error) {
-	target, err := mirror.ResolveTarget(cmd.Context(), client, opts.namespace, deployment)
-	if err != nil {
-		return nil, fmt.Errorf("resolve mirror target: %w", err)
-	}
-
-	point, err := mirror.SelectTapPoint(target, opts.container)
-	if err != nil {
-		return nil, fmt.Errorf("select tap point: %w", err)
-	}
-
-	return point, nil
+	return resolveInjectionPoint(cmd.Context(), client, opts.namespace, opts.container, deployment)
 }
 
 // ensureTap injects the read-only tap into the tap point's pod — reusing an
@@ -234,35 +258,19 @@ func ensureTap(
 	point *mirror.TapPoint,
 	opts mirrorOptions,
 ) error {
-	_, err := mirror.InjectTap(
-		cmd.Context(), client, point, mirror.WithTapImage(opts.tapImage),
-	)
-
-	switch {
-	case errors.Is(err, mirror.ErrTapAlreadyInjected):
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "reusing the tap already injected on pod %s",
-			Args:    []any{point.Pod},
-			Writer:  cmd.OutOrStdout(),
-		})
-	case err != nil:
-		return fmt.Errorf("inject tap: %w", err)
-	default:
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "injected read-only tap into pod %s (container %s)",
-			Args:    []any{point.Pod, point.Container},
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	err = mirror.WaitForTap(cmd.Context(), client, point, opts.tapTimeout)
-	if err != nil {
-		return fmt.Errorf("wait for tap: %w", err)
-	}
-
-	return nil
+	return injectAndWait(cmd, point, ephemeralInjector{
+		inject: func(ctx context.Context) (string, error) {
+			return mirror.InjectTap(ctx, client, point, mirror.WithTapImage(opts.tapImage))
+		},
+		wait: func(ctx context.Context) error {
+			return mirror.WaitForTap(ctx, client, point, opts.tapTimeout)
+		},
+		alreadyErr:  mirror.ErrTapAlreadyInjected,
+		reuseMsg:    "reusing the tap already injected on pod %s",
+		injectedMsg: "injected read-only tap into pod %s (container %s)",
+		injectVerb:  "inject tap",
+		waitVerb:    "wait for tap",
+	})
 }
 
 // captureToOutput runs the blocking capture session into the configured
