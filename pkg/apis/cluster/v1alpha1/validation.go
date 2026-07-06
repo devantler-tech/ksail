@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"regexp"
 	"slices"
@@ -407,7 +408,9 @@ func validateScaleDownUtilizationThreshold(autoscaler *NodeAutoscalerConfig) err
 		return fmt.Errorf("%w: %q", ErrInvalidScaleDownUtilizationThreshold, raw)
 	}
 
-	if value < 0.0 || value > 1.0 {
+	// NaN passes the range check below (NaN is neither < 0.0 nor > 1.0), so reject
+	// it explicitly; (+/-)Inf is already caught by the bounds.
+	if math.IsNaN(value) || value < 0.0 || value > 1.0 {
 		return fmt.Errorf("%w: %q", ErrInvalidScaleDownUtilizationThreshold, raw)
 	}
 
