@@ -83,6 +83,7 @@ func RunSteerAgent(
 	defer removeSteeringRule(ctx, redirect, runner)
 
 	session := NewTunnelSession(transport, transport, TunnelRoleServer)
+
 	defer func() { _ = session.Close() }()
 
 	return ForwardRedirected(ctx, listener, session)

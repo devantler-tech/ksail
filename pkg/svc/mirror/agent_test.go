@@ -67,6 +67,7 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	t.Cleanup(cancel)
 
 	agentDone := make(chan error, 1)
+
 	go func() {
 		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
 	}()
