@@ -38,6 +38,13 @@ type NodeAutoscalerConfig struct {
 	// ScaleDownUnneededTime is how long a node must be unneeded before it is
 	// eligible for scale down (e.g. "10m").
 	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	// ScaleDownUtilizationThreshold is the node resource-utilization ratio
+	// (0.0–1.0, computed over requests) at or below which the Cluster Autoscaler
+	// considers a node for scale down (upstream --scale-down-utilization-threshold,
+	// default 0.5). Passed verbatim as a string; leave empty to inherit the upstream
+	// default. For agent-heavy clusters prefer ignoreDaemonsetsUtilization, which
+	// excludes DaemonSet requests from this calculation entirely.
+	ScaleDownUtilizationThreshold string `json:"scaleDownUtilizationThreshold,omitzero" jsonschema_description:"Node resource-utilization ratio (0.0–1.0, computed over requests) at or below which the Cluster Autoscaler considers a node for scale down (upstream --scale-down-utilization-threshold, default 0.5). Passed verbatim; leave empty to inherit the upstream default. For agent-heavy clusters prefer ignoreDaemonsetsUtilization, which excludes DaemonSet requests from this calculation. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)."` //nolint:lll
 	// CapacityBuffers enables the Cluster Autoscaler capacity-buffers feature:
 	// KSail installs the CapacityBuffer CRD and turns on the buffer controller
 	// and pod-injection flags, so CapacityBuffer resources reserve scale-up

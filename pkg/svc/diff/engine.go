@@ -780,6 +780,11 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 		"scaleDownUnneededTime can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
 
+	appendChange(result, "cluster.autoscaler.node.scaleDownUtilizationThreshold",
+		oldNode.ScaleDownUtilizationThreshold, newNode.ScaleDownUtilizationThreshold, "",
+		"scaleDownUtilizationThreshold can be updated via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+
 	appendChange(result, "cluster.autoscaler.node.capacityBuffers",
 		strconv.FormatBool(oldNode.CapacityBuffers), strconv.FormatBool(newNode.CapacityBuffers),
 		"false",
