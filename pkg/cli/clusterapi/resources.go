@@ -3,7 +3,6 @@ package clusterapi
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sort"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -111,18 +110,9 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 // kubeconfig that changed between them. An unreadable kubeconfig yields nil, which both helpers treat
 // as "no contexts".
 func (s *Service) loadKubeconfig() *clientcmdapi.Config {
-	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
-	if err != nil {
-		// Best-effort: a missing kubeconfig is normal, but a malformed one would otherwise silently
-		// yield zero endpoints and zero unmanaged clusters with no trail — log at debug so the cause is
-		// discoverable without changing the nil return contract.
-		slog.Debug("load kubeconfig for cluster list",
-			"path", s.kubeconfigPath(), "error", err)
-
-		return nil
-	}
-
-	return config
+	// Best-effort load with nil-on-error semantics, shared with the CLI's cluster list via
+	// clusterdiscovery.LoadKubeconfig so both surfaces read a kubeconfig identically.
+	return clusterdiscovery.LoadKubeconfig(s.kubeconfigPath())
 }
 
 // endpointForContext resolves the API server URL for a kubeconfig context, or "" when the context or

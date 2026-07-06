@@ -21,7 +21,7 @@ import (
 // managed cluster never appears twice. Best-effort and offline (no cluster round-trips): a missing or
 // unreadable kubeconfig yields none. Results are sorted by context name so the list stays stable.
 func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Cluster {
-	config := loadKubeconfigForUnmanaged(kubeconfigPath)
+	config := LoadKubeconfig(kubeconfigPath)
 	if config == nil {
 		return nil
 	}
@@ -74,14 +74,14 @@ func ContextIsManaged(contextName string, isManaged func(name string) bool) bool
 	return false
 }
 
-// loadKubeconfigForUnmanaged loads the kubeconfig best-effort: a missing kubeconfig is normal and a
-// malformed one must not turn discovery into a failure, so both yield nil (logged at debug so the
-// cause stays discoverable). Mirrors pkg/cli/clusterapi's loader.
-func loadKubeconfigForUnmanaged(kubeconfigPath string) *clientcmdapi.Config {
+// LoadKubeconfig loads a kubeconfig best-effort: a missing kubeconfig is normal and a malformed one
+// must not turn a caller into a failure, so both yield nil (logged at debug so the cause stays
+// discoverable). Shared by DiscoverUnmanaged and the web-UI model (pkg/cli/clusterapi) so the
+// nil-on-error load semantics live in one place and cannot drift.
+func LoadKubeconfig(kubeconfigPath string) *clientcmdapi.Config {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
-		slog.Debug("load kubeconfig for unmanaged cluster discovery",
-			"path", kubeconfigPath, "error", err)
+		slog.Debug("load kubeconfig", "path", kubeconfigPath, "error", err)
 
 		return nil
 	}

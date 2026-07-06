@@ -283,11 +283,7 @@ func buildTableRows(providers []v1alpha1.Provider, results []listResult) [][]str
 
 	// Unmanaged (kubeconfig-only) clusters have no provider, so the provider loop above skips them —
 	// append them last with blank PROVIDER/DISTRIBUTION and STATUS=Unmanaged.
-	for _, result := range results {
-		if result.RunState != clusterdiscovery.RunStateUnmanaged {
-			continue
-		}
-
+	for _, result := range unmanagedResults(results) {
 		row := []string{"", "", result.ClusterName, statusLabel(result.RunState)}
 		if hasTTL {
 			row = append(row, formatTTLValue(result.TTL))
@@ -297,6 +293,21 @@ func buildTableRows(providers []v1alpha1.Provider, results []listResult) [][]str
 	}
 
 	return rows
+}
+
+// unmanagedResults returns the unmanaged (kubeconfig-only) clusters — the ones the provider-ordered
+// loops skip because they have no provider. Both the table and JSON builders append these last, so
+// the selection lives in one place and the two output paths cannot drift.
+func unmanagedResults(results []listResult) []listResult {
+	unmanaged := make([]listResult, 0)
+
+	for _, result := range results {
+		if result.RunState == clusterdiscovery.RunStateUnmanaged {
+			unmanaged = append(unmanaged, result)
+		}
+	}
+
+	return unmanaged
 }
 
 // tableHeaders returns the column headers for the results: the fixed PROVIDER/DISTRIBUTION/CLUSTER/

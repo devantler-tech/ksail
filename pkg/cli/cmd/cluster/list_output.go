@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 )
 
 // ListItemJSON is the JSON representation of a single cluster row emitted by
@@ -52,11 +51,7 @@ func buildListJSON(providers []v1alpha1.Provider, results []listResult) []ListIt
 
 	// Unmanaged (kubeconfig-only) clusters have no provider, so the provider loop above skips them —
 	// append them last with empty provider/distribution and status "Unmanaged".
-	for _, result := range results {
-		if result.RunState != clusterdiscovery.RunStateUnmanaged {
-			continue
-		}
-
+	for _, result := range unmanagedResults(results) {
 		rows = append(rows, ListItemJSON{
 			Name:         result.ClusterName,
 			Provider:     "",
