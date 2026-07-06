@@ -74,16 +74,7 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 
 // NewValidateCmd creates the workload validate command.
 func NewValidateCmd() *cobra.Command {
-	var (
-		skipSecrets          bool
-		strict               bool
-		ignoreMissingSchemas bool
-		skipHelmRender       bool
-		includeCRDSchemas    bool
-		skipKinds            []string
-		schemaLocations      []string
-		rules                string
-	)
+	flags := &validateFlags{}
 
 	cmd := &cobra.Command{
 		Use:   "validate [PATH]",
@@ -91,40 +82,17 @@ func NewValidateCmd() *cobra.Command {
 		Long:  validateLongDescription,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runValidateCmd(
-				cmd.Context(),
-				cmd,
-				args,
-				validateFlags{
-					skipSecrets:          skipSecrets,
-					strict:               strict,
-					ignoreMissingSchemas: ignoreMissingSchemas,
-					skipHelmRender:       skipHelmRender,
-					includeCRDSchemas:    includeCRDSchemas,
-					skipKinds:            skipKinds,
-					schemaLocations:      schemaLocations,
-					rules:                rules,
-				},
-			)
+			return runValidateCmd(cmd.Context(), cmd, args, *flags)
 		},
 	}
 
-	addValidateFlags(
-		cmd,
-		&skipSecrets,
-		&strict,
-		&ignoreMissingSchemas,
-		&skipHelmRender,
-		&includeCRDSchemas,
-		&skipKinds,
-		&schemaLocations,
-		&rules,
-	)
+	addValidateFlags(cmd, flags)
 
 	return cmd
 }
 
-// validateFlags carries the resolved validate command flags.
+// validateFlags carries the validate command flags. cobra binds each flag directly
+// to a field here (see addValidateFlags), and runValidateCmd reads them.
 type validateFlags struct {
 	skipSecrets          bool
 	strict               bool
@@ -136,37 +104,34 @@ type validateFlags struct {
 	rules                string
 }
 
-// addValidateFlags registers the flags for the validate command.
-func addValidateFlags(
-	cmd *cobra.Command,
-	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender, includeCRDSchemas *bool,
-	skipKinds, schemaLocations *[]string,
-	rules *string,
-) {
-	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
-	cmd.Flags().BoolVar(strict, "strict", false, "Enable strict validation mode")
+// addValidateFlags registers the flags for the validate command, binding each to a
+// field of flags.
+func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
+	cmd.Flags().
+		BoolVar(&flags.skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
+	cmd.Flags().BoolVar(&flags.strict, "strict", false, "Enable strict validation mode")
 	cmd.Flags().BoolVar(
-		ignoreMissingSchemas,
+		&flags.ignoreMissingSchemas,
 		"ignore-missing-schemas",
 		true,
 		"Ignore resources with missing schemas",
 	)
 	cmd.Flags().BoolVar(
-		skipHelmRender,
+		&flags.skipHelmRender,
 		"skip-helm-render",
 		false,
 		"Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). "+
 			"By default, charts are rendered in-process and the rendered manifests are validated.",
 	)
 	cmd.Flags().StringSliceVar(
-		skipKinds,
+		&flags.skipKinds,
 		"skip-kinds",
 		nil,
 		"Additional Kubernetes kinds to skip during validation "+
 			"(merged with spec.workload.validation.skipKinds from ksail.yaml)",
 	)
 	cmd.Flags().StringSliceVar(
-		schemaLocations,
+		&flags.schemaLocations,
 		"schema-location",
 		nil,
 		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
@@ -174,7 +139,7 @@ func addValidateFlags(
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
 	)
 	cmd.Flags().BoolVar(
-		includeCRDSchemas,
+		&flags.includeCRDSchemas,
 		"include-crd-schemas",
 		false,
 		"Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that "+
@@ -182,7 +147,7 @@ func addValidateFlags(
 			"(off by default; a CRD that cannot be converted is warned and skipped)",
 	)
 	cmd.Flags().StringVar(
-		rules,
+		&flags.rules,
 		"rules",
 		"",
 		"Path to a YAML CEL rules file. Each rule's CEL expression is evaluated against every "+
