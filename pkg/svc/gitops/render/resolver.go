@@ -11,6 +11,7 @@ import (
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	meta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
 	"sigs.k8s.io/yaml"
 )
 
@@ -302,18 +303,15 @@ func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, 
 
 // applyValuesFrom merges one valuesFrom reference into values, resolving it from
 // the in-repo ConfigMap/Secret index. References to objects not present in the
-// stream (typically cluster-managed) are skipped. Nested targetPath references
-// are not yet supported and are skipped rather than merged incorrectly.
+// stream (typically cluster-managed) are skipped. A reference with a targetPath
+// injects its single flat value at that path (see applyTargetPathValue);
+// otherwise the referenced value is YAML-merged at the root.
 func applyValuesFrom(
 	values map[string]any,
 	ref meta.ValuesReference,
 	namespace string,
 	sources SourceIndex,
 ) {
-	if ref.TargetPath != "" {
-		return
-	}
-
 	var data map[string]string
 
 	switch ref.Kind {
@@ -330,6 +328,12 @@ func applyValuesFrom(
 		return
 	}
 
+	if ref.TargetPath != "" {
+		applyTargetPathValue(values, ref, raw)
+
+		return
+	}
+
 	var parsed map[string]any
 
 	if yaml.Unmarshal([]byte(raw), &parsed) != nil {
@@ -337,6 +341,25 @@ func applyValuesFrom(
 	}
 
 	mergeValues(values, parsed)
+}
+
+// applyTargetPathValue merges a single flat value at ref.TargetPath, mirroring
+// helm-controller's valuesFrom targetPath handling so the offline render matches
+// what Flux applies. A non-literal reference uses Helm's --set-string semantics
+// (the target path is interpreted but the value stays a string); a literal
+// reference uses --set-literal semantics (the value is injected verbatim, with
+// no comma/bracket/dot/equals interpretation — the safe path for config files,
+// JSON blobs and multi-line strings). A malformed assignment is skipped rather
+// than failing the whole offline render, matching the root-merge branch.
+func applyTargetPathValue(values map[string]any, ref meta.ValuesReference, raw string) {
+	assignment := fmt.Sprintf("%s=%s", ref.TargetPath, raw)
+
+	parse := helmv4strvals.ParseIntoString
+	if ref.Literal {
+		parse = helmv4strvals.ParseLiteralInto
+	}
+
+	_ = parse(assignment, values)
 }
 
 // sourceKey builds the "namespace/name" lookup key, defaulting an empty

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
 // captureClient embeds helm.Interface and records the ChartSpec passed to
@@ -55,6 +56,19 @@ func resolveSpec(
 	require.NotNil(t, capture.spec)
 
 	return capture.spec
+}
+
+// unmarshalValues parses a resolved ChartSpec.ValuesYaml back into a map so a
+// test can assert the value type and nesting (e.g. string-vs-number coercion),
+// which the raw YAML text alone leaves ambiguous.
+func unmarshalValues(t *testing.T, valuesYaml string) map[string]any {
+	t.Helper()
+
+	var values map[string]any
+
+	require.NoError(t, yaml.Unmarshal([]byte(valuesYaml), &values))
+
+	return values
 }
 
 func ociIndex(ref *sourcev1.OCIRepositoryRef) render.SourceIndex {
@@ -207,6 +221,56 @@ func TestBuildChartSpecValuesFromConfigMap(t *testing.T) {
 	spec := resolveSpec(t, helmRelease, sources)
 
 	assert.Contains(t, spec.ValuesYaml, "port: 9999")
+}
+
+func TestBuildChartSpecValuesFromTargetPath(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := chartRefRelease()
+	helmRelease.Spec.ValuesFrom = []fluxmeta.ValuesReference{
+		{Kind: "ConfigMap", Name: "image-tag", ValuesKey: "tag", TargetPath: "image.tag"},
+	}
+
+	sources := ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"})
+	sources.ConfigMaps = map[string]map[string]string{
+		"flux-system/image-tag": {"tag": "123"},
+	}
+
+	spec := resolveSpec(t, helmRelease, sources)
+
+	values := unmarshalValues(t, spec.ValuesYaml)
+	image, ok := values["image"].(map[string]any)
+	require.True(t, ok, "the value should be set at the nested targetPath")
+	// --set-string semantics: the flat value stays a string, never coerced to a number.
+	assert.Equal(t, "123", image["tag"])
+}
+
+func TestBuildChartSpecValuesFromTargetPathLiteral(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := chartRefRelease()
+	helmRelease.Spec.ValuesFrom = []fluxmeta.ValuesReference{
+		{
+			Kind:       "Secret",
+			Name:       "config-blob",
+			ValuesKey:  "blob",
+			TargetPath: "config.raw",
+			Literal:    true,
+		},
+	}
+
+	sources := ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"})
+	sources.Secrets = map[string]map[string]string{
+		"flux-system/config-blob": {"blob": "a,b=c[0]"},
+	}
+
+	spec := resolveSpec(t, helmRelease, sources)
+
+	values := unmarshalValues(t, spec.ValuesYaml)
+	config, ok := values["config"].(map[string]any)
+	require.True(t, ok, "the literal value should be set at the nested targetPath")
+	// --set-literal semantics: commas, brackets and equals are NOT interpreted.
+	assert.Equal(t, "a,b=c[0]", config["raw"])
 }
 
 func TestRenderUnsupportedSourceKindDegrades(t *testing.T) {
