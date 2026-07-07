@@ -49,6 +49,18 @@ func buildListJSON(providers []v1alpha1.Provider, results []listResult) []ListIt
 		}
 	}
 
+	// Unmanaged (kubeconfig-only) clusters have no provider, so the provider loop above skips them —
+	// append them last with empty provider/distribution and status "Unmanaged".
+	for _, result := range unmanagedResults(results) {
+		rows = append(rows, ListItemJSON{
+			Name:         result.ClusterName,
+			Provider:     "",
+			Distribution: "",
+			Status:       statusLabel(result.RunState),
+			TTL:          listTTLValue(result),
+		})
+	}
+
 	return rows
 }
 

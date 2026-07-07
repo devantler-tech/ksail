@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -166,6 +168,9 @@ func TestListCmd_AllProviders(t *testing.T) {
 			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
 		DockerStatusFunc: runningDockerStatus,
+		// Point unmanaged discovery at a nonexistent kubeconfig so the snapshot stays deterministic
+		// regardless of the test machine's real kubeconfig contexts.
+		KubeconfigPathFunc: func() string { return filepath.Join(t.TempDir(), "no-kubeconfig") },
 	}
 
 	// No filter = list all providers (default behavior)
@@ -174,6 +179,97 @@ func TestListCmd_AllProviders(t *testing.T) {
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
+}
+
+// writeListKubeconfig writes a minimal kubeconfig with the given context names to a temp file for the
+// list command's unmanaged-discovery wiring tests, returning its path.
+func writeListKubeconfig(t *testing.T, contextNames ...string) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	buf.WriteString("apiVersion: v1\nkind: Config\nclusters:\n")
+
+	for _, name := range contextNames {
+		fmt.Fprintf(&buf,
+			"  - name: %s\n    cluster:\n      server: https://127.0.0.1:6443\n", name)
+	}
+
+	buf.WriteString("contexts:\n")
+
+	for _, name := range contextNames {
+		fmt.Fprintf(&buf,
+			"  - name: %s\n    context:\n      cluster: %s\n      user: %s\n", name, name, name)
+	}
+
+	buf.WriteString("users:\n")
+
+	for _, name := range contextNames {
+		fmt.Fprintf(&buf, "  - name: %s\n    user: {}\n", name)
+	}
+
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+
+	return path
+}
+
+func TestListCmd_AllProviders_SurfacesUnmanaged(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	// "kind-test-cluster" detects to the managed cluster "test-cluster" (deduped); "colleague-cluster"
+	// is an external context ksail never provisioned → surfaced as Unmanaged.
+	kubeconfig := writeListKubeconfig(t, "kind-test-cluster", "colleague-cluster")
+
+	cmd := &cobra.Command{Use: "list"}
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
+		},
+		DockerStatusFunc:   runningDockerStatus,
+		KubeconfigPathFunc: func() string { return kubeconfig },
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, "", deps))
+
+	out := buf.String()
+	assert.Contains(t, out, "colleague-cluster", "the unmanaged context should be listed")
+	assert.Contains(t, out, "Unmanaged", "the unmanaged context should carry STATUS=Unmanaged")
+	assert.NotContains(t, out, "kind-test-cluster",
+		"a managed cluster's kubeconfig context must be deduped, not re-surfaced as unmanaged")
+}
+
+func TestListCmd_OutputJSON_SurfacesUnmanaged(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	kubeconfig := writeListKubeconfig(t, "colleague-cluster")
+
+	cmd, buf := newListCmdWithJSONOutput(t)
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{}}
+		},
+		KubeconfigPathFunc: func() string { return kubeconfig },
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, "", deps))
+
+	var rows []jsonListRow
+
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "colleague-cluster", rows[0].Name)
+	assert.Equal(t, "Unmanaged", rows[0].Status)
+	assert.Empty(t, rows[0].Provider, "an unmanaged cluster has no provider")
+	assert.Empty(t, rows[0].Distribution, "an unmanaged cluster has no distribution")
 }
 
 //nolint:paralleltest // uses t.Chdir
