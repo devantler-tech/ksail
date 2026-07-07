@@ -269,14 +269,19 @@ body {
 /*  Cards & CardGrid                                                       */
 
 /* ----------------------------------------------------------------------- */
-.card {
+
+/* Cards and LinkCards (feature overview) share the same surface treatment, so
+   they are styled together rather than duplicated. */
+.card,
+.sl-link-card {
   border: 1px solid var(--ksail-border);
   border-radius: 1rem;
   background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.card:hover {
+.card:hover,
+.sl-link-card:hover {
   transform: translateY(-3px);
   border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
   box-shadow: var(--ksail-glow);
@@ -286,25 +291,7 @@ body {
   color: var(--ksail-cyan-bright);
 }
 
-.card .title {
-  font-family: var(--ksail-font-display);
-  letter-spacing: -0.01em;
-}
-
-/* LinkCards (feature overview) share the Card surface treatment. */
-.sl-link-card {
-  border: 1px solid var(--ksail-border);
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.sl-link-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
-  box-shadow: var(--ksail-glow);
-}
-
+.card .title,
 .sl-link-card .title {
   font-family: var(--ksail-font-display);
   letter-spacing: -0.01em;
