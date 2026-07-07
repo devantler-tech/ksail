@@ -40,6 +40,11 @@ const (
 	// RunStateStopped means the cluster's nodes/containers exist but none (or not all) are running —
 	// the cluster is present but not serving. The local backend surfaces this as a not-Ready condition.
 	RunStateStopped RunState = "stopped"
+	// RunStateUnmanaged marks a cluster ksail did not provision — a kubeconfig context with no
+	// matching managed cluster (see DiscoverUnmanaged). It carries no Distribution/Provider and is
+	// never actionable by ksail-only operations. Distinct from RunStateUnknown, which is a managed
+	// cluster whose provider cannot report run-state.
+	RunStateUnmanaged RunState = "unmanaged"
 )
 
 // Cluster is a single cluster discovered from a provider.
