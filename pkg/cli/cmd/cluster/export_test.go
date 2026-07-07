@@ -9,10 +9,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -27,6 +29,18 @@ import (
 func ExportShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 	return setup.ShouldPushOCIArtifact(clusterCfg)
 }
+
+// ExportAWSProviderStatus exports awsProviderStatus for testing.
+func ExportAWSProviderStatus(
+	ctx context.Context,
+	client *eksctlclient.Client,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	return awsProviderStatus(ctx, client, clusterName)
+}
+
+// ErrProviderNotConfigured exports errProviderNotConfigured for testing.
+var ErrProviderNotConfigured = errProviderNotConfigured
 
 // ExportSetupK3dCSI exports setupK3dCSI for testing.
 func ExportSetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
