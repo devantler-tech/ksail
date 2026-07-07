@@ -40,6 +40,7 @@ func NewStartCmd() *cobra.Command {
 		) error {
 			return provisioner.Start(ctx, clusterName)
 		},
+		Guard: unmanagedClusterGuard,
 	})
 
 	cmd.Annotations = map[string]string{
@@ -80,6 +81,7 @@ func NewStopCmd() *cobra.Command {
 		) error {
 			return provisioner.Stop(ctx, clusterName)
 		},
+		Guard: unmanagedClusterGuard,
 	})
 
 	cmd.Annotations = map[string]string{

@@ -7,10 +7,11 @@ Usage:
   project [command]
 
 Available Commands:
-  add-environment Clone an existing cluster environment into a new one
-  completion      Generate the autocompletion script for the specified shell
-  help            Help about any command
-  init            Initialize a new project
+  add-environment   Clone an existing cluster environment into a new one
+  completion        Generate the autocompletion script for the specified shell
+  help              Help about any command
+  init              Initialize a new project
+  list-environments List the cluster environments declared in the workspace
 
 Flags:
   -h, --help   help for project
