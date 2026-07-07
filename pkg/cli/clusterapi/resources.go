@@ -3,11 +3,11 @@ package clusterapi
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sort"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -110,18 +110,9 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 // kubeconfig that changed between them. An unreadable kubeconfig yields nil, which both helpers treat
 // as "no contexts".
 func (s *Service) loadKubeconfig() *clientcmdapi.Config {
-	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
-	if err != nil {
-		// Best-effort: a missing kubeconfig is normal, but a malformed one would otherwise silently
-		// yield zero endpoints and zero unmanaged clusters with no trail — log at debug so the cause is
-		// discoverable without changing the nil return contract.
-		slog.Debug("load kubeconfig for cluster list",
-			"path", s.kubeconfigPath(), "error", err)
-
-		return nil
-	}
-
-	return config
+	// Best-effort load with nil-on-error semantics, shared with the CLI's cluster list via
+	// clusterdiscovery.LoadKubeconfig so both surfaces read a kubeconfig identically.
+	return clusterdiscovery.LoadKubeconfig(s.kubeconfigPath())
 }
 
 // endpointForContext resolves the API server URL for a kubeconfig context, or "" when the context or
@@ -198,7 +189,13 @@ func unmanagedClusters(
 	items := make([]v1alpha1.Cluster, 0, len(contextNames))
 
 	for _, contextName := range contextNames {
-		if contextIsManaged(contextName, managed) {
+		// The dedup rule (raw context name OR ksail-detected name in the managed set) is shared with
+		// the CLI's cluster list via clusterdiscovery.ContextIsManaged, so both surfaces stay aligned.
+		if clusterdiscovery.ContextIsManaged(contextName, func(name string) bool {
+			_, ok := managed[name]
+
+			return ok
+		}) {
 			continue
 		}
 
@@ -207,26 +204,6 @@ func unmanagedClusters(
 	}
 
 	return items
-}
-
-// contextIsManaged reports whether a kubeconfig context corresponds to a cluster ksail already lists,
-// so unmanagedClusters does not re-surface it. A context maps to a managed cluster when its
-// ksail-detected name — or, when detection fails, the raw context name — is a key in the managed set.
-// Detection is what List uses to key discovered clusters (via clusterEndpoints), so matching on it
-// keeps a managed cluster from appearing twice (once managed, once as an unmanaged context).
-func contextIsManaged(contextName string, managed map[string]listEntry) bool {
-	if _, ok := managed[contextName]; ok {
-		return true
-	}
-
-	_, name, err := clusterdetector.DetectDistributionFromContext(contextName)
-	if err == nil {
-		if _, ok := managed[name]; ok {
-			return true
-		}
-	}
-
-	return false
 }
 
 // newUnmanagedCluster builds the Cluster ksail surfaces for a kubeconfig context it does not manage.
