@@ -531,3 +531,34 @@ spec:
 status: {}
 
 ---
+
+[TestGenHelmReleaseWithValuesFromLiteral - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: default
+  interval: 1m0s
+  timeout: 5m0s
+  valuesFrom:
+  - kind: ConfigMap
+    literal: true
+    name: app-config
+    targetPath: app.configJson
+    valuesKey: config.json
+  - kind: Secret
+    literal: true
+    name: tls-bundle
+    targetPath: tls.caBundle
+    valuesKey: ca.pem
+status: {}
+
+---
