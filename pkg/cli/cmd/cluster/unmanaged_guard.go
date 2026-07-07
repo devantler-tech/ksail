@@ -7,6 +7,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 )
@@ -122,12 +123,23 @@ func guardUpdateTargetManaged(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 ) error {
-	kubeconfigPath, _ := clusterdetector.ResolveKubeconfigPath(
+	kubeconfigPath, err := clusterdetector.ResolveKubeconfigPath(
 		clusterCfg.Spec.Cluster.Connection.Kubeconfig,
 	)
+	if err != nil {
+		return fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	// Canonicalize the user-supplied path before the guard reads the kubeconfig (repo path-safety
+	// guideline; EvalCanonicalPath tolerates a not-yet-existing file by resolving its parent, so a
+	// missing kubeconfig still falls through to the guard's fail-open path).
+	canonical, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
+	}
 
 	return updateUnmanagedGuardFunc(ctx, &lifecycle.ResolvedClusterInfo{
 		ClusterName:    clusterName,
-		KubeconfigPath: kubeconfigPath,
+		KubeconfigPath: canonical,
 	})
 }
