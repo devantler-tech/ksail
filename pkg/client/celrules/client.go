@@ -61,23 +61,62 @@ func (c *Client) Validate(
 	var report Report
 
 	for _, document := range documents {
-		object, identity, parseErr := parseDocument(document)
-		if parseErr != nil {
-			// A blank/unparseable document carries no resource to evaluate;
-			// schema validation (kubeconform) owns shape errors, so skip here.
-			continue
+		violations, err := evaluateDocument(ctx, compiled, document, opts)
+		if err != nil {
+			return Report{}, err
 		}
 
-		resource := attributedResource(identity, opts)
-
-		for _, rule := range compiled {
-			if violation, violated := evalRule(ctx, rule, object, resource); violated {
-				report.Violations = append(report.Violations, violation)
-			}
-		}
+		report.Violations = append(report.Violations, violations...)
 	}
 
 	return report, nil
+}
+
+// evaluateDocument parses one manifest and evaluates every compiled rule against
+// it. A blank/null document yields no violations; a malformed manifest or a
+// cancelled context returns an error that aborts the whole run rather than
+// silently passing broken input or recording a spurious violation.
+func evaluateDocument(
+	ctx context.Context,
+	compiled []compiledRule,
+	document []byte,
+	opts *Options,
+) ([]Violation, error) {
+	err := ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("validating documents: %w", err)
+	}
+
+	object, identity, parseErr := parseDocument(document)
+	if parseErr != nil {
+		if errors.Is(parseErr, errEmptyDocument) {
+			return nil, nil
+		}
+
+		return nil, parseErr
+	}
+
+	resource := attributedResource(identity, opts)
+
+	var violations []Violation
+
+	for _, rule := range compiled {
+		violation, violated := evalRule(ctx, rule, object, resource)
+
+		// A cancelled context surfaces from ContextEval as an evaluation error;
+		// abort with the cancellation cause instead of recording it as a
+		// spurious violation and continuing.
+		err := ctx.Err()
+		if err != nil {
+			return nil, fmt.Errorf("evaluating rules: %w", err)
+		}
+
+		if violated {
+			violations = append(violations, violation)
+		}
+	}
+
+	return violations, nil
 }
 
 // compile builds a CEL program for each rule, rejecting a non-boolean

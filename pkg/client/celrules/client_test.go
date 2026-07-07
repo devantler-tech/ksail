@@ -2,7 +2,6 @@ package celrules_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/celrules"
@@ -258,10 +257,28 @@ func TestValidate_ContextCancelled(t *testing.T) {
 
 	report, err := client.Validate(ctx, rules, [][]byte{[]byte(serviceManifest)}, nil)
 
-	// Cancellation surfaces as an evaluation-error violation, never a panic.
-	require.NoError(t, err)
+	// A cancelled context aborts validation with the cancellation cause rather
+	// than masking it as a spurious evaluation-error violation.
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, report.Violations)
+}
 
-	if len(report.Violations) > 0 {
-		assert.Contains(t, strings.ToLower(report.Violations[0].Message), "error")
-	}
+func TestValidate_MalformedDocumentSurfacesError(t *testing.T) {
+	t.Parallel()
+
+	client := celrules.NewClient()
+	rules := []celrules.Rule{rule("r", "true", "m", celrules.SeverityError)}
+
+	// A bare scalar cannot unmarshal into an object; a broken manifest must
+	// surface as an error, not slip through the empty-document skip and return
+	// a false success.
+	report, err := client.Validate(
+		t.Context(),
+		rules,
+		[][]byte{[]byte("scalar-not-a-mapping")},
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.Empty(t, report.Violations)
 }
