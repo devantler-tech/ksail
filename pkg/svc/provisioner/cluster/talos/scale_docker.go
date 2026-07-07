@@ -403,7 +403,7 @@ func (p *Provisioner) createTalosContainer(
 		Image:    p.options.TalosImage,
 		Env:      env,
 		Labels: map[string]string{
-			LabelTalosOwned:       "true",
+			LabelTalosOwned:       labelValueTrue,
 			LabelTalosClusterName: clusterName,
 			"talos.type":          talosTypeFromRole(role),
 		},
