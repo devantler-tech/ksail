@@ -301,6 +301,16 @@ func runSimpleLifecycleAction(
 		Writer: cmd.OutOrStdout(),
 	})
 
+	return provisionAndAct(cmd, config, resolved)
+}
+
+// provisionAndAct creates a minimal provisioner for the resolved cluster, runs the
+// configured lifecycle action, and emits the success message on completion.
+func provisionAndAct(
+	cmd *cobra.Command,
+	config SimpleLifecycleConfig,
+	resolved *ResolvedClusterInfo,
+) error {
 	// Create cluster info for provisioner creation
 	clusterInfo := &clusterdetector.Info{
 		ClusterName:    resolved.ClusterName,
