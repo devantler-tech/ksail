@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/steeragent"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -56,6 +57,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd())
 	cmd.AddCommand(workload.NewWorkloadCmd())
 	cmd.AddCommand(operator.NewOperatorCmd())
+	cmd.AddCommand(steeragent.NewSteerAgentCmd())
 	cmd.AddCommand(project.NewProjectCmd())
 	cmd.AddCommand(tenant.NewTenantCmd())
 	cmd.AddCommand(open.NewOpenCmd())
