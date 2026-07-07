@@ -110,6 +110,10 @@ func createKubeadmHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, an
 		return nil, nil, fmt.Errorf("create kubeadm Hetzner provisioner: %w", err)
 	}
 
+	// Wire the hub for the operator's Connector capability (nil outside a pod —
+	// the CLI flow publishes nothing).
+	provisioner.Hub, provisioner.HubNamespace = connectorHub()
+
 	return provisioner, nil, nil
 }
 

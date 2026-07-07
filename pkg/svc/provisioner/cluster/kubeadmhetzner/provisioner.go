@@ -7,6 +7,13 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
+// connectorSecretPrefix names this distribution's Connector kubeconfig Secret
+// ("vanilla-hetzner-<name>-kubeconfig") in the shared hub namespace, using the
+// distribution's API name (Vanilla) rather than the implementation (kubeadm).
+//
+//nolint:gosec // G101 false positive: this is a Secret NAME prefix, not a credential.
+const connectorSecretPrefix = "vanilla-hetzner"
+
 // Provisioner provisions a Vanilla (kubeadm) cluster on Hetzner Cloud servers by
 // composing the declarative kubeadm install (via [BuildNodeUserData]), the
 // cloud-init delivery transport, and the shared Hetzner infrastructure lifecycle
@@ -56,7 +63,7 @@ func NewProvisioner(
 	}
 
 	provisioner.Base = base
-	base.Strategy = provisioner
+	base.Wire(provisioner, connectorSecretPrefix)
 
 	return provisioner, nil
 }

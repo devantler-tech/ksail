@@ -1,7 +1,7 @@
 // Package clusterdiscovery enumerates KSail-managed clusters across every infrastructure provider
-// (Docker, Hetzner, Omni, AWS/EKS, GCP/GKE, and nested Kubernetes), reading provider credentials
-// from the environment via a credentials.Resolver and silently skipping providers that are not
-// configured.
+// (Docker, Hetzner, Omni, AWS/EKS, GCP/GKE, Azure/AKS, and nested Kubernetes), reading provider
+// credentials from the environment via a credentials.Resolver and silently skipping providers that
+// are not configured.
 //
 // It is the single source of truth for "what clusters exist" shared by the `ksail cluster list`
 // command and the local web-UI backend (pkg/cli/clusterapi). Before this package existed the two
@@ -40,6 +40,11 @@ const (
 	// RunStateStopped means the cluster's nodes/containers exist but none (or not all) are running —
 	// the cluster is present but not serving. The local backend surfaces this as a not-Ready condition.
 	RunStateStopped RunState = "stopped"
+	// RunStateUnmanaged marks a cluster ksail did not provision — a kubeconfig context with no
+	// matching managed cluster (see DiscoverUnmanaged). It carries no Distribution/Provider and is
+	// never actionable by ksail-only operations. Distinct from RunStateUnknown, which is a managed
+	// cluster whose provider cannot report run-state.
+	RunStateUnmanaged RunState = "unmanaged"
 )
 
 // Cluster is a single cluster discovered from a provider.
@@ -68,8 +73,8 @@ func (e ProviderError) Error() string {
 func (e ProviderError) Unwrap() error { return e.Err }
 
 // ClusterLister lists the cluster names managed by a single-distribution cloud provider (Hetzner,
-// Omni, AWS, GCP). *hetzner.Provider, *omni.Provider, *aws.Provider and *gcp.Provider all satisfy
-// it.
+// Omni, AWS, GCP, Azure). *hetzner.Provider, *omni.Provider, *aws.Provider, *gcp.Provider and
+// *azure.Provider all satisfy it.
 type ClusterLister interface {
 	ListAllClusters(ctx context.Context) ([]string, error)
 }
@@ -98,6 +103,7 @@ type Discoverer struct {
 	Omni          ClusterLister
 	AWS           ClusterLister
 	GCP           ClusterLister
+	Azure         ClusterLister
 	Kubernetes    KubernetesLister
 	DockerFactory DockerFactory
 
@@ -142,6 +148,7 @@ func AllProviders() []v1alpha1.Provider {
 		v1alpha1.ProviderOmni,
 		v1alpha1.ProviderAWS,
 		v1alpha1.ProviderGCP,
+		v1alpha1.ProviderAzure,
 		v1alpha1.ProviderKubernetes,
 	}
 }
@@ -224,10 +231,7 @@ func (d *Discoverer) listProvider(
 	case v1alpha1.ProviderGCP:
 		return d.listGCP(ctx)
 	case v1alpha1.ProviderAzure:
-		// Azure cluster listing lands with the AKS discovery follow-up (same
-		// deliberate gating as GCP); until then Azure clusters are not
-		// discoverable.
-		return nil, fmt.Errorf("%w: %s", clustererr.ErrUnsupportedProvider, prov)
+		return d.listAzure(ctx)
 	case v1alpha1.ProviderKubernetes:
 		return d.listKubernetes(ctx)
 	default:

@@ -98,6 +98,7 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
+  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -953,6 +954,7 @@ Flags:
       --depends-on strings        Kustomization that must be ready before this one
       --export                    export in YAML format to stdout
   -h, --help                      help for kustomization
+      --ignore-paths strings      JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas
       --interval duration         reconciliation interval (default 1m0s)
       --path string               path to the directory containing a kustomization.yaml file (default "./")
       --prune                     enable garbage collection
@@ -2373,6 +2375,7 @@ Flags:
       --interval duration              reconciliation interval (default 1m0s)
       --kubeconfig-secret-ref string   KubeConfig secret reference for remote reconciliation
   -n, --namespace string               namespace scope for the HelmRelease (default "default")
+      --post-render-strategy string    post-render strategy for sending hooks to post-renderers (nohooks, combined, separate); leave unset to use the controller default
       --release-name string            name used for the Helm release
       --service-account string         service account name to impersonate
       --source string                  source that contains the chart (HelmRepository/name, GitRepository/name, Bucket/name)
@@ -3415,6 +3418,7 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
+  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -3781,6 +3785,59 @@ Flags:
       --tap-image string       Image the injected tap container runs (default "docker.io/nicolaka/netshoot:v0.16")
       --tap-timeout duration   How long to wait for the tap container to reach Running (default 1m0s)
       --to string              Local address (host:port) the mirrored inbound TCP payloads are replayed to, live
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/intercept - 1]
+Intercept a Deployment's inbound traffic to a local process (reverse dev bridge).
+
+Resolves the Deployment to a running pod, injects a steering container (an
+ephemeral container holding only CAP_NET_ADMIN), and runs the operator-supplied
+steering agent in it over the Kubernetes exec channel. The agent installs an
+iptables REDIRECT rule that captures the workload's inbound TCP and forwards it,
+over a multiplexed tunnel, to a process running on your machine — so the copy on
+your laptop serves the cluster's live requests.
+
+Unlike `workload mirror` (read-only pcap, traffic keeps flowing to the
+workload), intercept steers the traffic away from the workload to your local
+process; the agent removes its rule again on exit, restoring the pod.
+
+The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
+lets the in-cluster agent reverse its redirect.
+
+--steer-command is required and --steer-image must carry the agent binary plus
+iptables: KSail does not yet ship a default steering-agent image (tracked as a
+follow-up), so the agent is operator-supplied for now.
+
+Ephemeral containers cannot be removed, so an already-injected steering agent on
+the target pod is reused rather than treated as an error.
+
+Usage:
+  ksail workload intercept <deployment> [flags]
+
+Examples:
+  # Intercept the traffic my-app receives and forward it to localhost:8080
+  ksail workload intercept my-app --local-port 8080 \
+    --steer-image ghcr.io/acme/ksail-steer:latest \
+    --steer-command ksail-steer --steer-command --port=8080
+
+  # Intercept a specific container of a multi-container Deployment in a namespace
+  ksail workload intercept my-app -n prod -c api --local-port 8080 \
+    --steer-image ghcr.io/acme/ksail-steer:latest --steer-command ksail-steer
+
+Flags:
+  -c, --container string            Container whose traffic is intercepted (required when the Deployment has several)
+      --context string              Kubeconfig context of the target cluster
+  -h, --help                        help for intercept
+  -l, --local-port int              Local port the intercepted inbound traffic is forwarded to (required)
+  -n, --namespace string            Namespace of the target Deployment (default "default")
+      --steer-command stringArray   Command the in-cluster steering agent container runs, exec'd over the tunnel (required)
+      --steer-image string          Image the injected steering container runs (must carry the agent binary and iptables) (default "docker.io/nicolaka/netshoot:v0.16")
+      --wait-timeout duration       How long to wait for the steering container to reach Running (default 1m0s)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

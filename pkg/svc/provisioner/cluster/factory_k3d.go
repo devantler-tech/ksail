@@ -130,6 +130,10 @@ func createK3sHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, any, e
 		return nil, nil, fmt.Errorf("create K3s Hetzner provisioner: %w", err)
 	}
 
+	// Wire the hub for the operator's Connector capability (nil outside a pod —
+	// the CLI flow publishes nothing).
+	provisioner.Hub, provisioner.HubNamespace = connectorHub()
+
 	return provisioner, nil, nil
 }
 

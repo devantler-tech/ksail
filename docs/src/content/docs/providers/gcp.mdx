@@ -1,0 +1,78 @@
+---
+title: GCP Provider
+description: Deploy managed Google Kubernetes Engine (GKE) clusters with KSail using the GCP provider and Application Default Credentials.
+---
+
+The GCP provider creates managed [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine) clusters via the Google Cloud SDK. It is the only provider available for the [GKE distribution](/distributions/gke/).
+
+> [!NOTE]
+> The GCP provider only supports the **GKE** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
+
+## Prerequisites
+
+1. **Google Cloud project** — with the Kubernetes Engine API enabled and permissions to create GKE clusters
+2. **Application Default Credentials** — configured via the gcloud CLI or a service-account key file:
+   ```bash
+   gcloud auth application-default login
+   # or point at a service-account key:
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+   ```
+3. **Project and location** — exported in the environment:
+   ```bash
+   export GOOGLE_CLOUD_PROJECT=my-project
+   export GOOGLE_CLOUD_LOCATION=europe-north1
+   ```
+   The location may be a zone (`europe-north1-a`) or a region (`europe-north1`), and can also be set in `gke.yaml` (the environment variable wins when both are set). Listing clusters works without a location by searching all locations.
+4. **Docker** — required locally for the `ksail` CLI
+
+## Configuration
+
+### ksail.yaml Reference
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: gke-default
+spec:
+  cluster:
+    distribution: GKE
+    provider: GCP
+```
+
+By default KSail reads the project from `GOOGLE_CLOUD_PROJECT` and the location from `GOOGLE_CLOUD_LOCATION`. If your environment uses different variable names, point KSail at them:
+
+```yaml
+spec:
+  provider:
+    gcp:
+      projectEnvVar: MY_PROJECT_VAR # defaults to GOOGLE_CLOUD_PROJECT
+      locationEnvVar: MY_LOCATION_VAR # defaults to GOOGLE_CLOUD_LOCATION
+```
+
+The cluster shape (node pools, versions, networking) lives in `gke.yaml` — see the [GKE distribution guide](/distributions/gke/) for the configuration reference.
+
+## Characteristics
+
+| Property               | Value                                        |
+| ---------------------- | -------------------------------------------- |
+| Supported distribution | GKE                                          |
+| Infrastructure type    | Cloud (managed Google Cloud)                 |
+| Local registries       | ❌ Not supported                             |
+| Local mirrors          | ❌ Not supported (use external URLs)         |
+| CNI                    | GKE VPC-native networking (provided)         |
+| CSI                    | GCP Persistent Disk CSI driver (provided)    |
+| LoadBalancer support   | Built-in (Google-managed)                    |
+| Start/Stop             | Scales node pools down to 0 / back up        |
+
+## Limitations
+
+- Cloud provider — local Docker containers (mirrors, registries) are inaccessible from the cluster
+- Only one distribution is supported: **GKE**
+- Cloud clusters incur Google Cloud charges while running
+
+## Related
+
+- [GKE Distribution](/distributions/gke/)
+- [Support Matrix](/support-matrix/)

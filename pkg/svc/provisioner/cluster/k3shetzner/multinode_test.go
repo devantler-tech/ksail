@@ -62,3 +62,38 @@ func TestComposeJoiningNodesThreadsPrivateJoinURL(t *testing.T) {
 		assert.Contains(t, spec.UserData, "https://10.0.1.5:6443")
 	}
 }
+
+// TestComposeJoiningNodesIncludesAdditionalControlPlanes pins the HA topology:
+// with more than one control plane, ComposeJoiningNodes returns the additional
+// control-plane servers first (tagged control planes, joining the init server via
+// --server and publishing the readiness-gated join-complete sentinel), then the
+// agents (tagged workers, no sentinel) — the shape the shared flow serialises.
+func TestComposeJoiningNodesIncludesAdditionalControlPlanes(t *testing.T) {
+	t.Parallel()
+
+	// 3 control planes + 1 agent → after the init node, 2 additional control
+	// planes then 1 agent.
+	prov := newProvisioner(&fakeInfra{}, 3, 1)
+
+	specs, err := prov.ComposeJoiningNodes(
+		testClusterName, "token", net.ParseIP("10.0.1.5"), testBootstrapMaterial(),
+	)
+	require.NoError(t, err)
+	require.Len(t, specs, 3)
+
+	// The two additional control planes come first: they join the init server's
+	// embedded etcd and publish the join-complete sentinel behind the /readyz gate.
+	for _, spec := range specs[:2] {
+		assert.Equal(t, hetzner.NodeTypeControlPlane, spec.NodeType)
+		assert.Contains(t, spec.UserData, "https://10.0.1.5:6443")
+		assert.Contains(t, spec.UserData, "readyz")
+		assert.Contains(t, spec.UserData, "k3s-server-join-complete")
+	}
+
+	// The agent follows: a worker that registers via K3S_URL and never writes the
+	// control-plane join sentinel.
+	agent := specs[2]
+	assert.Equal(t, hetzner.NodeTypeWorker, agent.NodeType)
+	assert.Contains(t, agent.UserData, "K3S_URL")
+	assert.NotContains(t, agent.UserData, "k3s-server-join-complete")
+}

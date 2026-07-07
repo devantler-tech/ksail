@@ -3,13 +3,18 @@ package clusterapi
 import (
 	"context"
 	"fmt"
+	"sort"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // Ensure the local backend exposes the read-only resource browser and the safe write actions via the
@@ -98,34 +103,132 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
 }
 
+// loadKubeconfig reads the user's kubeconfig once, best-effort and offline. List calls it a single
+// time and shares the parsed config with both clusterEndpoints and unmanagedClusters, so the file is
+// read and YAML-parsed once per List (not once per helper) and both helpers observe the SAME snapshot
+// — closing the TOCTOU window where two independent reads could otherwise mix contexts from a
+// kubeconfig that changed between them. An unreadable kubeconfig yields nil, which both helpers treat
+// as "no contexts".
+func (s *Service) loadKubeconfig() *clientcmdapi.Config {
+	// Best-effort load with nil-on-error semantics, shared with the CLI's cluster list via
+	// clusterdiscovery.LoadKubeconfig so both surfaces read a kubeconfig identically.
+	return clusterdiscovery.LoadKubeconfig(s.kubeconfigPath())
+}
+
+// endpointForContext resolves the API server URL for a kubeconfig context, or "" when the context or
+// its cluster is absent. Shared by clusterEndpoints and unmanagedClusters so the two-step
+// context -> cluster -> server lookup and its nil checks live in one place.
+func endpointForContext(config *clientcmdapi.Config, contextName string) string {
+	kubeContext, contextExists := config.Contexts[contextName]
+	if !contextExists {
+		return ""
+	}
+
+	cluster, clusterExists := config.Clusters[kubeContext.Cluster]
+	if !clusterExists {
+		return ""
+	}
+
+	return cluster.Server
+}
+
 // clusterEndpoints maps every cluster name detectable from the kubeconfig's contexts to its API
 // server URL, so List can report a real endpoint for local/discovered clusters (the operator surface
-// observes it during reconciliation instead). Best-effort and offline (one file read, no cluster
-// round-trips): an unreadable kubeconfig yields no endpoints. The first context detected for a name
-// wins, matching contextForCluster.
-func (s *Service) clusterEndpoints() map[string]string {
-	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
-	if err != nil {
+// observes it during reconciliation instead). Best-effort and offline (no cluster round-trips): a nil
+// config (unreadable kubeconfig) yields no endpoints. The first context detected for a name wins,
+// matching contextForCluster.
+func clusterEndpoints(config *clientcmdapi.Config) map[string]string {
+	if config == nil {
 		return nil
 	}
 
 	endpoints := make(map[string]string, len(config.Contexts))
 
-	for contextName, kubeContext := range config.Contexts {
+	for contextName := range config.Contexts {
 		_, name, detectErr := clusterdetector.DetectDistributionFromContext(contextName)
 		if detectErr != nil {
 			continue
 		}
 
-		cluster, ok := config.Clusters[kubeContext.Cluster]
-		if !ok || cluster.Server == "" {
+		server := endpointForContext(config, contextName)
+		if server == "" {
 			continue
 		}
 
 		if _, exists := endpoints[name]; !exists {
-			endpoints[name] = cluster.Server
+			endpoints[name] = server
 		}
 	}
 
 	return endpoints
+}
+
+// unmanagedClusters synthesizes a Cluster for every kubeconfig context that does NOT correspond to a
+// cluster ksail already lists (discovered via an infrastructure provider or tracked as an in-flight
+// job — the keys of managed), flagged unmanaged via the ksail.io/unmanaged annotation. It lets ksail
+// see clusters that exist in the user's kubeconfig but were not provisioned by ksail (a managed
+// EKS/GKE/AKS cluster, a kubeadm cluster, a colleague's cluster) so read/operate surfaces can work
+// against them within limits while ksail-only operations are refused. Best-effort and offline, exactly
+// like clusterEndpoints: no cluster round-trips, and a nil config (unreadable kubeconfig) yields none.
+// Contexts are emitted in sorted order so the list is stable.
+func unmanagedClusters(
+	config *clientcmdapi.Config,
+	managed map[string]listEntry,
+) []v1alpha1.Cluster {
+	if config == nil {
+		return nil
+	}
+
+	contextNames := make([]string, 0, len(config.Contexts))
+	for contextName := range config.Contexts {
+		contextNames = append(contextNames, contextName)
+	}
+
+	sort.Strings(contextNames)
+
+	items := make([]v1alpha1.Cluster, 0, len(contextNames))
+
+	for _, contextName := range contextNames {
+		// The dedup rule (raw context name OR ksail-detected name in the managed set) is shared with
+		// the CLI's cluster list via clusterdiscovery.ContextIsManaged, so both surfaces stay aligned.
+		if clusterdiscovery.ContextIsManaged(contextName, func(name string) bool {
+			_, ok := managed[name]
+
+			return ok
+		}) {
+			continue
+		}
+
+		endpoint := endpointForContext(config, contextName)
+		items = append(items, newUnmanagedCluster(contextName, endpoint))
+	}
+
+	return items
+}
+
+// newUnmanagedCluster builds the Cluster ksail surfaces for a kubeconfig context it does not manage.
+// It is keyed by the context name, carries the ksail.io/unmanaged=true annotation (the stable marker
+// every surface reads), and reports a Ready=False/reason=Unmanaged condition — reusing the same
+// "Ready" condition the web UI already renders for stopped clusters, so an unmanaged cluster is never
+// shown green/normal even before a surface adds a dedicated badge. Distribution and provider are left
+// empty: without a ksail spec they are unknown.
+func newUnmanagedCluster(contextName, endpoint string) v1alpha1.Cluster {
+	cluster := v1alpha1.Cluster{}
+	cluster.Name = contextName
+	cluster.Namespace = localNamespace
+	cluster.Annotations = map[string]string{v1alpha1.UnmanagedAnnotation: "true"}
+	cluster.Status.Endpoint = endpoint
+	cluster.Status.Conditions = []metav1.Condition{unmanagedCondition()}
+
+	return cluster
+}
+
+// unmanagedCondition is the Ready=False condition attached to an unmanaged (kubeconfig-only) cluster.
+func unmanagedCondition() metav1.Condition {
+	return metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Unmanaged",
+		Message: "Cluster is present in the kubeconfig but not managed by ksail",
+	}
 }

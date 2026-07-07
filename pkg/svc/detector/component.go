@@ -632,11 +632,32 @@ func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[strin
 		cfg.ScaleDownUnneededTime = scaleDown
 	}
 
+	if threshold, ok := args["scale-down-utilization-threshold"].(string); ok {
+		cfg.ScaleDownUtilizationThreshold = threshold
+	}
+
 	// The installer renders both capacity-buffer flags together; the controller
 	// flag is the canonical marker for the capacityBuffers option. An absent key
 	// means the feature is off (the installer omits the flags when disabled).
 	if capacityBuffers, ok := args["capacity-buffer-controller-enabled"].(bool); ok {
 		cfg.CapacityBuffers = capacityBuffers
+	}
+
+	// ignoreDaemonsetsUtilization is a plain bool (off by default); the installer
+	// omits the flag when false, so an absent key leaves cfg's zero value (false).
+	if ignoreDaemonsets, ok := args["ignore-daemonsets-utilization"].(bool); ok {
+		cfg.IgnoreDaemonsetsUtilization = ignoreDaemonsets
+	}
+
+	// skipNodesWith* are *bool: the installer omits the flag when unset, so an
+	// absent key leaves cfg's nil pointer (inherits the upstream default true).
+	// A present key is an explicit true/false and is preserved as a non-nil value.
+	if skipLocalStorage, ok := args["skip-nodes-with-local-storage"].(bool); ok {
+		cfg.SkipNodesWithLocalStorage = &skipLocalStorage
+	}
+
+	if skipSystemPods, ok := args["skip-nodes-with-system-pods"].(bool); ok {
+		cfg.SkipNodesWithSystemPods = &skipSystemPods
 	}
 }
 

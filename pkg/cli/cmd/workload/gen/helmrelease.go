@@ -215,7 +215,7 @@ func runHelmReleaseGen(cmd *cobra.Command, args []string) error {
 
 	cfg := readHelmReleaseFlags(cmd, args)
 
-	err := validateHelmReleaseArgs(cfg.source, cfg.chart, cfg.chartRef, cfg.crdsPolicy)
+	err := validateHelmReleaseArgs(cfg)
 	if err != nil {
 		return err
 	}
@@ -290,6 +290,7 @@ func readHelmReleaseFlags(cmd *cobra.Command, args []string) helmReleaseConfig {
 	cfg.crdsPolicy, _ = cmd.Flags().GetString("crds")
 	cfg.kubeConfigSecretRef, _ = cmd.Flags().GetString("kubeconfig-secret-ref")
 	cfg.releaseName, _ = cmd.Flags().GetString("release-name")
+	cfg.postRenderStrategy, _ = cmd.Flags().GetString("post-render-strategy")
 
 	return cfg
 }
@@ -325,13 +326,19 @@ func configureHelmReleaseFlags(cmd *cobra.Command) {
 		"KubeConfig secret reference for remote reconciliation",
 	)
 	flags.String("release-name", "", "name used for the Helm release")
+	flags.String(
+		"post-render-strategy",
+		"",
+		"post-render strategy for sending hooks to post-renderers "+
+			"(nohooks, combined, separate); leave unset to use the controller default",
+	)
 	flags.Bool("export", false, "export in YAML format to stdout")
 }
 
-func validateHelmReleaseArgs(source, chart, chartRef, crdsPolicy string) error {
+func validateHelmReleaseArgs(cfg helmReleaseConfig) error {
 	// Either source+chart or chartRef must be specified
-	hasSource := source != "" && chart != ""
-	hasChartRef := chartRef != ""
+	hasSource := cfg.source != "" && cfg.chart != ""
+	hasChartRef := cfg.chartRef != ""
 
 	if !hasSource && !hasChartRef {
 		return errMissingSourceOrRef
@@ -342,10 +349,24 @@ func validateHelmReleaseArgs(source, chart, chartRef, crdsPolicy string) error {
 	}
 
 	// Validate CRDs policy if specified
-	if crdsPolicy != "" {
+	if cfg.crdsPolicy != "" {
 		validPolicies := []string{"Create", "CreateReplace", "Skip"}
 
-		err := validateKind(crdsPolicy, validPolicies, "crds policy")
+		err := validateKind(cfg.crdsPolicy, validPolicies, "crds policy")
+		if err != nil {
+			return err
+		}
+	}
+
+	// Validate post-render strategy if specified
+	if cfg.postRenderStrategy != "" {
+		validStrategies := []string{
+			string(helmv2.PostRenderStrategyNoHooks),
+			string(helmv2.PostRenderStrategyCombined),
+			string(helmv2.PostRenderStrategySeparate),
+		}
+
+		err := validateKind(cfg.postRenderStrategy, validStrategies, "post-render strategy")
 		if err != nil {
 			return err
 		}
@@ -407,6 +428,10 @@ func configureChartSource(helmRelease *helmv2.HelmRelease, cfg helmReleaseConfig
 func configureOptionalFields(helmRelease *helmv2.HelmRelease, cfg helmReleaseConfig) {
 	if cfg.releaseName != "" {
 		helmRelease.Spec.ReleaseName = cfg.releaseName
+	}
+
+	if cfg.postRenderStrategy != "" {
+		helmRelease.Spec.PostRenderStrategy = helmv2.PostRenderStrategy(cfg.postRenderStrategy)
 	}
 
 	if cfg.targetNamespace != "" {
@@ -501,6 +526,7 @@ type helmReleaseConfig struct {
 	crdsPolicy          string
 	kubeConfigSecretRef string
 	releaseName         string
+	postRenderStrategy  string
 }
 
 // setChartSpec sets the chart specification for the HelmRelease.

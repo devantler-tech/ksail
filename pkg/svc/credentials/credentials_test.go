@@ -38,6 +38,17 @@ func TestDefaultEnvVar_MatchesCanonicalSources(t *testing.T) {
 	// GCP defaults mirror the struct-tag defaults on v1alpha1.OptionsGCP (no exported constants).
 	assert.Equal(t, "GOOGLE_CLOUD_PROJECT", credentials.DefaultEnvVar(credentials.GCPProject))
 	assert.Equal(t, "GOOGLE_CLOUD_LOCATION", credentials.DefaultEnvVar(credentials.GCPLocation))
+	// Azure defaults mirror the struct-tag defaults on v1alpha1.OptionsAzure (no exported constants).
+	assert.Equal(
+		t,
+		"AZURE_SUBSCRIPTION_ID",
+		credentials.DefaultEnvVar(credentials.AzureSubscriptionID),
+	)
+	assert.Equal(
+		t,
+		"AZURE_RESOURCE_GROUP",
+		credentials.DefaultEnvVar(credentials.AzureResourceGroup),
+	)
 	// The Copilot token has no external canonical source; it mirrors webchat's primary token variable.
 	assert.Equal(t, "KSAIL_COPILOT_TOKEN", credentials.DefaultEnvVar(credentials.CopilotToken))
 }

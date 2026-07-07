@@ -8,6 +8,13 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 )
 
+// connectorSecretPrefix names this distribution's Connector kubeconfig Secret
+// ("k3s-hetzner-<name>-kubeconfig") in the shared hub namespace; "k3s" alone would
+// collide with the k3k (K3s-on-Kubernetes) naming space.
+//
+//nolint:gosec // G101 false positive: this is a Secret NAME prefix, not a credential.
+const connectorSecretPrefix = "k3s-hetzner"
+
 // Provisioner provisions a K3s cluster on Hetzner Cloud servers by composing the
 // native k3s install renderer, the cloud-init delivery transport, and the shared
 // Hetzner infrastructure lifecycle ([hetznerbase.Base]). See the package
@@ -43,7 +50,7 @@ func NewProvisioner(
 	}
 
 	provisioner.Base = base
-	base.Strategy = provisioner
+	base.Wire(provisioner, connectorSecretPrefix)
 
 	return provisioner, nil
 }

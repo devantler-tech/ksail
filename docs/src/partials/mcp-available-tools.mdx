@@ -11,7 +11,7 @@ The MCP server generates tools from the KSail command tree, consolidating comman
 | `workload_read` | Read-only | Manage workload operations | `workload_command` |
 | `workload_write` | Write | Manage workload operations | `workload_command` |
 
-These commands are not exposed as tools (interactive or long-running commands and shell helpers): `completion`, `help`, `open`, `operator`.
+These commands are not exposed as tools (interactive or long-running commands and shell helpers): `completion`, `help`, `open`, `operator`, `steer-agent`.
 
 Each tool takes a **subcommand parameter** selecting the operation, plus the merged flags of its subcommands. Subcommands marked below also accept positional arguments via the `args` parameter.
 
@@ -150,6 +150,7 @@ Manage workload operations — write subcommands of `ksail workload`. Select the
 | `expose` | Expose a resource as a service | Yes |
 | `import` | Import container images to the cluster | Yes |
 | `install` | Install Helm charts | Yes |
+| `intercept` | Intercept a Deployment's inbound traffic to a local process (reverse dev bridge) | Yes |
 | `mirror` | Mirror a Deployment's inbound traffic locally (read-only pcap capture) | Yes |
 | `push` | Package and push an OCI artifact to a registry | Yes |
 | `reconcile` | Trigger reconciliation for GitOps workloads | Yes |

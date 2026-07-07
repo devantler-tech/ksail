@@ -510,3 +510,24 @@ metadata:
   name: test-sa
 
 ---
+
+[TestGenHelmReleaseWithPostRenderStrategy - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: podinfo
+      sourceRef:
+        kind: HelmRepository
+        name: podinfo
+        namespace: default
+  interval: 1m0s
+  postRenderStrategy: nohooks
+  timeout: 5m0s
+status: {}
+
+---

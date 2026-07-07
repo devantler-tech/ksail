@@ -1,0 +1,95 @@
+---
+title: GKE
+description: Deploy managed Kubernetes clusters on Google Kubernetes Engine with KSail using a declarative cluster specification.
+---
+
+KSail supports [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine) as a managed Kubernetes distribution via the Google Cloud SDK. A declarative `gke.yaml` cluster specification defines the cluster shape; KSail provisions it and manages its lifecycle with the same commands used for local clusters.
+
+GKE is the only distribution that uses the [GCP provider](/providers/gcp/). It is a cloud distribution — local mirror registries and local registry containers are not supported.
+
+## When to Use GKE
+
+GKE is ideal when you:
+
+- Need a managed Google Cloud Kubernetes cluster with full cloud integrations (Cloud Load Balancing, Persistent Disk, VPC-native networking)
+- Want to use the same KSail workflow (init → create → delete) for cloud clusters
+- Require GitOps workflows (Flux or ArgoCD) on managed Google Cloud infrastructure
+
+For local development and testing, consider the [Vanilla](/distributions/vanilla/), [K3s](/distributions/k3s/), or [VCluster](/distributions/vcluster/) distributions instead.
+
+## What GKE Provides by Default
+
+| Component      | Status   | Details                                                  |
+| -------------- | -------- | -------------------------------------------------------- |
+| CNI            | Built-in | GKE VPC-native networking                                 |
+| CSI            | Built-in | GCP Persistent Disk CSI driver                            |
+| LoadBalancer   | Built-in | Google-managed `Service` type `LoadBalancer` support      |
+| Metrics Server | Built-in | Provided by GKE                                           |
+
+## Quick Start
+
+### 1. Initialize a GKE Project
+
+```bash
+mkdir my-gke-cluster
+cd my-gke-cluster
+
+ksail project init \
+  --name gke-default \
+  --distribution GKE \
+  --provider GCP
+```
+
+This generates:
+- `ksail.yaml` — KSail cluster configuration
+- `k8s/kustomization.yaml` — directory for Kubernetes manifests
+
+No `gke.yaml` is scaffolded — you author it when creating a cluster (see below).
+
+### 2. Author `gke.yaml`
+
+`gke.yaml` is a [GKE `Cluster`](https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.locations.clusters#Cluster) in YAML, using the API's camelCase field names. A minimal example:
+
+```yaml
+name: gke-default
+location: europe-north1
+nodePools:
+  - name: default
+    initialNodeCount: 1
+```
+
+Creating a cluster **requires** this file; operations on an existing cluster — read-only ones (`list`, `info`) and lifecycle ones (`start`, `stop`, `delete`) — work without it. Unknown fields are rejected, so the file stays in lockstep with the GKE API. Store it next to `ksail.yaml`, or point `spec.cluster.distributionConfig` at a custom path.
+
+### 3. Set Credentials and Create the Cluster
+
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=my-project
+export GOOGLE_CLOUD_LOCATION=europe-north1
+
+ksail cluster create
+```
+
+See the [GCP provider guide](/providers/gcp/) for the full credential and environment-variable reference.
+
+## Lifecycle
+
+| Command                | Effect                                                            |
+| ---------------------- | ----------------------------------------------------------------- |
+| `ksail cluster create` | Provisions the cluster from `gke.yaml` and waits for completion   |
+| `ksail cluster delete` | Deletes the cluster                                               |
+| `ksail cluster stop`   | Scales all node pools to zero to halt node costs                  |
+| `ksail cluster start`  | Restores node pools to their configured size                      |
+| `ksail cluster list`   | Lists clusters (searches all locations when no location is set)   |
+| `ksail cluster info`   | Shows cluster details                                             |
+
+## Limitations
+
+- Cloud distribution — local Docker containers (mirrors, registries) are inaccessible from the cluster
+- Only one provider is supported: **GCP**
+- The control plane keeps running (and billing) while node pools are stopped — use `ksail cluster delete` to stop all charges
+
+## Related
+
+- [GCP Provider](/providers/gcp/)
+- [Support Matrix](/support-matrix/)

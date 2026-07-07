@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"k8s.io/client-go/kubernetes"
 )
 
 var (
@@ -150,6 +151,19 @@ type Base struct {
 	// BringUpPollInterval is the delay between the multi-node bring-up's probes for
 	// a node's admin kubeconfig; zero means [DefaultKubeconfigPollInterval].
 	BringUpPollInterval time.Duration
+	// Hub is the hub-cluster clientset the Connector capability publishes the child
+	// kubeconfig Secret through (the cluster the KSail operator runs on). Nil outside
+	// a pod (the CLI flow), which skips the publish and leaves the Connector read
+	// unavailable — a CLI-created Hetzner cluster has no hub to publish to.
+	Hub kubernetes.Interface
+	// HubNamespace is the hub namespace the Connector kubeconfig Secret lives in
+	// (the operator's own namespace). Read only when Hub is set.
+	HubNamespace string
+	// ConnectorSecretPrefix is the distribution-specific prefix of the Connector
+	// kubeconfig Secret name ("<prefix>-<name>-kubeconfig"). Each provisioner sets
+	// its own (e.g. "k3s-hetzner") so distributions never collide in the shared hub
+	// namespace.
+	ConnectorSecretPrefix string
 }
 
 // CreateStrategy is the distribution-specific seam [Base.Create] composes with
@@ -195,6 +209,16 @@ func NewBase(
 		KubeconfigPath: kubeconfigPath,
 		LogWriter:      os.Stdout,
 	}, nil
+}
+
+// Wire finalises a freshly built Base for a distribution provisioner: it records the
+// distro-specific create [CreateStrategy] and the Connector Secret prefix. Call it
+// once, immediately after [NewBase], passing the constructed provisioner as strategy —
+// the wiring step both distributions' NewProvisioner constructors delegate to instead
+// of open-coding it (which jscpd flagged as a near-identical clone).
+func (b *Base) Wire(strategy CreateStrategy, connectorSecretPrefix string) {
+	b.Strategy = strategy
+	b.ConnectorSecretPrefix = connectorSecretPrefix
 }
 
 // ResolveName returns name when non-empty, otherwise the Base's configured default
@@ -289,13 +313,20 @@ func (b *Base) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("check network: %w", err)
 	}
 
-	if !networkExists {
-		return nil
+	if networkExists {
+		err = b.Infra.DeleteNodes(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
 	}
 
-	err = b.Infra.DeleteNodes(ctx, clusterName)
+	// Clean the published Connector Secret on BOTH paths — a retry after the infra
+	// is already gone must not orphan the credential in the hub namespace.
+	err = b.deleteConnectorKubeconfig(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("delete nodes: %w", err)
+		// The cluster itself is gone; a leftover Secret must not fail the delete.
+		// Surface it on the progress output instead.
+		_, _ = fmt.Fprintf(b.LogWriter, "warning: %v\n", err)
 	}
 
 	return nil
@@ -484,6 +515,15 @@ func (b *Base) rewriteAndPersistKubeconfig(
 	}
 
 	persistedPath, err := b.persistKubeconfig(kubeconfig)
+	if err != nil {
+		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
+	}
+
+	// Publish the rewritten kubeconfig for the operator's Connector read (a no-op
+	// without a hub clientset). Failure tears the cluster down like the other
+	// post-bring-up steps: a cluster the operator can never reach would otherwise
+	// wedge behind ErrClusterAlreadyExists on the retry.
+	err = b.publishConnectorKubeconfig(ctx, clusterName, kubeconfig)
 	if err != nil {
 		return "", "", b.cleanUpFailedBringUp(ctx, clusterName, err)
 	}

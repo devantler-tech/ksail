@@ -671,6 +671,28 @@ func TestClusterAutoscalerInstaller_ValuesYaml_IgnoreDaemonsetsUtilization(t *te
 	})
 }
 
+// TestClusterAutoscalerInstaller_ValuesYaml_ScaleDownUtilizationThreshold verifies
+// that the scale-down-utilization-threshold extraArg is rendered verbatim only when
+// set, and omitted (upstream default 0.5) when empty so existing releases see no
+// values drift.
+func TestClusterAutoscalerInstaller_ValuesYaml_ScaleDownUtilizationThreshold(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set renders the flag", func(t *testing.T) {
+		t.Parallel()
+		assertAutoscalerValuesYaml(t,
+			v1alpha1.NodeAutoscalerConfig{ScaleDownUtilizationThreshold: "0.7"},
+			[]string{"scale-down-utilization-threshold: \"0.7\""}, nil)
+	})
+
+	t.Run("empty omits the flag", func(t *testing.T) {
+		t.Parallel()
+		assertAutoscalerValuesYaml(t,
+			v1alpha1.NodeAutoscalerConfig{ScaleDownUtilizationThreshold: ""},
+			nil, []string{"scale-down-utilization-threshold"})
+	})
+}
+
 // assertAutoscalerValuesYaml installs with cfg and asserts the rendered chart
 // ValuesYaml contains every wantContain substring and none of the wantOmit ones.
 func assertAutoscalerValuesYaml(

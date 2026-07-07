@@ -1,0 +1,99 @@
+---
+title: AKS
+description: Deploy managed Kubernetes clusters on Azure Kubernetes Service with KSail using a declarative cluster specification.
+---
+
+KSail supports [Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/products/kubernetes-service) as a managed Kubernetes distribution via the Azure SDK. A declarative `aks.yaml` cluster specification defines the cluster shape; KSail provisions it and manages its lifecycle with the same commands used for local clusters.
+
+AKS is the only distribution that uses the [Azure provider](/providers/azure/). It is a cloud distribution — local mirror registries and local registry containers are not supported.
+
+## When to Use AKS
+
+AKS is ideal when you:
+
+- Need a managed Azure Kubernetes cluster with full cloud integrations (Azure Load Balancer, Azure Disk, Azure CNI)
+- Want to use the same KSail workflow (init → create → delete) for cloud clusters
+- Require GitOps workflows (Flux or ArgoCD) on managed Azure infrastructure
+
+For local development and testing, consider the [Vanilla](/distributions/vanilla/), [K3s](/distributions/k3s/), or [VCluster](/distributions/vcluster/) distributions instead.
+
+## What AKS Provides by Default
+
+| Component      | Status   | Details                                                |
+| -------------- | -------- | ------------------------------------------------------- |
+| CNI            | Built-in | Azure CNI                                                |
+| CSI            | Built-in | Azure Disk CSI driver                                    |
+| LoadBalancer   | Built-in | Azure-managed `Service` type `LoadBalancer` support      |
+| Metrics Server | Built-in | Provided by AKS                                          |
+
+## Quick Start
+
+### 1. Initialize an AKS Project
+
+```bash
+mkdir my-aks-cluster
+cd my-aks-cluster
+
+ksail project init \
+  --name aks-default \
+  --distribution AKS \
+  --provider Azure
+```
+
+This generates:
+- `ksail.yaml` — KSail cluster configuration
+- `k8s/kustomization.yaml` — directory for Kubernetes manifests
+
+No `aks.yaml` is scaffolded — you author it when creating a cluster (see below).
+
+### 2. Author `aks.yaml`
+
+`aks.yaml` is an [ARM `ManagedCluster`](https://learn.microsoft.com/en-us/rest/api/aks/managed-clusters/create-or-update) in YAML, using the ARM API's camelCase field names. A minimal example:
+
+```yaml
+name: aks-default
+location: swedencentral
+properties:
+  dnsPrefix: aks-default
+  agentPoolProfiles:
+    - name: default
+      count: 1
+      vmSize: Standard_DS2_v2
+      mode: System
+```
+
+Creating a cluster **requires** this file; operations on an existing cluster — read-only ones (`list`, `info`) and lifecycle ones (`start`, `stop`, `delete`) — work without it. Store it next to `ksail.yaml`, or point `spec.cluster.distributionConfig` at a custom path.
+
+### 3. Set Credentials and Create the Cluster
+
+```bash
+az login
+export AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
+export AZURE_RESOURCE_GROUP=my-resource-group
+
+ksail cluster create
+```
+
+See the [Azure provider guide](/providers/azure/) for the full credential and environment-variable reference.
+
+## Lifecycle
+
+| Command                | Effect                                                                   |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `ksail cluster create` | Provisions the cluster from `aks.yaml` and waits for completion          |
+| `ksail cluster delete` | Deletes the cluster                                                      |
+| `ksail cluster stop`   | AKS native stop — deallocates the whole cluster while keeping its state  |
+| `ksail cluster start`  | AKS native start — restores the stopped cluster                          |
+| `ksail cluster list`   | Lists clusters in the subscription                                       |
+| `ksail cluster info`   | Shows cluster details                                                    |
+
+## Limitations
+
+- Cloud distribution — local Docker containers (mirrors, registries) are inaccessible from the cluster
+- Only one provider is supported: **Azure**
+- Cloud clusters incur Azure charges while running (stop deallocates compute to reduce cost)
+
+## Related
+
+- [Azure Provider](/providers/azure/)
+- [Support Matrix](/support-matrix/)

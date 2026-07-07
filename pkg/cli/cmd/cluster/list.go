@@ -9,6 +9,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -30,6 +31,9 @@ Output Format:
 The STATUS column reports the cluster's run-state: "Running" when its nodes are
 up, "Stopped" when they exist but are not running (e.g. a stopped Docker
 cluster), and "Unknown" for providers that cannot report it (cloud providers).
+Kubeconfig contexts KSail did not provision are also listed with STATUS
+"Unmanaged" (blank PROVIDER/DISTRIBUTION) so they are visible on the CLI just as
+in the web UI; KSail-only operations (delete/stop/update) do not act on them.
 
 When any cluster has a TTL set, a TTL column is appended:
   PROVIDER   DISTRIBUTION   CLUSTER       STATUS    TTL
@@ -44,7 +48,7 @@ Use --output json for machine-readable output. The JSON is an array of objects:
   [
     {"name": "dev", "provider": "docker", "distribution": "Vanilla", "status": "Running", "ttl": "2h 30m"}
   ]
-The "status" field is "Running", "Stopped", or "Unknown" (see the STATUS column).
+The "status" field is "Running", "Stopped", "Unknown", or "Unmanaged" (see the STATUS column).
 The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
 
 Examples:
@@ -112,6 +116,11 @@ type ListDeps struct {
 		distribution v1alpha1.Distribution,
 		name string,
 	) clusterdiscovery.RunState
+
+	// KubeconfigPathFunc optionally resolves the kubeconfig path scanned for unmanaged
+	// (kubeconfig-only) clusters. If nil, the user's default kubeconfig is used. Primarily for
+	// testing, so unmanaged discovery reads a temp kubeconfig instead of the real one.
+	KubeconfigPathFunc func() string
 }
 
 // HandleListRunE handles the list command. It delegates cluster enumeration to the shared
@@ -133,6 +142,14 @@ func HandleListRunE(
 			failure.Provider,
 			failure.Err,
 		)
+	}
+
+	// When listing all providers (no --provider filter), also surface kubeconfig contexts ksail did
+	// not provision — flagged Unmanaged — so an unmanaged cluster visible in the web UI is visible on
+	// the CLI too (ksail#5654 surface parity). A provider filter narrows to that provider's managed
+	// clusters, so provider-less unmanaged clusters are omitted there.
+	if providerFilter == "" {
+		clusters = append(clusters, discoverUnmanaged(deps, clusters)...)
 	}
 
 	allResults := make([]listResult, 0, len(clusters))
@@ -191,6 +208,26 @@ func newDiscoverer(deps ListDeps) *clusterdiscovery.Discoverer {
 	return discoverer
 }
 
+// discoverUnmanaged returns the kubeconfig-only (unmanaged) clusters not already among the discovered
+// set, keying the managed set by the discovered clusters' names so DiscoverUnmanaged can dedup
+// contexts against them. The kubeconfig path comes from the deps seam (the user's default when unset).
+func discoverUnmanaged(
+	deps ListDeps,
+	discovered []clusterdiscovery.Cluster,
+) []clusterdiscovery.Cluster {
+	managed := make(map[string]struct{}, len(discovered))
+	for _, cluster := range discovered {
+		managed[cluster.Name] = struct{}{}
+	}
+
+	kubeconfigPath := k8s.DefaultKubeconfigPath
+	if deps.KubeconfigPathFunc != nil {
+		kubeconfigPath = deps.KubeconfigPathFunc
+	}
+
+	return clusterdiscovery.DiscoverUnmanaged(kubeconfigPath(), managed)
+}
+
 // resolveProviders returns the list of providers to query based on the filter.
 func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	if filter == "" {
@@ -244,7 +281,33 @@ func buildTableRows(providers []v1alpha1.Provider, results []listResult) [][]str
 		}
 	}
 
+	// Unmanaged (kubeconfig-only) clusters have no provider, so the provider loop above skips them —
+	// append them last with blank PROVIDER/DISTRIBUTION and STATUS=Unmanaged.
+	for _, result := range unmanagedResults(results) {
+		row := []string{"", "", result.ClusterName, statusLabel(result.RunState)}
+		if hasTTL {
+			row = append(row, formatTTLValue(result.TTL))
+		}
+
+		rows = append(rows, row)
+	}
+
 	return rows
+}
+
+// unmanagedResults returns the unmanaged (kubeconfig-only) clusters — the ones the provider-ordered
+// loops skip because they have no provider. Both the table and JSON builders append these last, so
+// the selection lives in one place and the two output paths cannot drift.
+func unmanagedResults(results []listResult) []listResult {
+	unmanaged := make([]listResult, 0)
+
+	for _, result := range results {
+		if result.RunState == clusterdiscovery.RunStateUnmanaged {
+			unmanaged = append(unmanaged, result)
+		}
+	}
+
+	return unmanaged
 }
 
 // tableHeaders returns the column headers for the results: the fixed PROVIDER/DISTRIBUTION/CLUSTER/
@@ -386,6 +449,8 @@ func statusLabel(runState clusterdiscovery.RunState) string {
 		return "Running"
 	case clusterdiscovery.RunStateStopped:
 		return "Stopped"
+	case clusterdiscovery.RunStateUnmanaged:
+		return "Unmanaged"
 	case clusterdiscovery.RunStateUnknown:
 		return "Unknown"
 	default:
