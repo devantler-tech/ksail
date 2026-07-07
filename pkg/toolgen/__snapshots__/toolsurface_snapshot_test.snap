@@ -2,6 +2,7 @@
 [TestToolSurfaceSnapshot - 1]
 cluster_read
 cluster_write
+project_read
 project_write
 tenant_write
 workload_read
@@ -2367,6 +2368,44 @@ workload_write
         "default": 0,
         "description": "Number of worker nodes",
         "type": "integer"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  }
+}
+---
+
+[TestToolSurfaceSnapshot/project_read - 1]
+{
+  "name": "project_read",
+  "title": "Project Read",
+  "description": "Manage GitOps project files",
+  "commandPath": "ksail project",
+  "requiresPermission": false,
+  "isConsolidated": true,
+  "subcommandParam": "command",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "parameters": {
+    "properties": {
+      "command": {
+        "description": "The subcommand to execute. Options:\nlist-environments: List the cluster environments declared in the workspace",
+        "enum": [
+          "list-environments"
+        ],
+        "type": "string"
+      },
+      "output": {
+        "default": "text",
+        "description": "Output format: text or json. Use json for machine-readable output (array of {name, distribution, provider, config}).",
+        "type": "string"
       }
     },
     "required": [
