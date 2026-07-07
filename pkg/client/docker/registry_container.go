@@ -110,15 +110,13 @@ func (rm *RegistryManager) registryExists(ctx context.Context, name string) (boo
 	return len(containers) > 0, nil
 }
 
-// listRegistryContainers lists all containers matching the given registry name.
-func (rm *RegistryManager) listRegistryContainers(
+// listRegistryContainersByFilter lists all containers (running and stopped) matching
+// the given filters. It centralizes the ContainerList call and error wrapping shared
+// by the registry container-listing helpers.
+func (rm *RegistryManager) listRegistryContainersByFilter(
 	ctx context.Context,
-	name string,
+	filterArgs filters.Args,
 ) ([]container.Summary, error) {
-	filterArgs := filters.NewArgs()
-	filterArgs.Add("name", name)
-	filterArgs.Add("label", fmt.Sprintf("%s=%s", RegistryLabelKey, name))
-
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
 		All:     true,
 		Filters: filterArgs,
@@ -128,6 +126,18 @@ func (rm *RegistryManager) listRegistryContainers(
 	}
 
 	return containers, nil
+}
+
+// listRegistryContainers lists all containers matching the given registry name.
+func (rm *RegistryManager) listRegistryContainers(
+	ctx context.Context,
+	name string,
+) ([]container.Summary, error) {
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("name", name)
+	filterArgs.Add("label", fmt.Sprintf("%s=%s", RegistryLabelKey, name))
+
+	return rm.listRegistryContainersByFilter(ctx, filterArgs)
 }
 
 // listContainersByNameOnly lists containers matching the given name without requiring KSail labels.
@@ -140,15 +150,7 @@ func (rm *RegistryManager) listContainersByNameOnly(
 	// Use exact name match with regex anchor to avoid partial matches
 	filterArgs.Add("name", "^/"+name+"$")
 
-	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filterArgs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list registry containers: %w", err)
-	}
-
-	return containers, nil
+	return rm.listRegistryContainersByFilter(ctx, filterArgs)
 }
 
 // FindContainerBySuffix finds a running container whose name ends with the given suffix.
