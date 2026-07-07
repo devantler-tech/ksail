@@ -901,12 +901,12 @@ github.com/fluxcd/pkg/apis/acl v0.10.0 h1:KPfAmELNvtvaz8wixnm/MYXqa+MJf7ntVVMUU9
 github.com/fluxcd/pkg/apis/acl v0.10.0/go.mod h1:a87i2A7AlFO5N2J8CxtzaUCCDmuLLWOHwkKu3eJF5fY=
 github.com/fluxcd/pkg/apis/kustomize v1.19.0 h1:DKiRUwS/8HaePXUF+JUShbBe/HAClnJwm2tdiUnPMiY=
 github.com/fluxcd/pkg/apis/kustomize v1.19.0/go.mod h1:BYPKRhf3MQKPtSsaNcOs44BigF0q8Fzza5iuOHTd26U=
-github.com/fluxcd/pkg/apis/meta v1.30.0 h1:26TOd1hbamH3c5KOb/CIMGpUDB4G4JV+WCcPyUhmuaM=
-github.com/fluxcd/pkg/apis/meta v1.30.0/go.mod h1:q1YjUeCmf0syhkZoMcRmP3pkBaLKFLl7g0mUvVGG4CM=
+github.com/fluxcd/pkg/apis/meta v1.30.1 h1:TRqdvb/zo9h9Ig10xHxV7jMilG+e1jOv3djI00GFr9g=
+github.com/fluxcd/pkg/apis/meta v1.30.1/go.mod h1:Gx+YRq26a+mTbCjotSXC7/6kSSyo0zXQ8JnsEXf2vVk=
 github.com/fluxcd/pkg/ssa v0.73.0 h1:JdFp3M+Ib2vg26Vara/5eirHZ/qMNzEQ1nQ+/LaWPsc=
 github.com/fluxcd/pkg/ssa v0.73.0/go.mod h1:6igtlt7/zF+nNFQpa5ZAkkvtpL6o36NRU39/PqqC+Bg=
-github.com/fluxcd/source-controller/api v1.9.0 h1:kO5elmtCk227YKAfpTY+8Q6rgozOYmeyRRskGZBEbbo=
-github.com/fluxcd/source-controller/api v1.9.0/go.mod h1:NsJJuEPUYYUJ0u8wMnAqS2T+bXyxOmGrnwdzvZRTiZw=
+github.com/fluxcd/source-controller/api v1.9.1 h1:04Elx6/iFwgNOmrymfetaDfFFBqw5/LfoiTgyeLlrqQ=
+github.com/fluxcd/source-controller/api v1.9.1/go.mod h1:qO98L20gw0MvLpSPapJKypyxHP7PejmJN5KxWXxDjCA=
 github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:xEzjJPgXI435gkrCt3MPfRiAkVrwSbHsst4LCFVfpJc=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
@@ -2230,8 +2230,8 @@ github.com/siderolabs/go-blockdevice/v2 v2.0.31 h1:v8P2oNxSFRQlc/9QXBOHQBgHXLB3H
 github.com/siderolabs/go-blockdevice/v2 v2.0.31/go.mod h1:6Dx9PclDbRv/wQbgMXhCwVvif9sCqJzARAokWCOpGOQ=
 github.com/siderolabs/go-cmd v0.2.0 h1:fZ0jbQzZg4bFLmJzNEDZM/RlebZsfHOo2k+PCJ6g7y4=
 github.com/siderolabs/go-cmd v0.2.0/go.mod h1:YA/UEDh8Av84RlI4LfQw7HN9+vgxUrQw/Byef1dgptY=
-github.com/siderolabs/go-kubernetes v0.2.39 h1:NhCKsFwwXNDDYD7PPLycP7VVJwaZmXum8kEQoA65yDA=
-github.com/siderolabs/go-kubernetes v0.2.39/go.mod h1:4DBVXLASGnJIhbDRJNl9DayYohYLu3VhQ1cpY/Gj2nw=
+github.com/siderolabs/go-kubernetes v0.2.40 h1:558ZJoX47B/FoSdDqk+gfJZTMtqT78e/+bBPnEOi7jk=
+github.com/siderolabs/go-kubernetes v0.2.40/go.mod h1:yXYk/2N9okLCq+SZCm2x32LtGcs0HcRislWQMyaodWA=
 github.com/siderolabs/go-pointer v1.0.1 h1:f7Yi4IK1jptS8yrT9GEbwhmGcVxvPQgBUG/weH3V3DM=
 github.com/siderolabs/go-pointer v1.0.1/go.mod h1:C8Q/3pNHT4RE9e4rYR9PHeS6KPMlStRBgYrJQJNy/vA=
 github.com/siderolabs/go-procfs v0.1.2 h1:bDs9hHyYGE2HO1frpmUsD60yg80VIEDrx31fkbi4C8M=
