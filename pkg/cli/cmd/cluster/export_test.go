@@ -35,8 +35,9 @@ func ExportAWSProviderStatus(
 	ctx context.Context,
 	client *eksctlclient.Client,
 	clusterName string,
+	region string,
 ) (*provider.ClusterStatus, error) {
-	return awsProviderStatus(ctx, client, clusterName)
+	return awsProviderStatus(ctx, client, clusterName, region)
 }
 
 // ErrProviderNotConfigured exports errProviderNotConfigured for testing.

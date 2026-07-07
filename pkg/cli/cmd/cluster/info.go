@@ -81,6 +81,7 @@ func runInfoCmd(
 		resolved.Provider,
 		resolved.ClusterName,
 		resolved.OmniOpts,
+		resolved.AWSRegion,
 	)
 
 	if errors.Is(provErr, errUnsupportedProvider) {
@@ -210,6 +211,7 @@ func getProviderStatus(
 	prov v1alpha1.Provider,
 	clusterName string,
 	omniOpts v1alpha1.OptionsOmni,
+	awsRegion string,
 ) (*provider.ClusterStatus, error) {
 	switch prov {
 	case v1alpha1.ProviderDocker, "":
@@ -219,7 +221,7 @@ func getProviderStatus(
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
 	case v1alpha1.ProviderAWS:
-		return getAWSProviderStatus(cmd.Context(), clusterName)
+		return getAWSProviderStatus(cmd.Context(), clusterName, awsRegion)
 	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
 		// GCP/GKE and Azure/AKS status inspection is not yet implemented. Return
 		// a minimal stub so callers that rely on this helper do not fail for them.
@@ -326,32 +328,38 @@ func getOmniProviderStatus(
 	return result, nil
 }
 
-// getAWSProviderStatus queries Amazon EKS for cluster status via eksctl.
+// getAWSProviderStatus queries Amazon EKS for cluster status via eksctl. The
+// region is resolved from the cluster config (the RegionEnvVar env var, else
+// eks.yaml's region) so the lookup targets the cluster's configured region
+// rather than only eksctl's AWS_REGION/profile default.
 func getAWSProviderStatus(
 	ctx context.Context,
 	clusterName string,
+	region string,
 ) (*provider.ClusterStatus, error) {
-	return awsProviderStatus(ctx, eksctlclient.NewClient(), clusterName)
+	return awsProviderStatus(ctx, eksctlclient.NewClient(), clusterName, region)
 }
 
 // awsProviderStatus is the injectable core of getAWSProviderStatus: it accepts
-// the eksctl client so tests can substitute a scripted runner. The region is
-// left empty so eksctl resolves it from AWS_REGION / the active profile — the
-// info command has no region flag. A missing eksctl binary is reported as
-// errProviderNotConfigured (a soft error classifyProviderError maps to "no
-// provider info"), so 'cluster info' falls back to kubectl instead of failing
-// when AWS tooling is absent, mirroring the Hetzner/Omni credential paths.
+// the eksctl client so tests can substitute a scripted runner. The resolved
+// region is passed through to scope the lookup; an empty region defers to
+// eksctl's own resolution (AWS_REGION / the active profile). A missing eksctl
+// binary is reported as errProviderNotConfigured (a soft error
+// classifyProviderError maps to "no provider info"), so 'cluster info' falls
+// back to kubectl instead of failing when AWS tooling is absent, mirroring the
+// Hetzner/Omni credential paths.
 func awsProviderStatus(
 	ctx context.Context,
 	client *eksctlclient.Client,
 	clusterName string,
+	region string,
 ) (*provider.ClusterStatus, error) {
 	err := client.CheckAvailable()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errProviderNotConfigured, err)
 	}
 
-	awsProv, err := awsprovider.NewProvider(client, "")
+	awsProv, err := awsprovider.NewProvider(client, region)
 	if err != nil {
 		return nil, fmt.Errorf("aws provider: %w", err)
 	}

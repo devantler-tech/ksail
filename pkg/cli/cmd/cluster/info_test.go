@@ -24,6 +24,9 @@ var errEksctlStubEmptyArgs = errors.New("eksctl stub: empty args")
 type eksctlStubRunner struct {
 	t         *testing.T
 	responses map[string][]byte
+	// gotArgs records every argument slice the runner was invoked with, so tests
+	// can assert on the flags the eksctl client built (e.g. --region).
+	gotArgs [][]string
 }
 
 func (s *eksctlStubRunner) Run(
@@ -33,6 +36,8 @@ func (s *eksctlStubRunner) Run(
 	_ io.Reader,
 ) ([]byte, []byte, error) {
 	s.t.Helper()
+
+	s.gotArgs = append(s.gotArgs, args)
 
 	if len(args) == 0 {
 		return nil, nil, errEksctlStubEmptyArgs
@@ -73,7 +78,7 @@ func TestAWSProviderStatus_AggregatesNodegroups(t *testing.T) {
 		),
 	})
 
-	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo")
+	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo", "")
 	require.NoError(t, err)
 	require.NotNil(t, status)
 	assert.Equal(t, 2, status.NodesTotal)
@@ -88,7 +93,7 @@ func TestAWSProviderStatus_ClusterNotFound(t *testing.T) {
 		"get cluster": []byte("null"),
 	})
 
-	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "missing")
+	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "missing", "")
 	require.ErrorIs(t, err, provider.ErrClusterNotFound)
 	assert.Nil(t, status)
 }
@@ -103,7 +108,49 @@ func TestAWSProviderStatus_EksctlUnavailable(t *testing.T) {
 		eksctlclient.WithBinary("ksail-nonexistent-eksctl-binary"),
 	)
 
-	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo")
+	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo", "")
 	require.ErrorIs(t, err, cluster.ErrProviderNotConfigured)
 	assert.Nil(t, status)
+}
+
+// TestAWSProviderStatus_ForwardsRegion asserts the resolved region is threaded
+// into eksctl's calls (as --region), so 'cluster info' targets the cluster's
+// configured region instead of only eksctl's AWS_REGION/profile default.
+func TestAWSProviderStatus_ForwardsRegion(t *testing.T) {
+	t.Parallel()
+
+	runner := &eksctlStubRunner{
+		t: t,
+		responses: map[string][]byte{
+			"get cluster": []byte(
+				`[{"Name":"demo","Region":"eu-west-1","EksctlCreated":"True"}]`,
+			),
+			"get nodegroup": []byte(`[{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE"}]`),
+		},
+	}
+	client := eksctlclient.NewClient(
+		eksctlclient.WithBinary(os.Args[0]),
+		eksctlclient.WithRunner(runner),
+	)
+
+	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo", "eu-west-1")
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	var sawRegion bool
+
+	for _, args := range runner.gotArgs {
+		for i := range len(args) - 1 {
+			if args[i] == "--region" && args[i+1] == "eu-west-1" {
+				sawRegion = true
+			}
+		}
+	}
+
+	assert.True(
+		t,
+		sawRegion,
+		"expected eksctl to be invoked with --region eu-west-1, got %v",
+		runner.gotArgs,
+	)
 }
