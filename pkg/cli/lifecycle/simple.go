@@ -112,6 +112,39 @@ type ResolvedClusterInfo struct {
 	KubeconfigPath string
 	OmniOpts       v1alpha1.OptionsOmni
 	KubernetesOpts v1alpha1.OptionsKubernetes
+	// AWSRegion is the resolved AWS region for read-only EKS status lookups.
+	// Empty defers region resolution to eksctl (AWS_REGION env / active profile).
+	AWSRegion string
+}
+
+// awsRegionEnvVarDefault is the fallback environment variable name for the AWS
+// region when spec.provider.aws.regionEnvVar is unset (mirrors the OptionsAWS
+// default so the info path resolves the region the same way create does).
+const awsRegionEnvVarDefault = "AWS_REGION"
+
+// resolveAWSRegion determines the AWS region for read-only EKS status lookups,
+// honoring the documented precedence from OptionsAWS: the environment variable
+// named by RegionEnvVar (default AWS_REGION) overrides the region declared in
+// eks.yaml. An empty result tells eksctl to fall back to its own resolution, so
+// this never regresses the previous always-empty behavior.
+func resolveAWSRegion(
+	awsOpts v1alpha1.OptionsAWS,
+	distCfg *clusterprovisioner.DistributionConfig,
+) string {
+	envVar := awsOpts.RegionEnvVar
+	if envVar == "" {
+		envVar = awsRegionEnvVarDefault
+	}
+
+	if region := os.Getenv(envVar); region != "" {
+		return region
+	}
+
+	if distCfg != nil && distCfg.EKS != nil {
+		return distCfg.EKS.Region
+	}
+
+	return ""
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
@@ -135,9 +168,12 @@ func ResolveClusterInfo(
 	var (
 		omniOpts       v1alpha1.OptionsOmni
 		kubernetesOpts v1alpha1.OptionsKubernetes
+		awsRegion      string
 	)
 
-	resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts)
+	resolveFromConfig(
+		cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts, &awsRegion,
+	)
 
 	// Fall back to kubeconfig context detection
 	if clusterName == "" {
@@ -163,6 +199,7 @@ func ResolveClusterInfo(
 		KubeconfigPath: resolvedPath,
 		OmniOpts:       omniOpts,
 		KubernetesOpts: kubernetesOpts,
+		AWSRegion:      awsRegion,
 	}, nil
 }
 
@@ -188,7 +225,7 @@ func loadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.Dist
 	return cfg, cfgManager.DistributionConfig
 }
 
-// resolveFromConfig fills missing cluster info and Omni options from the ksail.yaml config.
+// resolveFromConfig fills missing cluster info and provider options from the ksail.yaml config.
 // When cmd is non-nil, the --config persistent flag is honored.
 // Fields that already have values (from flags) are not overwritten.
 func resolveFromConfig(
@@ -198,6 +235,7 @@ func resolveFromConfig(
 	kubeconfigPath *string,
 	omniOpts *v1alpha1.OptionsOmni,
 	kubernetesOpts *v1alpha1.OptionsKubernetes,
+	awsRegion *string,
 ) {
 	cfg, distCfg := loadConfig(cmd)
 	if cfg == nil {
@@ -224,6 +262,7 @@ func resolveFromConfig(
 
 	*omniOpts = cfg.Spec.Provider.Omni
 	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
+	*awsRegion = resolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
 }
 
 // commandContext returns cmd's context, falling back to context.Background()
