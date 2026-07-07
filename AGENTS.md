@@ -389,6 +389,7 @@ after validation. Wrap the command's constructor return in **`experimental.Guard
 unless the user passes the global **`--experimental`** flag (`flags.ExperimentalFlagName`). Prefer a
 lightweight cobra gate over a runtime SDK for the common case; reach for the OpenFeature Go SDK only
 where genuinely per-user/remote evaluation is needed. Rules:
+
 - **Test both states** — the gated path is covered on (`--experimental`) and off (refused with
   `experimental.ErrDisabled`); default snapshots stay deterministic (a hidden command drops from the
   help/toolgen snapshots, so regenerate them — see below).
@@ -401,7 +402,7 @@ where genuinely per-user/remote evaluation is needed. Rules:
   the default steering-agent image (#5882) ships.
 - Adding/removing a gated command or the `--experimental` flag changes **three** generated surfaces —
   the `--help` snapshot, the `pkg/toolgen` tool-surface snapshot, and `docs/` — regenerate all three
-  (`UPDATE_SNAPS=true go test ./pkg/... ` + `make generate`).
+  (`UPDATE_SNAPS=true go test ./pkg/...` + `make generate`).
 
 **Task menu** (pick the highest-value for the current repo state; not all):
 
