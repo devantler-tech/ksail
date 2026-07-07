@@ -1739,6 +1739,10 @@ workload_write
         },
         "type": "array"
       },
+      "include-crd-schemas": {
+        "description": "Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default... (applies to: validate)",
+        "type": "boolean"
+      },
       "interval": {
         "default": "1m0s",
         "description": "reconciliation interval (applies to: gen_helmrelease)",
