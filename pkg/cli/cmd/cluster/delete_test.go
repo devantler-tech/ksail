@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -128,7 +129,16 @@ func setupContextBasedTest(
 	// This ensures existing tests don't prompt for confirmation
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
 
+	// The fake provisioner factory above represents a cluster ksail manages, but the real
+	// cross-provider discovery the unmanaged guard uses cannot see the fake — so neutralize the guard
+	// here (the setup cluster is "managed" in the test's world). Tests that exercise the guard itself
+	// override it explicitly instead of using this helper.
+	restoreGuard := cluster.ExportSetDeleteUnmanagedGuard(
+		func(context.Context, *lifecycle.ResolvedClusterInfo) error { return nil },
+	)
+
 	cleanup := func() {
+		restoreGuard()
 		restoreTTY()
 		restoreDocker()
 		restoreFactory()
@@ -230,6 +240,56 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 	require.Error(t, err)
 	// Error should indicate cluster name is required
 	require.Contains(t, err.Error(), "cluster name is required")
+}
+
+// TestDelete_UnmanagedCluster_Refused verifies that `ksail cluster delete` refuses to act on a
+// cluster ksail did not provision: when the resolved context exists in the kubeconfig but is NOT in
+// ksail's managed set, the unmanaged-cluster guard (ksail#5885, epic #5654) rejects with
+// ErrUnmanagedCluster before any provisioner is created — so ksail never destroys a cluster it does
+// not own. Read-only operations are unaffected.
+func TestDelete_UnmanagedCluster_Refused(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, "kind-my-cluster")
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	// The provisioner must never be reached: the guard aborts before any cluster is touched. Wiring
+	// a fake factory here mirrors the other delete tests; a successful delete (existsResult=true,
+	// deleteErr=nil) is what we expect the guard to PREVENT.
+	restoreFactory := cluster.SetProvisionerFactoryForTests(
+		fakeDeleteFactory{existsResult: true, deleteErr: nil},
+	)
+	defer restoreFactory()
+
+	restoreDocker := cluster.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, _ func(dockerpkg.Client) error) error { return nil },
+	)
+	defer restoreDocker()
+
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
+	defer restoreTTY()
+
+	// Drive the REAL guard against an empty managed set: "my-cluster" is not managed, yet its context
+	// exists in the kubeconfig, so the guard must refuse.
+	restoreGuard := cluster.ExportSetDeleteUnmanagedGuard(
+		func(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			return cluster.ExportEnsureClusterManaged(ctx, resolved, map[string]struct{}{}, true)
+		},
+	)
+	defer restoreGuard()
+
+	cmd := cluster.NewDeleteCmd()
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	require.Contains(t, err.Error(), "my-cluster")
 }
 
 // TestDelete_CommandFlags verifies that the delete command has the expected flags.
