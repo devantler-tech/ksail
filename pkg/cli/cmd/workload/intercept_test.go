@@ -119,7 +119,7 @@ func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 	assert.Contains(t, err.Error(), "local-port")
 }
 
-func TestInterceptCmdRequiresSteerCommand(t *testing.T) {
+func TestInterceptCmdRequiresSteerOrServicePort(t *testing.T) {
 	t.Parallel()
 
 	cmd := experimentalInterceptCmd()
@@ -128,8 +128,20 @@ func TestInterceptCmdRequiresSteerCommand(t *testing.T) {
 	cmd.SetErr(io.Discard)
 
 	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "steer-command")
+	require.ErrorIs(t, err, workload.ErrInterceptSteerUnspecified)
+}
+
+func TestInterceptCmdRejectsServicePortCollidingWithInternalPort(t *testing.T) {
+	t.Parallel()
+
+	cmd := experimentalInterceptCmd()
+	// 19000 is the agent's internal listener port; steering it to itself loops.
+	cmd.SetArgs([]string{mirrorTestDeploy, "--local-port", "8080", "--service-port", "19000"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, workload.ErrInvalidInterceptServicePort)
 }
 
 func TestInterceptCmdRejectsInvalidLocalPort(t *testing.T) {
@@ -188,6 +200,60 @@ func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 	assert.Equal(t, []string{"ksail-steer", "--port=8080"}, call.steerCommand)
 	assert.Equal(t, 8080, call.localPort)
 	assert.Contains(t, out.String(), "injected steering agent")
+}
+
+//nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
+func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
+	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
+
+	restore, call := stubInterceptSession(client)
+	defer restore()
+
+	cmd := experimentalInterceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.True(t, call.ran, "the steering session must run")
+	// With no --steer-command, KSail derives the default `ksail steer-agent`
+	// invocation for the shipped steering image from --service-port.
+	assert.Equal(t, []string{
+		"ksail", "steer-agent", "--service-port=9090", "--intercept-port=19000",
+	}, call.steerCommand)
+	assert.Equal(t, 8080, call.localPort)
+}
+
+//nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
+func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
+	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
+
+	restore, call := stubInterceptSession(client)
+	defer restore()
+
+	cmd := experimentalInterceptCmd()
+	// Both flags set: the explicit --steer-command wins (the escape hatch),
+	// --service-port is ignored rather than derived.
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
+		"--steer-command", "custom-agent", "--steer-command", "--flag",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.True(t, call.ran, "the steering session must run")
+	assert.Equal(t, []string{"custom-agent", "--flag"}, call.steerCommand)
 }
 
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
