@@ -43,6 +43,12 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 		"Path to config file (default: ksail.yaml found via directory traversal)",
 	)
 
+	cmd.PersistentFlags().Bool(
+		flags.ExperimentalFlagName,
+		false,
+		"Enable experimental (unstable) commands and features",
+	)
+
 	// Transparently refresh expired Omni kubeconfig tokens before any command.
 	// Cobra does not chain PersistentPreRunE: when a child command defines its own
 	// (e.g. workload via wrapWithKubeconfigResolution), the child's hook replaces

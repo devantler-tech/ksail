@@ -25,6 +25,7 @@ Available Commands:
 Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
   -h, --help            help for ksail
   -v, --version         version for ksail
 
@@ -51,6 +52,7 @@ Available Commands:
 Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
   -h, --help            help for ksail
   -v, --version         version for ksail
 
