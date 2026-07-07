@@ -82,7 +82,10 @@ func evaluateDocument(
 	document []byte,
 	opts *Options,
 ) ([]Violation, error) {
-	err := ctx.Err()
+	// context.Cause preserves a custom cancellation cause (from WithCancelCause/
+	// WithTimeoutCause) and falls back to the generic Canceled/DeadlineExceeded
+	// error when none is set.
+	err := context.Cause(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("validating documents: %w", err)
 	}
@@ -104,9 +107,9 @@ func evaluateDocument(
 		violation, violated := evalRule(ctx, rule, object, resource)
 
 		// A cancelled context surfaces from ContextEval as an evaluation error;
-		// abort with the cancellation cause instead of recording it as a
-		// spurious violation and continuing.
-		err := ctx.Err()
+		// abort with the cancellation cause (context.Cause preserves a custom
+		// cause) instead of recording it as a spurious violation and continuing.
+		err := context.Cause(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating rules: %w", err)
 		}
