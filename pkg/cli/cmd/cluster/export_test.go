@@ -89,6 +89,22 @@ func ExportResolveKubeContext(ctx *localregistry.Context) string {
 	return resolveKubeContext(ctx)
 }
 
+// ExportEnsureClusterManaged exports ensureClusterManaged for testing, driving it from a fixed
+// managed-set + completeness pair (instead of the live cross-provider discoverer) so the
+// unmanaged-cluster guard can be exercised fully offline.
+func ExportEnsureClusterManaged(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+	managed map[string]struct{},
+	complete bool,
+) error {
+	return ensureClusterManaged(
+		ctx,
+		resolved,
+		func(context.Context) (map[string]struct{}, bool) { return managed, complete },
+	)
+}
+
 // ExportResolveCreatedContextName exports resolveCreatedContextName for testing.
 func ExportResolveCreatedContextName(
 	distribution v1alpha1.Distribution,
