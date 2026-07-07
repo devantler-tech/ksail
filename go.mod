@@ -93,7 +93,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/siderolabs/crypto v0.6.5
 	github.com/siderolabs/gen v0.8.6
-	github.com/siderolabs/go-kubernetes v0.2.39
+	github.com/siderolabs/go-kubernetes v0.2.40
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
 	github.com/siderolabs/omni/client v1.9.0
