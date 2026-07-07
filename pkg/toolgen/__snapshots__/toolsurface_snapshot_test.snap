@@ -2091,6 +2091,13 @@ workload_write
         },
         "type": "array"
       },
+      "values-from-literal": {
+        "description": "literal value from a ConfigMap or Secret merged at a target path without Helm's --set interpretation (Kind/Name/valuesKey@targetPath) (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "verb": {
         "description": "Verb that applies to the resources contained in the rule (applies to: gen_clusterrole, gen_role)",
         "items": {
