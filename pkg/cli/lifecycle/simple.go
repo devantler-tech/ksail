@@ -56,6 +56,10 @@ type SimpleLifecycleConfig struct {
 		provisioner clusterprovisioner.Provisioner,
 		clusterName string,
 	) error
+	// Guard, when non-nil, runs after cluster resolution and before the provisioner is created. It
+	// lets a caller refuse the action for a resolved cluster — e.g. an unmanaged, ksail-unprovisioned
+	// cluster — with a clear error. A nil Guard is a no-op.
+	Guard func(ctx context.Context, resolved *ResolvedClusterInfo) error
 }
 
 // NewSimpleLifecycleCmd creates a simple lifecycle command (start/stop) with --name and --provider flags.
@@ -311,6 +315,13 @@ func runSimpleLifecycleAction(
 		return err
 	}
 
+	if config.Guard != nil {
+		err = config.Guard(cmd.Context(), resolved)
+		if err != nil {
+			return err
+		}
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Content: config.TitleContent,
@@ -329,6 +340,16 @@ func runSimpleLifecycleAction(
 		Writer: cmd.OutOrStdout(),
 	})
 
+	return provisionAndAct(cmd, config, resolved)
+}
+
+// provisionAndAct creates a minimal provisioner for the resolved cluster, runs the
+// configured lifecycle action, and emits the success message on completion.
+func provisionAndAct(
+	cmd *cobra.Command,
+	config SimpleLifecycleConfig,
+	resolved *ResolvedClusterInfo,
+) error {
 	// Create cluster info for provisioner creation
 	clusterInfo := &clusterdetector.Info{
 		ClusterName:    resolved.ClusterName,
