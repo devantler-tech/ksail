@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +17,18 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
+
+// experimentalInterceptCmd builds the intercept command with the --experimental
+// opt-in enabled, so these tests exercise the gated command's own behaviour
+// rather than the experimental.Guard rejection (which is covered in the
+// experimental package's own tests). intercept ships behind the experimental
+// gate (issue #5884), so a plain invocation is refused before it runs.
+func experimentalInterceptCmd() *cobra.Command {
+	cmd := workload.NewInterceptCmd()
+	cmd.Flags().Bool(flags.ExperimentalFlagName, true, "")
+
+	return cmd
+}
 
 // interceptCall records what the stubbed steering session was invoked with, so
 // tests can assert the command wired resolve → inject → session correctly
@@ -95,7 +109,7 @@ func stubInterceptSession(client kubernetes.Interface) (func(), *interceptCall) 
 func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{mirrorTestDeploy, "--steer-command", "ksail-steer"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -108,7 +122,7 @@ func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 func TestInterceptCmdRequiresSteerCommand(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{mirrorTestDeploy, "--local-port", "8080"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -121,7 +135,7 @@ func TestInterceptCmdRequiresSteerCommand(t *testing.T) {
 func TestInterceptCmdRejectsInvalidLocalPort(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "70000", "--steer-command", "ksail-steer",
 	})
@@ -137,7 +151,7 @@ func TestInterceptCmdFailsForMissingDeployment(t *testing.T) {
 	restore, _ := stubInterceptSession(k8sfake.NewClientset())
 	defer restore()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
 	})
@@ -155,7 +169,7 @@ func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080",
 		"--steer-command", "ksail-steer", "--steer-command", "--port=8080",
@@ -183,7 +197,7 @@ func TestInterceptCmdReusesExistingSteer(t *testing.T) {
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := workload.NewInterceptCmd()
+	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
 	})

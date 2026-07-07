@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -180,7 +181,11 @@ func NewInterceptCmd() *cobra.Command {
 		return runInterceptCommand(cmd, args[0], opts)
 	}
 
-	return cmd
+	// intercept is an in-development reverse dev-bridge (#4521): until KSail
+	// ships a default steering-agent image (#5882) it needs an operator-supplied
+	// --steer-command to work, so it is gated experimental rather than advertised
+	// as stable. Graduate by dropping this Guard call.
+	return experimental.Guard(cmd)
 }
 
 // runInterceptCommand chains the increment-3 steering primitives end-to-end:

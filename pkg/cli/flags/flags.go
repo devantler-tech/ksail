@@ -14,6 +14,8 @@ const (
 	BenchmarkFlagName = "benchmark"
 	// ConfigFlagName is the global/root persistent flag that specifies an alternate config file path.
 	ConfigFlagName = "config"
+	// ExperimentalFlagName is the global/root persistent flag that opts into experimental features.
+	ExperimentalFlagName = "experimental"
 )
 
 var (
@@ -62,6 +64,36 @@ func IsBenchmarkEnabled(cmd *cobra.Command) (bool, error) {
 	}
 
 	return false, fmt.Errorf("%w: %q", errFlagNotFound, BenchmarkFlagName)
+}
+
+// IsExperimentalEnabled reports whether the current command invocation opted into experimental
+// features via the root --experimental persistent flag.
+//
+// The flag is defined as a root persistent flag and inherited by subcommands. Unlike
+// IsBenchmarkEnabled, a missing flag is treated as disabled (the safe default) rather than an
+// error: a gated command constructed outside the root tree — e.g. in a unit test — stays off
+// unless the flag is explicitly present and true.
+func IsExperimentalEnabled(cmd *cobra.Command) (bool, error) {
+	if cmd == nil {
+		return false, errNilCommand
+	}
+
+	value, found, err := getBoolFlag(cmd.Flags(), ExperimentalFlagName)
+	if found || err != nil {
+		return value, err
+	}
+
+	value, found, err = getBoolFlag(cmd.InheritedFlags(), ExperimentalFlagName)
+	if found || err != nil {
+		return value, err
+	}
+
+	value, found, err = getBoolFlag(cmd.PersistentFlags(), ExperimentalFlagName)
+	if found || err != nil {
+		return value, err
+	}
+
+	return false, nil
 }
 
 func getStringFlag(flagSet *pflag.FlagSet, name string) (string, bool, error) {
