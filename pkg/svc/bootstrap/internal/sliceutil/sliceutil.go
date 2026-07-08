@@ -26,3 +26,40 @@ func SortedNonEmpty(values []string) []string {
 
 	return out
 }
+
+// ValidateAndPrealloc runs validate and, on success, returns a freshly allocated slice of the
+// given capacity — the validate-then-preallocate prelude shared by every distribution's Plan
+// (k3s, kubeadm) before they diverge on how they populate the plan's nodes.
+func ValidateAndPrealloc[N any](validate func() error, capacity int) ([]N, error) {
+	err := validate()
+	if err != nil {
+		return nil, err
+	}
+
+	return make([]N, 0, capacity), nil
+}
+
+// AssignNodes appends the ordered node list into nodes (already preallocated by
+// ValidateAndPrealloc): node 0 is firstCP()'s config — the cluster-initialising control-plane node,
+// which must never carry join settings — each further control-plane node is remainingCP()'s config,
+// and each agent node is agent()'s config. This is the node-ordering shared by every distribution's
+// Plan (k3s, kubeadm) once their own config-building functions diverge; newNode wraps an
+// index+config pair as the caller's own Node type.
+func AssignNodes[N, C any](
+	nodes []N,
+	controlPlaneCount, agentCount int,
+	newNode func(index int, config C) N,
+	firstCP, remainingCP, agent func() C,
+) []N {
+	nodes = append(nodes, newNode(0, firstCP()))
+
+	for range controlPlaneCount - 1 {
+		nodes = append(nodes, newNode(len(nodes), remainingCP()))
+	}
+
+	for range agentCount {
+		nodes = append(nodes, newNode(len(nodes), agent()))
+	}
+
+	return nodes
+}
