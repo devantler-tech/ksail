@@ -206,13 +206,15 @@ func (p *Provider) fetchNodegroups(
 	ctx context.Context,
 	clusterName string,
 ) ([]eksctlclient.NodegroupSummary, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	nodegroups, err := provider.FetchOrTranslate(
+		p.client != nil,
+		func() ([]eksctlclient.NodegroupSummary, error) {
+			return p.client.ListNodegroups(ctx, clusterName, p.region)
+		},
+		translateClientErr,
+	)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
 	return nodegroups, nil

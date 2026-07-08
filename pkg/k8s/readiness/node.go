@@ -62,6 +62,12 @@ func allNodesReady(nodes []corev1.Node) bool {
 // ListNodesOrContinue lists cluster nodes for use inside a PollForReadiness check func: a transient
 // list error returns (nil, nil) rather than failing the poll, so the caller's check simply sees no
 // nodes this tick and the polling loop continues instead of aborting on a passing API hiccup.
+//
+// The error return is intentionally always nil today (never actionable) — every failure path is
+// swallowed into the (nil, nil) "continue polling" case above. It is kept in the signature, rather
+// than dropped, so a future change to add a real terminal-error case (e.g. a non-transient
+// permission failure that should abort the poll instead of retrying) doesn't need an API change;
+// callers must not assume a non-nil error can occur today.
 func ListNodesOrContinue(
 	ctx context.Context,
 	clientset kubernetes.Interface,

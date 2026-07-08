@@ -108,7 +108,7 @@ func (c *Client) GetCluster(
 		return nil, ErrEmptyClusterName
 	}
 
-	stdout, err := c.getClusterJSON(
+	stdout, err := c.runGetJSON(
 		ctx,
 		[]string{subcommandGet, "cluster", "--name", name, flagOutput, outputFormatJSON},
 		region,
@@ -133,7 +133,7 @@ func (c *Client) GetCluster(
 // Pass "" for region to rely on eksctl's default (AWS_REGION env or
 // AWS profile).
 func (c *Client) ListClusters(ctx context.Context, region string) ([]ClusterSummary, error) {
-	stdout, err := c.getClusterJSON(
+	stdout, err := c.runGetJSON(
 		ctx,
 		[]string{subcommandGet, "cluster", flagOutput, outputFormatJSON},
 		region,
@@ -145,9 +145,10 @@ func (c *Client) ListClusters(ctx context.Context, region string) ([]ClusterSumm
 	return parseClusterSummaries(stdout)
 }
 
-// getClusterJSON appends --region (when set) to args and runs it via eksctl, returning stdout — the
-// exec/error-handling shared by GetCluster and ListClusters before they diverge on how they parse it.
-func (c *Client) getClusterJSON(ctx context.Context, args []string, region string) ([]byte, error) {
+// runGetJSON appends --region (when set) to args and runs an `eksctl get …` invocation, returning
+// stdout — the exec/error-handling shared by every read-only listing call in this file before they
+// diverge on how they parse the result.
+func (c *Client) runGetJSON(ctx context.Context, args []string, region string) ([]byte, error) {
 	if region != "" {
 		args = append(args, "--region", region)
 	}
@@ -169,16 +170,11 @@ func (c *Client) ListNodegroups(
 		return nil, ErrEmptyClusterName
 	}
 
-	args := []string{
-		subcommandGet, "nodegroup",
-		"--cluster", clusterName,
-		flagOutput, outputFormatJSON,
-	}
-	if region != "" {
-		args = append(args, "--region", region)
-	}
-
-	stdout, _, err := c.Exec(ctx, args...)
+	stdout, err := c.runGetJSON(
+		ctx,
+		[]string{subcommandGet, "nodegroup", "--cluster", clusterName, flagOutput, outputFormatJSON},
+		region,
+	)
 	if err != nil {
 		return nil, err
 	}
