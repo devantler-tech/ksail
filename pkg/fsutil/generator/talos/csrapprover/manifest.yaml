@@ -26,34 +26,34 @@ metadata:
     app.kubernetes.io/name: kubelet-serving-cert-approver
   name: certificates:kubelet-serving-cert-approver
 rules:
-- apiGroups:
-  - certificates.k8s.io
-  resources:
-  - certificatesigningrequests
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - certificates.k8s.io
-  resources:
-  - certificatesigningrequests/approval
-  verbs:
-  - update
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
-- apiGroups:
-  - certificates.k8s.io
-  resourceNames:
-  - kubernetes.io/kubelet-serving
-  resources:
-  - signers
-  verbs:
-  - approve
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests/approval
+    verbs:
+      - update
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+  - apiGroups:
+      - certificates.k8s.io
+    resourceNames:
+      - kubernetes.io/kubelet-serving
+    resources:
+      - signers
+    verbs:
+      - approve
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -63,13 +63,13 @@ metadata:
     app.kubernetes.io/name: kubelet-serving-cert-approver
   name: events:kubelet-serving-cert-approver
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -84,9 +84,9 @@ roleRef:
   kind: ClusterRole
   name: events:kubelet-serving-cert-approver
 subjects:
-- kind: ServiceAccount
-  name: kubelet-serving-cert-approver
-  namespace: kubelet-serving-cert-approver
+  - kind: ServiceAccount
+    name: kubelet-serving-cert-approver
+    namespace: kubelet-serving-cert-approver
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -100,9 +100,9 @@ roleRef:
   kind: ClusterRole
   name: certificates:kubelet-serving-cert-approver
 subjects:
-- kind: ServiceAccount
-  name: kubelet-serving-cert-approver
-  namespace: kubelet-serving-cert-approver
+  - kind: ServiceAccount
+    name: kubelet-serving-cert-approver
+    namespace: kubelet-serving-cert-approver
 ---
 apiVersion: v1
 kind: Service
@@ -114,10 +114,10 @@ metadata:
   namespace: kubelet-serving-cert-approver
 spec:
   ports:
-  - name: metrics
-    port: 9090
-    protocol: TCP
-    targetPort: metrics
+    - name: metrics
+      port: 9090
+      protocol: TCP
+      targetPort: metrics
   selector:
     app.kubernetes.io/instance: kubelet-serving-cert-approver
     app.kubernetes.io/name: kubelet-serving-cert-approver
@@ -145,51 +145,51 @@ spec:
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - preference:
-              matchExpressions:
-              - key: node-role.kubernetes.io/control-plane
-                operator: DoesNotExist
-            weight: 100
+            - preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+              weight: 100
       containers:
-      - args:
-        - serve
-        env:
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        image: ghcr.io/alex1989hu/kubelet-serving-cert-approver:main
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: health
-          initialDelaySeconds: 6
-        name: cert-approver
-        ports:
-        - containerPort: 8080
-          name: health
-        - containerPort: 9090
-          name: metrics
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: health
-          initialDelaySeconds: 3
-        resources:
-          limits:
-            cpu: 250m
-            memory: 32Mi
-          requests:
-            cpu: 10m
-            memory: 16Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          privileged: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
+        - args:
+            - serve
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          image: ghcr.io/alex1989hu/kubelet-serving-cert-approver:main
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 6
+          name: cert-approver
+          ports:
+            - containerPort: 8080
+              name: health
+            - containerPort: 9090
+              name: metrics
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 3
+          resources:
+            limits:
+              cpu: 250m
+              memory: 32Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
       priorityClassName: system-cluster-critical
       securityContext:
         fsGroup: 65534
@@ -199,12 +199,12 @@ spec:
           type: RuntimeDefault
       serviceAccountName: kubelet-serving-cert-approver
       tolerations:
-      - effect: NoSchedule
-        key: node.cloudprovider.kubernetes.io/uninitialized
-        operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
-        operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/control-plane
-        operator: Exists
+        - effect: NoSchedule
+          key: node.cloudprovider.kubernetes.io/uninitialized
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
