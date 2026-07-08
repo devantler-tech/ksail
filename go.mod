@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v7
 
-go 1.26.4
+go 1.26.5
 
 // Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
 // ambiguous import errors. The opentelemetry stats package is included in the main
