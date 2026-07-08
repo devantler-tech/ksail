@@ -172,7 +172,14 @@ func (c *Client) ListNodegroups(
 
 	stdout, err := c.runGetJSON(
 		ctx,
-		[]string{subcommandGet, "nodegroup", "--cluster", clusterName, flagOutput, outputFormatJSON},
+		[]string{
+			subcommandGet,
+			"nodegroup",
+			"--cluster",
+			clusterName,
+			flagOutput,
+			outputFormatJSON,
+		},
 		region,
 	)
 	if err != nil {
