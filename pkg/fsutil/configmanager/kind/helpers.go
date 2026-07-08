@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/imageverifier"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -92,24 +93,15 @@ func ApplyKubeletCertRotationPatches(kindConfig *kindv1alpha4.Cluster) {
 // Verifier binaries (e.g., Cosign, Notation) must be pre-installed in the Kind node image
 // at the configured bin_dir path.
 // See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
-const ImageVerificationPatch = `# Enable the containerd image verifier plugin (requires containerd 2.x).
+//
+//nolint:gochecknoglobals // computed once from imageverifier.BindirPatch; immutable, constant-like value
+var ImageVerificationPatch = `# Enable the containerd image verifier plugin (requires containerd 2.x).
 # Verifier binaries must be pre-installed in the Kind node image at bin_dir.
 # If bin_dir is empty or missing, image pulls proceed without verification.
 # See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
-[plugins."io.containerd.image-verifier.v1.bindir"]
-bin_dir = "/opt/image-verifier/bin"
-max_verifiers = 10
-per_verifier_timeout = "10s"
-
-# --- Example: Cosign keyless verification (OIDC / Sigstore) ---
-# Install the cosign verifier binary into /opt/image-verifier/bin/ in a custom Kind node image.
-# Cosign will verify signatures using the Sigstore public good instance by default.
-# See: https://docs.sigstore.dev/cosign/
-
-# --- Example: Notation verification ---
-# Install the notation verifier binary into /opt/image-verifier/bin/ in a custom Kind node image.
-# Configure trust policies and certificates in the notation config directory.
-# See: https://notaryproject.dev/docs/`
+` + imageverifier.BindirPatch(
+	"Kind",
+)
 
 // CDIPatch is a containerd config TOML merge patch that enables CDI (Container Device Interface).
 // CDI provides a standardized mechanism for container runtimes to create containers which are able

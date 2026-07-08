@@ -109,30 +109,24 @@ func (p *Provider) WaitForDefaultServiceAccount(ctx context.Context, clusterName
 
 	var condErr error
 
-	err := wait.PollUntilContextTimeout(
-		ctx,
-		dindReadyPollInterval,
-		dindReadyTimeout,
-		true, // check before the first wait, matching the legacy deadline loop.
-		func(ctx context.Context) (bool, error) {
-			_, getErr := p.client.CoreV1().
-				ServiceAccounts(namespace).
-				Get(ctx, "default", metav1.GetOptions{})
-			if getErr == nil {
-				return true, nil
-			}
+	err := pollDinDReady(ctx, func(ctx context.Context) (bool, error) {
+		_, getErr := p.client.CoreV1().
+			ServiceAccounts(namespace).
+			Get(ctx, "default", metav1.GetOptions{})
+		if getErr == nil {
+			return true, nil
+		}
 
-			// NotFound is the not-ready condition: the SA controller is still
-			// provisioning it. Any other error is fatal.
-			if !errors.IsNotFound(getErr) {
-				condErr = fmt.Errorf("get default service account in %s: %w", namespace, getErr)
+		// NotFound is the not-ready condition: the SA controller is still
+		// provisioning it. Any other error is fatal.
+		if !errors.IsNotFound(getErr) {
+			condErr = fmt.Errorf("get default service account in %s: %w", namespace, getErr)
 
-				return false, condErr
-			}
+			return false, condErr
+		}
 
-			return false, nil
-		},
-	)
+		return false, nil
+	})
 	if err == nil {
 		return nil
 	}
@@ -151,24 +145,18 @@ func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 
 	var condErr error
 
-	err := wait.PollUntilContextTimeout(
-		ctx,
-		dindReadyPollInterval,
-		dindReadyTimeout,
-		true, // check before the first wait, matching the legacy deadline loop.
-		func(ctx context.Context) (bool, error) {
-			pod, getErr := p.client.CoreV1().
-				Pods(namespace).
-				Get(ctx, DinDPodName, metav1.GetOptions{})
-			if getErr != nil {
-				condErr = fmt.Errorf("get DinD pod: %w", getErr)
+	err := pollDinDReady(ctx, func(ctx context.Context) (bool, error) {
+		pod, getErr := p.client.CoreV1().
+			Pods(namespace).
+			Get(ctx, DinDPodName, metav1.GetOptions{})
+		if getErr != nil {
+			condErr = fmt.Errorf("get DinD pod: %w", getErr)
 
-				return false, condErr
-			}
+			return false, condErr
+		}
 
-			return dindContainerReady(pod), nil
-		},
-	)
+		return dindContainerReady(pod), nil
+	})
 	if err == nil {
 		return nil
 	}
@@ -178,6 +166,19 @@ func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 		condErr,
 		"waiting for DinD",
 		fmt.Errorf("%w: %v", ErrDinDNotReady, dindReadyTimeout),
+	)
+}
+
+// pollDinDReady runs check on the DinD readiness poll/timeout cadence shared by
+// WaitForDefaultServiceAccount and WaitForDinD — the two callers differ only in what they check
+// each tick and how they classify a fatal condition error.
+func pollDinDReady(ctx context.Context, check wait.ConditionWithContextFunc) error {
+	return wait.PollUntilContextTimeout( //nolint:wrapcheck // callers pass the raw error to mapWaitError
+		ctx,
+		dindReadyPollInterval,
+		dindReadyTimeout,
+		true, // check before the first wait, matching the legacy deadline loop.
+		check,
 	)
 }
 
