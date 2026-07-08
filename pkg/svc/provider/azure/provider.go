@@ -132,21 +132,20 @@ func (p *Provider) ListNodes(
 // resource group (the whole subscription when the provider was built with an
 // empty resource group).
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	clusters, err := p.client.ListClusters(ctx, p.resourceGroup)
+	clusters, err := provider.FetchOrTranslate(
+		p.client != nil,
+		func() ([]*armcontainerservice.ManagedCluster, error) {
+			return p.client.ListClusters(ctx, p.resourceGroup)
+		},
+		translateClientErr,
+	)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		names = append(names, derefString(cluster.Name))
-	}
-
-	return names, nil
+	return provider.NamesFrom(clusters, func(c *armcontainerservice.ManagedCluster) string {
+		return derefString(c.Name)
+	}), nil
 }
 
 // NodesExist returns true if the cluster has at least one agent pool.

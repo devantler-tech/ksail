@@ -1,6 +1,10 @@
 package k3sbootstrap
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/internal/sliceutil"
+)
 
 // PlanInput describes the topology of a K3s cluster to bootstrap across a set of
 // freshly-provisioned servers (e.g. Hetzner Cloud servers). It is the typed input
@@ -70,37 +74,35 @@ type Node struct {
 // missing ServerURL when joining nodes are present) is reported instead of a
 // partial plan.
 func Plan(input PlanInput) ([]Node, error) {
-	err := input.validate()
+	nodes, err := sliceutil.ValidateAndPrealloc[Node](input.validate, input.nodeCount())
 	if err != nil {
 		return nil, err
 	}
 
-	nodes := make([]Node, 0, input.ControlPlaneCount+input.AgentCount)
-
 	// The first control-plane node initialises the cluster and must not carry a
 	// ServerURL; the remaining control-plane nodes join it.
-	nodes = append(nodes, Node{Index: 0, Config: input.serverConfig(RoleServerInit, "")})
-
-	for range input.ControlPlaneCount - 1 {
-		nodes = append(nodes, Node{
-			Index:  len(nodes),
-			Config: input.serverConfig(RoleServer, input.ServerURL),
-		})
-	}
-
-	for range input.AgentCount {
-		nodes = append(nodes, Node{
-			Index: len(nodes),
-			Config: InstallConfig{
+	nodes = sliceutil.AssignNodes(
+		nodes, input.ControlPlaneCount, input.AgentCount,
+		func(index int, config InstallConfig) Node { return Node{Index: index, Config: config} },
+		func() InstallConfig { return input.serverConfig(RoleServerInit, "") },
+		func() InstallConfig { return input.serverConfig(RoleServer, input.ServerURL) },
+		func() InstallConfig {
+			return InstallConfig{
 				Version:   input.Version,
 				Role:      RoleAgent,
 				Token:     input.Token,
 				ServerURL: input.ServerURL,
-			},
-		})
-	}
+			}
+		},
+	)
 
 	return nodes, nil
+}
+
+// nodeCount is the total number of nodes (control-plane + agent) the plan expands to —
+// the capacity Plan preallocates its result slice with.
+func (input PlanInput) nodeCount() int {
+	return input.ControlPlaneCount + input.AgentCount
 }
 
 // validate reports the first error in input, or nil when it describes a cluster
