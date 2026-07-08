@@ -26,3 +26,15 @@ func SortedNonEmpty(values []string) []string {
 
 	return out
 }
+
+// ValidateAndPrealloc runs validate and, on success, returns a freshly allocated slice of the
+// given capacity — the validate-then-preallocate prelude shared by every distribution's Plan
+// (k3s, kubeadm) before they diverge on how they populate the plan's nodes.
+func ValidateAndPrealloc[N any](validate func() error, capacity int) ([]N, error) {
+	err := validate()
+	if err != nil {
+		return nil, err
+	}
+
+	return make([]N, 0, capacity), nil
+}

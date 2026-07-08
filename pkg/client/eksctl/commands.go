@@ -8,6 +8,16 @@ import (
 	"strings"
 )
 
+// flagOutput is the eksctl flag requesting machine-readable output, shared by every
+// `eksctl get …` invocation in this file.
+const flagOutput = "--output"
+
+// subcommandGet is the eksctl "get" subcommand, shared by every read-only listing call in this file.
+const subcommandGet = "get"
+
+// outputFormatJSON is the eksctl --output value requesting JSON, shared by every listing call.
+const outputFormatJSON = "json"
+
 // ClusterSummary represents a single cluster entry returned by
 // `eksctl get cluster -o json`. Field tags preserve eksctl's PascalCase
 // JSON keys (eksctl emits these names verbatim).
@@ -98,12 +108,11 @@ func (c *Client) GetCluster(
 		return nil, ErrEmptyClusterName
 	}
 
-	args := []string{"get", "cluster", "--name", name, "--output", "json"}
-	if region != "" {
-		args = append(args, "--region", region)
-	}
-
-	stdout, _, err := c.Exec(ctx, args...)
+	stdout, err := c.getClusterJSON(
+		ctx,
+		[]string{subcommandGet, "cluster", "--name", name, flagOutput, outputFormatJSON},
+		region,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +133,21 @@ func (c *Client) GetCluster(
 // Pass "" for region to rely on eksctl's default (AWS_REGION env or
 // AWS profile).
 func (c *Client) ListClusters(ctx context.Context, region string) ([]ClusterSummary, error) {
-	args := []string{"get", "cluster", "--output", "json"}
+	stdout, err := c.getClusterJSON(
+		ctx,
+		[]string{subcommandGet, "cluster", flagOutput, outputFormatJSON},
+		region,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseClusterSummaries(stdout)
+}
+
+// getClusterJSON appends --region (when set) to args and runs it via eksctl, returning stdout — the
+// exec/error-handling shared by GetCluster and ListClusters before they diverge on how they parse it.
+func (c *Client) getClusterJSON(ctx context.Context, args []string, region string) ([]byte, error) {
 	if region != "" {
 		args = append(args, "--region", region)
 	}
@@ -134,7 +157,7 @@ func (c *Client) ListClusters(ctx context.Context, region string) ([]ClusterSumm
 		return nil, err
 	}
 
-	return parseClusterSummaries(stdout)
+	return stdout, nil
 }
 
 // ListNodegroups returns the nodegroup summaries for a named cluster.
@@ -147,9 +170,9 @@ func (c *Client) ListNodegroups(
 	}
 
 	args := []string{
-		"get", "nodegroup",
+		subcommandGet, "nodegroup",
 		"--cluster", clusterName,
-		"--output", "json",
+		flagOutput, outputFormatJSON,
 	}
 	if region != "" {
 		args = append(args, "--region", region)

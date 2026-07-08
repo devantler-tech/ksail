@@ -1,6 +1,10 @@
 package kubeadmbootstrap
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/internal/sliceutil"
+)
 
 // PlanInput describes the topology of a kubeadm cluster to bootstrap across a set
 // of freshly-provisioned servers (e.g. Hetzner Cloud servers). It is the typed
@@ -85,12 +89,12 @@ type Node struct {
 // malformed API server endpoint / CA cert hash when joining nodes are present) is
 // reported instead of a partial plan.
 func Plan(input PlanInput) ([]Node, error) {
-	err := input.validate()
+	nodes, err := sliceutil.ValidateAndPrealloc[Node](
+		input.validate, input.ControlPlaneCount+input.AgentCount,
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	nodes := make([]Node, 0, input.ControlPlaneCount+input.AgentCount)
 
 	// The first control-plane node initialises the cluster and joins nothing; the
 	// remaining control-plane nodes and the agents join it.

@@ -110,6 +110,29 @@ func EnsureAvailableAndListNodes(
 	return nodes, nil
 }
 
+// FetchOrTranslate guards against an unavailable client, runs fetch, and translates any error via
+// translateErr — the nil-check/error-wrap prelude shared by every provider's client-backed listing
+// method (ListAllClusters, ListNodes, …), which otherwise differ only in what fetch actually calls
+// and how the raw result is translated into that provider's own error types.
+func FetchOrTranslate[T any](
+	available bool,
+	fetch func() (T, error),
+	translateErr func(error) error,
+) (T, error) {
+	var zero T
+
+	if !available {
+		return zero, ErrProviderUnavailable
+	}
+
+	result, err := fetch()
+	if err != nil {
+		return zero, translateErr(err)
+	}
+
+	return result, nil
+}
+
 // CheckNodesExist returns true if the given cluster has at least one node.
 // This is a shared helper for provider implementations that delegate
 // NodesExist to ListNodes.

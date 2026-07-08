@@ -15,7 +15,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
-	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
@@ -643,14 +642,12 @@ func importCachedImages(
 	})
 
 	// Use the existing image import functionality
-	dockerClient, err := docker.GetDockerClient()
+	importer, cleanup, err := imagesvc.NewImporterFromDefaultClient()
 	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
+		return err //nolint:wrapcheck // NewImporterFromDefaultClient already labels the error
 	}
 
-	defer func() { _ = dockerClient.Close() }()
-
-	importer := imagesvc.NewImporter(dockerClient)
+	defer cleanup()
 
 	// Resolve cluster name from distribution configs
 	clusterName := resolveClusterNameFromContext(ctx)
