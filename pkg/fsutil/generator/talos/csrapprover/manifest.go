@@ -13,7 +13,7 @@ package csrapprover
 import _ "embed"
 
 // manifestTemplate is the kubelet-serving-cert-approver standalone deployment manifest,
-// embedded verbatim from manifest.yaml so it stays a byte-for-byte, easily diffable copy of
+// embedded from manifest.yaml — content-identical (Prettier reformats indentation on save) to
 // https://github.com/alex1989hu/kubelet-serving-cert-approver/blob/main/deploy/standalone-install.yaml
 // (the upstream-recommended :main image tag) — kept as a real .yaml file, not an inline Go string
 // literal, so the repo's manifest-hygiene tooling (kubeconform, jscpd) treats it as the vendored data
