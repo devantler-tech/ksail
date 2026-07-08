@@ -46,10 +46,7 @@ var ErrBuildFailed = errors.New("build failed")
 const validateLongDescription = `Validate Kubernetes manifest files and kustomizations using kubeconform.
 
 This command validates individual YAML files and kustomizations in the specified path.
-If no path is provided, the path is resolved in order:
-  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
-  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
-  3. The current directory (fallback when no ksail.yaml config file is found)
+` + sourcePathResolutionHelp + `
 
 The validation process:
 1. Validates individual YAML files (patch files referenced in a kustomization file via patches,

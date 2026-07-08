@@ -10,6 +10,7 @@ import (
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 )
 
 // MirrorSpec represents a parsed mirror registry specification entry.
@@ -33,6 +34,32 @@ func (m MirrorSpec) ResolveCredentials() (username, password string) {
 // HasCredentials returns true if the spec has non-empty username or password.
 func (m MirrorSpec) HasCredentials() bool {
 	return m.Username != "" || m.Password != ""
+}
+
+// BuildTalosMirrorRegistries converts mirrorSpecs into the Talos machine config's mirror-registry
+// shape, pointing each at its in-cluster registry container (by Docker DNS name, prefixed with
+// clusterName to avoid collisions) and resolving credential env-var placeholders. Shared by the
+// mirrorregistry CLI setup and the nested-Docker (DinD) Talos provisioner, which both need to point a
+// Talos config's registries.mirrors at the same container-name convention.
+func BuildTalosMirrorRegistries(
+	mirrorSpecs []MirrorSpec,
+	clusterName string,
+) []talosconfigmanager.MirrorRegistry {
+	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
+
+	for _, spec := range mirrorSpecs {
+		containerName := BuildRegistryName(clusterName, spec.Host)
+		username, password := spec.ResolveCredentials()
+
+		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+			Host:      spec.Host,
+			Endpoints: []string{"http://" + containerName + ":5000"},
+			Username:  username,
+			Password:  password,
+		})
+	}
+
+	return mirrors
 }
 
 // MirrorEntry contains the normalized data required to create a registry mirror.

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v7/pkg/svc/image"
@@ -85,14 +84,12 @@ func executeImport(
 	ctx *imageCommandContext,
 	inputPath string,
 ) error {
-	dockerClient, err := docker.GetDockerClient()
+	importer, cleanup, err := imagesvc.NewImporterFromDefaultClient()
 	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
+		return err //nolint:wrapcheck // NewImporterFromDefaultClient already labels the error
 	}
 
-	defer func() { _ = dockerClient.Close() }()
-
-	importer := imagesvc.NewImporter(dockerClient)
+	defer cleanup()
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,

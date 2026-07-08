@@ -434,13 +434,13 @@ func (p *Provisioner) waitForReplacementNodeReady(
 		ctx,
 		nodeReadinessTimeout,
 		func(ctx context.Context) (bool, error) {
-			nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+			nodes, err := readiness.ListNodesOrContinue(ctx, clientset)
 			if err != nil {
-				return false, nil //nolint:nilerr // returning nil to continue polling
+				return false, err //nolint:wrapcheck // ListNodesOrContinue never returns non-nil today; kept defensively
 			}
 
-			for i := range nodes.Items {
-				node := &nodes.Items[i]
+			for i := range nodes {
+				node := &nodes[i]
 				if !nodeMatchesServer(node, server.Name, serverIP) {
 					continue
 				}
