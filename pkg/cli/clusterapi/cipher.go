@@ -33,6 +33,30 @@ func secretFileExtension(format string) string {
 	return ".yaml"
 }
 
+// prepareSecretFile stages content in a temp file (via writeTempSecret) and selects its SOPS
+// input/output stores via storeSelector (sopsclient.GetStores for encrypt,
+// sopsclient.GetDecryptStores for decrypt) — the setup shared by EncryptSecret and DecryptSecret
+// before they diverge on the actual cipher operation. On a store-selection error the temp file is
+// cleaned up before returning.
+func prepareSecretFile(
+	content, format string,
+	storeSelector func(path string) (sops.Store, sops.Store, error),
+) (path string, inputStore, outputStore sops.Store, cleanup func(), err error) {
+	path, cleanup, err = writeTempSecret(content, format)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
+	inputStore, outputStore, err = storeSelector(path)
+	if err != nil {
+		cleanup()
+
+		return "", nil, nil, nil, fmt.Errorf("select sops store: %w", err)
+	}
+
+	return path, inputStore, outputStore, cleanup, nil
+}
+
 // writeTempSecret stages content in a 0600 temp file with the format's extension and returns the
 // path + a cleanup func. SOPS reads its input from a file path, so in-process encrypt/decrypt write
 // to a short-lived temp file (owner-only, removed immediately after) rather than holding it on disk.
@@ -91,16 +115,11 @@ func (s *Service) EncryptSecret(
 		return "", fmt.Errorf("%w: invalid age recipient: %w", api.ErrInvalid, err)
 	}
 
-	path, cleanup, err := writeTempSecret(plaintext, format)
+	path, inputStore, outputStore, cleanup, err := prepareSecretFile(plaintext, format, sopsclient.GetStores)
 	if err != nil {
 		return "", err
 	}
 	defer cleanup()
-
-	inputStore, outputStore, err := sopsclient.GetStores(path)
-	if err != nil {
-		return "", fmt.Errorf("select sops store: %w", err)
-	}
 
 	encrypted, err := sopsclient.Encrypt(sopsclient.EncryptOpts{
 		EncryptConfig: sopsclient.EncryptConfig{KeyGroups: []sops.KeyGroup{{masterKey}}},
@@ -123,16 +142,15 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 		return "", fmt.Errorf("%w: encrypted input is empty", api.ErrInvalid)
 	}
 
-	path, cleanup, err := writeTempSecret(encrypted, format)
+	getDecryptStores := func(p string) (sops.Store, sops.Store, error) {
+		return sopsclient.GetDecryptStores(p, false)
+	}
+
+	path, inputStore, outputStore, cleanup, err := prepareSecretFile(encrypted, format, getDecryptStores)
 	if err != nil {
 		return "", err
 	}
 	defer cleanup()
-
-	inputStore, outputStore, err := sopsclient.GetDecryptStores(path, false)
-	if err != nil {
-		return "", fmt.Errorf("select sops store: %w", err)
-	}
 
 	decrypted, err := sopsclient.Decrypt(sopsclient.DecryptOpts{
 		Cipher:      aes.NewCipher(),

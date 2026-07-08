@@ -55,3 +55,16 @@ GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; n
 GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
 GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
 GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via symlink (CVE-2026-53489; transitive; no v1 fix; path unused)
+
+# --- golang.org/x/crypto/openpgp @ v0.53.0 (transitive via Helm) ------------
+# Published 2026-07-08. This is a package-level "unmaintained, don't use" design
+# advisory (no CVE, no patchable bug — `Fixed in: N/A` is permanent, not
+# pending). Reachability chain: pkg/client/kubescape -> kubescape/v3/core/cautils
+# -> helm.sh/helm/v3/pkg/downloader -> helm.sh/helm/v3/pkg/provenance ->
+# x/crypto/openpgp (Helm's chart-provenance/PGP-signature verification). ksail
+# embeds the kubescape library for `workload scan` policy scanning only; it
+# never calls Helm's provenance/PGP verification APIs itself. No upstream fix
+# exists (the maintainers' guidance is "migrate off the package entirely", not
+# "wait for a patch") and ksail does not control Helm's or kubescape's internal
+# dependency choice. Re-evaluate if kubescape or Helm migrate off x/crypto/openpgp.
+GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via helm provenance; no fix; path unused)
