@@ -25,12 +25,20 @@ const provisioningStateSucceeded = "Succeeded"
 // not carry — a documented limitation of this increment. It returns
 // clustererr.ErrKubeconfigNotReady until the cluster's provisioning state is
 // Succeeded so the caller requeues.
+//
+//nolint:wrapcheck // WithResolvedTarget already labels the error; nothing to add here.
 func (p *Provisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
-	target := p.resolveName(name)
-	if target == "" {
-		return nil, fmt.Errorf("%w: no cluster name configured", ErrClusterNotFound)
-	}
+	return clustererr.WithResolvedTarget(
+		ctx,
+		p.resolveName,
+		name,
+		ErrClusterNotFound,
+		p.kubeconfigForTarget,
+	)
+}
 
+// kubeconfigForTarget fetches the AKS kubeconfig for an already-resolved target name.
+func (p *Provisioner) kubeconfigForTarget(ctx context.Context, target string) ([]byte, error) {
 	resourceGroup, err := p.resolveResourceGroup(ctx, target)
 	if err != nil {
 		return nil, err
