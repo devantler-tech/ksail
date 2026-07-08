@@ -11,5 +11,5 @@ description: Dependabot version pin for the hcloud-csi Helm chart (not a deploya
 version: 0.0.0
 dependencies:
   - name: hcloud-csi
-    version: 2.21.2
+    version: 2.22.0
     repository: https://charts.hetzner.cloud
