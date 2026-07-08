@@ -10,9 +10,9 @@ import (
 )
 
 // steerIptablesBinary is the command the steering agent drives to install and
-// remove its NAT REDIRECT rule; netshoot ([DefaultSteerImage]) ships it. It is
-// the name RunSteerAgent hands the [SteerCommandRunner]; the runner owns how it
-// is actually launched.
+// remove its NAT REDIRECT rule; the steering image ([DefaultSteerImage]) ships
+// it. It is the name RunSteerAgent hands the [SteerCommandRunner]; the runner
+// owns how it is actually launched.
 const steerIptablesBinary = "iptables"
 
 // steerTeardownTimeout bounds the rule-removal command so a wedged iptables at

@@ -98,7 +98,6 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
-  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -387,6 +386,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload apply [command] --help" for more information about a command.
 
@@ -429,6 +429,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -461,6 +462,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -491,6 +493,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -573,6 +576,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload create [command] --help" for more information about a command.
 
@@ -622,6 +626,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -653,6 +658,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -702,6 +708,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -738,6 +745,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -783,6 +791,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -825,6 +834,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -892,6 +902,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -927,6 +938,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -967,6 +979,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -997,6 +1010,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1035,6 +1049,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1075,6 +1090,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1110,6 +1126,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1149,6 +1166,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1184,6 +1202,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1211,6 +1230,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload create secret [command] --help" for more information about a command.
 
@@ -1260,6 +1280,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1310,6 +1331,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1342,6 +1364,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1367,6 +1390,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload create service [command] --help" for more information about a command.
 
@@ -1401,6 +1425,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1432,6 +1457,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1460,6 +1486,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1489,6 +1516,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1519,6 +1547,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1539,6 +1568,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload create source [command] --help" for more information about a command.
 
@@ -1581,6 +1611,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1612,6 +1643,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1648,6 +1680,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1691,6 +1724,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1779,6 +1813,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1862,6 +1897,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1923,6 +1959,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1949,6 +1986,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2013,6 +2051,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2066,6 +2105,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2102,6 +2142,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2181,6 +2222,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2243,6 +2285,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2278,6 +2321,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload gen [command] --help" for more information about a command.
 
@@ -2343,6 +2387,14 @@ Examples:
     --values-from=Secret/my-secret-values \
     --export
 
+  # Generate a HelmRelease injecting a literal value (e.g. a config file) at a
+  # target path without Helm --set interpretation
+  ksail workload gen helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --values-from-literal=ConfigMap/app-config/config.json@app.configJson \
+    --export
+
   # Generate a HelmRelease with a custom release name
   ksail workload gen helmrelease podinfo \
     --release-name=podinfo-dev \
@@ -2385,10 +2437,12 @@ Flags:
       --timeout duration               timeout for any individual Kubernetes operation (default 5m0s)
       --values strings                 local values YAML files
       --values-from strings            values from ConfigMap or Secret
+      --values-from-literal strings    literal value from a ConfigMap or Secret merged at a target path without Helm's --set interpretation (Kind/Name/valuesKey@targetPath)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2561,6 +2615,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2612,6 +2667,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2642,6 +2698,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2663,6 +2720,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2768,6 +2826,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2812,6 +2871,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2829,6 +2889,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2885,6 +2946,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload rollout [command] --help" for more information about a command.
 
@@ -2918,6 +2980,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2950,6 +3013,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -2989,6 +3053,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3019,6 +3084,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3047,6 +3113,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3082,6 +3149,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3146,6 +3214,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3198,6 +3267,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3248,6 +3318,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3308,6 +3379,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3365,6 +3437,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3420,7 +3493,6 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
-  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -3436,6 +3508,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload [command] --help" for more information about a command.
 
@@ -3509,6 +3582,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3549,6 +3623,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3584,6 +3659,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3610,6 +3686,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3641,6 +3718,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 Use "ksail workload cipher [command] --help" for more information about a command.
 
@@ -3681,6 +3759,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3736,6 +3815,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -3791,6 +3871,7 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
