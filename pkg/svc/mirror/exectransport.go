@@ -177,6 +177,19 @@ func (t *ExecTransport) run(ctx context.Context, executor CaptureExecutor) {
 	_ = t.stdinReader.CloseWithError(io.EOF)
 }
 
+// execURL builds the exec-subresource URL for the tapped pod, running the
+// given PodExecOptions in one of its containers. It is the single home for the
+// pods/exec REST-request chain shared by the stream and capture builders.
+func execURL(client kubernetes.Interface, point *TapPoint, opts *corev1.PodExecOptions) *url.URL {
+	return client.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(point.Pod).
+		Namespace(point.Namespace).
+		SubResource("exec").
+		VersionedParams(opts, scheme.ParameterCodec).
+		URL()
+}
+
 // execStreamURL builds the exec-subresource URL for a bidirectional stream
 // (stdin + stdout) running command in the named container of the tapped pod.
 func execStreamURL(
@@ -185,17 +198,11 @@ func execStreamURL(
 	container string,
 	command []string,
 ) *url.URL {
-	return client.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(point.Pod).
-		Namespace(point.Namespace).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: container,
-			Command:   command,
-			Stdin:     true,
-			Stdout:    true,
-			Stderr:    true,
-		}, scheme.ParameterCodec).
-		URL()
+	return execURL(client, point, &corev1.PodExecOptions{
+		Container: container,
+		Command:   command,
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+	})
 }
