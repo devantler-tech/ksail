@@ -489,14 +489,10 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 // Node start is delegated to the infrastructure provider; readiness waiting is
 // then specialized per provider type.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-
-	infraProvider, err := p.nodeLifecycleProvider()
+	clusterName, infraProvider, err := p.beginNodeLifecycleOp(name, "Starting")
 	if err != nil {
 		return err
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
 
 	err = infraProvider.StartNodes(ctx, clusterName)
 	if err != nil {
@@ -528,14 +524,10 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 // If name is non-empty, it overrides the configured cluster name.
 // Node stop is delegated to the infrastructure provider.
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-
-	infraProvider, err := p.nodeLifecycleProvider()
+	clusterName, infraProvider, err := p.beginNodeLifecycleOp(name, "Stopping")
 	if err != nil {
 		return err
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
 
 	err = infraProvider.StopNodes(ctx, clusterName)
 	if err != nil {
@@ -545,6 +537,22 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
 
 	return nil
+}
+
+// beginNodeLifecycleOp resolves the target cluster name, fetches the node-lifecycle provider, and
+// logs the given present-participle verb (e.g. "Starting", "Stopping") — the setup shared by Start
+// and Stop before they diverge on which provider method to call and how to wait for readiness.
+func (p *Provisioner) beginNodeLifecycleOp(name, verb string) (string, provider.Provider, error) {
+	clusterName := p.resolveClusterName(name)
+
+	infraProvider, err := p.nodeLifecycleProvider()
+	if err != nil {
+		return "", nil, err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "%s Talos cluster %q...\n", verb, clusterName)
+
+	return clusterName, infraProvider, nil
 }
 
 // nodeLifecycleProvider returns the infrastructure provider used for node

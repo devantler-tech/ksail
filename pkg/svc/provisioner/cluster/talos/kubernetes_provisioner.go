@@ -595,19 +595,7 @@ func (p *KubernetesProvisioner) setupDinDMirrors(
 // applyMirrorsToTalosConfig points the nested Talos machine config's
 // registries.mirrors at the in-DinD registry containers (by Docker DNS name).
 func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) error {
-	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(p.mirrorSpecs))
-
-	for _, spec := range p.mirrorSpecs {
-		containerName := registry.BuildRegistryName(clusterName, spec.Host)
-		username, password := spec.ResolveCredentials()
-
-		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
-			Host:      spec.Host,
-			Endpoints: []string{"http://" + containerName + ":5000"},
-			Username:  username,
-			Password:  password,
-		})
-	}
+	mirrors := registry.BuildTalosMirrorRegistries(p.mirrorSpecs, clusterName)
 
 	err := p.inner.talosConfigs.ApplyMirrorRegistries(mirrors)
 	if err != nil {
