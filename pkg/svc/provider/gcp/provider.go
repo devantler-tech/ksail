@@ -127,12 +127,10 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		names = append(names, cluster.GetName())
-	}
-
-	return names, nil
+	return provider.NamesFrom(
+		clusters,
+		func(c *containerpb.Cluster) string { return c.GetName() },
+	), nil
 }
 
 // NodesExist returns true if the cluster has at least one node pool.

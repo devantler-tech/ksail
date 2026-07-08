@@ -143,12 +143,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		names = append(names, derefString(cluster.Name))
-	}
-
-	return names, nil
+	return provider.NamesFrom(clusters, func(c *armcontainerservice.ManagedCluster) string {
+		return derefString(c.Name)
+	}), nil
 }
 
 // NodesExist returns true if the cluster has at least one agent pool.

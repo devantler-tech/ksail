@@ -133,6 +133,18 @@ func FetchOrTranslate[T any](
 	return result, nil
 }
 
+// NamesFrom projects a slice of client-returned items into their display names via nameOf — the
+// make/range/append boilerplate shared by every cloud provider's ListAllClusters once
+// FetchOrTranslate has returned the raw item list.
+func NamesFrom[T any](items []T, nameOf func(T) string) []string {
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		names = append(names, nameOf(item))
+	}
+
+	return names
+}
+
 // CheckNodesExist returns true if the given cluster has at least one node.
 // This is a shared helper for provider implementations that delegate
 // NodesExist to ListNodes.
