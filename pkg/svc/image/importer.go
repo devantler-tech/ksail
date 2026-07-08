@@ -38,6 +38,19 @@ func NewImporter(dockerClient dockerclient.Client) *Importer {
 	}
 }
 
+// NewImporterFromDefaultClient connects to the default Docker client and wraps it in an Importer, so
+// a caller that just needs "the importer" (not a specific injected client) does not have to repeat the
+// connect/wrap/cleanup boilerplate — the setup shared by every CLI command that imports images. The
+// returned cleanup func is always non-nil and safe to defer, even when err is non-nil.
+func NewImporterFromDefaultClient() (*Importer, func(), error) {
+	dockerClient, err := dockerclient.GetDockerClient()
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	return NewImporter(dockerClient), func() { _ = dockerClient.Close() }, nil
+}
+
 // Import imports container images to the cluster's containerd runtime.
 func (i *Importer) Import(
 	ctx context.Context,
