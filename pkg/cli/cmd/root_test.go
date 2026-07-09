@@ -98,6 +98,26 @@ func TestNewRootCmdBenchmarkFlagDefaultFalse(t *testing.T) {
 	}
 }
 
+func TestNewRootCmdExperimentalFlagDefaultFalse(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "test", "test")
+
+	flag := root.PersistentFlags().Lookup(flags.ExperimentalFlagName)
+	if flag == nil {
+		t.Fatalf("expected persistent flag %q to exist", flags.ExperimentalFlagName)
+	}
+
+	got, err := root.PersistentFlags().GetBool(flags.ExperimentalFlagName)
+	if err != nil {
+		t.Fatalf("expected to read %q flag: %v", flags.ExperimentalFlagName, err)
+	}
+
+	if got {
+		t.Fatalf("expected %q to default to false", flags.ExperimentalFlagName)
+	}
+}
+
 func TestDefaultRunDoesNotPrintBenchmarkOutput(t *testing.T) {
 	t.Parallel()
 

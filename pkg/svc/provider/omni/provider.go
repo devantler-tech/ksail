@@ -66,16 +66,7 @@ func (p *Provider) Close() error {
 // It validates that the cluster has nodes and returns provider.ErrNoNodes
 // when no nodes exist for the given cluster.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	if len(nodes) == 0 {
-		return provider.ErrNoNodes
-	}
-
-	return nil
+	return p.ensureNodesExist(ctx, clusterName)
 }
 
 // StopNodes is a no-op for Omni. Omni manages the machine lifecycle
@@ -83,16 +74,7 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 // It validates that the cluster has nodes and returns provider.ErrNoNodes
 // when no nodes exist for the given cluster.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	if len(nodes) == 0 {
-		return provider.ErrNoNodes
-	}
-
-	return nil
+	return p.ensureNodesExist(ctx, clusterName)
 }
 
 // ListNodes returns all machines allocated to the given cluster in Omni.
@@ -506,6 +488,22 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	return ids, nil
+}
+
+// ensureNodesExist lists the cluster's nodes and returns provider.ErrNoNodes when none exist — the
+// validation shared by StartNodes and StopNodes, both of which are otherwise no-ops since Omni
+// manages the machine lifecycle itself.
+func (p *Provider) ensureNodesExist(ctx context.Context, clusterName string) error {
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if len(nodes) == 0 {
+		return provider.ErrNoNodes
+	}
+
+	return nil
 }
 
 // destroyIfOrphaned destroys a MachineSetNode whose parent cluster no longer exists.

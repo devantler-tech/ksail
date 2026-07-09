@@ -4,11 +4,7 @@
    and a warm signal-coral pop. Dark-first, with a clear light counterpart.
    ========================================================================= */
 
-/* ----------------------------------------------------------------------- */
-
-/*  Typography                                                             */
-
-/* ----------------------------------------------------------------------- */
+/* Typography */
 :root {
   --sl-font: "Hanken Grotesque", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, helvetica, arial, sans-serif;
   --sl-font-mono: "JetBrains Mono", ui-monospace, sfmono-regular, menlo, consolas, monospace;
@@ -59,11 +55,7 @@
   --ksail-glow: 0 0 0 1px #ffffff10, 0 18px 48px -24px #000c;
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Color — light theme                                                    */
-
-/* ----------------------------------------------------------------------- */
+/* Color — light theme */
 :root[data-theme="light"] {
   --sl-color-white: #0a1622;
   --sl-color-gray-1: #16293a;
@@ -92,11 +84,7 @@
   --ksail-glow: 0 0 0 1px #0a16220d, 0 16px 40px -28px #1c405a59;
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Global atmosphere & base                                               */
-
-/* ----------------------------------------------------------------------- */
+/* Global atmosphere & base */
 html {
   scroll-behavior: smooth;
 }
@@ -151,11 +139,7 @@ body {
   text-decoration-color: var(--sl-color-text-accent);
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Hero (splash homepage)                                                 */
-
-/* ----------------------------------------------------------------------- */
+/* Hero (splash homepage) */
 .hero {
   position: relative;
   padding: clamp(1.75rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3.5rem);
@@ -228,11 +212,7 @@ body {
   .sl-link-button { transition: none; }
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Buttons (hero actions)                                                 */
-
-/* ----------------------------------------------------------------------- */
+/* Buttons (hero actions) */
 .sl-link-button {
   border-radius: 0.7rem;
   font-weight: 600;
@@ -264,19 +244,20 @@ body {
   background: color-mix(in oklab, var(--ksail-cyan) 10%, transparent);
 }
 
-/* ----------------------------------------------------------------------- */
+/* Cards & CardGrid */
 
-/*  Cards & CardGrid                                                       */
-
-/* ----------------------------------------------------------------------- */
-.card {
+/* Cards and LinkCards (feature overview) share the same surface treatment, so
+   they are styled together rather than duplicated. */
+.card,
+.sl-link-card {
   border: 1px solid var(--ksail-border);
   border-radius: 1rem;
   background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.card:hover {
+.card:hover,
+.sl-link-card:hover {
   transform: translateY(-3px);
   border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
   box-shadow: var(--ksail-glow);
@@ -286,25 +267,7 @@ body {
   color: var(--ksail-cyan-bright);
 }
 
-.card .title {
-  font-family: var(--ksail-font-display);
-  letter-spacing: -0.01em;
-}
-
-/* LinkCards (feature overview) share the Card surface treatment. */
-.sl-link-card {
-  border: 1px solid var(--ksail-border);
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.sl-link-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
-  box-shadow: var(--ksail-glow);
-}
-
+.card .title,
 .sl-link-card .title {
   font-family: var(--ksail-font-display);
   letter-spacing: -0.01em;
@@ -321,11 +284,7 @@ body {
   background: var(--sl-color-bg-inline-code);
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Code blocks & inline code                                              */
-
-/* ----------------------------------------------------------------------- */
+/* Code blocks & inline code */
 pre {
   border-radius: 0.85rem;
   border: 1px solid var(--sl-color-hairline);
@@ -339,11 +298,7 @@ pre {
   font-size: 0.85em;
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Tables — readable, bordered, no forced nowrap                          */
-
-/* ----------------------------------------------------------------------- */
+/* Tables — readable, bordered, no forced nowrap */
 .sl-markdown-content table {
   display: table;
   width: 100%;
@@ -384,11 +339,7 @@ pre {
   }
 }
 
-/* ----------------------------------------------------------------------- */
-
-/*  Navigation & misc polish                                               */
-
-/* ----------------------------------------------------------------------- */
+/* Navigation & misc polish */
 header.header {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--sl-color-hairline);

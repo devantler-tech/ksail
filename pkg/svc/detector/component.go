@@ -642,6 +642,23 @@ func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[strin
 	if capacityBuffers, ok := args["capacity-buffer-controller-enabled"].(bool); ok {
 		cfg.CapacityBuffers = capacityBuffers
 	}
+
+	// ignoreDaemonsetsUtilization is a plain bool (off by default); the installer
+	// omits the flag when false, so an absent key leaves cfg's zero value (false).
+	if ignoreDaemonsets, ok := args["ignore-daemonsets-utilization"].(bool); ok {
+		cfg.IgnoreDaemonsetsUtilization = ignoreDaemonsets
+	}
+
+	// skipNodesWith* are *bool: the installer omits the flag when unset, so an
+	// absent key leaves cfg's nil pointer (inherits the upstream default true).
+	// A present key is an explicit true/false and is preserved as a non-nil value.
+	if skipLocalStorage, ok := args["skip-nodes-with-local-storage"].(bool); ok {
+		cfg.SkipNodesWithLocalStorage = &skipLocalStorage
+	}
+
+	if skipSystemPods, ok := args["skip-nodes-with-system-pods"].(bool); ok {
+		cfg.SkipNodesWithSystemPods = &skipSystemPods
+	}
 }
 
 // helmExpandersToEnum reverses the Helm chart's expander value — a single

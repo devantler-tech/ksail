@@ -13,11 +13,13 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
@@ -79,6 +81,7 @@ func runInfoCmd(
 		resolved.Provider,
 		resolved.ClusterName,
 		resolved.OmniOpts,
+		resolved.AWSRegion,
 	)
 
 	if errors.Is(provErr, errUnsupportedProvider) {
@@ -208,6 +211,7 @@ func getProviderStatus(
 	prov v1alpha1.Provider,
 	clusterName string,
 	omniOpts v1alpha1.OptionsOmni,
+	awsRegion string,
 ) (*provider.ClusterStatus, error) {
 	switch prov {
 	case v1alpha1.ProviderDocker, "":
@@ -216,9 +220,10 @@ func getProviderStatus(
 		return getHetznerProviderStatus(cmd.Context(), clusterName)
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
-		// AWS/EKS, GCP/GKE, and Azure/AKS status is derived from the cloud API
-		// through the provisioner, not from local container inspection. Return
+	case v1alpha1.ProviderAWS:
+		return getAWSProviderStatus(cmd.Context(), clusterName, awsRegion)
+	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
+		// GCP/GKE and Azure/AKS status inspection is not yet implemented. Return
 		// a minimal stub so callers that rely on this helper do not fail for them.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	case v1alpha1.ProviderKubernetes:
@@ -318,6 +323,50 @@ func getOmniProviderStatus(
 	result, err := omniProvider.GetClusterStatus(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("omni provider status: %w", err)
+	}
+
+	return result, nil
+}
+
+// getAWSProviderStatus queries Amazon EKS for cluster status via eksctl. The
+// region is resolved from the cluster config (the RegionEnvVar env var, else
+// eks.yaml's region) so the lookup targets the cluster's configured region
+// rather than only eksctl's AWS_REGION/profile default.
+func getAWSProviderStatus(
+	ctx context.Context,
+	clusterName string,
+	region string,
+) (*provider.ClusterStatus, error) {
+	return awsProviderStatus(ctx, eksctlclient.NewClient(), clusterName, region)
+}
+
+// awsProviderStatus is the injectable core of getAWSProviderStatus: it accepts
+// the eksctl client so tests can substitute a scripted runner. The resolved
+// region is passed through to scope the lookup; an empty region defers to
+// eksctl's own resolution (AWS_REGION / the active profile). A missing eksctl
+// binary is reported as errProviderNotConfigured (a soft error
+// classifyProviderError maps to "no provider info"), so 'cluster info' falls
+// back to kubectl instead of failing when AWS tooling is absent, mirroring the
+// Hetzner/Omni credential paths.
+func awsProviderStatus(
+	ctx context.Context,
+	client *eksctlclient.Client,
+	clusterName string,
+	region string,
+) (*provider.ClusterStatus, error) {
+	err := client.CheckAvailable()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errProviderNotConfigured, err)
+	}
+
+	awsProv, err := awsprovider.NewProvider(client, region)
+	if err != nil {
+		return nil, fmt.Errorf("aws provider: %w", err)
+	}
+
+	result, err := awsProv.GetClusterStatus(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("aws provider status: %w", err)
 	}
 
 	return result, nil

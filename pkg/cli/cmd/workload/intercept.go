@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -23,16 +24,30 @@ var ErrInvalidInterceptLocalPort = errors.New(
 	"invalid --local-port: must be between 1 and 65535",
 )
 
-// ErrInterceptSteerCommandRequired rejects an empty --steer-command: until
-// KSail ships a default steering-agent image the in-cluster agent invocation
-// is operator-supplied, so the command has no agent to exec without it.
-var ErrInterceptSteerCommandRequired = errors.New(
-	"invalid --steer-command: the in-cluster steering agent command is required",
+// ErrInterceptSteerUnspecified rejects an intercept with neither an explicit
+// --steer-command nor a --service-port to derive one from: without one of them
+// the steering container has no agent invocation to exec.
+var ErrInterceptSteerUnspecified = errors.New(
+	"provide --service-port to intercept a workload port (or --steer-command to run a custom agent)",
+)
+
+// ErrInvalidInterceptServicePort rejects a --service-port outside the valid TCP
+// range or one that collides with the agent's internal listener port (which
+// would redirect the port to itself).
+var ErrInvalidInterceptServicePort = errors.New(
+	"invalid --service-port: must be 1-65535 and differ from the agent's internal port",
 )
 
 // defaultSteerWaitTimeout bounds how long intercept waits for the injected
 // steering container to reach Running before giving up.
 const defaultSteerWaitTimeout = 60 * time.Second
+
+// steerAgentInterceptPort is the pod-internal loopback port the default steering
+// agent listens on: its iptables rule redirects the workload's --service-port to
+// this port inside the pod's own netns. It is internal (never the developer's
+// --local-port), fixed to a high, uncommon value unlikely to clash with the
+// workload's own listeners; a --service-port that lands on it is rejected.
+const steerAgentInterceptPort = 19000
 
 // loopbackHost is the address the intercepted streams are forwarded to — the
 // developer's local process listens on loopback, never a routable interface.
@@ -41,11 +56,11 @@ const loopbackHost = "127.0.0.1"
 const interceptCmdLong = `Intercept a Deployment's inbound traffic to a local process (reverse dev bridge).
 
 Resolves the Deployment to a running pod, injects a steering container (an
-ephemeral container holding only CAP_NET_ADMIN), and runs the operator-supplied
-steering agent in it over the Kubernetes exec channel. The agent installs an
-iptables REDIRECT rule that captures the workload's inbound TCP and forwards it,
-over a multiplexed tunnel, to a process running on your machine — so the copy on
-your laptop serves the cluster's live requests.
+ephemeral container holding only CAP_NET_ADMIN), and runs the steering agent in
+it over the Kubernetes exec channel. The agent installs an iptables REDIRECT rule
+that captures the workload's inbound TCP and forwards it, over a multiplexed
+tunnel, to a process running on your machine — so the copy on your laptop serves
+the cluster's live requests.
 
 Unlike ` + "`workload mirror`" + ` (read-only pcap, traffic keeps flowing to the
 workload), intercept steers the traffic away from the workload to your local
@@ -54,21 +69,23 @@ process; the agent removes its rule again on exit, restoring the pod.
 The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
 lets the in-cluster agent reverse its redirect.
 
---steer-command is required and --steer-image must carry the agent binary plus
-iptables: KSail does not yet ship a default steering-agent image (tracked as a
-follow-up), so the agent is operator-supplied for now.
+By default intercept runs the KSail-shipped steering image and derives the agent
+command from --service-port, so only --service-port and --local-port are needed.
+Pass an explicit --steer-image and --steer-command to run a custom agent instead.
 
 Ephemeral containers cannot be removed, so an already-injected steering agent on
 the target pod is reused rather than treated as an error.`
 
-const interceptCmdExample = `  # Intercept the traffic my-app receives and forward it to localhost:8080
-  ksail workload intercept my-app --local-port 8080 \
-    --steer-image ghcr.io/acme/ksail-steer:latest \
-    --steer-command ksail-steer --steer-command --port=8080
+const interceptCmdExample = `  # Intercept the traffic my-app serves on :8080 and forward it to localhost:8080
+  ksail workload intercept my-app --service-port 8080 --local-port 8080
 
   # Intercept a specific container of a multi-container Deployment in a namespace
-  ksail workload intercept my-app -n prod -c api --local-port 8080 \
-    --steer-image ghcr.io/acme/ksail-steer:latest --steer-command ksail-steer`
+  ksail workload intercept my-app -n prod -c api --service-port 8080 --local-port 8080
+
+  # Run a custom steering agent image and command instead of the KSail default
+  ksail workload intercept my-app --local-port 8080 \
+    --steer-image ghcr.io/acme/ksail-steer:latest \
+    --steer-command ksail-steer --steer-command --port=8080`
 
 // runInterceptSession is the blocking client side of intercept the command
 // drives: it opens the exec-channel transport to the steering agent, muxes the
@@ -135,6 +152,7 @@ type interceptOptions struct {
 	namespace    string
 	container    string
 	localPort    int
+	servicePort  int
 	steerImage   string
 	steerCommand []string
 	steerTimeout time.Duration
@@ -158,29 +176,74 @@ func NewInterceptCmd() *cobra.Command {
 
 	cmd.Flags().IntVarP(&opts.localPort, "local-port", "l", 0,
 		"Local port the intercepted inbound traffic is forwarded to (required)")
+	cmd.Flags().IntVar(&opts.servicePort, "service-port", 0,
+		"Workload port to intercept; KSail derives the default steering command from it "+
+			"(alternative to an explicit --steer-command)")
 	cmd.Flags().StringArrayVar(&opts.steerCommand, "steer-command", nil,
-		"Command the in-cluster steering agent container runs, exec'd over the tunnel (required)")
+		"Command the in-cluster steering agent container runs, exec'd over the tunnel "+
+			"(default: derived from --service-port for the KSail steering image)")
 	cmd.Flags().StringVar(&opts.steerImage, "steer-image", mirror.DefaultSteerImage,
 		"Image the injected steering container runs (must carry the agent binary and iptables)")
 	cmd.Flags().DurationVar(&opts.steerTimeout, "wait-timeout", defaultSteerWaitTimeout,
 		"How long to wait for the steering container to reach Running")
 
 	_ = cmd.MarkFlagRequired("local-port")
-	_ = cmd.MarkFlagRequired("steer-command")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if opts.localPort <= 0 || opts.localPort > maxTCPPort {
 			return fmt.Errorf("%w: got %d", ErrInvalidInterceptLocalPort, opts.localPort)
 		}
 
-		if len(opts.steerCommand) == 0 {
-			return ErrInterceptSteerCommandRequired
+		err := resolveSteerCommand(&opts)
+		if err != nil {
+			return err
 		}
 
 		return runInterceptCommand(cmd, args[0], opts)
 	}
 
-	return cmd
+	// intercept is a reverse dev-bridge (#4521) whose default steering image and
+	// derived agent command are now wired (#5945), but the full in-cluster path
+	// is only exercisable against a live cluster, so it stays gated experimental
+	// until that end-to-end validation graduates it (#5882 AC#3). Graduate by
+	// dropping this Guard call.
+	return experimental.Guard(cmd)
+}
+
+// resolveSteerCommand fills opts.steerCommand when the caller did not pass one
+// explicitly: it derives the default `ksail steer-agent` invocation from
+// --service-port (honoured by the KSail-shipped steering image). An explicit
+// --steer-command is left untouched (the escape hatch for a custom agent); with
+// neither flag there is nothing to exec, and a --service-port that is out of
+// range or collides with the agent's internal listener port is rejected.
+func resolveSteerCommand(opts *interceptOptions) error {
+	if len(opts.steerCommand) > 0 {
+		return nil
+	}
+
+	if opts.servicePort <= 0 {
+		return ErrInterceptSteerUnspecified
+	}
+
+	if opts.servicePort > maxTCPPort || opts.servicePort == steerAgentInterceptPort {
+		return fmt.Errorf("%w: got %d", ErrInvalidInterceptServicePort, opts.servicePort)
+	}
+
+	opts.steerCommand = deriveSteerCommand(opts.servicePort)
+
+	return nil
+}
+
+// deriveSteerCommand builds the default steering-agent invocation for the
+// KSail-shipped steering image (Dockerfile.steer places `ksail` on PATH): run
+// `ksail steer-agent` with the workload's service port and the agent's internal
+// loopback listener port.
+func deriveSteerCommand(servicePort int) []string {
+	return []string{
+		"ksail", "steer-agent",
+		"--service-port=" + strconv.Itoa(servicePort),
+		"--intercept-port=" + strconv.Itoa(steerAgentInterceptPort),
+	}
 }
 
 // runInterceptCommand chains the increment-3 steering primitives end-to-end:

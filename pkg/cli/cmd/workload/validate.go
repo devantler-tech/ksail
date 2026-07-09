@@ -18,6 +18,7 @@ import (
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/celrules"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
@@ -45,10 +46,7 @@ var ErrBuildFailed = errors.New("build failed")
 const validateLongDescription = `Validate Kubernetes manifest files and kustomizations using kubeconform.
 
 This command validates individual YAML files and kustomizations in the specified path.
-If no path is provided, the path is resolved in order:
-  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
-  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
-  3. The current directory (fallback when no ksail.yaml config file is found)
+` + sourcePathResolutionHelp + `
 
 The validation process:
 1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
@@ -73,15 +71,7 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 
 // NewValidateCmd creates the workload validate command.
 func NewValidateCmd() *cobra.Command {
-	var (
-		skipSecrets          bool
-		strict               bool
-		ignoreMissingSchemas bool
-		skipHelmRender       bool
-		skipKinds            []string
-		schemaLocations      []string
-		rules                string
-	)
+	flags := &validateFlags{}
 
 	cmd := &cobra.Command{
 		Use:   "validate [PATH]",
@@ -89,87 +79,72 @@ func NewValidateCmd() *cobra.Command {
 		Long:  validateLongDescription,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runValidateCmd(
-				cmd.Context(),
-				cmd,
-				args,
-				validateFlags{
-					skipSecrets:          skipSecrets,
-					strict:               strict,
-					ignoreMissingSchemas: ignoreMissingSchemas,
-					skipHelmRender:       skipHelmRender,
-					skipKinds:            skipKinds,
-					schemaLocations:      schemaLocations,
-					rules:                rules,
-				},
-			)
+			return runValidateCmd(cmd.Context(), cmd, args, *flags)
 		},
 	}
 
-	addValidateFlags(
-		cmd,
-		&skipSecrets,
-		&strict,
-		&ignoreMissingSchemas,
-		&skipHelmRender,
-		&skipKinds,
-		&schemaLocations,
-		&rules,
-	)
+	addValidateFlags(cmd, flags)
 
 	return cmd
 }
 
-// validateFlags carries the resolved validate command flags.
+// validateFlags carries the validate command flags. cobra binds each flag directly
+// to a field here (see addValidateFlags), and runValidateCmd reads them.
 type validateFlags struct {
 	skipSecrets          bool
 	strict               bool
 	ignoreMissingSchemas bool
 	skipHelmRender       bool
+	includeCRDSchemas    bool
 	skipKinds            []string
 	schemaLocations      []string
 	rules                string
 }
 
-// addValidateFlags registers the flags for the validate command.
-func addValidateFlags(
-	cmd *cobra.Command,
-	skipSecrets, strict, ignoreMissingSchemas, skipHelmRender *bool,
-	skipKinds, schemaLocations *[]string,
-	rules *string,
-) {
-	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
-	cmd.Flags().BoolVar(strict, "strict", false, "Enable strict validation mode")
+// addValidateFlags registers the flags for the validate command, binding each to a
+// field of flags.
+func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
+	cmd.Flags().
+		BoolVar(&flags.skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
+	cmd.Flags().BoolVar(&flags.strict, "strict", false, "Enable strict validation mode")
 	cmd.Flags().BoolVar(
-		ignoreMissingSchemas,
+		&flags.ignoreMissingSchemas,
 		"ignore-missing-schemas",
 		true,
 		"Ignore resources with missing schemas",
 	)
 	cmd.Flags().BoolVar(
-		skipHelmRender,
+		&flags.skipHelmRender,
 		"skip-helm-render",
 		false,
 		"Skip rendering HelmReleases before validation (validate the HelmRelease CR as-is). "+
 			"By default, charts are rendered in-process and the rendered manifests are validated.",
 	)
 	cmd.Flags().StringSliceVar(
-		skipKinds,
+		&flags.skipKinds,
 		"skip-kinds",
 		nil,
 		"Additional Kubernetes kinds to skip during validation "+
 			"(merged with spec.workload.validation.skipKinds from ksail.yaml)",
 	)
 	cmd.Flags().StringSliceVar(
-		schemaLocations,
+		&flags.schemaLocations,
 		"schema-location",
 		nil,
 		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
 			"absent from the CRDs-catalog, so they are validated against a supplied schema instead "+
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
 	)
+	cmd.Flags().BoolVar(
+		&flags.includeCRDSchemas,
+		"include-crd-schemas",
+		false,
+		"Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that "+
+			"custom resources whose CRD ships in the repo are validated instead of skipped "+
+			"(off by default; a CRD that cannot be converted is warned and skipped)",
+	)
 	cmd.Flags().StringVar(
-		rules,
+		&flags.rules,
 		"rules",
 		"",
 		"Path to a YAML CEL rules file. Each rule's CEL expression is evaluated against every "+
@@ -210,40 +185,22 @@ func runValidateCmd(
 	// Create kubeconform client
 	kubeconformClient := kubeconform.NewClient()
 
-	// Build validation options
-	validationOpts := &kubeconform.ValidationOptions{
-		Strict:               flags.strict,
-		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+	// Assemble validation options (skip-kinds, schema locations, and — when
+	// --include-crd-schemas is set — schemas derived from in-tree CRDs). cleanup
+	// removes any temporary CRD-schema directory once validation completes.
+	validationOpts, cleanup, err := buildValidationOptions(
+		cmd,
+		cfg,
+		configFound,
+		loadErr,
+		flags,
+		path,
+	)
+	if err != nil {
+		return err
 	}
 
-	if flags.skipSecrets {
-		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
-	}
-
-	// Additional kinds to skip come from the --skip-kinds flag and from
-	// spec.workload.validation.skipKinds in ksail.yaml. This lets a repo opt out
-	// of validating CRDs whose CRDs-catalog schema is stale or missing (which
-	// kubeconform would otherwise reject as "additional properties not allowed").
-	validationOpts.SkipKinds = append(validationOpts.SkipKinds, flags.skipKinds...)
-	validationOpts.SkipKinds = append(
-		validationOpts.SkipKinds,
-		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
-	)
-
-	// Additional schema locations come from the --schema-location flag and from
-	// spec.workload.validation.schemaLocations in ksail.yaml. They let a repo
-	// validate CRDs absent from the CRDs-catalog against a supplied schema rather
-	// than skipping the kind via --skip-kinds. Local filesystem locations are
-	// canonicalized (see canonicalizeSchemaLocations) so validation reads the
-	// intended schema tree; URLs and kubeconform path templates pass through.
-	suppliedSchemaLocations := slices.Concat(
-		flags.schemaLocations,
-		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
-	)
-	validationOpts.SchemaLocations = append(
-		validationOpts.SchemaLocations,
-		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
-	)
+	defer cleanup()
 
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
@@ -260,6 +217,102 @@ func runValidateCmd(
 	}
 
 	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine)
+}
+
+// buildValidationOptions assembles the kubeconform validation options from the
+// flags and ksail.yaml config: skip-kinds (--skip-kinds + spec.workload.validation
+// .skipKinds), schema locations (--schema-location + the configured locations), and
+// — when --include-crd-schemas is set — schemas derived from CustomResourceDefinition
+// manifests in the path so custom resources whose CRD ships in the repo are validated
+// instead of skipped. It returns the options plus a cleanup func (always non-nil,
+// safe to defer) that removes any temporary CRD-schema directory.
+func buildValidationOptions(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flags validateFlags,
+	path string,
+) (*kubeconform.ValidationOptions, func(), error) {
+	validationOpts := &kubeconform.ValidationOptions{
+		Strict:               flags.strict,
+		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+	}
+
+	if flags.skipSecrets {
+		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
+	}
+
+	validationOpts.SkipKinds = append(validationOpts.SkipKinds, flags.skipKinds...)
+	validationOpts.SkipKinds = append(
+		validationOpts.SkipKinds,
+		configuredSkipKinds(cmd, cfg, configFound, loadErr)...,
+	)
+
+	// Local filesystem locations are canonicalized (see canonicalizeSchemaLocations)
+	// so validation reads the intended schema tree; URLs and kubeconform path
+	// templates pass through.
+	suppliedSchemaLocations := slices.Concat(
+		flags.schemaLocations,
+		configuredSchemaLocations(cmd, cfg, configFound, loadErr),
+	)
+	validationOpts.SchemaLocations = append(
+		validationOpts.SchemaLocations,
+		canonicalizeSchemaLocations(suppliedSchemaLocations)...,
+	)
+
+	cleanup := func() {}
+
+	if flags.includeCRDSchemas {
+		crdCleanup, err := addCRDSchemas(cmd, path, validationOpts)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		cleanup = crdCleanup
+	}
+
+	return validationOpts, cleanup, nil
+}
+
+// addCRDSchemas derives kubeconform schemas from CustomResourceDefinition
+// manifests under path into a temporary directory, appends that directory as a
+// schema location on opts, and warns about any CRD that could not be converted. It
+// returns a cleanup function (always non-nil, safe to defer) that removes the
+// temporary directory once validation has completed.
+func addCRDSchemas(
+	cmd *cobra.Command,
+	path string,
+	opts *kubeconform.ValidationOptions,
+) (func(), error) {
+	tempDir, err := os.MkdirTemp("", "ksail-crd-schemas-")
+	if err != nil {
+		return nil, fmt.Errorf("create CRD schema directory: %w", err)
+	}
+
+	cleanup := func() { _ = os.RemoveAll(tempDir) }
+
+	result, err := crdschema.Materialize(path, tempDir)
+	if err != nil {
+		cleanup()
+
+		return nil, fmt.Errorf("derive CRD schemas: %w", err)
+	}
+
+	for _, warning := range result.Warnings {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "skipped CRD schema: %s",
+			Args:    []any{warning.String()},
+			Writer:  cmd.ErrOrStderr(),
+		})
+	}
+
+	if result.Written > 0 {
+		opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
+	}
+
+	return cleanup, nil
 }
 
 // buildValidateRenderer returns a gitopsRenderer when Helm rendering is enabled,

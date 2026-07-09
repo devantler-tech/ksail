@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/imageverifier"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"
 )
@@ -109,7 +110,9 @@ const DefaultImageVerifierDir = "k3d/containerd"
 //
 // Requires K3s v1.35+ (containerd 2.2+).
 // See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
-const ImageVerificationConfigTemplate = `# K3s containerd config template (containerd 2.x, config v3)
+//
+//nolint:gochecknoglobals // computed once from imageverifier.BindirPatch; immutable, constant-like value
+var ImageVerificationConfigTemplate = `# K3s containerd config template (containerd 2.x, config v3)
 # This file is processed by K3s as a Go template to generate the final containerd config.
 # It replaces K3s's built-in default template. K3s template markers (e.g.,
 # {{ "{{ .PrivateRegistryConfig }}" }}) are preserved so K3s can inject dynamic settings.
@@ -132,21 +135,7 @@ version = 3
 # pre-installed in the K3s node image at the configured bin_dir path.
 # If bin_dir is empty or missing, image pulls proceed without verification.
 # See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
-[plugins."io.containerd.image-verifier.v1.bindir"]
-bin_dir = "/opt/image-verifier/bin"
-max_verifiers = 10
-per_verifier_timeout = "10s"
-
-# --- Example: Cosign keyless verification (OIDC / Sigstore) ---
-# Install the cosign verifier binary into /opt/image-verifier/bin/ in a custom K3s node image.
-# Cosign will verify signatures using the Sigstore public good instance by default.
-# See: https://docs.sigstore.dev/cosign/
-
-# --- Example: Notation verification ---
-# Install the notation verifier binary into /opt/image-verifier/bin/ in a custom K3s node image.
-# Configure trust policies and certificates in the notation config directory.
-# See: https://notaryproject.dev/docs/
-`
+` + imageverifier.BindirPatch("K3s") + "\n"
 
 // ApplyImageVerificationVolumes adds a volume mount to the K3d config to inject
 // the containerd config template into K3d node containers. The template is mounted

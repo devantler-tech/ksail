@@ -1,0 +1,29 @@
+# Steering-agent image for `ksail workload intercept` (#5882): a minimal Alpine
+# base carrying the iptables userspace the in-cluster agent drives, plus the
+# ksail binary so the injected ephemeral container can `exec ksail steer-agent`
+# over the tunnel — no operator-supplied --steer-image/--steer-command needed.
+#
+# Alpine (not the distroless CLI base) because the steering path needs two
+# runtime tools distroless lacks: `iptables` — the agent installs a NAT REDIRECT
+# rule in the pod's own network namespace (see pkg/svc/mirror/steering.go) — and
+# a `sleep` holder, since InjectSteer runs `sleep infinity` as the container
+# command while the real agent is exec'd over the exec channel.
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+
+# iptables userspace, including the `comment` match the steering rule tags itself
+# with (SteeringRuleComment). It is the only extra package the agent needs —
+# busybox already provides the `sleep` holder command. The apk version is left
+# unpinned (hadolint DL3018): the base is already digest-pinned above, and
+# pinning a package build against Alpine's rolling repository would rot on every
+# 3.21 point refresh for no supply-chain gain over the pinned base.
+# hadolint ignore=DL3018
+RUN apk add --no-cache iptables
+
+# GoReleaser v2 (buildx) provides TARGETPLATFORM, e.g. linux/amd64, linux/arm64.
+ARG TARGETPLATFORM
+
+# The same ksail binary the CLI image ships, placed on PATH so the steering
+# command exec'd over the tunnel is simply `ksail steer-agent …`.
+COPY ${TARGETPLATFORM}/ksail /usr/local/bin/ksail
+
+ENTRYPOINT ["/usr/local/bin/ksail"]

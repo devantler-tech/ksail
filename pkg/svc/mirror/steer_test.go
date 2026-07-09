@@ -16,6 +16,40 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+func TestDefaultSteerImageForVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		version string
+		want    string
+	}{
+		"release version stamps a v-prefixed tag matching the published image": {
+			version: "7.158.0",
+			want:    "ghcr.io/devantler-tech/ksail-steer:v7.158.0",
+		},
+		"an already-v-prefixed version is not doubled": {
+			version: "v7.158.0",
+			want:    "ghcr.io/devantler-tech/ksail-steer:v7.158.0",
+		},
+		"a dev build falls back to the latest tag": {
+			version: "dev",
+			want:    "ghcr.io/devantler-tech/ksail-steer:latest",
+		},
+		"an empty version falls back to the latest tag": {
+			version: "",
+			want:    "ghcr.io/devantler-tech/ksail-steer:latest",
+		},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.want, mirror.DefaultSteerImageForVersion(testCase.version))
+		})
+	}
+}
+
 // steeredPod builds a Running pod that already carries a steering ephemeral
 // container, for the idempotency test.
 func steeredPod() *corev1.Pod {

@@ -59,6 +59,27 @@ func allNodesReady(nodes []corev1.Node) bool {
 	return true
 }
 
+// ListNodesOrContinue lists cluster nodes for use inside a PollForReadiness check func: a transient
+// list error returns (nil, nil) rather than failing the poll, so the caller's check simply sees no
+// nodes this tick and the polling loop continues instead of aborting on a passing API hiccup.
+//
+// The error return is intentionally always nil today (never actionable) — every failure path is
+// swallowed into the (nil, nil) "continue polling" case above. It is kept in the signature, rather
+// than dropped, so a future change to add a real terminal-error case (e.g. a non-transient
+// permission failure that should abort the poll instead of retrying) doesn't need an API change;
+// callers must not assume a non-nil error can occur today.
+func ListNodesOrContinue(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) ([]corev1.Node, error) {
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil //nolint:nilerr // returning nil to continue polling
+	}
+
+	return nodes.Items, nil
+}
+
 // waitForNodes polls nodes and passes them to the check function until it returns true.
 func waitForNodes(
 	ctx context.Context,
@@ -67,12 +88,12 @@ func waitForNodes(
 	check func([]corev1.Node) bool,
 ) error {
 	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
-		nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		nodes, err := ListNodesOrContinue(ctx, clientset)
 		if err != nil {
-			return false, nil //nolint:nilerr // returning nil to continue polling
+			return false, err
 		}
 
-		return check(nodes.Items), nil
+		return check(nodes), nil
 	})
 }
 

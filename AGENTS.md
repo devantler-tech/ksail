@@ -382,6 +382,28 @@ clusters you created; build throwaway binaries to `/tmp` (not `./ksail`) to avoi
 worktree. Maintainers building locally should still use the standard `make build` (`go build -o
 ksail .`).
 
+**Feature-flag / experimental gating** (portfolio convention — see monorepo#2059): a new,
+not-yet-stable command ships **behind the experimental gate, off by default**, and is flipped on only
+after validation. Wrap the command's constructor return in **`experimental.Guard(cmd)`**
+(`pkg/cli/experimental`): it hides the command from `--help` + the MCP/tool surface and refuses to run
+unless the user passes the global **`--experimental`** flag (`flags.ExperimentalFlagName`). Prefer a
+lightweight cobra gate over a runtime SDK for the common case; reach for the OpenFeature Go SDK only
+where genuinely per-user/remote evaluation is needed. Rules:
+
+- **Test both states** — the gated path is covered on (`--experimental`) and off (refused with
+  `experimental.ErrDisabled`); default snapshots stay deterministic (a hidden command drops from the
+  help/toolgen snapshots, so regenerate them — see below).
+- **Config-gated behaviour** that is not a whole command → a typed `experimental` field in `ksail.yaml`
+  (regenerate the schema/CRD), not an ad-hoc global.
+- **Lifecycle (mandatory — avoid flag debt):** graduate a validated feature to stable by **deleting the
+  single `Guard` call** (un-hides it, drops the opt-in). Don't let experimental scaffolding become
+  permanent; only genuine kill-switch/permission gates are long-lived.
+- **Reference:** `workload intercept` (`pkg/cli/cmd/workload/intercept.go`) — gated experimental until
+  the default steering-agent image (#5882) ships.
+- Adding/removing a gated command or the `--experimental` flag changes **three** generated surfaces —
+  the `--help` snapshot, the `pkg/toolgen` tool-surface snapshot, and `docs/` — regenerate all three
+  (`UPDATE_SNAPS=true go test ./pkg/...` + `make generate`).
+
 **Task menu** (pick the highest-value for the current repo state; not all):
 
 - **Triage** issues/PRs (label, add `triaged`, close obvious spam); one insightful comment on the

@@ -34,6 +34,7 @@ func NewProjectCmd() *cobra.Command {
 
 	cmd.AddCommand(NewInitCmd())
 	cmd.AddCommand(NewAddEnvironmentCmd())
+	cmd.AddCommand(NewListEnvironmentsCmd())
 
 	return cmd
 }

@@ -345,19 +345,9 @@ func newManifestLayer(
 		}
 	}
 
-	err = tarWriter.Close()
-	if err != nil {
-		return nil, fmt.Errorf("close tar writer: %w", err)
-	}
-
-	err = gzipWriter.Close()
-	if err != nil {
-		return nil, fmt.Errorf("close gzip writer: %w", err)
-	}
-
 	// Argo CD requires a single gzip tar layer and will ignore/skip unrecognized
 	// layer media types, producing errors like "got 0" layers.
-	return static.NewLayer(compressed.Bytes(), types.OCILayer), nil
+	return finalizeLayer(tarWriter, gzipWriter, compressed)
 }
 
 // addFileToArchive adds a single file to the tar archive with its relative path from root.
@@ -523,7 +513,17 @@ resources: []
 		return nil, fmt.Errorf("add kustomization.yaml: %w", err)
 	}
 
-	err = tarWriter.Close()
+	return finalizeLayer(tarWriter, gzipWriter, compressed)
+}
+
+// finalizeLayer closes the tar and gzip writers (in that order) and wraps the compressed bytes as an
+// OCI layer — the shared closing sequence for newManifestLayer and newEmptyKustomizationLayer.
+func finalizeLayer(
+	tarWriter *tar.Writer,
+	gzipWriter *gzip.Writer,
+	compressed *bytes.Buffer,
+) (v1.Layer, error) {
+	err := tarWriter.Close()
 	if err != nil {
 		return nil, fmt.Errorf("close tar writer: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -404,67 +405,33 @@ kind: NetworkDefaultActionConfig
 ingress: block
 `
 
-// ingressFirewallCPRulesTemplate is the Talos NetworkRuleConfig YAML template for
-// control-plane nodes. %[1]s is substituted with the network CIDR, %[2]d with the CNI VXLAN port,
-// and %[3]s with the API ingress subnet lines (either allowed CIDRs or 0.0.0.0/0 + ::/0).
-const ingressFirewallCPRulesTemplate = `apiVersion: v1alpha1
+// networkRuleConfigTemplate is a single Talos NetworkRuleConfig YAML document. %[1]s is the rule
+// name, %[2]s the port (or port range/list, pre-formatted), %[3]s the protocol, and %[4]s the
+// already-indented `ingress:` list body (e.g. "  - subnet: 10.0.0.0/16\n", or multiple such lines
+// for an allowed-CIDR list) — the one building block both the control-plane and worker ingress
+// firewall rule sets below are assembled from, instead of each hand-duplicating every document.
+const networkRuleConfigTemplate = `apiVersion: v1alpha1
 kind: NetworkRuleConfig
-name: kubelet
+name: %[1]s
 portSelector:
   ports:
-    - 10250
-  protocol: tcp
+    - %[2]s
+  protocol: %[3]s
 ingress:
-  - subnet: %[1]s
----
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: apid
-portSelector:
-  ports:
-    - 50000
-  protocol: tcp
-ingress:
-%[3]s---
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: kubernetes-api
-portSelector:
-  ports:
-    - 6443
-  protocol: tcp
-ingress:
-%[3]s---
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: trustd
-portSelector:
-  ports:
-    - 50001
-  protocol: tcp
-ingress:
-  - subnet: %[1]s
----
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: etcd
-portSelector:
-  ports:
-    - 2379-2380
-  protocol: tcp
-ingress:
-  - subnet: %[1]s
----
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: cni-vxlan
-portSelector:
-  ports:
-    - %[2]d
-  protocol: udp
-ingress:
-  - subnet: %[1]s
-`
+%[4]s`
+
+// networkRuleConfigDoc renders one NetworkRuleConfig document via networkRuleConfigTemplate.
+func networkRuleConfigDoc(name, port, protocol, ingressLines string) string {
+	return fmt.Sprintf(networkRuleConfigTemplate, name, port, protocol, ingressLines)
+}
+
+// singleSubnetIngress formats the common single-CIDR `ingress:` body used by every rule that is
+// always restricted to the cluster's own network CIDR (kubelet, trustd, etcd, cni-vxlan) —
+// formatIngressSubnets handles the API-facing rules (apid, kubernetes-api), which additionally
+// support an allowed-CIDR override.
+func singleSubnetIngress(cidr string) string {
+	return "  - subnet: " + cidr + "\n"
+}
 
 // IngressFirewallCPRulesYAML returns the Talos NetworkRuleConfig documents for control-plane
 // nodes. The networkCIDR and cniPort parameters are injected at generation time.
@@ -475,43 +442,32 @@ ingress:
 // generator (file-based scaffolding) and the runtime config manager (in-memory injection).
 func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int, allowedCIDRs []string) string {
 	apiIngress := formatIngressSubnets(allowedCIDRs)
+	networkIngress := singleSubnetIngress(networkCIDR)
 
-	return fmt.Sprintf(ingressFirewallCPRulesTemplate, networkCIDR, cniPort, apiIngress)
+	docs := []string{
+		networkRuleConfigDoc("kubelet", "10250", "tcp", networkIngress),
+		networkRuleConfigDoc("apid", "50000", "tcp", apiIngress),
+		networkRuleConfigDoc("kubernetes-api", "6443", "tcp", apiIngress),
+		networkRuleConfigDoc("trustd", "50001", "tcp", networkIngress),
+		networkRuleConfigDoc("etcd", "2379-2380", "tcp", networkIngress),
+		networkRuleConfigDoc("cni-vxlan", strconv.Itoa(cniPort), "udp", networkIngress),
+	}
+
+	return strings.Join(docs, "---\n")
 }
 
 // IngressFirewallWorkerRulesYAML returns the Talos NetworkRuleConfig documents for worker
 // nodes. Workers expose fewer ports than control-plane nodes.
 func IngressFirewallWorkerRulesYAML(networkCIDR string, cniPort int) string {
-	return fmt.Sprintf(`apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: kubelet
-portSelector:
-  ports:
-    - 10250
-  protocol: tcp
-ingress:
-  - subnet: %[1]s
----
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: apid
-portSelector:
-  ports:
-    - 50000
-  protocol: tcp
-ingress:
-  - subnet: %[1]s
----
-apiVersion: v1alpha1
-kind: NetworkRuleConfig
-name: cni-vxlan
-portSelector:
-  ports:
-    - %[2]d
-  protocol: udp
-ingress:
-  - subnet: %[1]s
-`, networkCIDR, cniPort)
+	networkIngress := singleSubnetIngress(networkCIDR)
+
+	docs := []string{
+		networkRuleConfigDoc("kubelet", "10250", "tcp", networkIngress),
+		networkRuleConfigDoc("apid", "50000", "tcp", networkIngress),
+		networkRuleConfigDoc("cni-vxlan", strconv.Itoa(cniPort), "udp", networkIngress),
+	}
+
+	return strings.Join(docs, "---\n")
 }
 
 // formatIngressSubnets formats allowed CIDRs (or default 0.0.0.0/0 + ::/0) as

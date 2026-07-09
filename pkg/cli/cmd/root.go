@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/steeragent"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -42,6 +43,12 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 		"Path to config file (default: ksail.yaml found via directory traversal)",
 	)
 
+	cmd.PersistentFlags().Bool(
+		flags.ExperimentalFlagName,
+		false,
+		"Enable experimental (unstable) commands and features",
+	)
+
 	// Transparently refresh expired Omni kubeconfig tokens before any command.
 	// Cobra does not chain PersistentPreRunE: when a child command defines its own
 	// (e.g. workload via wrapWithKubeconfigResolution), the child's hook replaces
@@ -56,6 +63,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd())
 	cmd.AddCommand(workload.NewWorkloadCmd())
 	cmd.AddCommand(operator.NewOperatorCmd())
+	cmd.AddCommand(steeragent.NewSteerAgentCmd())
 	cmd.AddCommand(project.NewProjectCmd())
 	cmd.AddCommand(tenant.NewTenantCmd())
 	cmd.AddCommand(open.NewOpenCmd())

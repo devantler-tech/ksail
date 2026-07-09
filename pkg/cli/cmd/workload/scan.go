@@ -28,10 +28,7 @@ templating of HelmReleases), so findings reflect overlay patches and chart outpu
 rather than the raw files. HelmReleases that cannot be rendered offline are left
 as-is with a warning. Use --no-render to scan the raw files instead.
 
-If no path is provided, the path is resolved in order:
-  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
-  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
-  3. The current directory (fallback when no ksail.yaml config file is found)
+` + sourcePathResolutionHelp + `
 
 Exceptions: pass --exceptions <file> to forward a Kubescape exceptions file (a JSON
 array of PostureExceptionPolicy objects) so justified, runtime-enforced findings

@@ -20,6 +20,9 @@ Output Format:
 The STATUS column reports the cluster's run-state: "Running" when its nodes are
 up, "Stopped" when they exist but are not running (e.g. a stopped Docker
 cluster), and "Unknown" for providers that cannot report it (cloud providers).
+Kubeconfig contexts KSail did not provision are also listed with STATUS
+"Unmanaged" (blank PROVIDER/DISTRIBUTION) so they are visible on the CLI just as
+in the web UI; KSail-only operations (delete/stop/update) do not act on them.
 
 When any cluster has a TTL set, a TTL column is appended:
   PROVIDER   DISTRIBUTION   CLUSTER       STATUS    TTL
@@ -34,7 +37,7 @@ Use --output json for machine-readable output. The JSON is an array of objects:
   [
     {"name": "dev", "provider": "docker", "distribution": "Vanilla", "status": "Running", "ttl": "2h 30m"}
   ]
-The "status" field is "Running", "Stopped", or "Unknown" (see the STATUS column).
+The "status" field is "Running", "Stopped", "Unknown", or "Unmanaged" (see the STATUS column).
 The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
 
 Examples:
@@ -63,5 +66,6 @@ Flags:
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ```

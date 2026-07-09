@@ -790,6 +790,41 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 		"false",
 		"capacity buffers can be toggled via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.ignoreDaemonsetsUtilization",
+		strconv.FormatBool(oldNode.IgnoreDaemonsetsUtilization),
+		strconv.FormatBool(newNode.IgnoreDaemonsetsUtilization),
+		"false",
+		"ignoreDaemonsetsUtilization can be toggled via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+
+	// skipNodesWith* are *bool with an upstream default of true; a nil pointer
+	// (unset) compares as "true" so nil→false surfaces as a change and nil↔true
+	// does not.
+	appendChange(result, "cluster.autoscaler.node.skipNodesWithLocalStorage",
+		formatBoolPtr(oldNode.SkipNodesWithLocalStorage),
+		formatBoolPtr(newNode.SkipNodesWithLocalStorage),
+		"true",
+		"skipNodesWithLocalStorage can be toggled via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.skipNodesWithSystemPods",
+		formatBoolPtr(oldNode.SkipNodesWithSystemPods),
+		formatBoolPtr(newNode.SkipNodesWithSystemPods),
+		"true",
+		"skipNodesWithSystemPods can be toggled via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+// formatBoolPtr renders a *bool for diffing: a nil pointer yields the empty
+// string so appendChange's default substitution supplies the field's upstream
+// default, while a non-nil pointer renders its explicit true/false.
+func formatBoolPtr(b *bool) string {
+	if b == nil {
+		return ""
+	}
+
+	return strconv.FormatBool(*b)
 }
 
 // checkAutoscalerPodScalarsChange emits in-place changes for scalar pod-autoscaler fields.

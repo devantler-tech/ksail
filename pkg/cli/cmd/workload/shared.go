@@ -213,6 +213,14 @@ func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
 	return engine
 }
 
+// sourcePathResolutionHelp documents the path-resolution order shared by every command whose
+// argument defaults to the configured workload source directory (validate, scan, …) — one wording
+// kept in one place instead of copy-pasted into each command's long help text.
+const sourcePathResolutionHelp = `If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)`
+
 // Shared errors.
 //
 //nolint:staticcheck // "GitOps" is a proper noun and must be capitalized

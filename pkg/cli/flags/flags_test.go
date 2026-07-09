@@ -76,6 +76,62 @@ func TestIsBenchmarkEnabled_FlagNotFound(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
+func TestIsExperimentalEnabled_NilCommand(t *testing.T) {
+	t.Parallel()
+
+	_, err := flags.IsExperimentalEnabled(nil)
+	require.Error(t, err)
+}
+
+func TestIsExperimentalEnabled_FlagFalse(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool(flags.ExperimentalFlagName, false, "")
+
+	enabled, err := flags.IsExperimentalEnabled(cmd)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
+func TestIsExperimentalEnabled_FlagTrue(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool(flags.ExperimentalFlagName, true, "")
+
+	enabled, err := flags.IsExperimentalEnabled(cmd)
+	require.NoError(t, err)
+	assert.True(t, enabled)
+}
+
+func TestIsExperimentalEnabled_InheritedFromParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &cobra.Command{}
+	parent.PersistentFlags().Bool(flags.ExperimentalFlagName, true, "")
+
+	child := &cobra.Command{}
+	parent.AddCommand(child)
+
+	enabled, err := flags.IsExperimentalEnabled(child)
+	require.NoError(t, err)
+	assert.True(t, enabled)
+}
+
+// TestIsExperimentalEnabled_FlagNotFound documents the deliberate divergence from
+// IsBenchmarkEnabled: a missing --experimental flag is disabled, not an error, so a
+// gated command built outside the root tree stays safely off.
+func TestIsExperimentalEnabled_FlagNotFound(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	enabled, err := flags.IsExperimentalEnabled(cmd)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
 func TestMaybeTimer_NilCommand(t *testing.T) {
 	t.Parallel()
 

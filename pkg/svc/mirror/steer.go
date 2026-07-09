@@ -3,8 +3,10 @@ package mirror
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -18,11 +20,34 @@ import (
 // so mirror and intercept stay independently runnable (#5839).
 const SteerContainerName = "ksail-steer"
 
+// steerImageRepo is the published steering-agent image (Dockerfile.steer): the
+// ksail binary on an Alpine base carrying the iptables userspace, so the
+// injected container runs `ksail steer-agent` out of the box — no
+// operator-supplied --steer-image/--steer-command needed (#5882/#5945).
+const steerImageRepo = "ghcr.io/devantler-tech/ksail-steer"
+
 // DefaultSteerImage is the image the steering container runs when the caller
-// does not override it with WithSteerImage. The same pinned netshoot release
-// as the tap ([DefaultTapImage]) — it carries the iptables userspace tooling
-// the steering agent drives.
-const DefaultSteerImage = DefaultTapImage
+// does not override it with WithSteerImage: the ksail-steer image published by
+// this binary's own release, version-pinned so the agent image always matches
+// the `ksail steer-agent` entrypoint it execs. Unlike the tap ([DefaultTapImage],
+// netshoot), the steering path needs the ksail binary, not tcpdump.
+//
+//nolint:gochecknoglobals // Derived from the ldflag-stamped build version, so it cannot be a const.
+var DefaultSteerImage = defaultSteerImage(buildmeta.Version)
+
+// defaultSteerImage builds the version-pinned steer image reference from the
+// build's version stamp. Release builds stamp buildmeta.Version with goreleaser's
+// {{.Version}} (the tag without its leading v, e.g. "7.158.0") while the image is
+// tagged {{.Tag}} (with the v, e.g. "v7.158.0"), so the release ref normalises to
+// repo + ":v" + version. An unstamped/dev build ("dev") has no per-commit steer
+// image published, so it falls back to the :latest tag.
+func defaultSteerImage(version string) string {
+	if version == "" || version == "dev" {
+		return steerImageRepo + ":latest"
+	}
+
+	return steerImageRepo + ":v" + strings.TrimPrefix(version, "v")
+}
 
 // ErrSteerAlreadyInjected is returned when the tap point's pod already carries
 // a steering container. Ephemeral containers cannot be removed or restarted,

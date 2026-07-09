@@ -22,27 +22,48 @@ func resolveTalosRegistries(ctx *Context, usedPorts map[int]struct{}) (string, [
 	return clusterName, registryInfos
 }
 
+// resolveTalosBackendRegistries creates the registry backend and resolves the cluster's registry
+// set from its currently-used ports — the setup shared by runTalosRegistryAction and
+// runTalosConnectAction before they diverge on what to do with the result. The returned bool is
+// false when there is nothing to configure (caller should return nil).
+func resolveTalosBackendRegistries(
+	execCtx context.Context,
+	ctx *Context,
+	dockerAPIClient dockerclient.Client,
+) (registry.Backend, string, []registry.Info, bool, error) {
+	// Create registry backend using the factory (allows test injection)
+	backend, err := GetBackendFactory()(dockerAPIClient)
+	if err != nil {
+		return nil, "", nil, false, fmt.Errorf("failed to create registry backend: %w", err)
+	}
+
+	// Get used ports from running containers to avoid conflicts
+	usedPorts, err := getUsedPorts(execCtx, backend)
+	if err != nil {
+		return nil, "", nil, false, fmt.Errorf("failed to get used ports: %w", err)
+	}
+
+	clusterName, registryInfos := resolveTalosRegistries(ctx, usedPorts)
+
+	return backend, clusterName, registryInfos, len(registryInfos) > 0, nil
+}
+
 // runTalosRegistryAction creates and configures registry containers.
 func runTalosRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
 	dockerAPIClient dockerclient.Client,
 ) error {
-	// Create registry backend using the factory (allows test injection)
-	backend, err := GetBackendFactory()(dockerAPIClient)
+	backend, clusterName, registryInfos, hasRegistries, err := resolveTalosBackendRegistries(
+		execCtx,
+		ctx,
+		dockerAPIClient,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to create registry backend: %w", err)
+		return err
 	}
 
-	// Get used ports from running containers to avoid conflicts
-	usedPorts, err := getUsedPorts(execCtx, backend)
-	if err != nil {
-		return fmt.Errorf("failed to get used ports: %w", err)
-	}
-
-	clusterName, registryInfos := resolveTalosRegistries(ctx, usedPorts)
-
-	if len(registryInfos) == 0 {
+	if !hasRegistries {
 		return nil
 	}
 
@@ -90,21 +111,16 @@ func runTalosConnectAction(
 	ctx *Context,
 	dockerAPIClient dockerclient.Client,
 ) error {
-	// Create registry backend using the factory (allows test injection)
-	backend, err := GetBackendFactory()(dockerAPIClient)
+	_, clusterName, registryInfos, hasRegistries, err := resolveTalosBackendRegistries(
+		execCtx,
+		ctx,
+		dockerAPIClient,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to create registry backend: %w", err)
+		return err
 	}
 
-	// Get used ports from running containers (for consistent registry info building)
-	usedPorts, err := getUsedPorts(execCtx, backend)
-	if err != nil {
-		return fmt.Errorf("failed to get used ports: %w", err)
-	}
-
-	clusterName, registryInfos := resolveTalosRegistries(ctx, usedPorts)
-
-	if len(registryInfos) == 0 {
+	if !hasRegistries {
 		return nil
 	}
 
@@ -225,22 +241,7 @@ func PrepareTalosConfigWithMirrors(
 	// 1. Clusters created solely from CLI with no declarative config
 	// 2. Clusters with declarative config where additional mirrors are added via CLI
 	if talosConfig != nil {
-		mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
-		for _, spec := range mirrorSpecs {
-			// Use cluster name prefix for container name to avoid Docker DNS collisions
-			// e.g., for cluster "talos-default", ghcr.io becomes "talos-default-ghcr.io"
-			containerName := registry.BuildRegistryName(clusterName, spec.Host)
-
-			// Resolve credentials (expands ${ENV_VAR} placeholders)
-			username, password := spec.ResolveCredentials()
-
-			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
-				Host:      spec.Host,
-				Endpoints: []string{"http://" + containerName + ":5000"},
-				Username:  username,
-				Password:  password,
-			})
-		}
+		mirrors := registry.BuildTalosMirrorRegistries(mirrorSpecs, clusterName)
 
 		// Apply mirrors to the Talos config - this merges with any existing mirrors
 		_ = talosConfig.ApplyMirrorRegistries(mirrors)

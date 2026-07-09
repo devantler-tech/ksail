@@ -30,6 +30,7 @@ const (
 	expectedNamespaceParts  = 2
 	expectedDependencyParts = 2
 	singleDependencyPart    = 1
+	expectedLiteralRefParts = 3
 )
 
 const helmReleaseExamples = `  # Generate a HelmRelease with a chart from a HelmRepository source
@@ -60,6 +61,14 @@ const helmReleaseExamples = `  # Generate a HelmRelease with a chart from a Helm
     --source=HelmRepository/podinfo \
     --chart=podinfo \
     --values-from=Secret/my-secret-values \
+    --export
+
+  # Generate a HelmRelease injecting a literal value (e.g. a config file) at a
+  # target path without Helm --set interpretation
+  ksail workload gen helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --values-from-literal=ConfigMap/app-config/config.json@app.configJson \
     --export
 
   # Generate a HelmRelease with a custom release name
@@ -286,6 +295,7 @@ func readHelmReleaseFlags(cmd *cobra.Command, args []string) helmReleaseConfig {
 	cfg.timeout, _ = cmd.Flags().GetDuration("timeout")
 	cfg.values, _ = cmd.Flags().GetStringSlice("values")
 	cfg.valuesFrom, _ = cmd.Flags().GetStringSlice("values-from")
+	cfg.valuesFromLiteral, _ = cmd.Flags().GetStringSlice("values-from-literal")
 	cfg.saName, _ = cmd.Flags().GetString("service-account")
 	cfg.crdsPolicy, _ = cmd.Flags().GetString("crds")
 	cfg.kubeConfigSecretRef, _ = cmd.Flags().GetString("kubeconfig-secret-ref")
@@ -318,6 +328,12 @@ func configureHelmReleaseFlags(cmd *cobra.Command) {
 	flags.Duration("timeout", defaultTimeout, "timeout for any individual Kubernetes operation")
 	flags.StringSlice("values", nil, "local values YAML files")
 	flags.StringSlice("values-from", nil, "values from ConfigMap or Secret")
+	flags.StringSlice(
+		"values-from-literal",
+		nil,
+		"literal value from a ConfigMap or Secret merged at a target path without Helm's "+
+			"--set interpretation (Kind/Name/valuesKey@targetPath)",
+	)
 	flags.String("service-account", "", "service account name to impersonate")
 	flags.String("crds", "", "CRDs policy (Create, CreateReplace, Skip)")
 	flags.String(
@@ -475,7 +491,7 @@ func configureDependenciesAndValues(helmRelease *helmv2.HelmRelease, cfg helmRel
 		return err
 	}
 
-	err = setValues(helmRelease, cfg.values, cfg.valuesFrom)
+	err = setValues(helmRelease, cfg.values, cfg.valuesFrom, cfg.valuesFromLiteral)
 	if err != nil {
 		return err
 	}
@@ -522,6 +538,7 @@ type helmReleaseConfig struct {
 	timeout             time.Duration
 	values              []string
 	valuesFrom          []string
+	valuesFromLiteral   []string
 	saName              string
 	crdsPolicy          string
 	kubeConfigSecretRef string
@@ -635,7 +652,10 @@ func setCRDsPolicy(helmRelease *helmv2.HelmRelease, crdsPolicy string) {
 }
 
 // setValues sets values from files and ConfigMaps/Secrets for the HelmRelease.
-func setValues(helmRelease *helmv2.HelmRelease, values, valuesFrom []string) error {
+func setValues(
+	helmRelease *helmv2.HelmRelease,
+	values, valuesFrom, valuesFromLiteral []string,
+) error {
 	if len(values) > 0 {
 		valuesMap, err := loadValuesFromFiles(values)
 		if err != nil {
@@ -650,12 +670,27 @@ func setValues(helmRelease *helmv2.HelmRelease, values, valuesFrom []string) err
 		helmRelease.Spec.Values = &apiextensionsv1.JSON{Raw: jsonData}
 	}
 
+	valuesRefs := []helmv2.ValuesReference{}
+
 	if len(valuesFrom) > 0 {
-		valuesRefs, err := parseValuesFrom(valuesFrom)
+		refs, err := parseValuesFrom(valuesFrom)
 		if err != nil {
 			return err
 		}
 
+		valuesRefs = append(valuesRefs, refs...)
+	}
+
+	if len(valuesFromLiteral) > 0 {
+		refs, err := parseValuesFromLiteral(valuesFromLiteral)
+		if err != nil {
+			return err
+		}
+
+		valuesRefs = append(valuesRefs, refs...)
+	}
+
+	if len(valuesRefs) > 0 {
 		helmRelease.Spec.ValuesFrom = valuesRefs
 	}
 
@@ -712,6 +747,50 @@ func parseValuesFrom(valuesFrom []string) ([]helmv2.ValuesReference, error) {
 		valuesRefs = append(valuesRefs, helmv2.ValuesReference{
 			Kind: canonicalKind,
 			Name: vfRef.Name,
+		})
+	}
+
+	return valuesRefs, nil
+}
+
+// parseValuesFromLiteral parses --values-from-literal entries of the form
+// "Kind/Name/valuesKey@targetPath" into literal ValuesReferences. Flux only
+// honours ValuesReference.Literal in combination with a TargetPath — the
+// referenced value is then merged at that path without interpreting Helm's
+// --set syntax (mirroring `helm --set-literal`) — so a target path is required.
+func parseValuesFromLiteral(entries []string) ([]helmv2.ValuesReference, error) {
+	valuesRefs := []helmv2.ValuesReference{}
+
+	for _, entry := range entries {
+		refPart, targetPath, found := strings.Cut(entry, "@")
+
+		parts := strings.Split(refPart, "/")
+		if !found || targetPath == "" || len(parts) != expectedLiteralRefParts ||
+			parts[0] == "" || parts[1] == "" || parts[2] == "" {
+			return nil, fmt.Errorf(
+				"%w: values-from-literal %q, expected Kind/Name/valuesKey@targetPath",
+				errInvalidFormat,
+				entry,
+			)
+		}
+
+		validKinds := []string{"ConfigMap", "Secret"}
+
+		canonicalKind, err := validateKindCaseInsensitive(
+			parts[0],
+			validKinds,
+			"values-from-literal",
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		valuesRefs = append(valuesRefs, helmv2.ValuesReference{
+			Kind:       canonicalKind,
+			Name:       parts[1],
+			ValuesKey:  parts[2],
+			TargetPath: targetPath,
+			Literal:    true,
 		})
 	}
 

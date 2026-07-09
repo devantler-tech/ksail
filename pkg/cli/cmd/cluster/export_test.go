@@ -9,10 +9,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -27,6 +29,19 @@ import (
 func ExportShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 	return setup.ShouldPushOCIArtifact(clusterCfg)
 }
+
+// ExportAWSProviderStatus exports awsProviderStatus for testing.
+func ExportAWSProviderStatus(
+	ctx context.Context,
+	client *eksctlclient.Client,
+	clusterName string,
+	region string,
+) (*provider.ClusterStatus, error) {
+	return awsProviderStatus(ctx, client, clusterName, region)
+}
+
+// ErrProviderNotConfigured exports errProviderNotConfigured for testing.
+var ErrProviderNotConfigured = errProviderNotConfigured
 
 // ExportSetupK3dCSI exports setupK3dCSI for testing.
 func ExportSetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
@@ -72,6 +87,22 @@ func ExportEnsureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error
 // ExportResolveKubeContext exports resolveKubeContext for testing.
 func ExportResolveKubeContext(ctx *localregistry.Context) string {
 	return resolveKubeContext(ctx)
+}
+
+// ExportEnsureClusterManaged exports ensureClusterManaged for testing, driving it from a fixed
+// managed-set + completeness pair (instead of the live cross-provider discoverer) so the
+// unmanaged-cluster guard can be exercised fully offline.
+func ExportEnsureClusterManaged(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+	managed map[string]struct{},
+	complete bool,
+) error {
+	return ensureClusterManaged(
+		ctx,
+		resolved,
+		func(context.Context) (map[string]struct{}, bool) { return managed, complete },
+	)
 }
 
 // ExportResolveCreatedContextName exports resolveCreatedContextName for testing.

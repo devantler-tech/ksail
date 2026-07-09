@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.26.4"
+  go: "1.26.5"
 formatters:
   enable:
     - gci
@@ -36,6 +36,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/k8s/rest_config_test.go
+      # Tests that modify env vars cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/cli/lifecycle/awsregion_test.go
       # Tests that mutate the global go-keyring mock provider cannot run in parallel
       - linters:
           - paralleltest

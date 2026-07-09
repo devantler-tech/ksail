@@ -33,6 +33,30 @@ func secretFileExtension(format string) string {
 	return ".yaml"
 }
 
+// prepareSecretFile stages content in a temp file (via writeTempSecret) and selects its SOPS
+// input/output stores via storeSelector (sopsclient.GetStores for encrypt,
+// sopsclient.GetDecryptStores for decrypt) — the setup shared by EncryptSecret and DecryptSecret
+// before they diverge on the actual cipher operation. On a store-selection error the temp file is
+// cleaned up before returning.
+func prepareSecretFile(
+	content, format string,
+	storeSelector func(path string) (sops.Store, sops.Store, error),
+) (string, sops.Store, sops.Store, func(), error) {
+	path, cleanup, err := writeTempSecret(content, format)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
+	inputStore, outputStore, err := storeSelector(path)
+	if err != nil {
+		cleanup()
+
+		return "", nil, nil, nil, fmt.Errorf("select sops store: %w", err)
+	}
+
+	return path, inputStore, outputStore, cleanup, nil
+}
+
 // writeTempSecret stages content in a 0600 temp file with the format's extension and returns the
 // path + a cleanup func. SOPS reads its input from a file path, so in-process encrypt/decrypt write
 // to a short-lived temp file (owner-only, removed immediately after) rather than holding it on disk.
@@ -91,30 +115,17 @@ func (s *Service) EncryptSecret(
 		return "", fmt.Errorf("%w: invalid age recipient: %w", api.ErrInvalid, err)
 	}
 
-	path, cleanup, err := writeTempSecret(plaintext, format)
-	if err != nil {
-		return "", err
-	}
-	defer cleanup()
-
-	inputStore, outputStore, err := sopsclient.GetStores(path)
-	if err != nil {
-		return "", fmt.Errorf("select sops store: %w", err)
-	}
-
-	encrypted, err := sopsclient.Encrypt(sopsclient.EncryptOpts{
-		EncryptConfig: sopsclient.EncryptConfig{KeyGroups: []sops.KeyGroup{{masterKey}}},
-		Cipher:        aes.NewCipher(),
-		InputStore:    inputStore,
-		OutputStore:   outputStore,
-		InputPath:     path,
-		KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-	})
-	if err != nil {
-		return "", fmt.Errorf("encrypt secret: %w", err)
-	}
-
-	return string(encrypted), nil
+	return runCipherOp(plaintext, format, sopsclient.GetStores, "encrypt secret",
+		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
+			return sopsclient.Encrypt(sopsclient.EncryptOpts{
+				EncryptConfig: sopsclient.EncryptConfig{KeyGroups: []sops.KeyGroup{{masterKey}}},
+				Cipher:        aes.NewCipher(),
+				InputStore:    inputStore,
+				OutputStore:   outputStore,
+				InputPath:     path,
+				KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+			})
+		})
 }
 
 // DecryptSecret decrypts a SOPS document (YAML/JSON per format) using the local age keys.
@@ -123,29 +134,42 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 		return "", fmt.Errorf("%w: encrypted input is empty", api.ErrInvalid)
 	}
 
-	path, cleanup, err := writeTempSecret(encrypted, format)
+	getDecryptStores := func(p string) (sops.Store, sops.Store, error) {
+		return sopsclient.GetDecryptStores(p, false)
+	}
+
+	return runCipherOp(encrypted, format, getDecryptStores, "decrypt secret",
+		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
+			return sopsclient.Decrypt(sopsclient.DecryptOpts{
+				Cipher:      aes.NewCipher(),
+				InputStore:  inputStore,
+				OutputStore: outputStore,
+				InputPath:   path,
+				KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+			})
+		})
+}
+
+// runCipherOp shares the prepareSecretFile setup/cleanup + result-formatting boilerplate common to
+// EncryptSecret and DecryptSecret; op performs the actual SOPS cipher call and errMsg wraps its error.
+func runCipherOp(
+	content, format string,
+	storeSelector func(path string) (sops.Store, sops.Store, error),
+	errMsg string,
+	cipherFn func(path string, inputStore, outputStore sops.Store) ([]byte, error),
+) (string, error) {
+	path, inputStore, outputStore, cleanup, err := prepareSecretFile(content, format, storeSelector)
 	if err != nil {
 		return "", err
 	}
 	defer cleanup()
 
-	inputStore, outputStore, err := sopsclient.GetDecryptStores(path, false)
+	result, err := cipherFn(path, inputStore, outputStore)
 	if err != nil {
-		return "", fmt.Errorf("select sops store: %w", err)
+		return "", fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	decrypted, err := sopsclient.Decrypt(sopsclient.DecryptOpts{
-		Cipher:      aes.NewCipher(),
-		InputStore:  inputStore,
-		OutputStore: outputStore,
-		InputPath:   path,
-		KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-	})
-	if err != nil {
-		return "", fmt.Errorf("decrypt secret: %w", err)
-	}
-
-	return string(decrypted), nil
+	return string(result), nil
 }
 
 // CipherRecipients lists the age public keys (age1…) derivable from the local age key file.

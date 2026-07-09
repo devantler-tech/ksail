@@ -410,15 +410,7 @@ func (rm *RegistryManager) listAllRegistryImageContainers(
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("ancestor", RegistryImageName)
 
-	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filterArgs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list registry containers: %w", err)
-	}
-
-	return containers, nil
+	return rm.listRegistryContainersByFilter(ctx, filterArgs)
 }
 
 // DeleteRegistriesByInfo deletes registry containers using pre-discovered registry information.

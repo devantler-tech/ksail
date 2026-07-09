@@ -87,6 +87,28 @@ dockers_v2:
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
       "org.opencontainers.image.licenses": "PolyForm-Shield-1.0.0"
+  # Steering-agent image for `ksail workload intercept` (#5882). Same ksail
+  # binary as the CLI image, on an Alpine base that carries the iptables
+  # userspace + `sleep` holder the injected steering container needs. It ships
+  # latent — `mirror.DefaultSteerImage` is not yet repointed at it (a follow-up
+  # flips the default once this image publishes), so no runtime behaviour
+  # changes here. Built + signed by the same release pipeline (docker_signs
+  # `artifacts: all` below covers it).
+  - id: ksail-steer
+    images:
+      - "ghcr.io/devantler-tech/ksail-steer"
+    dockerfile: Dockerfile.steer
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    labels:
+      "org.opencontainers.image.description": "KSail traffic-steering agent image for `ksail workload intercept`."
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}-steer"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.licenses": "PolyForm-Shield-1.0.0"
 
 # Keyless cosign signature for the published container image (the same
 # `ghcr.io/devantler-tech/ksail` image the ksail-operator runs). Signing it

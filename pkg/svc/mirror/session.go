@@ -11,7 +11,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -161,16 +160,10 @@ func captureExecURL(
 	point *TapPoint,
 	command []string,
 ) *url.URL {
-	return client.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(point.Pod).
-		Namespace(point.Namespace).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: TapContainerName,
-			Command:   command,
-			Stdout:    true,
-			Stderr:    true,
-		}, scheme.ParameterCodec).
-		URL()
+	return execURL(client, point, &corev1.PodExecOptions{
+		Container: TapContainerName,
+		Command:   command,
+		Stdout:    true,
+		Stderr:    true,
+	})
 }

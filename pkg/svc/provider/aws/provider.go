@@ -104,13 +104,9 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 // NodeInfo whose Name is the nodegroup name. Downstream consumers that need
 // instance-level detail should call the AWS SDK directly.
 func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	nodegroups, err := p.fetchNodegroups(ctx, clusterName)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err
 	}
 
 	nodes := make([]provider.NodeInfo, 0, len(nodegroups))
@@ -130,21 +126,21 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 // ListAllClusters returns the names of all EKS clusters visible in the
 // configured region (or the default region eksctl resolves when region is "").
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	clusters, err := p.client.ListClusters(ctx, p.region)
+	clusters, err := provider.FetchOrTranslate(
+		p.client != nil,
+		func() ([]eksctlclient.ClusterSummary, error) {
+			return p.client.ListClusters(ctx, p.region)
+		},
+		translateClientErr,
+	)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		names = append(names, cluster.Name)
-	}
-
-	return names, nil
+	return provider.NamesFrom(
+		clusters,
+		func(c eksctlclient.ClusterSummary) string { return c.Name },
+	), nil
 }
 
 // NodesExist returns true if the cluster has at least one managed nodegroup.
@@ -203,6 +199,27 @@ func (p *Provider) Region() string {
 	return p.region
 }
 
+// fetchNodegroups guards against a nil client and fetches this cluster's nodegroups — the
+// exec/error-handling shared by ListNodes and listNodegroupsForScale before they diverge on how
+// they treat an empty result.
+func (p *Provider) fetchNodegroups(
+	ctx context.Context,
+	clusterName string,
+) ([]eksctlclient.NodegroupSummary, error) {
+	nodegroups, err := provider.FetchOrTranslate(
+		p.client != nil,
+		func() ([]eksctlclient.NodegroupSummary, error) {
+			return p.client.ListNodegroups(ctx, clusterName, p.region)
+		},
+		translateClientErr,
+	)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
+	}
+
+	return nodegroups, nil
+}
+
 // listNodegroupsForScale is a shared prelude for StartNodes and StopNodes
 // that guards against nil clients, fetches nodegroups, and classifies the
 // empty result as provider.ErrNoNodes.
@@ -210,13 +227,9 @@ func (p *Provider) listNodegroupsForScale(
 	ctx context.Context,
 	clusterName string,
 ) ([]eksctlclient.NodegroupSummary, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	nodegroups, err := p.fetchNodegroups(ctx, clusterName)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err
 	}
 
 	if len(nodegroups) == 0 {

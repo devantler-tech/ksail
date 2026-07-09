@@ -55,3 +55,21 @@ GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; n
 GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
 GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
 GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via symlink (CVE-2026-53489; transitive; no v1 fix; path unused)
+
+# --- golang.org/x/crypto/openpgp @ v0.53.0 (transitive via kubescape) -------
+# Published 2026-07-08. This is a package-level "unmaintained, don't use" design
+# advisory (no CVE, no patchable bug — `Fixed in: N/A` is permanent, not
+# pending). CORRECTED 2026-07-08 (CodeRabbit review on #5967 caught the prior
+# note's "no ksail call path" claim as factually wrong): `govulncheck -show
+# verbose` confirms REAL symbol-level reachability — pkg/client/kubescape's
+# Client.ScanDirectory calls kubescape/v3/core.Kubescape.Scan, which internally
+# (via cautils) reaches x/crypto/openpgp's armor/packet/clearsign decoders as
+# part of kubescape's own policy-scanning engine, independent of Helm's chart-
+# provenance download path. No upstream fix exists (the x/crypto maintainers'
+# guidance is "migrate off the package entirely", not "wait for a patch") and
+# ksail does not control kubescape's internal dependency choice. Risk-accepted
+# because `ScanDirectory` (used by `ksail workload scan`) only ever processes a
+# local, non-attacker-controlled manifest directory — never remote or
+# untrusted PGP-signed input. Re-evaluate if kubescape migrates off
+# x/crypto/openpgp.
+GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via kubescape core.Scan; no fix; local-input-only path)

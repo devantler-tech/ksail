@@ -116,21 +116,21 @@ func (p *Provider) ListNodes(
 // project and location (all locations when the provider was built with an
 // empty location).
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	clusters, err := p.client.ListClusters(ctx, p.project, p.listLocation())
+	clusters, err := provider.FetchOrTranslate(
+		p.client != nil,
+		func() ([]*containerpb.Cluster, error) {
+			return p.client.ListClusters(ctx, p.project, p.listLocation())
+		},
+		translateClientErr,
+	)
 	if err != nil {
-		return nil, translateClientErr(err)
+		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		names = append(names, cluster.GetName())
-	}
-
-	return names, nil
+	return provider.NamesFrom(
+		clusters,
+		func(c *containerpb.Cluster) string { return c.GetName() },
+	), nil
 }
 
 // NodesExist returns true if the cluster has at least one node pool.

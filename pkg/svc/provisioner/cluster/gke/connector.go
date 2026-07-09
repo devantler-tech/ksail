@@ -24,12 +24,20 @@ const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 // design — the operator calls Kubeconfig on each reconcile and the installers
 // consume it immediately. It returns clustererr.ErrKubeconfigNotReady while
 // the cluster is still provisioning so the caller requeues.
+//
+//nolint:wrapcheck // WithResolvedTarget already labels the error; nothing to add here.
 func (p *Provisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
-	target := p.resolveName(name)
-	if target == "" {
-		return nil, fmt.Errorf("%w: no cluster name configured", ErrClusterNotFound)
-	}
+	return clustererr.WithResolvedTarget(
+		ctx,
+		p.resolveName,
+		name,
+		ErrClusterNotFound,
+		p.kubeconfigForTarget,
+	)
+}
 
+// kubeconfigForTarget builds the GKE kubeconfig for an already-resolved target name.
+func (p *Provisioner) kubeconfigForTarget(ctx context.Context, target string) ([]byte, error) {
 	location, err := p.resolveLocation(ctx, target)
 	if err != nil {
 		return nil, err

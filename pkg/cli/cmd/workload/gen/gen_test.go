@@ -485,6 +485,53 @@ func TestGenHelmReleaseWithValuesFrom(t *testing.T) {
 	snaps.MatchSnapshot(t, output)
 }
 
+func TestGenHelmReleaseWithValuesFromLiteral(t *testing.T) {
+	t.Parallel()
+
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
+		"webapp",
+		"--source=HelmRepository/charts",
+		"--chart=webapp",
+		"--values-from-literal=ConfigMap/app-config/config.json@app.configJson",
+		"--values-from-literal=secret/tls-bundle/ca.pem@tls.caBundle",
+		"--export",
+	})
+
+	require.NoError(t, err)
+	require.Contains(t, errOutput, "generated HelmRelease")
+	snaps.MatchSnapshot(t, output)
+}
+
+func TestGenHelmReleaseInvalidValuesFromLiteralMissingTargetPath(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
+		"webapp",
+		"--source=HelmRepository/charts",
+		"--chart=webapp",
+		"--values-from-literal=ConfigMap/app-config/config.json",
+		"--export",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid format")
+}
+
+func TestGenHelmReleaseInvalidValuesFromLiteralKind(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
+		"webapp",
+		"--source=HelmRepository/charts",
+		"--chart=webapp",
+		"--values-from-literal=Deployment/app-config/config.json@app.configJson",
+		"--export",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid kind")
+}
+
 func TestGenHelmReleaseWithVersion(t *testing.T) {
 	t.Parallel()
 

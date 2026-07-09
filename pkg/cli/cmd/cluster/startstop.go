@@ -9,8 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const startLongDesc = `Start a previously stopped Kubernetes cluster.
-
+// clusterProviderResolutionDesc documents the shared --name/--provider resolution priority order
+// used by both the start and stop long descriptions below (they differ only in their opening line).
+const clusterProviderResolutionDesc = `
 The cluster is resolved in the following priority order:
   1. From --name flag
   2. From ksail.yaml config file (if present)
@@ -22,6 +23,8 @@ The provider is resolved in the following priority order:
   3. Defaults to Docker
 
 Supported distributions are automatically detected from existing clusters.`
+
+const startLongDesc = "Start a previously stopped Kubernetes cluster.\n" + clusterProviderResolutionDesc
 
 // NewStartCmd creates and returns the start command.
 func NewStartCmd() *cobra.Command {
@@ -40,6 +43,7 @@ func NewStartCmd() *cobra.Command {
 		) error {
 			return provisioner.Start(ctx, clusterName)
 		},
+		Guard: unmanagedClusterGuard,
 	})
 
 	cmd.Annotations = map[string]string{
@@ -49,19 +53,7 @@ func NewStartCmd() *cobra.Command {
 	return cmd
 }
 
-const stopLongDesc = `Stop a running Kubernetes cluster.
-
-The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
-
-The provider is resolved in the following priority order:
-  1. From --provider flag
-  2. From ksail.yaml config file (if present)
-  3. Defaults to Docker
-
-Supported distributions are automatically detected from existing clusters.`
+const stopLongDesc = "Stop a running Kubernetes cluster.\n" + clusterProviderResolutionDesc
 
 // NewStopCmd creates and returns the stop command.
 func NewStopCmd() *cobra.Command {
@@ -80,6 +72,7 @@ func NewStopCmd() *cobra.Command {
 		) error {
 			return provisioner.Stop(ctx, clusterName)
 		},
+		Guard: unmanagedClusterGuard,
 	})
 
 	cmd.Annotations = map[string]string{
