@@ -81,6 +81,13 @@ func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionTalos, v1alpha1.DistributionVCluster:
 		return true
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
+		return false
 	default:
 		return false
 	}
@@ -96,6 +103,13 @@ func registryHostNetworkName(clusterCfg *v1alpha1.Cluster, clusterName string) s
 		return clusterName
 	case v1alpha1.DistributionVCluster:
 		return vclusterNetworkPrefix + clusterName
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
+		return ""
 	default:
 		return ""
 	}

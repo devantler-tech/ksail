@@ -1,23 +1,20 @@
-package setup
+package setup_test
 
 import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNeedsRegistryIPResolution(t *testing.T) {
+func TestNeedsRegistryIPResolution_TrueForDockerLocalRegistries(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
 		clusterCfg *v1alpha1.Cluster
-		expected   bool
 	}{
-		{
-			name: "nil config",
-		},
 		{
 			name: "talos docker local registry",
 			clusterCfg: clusterForRegistryHostTest(
@@ -25,7 +22,6 @@ func TestNeedsRegistryIPResolution(t *testing.T) {
 				v1alpha1.ProviderDocker,
 				"localhost:5050",
 			),
-			expected: true,
 		},
 		{
 			name: "talos default provider local registry",
@@ -34,7 +30,35 @@ func TestNeedsRegistryIPResolution(t *testing.T) {
 				"",
 				"localhost:5050",
 			),
-			expected: true,
+		},
+		{
+			name: "vcluster docker local registry",
+			clusterCfg: clusterForRegistryHostTest(
+				v1alpha1.DistributionVCluster,
+				v1alpha1.ProviderDocker,
+				"localhost:5050",
+			),
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.True(t, setup.NeedsRegistryIPResolutionForTest(testCase.clusterCfg))
+		})
+	}
+}
+
+func TestNeedsRegistryIPResolution_FalseForUnsupportedRegistryAccess(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		clusterCfg *v1alpha1.Cluster
+	}{
+		{
+			name: "nil config",
 		},
 		{
 			name: "talos external registry",
@@ -51,15 +75,6 @@ func TestNeedsRegistryIPResolution(t *testing.T) {
 				v1alpha1.ProviderHetzner,
 				"localhost:5050",
 			),
-		},
-		{
-			name: "vcluster docker local registry",
-			clusterCfg: clusterForRegistryHostTest(
-				v1alpha1.DistributionVCluster,
-				v1alpha1.ProviderDocker,
-				"localhost:5050",
-			),
-			expected: true,
 		},
 		{
 			name: "vanilla docker local registry",
@@ -83,7 +98,7 @@ func TestNeedsRegistryIPResolution(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, testCase.expected, needsRegistryIPResolution(testCase.clusterCfg))
+			assert.False(t, setup.NeedsRegistryIPResolutionForTest(testCase.clusterCfg))
 		})
 	}
 }
@@ -114,7 +129,7 @@ func TestRegistryHostNetworkName(t *testing.T) {
 				v1alpha1.ProviderDocker,
 				"localhost:5050",
 			),
-			expected: defaultTalosNetworkName,
+			expected: setup.DefaultTalosNetworkNameForTest,
 		},
 		{
 			name: "vcluster uses prefixed network",
@@ -143,7 +158,7 @@ func TestRegistryHostNetworkName(t *testing.T) {
 			assert.Equal(
 				t,
 				testCase.expected,
-				registryHostNetworkName(testCase.clusterCfg, testCase.cluster),
+				setup.RegistryHostNetworkNameForTest(testCase.clusterCfg, testCase.cluster),
 			)
 		})
 	}
