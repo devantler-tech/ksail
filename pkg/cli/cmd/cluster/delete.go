@@ -77,6 +77,13 @@ func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
 	)
 }
 
+// deleteUnmanagedGuardFunc is the unmanaged-cluster guard the delete command applies before it
+// touches the target. It defaults to the real cross-provider guard; tests override it (via
+// ExportSetDeleteUnmanagedGuard) so the refusal path can be exercised without a live provider.
+//
+//nolint:gochecknoglobals // dependency injection for tests
+var deleteUnmanagedGuardFunc = unmanagedClusterGuard
+
 // runDeleteAction executes the cluster deletion with registry cleanup.
 func runDeleteAction(
 	cmd *cobra.Command,
@@ -93,6 +100,15 @@ func runDeleteAction(
 	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.Name, flags.Provider, flags.Kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
+	}
+
+	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
+	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
+	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally
+	// deletes a cluster it does not own. Read-only operations still work. (ksail#5885, epic #5654.)
+	err = deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	if err != nil {
+		return err
 	}
 
 	// Detect cluster distribution and info before deletion
