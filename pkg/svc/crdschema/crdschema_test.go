@@ -353,3 +353,130 @@ func TestMaterialize_DerivedSchemaValidatesViaKubeconform(t *testing.T) {
 	)
 	require.NoError(t, err, "without the derived schema the CR should be skipped")
 }
+
+// TestMaterializeBytes_WritesSchemaPerVersion proves MaterializeBytes finds a CRD
+// in a pre-rendered manifest stream (a []byte, not a file on disk) exactly like
+// Materialize finds one by walking a file tree — the two entry points share the
+// same per-document extraction, just fed from a different source.
+func TestMaterializeBytes_WritesSchemaPerVersion(t *testing.T) {
+	t.Parallel()
+
+	dest := t.TempDir()
+
+	result, err := crdschema.MaterializeBytes(
+		[]byte(widgetCRD),
+		"helmrelease/widgets (rendered)",
+		dest,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Written)
+	require.Empty(t, result.Warnings)
+	require.FileExists(t, filepath.Join(dest, "example.com", "widget_v1.json"))
+}
+
+// TestMaterializeBytes_IgnoresNonCRDDocuments proves a multi-document rendered
+// stream (the shape helm/kustomize output actually takes — many resources
+// separated by "---", most of them not CRDs) only yields a schema for the
+// CustomResourceDefinition document, mirroring Materialize's raw-tree behavior.
+func TestMaterializeBytes_IgnoresNonCRDDocuments(t *testing.T) {
+	t.Parallel()
+
+	rendered := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+---
+` + widgetCRD + `---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+`
+
+	dest := t.TempDir()
+
+	result, err := crdschema.MaterializeBytes(
+		[]byte(rendered),
+		"kustomization/app (rendered)",
+		dest,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Written)
+	require.FileExists(t, filepath.Join(dest, "example.com", "widget_v1.json"))
+}
+
+// TestMaterializeBytes_WarningCarriesSource proves a warning from a malformed
+// rendered document is attributed to the caller-supplied source label (e.g. the
+// kustomization directory the stream was rendered from), not a file path — there
+// is no file, since the content came from rendering rather than disk.
+func TestMaterializeBytes_WarningCarriesSource(t *testing.T) {
+	t.Parallel()
+
+	const malformedCRD = `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: evil.example.com
+spec:
+  names:
+    kind: Evil
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+`
+
+	dest := t.TempDir()
+
+	result, err := crdschema.MaterializeBytes([]byte(malformedCRD), "k8s/apps (rendered)", dest)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Written)
+	require.Len(t, result.Warnings, 1)
+	require.Equal(t, "k8s/apps (rendered)", result.Warnings[0].Source)
+	require.Contains(t, result.Warnings[0].Reason, "spec.group")
+}
+
+// TestMaterializeBytes_DerivedSchemaValidatesViaKubeconform is the rendered-output
+// counterpart of TestMaterialize_DerivedSchemaValidatesViaKubeconform: a schema
+// derived from a CRD that only appears in a rendered manifest stream — never
+// written to disk anywhere — still lets kubeconform catch an invalid custom
+// resource of that kind, and pass a valid one.
+func TestMaterializeBytes_DerivedSchemaValidatesViaKubeconform(t *testing.T) {
+	t.Parallel()
+
+	dest := t.TempDir()
+
+	result, err := crdschema.MaterializeBytes(
+		[]byte(widgetCRD),
+		"helmrelease/widgets (rendered)",
+		dest,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Written)
+
+	client := kubeconform.NewClient()
+	ctx := context.Background()
+	location := crdschema.SchemaLocation(dest)
+
+	err = client.ValidateBytes(
+		ctx,
+		"widget.yaml",
+		[]byte(validWidgetCR),
+		&kubeconform.ValidationOptions{
+			IgnoreMissingSchemas: false,
+			SchemaLocations:      []string{location},
+		},
+	)
+	require.NoError(t, err, "valid CR should pass against the rendered-source derived schema")
+
+	err = client.ValidateBytes(
+		ctx,
+		"widget.yaml",
+		[]byte(invalidWidgetCR),
+		&kubeconform.ValidationOptions{
+			IgnoreMissingSchemas: false,
+			SchemaLocations:      []string{location},
+		},
+	)
+	require.Error(t, err, "invalid CR should fail against the rendered-source derived schema")
+}

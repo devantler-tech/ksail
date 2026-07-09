@@ -1,0 +1,9 @@
+apiVersion: v2
+name: crdchart
+description: >-
+  A minimal chart that ships a CustomResourceDefinition in templates/ (offline
+  test fixture for --include-crd-schemas discovering a CRD only present in
+  rendered Helm output, not the raw source tree).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

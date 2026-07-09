@@ -185,24 +185,33 @@ func runValidateCmd(
 	// Create kubeconform client
 	kubeconformClient := kubeconform.NewClient()
 
+	// Built before buildValidationOptions so that, when --include-crd-schemas is
+	// set, CRD-schema discovery can also render every kustomization and inspect
+	// its output (a CRD a chart ships under templates/ is invisible to a raw-tree
+	// walk). Reusing this same renderer for the real validation pass below lets
+	// its chart cache (pkg/svc/gitops/render.ChartCache) serve the second render
+	// of an already-seen chart from memory instead of re-templating it.
+	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
+
 	// Assemble validation options (skip-kinds, schema locations, and — when
-	// --include-crd-schemas is set — schemas derived from in-tree CRDs). cleanup
+	// --include-crd-schemas is set — schemas derived from in-tree CRDs plus, when
+	// Helm rendering is enabled, from rendered kustomization output). cleanup
 	// removes any temporary CRD-schema directory once validation completes.
 	validationOpts, cleanup, err := buildValidationOptions(
+		ctx,
 		cmd,
 		cfg,
 		configFound,
 		loadErr,
 		flags,
 		path,
+		renderer,
 	)
 	if err != nil {
 		return err
 	}
 
 	defer cleanup()
-
-	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
 	// Compile the CEL rules once up front so a malformed rules file fails fast
 	// (before any manifest is processed) rather than silently skipping the rules.
@@ -223,16 +232,20 @@ func runValidateCmd(
 // flags and ksail.yaml config: skip-kinds (--skip-kinds + spec.workload.validation
 // .skipKinds), schema locations (--schema-location + the configured locations), and
 // — when --include-crd-schemas is set — schemas derived from CustomResourceDefinition
-// manifests in the path so custom resources whose CRD ships in the repo are validated
-// instead of skipped. It returns the options plus a cleanup func (always non-nil,
-// safe to defer) that removes any temporary CRD-schema directory.
+// manifests in the path, plus (when renderer is non-nil) from every kustomization's
+// rendered output, so custom resources whose CRD ships in the repo OR is only
+// produced by Helm/Kustomize rendering are validated instead of skipped. It
+// returns the options plus a cleanup func (always non-nil, safe to defer) that
+// removes any temporary CRD-schema directory.
 func buildValidationOptions(
+	ctx context.Context,
 	cmd *cobra.Command,
 	cfg *v1alpha1.Cluster,
 	configFound bool,
 	loadErr error,
 	flags validateFlags,
 	path string,
+	renderer *gitopsRenderer,
 ) (*kubeconform.ValidationOptions, func(), error) {
 	validationOpts := &kubeconform.ValidationOptions{
 		Strict:               flags.strict,
@@ -264,7 +277,7 @@ func buildValidationOptions(
 	cleanup := func() {}
 
 	if flags.includeCRDSchemas {
-		crdCleanup, err := addCRDSchemas(cmd, path, validationOpts)
+		crdCleanup, err := addCRDSchemas(ctx, cmd, path, renderer, validationOpts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -276,13 +289,19 @@ func buildValidationOptions(
 }
 
 // addCRDSchemas derives kubeconform schemas from CustomResourceDefinition
-// manifests under path into a temporary directory, appends that directory as a
-// schema location on opts, and warns about any CRD that could not be converted. It
-// returns a cleanup function (always non-nil, safe to defer) that removes the
-// temporary directory once validation has completed.
+// manifests under path into a temporary directory: first from the raw source
+// tree (crdschema.Materialize), then — when renderer is non-nil — from every
+// kustomization's rendered output (addRenderedCRDSchemas), so a CRD that only
+// exists after Helm/Kustomize rendering (e.g. shipped under a chart's
+// templates/) is discovered too. It appends that directory as a schema location
+// on opts and warns about any CRD (or kustomization render) that could not be
+// converted. It returns a cleanup function (always non-nil, safe to defer) that
+// removes the temporary directory once validation has completed.
 func addCRDSchemas(
+	ctx context.Context,
 	cmd *cobra.Command,
 	path string,
+	renderer *gitopsRenderer,
 	opts *kubeconform.ValidationOptions,
 ) (func(), error) {
 	tempDir, err := os.MkdirTemp("", "ksail-crd-schemas-")
@@ -299,6 +318,18 @@ func addCRDSchemas(
 		return nil, fmt.Errorf("derive CRD schemas: %w", err)
 	}
 
+	if renderer != nil {
+		renderedResult, err := addRenderedCRDSchemas(ctx, path, renderer, tempDir)
+		if err != nil {
+			cleanup()
+
+			return nil, err
+		}
+
+		result.Written += renderedResult.Written
+		result.Warnings = append(result.Warnings, renderedResult.Warnings...)
+	}
+
 	for _, warning := range result.Warnings {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -313,6 +344,54 @@ func addCRDSchemas(
 	}
 
 	return cleanup, nil
+}
+
+// addRenderedCRDSchemas renders every kustomization under path and extracts CRD
+// schemas from each rendered manifest stream into destDir, discovering CRDs that
+// only exist after Helm/Kustomize rendering (invisible to a raw source-tree
+// walk). A kustomization that fails to render is skipped with a warning rather
+// than failing the run — --include-crd-schemas degrades gracefully, matching
+// crdschema.Materialize's own per-CRD warning behaviour. Reusing renderer (the
+// same instance the real validation pass below uses) lets its chart cache serve
+// a chart already rendered here from memory instead of re-templating it.
+func addRenderedCRDSchemas(
+	ctx context.Context,
+	path string,
+	renderer *gitopsRenderer,
+	destDir string,
+) (crdschema.Result, error) {
+	var result crdschema.Result
+
+	kustomizations, err := findKustomizations(path)
+	if err != nil {
+		return result, fmt.Errorf("find kustomizations for CRD schema discovery: %w", err)
+	}
+
+	for _, kustDir := range kustomizations {
+		rendered, err := renderer.expand(ctx, kustDir)
+		if err != nil {
+			result.Warnings = append(result.Warnings, crdschema.Warning{
+				Source: kustDir,
+				Reason: "render: " + err.Error(),
+			})
+
+			continue
+		}
+
+		docResult, err := crdschema.MaterializeBytes(
+			rendered.Bytes(),
+			kustDir+" (rendered)",
+			destDir,
+		)
+		if err != nil {
+			return result, fmt.Errorf("derive rendered CRD schemas for %s: %w", kustDir, err)
+		}
+
+		result.Written += docResult.Written
+		result.Warnings = append(result.Warnings, docResult.Warnings...)
+	}
+
+	return result, nil
 }
 
 // buildValidateRenderer returns a gitopsRenderer when Helm rendering is enabled,
