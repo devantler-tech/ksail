@@ -73,7 +73,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.19.0
-	github.com/cosi-project/runtime v1.16.1
+	github.com/cosi-project/runtime v1.16.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.5
 	github.com/go-jose/go-jose/v4 v4.1.4
