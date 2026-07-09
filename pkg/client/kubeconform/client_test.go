@@ -3,6 +3,7 @@ package kubeconform_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,6 +356,53 @@ data: "this is not a map"
 
 	if strings.Contains(msg, "test-namespace") {
 		t.Fatalf("expected error not to implicate the valid Namespace, got: %v", err)
+	}
+}
+
+func TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream(t *testing.T) {
+	t.Parallel()
+
+	const (
+		documentCount = 512
+		payloadSize   = 10 * 1024
+	)
+
+	var stream strings.Builder
+	for i := range documentCount {
+		_, _ = fmt.Fprintf(
+			&stream,
+			"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-%03d\ndata:\n  payload: %q\n---\n",
+			i,
+			strings.Repeat("x", payloadSize),
+		)
+	}
+
+	source := []byte(stream.String())
+
+	documents, err := kubeconform.SplitDocumentsForValidation(source)
+	if err != nil {
+		t.Fatalf("expected large stream to split cleanly, got: %v", err)
+	}
+
+	if len(documents) != documentCount {
+		t.Fatalf("expected %d documents, got %d", documentCount, len(documents))
+	}
+
+	for index, document := range documents {
+		// Prove each split document owns stable bytes: callers may retry
+		// validation over the split output while the original input buffer is
+		// no longer trusted.
+		source[0] = '#'
+
+		expectedName := fmt.Sprintf("name: cm-%03d", index)
+		if !bytes.Contains(document, []byte(expectedName)) {
+			t.Fatalf(
+				"document %d lost its identity; expected %q in:\n%s",
+				index,
+				expectedName,
+				document,
+			)
+		}
 	}
 }
 
