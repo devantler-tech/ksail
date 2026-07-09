@@ -294,7 +294,7 @@ require (
 	github.com/fluxcd/kustomize-controller/api v1.9.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.30.1 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.31.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.73.0 // indirect
 	github.com/fluxcd/source-controller/api v1.9.1 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
