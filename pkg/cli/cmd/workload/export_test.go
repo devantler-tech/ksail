@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -457,4 +458,26 @@ func ExportSetRunInterceptSession(
 	runInterceptSession = session
 
 	return func() { runInterceptSession = original }
+}
+
+// ExportSetEphemeralProvisioner swaps the --ephemeral cluster provisioner
+// factory so tests can substitute a fake without a live Docker/KWOK
+// dependency. It returns a restore function that reinstates the original.
+func ExportSetEphemeralProvisioner(
+	factory func(name string) clusterprovisioner.Provisioner,
+) func() {
+	original := newEphemeralProvisioner
+	newEphemeralProvisioner = factory
+
+	return func() { newEphemeralProvisioner = original }
+}
+
+// ExportWithEphemeralCluster exposes withEphemeralCluster for external-package
+// tests exercising the provision/guaranteed-teardown seam directly.
+func ExportWithEphemeralCluster(
+	ctx context.Context,
+	cmd *cobra.Command,
+	runFn func(ctx context.Context) error,
+) error {
+	return withEphemeralCluster(ctx, cmd, runFn)
 }
