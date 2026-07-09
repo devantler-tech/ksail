@@ -133,6 +133,10 @@ func (c *Client) validateData(
 	return c.validateWithRetry(ctx, func() error {
 		results := make([]validator.Result, 0, len(documents))
 		for _, document := range documents {
+			if ctx.Err() != nil {
+				return fmt.Errorf("%w", ctx.Err())
+			}
+
 			results = append(
 				results,
 				kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(document)))...,
@@ -143,6 +147,8 @@ func (c *Client) validateData(
 	})
 }
 
+// splitDocumentsForValidation reads a YAML stream into stable, non-empty
+// document byte slices so validation retries never reuse scanner-owned buffers.
 func splitDocumentsForValidation(data []byte) ([][]byte, error) {
 	reader := k8syaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 	documents := [][]byte{}

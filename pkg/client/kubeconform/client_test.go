@@ -3,10 +3,14 @@ package kubeconform_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
@@ -359,6 +363,8 @@ data: "this is not a map"
 	}
 }
 
+// TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream verifies that
+// split documents are stable copies rather than views into the source buffer.
 func TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream(t *testing.T) {
 	t.Parallel()
 
@@ -403,6 +409,49 @@ func TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream(t *testing.T)
 				document,
 			)
 		}
+	}
+}
+
+// TestValidateBytesStopsBetweenDocumentsWhenContextCancelled verifies that a
+// cancelled batch stops before validating later split documents.
+func TestValidateBytesStopsBetweenDocumentsWhenContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var schemaRequests atomic.Int32
+
+	schemaServer := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			schemaRequests.Add(1)
+			cancel()
+
+			_, _ = w.Write([]byte(widgetCRDSchema))
+		}),
+	)
+	t.Cleanup(schemaServer.Close)
+
+	client := kubeconform.NewClient()
+	opts := &kubeconform.ValidationOptions{
+		IgnoreMissingSchemas: false,
+		SchemaLocations: []string{
+			schemaServer.URL + "/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		},
+	}
+
+	err := client.ValidateBytes(
+		ctx,
+		"widgets.yaml",
+		[]byte(validWidgetCR+"---\n"+validWidgetCR),
+		opts,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation between documents, got: %v", err)
+	}
+
+	if got := schemaRequests.Load(); got == 0 {
+		t.Fatal("expected validation to request at least one schema before cancellation")
 	}
 }
 
