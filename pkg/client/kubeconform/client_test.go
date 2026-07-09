@@ -412,6 +412,28 @@ func TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream(t *testing.T)
 	}
 }
 
+// TestSplitDocumentsForValidationRejectsMalformedYAML verifies malformed
+// documents fail while splitting, before any kubeconform validation runs.
+func TestSplitDocumentsForValidationRejectsMalformedYAML(t *testing.T) {
+	t.Parallel()
+
+	malformedStream := []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: broken
+--- invalid separator content
+`)
+
+	documents, err := kubeconform.SplitDocumentsForValidation(malformedStream)
+	if err == nil {
+		t.Fatalf("expected malformed YAML to fail splitting, got %d documents", len(documents))
+	}
+
+	if !strings.Contains(err.Error(), "read YAML document") {
+		t.Fatalf("expected split error to wrap YAML read failure, got: %v", err)
+	}
+}
+
 // TestValidateBytesStopsBetweenDocumentsWhenContextCancelled verifies that a
 // cancelled batch stops before validating later split documents.
 func TestValidateBytesStopsBetweenDocumentsWhenContextCancelled(t *testing.T) {
