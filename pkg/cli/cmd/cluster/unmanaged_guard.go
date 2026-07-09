@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 )
 
 // ErrUnmanagedCluster indicates a ksail-only lifecycle action (start/stop/…) was attempted against a
@@ -100,4 +103,43 @@ func kubeconfigHasClusterContext(kubeconfigPath, clusterName string) bool {
 // rejects an action on a cluster ksail did not provision, using the real cross-provider discoverer.
 func unmanagedClusterGuard(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
 	return ensureClusterManaged(ctx, resolved, discoverManagedClusters)
+}
+
+// updateUnmanagedGuardFunc is the unmanaged-cluster guard `cluster update` applies before it
+// reconciles any configuration. It defaults to the real cross-provider guard; tests override it
+// (via ExportSetUpdateUnmanagedGuard) so the refusal path is exercised without a live provider.
+//
+//nolint:gochecknoglobals // dependency injection for tests
+var updateUnmanagedGuardFunc = unmanagedClusterGuard
+
+// guardUpdateTargetManaged refuses `cluster update` when its target is a cluster ksail did not
+// provision. Unlike delete/start/stop, `cluster update` has no --kubeconfig flag — it resolves its
+// target from ksail.yaml — so the kubeconfig path is read from the loaded ClusterCfg and resolved
+// the same way ResolveClusterInfo does, then handed to the shared unmanaged-cluster guard. The guard
+// fails open on incomplete discovery, so a genuine managed cluster is never wrongly refused.
+// (ksail#5885, epic #5654.)
+func guardUpdateTargetManaged(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) error {
+	kubeconfigPath, err := clusterdetector.ResolveKubeconfigPath(
+		clusterCfg.Spec.Cluster.Connection.Kubeconfig,
+	)
+	if err != nil {
+		return fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	// Canonicalize the user-supplied path before the guard reads the kubeconfig (repo path-safety
+	// guideline; EvalCanonicalPath tolerates a not-yet-existing file by resolving its parent, so a
+	// missing kubeconfig still falls through to the guard's fail-open path).
+	canonical, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
+	}
+
+	return updateUnmanagedGuardFunc(ctx, &lifecycle.ResolvedClusterInfo{
+		ClusterName:    clusterName,
+		KubeconfigPath: canonical,
+	})
 }

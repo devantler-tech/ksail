@@ -548,6 +548,18 @@ func ExportSetIsKubeconfigStaleFunc(fn func(string, string) bool) func() {
 	return func() { isKubeconfigStaleFunc = orig }
 }
 
+// ExportSetDeleteUnmanagedGuard overrides the delete command's unmanaged-cluster guard for testing
+// (so the refusal path is exercised without a live cross-provider discoverer). The returned function
+// restores the original.
+func ExportSetDeleteUnmanagedGuard(
+	fn func(context.Context, *lifecycle.ResolvedClusterInfo) error,
+) func() {
+	orig := deleteUnmanagedGuardFunc
+	deleteUnmanagedGuardFunc = fn
+
+	return func() { deleteUnmanagedGuardFunc = orig }
+}
+
 // ExportRunDiagnoseTextReport exposes runDiagnoseTextReport for testing.
 func ExportRunDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
 	return runDiagnoseTextReport(report, w)
@@ -556,4 +568,26 @@ func ExportRunDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
 // ExportRunDiagnoseJSONReport exposes runDiagnoseJSONReport for testing.
 func ExportRunDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
 	return runDiagnoseJSONReport(report, w)
+}
+
+// ExportSetUpdateUnmanagedGuard overrides the update command's unmanaged-cluster guard for testing
+// (so the refusal path is exercised without a live cross-provider discoverer). The returned function
+// restores the original.
+func ExportSetUpdateUnmanagedGuard(
+	fn func(context.Context, *lifecycle.ResolvedClusterInfo) error,
+) func() {
+	orig := updateUnmanagedGuardFunc
+	updateUnmanagedGuardFunc = fn
+
+	return func() { updateUnmanagedGuardFunc = orig }
+}
+
+// ExportGuardUpdateTargetManaged exposes guardUpdateTargetManaged for testing — it resolves the
+// kubeconfig from the ClusterCfg and applies the (overridable) unmanaged-cluster guard.
+func ExportGuardUpdateTargetManaged(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) error {
+	return guardUpdateTargetManaged(ctx, clusterCfg, clusterName)
 }

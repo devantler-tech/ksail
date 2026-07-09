@@ -60,9 +60,11 @@ on:
         required: false
         type: number
         default: 0
-  schedule:
-    # Weekly: Sunday 04:00 UTC
-    - cron: "0 4 * * 0"
+  # schedule trigger paused (#4973): zero machines have been registered in the Omni instance
+  # since ~2026-04-26, so every scheduled run failed at machine auto-discovery for 6+
+  # consecutive weeks before any provisioning happened — pure noise, not signal. Re-enable
+  # the weekly cron once a machine is registered; workflow_dispatch stays available for
+  # on-demand runs meanwhile.
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"

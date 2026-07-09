@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/stretchr/testify/assert"
@@ -128,5 +129,57 @@ func TestEnsureClusterManaged_MissingKubeconfigAllows(t *testing.T) {
 			map[string]struct{}{},
 			true,
 		),
+	)
+}
+
+// TestGuardUpdateTargetManaged_UnmanagedRejected verifies that `cluster update` refuses a cluster
+// ksail did not provision: when the target context exists in the kubeconfig configured in ksail.yaml
+// but is NOT in ksail's managed set, guardUpdateTargetManaged rejects with ErrUnmanagedCluster before
+// any configuration is applied. (ksail#5885, epic #5654.)
+//
+//nolint:paralleltest // mutates the package-global update guard via ExportSetUpdateUnmanagedGuard
+func TestGuardUpdateTargetManaged_UnmanagedRejected(t *testing.T) {
+	kubeconfigPath := writeKubeconfigWithContext(t, t.TempDir(), "kind-my-cluster")
+
+	// Drive the REAL guard against an empty managed set: "my-cluster" is not managed, yet its context
+	// exists in the configured kubeconfig, so the guard must refuse.
+	restore := cluster.ExportSetUpdateUnmanagedGuard(
+		func(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			return cluster.ExportEnsureClusterManaged(ctx, resolved, map[string]struct{}{}, true)
+		},
+	)
+	defer restore()
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
+
+	err := cluster.ExportGuardUpdateTargetManaged(context.Background(), clusterCfg, "my-cluster")
+
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	require.Contains(t, err.Error(), "my-cluster")
+}
+
+// TestGuardUpdateTargetManaged_ManagedAllows verifies the guard passes (returns nil) when the target
+// cluster IS managed by ksail — `cluster update` proceeds normally.
+//
+//nolint:paralleltest // mutates the package-global update guard via ExportSetUpdateUnmanagedGuard
+func TestGuardUpdateTargetManaged_ManagedAllows(t *testing.T) {
+	kubeconfigPath := writeKubeconfigWithContext(t, t.TempDir(), "kind-my-cluster")
+
+	restore := cluster.ExportSetUpdateUnmanagedGuard(
+		func(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			return cluster.ExportEnsureClusterManaged(
+				ctx, resolved, map[string]struct{}{"my-cluster": {}}, true,
+			)
+		},
+	)
+	defer restore()
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
+
+	require.NoError(
+		t,
+		cluster.ExportGuardUpdateTargetManaged(context.Background(), clusterCfg, "my-cluster"),
 	)
 }

@@ -131,6 +131,31 @@ func Materialize(root, destDir string) (Result, error) {
 	return result, nil
 }
 
+// MaterializeBytes converts every CustomResourceDefinition document found in a
+// single pre-rendered manifest stream (e.g. Helm/Kustomize rendered output, not
+// necessarily present verbatim anywhere in the source tree) into kubeconform
+// schemas under destDir, using the same {group}/{kind}_{version}.json layout as
+// Materialize. It complements Materialize, which only discovers CRDs by walking
+// a raw file tree: a chart that ships its CRDs under templates/, or a kustomize
+// component that generates one, is invisible to that walk but present in
+// rendered output. source is used only to attribute warnings (e.g. the
+// kustomization directory the manifest stream was rendered from).
+//
+// Extraction is best-effort, mirroring Materialize: a CRD (or a single version)
+// that cannot be parsed or converted is reported as a Warning and skipped rather
+// than failing the caller. An error is returned only when a schema cannot be
+// written to destDir.
+func MaterializeBytes(data []byte, source, destDir string) (Result, error) {
+	var result Result
+
+	err := materializeFile(data, source, destDir, &result)
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
 // materializeFile extracts and writes every CRD schema found in a single file's
 // documents, appending warnings to result. It returns an error only when a schema
 // cannot be written to destDir.
