@@ -43,6 +43,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
+      --ephemeral                      EXPERIMENTAL scaffold (ksail#5919): provision a throwaway KWOK cluster for the duration of this command, guaranteed to be torn down afterwards. Does not yet change what is scanned — off by default.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])

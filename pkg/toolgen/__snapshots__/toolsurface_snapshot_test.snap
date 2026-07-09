@@ -1598,6 +1598,10 @@ workload_write
         "description": "Must be \"none\", \"server\", or \"client\". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource.",
         "type": "string"
       },
+      "ephemeral": {
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: scan, validate)",
+        "type": "boolean"
+      },
       "exceptions": {
         "description": "Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml) (applies to: scan)",
         "type": "string"
