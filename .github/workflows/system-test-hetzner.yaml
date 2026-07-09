@@ -65,9 +65,10 @@ on:
         required: false
         type: string
         default: ""
-  schedule:
-    # Weekly: Sunday 03:00 UTC
-    - cron: "0 3 * * 0"
+  # schedule trigger paused (#4972): HCLOUD_TOKEN has been invalid/expired since ~2026-04-26,
+  # so every scheduled run failed at cluster-existence-check for 6+ consecutive weeks before
+  # any provisioning happened — pure noise, not signal. Re-enable the weekly cron once the
+  # secret is rotated; workflow_dispatch stays available for on-demand runs meanwhile.
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
