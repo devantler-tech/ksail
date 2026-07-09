@@ -75,7 +75,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/cosi-project/runtime v1.16.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/github/copilot-sdk/go v1.0.4
+	github.com/github/copilot-sdk/go v1.0.5
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-github/v72 v72.0.0
