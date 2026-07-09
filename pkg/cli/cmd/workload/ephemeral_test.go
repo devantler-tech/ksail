@@ -137,8 +137,18 @@ func TestWithEphemeralClusterSkipsFnAndTearsDownWhenCreateFails(t *testing.T) {
 
 	require.ErrorIs(t, err, errEphemeralCreateFailed)
 	assert.False(t, ran, "fn must not run when the ephemeral cluster fails to provision")
-	require.Len(t, fake.deleted, 1, "teardown must run after a failed create to clean partial state")
-	assert.Equal(t, fake.created[0], fake.deleted[0], "failed create cleanup must target the same cluster")
+	require.Len(
+		t,
+		fake.deleted,
+		1,
+		"teardown must run after a failed create to clean partial state",
+	)
+	assert.Equal(
+		t,
+		fake.created[0],
+		fake.deleted[0],
+		"failed create cleanup must target the same cluster",
+	)
 }
 
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
