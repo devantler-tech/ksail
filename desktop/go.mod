@@ -237,7 +237,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.19.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
-	github.com/cosi-project/runtime v1.16.1 // indirect
+	github.com/cosi-project/runtime v1.16.2 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-docker v0.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
@@ -294,7 +294,7 @@ require (
 	github.com/fluxcd/kustomize-controller/api v1.9.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.30.1 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.31.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.73.0 // indirect
 	github.com/fluxcd/source-controller/api v1.9.1 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
@@ -777,7 +777,7 @@ require (
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.39.0 // indirect

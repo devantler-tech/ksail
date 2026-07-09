@@ -16,7 +16,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.1
 	github.com/fluxcd/kustomize-controller/api v1.9.0
-	github.com/fluxcd/pkg/apis/meta v1.30.1
+	github.com/fluxcd/pkg/apis/meta v1.31.0
 	github.com/fluxcd/source-controller/api v1.9.1
 	github.com/getsops/sops/v3 v3.13.2
 	github.com/gkampitakis/go-snaps v0.5.22
@@ -34,7 +34,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/yannh/kubeconform v0.8.0
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.44.0
 	helm.sh/helm/v4 v4.2.2
 	k8s.io/api v0.36.2
@@ -73,7 +73,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.19.0
-	github.com/cosi-project/runtime v1.16.1
+	github.com/cosi-project/runtime v1.16.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.5
 	github.com/go-jose/go-jose/v4 v4.1.4
