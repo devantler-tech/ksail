@@ -63,14 +63,7 @@ func withEphemeralCluster(
 	name := ephemeralClusterName()
 	provisioner := newEphemeralProvisioner(name)
 
-	notify.Infof(cmd.OutOrStdout(), "provisioning ephemeral cluster %q for --ephemeral...", name)
-
-	createErr := provisioner.Create(ctx, name)
-	if createErr != nil {
-		return fmt.Errorf("provision ephemeral cluster %q: %w", name, createErr)
-	}
-
-	defer func() {
+	deleteCluster := func() error {
 		// context.WithoutCancel: the outer ctx may already be Done() (the
 		// SIGINT/SIGTERM that triggered this deferred call, or runFn's own
 		// early-return on context cancellation) — teardown must run
@@ -84,8 +77,24 @@ func withEphemeralCluster(
 
 		deleteErr := provisioner.Delete(deleteCtx, name)
 		if deleteErr != nil {
-			err = errors.Join(err, fmt.Errorf("delete ephemeral cluster %q: %w", name, deleteErr))
+			return fmt.Errorf("delete ephemeral cluster %q: %w", name, deleteErr)
 		}
+
+		return nil
+	}
+
+	notify.Infof(cmd.OutOrStdout(), "provisioning ephemeral cluster %q for --ephemeral...", name)
+
+	createErr := provisioner.Create(ctx, name)
+	if createErr != nil {
+		return errors.Join(
+			fmt.Errorf("provision ephemeral cluster %q: %w", name, createErr),
+			deleteCluster(),
+		)
+	}
+
+	defer func() {
+		err = errors.Join(err, deleteCluster())
 	}()
 
 	return runFn(ctx)

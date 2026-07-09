@@ -54,6 +54,15 @@ func (f *fakeEphemeralProvisioner) Exists(_ context.Context, _ string) (bool, er
 	return false, nil
 }
 
+func installEphemeralProvisioner(t *testing.T, fake *fakeEphemeralProvisioner) {
+	t.Helper()
+
+	restore := workload.ExportSetEphemeralProvisioner(
+		func(_ string) clusterprovisioner.Provisioner { return fake },
+	)
+	t.Cleanup(restore)
+}
+
 // newTestCommand returns a minimal *cobra.Command with a background context,
 // suitable for exercising withEphemeralCluster without a real CLI invocation.
 func newTestCommand(t *testing.T) *cobra.Command {
@@ -65,17 +74,19 @@ func newTestCommand(t *testing.T) *cobra.Command {
 	return cmd
 }
 
+func newEphemeralTestCommand(t *testing.T, fake *fakeEphemeralProvisioner) *cobra.Command {
+	t.Helper()
+
+	installEphemeralProvisioner(t, fake)
+
+	return newTestCommand(t)
+}
+
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterProvisionsAndTearsDownOnSuccess(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
-
 	ran := false
-	cmd := newTestCommand(t)
+	cmd := newEphemeralTestCommand(t, fake)
 
 	err := workload.ExportWithEphemeralCluster(cmd.Context(), cmd, func(_ context.Context) error {
 		ran = true
@@ -101,13 +112,7 @@ func TestWithEphemeralClusterProvisionsAndTearsDownOnSuccess(t *testing.T) {
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterTearsDownEvenWhenFnFails(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
-
-	cmd := newTestCommand(t)
+	cmd := newEphemeralTestCommand(t, fake)
 
 	err := workload.ExportWithEphemeralCluster(cmd.Context(), cmd, func(_ context.Context) error {
 		return errEphemeralFnFailed
@@ -119,16 +124,10 @@ func TestWithEphemeralClusterTearsDownEvenWhenFnFails(t *testing.T) {
 }
 
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
-func TestWithEphemeralClusterSkipsFnAndTeardownWhenCreateFails(t *testing.T) {
+func TestWithEphemeralClusterSkipsFnAndTearsDownWhenCreateFails(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{createErr: errEphemeralCreateFailed}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
-
 	ran := false
-	cmd := newTestCommand(t)
+	cmd := newEphemeralTestCommand(t, fake)
 
 	err := workload.ExportWithEphemeralCluster(cmd.Context(), cmd, func(_ context.Context) error {
 		ran = true
@@ -138,19 +137,14 @@ func TestWithEphemeralClusterSkipsFnAndTeardownWhenCreateFails(t *testing.T) {
 
 	require.ErrorIs(t, err, errEphemeralCreateFailed)
 	assert.False(t, ran, "fn must not run when the ephemeral cluster fails to provision")
-	assert.Empty(t, fake.deleted, "delete must not run when create never succeeded")
+	require.Len(t, fake.deleted, 1, "teardown must run after a failed create to clean partial state")
+	assert.Equal(t, fake.created[0], fake.deleted[0], "failed create cleanup must target the same cluster")
 }
 
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterJoinsFnAndDeleteErrors(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{deleteErr: errEphemeralDeleteFailed}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
-
-	cmd := newTestCommand(t)
+	cmd := newEphemeralTestCommand(t, fake)
 
 	err := workload.ExportWithEphemeralCluster(cmd.Context(), cmd, func(_ context.Context) error {
 		return errEphemeralFnFailed
@@ -168,13 +162,7 @@ func TestWithEphemeralClusterJoinsFnAndDeleteErrors(t *testing.T) {
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterReturnsDeleteErrorWhenFnSucceeds(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{deleteErr: errEphemeralDeleteFailed}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
-
-	cmd := newTestCommand(t)
+	cmd := newEphemeralTestCommand(t, fake)
 
 	err := workload.ExportWithEphemeralCluster(cmd.Context(), cmd, func(_ context.Context) error {
 		return nil
@@ -207,11 +195,7 @@ func TestScanCmdRegistersEphemeralFlagDefaultOff(t *testing.T) {
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestValidateEphemeralFlagProvisionsAndTearsDownCluster(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
-
-	restore := workload.ExportSetEphemeralProvisioner(
-		func(_ string) clusterprovisioner.Provisioner { return fake },
-	)
-	defer restore()
+	installEphemeralProvisioner(t, fake)
 
 	dir := t.TempDir()
 
