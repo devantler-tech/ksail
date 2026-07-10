@@ -1082,16 +1082,20 @@ jobs:
           # Enable Kubernetes provider tests on the default (init=true, args="")
           # entry for each distribution. This tests all 4 nested distributions
           # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
+          # The three mirror-supported distributions also opt into their smoke
+          # test here so it runs once per distribution rather than for all args.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           - distribution: K3s
             provider: Docker
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           - distribution: Talos
             provider: Docker
             init: true
@@ -1102,6 +1106,7 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
           # chart ships MutatingAdmissionPolicy resources that need the v1beta1
           # admissionregistration API enabled on the embedded k3s server via the k3k
@@ -1167,6 +1172,7 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
+          test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 

@@ -1,0 +1,237 @@
+name: KSail Workload Mirror Test
+description: |
+  Smoke-tests workload mirror against a live HTTP deployment and verifies
+  that the capture contains the request payload.
+
+inputs:
+  distribution:
+    description: Kubernetes distribution under test
+    required: true
+  workload-timeout:
+    description: Timeout for the mirror test workload to become available
+    required: false
+    default: "600s"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 ksail workload mirror
+      id: mirror-smoke
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+        WORKLOAD_IMAGE: docker.io/traefik/whoami:v1.10
+        WORKLOAD_NAME: ksail-mirror-smoke
+      run: |
+        set -euo pipefail
+
+        LOG_DIR=/tmp/ksail-system-test-logs
+        DIST_LOWER=$(printf '%s' "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        CAPTURE_FILE="$LOG_DIR/mirror-${DIST_LOWER}.pcap"
+        MIRROR_LOG="$LOG_DIR/mirror-${DIST_LOWER}.log"
+        FORWARD_LOG="$LOG_DIR/mirror-forward-${DIST_LOWER}.log"
+        PCAP_VERIFY_LOG="$LOG_DIR/mirror-pcap-verify-${DIST_LOWER}.log"
+        RESPONSE_LOG="$LOG_DIR/mirror-response-${DIST_LOWER}.log"
+        LOCAL_PORT=18080
+        TOKEN="mirror-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${DIST_LOWER}"
+        mirror_pid=""
+        forward_pid=""
+
+        mkdir -p "$LOG_DIR"
+
+        stop_process() {
+          local pid="$1"
+          local signal="$2"
+
+          if [ -z "$pid" ]; then
+            return
+          fi
+
+          if kill -0 "$pid" 2>/dev/null; then
+            kill "-$signal" "$pid" 2>/dev/null || true
+            for _ in $(seq 1 20); do
+              if ! kill -0 "$pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+              kill -KILL "$pid" 2>/dev/null || true
+            fi
+          fi
+          wait "$pid" 2>/dev/null || true
+        }
+
+        cleanup() {
+          local status=$?
+          local cleanup_failed=0
+          local resources_gone=false
+          trap - EXIT INT TERM
+          set +e
+
+          stop_process "$forward_pid" TERM
+          stop_process "$mirror_pid" INT
+
+          timeout 35 ksail workload delete deployment/"$WORKLOAD_NAME" \
+            --ignore-not-found --wait=false --request-timeout=30s \
+            >> "$MIRROR_LOG" 2>&1 || cleanup_failed=1
+
+          cleanup_deadline=$((SECONDS + 90))
+          while [ "$SECONDS" -lt "$cleanup_deadline" ]; do
+            deployment_output=$(timeout 5 ksail workload get \
+              deployment/"$WORKLOAD_NAME" --ignore-not-found \
+              --request-timeout=3s -o name 2>> "$MIRROR_LOG")
+            deployment_status=$?
+            pods_output=$(timeout 5 ksail workload get pods \
+              -l "app=$WORKLOAD_NAME" --request-timeout=3s \
+              -o name 2>> "$MIRROR_LOG")
+            pods_status=$?
+            if [ "$deployment_status" -eq 0 ] && [ -z "$deployment_output" ] && \
+              [ "$pods_status" -eq 0 ] && [ -z "$pods_output" ]; then
+              resources_gone=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$resources_gone" != "true" ]; then
+            echo "❌ mirror smoke workload cleanup did not complete" >&2
+            cleanup_failed=1
+          else
+            echo "✅ mirror smoke workload cleanup complete"
+          fi
+
+          if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then
+            status=1
+          fi
+          exit "$status"
+        }
+        trap cleanup EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+
+        ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" \
+          --timeout="$TIMEOUT"
+
+        ksail workload mirror "$WORKLOAD_NAME" --port 80 --output "$CAPTURE_FILE" \
+          > "$MIRROR_LOG" 2>&1 &
+        mirror_pid=$!
+
+        mirror_ready=false
+        for _ in $(seq 1 120); do
+          if grep -Fq "capturing TCP traffic on port 80" "$MIRROR_LOG"; then
+            mirror_ready=true
+            break
+          fi
+          if ! kill -0 "$mirror_pid" 2>/dev/null; then
+            echo "❌ workload mirror exited before becoming ready" >&2
+            cat "$MIRROR_LOG" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        if [ "$mirror_ready" != "true" ]; then
+          echo "❌ workload mirror did not become ready within 120 seconds" >&2
+          cat "$MIRROR_LOG" >&2
+          exit 1
+        fi
+
+        capture_stream_ready=false
+        for _ in $(seq 1 60); do
+          if [ -f "$CAPTURE_FILE" ] && [ "$(wc -c < "$CAPTURE_FILE")" -ge 24 ]; then
+            capture_stream_ready=true
+            break
+          fi
+          if ! kill -0 "$mirror_pid" 2>/dev/null; then
+            echo "❌ workload mirror exited before writing the pcap header" >&2
+            cat "$MIRROR_LOG" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        if [ "$capture_stream_ready" != "true" ]; then
+          echo "❌ workload mirror did not start its capture stream within 60 seconds" >&2
+          cat "$MIRROR_LOG" >&2
+          exit 1
+        fi
+
+        pod_name=$(ksail workload get pods -l "app=$WORKLOAD_NAME" \
+          -o jsonpath='{.items[0].metadata.name}')
+        tap_name=$(ksail workload get pod "$pod_name" \
+          -o jsonpath='{.spec.ephemeralContainers[?(@.name=="ksail-tap")].name}')
+        if [ "$tap_name" != "ksail-tap" ]; then
+          echo "❌ expected ephemeral container ksail-tap on pod $pod_name" >&2
+          exit 1
+        fi
+
+        ksail workload forward deployment/"$WORKLOAD_NAME" "$LOCAL_PORT:80" \
+          > "$FORWARD_LOG" 2>&1 &
+        forward_pid=$!
+
+        forward_ready=false
+        for _ in $(seq 1 60); do
+          if curl --fail --silent --show-error --max-time 2 --noproxy '*' \
+            "http://127.0.0.1:${LOCAL_PORT}/${TOKEN}" > "$RESPONSE_LOG" 2>/dev/null; then
+            forward_ready=true
+            break
+          fi
+          if ! kill -0 "$forward_pid" 2>/dev/null; then
+            echo "❌ workload forward exited before becoming ready" >&2
+            cat "$FORWARD_LOG" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        if [ "$forward_ready" != "true" ]; then
+          echo "❌ workload forward did not become ready within 60 seconds" >&2
+          cat "$FORWARD_LOG" >&2
+          exit 1
+        fi
+
+        for attempt in $(seq 1 5); do
+          curl --fail --silent --show-error --max-time 5 --noproxy '*' \
+            "http://127.0.0.1:${LOCAL_PORT}/${TOKEN}?attempt=${attempt}" \
+            >> "$RESPONSE_LOG"
+          sleep 1
+        done
+
+        capture_ready=false
+        for _ in $(seq 1 30); do
+          if [ -f "$CAPTURE_FILE" ] && [ "$(wc -c < "$CAPTURE_FILE")" -gt 24 ] && \
+            grep -aFq "$TOKEN" "$CAPTURE_FILE"; then
+            capture_ready=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$capture_ready" != "true" ]; then
+          echo "❌ mirror capture did not contain the expected request token" >&2
+          cat "$MIRROR_LOG" >&2
+          exit 1
+        fi
+
+        # The root process currently exits 130 on SIGINT before printing the
+        # documented packet summary (#6005). Assert the continuously-flushed
+        # pcap above, then treat process termination as cleanup for this smoke.
+        stop_process "$forward_pid" TERM
+        forward_pid=""
+        stop_process "$mirror_pid" INT
+        mirror_pid=""
+
+        if [ ! -f "$CAPTURE_FILE" ] || [ "$(wc -c < "$CAPTURE_FILE")" -le 24 ] || \
+          ! grep -aFq "$TOKEN" "$CAPTURE_FILE"; then
+          echo "❌ finalized mirror capture is empty or missing the request token" >&2
+          exit 1
+        fi
+
+        if ! timeout 30 ksail workload exec "$pod_name" -c ksail-tap -i \
+          --request-timeout=10s -- tcpdump -nn -r - \
+          < "$CAPTURE_FILE" > "$PCAP_VERIFY_LOG" 2>&1; then
+          echo "❌ tcpdump could not parse the finalized mirror capture" >&2
+          cat "$PCAP_VERIFY_LOG" >&2
+          exit 1
+        fi
+
+        echo "✅ workload mirror captured HTTP traffic for $DISTRIBUTION"
