@@ -307,11 +307,19 @@ func stubInterruptingMirrorSession(client kubernetes.Interface, pcap []byte) fun
 	}
 }
 
-//nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
-func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
+// skipIfInterruptUnsupported skips interrupt-raising tests on Windows, where
+// os.Interrupt cannot be sent to the running process.
+func skipIfInterruptUnsupported(t *testing.T) {
+	t.Helper()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
 	}
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
+func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
+	skipIfInterruptUnsupported(t)
 
 	t.Chdir(t.TempDir())
 

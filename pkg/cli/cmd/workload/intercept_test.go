@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -207,9 +206,7 @@ func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 //
 //nolint:paralleltest // Package seams and SIGINT are process-wide.
 func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
-	}
+	skipIfInterruptUnsupported(t)
 
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
 
@@ -234,9 +231,7 @@ func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 //
 //nolint:paralleltest // Package seams and SIGINT are process-wide.
 func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
-	}
+	skipIfInterruptUnsupported(t)
 
 	restore := stubInterruptingInterceptSetup()
 	defer restore()
