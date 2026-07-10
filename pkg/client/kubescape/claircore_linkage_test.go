@@ -146,7 +146,10 @@ func TestInertClaircorePackagesFreshMap(t *testing.T) {
 
 	second := inertClaircorePackages()
 	if _, ok := second[mutatedKey]; ok {
-		t.Fatalf("expected a fresh map from inertClaircorePackages, got a shared map containing %q", mutatedKey)
+		t.Fatalf(
+			"expected a fresh map from inertClaircorePackages, got a shared map containing %q",
+			mutatedKey,
+		)
 	}
 }
 
@@ -177,7 +180,8 @@ func TestModuleRootWalksUpMultipleLevels(t *testing.T) {
 	writeGoMod(t, root)
 
 	nested := filepath.Join(root, "a", "b", "c")
-	if err := os.MkdirAll(nested, 0o750); err != nil {
+	err := os.MkdirAll(nested, 0o750)
+	if err != nil {
 		t.Fatalf("create nested directories: %v", err)
 	}
 
@@ -202,7 +206,9 @@ func TestModuleRootFailsWhenNoGoModFound(t *testing.T) {
 	})
 
 	if ok {
-		t.Fatal("expected moduleRoot to fail the test when no go.mod is found above the working directory")
+		t.Fatal(
+			"expected moduleRoot to fail the test when no go.mod is found above the working directory",
+		)
 	}
 }
 
@@ -210,7 +216,11 @@ func TestModuleRootFailsWhenNoGoModFound(t *testing.T) {
 func writeGoMod(t *testing.T, dir string) {
 	t.Helper()
 
-	err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/moduleroottest\n"), 0o600)
+	err := os.WriteFile(
+		filepath.Join(dir, "go.mod"),
+		[]byte("module example.com/moduleroottest\n"),
+		0o600,
+	)
 	if err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
