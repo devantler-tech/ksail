@@ -57,7 +57,9 @@ func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 	var unexpected []string
 
 	for pkg := range strings.FieldsSeq(string(out)) {
-		if strings.HasPrefix(pkg, "github.com/quay/claircore") && !inertClaircorePackages()[pkg] {
+		isClaircore := pkg == "github.com/quay/claircore" ||
+			strings.HasPrefix(pkg, "github.com/quay/claircore/")
+		if isClaircore && !inertClaircorePackages()[pkg] {
 			unexpected = append(unexpected, pkg)
 		}
 	}
