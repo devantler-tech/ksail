@@ -3831,9 +3831,9 @@ container holding only CAP_NET_RAW), and streams a tcpdump pcap capture of the
 service port over the Kubernetes exec channel — no reverse tunnel, no traffic
 interception, the workload keeps serving untouched.
 
-The capture runs until interrupted (Ctrl-C). By default it is written to
-mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
-for piping into tshark/wireshark.
+The capture runs until interrupted. Ctrl-C stops it cleanly with exit status 0.
+By default it is written to mirror.pcap and summarized on stop; --output -
+streams the raw pcap to stdout for piping into tshark/wireshark.
 
 With --to, the mirrored inbound TCP payloads are additionally replayed LIVE to
 a locally-running process (one local connection per mirrored flow) while the

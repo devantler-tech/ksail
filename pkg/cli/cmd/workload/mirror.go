@@ -8,7 +8,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -52,9 +54,9 @@ container holding only CAP_NET_RAW), and streams a tcpdump pcap capture of the
 service port over the Kubernetes exec channel — no reverse tunnel, no traffic
 interception, the workload keeps serving untouched.
 
-The capture runs until interrupted (Ctrl-C). By default it is written to
-mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
-for piping into tshark/wireshark.
+The capture runs until interrupted. Ctrl-C stops it cleanly with exit status 0.
+By default it is written to mirror.pcap and summarized on stop; --output -
+streams the raw pcap to stdout for piping into tshark/wireshark.
 
 With --to, the mirrored inbound TCP payloads are additionally replayed LIVE to
 a locally-running process (one local connection per mirrored flow) while the
@@ -304,8 +306,16 @@ func captureToOutput(
 		Writer:  cmd.ErrOrStderr(),
 	})
 
+	// Ctrl-C is the documented way to end the capture: cancel the session's
+	// context on SIGINT/SIGTERM instead of letting the default disposition
+	// kill the process, so the session unwinds, the replay drains, the pcap
+	// closes, and the summary still prints (the service layer maps a
+	// cancelled context to a clean stop).
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	captureErr := runCaptureSession(
-		cmd.Context(), client, restConfig, point, opts.port, out,
+		ctx, client, restConfig, point, opts.port, out,
 	)
 
 	captureErr = finishCapture(captureErr, replay, file)
