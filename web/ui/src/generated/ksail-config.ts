@@ -28,7 +28,7 @@ export interface KSailClusterConfiguration {
      */
     cluster?: {
       /**
-       * Path to the distribution's own configuration file (kind.yaml
+       * Path to the distribution's own configuration file (kind.yaml / k3d.yaml / vcluster.yaml / eks.yaml / the talos directory). CLI-only; ignored by the operator.
        */
       distributionConfig?: string;
       /**
@@ -136,7 +136,7 @@ export interface KSailClusterConfiguration {
          */
         ageKeyEnvVar?: string;
         /**
-         * Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled
+         * Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled and false=Disabled).
          */
         enabled?: "Default" | "Enabled" | "Disabled";
         /**
@@ -196,7 +196,7 @@ export interface KSailClusterConfiguration {
          */
         node?: {
           /**
-           * Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled
+           * Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled and false=Disabled).
            */
           enabled?: "Enabled" | "Disabled";
           /**
@@ -253,7 +253,7 @@ export interface KSailClusterConfiguration {
            */
           maxNodesTotal?: number;
           /**
-           * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes
+           * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (the upstream comma-separated --expander chain).
            */
           expander?:
             | ("Price" | "LeastWaste" | "LeastNodes" | "Random")

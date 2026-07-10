@@ -214,7 +214,7 @@
           "properties": {
             "distributionConfig": {
               "type": "string",
-              "description": "Path to the distribution's own configuration file (kind.yaml"
+              "description": "Path to the distribution's own configuration file (kind.yaml / k3d.yaml / vcluster.yaml / eks.yaml / the talos directory). CLI-only; ignored by the operator."
             },
             "connection": {
               "properties": {
@@ -366,7 +366,7 @@
                     "Enabled",
                     "Disabled"
                   ],
-                  "description": "Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled"
+                  "description": "Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled and false=Disabled)."
                 },
                 "env": {
                   "properties": {
@@ -444,7 +444,7 @@
                         "Enabled",
                         "Disabled"
                       ],
-                      "description": "Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled"
+                      "description": "Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled and false=Disabled)."
                     },
                     "pools": {
                       "items": {
@@ -549,7 +549,7 @@
                           "type": "array"
                         }
                       ],
-                      "description": "Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes"
+                      "description": "Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (the upstream comma-separated --expander chain)."
                     },
                     "scaleDownUnneededTime": {
                       "type": "string",
