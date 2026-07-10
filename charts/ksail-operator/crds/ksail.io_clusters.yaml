@@ -304,7 +304,7 @@ spec:
                   distributionConfig:
                     description: |-
                       DistributionConfig is the path to the distribution's own configuration file
-                      (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
+                      (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory).
                       When empty, KSail uses the distribution's default file name.
                       CLI-only (a local file path on the CLI host); ignored by the operator.
                     type: string
