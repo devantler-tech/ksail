@@ -166,6 +166,32 @@ func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
 	}
 }
 
+// stubInterruptingInterceptSetup installs intercept-command seams whose
+// client factory raises the documented interrupt before pod resolution starts.
+// The short wait gives the process signal handler time to run before setup
+// continues, making the ordering regression deterministic.
+func stubInterruptingInterceptSetup() func() {
+	restoreClients := workload.ExportSetMirrorClients(
+		func(_, _ string) (kubernetes.Interface, *rest.Config, error) {
+			proc, err := os.FindProcess(os.Getpid())
+			if err != nil {
+				return nil, nil, fmt.Errorf("find own process: %w", err)
+			}
+
+			err = proc.Signal(os.Interrupt)
+			if err != nil {
+				return nil, nil, fmt.Errorf("raise interrupt: %w", err)
+			}
+
+			<-time.After(100 * time.Millisecond)
+
+			return nil, nil, context.Canceled
+		},
+	)
+
+	return restoreClients
+}
+
 // TestInterceptCmdHelpDocumentsCleanInterruptExit verifies that the command
 // advertises the successful Ctrl-C shutdown contract.
 func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
@@ -179,7 +205,7 @@ func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 // TestInterceptCmdInterruptStopsSessionCleanly verifies that an interrupt
 // cancels the steering session without surfacing an execution error.
 //
-//nolint:paralleltest // swaps package-level seams; the raised SIGINT is process-wide.
+//nolint:paralleltest // Package seams and SIGINT are process-wide.
 func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
@@ -201,6 +227,28 @@ func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 	cmd.SetErr(&out)
 
 	require.NoError(t, cmd.Execute(), "an interrupted intercept must end as a clean stop")
+}
+
+// TestInterceptCmdInterruptDuringSetupStopsCleanly verifies that the signal
+// handler is active before cluster setup starts, not only for the tunnel session.
+//
+//nolint:paralleltest // Package seams and SIGINT are process-wide.
+func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
+	}
+
+	restore := stubInterruptingInterceptSetup()
+	defer restore()
+
+	cmd := experimentalInterceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
+	})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute(), "an interrupt during setup must end as a clean stop")
 }
 
 func TestInterceptCmdRequiresLocalPort(t *testing.T) {

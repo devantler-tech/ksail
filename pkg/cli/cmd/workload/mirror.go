@@ -260,7 +260,7 @@ func ensureTap(
 	point *mirror.TapPoint,
 	opts mirrorOptions,
 ) error {
-	return injectAndWait(cmd, point, ephemeralInjector{
+	return injectAndWait(cmd.Context(), cmd, point, ephemeralInjector{
 		inject: func(ctx context.Context) (string, error) {
 			return mirror.InjectTap(ctx, client, point, mirror.WithTapImage(opts.tapImage))
 		},
