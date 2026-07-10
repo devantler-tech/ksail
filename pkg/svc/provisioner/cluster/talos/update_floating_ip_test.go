@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -175,9 +178,10 @@ func TestMergeFloatingIPChanges_EnabledAndAbsentAddsChange(t *testing.T) {
 		"detection must be read-only")
 }
 
-// TestMergeFloatingIPChanges_EnabledAndPresentIsNoop verifies idempotency when
-// the desired owned address already exists.
-func TestMergeFloatingIPChanges_EnabledAndPresentIsNoop(t *testing.T) {
+// TestMergeFloatingIPChanges_EnabledAndPresentMissingConfigAddsChange verifies
+// recovery after a partial apply created the address but failed before storing
+// the endpoint and VIP configuration.
+func TestMergeFloatingIPChanges_EnabledAndPresentMissingConfigAddsChange(t *testing.T) {
 	t.Parallel()
 
 	calls := &fipUpdateCalls{}
@@ -187,13 +191,94 @@ func TestMergeFloatingIPChanges_EnabledAndPresentIsNoop(t *testing.T) {
 		FloatingIPEnabled:  true,
 		FloatingIPLocation: "fsn1",
 	}).WithInfraProvider(newFipUpdateProvider(server.URL))
+	runningConfig := provisioner.TalosConfigsForTest().ControlPlane()
+	provisioner.WithNodeConfigFetcherForTest(
+		func(context.Context, string) (talosconfig.Provider, error) {
+			return runningConfig, nil
+		},
+	)
+
+	diff := &clusterupdate.UpdateResult{}
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
+
+	require.Len(t, diff.InPlaceChanges, 1,
+		"an existing address without stored VIP config must be reconciled again")
+	assert.Equal(t, floatingIPEnabledField, diff.InPlaceChanges[0].Field)
+}
+
+// TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop verifies idempotency
+// once both the owned address and stored endpoint/VIP configuration exist.
+func TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	hzProvider := newFipUpdateProvider(server.URL)
+
+	configuredProvisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}).WithInfraProvider(hzProvider)
+
+	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+	runningConfig := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+
+	// A fresh provisioner models the next CLI invocation: its generated config
+	// has no runtime VIP patch, so idempotency must be based on the running node.
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}).WithInfraProvider(hzProvider).
+		WithNodeConfigFetcherForTest(
+			func(context.Context, string) (talosconfig.Provider, error) {
+				return runningConfig, nil
+			},
+		)
 
 	diff := &clusterupdate.UpdateResult{}
 	require.NoError(t,
 		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
 	assert.Empty(t, diff.InPlaceChanges,
-		"an existing owned floating IP must not re-diff (idempotent re-run)")
+		"an existing owned floating IP with stored VIP config must not re-diff")
+}
+
+// TestAllControlPlanesHaveHetznerFloatingIPConfig_RequiresEveryNode verifies
+// that a partial in-place apply is still detected when only one control plane
+// received the endpoint/VIP configuration.
+func TestAllControlPlanesHaveHetznerFloatingIPConfig_RequiresEveryNode(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	hzProvider := newFipUpdateProvider(server.URL)
+
+	configuredProvisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	})
+	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+
+	configured := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+	missing := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		TalosConfigsForTest().ControlPlane()
+
+	assert.True(t, talosprovisioner.AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+		[]talosconfig.Provider{configured, configured}, "192.0.2.10",
+	))
+	assert.False(t, talosprovisioner.AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+		[]talosconfig.Provider{configured, missing}, "192.0.2.10",
+	))
 }
 
 // TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly verifies that the

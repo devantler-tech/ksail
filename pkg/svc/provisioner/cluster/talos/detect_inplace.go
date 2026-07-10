@@ -388,9 +388,9 @@ func (p *Provisioner) alignKubernetesVersion(
 }
 
 // graftNodeManagedSections copies the machine-config sections that ksail injects
-// post-generation at create — registry mirrors/auth and cert SANs — from the
-// running config into the desired config, so they don't read as drift. These are
-// node/setup-managed (not user patch content); the apply re-pushes them verbatim.
+// post-generation — registry mirrors/auth, cert SANs, and the Hetzner HCloud VIP
+// endpoint — from the running config into the desired config, so they don't read
+// as removable drift. These are node/setup-managed rather than user patch content.
 //
 // If ksail gains another post-generation machine-config transform, graft its
 // section here too (otherwise it will surface as phantom drift). The per-node
@@ -415,6 +415,7 @@ func graftNodeManagedSections(
 		cfg.MachineConfig.MachineRegistries = runningRaw.MachineConfig.MachineRegistries
 		// Cert SANs: appended by WithCertSANs at create (e.g. DinD exposure address).
 		cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
+		graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
 
 		return nil
 	})
@@ -423,6 +424,104 @@ func graftNodeManagedSections(
 	}
 
 	return grafted, nil
+}
+
+// graftHCloudVIP preserves the runtime-injected Hetzner VIP on its network
+// interface. When the desired config already declares that interface, only the
+// VIP and its DHCP prerequisite are grafted so unrelated user-owned interface
+// changes remain visible as drift.
+//
+//nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
+func graftHCloudVIP(desired, running *v1alpha1.MachineConfig) {
+	if running.MachineNetwork == nil || machineNetworkHasHCloudVIP(desired.MachineNetwork) {
+		return
+	}
+
+	for _, runningDevice := range running.MachineNetwork.NetworkInterfaces {
+		if !deviceHasHCloudVIP(runningDevice) {
+			continue
+		}
+
+		if desired.MachineNetwork == nil {
+			desired.MachineNetwork = new(v1alpha1.NetworkConfig)
+		}
+
+		desiredDevice := networkDeviceByInterface(
+			desired.MachineNetwork.NetworkInterfaces,
+			runningDevice.DeviceInterface,
+		)
+		if desiredDevice == nil {
+			runningIdentity := runningDevice.DeepCopy()
+
+			graftedDevice := &v1alpha1.Device{
+				DeviceInterface: runningIdentity.DeviceInterface,
+				DeviceSelector:  runningIdentity.DeviceSelector,
+				DeviceVIPConfig: runningDevice.DeviceVIPConfig.DeepCopy(),
+			}
+			if runningDevice.DeviceDHCP != nil {
+				dhcp := *runningDevice.DeviceDHCP
+				graftedDevice.DeviceDHCP = &dhcp
+			}
+
+			desired.MachineNetwork.NetworkInterfaces = append(
+				desired.MachineNetwork.NetworkInterfaces,
+				graftedDevice,
+			)
+
+			continue
+		}
+
+		desiredDevice.DeviceVIPConfig = runningDevice.DeviceVIPConfig.DeepCopy()
+		if runningDevice.DeviceDHCP != nil {
+			dhcp := *runningDevice.DeviceDHCP
+			desiredDevice.DeviceDHCP = &dhcp
+		}
+	}
+}
+
+// deviceHasHCloudVIP reports whether a network device carries a runtime
+// Hetzner VIP declaration.
+func deviceHasHCloudVIP(device *v1alpha1.Device) bool {
+	return device != nil && device.DeviceVIPConfig != nil &&
+		device.DeviceVIPConfig.HCloudConfig != nil
+}
+
+// machineNetworkHasHCloudVIP reports whether the desired config declares an
+// authoritative Hetzner VIP that must not be replaced by stale runtime state.
+//
+//nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
+func machineNetworkHasHCloudVIP(network *v1alpha1.NetworkConfig) bool {
+	if network == nil {
+		return false
+	}
+
+	for _, device := range network.NetworkInterfaces {
+		if device != nil && device.DeviceVIPConfig != nil &&
+			device.DeviceVIPConfig.HCloudConfig != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// networkDeviceByInterface returns the declared device with name interfaceName,
+// or nil when the desired config does not declare it.
+func networkDeviceByInterface(
+	devices v1alpha1.NetworkDeviceList,
+	interfaceName string,
+) *v1alpha1.Device {
+	if interfaceName == "" {
+		return nil
+	}
+
+	for _, device := range devices {
+		if device != nil && device.DeviceInterface == interfaceName {
+			return device
+		}
+	}
+
+	return nil
 }
 
 // machineConfigDiff returns the Talos-native textual diff between two configs,
@@ -516,7 +615,7 @@ func (p *Provisioner) fetchNodeConfigForRole(
 		return nil, false, nil
 	}
 
-	config, err := p.fetchNodeConfig(ctx, nodeIP)
+	config, err := p.nodeConfigFetcher(ctx, nodeIP)
 	if err != nil {
 		return nil, false, err
 	}

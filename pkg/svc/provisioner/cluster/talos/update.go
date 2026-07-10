@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
@@ -192,16 +193,13 @@ func appendServerTypeChange(
 const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 
 // mergeFloatingIPChanges detects a `floatingIPEnabled: true` configuration
-// whose ksail-owned floating IP does not actually exist — the newly-enabled
-// transition and the drifted (enabled-but-absent) state read identically live —
-// and merges an in-place change into diff so `cluster update` reconciles it
-// (#5947). The state is read from the cloud, not the persisted spec baseline,
-// because introspection echoes the desired flag and can never produce this diff
-// on its own. The disable transition (false with an owned floating IP still
-// present) is detected but only warned about: its endpoint-reversion and
-// deletion-policy semantics are a separate change (#6032), and warning beats
-// pretending to reconcile it. An ownership collision from detection is
-// returned as an error (see detectOwnedFloatingIP) rather than swallowed.
+// whose ksail-owned floating IP is absent or whose stored control-plane config
+// lacks the matching endpoint/VIP block. Both states merge an idempotent
+// in-place reconcile change, so a retry can recover when a prior update created
+// the address but failed before pushing Talos config (#5947). Cloud state is
+// read live because introspection echoes the desired flag and cannot reveal
+// address drift. The disable transition is warned about but remains deferred to
+// #6032. Ownership collisions propagate as errors rather than being swallowed.
 func (p *Provisioner) mergeFloatingIPChanges(
 	ctx context.Context,
 	name string,
@@ -211,7 +209,7 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	exists, detected, err := p.detectOwnedFloatingIP(ctx, name)
+	floatingIP, detected, err := p.detectOwnedFloatingIP(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -220,17 +218,43 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	switch {
-	case p.hetznerOpts.FloatingIPEnabled && !exists:
+	exists := floatingIP != nil
+
+	configured, configDetected := p.detectHetznerFloatingIPConfig(
+		ctx, name, floatingIP,
+	)
+	if !configDetected {
+		return nil
+	}
+
+	p.mergeDetectedFloatingIPChanges(diff, exists, configured)
+
+	return nil
+}
+
+// mergeDetectedFloatingIPChanges records the enabled-state repair or warns
+// about the separately tracked disable transition after live detection.
+func (p *Provisioner) mergeDetectedFloatingIPChanges(
+	diff *clusterupdate.UpdateResult,
+	exists, configured bool,
+) {
+	if p.hetznerOpts.FloatingIPEnabled {
+		if exists && configured {
+			return
+		}
+
 		diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
 			Field:    floatingIPEnabledField,
-			OldValue: strconv.FormatBool(exists),
+			OldValue: strconv.FormatBool(exists && configured),
 			NewValue: strconv.FormatBool(p.hetznerOpts.FloatingIPEnabled),
 			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason: "the floating IP is created and attached, and control planes " +
-				"receive the VIP config without reboot",
+			Reason:   floatingIPReconcileReason(exists),
 		})
-	case !p.hetznerOpts.FloatingIPEnabled && exists:
+
+		return
+	}
+
+	if exists {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ⚠ floatingIPEnabled is false but the cluster's ksail-owned floating IP"+
@@ -239,37 +263,151 @@ func (p *Provisioner) mergeFloatingIPChanges(
 				" it is no longer wanted\n",
 		)
 	}
-
-	return nil
 }
 
-// detectOwnedFloatingIP reads whether the cluster's ksail-owned floating IP
-// exists, returning (exists, detected, err). detected is false when the answer
-// is genuinely unavailable — not a Hetzner cluster, no infra provider, or the
-// lookup failed transiently (logged) — so callers skip rather than act on a
-// guess. An ownership collision (hetzner.ErrFloatingIPNotOwned: a same-name
-// floating IP ksail does not own) is a definitive answer, not an unavailable
-// one, and is returned as an error so the update fails instead of silently
-// skipping the reconcile.
+// detectHetznerFloatingIPConfig detects running endpoint/VIP state only when
+// the feature is enabled and its cloud address already exists. Other states need
+// no running-config lookup and are considered successfully detected.
+func (p *Provisioner) detectHetznerFloatingIPConfig(
+	ctx context.Context,
+	name string,
+	floatingIP *hcloud.FloatingIP,
+) (bool, bool) {
+	if !p.hetznerOpts.FloatingIPEnabled || floatingIP == nil {
+		return false, true
+	}
+
+	return p.detectRunningHetznerFloatingIPConfig(
+		ctx, p.resolveClusterName(name), floatingIP.IP.String(),
+	)
+}
+
+// floatingIPReconcileReason describes whether reconciliation creates the cloud
+// address or repairs stored Talos endpoint/VIP configuration around one that
+// already exists.
+func floatingIPReconcileReason(exists bool) string {
+	if exists {
+		return "the existing floating IP endpoint and missing VIP config are " +
+			"regenerated and pushed to control planes without reboot"
+	}
+
+	return "the floating IP is created and attached, and control planes " +
+		"receive the VIP config without reboot"
+}
+
+// detectRunningHetznerFloatingIPConfig reports whether every inventoried
+// control plane carries the expected endpoint/VIP state. An individual config
+// fetch failure is treated as needing idempotent reconciliation so a partial
+// prior apply is retried; inability to list any control planes remains an
+// unavailable detection and is skipped.
+func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
+	ctx context.Context,
+	clusterName, expectedIP string,
+) (bool, bool) {
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to list control planes for floating IP config detection: %v\n",
+			err,
+		)
+
+		return false, false
+	}
+
+	configs := make([]talosconfig.Provider, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Role != RoleControlPlane {
+			continue
+		}
+
+		config, fetchErr := p.nodeConfigFetcher(ctx, node.IP)
+		if fetchErr != nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"  ⚠ Failed to fetch control-plane floating IP config from %s: %v\n",
+				node.IP,
+				fetchErr,
+			)
+
+			return false, true
+		}
+
+		configs = append(configs, config)
+	}
+
+	if len(configs) == 0 {
+		return false, false
+	}
+
+	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP), true
+}
+
+// allControlPlanesHaveHetznerFloatingIPConfig reports whether every supplied
+// running control-plane config carries the expected endpoint and HCloud VIP.
+func allControlPlanesHaveHetznerFloatingIPConfig(
+	configs []talosconfig.Provider,
+	expectedIP string,
+) bool {
+	if len(configs) == 0 {
+		return false
+	}
+
+	for _, config := range configs {
+		if !hasHetznerFloatingIPConfig(config, expectedIP) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// hasHetznerFloatingIPConfig reports whether config carries a Hetzner-managed
+// VIP matching both the expected cloud address and cluster endpoint.
+func hasHetznerFloatingIPConfig(config talosconfig.Provider, expectedIP string) bool {
+	if config == nil || expectedIP == "" {
+		return false
+	}
+
+	endpoint := config.Cluster().Endpoint()
+	if endpoint == nil || endpoint.Hostname() != expectedIP {
+		return false
+	}
+
+	for _, device := range config.Machine().Network().Devices() {
+		vip := device.VIPConfig()
+		if vip != nil && vip.HCloud() != nil && vip.IP() == expectedIP {
+			return true
+		}
+	}
+
+	return false
+}
+
+// detectOwnedFloatingIP reads the cluster's ksail-owned floating IP, returning
+// the address with a detected flag. detected is false when the answer is
+// genuinely unavailable — not a Hetzner cluster, no infra provider, or a
+// transient lookup failure — so callers skip rather than act on a guess. An
+// ownership collision is definitive and returned as an error.
 func (p *Provisioner) detectOwnedFloatingIP(
 	ctx context.Context,
 	name string,
-) (bool, bool, error) {
+) (*hcloud.FloatingIP, bool, error) {
 	if p.hetznerOpts == nil {
-		return false, false, nil
+		return nil, false, nil
 	}
 
 	hzProvider, isHetzner := p.infraProvider.(*hetzner.Provider)
 	if !isHetzner {
-		return false, false, nil
+		return nil, false, nil
 	}
 
-	exists, err := hzProvider.OwnedFloatingIPExists(ctx, p.resolveClusterName(name))
+	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, p.resolveClusterName(name))
 	if err != nil {
-		return false, false, p.classifyFloatingIPDetectionErr(err)
+		return nil, false, p.classifyFloatingIPDetectionErr(err)
 	}
 
-	return exists, true, nil
+	return floatingIP, true, nil
 }
 
 // classifyFloatingIPDetectionErr splits floating-IP detection failures into

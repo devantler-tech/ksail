@@ -298,23 +298,16 @@ func (p *Provisioner) reattachFloatingIPAfterControlPlaneReplacement(
 	return nil
 }
 
-// finishControlPlaneReplacement keeps the Kubernetes Ready gate load-bearing
-// even when endpoint reattachment fails. A healthy replacement gets one final
-// reattachment attempt, allowing a transient API failure or Talos VIP election
-// to self-heal without leaving an unverified desired-type server behind.
+// finishControlPlaneReplacement retries a failed endpoint reattachment before
+// the endpoint-dependent Kubernetes Ready gate, then always runs that gate and
+// reports either or both final failures.
 func finishControlPlaneReplacement(reattach, waitReady func() error) error {
 	reattachErr := reattach()
-
-	readyErr := waitReady()
-	if readyErr != nil {
-		return errors.Join(reattachErr, readyErr)
-	}
-
 	if reattachErr != nil {
-		return reattach()
+		reattachErr = reattach()
 	}
 
-	return nil
+	return errors.Join(reattachErr, waitReady())
 }
 
 // configureAndWaitReplacement waits for the Talos API on a freshly provisioned

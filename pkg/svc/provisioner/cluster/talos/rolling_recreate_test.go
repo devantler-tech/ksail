@@ -358,8 +358,8 @@ func TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor(t *tes
 }
 
 // TestFinishControlPlaneReplacement_WaitsAfterReattachError verifies that a
-// failed endpoint operation cannot skip the Kubernetes Ready gate; once the
-// replacement is proven healthy, the endpoint operation is retried.
+// failed endpoint operation is retried before the endpoint-dependent Kubernetes
+// Ready gate, which must still run after the retry.
 func TestFinishControlPlaneReplacement_WaitsAfterReattachError(t *testing.T) {
 	t.Parallel()
 
@@ -385,7 +385,7 @@ func TestFinishControlPlaneReplacement_WaitsAfterReattachError(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"attach", "ready", "attach"}, events)
+	assert.Equal(t, []string{"attach", "attach", "ready"}, events)
 }
 
 func TestNodeMatchesServer(t *testing.T) {

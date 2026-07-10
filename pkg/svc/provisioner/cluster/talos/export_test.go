@@ -310,6 +310,15 @@ func FinishControlPlaneReplacementForTest(reattach, waitReady func() error) erro
 	return finishControlPlaneReplacement(reattach, waitReady)
 }
 
+// AllControlPlanesHaveHetznerFloatingIPConfigForTest exposes
+// allControlPlanesHaveHetznerFloatingIPConfig for unit testing.
+func AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+	configs []talosconfig.Provider,
+	expectedIP string,
+) bool {
+	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP)
+}
+
 // RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
 func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName, action string) {
 	recordAppliedChange(result, role, nodeName, action)
