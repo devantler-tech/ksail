@@ -174,6 +174,14 @@ func TestMirrorCmdRequiresPort(t *testing.T) {
 	assert.Contains(t, err.Error(), "port")
 }
 
+func TestMirrorCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewMirrorCmd()
+
+	assert.Contains(t, cmd.Long, "Ctrl-C stops it cleanly with exit status 0")
+}
+
 func TestMirrorCmdRejectsInvalidPort(t *testing.T) {
 	t.Parallel()
 
