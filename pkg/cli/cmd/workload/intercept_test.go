@@ -3,8 +3,13 @@ package workload_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -16,6 +21,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
+)
+
+// errInterceptInterruptIgnored reports that raising the documented interrupt
+// did not cancel the steering session context.
+var errInterceptInterruptIgnored = errors.New(
+	"interrupt did not cancel the steering session context",
 )
 
 // experimentalInterceptCmd builds the intercept command with the --experimental
@@ -104,6 +115,87 @@ func stubInterceptSession(client kubernetes.Interface) (func(), *interceptCall) 
 		restoreSession()
 		restoreClients()
 	}, call
+}
+
+// stubInterruptingInterceptSession installs intercept-command seams whose
+// steering session raises the documented interrupt at the test process and
+// then blocks until the interrupt cancels the session context — without the
+// command's signal-aware context, the default disposition kills the test
+// process at the raise.
+func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
+	restoreClients := workload.ExportSetMirrorClients(
+		func(_, _ string) (kubernetes.Interface, *rest.Config, error) {
+			return client, &rest.Config{}, nil
+		},
+	)
+
+	restoreSession := workload.ExportSetRunInterceptSession(
+		func(
+			ctx context.Context,
+			_ kubernetes.Interface,
+			_ *rest.Config,
+			_ *mirror.TapPoint,
+			_ []string,
+			_ int,
+		) error {
+			proc, err := os.FindProcess(os.Getpid())
+			if err != nil {
+				return fmt.Errorf("find own process: %w", err)
+			}
+
+			err = proc.Signal(os.Interrupt)
+			if err != nil {
+				return fmt.Errorf("raise interrupt: %w", err)
+			}
+
+			// Block like the real tunnel session until the interrupt cancels
+			// the context, then report the clean stop the service layer maps a
+			// cancelled session to.
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(10 * time.Second):
+				return errInterceptInterruptIgnored
+			}
+		},
+	)
+
+	return func() {
+		restoreSession()
+		restoreClients()
+	}
+}
+
+func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewInterceptCmd()
+
+	assert.Contains(t, cmd.Long, "Ctrl-C stops it cleanly with exit status 0")
+}
+
+//nolint:paralleltest // swaps package-level seams; the raised SIGINT is process-wide.
+func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
+	}
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
+
+	restore := stubInterruptingInterceptSession(client)
+	defer restore()
+
+	cmd := experimentalInterceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute(), "an interrupted intercept must end as a clean stop")
 }
 
 func TestInterceptCmdRequiresLocalPort(t *testing.T) {

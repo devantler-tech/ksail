@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
@@ -66,8 +69,8 @@ Unlike ` + "`workload mirror`" + ` (read-only pcap, traffic keeps flowing to the
 workload), intercept steers the traffic away from the workload to your local
 process; the agent removes its rule again on exit, restoring the pod.
 
-The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
-lets the in-cluster agent reverse its redirect.
+The intercept runs until interrupted. Ctrl-C stops it cleanly with exit status 0,
+tearing the tunnel down and letting the in-cluster agent reverse its redirect.
 
 By default intercept runs the KSail-shipped steering image and derives the agent
 command from --service-port, so only --service-port and --local-port are needed.
@@ -280,8 +283,16 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Writer:  cmd.ErrOrStderr(),
 	})
 
+	// Ctrl-C is the documented way to end the intercept: cancel the session's
+	// context on SIGINT/SIGTERM instead of letting the default disposition
+	// kill the process, so the tunnel drains, local connections close, and the
+	// in-cluster agent reverses its redirect (the service layer maps a
+	// cancelled context to a clean stop).
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	return runInterceptSession(
-		cmd.Context(),
+		ctx,
 		client,
 		restConfig,
 		point,
