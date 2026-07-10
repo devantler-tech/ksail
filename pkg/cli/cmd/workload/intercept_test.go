@@ -178,6 +178,7 @@ func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 
 // TestInterceptCmdInterruptStopsSessionCleanly verifies that an interrupt
 // cancels the steering session without surfacing an execution error.
+//
 //nolint:paralleltest // swaps package-level seams; the raised SIGINT is process-wide.
 func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 	if runtime.GOOS == "windows" {
