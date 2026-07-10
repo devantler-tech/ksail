@@ -180,6 +180,7 @@ func TestModuleRootWalksUpMultipleLevels(t *testing.T) {
 	writeGoMod(t, root)
 
 	nested := filepath.Join(root, "a", "b", "c")
+
 	err := os.MkdirAll(nested, 0o750)
 	if err != nil {
 		t.Fatalf("create nested directories: %v", err)
