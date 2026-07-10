@@ -31,9 +31,10 @@ import (
 // kubeconform's resource.FromStream, which aliases the bufio.Scanner buffer
 // across documents it emits and validates concurrently; the large multi-resource
 // streams this in-process render produces merely widen that race (the in-process
-// render itself was a red herring). #5362 is fixed only by bumping kubeconform
-// past the FromStream fix (upstream yannh/kubeconform#363). The lock still earns
-// its place by preventing the distinct Helm shared-cache corruption above.
+// render itself was a red herring). The kubeconform client avoids that path by
+// splitting rendered streams into independent single-document validations before
+// handing them to kubeconform. The lock still earns its place by preventing the
+// distinct Helm shared-cache corruption above.
 //
 //nolint:gochecknoglobals // package-level lock guarding Helm's process-global render state
 var helmRenderMu sync.Mutex

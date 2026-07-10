@@ -3,9 +3,14 @@ package kubeconform_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
@@ -355,6 +360,120 @@ data: "this is not a map"
 
 	if strings.Contains(msg, "test-namespace") {
 		t.Fatalf("expected error not to implicate the valid Namespace, got: %v", err)
+	}
+}
+
+// TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream verifies that
+// split documents are stable copies rather than views into the source buffer.
+func TestSplitDocumentsForValidationCopiesLargeMultiDocumentStream(t *testing.T) {
+	t.Parallel()
+
+	const (
+		documentCount = 512
+		payloadSize   = 10 * 1024
+	)
+
+	var stream strings.Builder
+	for i := range documentCount {
+		_, _ = fmt.Fprintf(
+			&stream,
+			"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-%03d\ndata:\n  payload: %q\n---\n",
+			i,
+			strings.Repeat("x", payloadSize),
+		)
+	}
+
+	source := []byte(stream.String())
+
+	documents, err := kubeconform.SplitDocumentsForValidation(source)
+	if err != nil {
+		t.Fatalf("expected large stream to split cleanly, got: %v", err)
+	}
+
+	if len(documents) != documentCount {
+		t.Fatalf("expected %d documents, got %d", documentCount, len(documents))
+	}
+
+	for index, document := range documents {
+		// Prove each split document owns stable bytes: callers may retry
+		// validation over the split output while the original input buffer is
+		// no longer trusted.
+		source[0] = '#'
+
+		expectedName := fmt.Sprintf("name: cm-%03d", index)
+		if !bytes.Contains(document, []byte(expectedName)) {
+			t.Fatalf(
+				"document %d lost its identity; expected %q in:\n%s",
+				index,
+				expectedName,
+				document,
+			)
+		}
+	}
+}
+
+// TestSplitDocumentsForValidationRejectsMalformedYAML verifies malformed
+// documents fail while splitting, before any kubeconform validation runs.
+func TestSplitDocumentsForValidationRejectsMalformedYAML(t *testing.T) {
+	t.Parallel()
+
+	malformedStream := []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: broken
+--- invalid separator content
+`)
+
+	documents, err := kubeconform.SplitDocumentsForValidation(malformedStream)
+	if err == nil {
+		t.Fatalf("expected malformed YAML to fail splitting, got %d documents", len(documents))
+	}
+
+	if !strings.Contains(err.Error(), "read YAML document") {
+		t.Fatalf("expected split error to wrap YAML read failure, got: %v", err)
+	}
+}
+
+// TestValidateBytesStopsBetweenDocumentsWhenContextCancelled verifies that a
+// cancelled batch stops before validating later split documents.
+func TestValidateBytesStopsBetweenDocumentsWhenContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var schemaRequests atomic.Int32
+
+	schemaServer := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			schemaRequests.Add(1)
+			cancel()
+
+			_, _ = w.Write([]byte(widgetCRDSchema))
+		}),
+	)
+	t.Cleanup(schemaServer.Close)
+
+	client := kubeconform.NewClient()
+	opts := &kubeconform.ValidationOptions{
+		IgnoreMissingSchemas: false,
+		SchemaLocations: []string{
+			schemaServer.URL + "/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		},
+	}
+
+	err := client.ValidateBytes(
+		ctx,
+		"widgets.yaml",
+		[]byte(validWidgetCR+"---\n"+validWidgetCR),
+		opts,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation between documents, got: %v", err)
+	}
+
+	if got := schemaRequests.Load(); got == 0 {
+		t.Fatal("expected validation to request at least one schema before cancellation")
 	}
 }
 

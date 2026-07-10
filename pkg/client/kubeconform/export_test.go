@@ -6,6 +6,9 @@ import "time"
 // ValidateWithRetry exposes validateWithRetry for black-box tests.
 var ValidateWithRetry = (*Client).validateWithRetry
 
+// SplitDocumentsForValidation exposes splitDocumentsForValidation for black-box tests.
+var SplitDocumentsForValidation = splitDocumentsForValidation
+
 // FormatFailure exposes formatFailure so black-box tests can assert the
 // resource-identity prefixing across the namespaced, cluster-scoped, and
 // no-signature branches without depending on kubeconform's status flow.
