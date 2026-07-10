@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 )
@@ -14,22 +17,49 @@ import (
 // nodegroup is healthy and reconciling its desired capacity.
 const NodegroupStatusActive = "ACTIVE"
 
+// clusterDescriber is the narrow seam over the AWS-SDK EKS DescribeCluster
+// operation the provider uses to read a cluster's control-plane endpoint —
+// data eksctl's cluster summary does not carry. *pkg/client/eks.Client
+// satisfies it, and tests inject a fake so no AWS credentials are needed.
+type clusterDescriber interface {
+	DescribeCluster(ctx context.Context, name string) (*ekstypes.Cluster, error)
+}
+
 // Provider implements provider.Provider for Amazon EKS via eksctl.
 type Provider struct {
-	client *eksctlclient.Client
-	region string
+	client    *eksctlclient.Client
+	region    string
+	describer clusterDescriber
+}
+
+// Option customises a Provider.
+type Option func(*Provider)
+
+// WithClusterDescriber injects the EKS DescribeCluster implementation, letting
+// tests substitute a fake for the AWS-SDK-backed client the provider would
+// otherwise construct lazily on the first GetClusterStatus call.
+func WithClusterDescriber(describer clusterDescriber) Option {
+	return func(p *Provider) {
+		p.describer = describer
+	}
 }
 
 // NewProvider returns a Provider using the given eksctl client and AWS region.
 // Pass region="" to defer to eksctl's own region resolution (AWS_REGION env,
 // active AWS profile, etc.). A nil client returns ErrClientRequired so callers
 // can fail fast rather than getting ErrProviderUnavailable at the first call.
-func NewProvider(client *eksctlclient.Client, region string) (*Provider, error) {
+func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*Provider, error) {
 	if client == nil {
 		return nil, ErrClientRequired
 	}
 
-	return &Provider{client: client, region: region}, nil
+	prov := &Provider{client: client, region: region, describer: nil}
+
+	for _, opt := range opts {
+		opt(prov)
+	}
+
+	return prov, nil
 }
 
 // StartNodes scales all managed nodegroups for the cluster back to their
@@ -191,12 +221,56 @@ func (p *Provider) GetClusterStatus(
 		status = &provider.ClusterStatus{Phase: provider.PhaseStopped, Nodes: nodes}
 	}
 
+	endpoint, err := p.clusterEndpoint(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	status.Endpoint = endpoint
+
 	return status, nil
 }
 
 // Region returns the AWS region this provider was configured with.
 func (p *Provider) Region() string {
 	return p.region
+}
+
+// clusterEndpoint reads the cluster's control-plane endpoint from the AWS SDK,
+// which eksctl's cluster summary omits — bringing EKS to parity with the GKE
+// and Azure providers, which both surface the endpoint on their status. The
+// SDK-backed describer is resolved lazily so the eksctl-only lifecycle paths
+// never resolve AWS credentials.
+func (p *Provider) clusterEndpoint(ctx context.Context, clusterName string) (string, error) {
+	describer, err := p.resolveDescriber(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get cluster status: %w", err)
+	}
+
+	cluster, err := describer.DescribeCluster(ctx, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("get cluster status: describe eks cluster: %w", err)
+	}
+
+	return awssdk.ToString(cluster.Endpoint), nil
+}
+
+// resolveDescriber returns the injected describer, or lazily constructs the
+// AWS-SDK-backed EKS client when none was injected. Construction is deferred
+// to first use because the eksctl lifecycle paths never need AWS credentials
+// resolved; GetClusterStatus is called once per `cluster info`, so no caching
+// of the constructed client is warranted.
+func (p *Provider) resolveDescriber(ctx context.Context) (clusterDescriber, error) {
+	if p.describer != nil {
+		return p.describer, nil
+	}
+
+	client, err := eksclient.NewClient(ctx, p.region)
+	if err != nil {
+		return nil, fmt.Errorf("creating aws eks client: %w", err)
+	}
+
+	return client, nil
 }
 
 // fetchNodegroups guards against a nil client and fetches this cluster's nodegroups — the

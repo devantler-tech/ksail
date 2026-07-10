@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
@@ -14,9 +16,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testEndpoint is the control-plane endpoint the default fake describer
+// returns so GetClusterStatus success paths never resolve real AWS
+// credentials.
+const testEndpoint = "https://ABCDEF0123456789.gr7.us-east-1.eks.amazonaws.com"
+
+// fakeDescriber is a credential-free stand-in for the AWS-SDK EKS
+// DescribeCluster seam. It records the requested name and returns the
+// configured cluster/err.
+type fakeDescriber struct {
+	cluster *ekstypes.Cluster
+	err     error
+	gotName string
+}
+
+func (f *fakeDescriber) DescribeCluster(
+	_ context.Context,
+	name string,
+) (*ekstypes.Cluster, error) {
+	f.gotName = name
+
+	return f.cluster, f.err
+}
+
 // errScriptedRunnerEmptyArgs is returned when the scripted runner is invoked
 // with no positional arguments (should never happen in real test cases).
 var errScriptedRunnerEmptyArgs = errors.New("scripted runner: empty args")
+
+// errDescribeDenied is a static describer error used to assert that
+// GetClusterStatus surfaces a DescribeCluster failure.
+var errDescribeDenied = errors.New("access denied")
 
 // scriptedRunner replays canned responses keyed by the first argument
 // (`create`, `delete`, `get`, `scale`, `upgrade`). It records every call for
@@ -73,7 +102,12 @@ func newProvider(t *testing.T, responses map[string][]response) (*aws.Provider, 
 		eksctlclient.WithRunner(runner),
 	)
 
-	prov, err := aws.NewProvider(client, "us-east-1")
+	// Inject a happy describer so GetClusterStatus success paths populate the
+	// endpoint without resolving real AWS credentials. Tests that exercise the
+	// endpoint itself construct the provider with their own describer inline.
+	prov, err := aws.NewProvider(client, "us-east-1", aws.WithClusterDescriber(
+		&fakeDescriber{cluster: &ekstypes.Cluster{Endpoint: awssdk.String(testEndpoint)}},
+	))
 	require.NoError(t, err)
 
 	return prov, runner
@@ -289,6 +323,74 @@ func TestGetClusterStatus_AggregatesNodegroupStatus(t *testing.T) {
 	assert.Equal(t, 1, status.NodesReady)
 	assert.False(t, status.Ready)
 	assert.Equal(t, "degraded", status.Phase)
+}
+
+// newProviderWithDescriber builds a provider whose eksctl client reports a
+// single running cluster, paired with the given describer, so the endpoint
+// branch of GetClusterStatus can be exercised in isolation.
+func newProviderWithDescriber(
+	t *testing.T,
+	describer aws.Option,
+) *aws.Provider {
+	t.Helper()
+
+	runner := &scriptedRunner{t: t, responses: map[string][]response{
+		"get cluster": {
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+		},
+		"get nodegroup": {{stdout: []byte(`[]`)}},
+	}}
+
+	client := eksctlclient.NewClient(
+		eksctlclient.WithBinary("eksctl-under-test"),
+		eksctlclient.WithRunner(runner),
+	)
+
+	prov, err := aws.NewProvider(client, "us-east-1", describer)
+	require.NoError(t, err)
+
+	return prov
+}
+
+func TestGetClusterStatus_PopulatesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	describer := &fakeDescriber{
+		cluster: &ekstypes.Cluster{Endpoint: awssdk.String(testEndpoint)},
+	}
+	prov := newProviderWithDescriber(t, aws.WithClusterDescriber(describer))
+
+	status, err := prov.GetClusterStatus(t.Context(), "demo")
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.Equal(t, testEndpoint, status.Endpoint)
+	assert.Equal(t, "demo", describer.gotName, "endpoint must be read for the requested cluster")
+}
+
+func TestGetClusterStatus_EmptyEndpointWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	// A described cluster with a nil Endpoint (still provisioning) yields an
+	// empty endpoint string, not a failure — cluster info omits the line.
+	prov := newProviderWithDescriber(t, aws.WithClusterDescriber(
+		&fakeDescriber{cluster: &ekstypes.Cluster{}},
+	))
+
+	status, err := prov.GetClusterStatus(t.Context(), "demo")
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.Empty(t, status.Endpoint)
+}
+
+func TestGetClusterStatus_DescribeError(t *testing.T) {
+	t.Parallel()
+
+	prov := newProviderWithDescriber(t, aws.WithClusterDescriber(
+		&fakeDescriber{err: errDescribeDenied},
+	))
+
+	_, err := prov.GetClusterStatus(t.Context(), "demo")
+	require.ErrorIs(t, err, errDescribeDenied)
 }
 
 // sanity check that provider.Provider interface is implemented.
