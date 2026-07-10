@@ -121,6 +121,8 @@ func newFloatingIPTestProvisioner(
 		WithLogWriter(io.Discard)
 }
 
+// controlPlaneServer builds the minimal public-network server fixture used by
+// floating-IP endpoint rendering tests.
 func controlPlaneServer(id int64, name, publicIPv4 string) *hcloud.Server {
 	return &hcloud.Server{
 		ID:   id,

@@ -114,6 +114,8 @@ type floatingIPCounters struct {
 	lastCreateBody                atomic.Value
 }
 
+// newFloatingIPProvider builds a provider backed by the floating-IP API fixture
+// and returns counters for every mutating operation.
 func newFloatingIPProvider(
 	t *testing.T,
 	listJSON string,
@@ -187,6 +189,8 @@ func TestEnsureFloatingIP_RejectsUnownedNameCollision(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create))
 }
 
+// TestEnsureFloatingIP_NilClient verifies that an unavailable provider fails
+// before attempting a floating-IP lookup or creation.
 func TestEnsureFloatingIP_NilClient(t *testing.T) {
 	t.Parallel()
 
