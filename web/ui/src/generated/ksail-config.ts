@@ -28,7 +28,7 @@ export interface KSailClusterConfiguration {
      */
     cluster?: {
       /**
-       * Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator.
+       * Path to the distribution's own configuration file (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory). CLI-only; ignored by the operator.
        */
       distributionConfig?: string;
       /**
@@ -249,7 +249,7 @@ export interface KSailClusterConfiguration {
             }[];
           }[];
           /**
-           * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit
+           * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. The value should be <= serverLimit.
            */
           maxNodesTotal?: number;
           /**
