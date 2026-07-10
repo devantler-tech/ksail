@@ -91,7 +91,7 @@ type ClusterSpec struct {
 	// (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
 	// When empty, KSail uses the distribution's default file name.
 	// CLI-only (a local file path on the CLI host); ignored by the operator.
-	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema_description:"Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator."` //nolint:lll
+	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema:"description=Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator."` //nolint:lll
 	// Connection defines how KSail connects to the cluster: the kubeconfig path,
 	// context name, and operation timeout.
 	// CLI-only (local kubeconfig path/context); ignored by the operator.

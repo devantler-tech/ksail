@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -22,11 +24,21 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// errInterceptInterruptIgnored reports that raising the documented interrupt
-// did not cancel the steering session context.
-var errInterceptInterruptIgnored = errors.New(
-	"interrupt did not cancel the steering session context",
+// errInterceptTerminationIgnored reports that a documented termination signal
+// did not cancel the intercept command context.
+var errInterceptTerminationIgnored = errors.New(
+	"termination signal did not cancel the intercept command context",
 )
+
+// skipIfInterceptSignalUnsupported skips signal-raising tests on Windows,
+// where os.Interrupt cannot be sent to the running process.
+func skipIfInterceptSignalUnsupported(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
+	}
+}
 
 // experimentalInterceptCmd builds the intercept command with the --experimental
 // opt-in enabled, so these tests exercise the gated command's own behaviour
@@ -116,12 +128,15 @@ func stubInterceptSession(client kubernetes.Interface) (func(), *interceptCall) 
 	}, call
 }
 
-// stubInterruptingInterceptSession installs intercept-command seams whose
-// steering session raises the documented interrupt at the test process and
-// then blocks until the interrupt cancels the session context — without the
+// stubTerminatingInterceptSession installs intercept-command seams whose
+// steering session raises the given termination signal at the test process and
+// then blocks until the signal cancels the session context — without the
 // command's signal-aware context, the default disposition kills the test
 // process at the raise.
-func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
+func stubTerminatingInterceptSession(
+	client kubernetes.Interface,
+	terminationSignal os.Signal,
+) func() {
 	restoreClients := workload.ExportSetMirrorClients(
 		func(_, _ string) (kubernetes.Interface, *rest.Config, error) {
 			return client, &rest.Config{}, nil
@@ -142,19 +157,19 @@ func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
 				return fmt.Errorf("find own process: %w", err)
 			}
 
-			err = proc.Signal(os.Interrupt)
+			err = proc.Signal(terminationSignal)
 			if err != nil {
-				return fmt.Errorf("raise interrupt: %w", err)
+				return fmt.Errorf("raise termination signal: %w", err)
 			}
 
-			// Block like the real tunnel session until the interrupt cancels
+			// Block like the real tunnel session until the signal cancels
 			// the context, then report the clean stop the service layer maps a
 			// cancelled session to.
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(10 * time.Second):
-				return errInterceptInterruptIgnored
+				return errInterceptTerminationIgnored
 			}
 		},
 	)
@@ -167,9 +182,11 @@ func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
 
 // stubInterruptingInterceptSetup installs intercept-command seams whose
 // client factory raises the documented interrupt before pod resolution starts.
-// The short wait gives the process signal handler time to run before setup
-// continues, making the ordering regression deterministic.
+// The returned pod leaves the steering container unready, so setup can finish
+// only when the signal-aware context cancels its readiness wait.
 func stubInterruptingInterceptSetup() func() {
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
 	restoreClients := workload.ExportSetMirrorClients(
 		func(_, _ string) (kubernetes.Interface, *rest.Config, error) {
 			proc, err := os.FindProcess(os.Getpid())
@@ -182,9 +199,7 @@ func stubInterruptingInterceptSetup() func() {
 				return nil, nil, fmt.Errorf("raise interrupt: %w", err)
 			}
 
-			<-time.After(100 * time.Millisecond)
-
-			return nil, nil, context.Canceled
+			return client, &rest.Config{}, nil
 		},
 	)
 
@@ -201,29 +216,41 @@ func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 	assert.Contains(t, cmd.Long, "Ctrl-C stops it cleanly with exit status 0")
 }
 
-// TestInterceptCmdInterruptStopsSessionCleanly verifies that an interrupt
-// cancels the steering session without surfacing an execution error.
+// TestInterceptCmdTerminationSignalsStopSessionCleanly verifies that SIGINT and
+// SIGTERM cancel the steering session without surfacing an execution error.
 //
-//nolint:paralleltest // Package seams and SIGINT are process-wide.
-func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
-	skipIfInterruptUnsupported(t)
+//nolint:paralleltest // Package seams and termination signals are process-wide.
+func TestInterceptCmdTerminationSignalsStopSessionCleanly(t *testing.T) {
+	skipIfInterceptSignalUnsupported(t)
 
-	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
+	tests := []struct {
+		name              string
+		terminationSignal os.Signal
+	}{
+		{name: "SIGINT", terminationSignal: os.Interrupt},
+		{name: "SIGTERM", terminationSignal: syscall.SIGTERM},
+	}
 
-	restore := stubInterruptingInterceptSession(client)
-	defer restore()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
 
-	cmd := experimentalInterceptCmd()
-	cmd.SetArgs([]string{
-		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
-	})
+			restore := stubTerminatingInterceptSession(client, test.terminationSignal)
+			defer restore()
 
-	var out bytes.Buffer
+			cmd := experimentalInterceptCmd()
+			cmd.SetArgs([]string{
+				mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
+			})
 
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+			var out bytes.Buffer
 
-	require.NoError(t, cmd.Execute(), "an interrupted intercept must end as a clean stop")
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+
+			require.NoError(t, cmd.Execute(), "a termination signal must end intercept cleanly")
+		})
+	}
 }
 
 // TestInterceptCmdInterruptDuringSetupStopsCleanly verifies that the signal
@@ -231,19 +258,26 @@ func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 //
 //nolint:paralleltest // Package seams and SIGINT are process-wide.
 func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
-	skipIfInterruptUnsupported(t)
+	skipIfInterceptSignalUnsupported(t)
 
 	restore := stubInterruptingInterceptSetup()
 	defer restore()
 
 	cmd := experimentalInterceptCmd()
 	cmd.SetArgs([]string{
-		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
+		mirrorTestDeploy,
+		"--local-port", "8080",
+		"--steer-command", "ksail-steer",
+		"--wait-timeout", "5s",
 	})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 
+	start := time.Now()
+
 	require.NoError(t, cmd.Execute(), "an interrupt during setup must end as a clean stop")
+	require.Less(t, time.Since(start), 2*time.Second,
+		"signal cancellation must end setup before the readiness timeout")
 }
 
 // TestInterceptCmdRequiresLocalPort verifies that every intercept names the

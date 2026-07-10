@@ -307,22 +307,11 @@ func stubInterruptingMirrorSession(client kubernetes.Interface, pcap []byte) fun
 	}
 }
 
-// skipIfInterruptUnsupported skips interrupt-raising tests on Windows, where
-// os.Interrupt cannot be sent to the running process.
-func skipIfInterruptUnsupported(t *testing.T) {
-	t.Helper()
-
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
+func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
 	}
-}
-
-// TestMirrorCmdInterruptStopsCaptureAndSummarizes verifies that an interrupted
-// capture still closes cleanly and reports the packets written before shutdown.
-//
-//nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
-func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
-	skipIfInterruptUnsupported(t)
 
 	t.Chdir(t.TempDir())
 

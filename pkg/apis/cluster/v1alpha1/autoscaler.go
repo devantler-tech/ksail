@@ -25,7 +25,7 @@ type NodeAutoscalerConfig struct {
 	// Enabled controls whether the Cluster Autoscaler is installed to manage
 	// worker node counts dynamically (Enabled or Disabled). A YAML boolean is
 	// still accepted on load (true -> Enabled, false -> Disabled).
-	Enabled NodeAutoscalerEnabled `json:"enabled,omitzero" jsonschema_description:"Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
+	Enabled NodeAutoscalerEnabled `json:"enabled,omitzero" jsonschema:"description=Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
 	// Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
 	Pools []NodePool `json:"pools,omitzero"`
 	// MaxNodesTotal caps the total number of nodes in the cluster
@@ -34,7 +34,7 @@ type NodeAutoscalerConfig struct {
 	// Expander selects the Cluster Autoscaler expander strategy. It accepts a
 	// single value (e.g. LeastWaste) or an ordered priority list
 	// (e.g. [LeastNodes, LeastWaste]) applied as a chain.
-	Expander AutoscalerExpanderList `json:"expander,omitzero" jsonschema_description:"Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."` //nolint:lll
+	Expander AutoscalerExpanderList `json:"expander,omitzero" jsonschema:"description=Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."` //nolint:lll
 	// ScaleDownUnneededTime is how long a node must be unneeded before it is
 	// eligible for scale down (e.g. "10m").
 	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
