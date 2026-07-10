@@ -166,6 +166,8 @@ func stubInterruptingInterceptSession(client kubernetes.Interface) func() {
 	}
 }
 
+// TestInterceptCmdHelpDocumentsCleanInterruptExit verifies that the command
+// advertises the successful Ctrl-C shutdown contract.
 func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 	t.Parallel()
 
@@ -174,6 +176,8 @@ func TestInterceptCmdHelpDocumentsCleanInterruptExit(t *testing.T) {
 	assert.Contains(t, cmd.Long, "Ctrl-C stops it cleanly with exit status 0")
 }
 
+// TestInterceptCmdInterruptStopsSessionCleanly verifies that an interrupt
+// cancels the steering session without surfacing an execution error.
 //nolint:paralleltest // swaps package-level seams; the raised SIGINT is process-wide.
 func TestInterceptCmdInterruptStopsSessionCleanly(t *testing.T) {
 	if runtime.GOOS == "windows" {
