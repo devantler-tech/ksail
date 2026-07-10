@@ -8,19 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The HelmRelease deliberately PRECEDES the HelmRepository it references:
+// EnumerateChartSpecs' two-pass indexing must resolve sources regardless of
+// document order, and this fixture pins that forward-reference path.
 const enumerateStream = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: not-a-helmrelease
   namespace: test
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: podinfo
-  namespace: test
-spec:
-  url: https://example.com/charts
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -37,6 +32,14 @@ spec:
         name: podinfo
   values:
     replicaCount: 2
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: podinfo
+  namespace: test
+spec:
+  url: https://example.com/charts
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
