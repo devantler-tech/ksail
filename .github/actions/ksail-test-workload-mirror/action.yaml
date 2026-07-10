@@ -191,9 +191,12 @@ runs:
         fi
 
         for attempt in $(seq 1 5); do
-          curl --fail --silent --show-error --max-time 5 --noproxy '*' \
+          if ! curl --fail --silent --show-error --max-time 5 --noproxy '*' \
             "http://127.0.0.1:${LOCAL_PORT}/${TOKEN}?attempt=${attempt}" \
-            >> "$RESPONSE_LOG"
+            >> "$RESPONSE_LOG"; then
+            echo "⚠️ mirror request attempt $attempt failed; continuing" \
+              | tee -a "$RESPONSE_LOG" >&2
+          fi
           sleep 1
         done
 
