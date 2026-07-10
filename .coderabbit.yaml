@@ -10,4 +10,3 @@ reviews:
       # 80% threshold and permanently blocks draft promotion. Keep the signal
       # visible but non-blocking rather than wedging the review gate.
       mode: warning
-
