@@ -112,6 +112,48 @@ func TestRenderTypeSectionsAutoscaler(t *testing.T) {
 	}
 }
 
+// TestRenderFieldTablePreservesCommaSeparatedDescriptions verifies that schema
+// descriptions retain prose commas instead of treating them as tag options.
+func TestRenderFieldTablePreservesCommaSeparatedDescriptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		typeOf reflect.Type
+		want   []string
+	}{
+		{
+			name:   "cluster distribution config",
+			typeOf: reflect.TypeFor[v1alpha1.ClusterSpec](),
+			want: []string{
+				"kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory",
+			},
+		},
+		{
+			name:   "node autoscaler aliases and expander chain",
+			typeOf: reflect.TypeFor[v1alpha1.NodeAutoscalerConfig](),
+			want: []string{
+				"true=Enabled, false=Disabled",
+				"[LeastNodes, LeastWaste]",
+				"--expander=least-nodes,least-waste",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			table := docs.RenderFieldTable(test.typeOf, "", loadAPIFieldDocs(t))
+			for _, want := range test.want {
+				if !strings.Contains(table, want) {
+					t.Errorf("rendered table missing complete description %q", want)
+				}
+			}
+		})
+	}
+}
+
 func TestConfigReferenceProviderSections(t *testing.T) {
 	t.Parallel()
 

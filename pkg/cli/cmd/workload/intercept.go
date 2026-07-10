@@ -253,23 +253,16 @@ func deriveSteerCommand(servicePort int) []string {
 // resolve → select injection point → inject/reuse steering agent → wait →
 // tunnel + serve to the local process.
 func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOptions) error {
-	// Ctrl-C is the documented way to end the intercept, and setup must honour
-	// it too: install the signal-aware context before the first Kubernetes
-	// call so SIGINT/SIGTERM during injection-point resolution or the steering
-	// agent's --wait-timeout wait cancels setup instead of letting the
-	// default disposition kill the process abruptly. The session unwinds
-	// through the same context (the service layer maps a cancelled context to
-	// a clean stop).
+	// Install the signal handler before any cluster setup so Ctrl-C also
+	// cancels pod resolution, steering-agent injection, and readiness waits.
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	cmd.SetContext(ctx)
 
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 	client, restConfig, err := newMirrorClients(kubeconfigPath, opts.context)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
 	point, err := resolveInjectionPoint(
@@ -280,12 +273,12 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		deployment,
 	)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
-	err = ensureSteer(cmd, client, point, opts)
+	err = ensureSteer(ctx, cmd, client, point, opts)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -295,7 +288,7 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Writer:  cmd.ErrOrStderr(),
 	})
 
-	return runInterceptSession(
+	err = runInterceptSession(
 		ctx,
 		client,
 		restConfig,
@@ -303,6 +296,18 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		opts.steerCommand,
 		opts.localPort,
 	)
+
+	return cleanInterceptCancellation(ctx, err)
+}
+
+// cleanInterceptCancellation maps signal-driven context cancellation to the
+// documented successful Ctrl-C exit while preserving unrelated setup errors.
+func cleanInterceptCancellation(ctx context.Context, err error) error {
+	if errors.Is(ctx.Err(), context.Canceled) && errors.Is(err, context.Canceled) {
+		return nil
+	}
+
+	return err
 }
 
 // ensureSteer injects the steering agent into the injection point's pod —
@@ -312,12 +317,13 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 // by runInterceptSession, matching the agent's design (its stdin/stdout is the
 // exec channel, not the container's entrypoint).
 func ensureSteer(
+	ctx context.Context,
 	cmd *cobra.Command,
 	client kubernetes.Interface,
 	point *mirror.TapPoint,
 	opts interceptOptions,
 ) error {
-	return injectAndWait(cmd, point, ephemeralInjector{
+	return injectAndWait(ctx, cmd, point, ephemeralInjector{
 		inject: func(ctx context.Context) (string, error) {
 			return mirror.InjectSteer(ctx, client, point, mirror.WithSteerImage(opts.steerImage))
 		},
@@ -350,8 +356,13 @@ type ephemeralInjector struct {
 // one, since ephemeral containers cannot be removed) and waits for it to reach
 // Running. Shared by the mirror tap and the intercept steering agent so both
 // take the identical inject → reuse-or-report → wait path.
-func injectAndWait(cmd *cobra.Command, point *mirror.TapPoint, inj ephemeralInjector) error {
-	_, err := inj.inject(cmd.Context())
+func injectAndWait(
+	ctx context.Context,
+	cmd *cobra.Command,
+	point *mirror.TapPoint,
+	inj ephemeralInjector,
+) error {
+	_, err := inj.inject(ctx)
 
 	switch {
 	case errors.Is(err, inj.alreadyErr):
@@ -372,7 +383,7 @@ func injectAndWait(cmd *cobra.Command, point *mirror.TapPoint, inj ephemeralInje
 		})
 	}
 
-	err = inj.wait(cmd.Context())
+	err = inj.wait(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: %w", inj.waitVerb, err)
 	}
