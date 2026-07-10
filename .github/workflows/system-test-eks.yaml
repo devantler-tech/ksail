@@ -94,8 +94,8 @@ jobs:
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ inputs.region }}
       AWS_DEFAULT_REGION: ${{ inputs.region }}
-      KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}
-      KSAIL_EKS_CLUSTER_NAME: st-eks-${{ github.run_id }}
+      KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_CLUSTER_NAME: st-eks-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -127,7 +127,12 @@ jobs:
           gh release download "$EKSCTL_VERSION" \
             --repo eksctl-io/eksctl \
             --pattern eksctl_Linux_amd64.tar.gz \
+            --pattern eksctl_checksums.txt \
             --dir "$RUNNER_TEMP/eksctl"
+          (
+            cd "$RUNNER_TEMP/eksctl"
+            grep 'Linux_amd64' eksctl_checksums.txt | sha256sum --check
+          )
           tar -xzf "$RUNNER_TEMP/eksctl/eksctl_Linux_amd64.tar.gz" -C "$RUNNER_TEMP/eksctl"
           sudo install "$RUNNER_TEMP/eksctl/eksctl" /usr/local/bin/eksctl
           eksctl version
@@ -167,6 +172,7 @@ jobs:
           '
 
       - name: 🧪 ksail cluster create
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
@@ -174,6 +180,7 @@ jobs:
           ksail cluster create
 
       - name: 🧪 ksail cluster info
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -182,6 +189,7 @@ jobs:
 
       - name: 🧪 ksail workload reconcile
         if: inputs.gitops_engine != 'None'
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
@@ -190,6 +198,7 @@ jobs:
 
       - name: 🧹 Delete EKS smoke cluster
         if: always()
+        timeout-minutes: 45
         shell: bash
         run: |
           set +e
