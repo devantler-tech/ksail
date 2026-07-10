@@ -164,6 +164,12 @@ func TestRegistryHostNetworkName(t *testing.T) {
 	}
 }
 
+func TestRegistryHostNetworkNameNilConfig(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, setup.RegistryHostNetworkNameForTest(nil, "cluster"))
+}
+
 func clusterForRegistryHostTest(
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,

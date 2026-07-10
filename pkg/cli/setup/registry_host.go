@@ -78,7 +78,11 @@ func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 		return false
 	}
 
-	switch clusterCfg.Spec.Cluster.Distribution {
+	return supportsRegistryNetworkOverride(clusterCfg.Spec.Cluster.Distribution)
+}
+
+func supportsRegistryNetworkOverride(distribution v1alpha1.Distribution) bool {
+	switch distribution {
 	case v1alpha1.DistributionTalos, v1alpha1.DistributionVCluster:
 		return true
 	case v1alpha1.DistributionVanilla,
@@ -94,25 +98,28 @@ func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 func registryHostNetworkName(clusterCfg *v1alpha1.Cluster, clusterName string) string {
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
+	if clusterCfg == nil {
+		return ""
+	}
+
+	distribution := clusterCfg.Spec.Cluster.Distribution
+	if !supportsRegistryNetworkOverride(distribution) {
+		return ""
+	}
+
+	if distribution == v1alpha1.DistributionTalos {
 		if clusterName == "" {
 			return defaultTalosNetworkName
 		}
 
 		return clusterName
-	case v1alpha1.DistributionVCluster:
-		return vclusterNetworkPrefix + clusterName
-	case v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionKWOK,
-		v1alpha1.DistributionEKS,
-		v1alpha1.DistributionGKE,
-		v1alpha1.DistributionAKS:
-		return ""
-	default:
-		return ""
 	}
+
+	if distribution == v1alpha1.DistributionVCluster {
+		return vclusterNetworkPrefix + clusterName
+	}
+
+	return ""
 }
 
 // ResolveRegistryHostForCluster is the exported variant of resolveRegistryHost.
