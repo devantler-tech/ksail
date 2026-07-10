@@ -246,6 +246,8 @@ func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
 	require.NoError(t, cmd.Execute(), "an interrupt during setup must end as a clean stop")
 }
 
+// TestInterceptCmdRequiresLocalPort verifies that every intercept names the
+// local process port that receives redirected traffic.
 func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +261,8 @@ func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 	assert.Contains(t, err.Error(), "local-port")
 }
 
+// TestInterceptCmdRequiresSteerOrServicePort verifies that the command has
+// either an explicit steering invocation or enough input to derive one.
 func TestInterceptCmdRequiresSteerOrServicePort(t *testing.T) {
 	t.Parallel()
 
@@ -271,6 +275,8 @@ func TestInterceptCmdRequiresSteerOrServicePort(t *testing.T) {
 	require.ErrorIs(t, err, workload.ErrInterceptSteerUnspecified)
 }
 
+// TestInterceptCmdRejectsServicePortCollidingWithInternalPort verifies that a
+// workload port cannot redirect back to the steering agent's listener.
 func TestInterceptCmdRejectsServicePortCollidingWithInternalPort(t *testing.T) {
 	t.Parallel()
 
@@ -284,6 +290,8 @@ func TestInterceptCmdRejectsServicePortCollidingWithInternalPort(t *testing.T) {
 	require.ErrorIs(t, err, workload.ErrInvalidInterceptServicePort)
 }
 
+// TestInterceptCmdRejectsInvalidLocalPort verifies that out-of-range local TCP
+// ports are rejected before cluster setup begins.
 func TestInterceptCmdRejectsInvalidLocalPort(t *testing.T) {
 	t.Parallel()
 
@@ -298,6 +306,9 @@ func TestInterceptCmdRejectsInvalidLocalPort(t *testing.T) {
 	require.ErrorIs(t, err, workload.ErrInvalidInterceptLocalPort)
 }
 
+// TestInterceptCmdFailsForMissingDeployment verifies that target-resolution
+// failures propagate without starting a steering session.
+//
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
 func TestInterceptCmdFailsForMissingDeployment(t *testing.T) {
 	restore, _ := stubInterceptSession(k8sfake.NewClientset())
@@ -314,6 +325,9 @@ func TestInterceptCmdFailsForMissingDeployment(t *testing.T) {
 	require.ErrorIs(t, err, mirror.ErrDeploymentNotFound)
 }
 
+// TestInterceptCmdInjectsSteerAndRunsSession verifies the command wires the
+// selected pod, steering command, and local port into the tunnel session.
+//
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
 func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
@@ -342,6 +356,9 @@ func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 	assert.Contains(t, out.String(), "injected steering agent")
 }
 
+// TestInterceptCmdDerivesSteerCommandFromServicePort verifies the default
+// steering-agent invocation when no custom command is supplied.
+//
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
 func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
@@ -370,6 +387,9 @@ func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
 	assert.Equal(t, 8080, call.localPort)
 }
 
+// TestInterceptCmdExplicitSteerCommandOverridesServicePort verifies that the
+// custom-agent escape hatch takes precedence over command derivation.
+//
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
 func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
@@ -396,6 +416,9 @@ func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
 	assert.Equal(t, []string{"custom-agent", "--flag"}, call.steerCommand)
 }
 
+// TestInterceptCmdReusesExistingSteer verifies that an injected ephemeral
+// steering container is reused because Kubernetes cannot remove it.
+//
 //nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
 func TestInterceptCmdReusesExistingSteer(t *testing.T) {
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(true))

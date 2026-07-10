@@ -317,6 +317,9 @@ func skipIfInterruptUnsupported(t *testing.T) {
 	}
 }
 
+// TestMirrorCmdInterruptStopsCaptureAndSummarizes verifies that an interrupted
+// capture still closes cleanly and reports the packets written before shutdown.
+//
 //nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
 func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
 	skipIfInterruptUnsupported(t)

@@ -24,6 +24,8 @@ func loadAPIFieldDocs(t *testing.T) docs.FieldDocs {
 	return fieldDocs
 }
 
+// TestLoadFieldDocs verifies that the loader captures both field-level and
+// type-level comments from the API package.
 func TestLoadFieldDocs(t *testing.T) {
 	t.Parallel()
 
@@ -41,6 +43,8 @@ func TestLoadFieldDocs(t *testing.T) {
 	}
 }
 
+// TestRenderFieldTableOptionsHetzner verifies that provider fields and defaults
+// render while runtime-only fields stay out of the generated reference.
 func TestRenderFieldTableOptionsHetzner(t *testing.T) {
 	t.Parallel()
 
@@ -65,6 +69,8 @@ func TestRenderFieldTableOptionsHetzner(t *testing.T) {
 	}
 }
 
+// TestRenderTypeSectionsProviderSpec verifies that nested provider types become
+// linked reference sections with their provider-specific fields.
 func TestRenderTypeSectionsProviderSpec(t *testing.T) {
 	t.Parallel()
 
@@ -90,6 +96,8 @@ func TestRenderTypeSectionsProviderSpec(t *testing.T) {
 	}
 }
 
+// TestRenderTypeSectionsAutoscaler verifies that nested autoscaler types render
+// through the node-pool taint level.
 func TestRenderTypeSectionsAutoscaler(t *testing.T) {
 	t.Parallel()
 
@@ -154,6 +162,8 @@ func TestRenderFieldTablePreservesCommaSeparatedDescriptions(t *testing.T) {
 	}
 }
 
+// TestConfigReferenceProviderSections verifies that the generated configuration
+// reference includes the expected provider and autoscaler sections.
 func TestConfigReferenceProviderSections(t *testing.T) {
 	t.Parallel()
 
