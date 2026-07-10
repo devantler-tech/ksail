@@ -166,8 +166,10 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 // runValidateCmd dispatches to runValidateCmdInner directly, or — when
 // --ephemeral is set — wraps it in a throwaway KWOK cluster that is
 // guaranteed to be torn down afterwards (see withEphemeralCluster). The
-// ephemeral cluster does not yet change what validatePath validates; wiring
-// it into the pipeline is a follow-up (ksail#5919 Phase 3b-2/3b-3).
+// cluster's connection handle is resolved and readiness-verified but not yet
+// consumed here: installing the declared operators and validating their
+// rendered children against it is the remainder of ksail#5919 Phase
+// 3b-2/3b-3.
 func runValidateCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -175,7 +177,7 @@ func runValidateCmd(
 	flags validateFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(ctx, cmd, func(ctx context.Context) error {
+		return withEphemeralCluster(ctx, cmd, func(ctx context.Context, _ ephemeralCluster) error {
 			return runValidateCmdInner(ctx, cmd, args, flags)
 		})
 	}

@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
@@ -34,12 +36,59 @@ var newEphemeralProvisioner = func(name string) clusterprovisioner.Provisioner {
 	return kwokprovisioner.NewProvisioner(name, "", nil)
 }
 
-// withEphemeralCluster provisions a throwaway cluster, runs runFn while it is
-// live, and guarantees the cluster is deleted afterwards — on success, on an
-// error from runFn, and on SIGINT/SIGTERM. It is scaffold-only: runFn runs
-// unchanged today (validate/scan still operate on local files); wiring the
-// ephemeral cluster's kubeconfig into the installer/apply/scan pipeline is a
-// follow-up (ksail#5919 Phase 3b-2/3b-3).
+// waitForEphemeralCluster verifies a freshly provisioned --ephemeral cluster
+// is genuinely usable — the API server answers /readyz AND a basic authorized
+// read succeeds — before runFn is invoked, so downstream steps never race the
+// control plane's warm-up window. A package var so tests can substitute a
+// fake without a live Docker/KWOK dependency.
+//
+//nolint:gochecknoglobals // test seam, mirrors newEphemeralProvisioner above
+var waitForEphemeralCluster = k8s.WaitForClusterReady
+
+// ephemeralCluster describes how a --ephemeral run reaches its throwaway
+// cluster once provisioned: the kubeconfig file the embedded kwokctl merged
+// the new context into, and that context's name. Phase 3b-2 of ksail#5919
+// consumes this handle to install the workload's declared operators into the
+// cluster; Phase 3b-3 applies the rendered manifests and scans their children.
+type ephemeralCluster struct {
+	// Name is the throwaway cluster's own name (ksail-ephemeral-<nanos>).
+	Name string
+	// KubeconfigPath is the kubeconfig file holding the cluster's context —
+	// the same file kwokctl writes to ($KUBECONFIG, or ~/.kube/config).
+	KubeconfigPath string
+	// Context is the kubeconfig context kwokctl created ("kwok-<name>").
+	Context string
+}
+
+// resolveEphemeralCluster derives the connection handle for a provisioned
+// --ephemeral cluster. The KWOK provisioner does not hand back a kubeconfig;
+// the embedded kwokctl merges the cluster's context into the kubeconfig at
+// $KUBECONFIG (or ~/.kube/config) under the distribution's context naming
+// convention, so the handle is derived from the cluster name.
+func resolveEphemeralCluster(name string) (ephemeralCluster, error) {
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath("")
+	if err != nil {
+		return ephemeralCluster{}, fmt.Errorf(
+			"resolve kubeconfig path for ephemeral cluster %q: %w", name, err,
+		)
+	}
+
+	distribution := v1alpha1.DistributionKWOK
+
+	return ephemeralCluster{
+		Name:           name,
+		KubeconfigPath: kubeconfigPath,
+		Context:        distribution.ContextName(name),
+	}, nil
+}
+
+// withEphemeralCluster provisions a throwaway cluster, waits until it is
+// genuinely ready, runs runFn with the cluster's connection handle while it
+// is live, and guarantees the cluster is deleted afterwards — on success, on
+// an error from any step, and on SIGINT/SIGTERM. runFn receives a verified
+// ephemeralCluster (kubeconfig path + context); wiring it into the
+// installer/apply/scan pipeline is the remainder of ksail#5919 Phase
+// 3b-2/3b-3.
 //
 // ctx should be the caller's own context (typically cmd.Context()); cmd is
 // used only for output (notify) and is not read for its context here, so the
@@ -55,7 +104,7 @@ var newEphemeralProvisioner = func(name string) clusterprovisioner.Provisioner {
 func withEphemeralCluster(
 	ctx context.Context,
 	cmd *cobra.Command,
-	runFn func(ctx context.Context) error,
+	runFn func(ctx context.Context, cluster ephemeralCluster) error,
 ) (err error) {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -97,7 +146,19 @@ func withEphemeralCluster(
 		err = errors.Join(err, deleteCluster())
 	}()
 
-	return runFn(ctx)
+	cluster, resolveErr := resolveEphemeralCluster(name)
+	if resolveErr != nil {
+		return resolveErr
+	}
+
+	notify.Infof(cmd.OutOrStdout(), "waiting for ephemeral cluster %q to become ready...", name)
+
+	waitErr := waitForEphemeralCluster(ctx, cluster.KubeconfigPath, cluster.Context)
+	if waitErr != nil {
+		return fmt.Errorf("ephemeral cluster %q never became ready: %w", name, waitErr)
+	}
+
+	return runFn(ctx, cluster)
 }
 
 // ephemeralClusterName generates a unique, DNS-1123-safe name for a throwaway

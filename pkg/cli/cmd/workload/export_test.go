@@ -472,12 +472,28 @@ func ExportSetEphemeralProvisioner(
 	return func() { newEphemeralProvisioner = original }
 }
 
+// EphemeralCluster re-exports the internal --ephemeral connection handle so
+// external-package tests can assert on what runFn receives.
+type EphemeralCluster = ephemeralCluster
+
+// ExportSetEphemeralClusterWaiter swaps the --ephemeral cluster readiness
+// waiter so tests can substitute a fake without a live cluster to poll. It
+// returns a restore function that reinstates the original.
+func ExportSetEphemeralClusterWaiter(
+	wait func(ctx context.Context, kubeconfigPath, contextName string) error,
+) func() {
+	original := waitForEphemeralCluster
+	waitForEphemeralCluster = wait
+
+	return func() { waitForEphemeralCluster = original }
+}
+
 // ExportWithEphemeralCluster exposes withEphemeralCluster for external-package
-// tests exercising the provision/guaranteed-teardown seam directly.
+// tests exercising the provision/readiness/guaranteed-teardown seam directly.
 func ExportWithEphemeralCluster(
 	ctx context.Context,
 	cmd *cobra.Command,
-	runFn func(ctx context.Context) error,
+	runFn func(ctx context.Context, cluster EphemeralCluster) error,
 ) error {
 	return withEphemeralCluster(ctx, cmd, runFn)
 }
