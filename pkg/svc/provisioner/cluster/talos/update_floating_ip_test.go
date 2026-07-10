@@ -160,7 +160,8 @@ func TestMergeFloatingIPChanges_EnabledAndAbsentAddsChange(t *testing.T) {
 	}).WithInfraProvider(newFipUpdateProvider(server.URL))
 
 	diff := &clusterupdate.UpdateResult{}
-	provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff, nil)
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
 	require.Len(t, diff.InPlaceChanges, 1)
 	change := diff.InPlaceChanges[0]
@@ -184,7 +185,8 @@ func TestMergeFloatingIPChanges_EnabledAndPresentIsNoop(t *testing.T) {
 	}).WithInfraProvider(newFipUpdateProvider(server.URL))
 
 	diff := &clusterupdate.UpdateResult{}
-	provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff, nil)
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
 	assert.Empty(t, diff.InPlaceChanges,
 		"an existing owned floating IP must not re-diff (idempotent re-run)")
@@ -203,7 +205,8 @@ func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
 	}).WithInfraProvider(newFipUpdateProvider(server.URL)).WithLogWriter(&log)
 
 	diff := &clusterupdate.UpdateResult{}
-	provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff, nil)
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
 	assert.Empty(t, diff.InPlaceChanges,
 		"the disable transition is deferred (#6032) and must not claim a reconcile")
@@ -219,9 +222,57 @@ func TestMergeFloatingIPChanges_NoHetznerOptionsIsNoop(t *testing.T) {
 	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{})
 
 	diff := &clusterupdate.UpdateResult{}
-	provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff, nil)
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
 	assert.Empty(t, diff.InPlaceChanges)
+}
+
+// fipUpdateUnownedFloatingIPJSON is a floating IP carrying the cluster's
+// conventional name but no ksail ownership labels — the collision case.
+const fipUpdateUnownedFloatingIPJSON = `{"id":8,"name":"fip-cluster-floating-ip",` +
+	`"description":"","ip":"192.0.2.20","type":"ipv4","server":null,"dns_ptr":[],` +
+	`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
+	`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
+	`"blocked":false,"protection":{"delete":false},"labels":{},` +
+	`"created":"2026-07-02T00:00:00+00:00"}`
+
+// TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate pins the ownership
+// guard at the update level: a same-name floating IP ksail does not own must
+// fail the merge (and with it `cluster update`) instead of degrading into a
+// successful no-op that skips the endpoint reconcile.
+func TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+			_, _ = responseWriter.Write(
+				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`))
+		},
+	)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	var log bytes.Buffer
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+	}).WithInfraProvider(newFipUpdateProvider(server.URL)).WithLogWriter(&log)
+
+	diff := &clusterupdate.UpdateResult{}
+	err := provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff)
+
+	require.ErrorIs(t, err, hetzner.ErrFloatingIPNotOwned,
+		"an ownership collision must propagate, not no-op the update")
+	assert.Empty(t, diff.InPlaceChanges,
+		"a collision must not claim a reconcilable change")
+	assert.NotContains(t, log.String(), "Failed to detect floating IP state",
+		"a collision is a definitive answer, not a warn-and-skip detection failure")
 }
 
 func TestReconcileFloatingIPEndpoint_NoopWithoutChange(t *testing.T) {
@@ -258,7 +309,8 @@ func TestReconcileFloatingIPEndpoint_AppliesDetectedChange(t *testing.T) {
 	}).WithInfraProvider(newFipUpdateProvider(server.URL))
 
 	diff := &clusterupdate.UpdateResult{}
-	provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff, nil)
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 	require.Len(t, diff.InPlaceChanges, 1, "the absent floating IP must diff")
 
 	err := provisioner.ReconcileFloatingIPEndpointForTest(t.Context(), "fip-cluster", diff)

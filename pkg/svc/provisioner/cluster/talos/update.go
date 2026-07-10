@@ -2,12 +2,14 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -36,8 +38,17 @@ func (p *Provisioner) Update(
 
 	// Detect a floatingIPEnabled config whose floating IP does not actually exist
 	// and merge it into diff, so enabling the field on a running cluster is
-	// reconciled instead of silently no-oping (#5947).
-	p.mergeFloatingIPChanges(ctx, name, diff, diffErr)
+	// reconciled instead of silently no-oping (#5947). Skipped when the diff
+	// itself failed (PrepareUpdate surfaces diffErr). An ownership collision (a
+	// same-name floating IP ksail does not own) fails the update: succeeding
+	// without the endpoint reconcile would be exactly the silent no-op this
+	// detection exists to prevent.
+	if diffErr == nil {
+		fipErr := p.mergeFloatingIPChanges(ctx, name, diff)
+		if fipErr != nil {
+			return nil, fipErr
+		}
+	}
 
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
@@ -189,20 +200,24 @@ const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 // on its own. The disable transition (false with an owned floating IP still
 // present) is detected but only warned about: its endpoint-reversion and
 // deletion-policy semantics are a separate change (#6032), and warning beats
-// pretending to reconcile it.
+// pretending to reconcile it. An ownership collision from detection is
+// returned as an error (see detectOwnedFloatingIP) rather than swallowed.
 func (p *Provisioner) mergeFloatingIPChanges(
 	ctx context.Context,
 	name string,
 	diff *clusterupdate.UpdateResult,
-	diffErr error,
-) {
-	if diffErr != nil || diff == nil {
-		return
+) error {
+	if diff == nil {
+		return nil
 	}
 
-	exists, detected := p.detectOwnedFloatingIP(ctx, name)
+	exists, detected, err := p.detectOwnedFloatingIP(ctx, name)
+	if err != nil {
+		return err
+	}
+
 	if !detected {
-		return
+		return nil
 	}
 
 	switch {
@@ -224,37 +239,55 @@ func (p *Provisioner) mergeFloatingIPChanges(
 				" it is no longer wanted\n",
 		)
 	}
+
+	return nil
 }
 
 // detectOwnedFloatingIP reads whether the cluster's ksail-owned floating IP
-// exists, returning (exists, detected). detected is false when the answer is
-// unavailable — not a Hetzner cluster, no infra provider, or the lookup failed
-// (logged) — so callers skip rather than act on a guess.
+// exists, returning (exists, detected, err). detected is false when the answer
+// is genuinely unavailable — not a Hetzner cluster, no infra provider, or the
+// lookup failed transiently (logged) — so callers skip rather than act on a
+// guess. An ownership collision (hetzner.ErrFloatingIPNotOwned: a same-name
+// floating IP ksail does not own) is a definitive answer, not an unavailable
+// one, and is returned as an error so the update fails instead of silently
+// skipping the reconcile.
 func (p *Provisioner) detectOwnedFloatingIP(
 	ctx context.Context,
 	name string,
-) (bool, bool) {
-	if p.hetznerOpts == nil || p.infraProvider == nil {
-		return false, false
+) (bool, bool, error) {
+	if p.hetznerOpts == nil {
+		return false, false, nil
 	}
 
-	hzProvider, err := p.hetznerProvider()
-	if err != nil {
-		return false, false
+	hzProvider, isHetzner := p.infraProvider.(*hetzner.Provider)
+	if !isHetzner {
+		return false, false, nil
 	}
 
 	exists, err := hzProvider.OwnedFloatingIPExists(ctx, p.resolveClusterName(name))
 	if err != nil {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  ⚠ Failed to detect floating IP state: %v\n",
-			err,
-		)
-
-		return false, false
+		return false, false, p.classifyFloatingIPDetectionErr(err)
 	}
 
-	return exists, true
+	return exists, true, nil
+}
+
+// classifyFloatingIPDetectionErr splits floating-IP detection failures into
+// the ownership collision (returned, wrapped — a definitive answer the update
+// must fail on) and everything else (logged and swallowed — detection is
+// genuinely unavailable, so the caller skips rather than acts on a guess).
+func (p *Provisioner) classifyFloatingIPDetectionErr(err error) error {
+	if errors.Is(err, hetzner.ErrFloatingIPNotOwned) {
+		return fmt.Errorf("failed to detect floating IP state: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  ⚠ Failed to detect floating IP state: %v\n",
+		err,
+	)
+
+	return nil
 }
 
 // hasFloatingIPChange reports whether diff carries the floatingIPEnabled

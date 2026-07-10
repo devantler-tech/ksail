@@ -277,9 +277,8 @@ func (p *Provisioner) MergeFloatingIPChangesForTest(
 	ctx context.Context,
 	name string,
 	diff *clusterupdate.UpdateResult,
-	diffErr error,
-) {
-	p.mergeFloatingIPChanges(ctx, name, diff, diffErr)
+) error {
+	return p.mergeFloatingIPChanges(ctx, name, diff)
 }
 
 // ReconcileFloatingIPEndpointForTest exposes reconcileFloatingIPEndpoint for
