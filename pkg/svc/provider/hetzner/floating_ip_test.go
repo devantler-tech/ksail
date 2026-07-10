@@ -197,6 +197,56 @@ func TestEnsureFloatingIP_NilClient(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
+func TestOwnedFloatingIPExists_FalseWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	prov, counters := newFloatingIPProvider(t, "")
+
+	exists, err := prov.OwnedFloatingIPExists(t.Context(), "test-cluster")
+
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create),
+		"the read-only lookup must never create")
+}
+
+func TestOwnedFloatingIPExists_TrueWhenOwned(t *testing.T) {
+	t.Parallel()
+
+	prov, counters := newFloatingIPProvider(t, ownedFloatingIPJSON)
+
+	exists, err := prov.OwnedFloatingIPExists(t.Context(), "test-cluster")
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create),
+		"the read-only lookup must never create")
+}
+
+func TestOwnedFloatingIPExists_RejectsUnownedNameCollision(t *testing.T) {
+	t.Parallel()
+
+	// Same ownership guard as EnsureFloatingIP: a user-managed reserved address
+	// sharing the conventional name is not the cluster's floating IP, and
+	// counting it as present would mask the collision until apply time.
+	prov, _ := newFloatingIPProvider(t, unownedFloatingIPJSON)
+
+	exists, err := prov.OwnedFloatingIPExists(t.Context(), "test-cluster")
+
+	require.ErrorIs(t, err, hetzner.ErrFloatingIPNotOwned)
+	assert.False(t, exists)
+}
+
+func TestOwnedFloatingIPExists_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+
+	_, err := prov.OwnedFloatingIPExists(t.Context(), "test-cluster")
+
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
 func TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned(t *testing.T) {
 	t.Parallel()
 

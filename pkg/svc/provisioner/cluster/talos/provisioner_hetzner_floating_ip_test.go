@@ -1,7 +1,6 @@
 package talosprovisioner_test
 
 import (
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -67,14 +66,6 @@ func TestApplyHetznerDefaults_FloatingIPLocation(t *testing.T) {
 func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Server {
 	t.Helper()
 
-	const ownedFloatingIP = `{"id":7,"name":"fip-cluster-floating-ip","description":"",` +
-		`"ip":"192.0.2.10","type":"ipv4","server":null,"dns_ptr":[],` +
-		`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
-		`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
-		`"blocked":false,"protection":{"delete":false},` +
-		`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster"},` +
-		`"created":"2026-07-02T00:00:00+00:00"}`
-
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(
@@ -88,25 +79,19 @@ func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Se
 				return
 			}
 
-			_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + ownedFloatingIP + `]}`))
+			// The canned owned floating IP is shared with the update-reconcile
+			// tests (update_floating_ip_test.go).
+			_, _ = responseWriter.Write(
+				[]byte(`{"floating_ips":[` + fipUpdateOwnedFloatingIPJSON + `]}`),
+			)
 		},
 	)
 
 	mux.HandleFunc(
 		"/floating_ips/7/actions/assign",
 		func(responseWriter http.ResponseWriter, _ *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
 			atomic.AddInt32(assignCalls, 1)
-
-			body := map[string]any{
-				"action": map[string]any{
-					"id":       1,
-					"command":  "assign_floating_ip",
-					"status":   "success",
-					"progress": 100,
-				},
-			}
-			_ = json.NewEncoder(responseWriter).Encode(body)
+			fipUpdateAssignActionResponse(responseWriter)
 		},
 	)
 

@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	corev1 "k8s.io/api/core/v1"
@@ -301,6 +303,44 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 	}
 
 	return endpointIP, certSANs, nil
+}
+
+// errFloatingIPConfigsUnavailable reports that the floating-IP change cannot be
+// reconciled because the Talos configs are not loaded — failing loudly here
+// beats the silent no-op the change was detected to fix (#5947).
+var errFloatingIPConfigsUnavailable = errors.New(
+	"cannot reconcile floating IP: talos configs are not loaded",
+)
+
+// reconcileFloatingIPEndpoint applies a detected floatingIPEnabled change
+// during `cluster update` (#5947): it ensures + attaches the cluster's
+// floating IP and regenerates the stored configs with the floating-IP
+// endpoint, certificate SANs, and control-plane VIP block (the same
+// updateConfigsWithEndpoint path the create flow uses), so the subsequent
+// in-place config step pushes the VIP onto the running control planes and the
+// elected leader claims the address. A diff without the floating-IP change is
+// a no-op.
+func (p *Provisioner) reconcileFloatingIPEndpoint(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	if !hasFloatingIPChange(diff) {
+		return nil
+	}
+
+	if p.talosConfigs == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	hzProvider, controlPlaneServers, err := p.hetznerNodesForRole(
+		ctx, clusterName, RoleControlPlane,
+	)
+	if err != nil {
+		return fmt.Errorf("list control-plane servers: %w", err)
+	}
+
+	return p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 }
 
 // prepareAndApplyConfigs prepares config bundle and applies configuration to all nodes.

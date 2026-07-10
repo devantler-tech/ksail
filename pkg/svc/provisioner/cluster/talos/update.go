@@ -34,6 +34,11 @@ func (p *Provisioner) Update(
 	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
 	p.mergeServerTypeRollingChanges(ctx, name, diff, diffErr)
 
+	// Detect a floatingIPEnabled config whose floating IP does not actually exist
+	// and merge it into diff, so enabling the field on a running cluster is
+	// reconciled instead of silently no-oping (#5947).
+	p.mergeFloatingIPChanges(ctx, name, diff, diffErr)
+
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
@@ -171,6 +176,103 @@ func appendServerTypeChange(
 	}
 }
 
+// floatingIPEnabledField is the diff field name for the Hetzner floating-IP
+// enablement change, shared by its detector and apply step.
+const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
+
+// mergeFloatingIPChanges detects a `floatingIPEnabled: true` configuration
+// whose ksail-owned floating IP does not actually exist — the newly-enabled
+// transition and the drifted (enabled-but-absent) state read identically live —
+// and merges an in-place change into diff so `cluster update` reconciles it
+// (#5947). The state is read from the cloud, not the persisted spec baseline,
+// because introspection echoes the desired flag and can never produce this diff
+// on its own. The disable transition (false with an owned floating IP still
+// present) is detected but only warned about: its endpoint-reversion and
+// deletion-policy semantics are a separate change (#6032), and warning beats
+// pretending to reconcile it.
+func (p *Provisioner) mergeFloatingIPChanges(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	if diffErr != nil || diff == nil {
+		return
+	}
+
+	exists, detected := p.detectOwnedFloatingIP(ctx, name)
+	if !detected {
+		return
+	}
+
+	switch {
+	case p.hetznerOpts.FloatingIPEnabled && !exists:
+		diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+			Field:    floatingIPEnabledField,
+			OldValue: strconv.FormatBool(exists),
+			NewValue: strconv.FormatBool(p.hetznerOpts.FloatingIPEnabled),
+			Category: clusterupdate.ChangeCategoryInPlace,
+			Reason: "the floating IP is created and attached, and control planes " +
+				"receive the VIP config without reboot",
+		})
+	case !p.hetznerOpts.FloatingIPEnabled && exists:
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ floatingIPEnabled is false but the cluster's ksail-owned floating IP"+
+				" still exists; cluster update does not reconcile the disable transition"+
+				" yet (#6032) — detach and release it via the Hetzner console or CLI if"+
+				" it is no longer wanted\n",
+		)
+	}
+}
+
+// detectOwnedFloatingIP reads whether the cluster's ksail-owned floating IP
+// exists, returning (exists, detected). detected is false when the answer is
+// unavailable — not a Hetzner cluster, no infra provider, or the lookup failed
+// (logged) — so callers skip rather than act on a guess.
+func (p *Provisioner) detectOwnedFloatingIP(
+	ctx context.Context,
+	name string,
+) (bool, bool) {
+	if p.hetznerOpts == nil || p.infraProvider == nil {
+		return false, false
+	}
+
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return false, false
+	}
+
+	exists, err := hzProvider.OwnedFloatingIPExists(ctx, p.resolveClusterName(name))
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect floating IP state: %v\n",
+			err,
+		)
+
+		return false, false
+	}
+
+	return exists, true
+}
+
+// hasFloatingIPChange reports whether diff carries the floatingIPEnabled
+// in-place change mergeFloatingIPChanges produces.
+func hasFloatingIPChange(diff *clusterupdate.UpdateResult) bool {
+	if diff == nil {
+		return false
+	}
+
+	for _, change := range diff.InPlaceChanges {
+		if change.Field == floatingIPEnabledField {
+			return true
+		}
+	}
+
+	return false
+}
+
 // applyUpdateChanges applies all update changes after PrepareUpdate succeeds by
 // running the ordered apply steps (see updateApplySteps) and stopping at the
 // first failure.
@@ -258,6 +360,13 @@ func (p *Provisioner) updateApplySteps(
 		{"apply rolling recreate changes", func(ctx context.Context) error {
 			return wrapStepErr(p.applyRollingRecreateChanges(ctx, clusterName, result),
 				"failed to apply rolling recreate changes")
+		}},
+		{"reconcile floating IP endpoint", func(ctx context.Context) error {
+			// Runs after scaling/rolling recreate (control planes exist) and
+			// before the in-place config push, which delivers the regenerated
+			// VIP config to the running control planes.
+			return wrapStepErr(p.reconcileFloatingIPEndpoint(ctx, clusterName, diff),
+				"failed to reconcile floating IP endpoint")
 		}},
 		{"apply in-place config changes", func(ctx context.Context) error {
 			if !p.shouldApplyInPlaceChanges(diff) {

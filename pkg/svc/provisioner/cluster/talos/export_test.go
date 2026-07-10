@@ -272,6 +272,26 @@ func (p *Provisioner) UpdateConfigsWithEndpointForTest(
 	return p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 }
 
+// MergeFloatingIPChangesForTest exposes mergeFloatingIPChanges for unit testing.
+func (p *Provisioner) MergeFloatingIPChangesForTest(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	p.mergeFloatingIPChanges(ctx, name, diff, diffErr)
+}
+
+// ReconcileFloatingIPEndpointForTest exposes reconcileFloatingIPEndpoint for
+// unit testing.
+func (p *Provisioner) ReconcileFloatingIPEndpointForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	return p.reconcileFloatingIPEndpoint(ctx, clusterName, diff)
+}
+
 // RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
 func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName, action string) {
 	recordAppliedChange(result, role, nodeName, action)

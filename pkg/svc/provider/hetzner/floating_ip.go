@@ -62,6 +62,41 @@ func (p *Provider) EnsureFloatingIP(
 	return result.FloatingIP, nil
 }
 
+// OwnedFloatingIPExists reports whether the cluster's ksail-owned floating IP
+// currently exists — the read-only companion to EnsureFloatingIP, used by
+// `cluster update` to diff the desired floatingIPEnabled state against what
+// the cloud actually carries (#5947). It applies the same ownership guard: a
+// floating IP that merely shares the conventional name but is not ksail-owned
+// is surfaced as an error rather than counted as the cluster's.
+func (p *Provider) OwnedFloatingIPExists(
+	ctx context.Context,
+	clusterName string,
+) (bool, error) {
+	if p.client == nil {
+		return false, provider.ErrProviderUnavailable
+	}
+
+	floatingIPName := clusterName + FloatingIPSuffix
+
+	floatingIP, _, err := p.client.FloatingIP.GetByName(ctx, floatingIPName)
+	if err != nil {
+		return false, fmt.Errorf("failed to get floating IP %s: %w", floatingIPName, err)
+	}
+
+	if floatingIP == nil {
+		return false, nil
+	}
+
+	if floatingIP.Labels[LabelOwned] != LabelOwnedValue {
+		return false, fmt.Errorf(
+			"%w: %s (release or rename it, or choose a different cluster name)",
+			ErrFloatingIPNotOwned, floatingIPName,
+		)
+	}
+
+	return true, nil
+}
+
 // AttachFloatingIPToServer assigns the floating IP to the given server. It is
 // idempotent: when the IP is already assigned to that server the call is a
 // no-op, so a Create retry after a partial failure re-asserts the assignment
