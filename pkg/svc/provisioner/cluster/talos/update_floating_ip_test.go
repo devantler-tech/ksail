@@ -148,6 +148,8 @@ func newFipUpdateProvider(serverURL string) *hetzner.Provider {
 	))
 }
 
+// TestMergeFloatingIPChanges_EnabledAndAbsentAddsChange verifies that drifted
+// enablement produces one in-place reconcile change.
 func TestMergeFloatingIPChanges_EnabledAndAbsentAddsChange(t *testing.T) {
 	t.Parallel()
 
@@ -173,6 +175,8 @@ func TestMergeFloatingIPChanges_EnabledAndAbsentAddsChange(t *testing.T) {
 		"detection must be read-only")
 }
 
+// TestMergeFloatingIPChanges_EnabledAndPresentIsNoop verifies idempotency when
+// the desired owned address already exists.
 func TestMergeFloatingIPChanges_EnabledAndPresentIsNoop(t *testing.T) {
 	t.Parallel()
 
@@ -192,6 +196,8 @@ func TestMergeFloatingIPChanges_EnabledAndPresentIsNoop(t *testing.T) {
 		"an existing owned floating IP must not re-diff (idempotent re-run)")
 }
 
+// TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly verifies that the
+// deferred disable transition is visible without claiming a reconcile.
 func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
 	t.Parallel()
 
@@ -214,6 +220,8 @@ func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
 		"the deferred disable transition must warn instead of staying silent")
 }
 
+// TestMergeFloatingIPChanges_NoHetznerOptionsIsNoop verifies that non-Hetzner
+// configurations skip cloud detection.
 func TestMergeFloatingIPChanges_NoHetznerOptionsIsNoop(t *testing.T) {
 	t.Parallel()
 
@@ -275,6 +283,8 @@ func TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate(t *testing.T) {
 		"a collision is a definitive answer, not a warn-and-skip detection failure")
 }
 
+// TestReconcileFloatingIPEndpoint_NoopWithoutChange verifies that the apply
+// step does not contact the provider without a matching diff.
 func TestReconcileFloatingIPEndpoint_NoopWithoutChange(t *testing.T) {
 	t.Parallel()
 

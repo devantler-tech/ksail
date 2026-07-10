@@ -39,11 +39,9 @@ func (p *Provider) EnsureFloatingIP(
 		// cluster (deleteFloatingIP applies the same ownership guard), and
 		// creating a second IP under the same name would fail Hetzner's name
 		// uniqueness anyway — so surface the collision instead.
-		if floatingIP.Labels[LabelOwned] != LabelOwnedValue {
-			return nil, fmt.Errorf(
-				"%w: %s (release or rename it, or choose a different cluster name)",
-				ErrFloatingIPNotOwned, floatingIPName,
-			)
+		ownershipErr := validateFloatingIPOwnership(floatingIP, floatingIPName)
+		if ownershipErr != nil {
+			return nil, ownershipErr
 		}
 
 		return floatingIP, nil
@@ -87,14 +85,25 @@ func (p *Provider) OwnedFloatingIPExists(
 		return false, nil
 	}
 
-	if floatingIP.Labels[LabelOwned] != LabelOwnedValue {
-		return false, fmt.Errorf(
-			"%w: %s (release or rename it, or choose a different cluster name)",
-			ErrFloatingIPNotOwned, floatingIPName,
-		)
+	ownershipErr := validateFloatingIPOwnership(floatingIP, floatingIPName)
+	if ownershipErr != nil {
+		return false, ownershipErr
 	}
 
 	return true, nil
+}
+
+// validateFloatingIPOwnership rejects a same-name floating IP that KSail does
+// not own, keeping the adoption rule identical across lookup and create paths.
+func validateFloatingIPOwnership(floatingIP *hcloud.FloatingIP, floatingIPName string) error {
+	if floatingIP.Labels[LabelOwned] == LabelOwnedValue {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: %s (release or rename it, or choose a different cluster name)",
+		ErrFloatingIPNotOwned, floatingIPName,
+	)
 }
 
 // AttachFloatingIPToServer assigns the floating IP to the given server. It is

@@ -197,6 +197,8 @@ func TestEnsureFloatingIP_NilClient(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
+// TestOwnedFloatingIPExists_FalseWhenAbsent verifies that a missing address is
+// reported without creating one.
 func TestOwnedFloatingIPExists_FalseWhenAbsent(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +212,8 @@ func TestOwnedFloatingIPExists_FalseWhenAbsent(t *testing.T) {
 		"the read-only lookup must never create")
 }
 
+// TestOwnedFloatingIPExists_TrueWhenOwned verifies that an owned address is
+// reported without mutating it.
 func TestOwnedFloatingIPExists_TrueWhenOwned(t *testing.T) {
 	t.Parallel()
 
@@ -223,6 +227,8 @@ func TestOwnedFloatingIPExists_TrueWhenOwned(t *testing.T) {
 		"the read-only lookup must never create")
 }
 
+// TestOwnedFloatingIPExists_RejectsUnownedNameCollision verifies that a
+// user-managed same-name address is never treated as KSail-owned.
 func TestOwnedFloatingIPExists_RejectsUnownedNameCollision(t *testing.T) {
 	t.Parallel()
 
@@ -237,6 +243,8 @@ func TestOwnedFloatingIPExists_RejectsUnownedNameCollision(t *testing.T) {
 	assert.False(t, exists)
 }
 
+// TestOwnedFloatingIPExists_NilClient verifies that detection fails clearly
+// when the provider client is unavailable.
 func TestOwnedFloatingIPExists_NilClient(t *testing.T) {
 	t.Parallel()
 
