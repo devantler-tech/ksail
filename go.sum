@@ -2245,8 +2245,8 @@ github.com/siderolabs/image-factory v1.3.3 h1:qyeUgi4zoJnw1ar1GqkSTVGB6rKygxCc5r
 github.com/siderolabs/image-factory v1.3.3/go.mod h1:FqPJMnCz/+4opu/3LH80IDrETkCUVlIWApxZLQJPQTM=
 github.com/siderolabs/net v0.4.0 h1:1bOgVay/ijPkJz4qct98nHsiB/ysLQU0KLoBC4qLm7I=
 github.com/siderolabs/net v0.4.0/go.mod h1:/ibG+Hm9HU27agp5r9Q3eZicEfjquzNzQNux5uEk0kM=
-github.com/siderolabs/omni/client v1.9.0 h1:OcROYplTqgtE4zFoekQGhmHACZUhgTGyhLngMec2Jzg=
-github.com/siderolabs/omni/client v1.9.0/go.mod h1:01+EwVbpz6lUjFTmdI+9Jdsk0psrGs7TIMdl83pgfTs=
+github.com/siderolabs/omni/client v1.9.1 h1:3YEjJTdAj3mqIAs6ICMnizRju4bkdMfGnvKfL6kQtfY=
+github.com/siderolabs/omni/client v1.9.1/go.mod h1:HFGbjYXdo8Ed7vE1x/qFwEaDC/epCFw9TzFlSI7LKtY=
 github.com/siderolabs/proto-codec v0.1.4 h1:AcrLot/251qAa35GYhSqDeEKF3bygOlNaYJSrl7MPNQ=
 github.com/siderolabs/proto-codec v0.1.4/go.mod h1:frX2VEBSrZwzGxEdT+AMSjiWr6ySY/rCSXJxD0z9kxQ=
 github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIGsr8Q=
