@@ -98,3 +98,29 @@ func moduleRoot(t *testing.T) string {
 		dir = parent
 	}
 }
+
+// TestInertClaircorePackagesExcludesRemoteFetchingCode asserts the claircore
+// packages that implement remote layer/manifest fetching — the sink behind
+// the #6008 SSRF advisory — never enter the inert allow-list. A failing
+// TestClaircoreLinkedPackagesStayInert must be resolved by re-establishing
+// the reachability verdict, not by widening the list with a sink package.
+func TestInertClaircorePackagesExcludesRemoteFetchingCode(t *testing.T) {
+	t.Parallel()
+
+	sensitive := []string{
+		"github.com/quay/claircore/libindex",
+		"github.com/quay/claircore/updater",
+		"github.com/quay/claircore/pkg/distlock",
+	}
+
+	inert := inertClaircorePackages()
+
+	for _, pkg := range sensitive {
+		if inert[pkg] {
+			t.Errorf(
+				"expected %q to be absent from the inert allow-list; it performs remote fetching",
+				pkg,
+			)
+		}
+	}
+}
