@@ -253,6 +253,18 @@ func deriveSteerCommand(servicePort int) []string {
 // resolve → select injection point → inject/reuse steering agent → wait →
 // tunnel + serve to the local process.
 func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOptions) error {
+	// Ctrl-C is the documented way to end the intercept, and setup must honour
+	// it too: install the signal-aware context before the first Kubernetes
+	// call so SIGINT/SIGTERM during injection-point resolution or the steering
+	// agent's --wait-timeout wait cancels setup instead of letting the
+	// default disposition kill the process abruptly. The session unwinds
+	// through the same context (the service layer maps a cancelled context to
+	// a clean stop).
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cmd.SetContext(ctx)
+
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 	client, restConfig, err := newMirrorClients(kubeconfigPath, opts.context)
@@ -261,7 +273,7 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 	}
 
 	point, err := resolveInjectionPoint(
-		cmd.Context(),
+		ctx,
 		client,
 		opts.namespace,
 		opts.container,
@@ -282,14 +294,6 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Args:    []any{opts.localPort},
 		Writer:  cmd.ErrOrStderr(),
 	})
-
-	// Ctrl-C is the documented way to end the intercept: cancel the session's
-	// context on SIGINT/SIGTERM instead of letting the default disposition
-	// kill the process, so the tunnel drains, local connections close, and the
-	// in-cluster agent reverses its redirect (the service layer maps a
-	// cancelled context to a clean stop).
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	return runInterceptSession(
 		ctx,
