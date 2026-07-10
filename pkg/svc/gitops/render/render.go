@@ -115,15 +115,7 @@ func Expand(ctx context.Context, stream []byte, opts Options) (Result, error) {
 		return Result{}, ErrNoResolver
 	}
 
-	docs := fsutil.SplitYAMLDocuments(stream)
-
-	index := newSourceIndex()
-	metas := make([]objectMeta, len(docs))
-
-	for docIndex, doc := range docs {
-		metas[docIndex] = parseObjectMeta(doc)
-		indexSource(&index, metas[docIndex], doc)
-	}
+	docs, metas, index := parseSourceIndexedDocs(stream)
 
 	var result Result
 
@@ -251,6 +243,23 @@ func sortDocuments(docs []Document) {
 
 		return bytes.Compare(left.Bytes, right.Bytes) < 0
 	})
+}
+
+// parseSourceIndexedDocs splits a manifest stream into documents and builds
+// each document's object meta plus the index of chart/values sources they
+// declare — the shared prelude of Expand and EnumerateChartSpecs.
+func parseSourceIndexedDocs(stream []byte) ([][]byte, []objectMeta, SourceIndex) {
+	docs := fsutil.SplitYAMLDocuments(stream)
+
+	index := newSourceIndex()
+	metas := make([]objectMeta, len(docs))
+
+	for docIndex, doc := range docs {
+		metas[docIndex] = parseObjectMeta(doc)
+		indexSource(&index, metas[docIndex], doc)
+	}
+
+	return docs, metas, index
 }
 
 // newSourceIndex returns an empty, ready-to-populate SourceIndex.

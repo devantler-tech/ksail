@@ -141,18 +141,20 @@ func addScanFlags(
 			"objects) forwarded to Kubescape's --exceptions "+
 			"(overrides spec.workload.scan.exceptions from ksail.yaml)")
 	cmd.Flags().BoolVar(ephemeral, "ephemeral", false,
-		"EXPERIMENTAL scaffold (ksail#5919): provision a throwaway KWOK cluster for the "+
-			"duration of this command, guaranteed to be torn down afterwards. Does not yet change "+
-			"what is scanned — off by default.")
+		"EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of "+
+			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
+			"into it, so declared operators' CRDs are registered. Scanning their rendered "+
+			"children against the cluster is not wired yet — off by default.")
 }
 
 // runScanCmd dispatches to runScanCmdInner directly, or — when --ephemeral is
 // set — wraps it in a throwaway KWOK cluster that is guaranteed to be torn
 // down afterwards (see withEphemeralCluster, shared with the validate
-// command). The cluster's connection handle is resolved and readiness-verified
-// but not yet consumed here: installing the declared operators and scanning
-// their rendered children against it is the remainder of ksail#5919 Phase
-// 3b-2/3b-3.
+// command). While the cluster is live, the workload's declared charts are
+// installed into it first (installDeclaredCharts, ksail#5919 Phase 3b-2) so
+// the declared operators' CRDs are registered; applying the rendered
+// manifests and scanning their operator-rendered children is the remaining
+// Phase 3b-3.
 func runScanCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -160,7 +162,7 @@ func runScanCmd(
 	flags scanFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(ctx, cmd, func(ctx context.Context, _ ephemeralCluster) error {
+		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
 			return runScanCmdInner(ctx, cmd, args, flags)
 		})
 	}
