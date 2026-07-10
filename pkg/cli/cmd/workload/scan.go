@@ -149,8 +149,10 @@ func addScanFlags(
 // runScanCmd dispatches to runScanCmdInner directly, or — when --ephemeral is
 // set — wraps it in a throwaway KWOK cluster that is guaranteed to be torn
 // down afterwards (see withEphemeralCluster, shared with the validate
-// command). The ephemeral cluster does not yet change what is scanned; wiring
-// it into the pipeline is a follow-up (ksail#5919 Phase 3b-2/3b-3).
+// command). The cluster's connection handle is resolved and readiness-verified
+// but not yet consumed here: installing the declared operators and scanning
+// their rendered children against it is the remainder of ksail#5919 Phase
+// 3b-2/3b-3.
 func runScanCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -158,7 +160,7 @@ func runScanCmd(
 	flags scanFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(ctx, cmd, func(ctx context.Context) error {
+		return withEphemeralCluster(ctx, cmd, func(ctx context.Context, _ ephemeralCluster) error {
 			return runScanCmdInner(ctx, cmd, args, flags)
 		})
 	}
