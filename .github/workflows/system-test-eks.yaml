@@ -221,4 +221,5 @@ jobs:
 
           if [ "$delete_status" -ne 0 ]; then
             echo "::warning::EKS cleanup did not complete. Check AWS for cluster '$KSAIL_EKS_CLUSTER_NAME' in region '$AWS_REGION'."
+            exit "$delete_status"
           fi
