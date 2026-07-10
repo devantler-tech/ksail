@@ -29,6 +29,8 @@ const (
 	testFieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
 )
 
+// TestRolesFromRollingChanges verifies that the rolling-change field names map
+// independently to control-plane and worker replacement requests.
 func TestRolesFromRollingChanges(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +78,8 @@ func TestRolesFromRollingChanges(t *testing.T) {
 	}
 }
 
+// TestServersNeedingReplacement verifies that matching servers are retained,
+// while wrong or unknown server types are selected and nil entries are ignored.
 func TestServersNeedingReplacement(t *testing.T) {
 	t.Parallel()
 
@@ -106,6 +110,8 @@ func TestServersNeedingReplacement(t *testing.T) {
 	assert.ElementsMatch(t, []string{testRollingNodeCP1, "cp-3"}, names)
 }
 
+// TestServersNeedingReplacement_CaseInsensitive verifies that provider type
+// names differing only by case do not trigger destructive replacement.
 func TestServersNeedingReplacement_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
@@ -117,6 +123,8 @@ func TestServersNeedingReplacement_CaseInsensitive(t *testing.T) {
 	assert.Empty(t, out, "matching type (case-insensitive) should not need replacement")
 }
 
+// TestAppendServerTypeChange verifies that server-type drift enters the
+// requested update category and that unchanged or unknown baselines are skipped.
 func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
@@ -183,6 +191,8 @@ func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven 
 	}
 }
 
+// TestCountServerNodesByRole verifies that only recognized control-plane and
+// worker nodes contribute to the quorum and scaling counts.
 func TestCountServerNodesByRole(t *testing.T) {
 	t.Parallel()
 
@@ -203,6 +213,8 @@ func TestCountServerNodesByRole(t *testing.T) {
 	assert.Equal(t, 0, workerEmpty)
 }
 
+// TestApplyRollingRecreateChanges_NoOp verifies that an empty diff or a
+// non-Hetzner provisioner cannot start replacement work.
 func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
 	t.Parallel()
 
@@ -388,6 +400,8 @@ func TestFinishControlPlaneReplacement_WaitsAfterReattachError(t *testing.T) {
 	assert.Equal(t, []string{"attach", "attach", "ready"}, events)
 }
 
+// TestNodeMatchesServer verifies replacement readiness can associate a
+// Kubernetes node with its server by case-insensitive name or external address.
 func TestNodeMatchesServer(t *testing.T) {
 	t.Parallel()
 
@@ -414,6 +428,8 @@ func TestNodeMatchesServer(t *testing.T) {
 		"should not match unrelated node")
 }
 
+// TestNodeIsReady verifies that only an explicit Ready=True node condition
+// satisfies the replacement readiness gate.
 func TestNodeIsReady(t *testing.T) {
 	t.Parallel()
 
