@@ -132,6 +132,8 @@ func newFloatingIPProvider(
 	return hetzner.NewProvider(newTestHcloudClient(srv.URL)), counters
 }
 
+// TestEnsureFloatingIP_CreatesWhenAbsent verifies the full create request and
+// returns the newly allocated owned address.
 func TestEnsureFloatingIP_CreatesWhenAbsent(t *testing.T) {
 	t.Parallel()
 
@@ -161,6 +163,8 @@ func TestEnsureFloatingIP_CreatesWhenAbsent(t *testing.T) {
 	assert.Equal(t, "test-cluster", labels["ksail.cluster.name"])
 }
 
+// TestEnsureFloatingIP_ReturnsExistingWithoutCreate verifies idempotent reuse
+// of the cluster's owned address.
 func TestEnsureFloatingIP_ReturnsExistingWithoutCreate(t *testing.T) {
 	t.Parallel()
 
@@ -174,6 +178,8 @@ func TestEnsureFloatingIP_ReturnsExistingWithoutCreate(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.create))
 }
 
+// TestEnsureFloatingIP_RejectsUnownedNameCollision verifies that a conventional
+// name alone never authorizes adopting a user-managed address.
 func TestEnsureFloatingIP_RejectsUnownedNameCollision(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +265,8 @@ func TestOwnedFloatingIPExists_NilClient(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
+// TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned verifies idempotent
+// attachment to the current server.
 func TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned(t *testing.T) {
 	t.Parallel()
 
@@ -274,6 +282,8 @@ func TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.assign))
 }
 
+// TestAttachFloatingIPToServer_AssignsWhenUnassigned verifies that an available
+// address is assigned to the requested server.
 func TestAttachFloatingIPToServer_AssignsWhenUnassigned(t *testing.T) {
 	t.Parallel()
 
@@ -289,6 +299,8 @@ func TestAttachFloatingIPToServer_AssignsWhenUnassigned(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.assign))
 }
 
+// TestAttachFloatingIPToServer_ReassignsWhenAssignedElsewhere verifies that the
+// endpoint can move between control-plane servers.
 func TestAttachFloatingIPToServer_ReassignsWhenAssignedElsewhere(t *testing.T) {
 	t.Parallel()
 
@@ -304,6 +316,8 @@ func TestAttachFloatingIPToServer_ReassignsWhenAssignedElsewhere(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.assign))
 }
 
+// TestDetachFloatingIP_NoopWhenUnassigned verifies idempotent detachment of an
+// already available address.
 func TestDetachFloatingIP_NoopWhenUnassigned(t *testing.T) {
 	t.Parallel()
 
@@ -315,6 +329,8 @@ func TestDetachFloatingIP_NoopWhenUnassigned(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.unassign))
 }
 
+// TestDetachFloatingIP_UnassignsWhenAssigned verifies release from the current
+// server without deleting the address.
 func TestDetachFloatingIP_UnassignsWhenAssigned(t *testing.T) {
 	t.Parallel()
 
@@ -330,6 +346,8 @@ func TestDetachFloatingIP_UnassignsWhenAssigned(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.unassign))
 }
 
+// TestDeleteFloatingIP_DeletesOwned verifies cleanup of an address carrying the
+// cluster ownership label.
 func TestDeleteFloatingIP_DeletesOwned(t *testing.T) {
 	t.Parallel()
 
@@ -341,6 +359,8 @@ func TestDeleteFloatingIP_DeletesOwned(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.del))
 }
 
+// TestDeleteFloatingIP_SkipsUnowned verifies that deletion never releases a
+// user-managed same-name address.
 func TestDeleteFloatingIP_SkipsUnowned(t *testing.T) {
 	t.Parallel()
 
@@ -352,6 +372,8 @@ func TestDeleteFloatingIP_SkipsUnowned(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.del))
 }
 
+// TestDeleteFloatingIP_NoopWhenAbsent verifies idempotent cleanup when the
+// cluster has no reserved address.
 func TestDeleteFloatingIP_NoopWhenAbsent(t *testing.T) {
 	t.Parallel()
 
@@ -363,6 +385,8 @@ func TestDeleteFloatingIP_NoopWhenAbsent(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&counters.del))
 }
 
+// TestDeleteFloatingIP_PropagatesLookupError verifies that API failures are not
+// mistaken for a safely absent address.
 func TestDeleteFloatingIP_PropagatesLookupError(t *testing.T) {
 	t.Parallel()
 
