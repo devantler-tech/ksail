@@ -92,7 +92,7 @@ require (
 	github.com/rancher/k3k v1.1.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/siderolabs/crypto v0.6.5
-	github.com/siderolabs/gen v0.8.6
+	github.com/siderolabs/gen v0.8.7
 	github.com/siderolabs/go-kubernetes v0.2.40
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
