@@ -639,7 +639,7 @@ require (
 	github.com/siderolabs/go-talos-support v0.2.1 // indirect
 	github.com/siderolabs/image-factory v1.3.3 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
-	github.com/siderolabs/omni/client v1.9.0 // indirect
+	github.com/siderolabs/omni/client v1.9.1 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/siderolabs/talos v1.14.0-alpha.1 // indirect
