@@ -353,13 +353,14 @@ func awsProviderStatus(
 	client *eksctlclient.Client,
 	clusterName string,
 	region string,
+	opts ...awsprovider.Option,
 ) (*provider.ClusterStatus, error) {
 	err := client.CheckAvailable()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errProviderNotConfigured, err)
 	}
 
-	awsProv, err := awsprovider.NewProvider(client, region)
+	awsProv, err := awsprovider.NewProvider(client, region, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("aws provider: %w", err)
 	}
