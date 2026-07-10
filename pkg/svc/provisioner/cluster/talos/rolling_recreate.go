@@ -16,6 +16,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// ErrFloatingIPReconcileBeforeControlPlaneRoll prevents a combined endpoint
+// enablement/drift repair and destructive control-plane replacement. The
+// endpoint must be established in a separate update before its current direct
+// control-plane address can safely be replaced.
+var ErrFloatingIPReconcileBeforeControlPlaneRoll = errors.New(
+	"floating IP endpoint must be reconciled before a control-plane rolling recreate; " +
+		"apply floatingIPEnabled without server-type changes, then retry",
+)
+
 // applyRollingRecreateChanges replaces Hetzner nodes one at a time to apply a
 // server-type change recorded in result.RollingRecreate. Workers are replaced
 // before control planes to minimise control-plane disruption. Each replacement
@@ -39,6 +48,9 @@ func (p *Provisioner) applyRollingRecreateChanges(
 	}
 
 	rollControlPlane, rollWorker := rolesFromRollingChanges(result.RollingRecreate)
+	if rollControlPlane && hasFloatingIPChange(result) {
+		return ErrFloatingIPReconcileBeforeControlPlaneRoll
+	}
 
 	clientset, err := p.createK8sClient(clusterName)
 	if err != nil {
@@ -230,16 +242,79 @@ func (p *Provisioner) rollingReplaceSingleNode(
 		return createErr
 	}
 
-	return p.configureAndWaitReplacement(ctx, clientset, newServer, role)
+	return p.configureAndWaitReplacement(
+		ctx, clientset, hzProvider, clusterName, oldServer, newServer, role,
+	)
+}
+
+// reattachFloatingIPAfterControlPlaneReplacement restores the stable API
+// endpoint when deleting its former control-plane server left the configured
+// floating IP unassigned. A surviving control plane may already have claimed
+// the IP through Talos VIP election; in that case the assignment is preserved
+// instead of being moved unnecessarily. This lookup is deliberately read-only:
+// endpoint enablement drift remains the later reconciliation step's job.
+func (p *Provisioner) reattachFloatingIPAfterControlPlaneReplacement(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	oldServer, newServer *hcloud.Server,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
+		return nil
+	}
+
+	floatingIP, lookupErr := hzProvider.GetOwnedFloatingIP(ctx, clusterName)
+	if lookupErr != nil {
+		return fmt.Errorf("looking up floating IP after control-plane replacement: %w", lookupErr)
+	}
+
+	if floatingIP == nil {
+		return nil
+	}
+
+	if floatingIP.Server != nil && floatingIP.Server.ID != oldServer.ID {
+		return nil
+	}
+
+	attachErr := hzProvider.AttachFloatingIPToServer(ctx, floatingIP, newServer)
+	if attachErr != nil {
+		return fmt.Errorf(
+			"reattaching floating IP to replacement %s: %w", newServer.Name, attachErr,
+		)
+	}
+
+	return nil
+}
+
+// finishControlPlaneReplacement keeps the Kubernetes Ready gate load-bearing
+// even when endpoint reattachment fails. A healthy replacement gets one final
+// reattachment attempt, allowing a transient API failure or Talos VIP election
+// to self-heal without leaving an unverified desired-type server behind.
+func finishControlPlaneReplacement(reattach, waitReady func() error) error {
+	reattachErr := reattach()
+
+	readyErr := waitReady()
+	if readyErr != nil {
+		return errors.Join(reattachErr, readyErr)
+	}
+
+	if reattachErr != nil {
+		return reattach()
+	}
+
+	return nil
 }
 
 // configureAndWaitReplacement waits for the Talos API on a freshly provisioned
-// replacement server, applies its role config so it rejoins the cluster, then
-// blocks until it has installed, rebooted, and become Ready in Kubernetes.
+// replacement server, applies its role config so it rejoins the cluster,
+// restores a displaced floating-IP endpoint after the replacement is reachable,
+// then blocks until it has installed, rebooted, and become Ready in Kubernetes.
 func (p *Provisioner) configureAndWaitReplacement(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	newServer *hcloud.Server,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	oldServer, newServer *hcloud.Server,
 	role string,
 ) error {
 	servers := []*hcloud.Server{newServer}
@@ -268,16 +343,37 @@ func (p *Provisioner) configureAndWaitReplacement(
 			newServer.Name, reachErr)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter,
-		"    Waiting for replacement %s to rejoin and become Ready...\n", newServer.Name)
+	waitReady := func() error {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    Waiting for replacement %s to rejoin and become Ready...\n", newServer.Name)
 
-	readyErr := p.waitForReplacementNodeReady(ctx, clientset, newServer)
-	if readyErr != nil {
-		return fmt.Errorf("waiting for replacement %s to become Ready: %w",
-			newServer.Name, readyErr)
+		readyErr := p.waitForReplacementNodeReady(ctx, clientset, newServer)
+		if readyErr != nil {
+			return fmt.Errorf("waiting for replacement %s to become Ready: %w",
+				newServer.Name, readyErr)
+		}
+
+		return nil
 	}
 
-	return nil
+	if role != RoleControlPlane {
+		return waitReady()
+	}
+
+	reattach := func() error {
+		reattachErr := p.reattachFloatingIPAfterControlPlaneReplacement(
+			ctx, hzProvider, clusterName, oldServer, newServer,
+		)
+		if reattachErr != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"    ⚠ Floating IP reattachment failed; verifying replacement readiness: %v\n",
+				reattachErr)
+		}
+
+		return reattachErr
+	}
+
+	return finishControlPlaneReplacement(reattach, waitReady)
 }
 
 // drainResolvedNode cordons and drains the Kubernetes node backing the given Talos

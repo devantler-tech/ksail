@@ -3,8 +3,13 @@ package talosprovisioner_test
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -225,6 +230,162 @@ func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
 		err := provisioner.ApplyRollingRecreateChangesForTest(context.Background(), "demo", result)
 		require.NoError(t, err)
 	})
+}
+
+// TestApplyRollingRecreateChanges_BlocksAbsentFloatingIP verifies that endpoint
+// enablement or drift is reconciled in a separate update before any destructive
+// control-plane replacement begins.
+func TestApplyRollingRecreateChanges_BlocksAbsentFloatingIP(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{FloatingIPEnabled: true}).
+		WithInfraProvider(newFipUpdateProvider("http://127.0.0.1")).
+		WithLogWriter(io.Discard)
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field: testFieldHetznerCPServerType,
+	})
+	result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
+		Field: floatingIPEnabledField,
+	})
+
+	err := provisioner.ApplyRollingRecreateChangesForTest(t.Context(), "fip-cluster", result)
+	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned verifies that
+// deleting the control plane that owned the endpoint cannot leave its floating
+// IP detached from the replacement server during a rolling recreate.
+func TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned(t *testing.T) {
+	t.Parallel()
+
+	var assignCalls atomic.Int32
+
+	server := floatingIPEndpointTestServer(t, &assignCalls)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), assignCalls.Load())
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_DoesNotCreate verifies
+// that rolling replacement only preserves an existing endpoint; enablement
+// drift remains the later reconciliation step's responsibility.
+func TestReattachFloatingIPAfterControlPlaneReplacement_DoesNotCreate(t *testing.T) {
+	t.Parallel()
+
+	calls := new(fipUpdateCalls)
+	server := fipUpdateTestServer(t, false, calls)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), calls.create.Load())
+	assert.Equal(t, int32(0), calls.assign.Load())
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor verifies
+// that a surviving control plane which already claimed the endpoint keeps it;
+// rolling replacement must not cause a needless second assignment.
+func TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor(t *testing.T) {
+	t.Parallel()
+
+	var assignCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			switch request.URL.Path {
+			case "/floating_ips":
+				ownedBySurvivor := strings.Replace(
+					fipUpdateOwnedFloatingIPJSON, `"server":null`, `"server":13`, 1,
+				)
+				_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + ownedBySurvivor + `]}`))
+			case "/floating_ips/7/actions/assign":
+				assignCalls.Add(1)
+				fipUpdateAssignActionResponse(responseWriter)
+			default:
+				http.NotFound(responseWriter, request)
+			}
+		},
+	))
+	t.Cleanup(server.Close)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), assignCalls.Load())
+}
+
+// TestFinishControlPlaneReplacement_WaitsAfterReattachError verifies that a
+// failed endpoint operation cannot skip the Kubernetes Ready gate; once the
+// replacement is proven healthy, the endpoint operation is retried.
+func TestFinishControlPlaneReplacement_WaitsAfterReattachError(t *testing.T) {
+	t.Parallel()
+
+	events := make([]string, 0, 3)
+	attachAttempts := 0
+
+	err := talosprovisioner.FinishControlPlaneReplacementForTest(
+		func() error {
+			attachAttempts++
+
+			events = append(events, "attach")
+
+			if attachAttempts == 1 {
+				return context.DeadlineExceeded
+			}
+
+			return nil
+		},
+		func() error {
+			events = append(events, "ready")
+
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"attach", "ready", "attach"}, events)
 }
 
 func TestNodeMatchesServer(t *testing.T) {

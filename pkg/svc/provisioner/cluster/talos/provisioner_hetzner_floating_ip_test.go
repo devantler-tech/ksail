@@ -63,7 +63,7 @@ func TestApplyHetznerDefaults_FloatingIPLocation(t *testing.T) {
 // path makes: GET /floating_ips (GetByName) with an existing ksail-owned,
 // unassigned floating IP, and POST /floating_ips/7/actions/assign counting
 // assignments.
-func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Server {
+func floatingIPEndpointTestServer(t *testing.T, assignCalls *atomic.Int32) *httptest.Server {
 	t.Helper()
 
 	mux := http.NewServeMux()
@@ -90,7 +90,7 @@ func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Se
 	mux.HandleFunc(
 		"/floating_ips/7/actions/assign",
 		func(responseWriter http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt32(assignCalls, 1)
+			assignCalls.Add(1)
 			fipUpdateAssignActionResponse(responseWriter)
 		},
 	)
@@ -166,7 +166,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
 
-	var assignCalls int32
+	var assignCalls atomic.Int32
 
 	server := floatingIPEndpointTestServer(t, &assignCalls)
 	client := hcloud.NewClient(
@@ -191,7 +191,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&assignCalls),
+	assert.Equal(t, int32(1), assignCalls.Load(),
 		"floating IP must be attached to the first control-plane server")
 
 	configs := provisioner.TalosConfigsForTest()
@@ -229,7 +229,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 	t.Parallel()
 
-	var assignCalls int32
+	var assignCalls atomic.Int32
 
 	server := floatingIPEndpointTestServer(t, &assignCalls)
 	client := hcloud.NewClient(
@@ -250,7 +250,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
 	)
 	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
-	assert.Equal(t, int32(0), atomic.LoadInt32(&assignCalls),
+	assert.Equal(t, int32(0), assignCalls.Load(),
 		"missing token must fail before any hcloud assign call")
 }
 

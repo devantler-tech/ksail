@@ -291,6 +291,25 @@ func (p *Provisioner) ReconcileFloatingIPEndpointForTest(
 	return p.reconcileFloatingIPEndpoint(ctx, clusterName, diff)
 }
 
+// ReattachFloatingIPAfterControlPlaneReplacementForTest exposes
+// reattachFloatingIPAfterControlPlaneReplacement for unit testing.
+func (p *Provisioner) ReattachFloatingIPAfterControlPlaneReplacementForTest(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	oldServer, newServer *hcloud.Server,
+) error {
+	return p.reattachFloatingIPAfterControlPlaneReplacement(
+		ctx, hzProvider, clusterName, oldServer, newServer,
+	)
+}
+
+// FinishControlPlaneReplacementForTest exposes finishControlPlaneReplacement
+// for unit testing.
+func FinishControlPlaneReplacementForTest(reattach, waitReady func() error) error {
+	return finishControlPlaneReplacement(reattach, waitReady)
+}
+
 // RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
 func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName, action string) {
 	recordAppliedChange(result, role, nodeName, action)
