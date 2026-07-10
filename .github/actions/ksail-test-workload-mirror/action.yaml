@@ -119,25 +119,9 @@ runs:
           > "$MIRROR_LOG" 2>&1 &
         mirror_pid=$!
 
-        mirror_ready=false
-        for _ in $(seq 1 120); do
-          if grep -Fq "capturing TCP traffic on port 80" "$MIRROR_LOG"; then
-            mirror_ready=true
-            break
-          fi
-          if ! kill -0 "$mirror_pid" 2>/dev/null; then
-            echo "❌ workload mirror exited before becoming ready" >&2
-            cat "$MIRROR_LOG" >&2
-            exit 1
-          fi
-          sleep 1
-        done
-        if [ "$mirror_ready" != "true" ]; then
-          echo "❌ workload mirror did not become ready within 120 seconds" >&2
-          cat "$MIRROR_LOG" >&2
-          exit 1
-        fi
-
+        # Activity notifications are not stable in non-interactive logs. The
+        # pcap global header is the first byte-level proof that the remote
+        # tcpdump stream is live, so use it as the readiness signal.
         capture_stream_ready=false
         for _ in $(seq 1 60); do
           if [ -f "$CAPTURE_FILE" ] && [ "$(wc -c < "$CAPTURE_FILE")" -ge 24 ]; then
