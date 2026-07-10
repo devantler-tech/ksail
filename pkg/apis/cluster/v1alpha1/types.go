@@ -51,7 +51,7 @@ type ClusterList struct {
 type Spec struct {
 	// Editor is the editor command launched for interactive workflows (e.g. "code --wait").
 	// CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
-	Editor string `json:"editor,omitzero" jsonschema:"description=Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator."` //nolint:lll
+	Editor string `json:"editor,omitzero" jsonschema_description:"Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator."` //nolint:lll
 	// Cluster configures the Kubernetes cluster KSail manages: distribution,
 	// provider, components, and connection settings.
 	Cluster ClusterSpec `json:"cluster,omitzero"`
@@ -91,7 +91,7 @@ type ClusterSpec struct {
 	// (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
 	// When empty, KSail uses the distribution's default file name.
 	// CLI-only (a local file path on the CLI host); ignored by the operator.
-	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema:"description=Path to the distribution's own configuration file (kind.yaml / k3d.yaml / vcluster.yaml / eks.yaml / the talos directory). CLI-only; ignored by the operator."` //nolint:lll
+	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema_description:"Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator."` //nolint:lll
 	// Connection defines how KSail connects to the cluster: the kubeconfig path,
 	// context name, and operation timeout.
 	// CLI-only (local kubeconfig path/context); ignored by the operator.
@@ -132,7 +132,7 @@ type ClusterSpec struct {
 	// Enabled requires verifier binaries (and typically policy) to be present in the
 	// node image bin_dir. Disabled (default) skips it.
 	// Supersedes spec.cluster.talos.imageVerification (deprecated; aliased on load).
-	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema:"description=Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it."` //nolint:lll
+	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema_description:"Container-image signature verification scaffolding for all distributions: Talos scaffolds an ImageVerificationConfig document (1.13+); Vanilla/Kind injects a containerd verifier plugin patch; K3s/K3d scaffolds a containerd config template and mounts it into node containers. Requires verifier binaries (and typically policy) in the node image bin_dir. Disabled skips it."` //nolint:lll
 	// PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper.
 	PolicyEngine PolicyEngine `json:"policyEngine,omitzero"`
 	// LocalRegistry configures the host-local OCI registry (or an external
@@ -145,20 +145,20 @@ type ClusterSpec struct {
 	SOPS SOPS `json:"sops,omitzero"`
 	// NodeAutoscaling is a deprecated alias for spec.cluster.autoscaler.node.enabled
 	// and is migrated on load. Do not set both nodeAutoscaling and autoscaler.
-	NodeAutoscaling NodeAutoscaling `json:"nodeAutoscaling,omitzero" jsonschema:"description=Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."` //nolint:lll
+	NodeAutoscaling NodeAutoscaling `json:"nodeAutoscaling,omitzero" jsonschema_description:"Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."` //nolint:lll
 	// Autoscaler defines pod and node autoscaling configuration.
 	// Supersedes spec.cluster.nodeAutoscaling (deprecated; aliased on load).
-	Autoscaler   AutoscalerConfig `json:"autoscaler,omitzero"   jsonschema:"description=Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"`                               //nolint:lll // Long description required for JSON schema
-	ImportImages string           `json:"importImages,omitzero" jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
+	Autoscaler   AutoscalerConfig `json:"autoscaler,omitzero"   jsonschema_description:"Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"`                               //nolint:lll // Long description required for JSON schema
+	ImportImages string           `json:"importImages,omitzero" jsonschema_description:"Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	// Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
 	// Supersedes spec.cluster.talos.controlPlanes (deprecated; aliased on load).
-	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero" jsonschema:"description=Number of control-plane nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
+	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero" jsonschema:"minimum=0" jsonschema_description:"Number of control-plane nodes to create for the cluster (provider/distribution-agnostic)"` //nolint:lll
 	// Workers is the number of worker nodes (default: 0).
 	// Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
 	// When 0 on Talos, scheduling is allowed on control-plane nodes.
 	// Supersedes spec.cluster.talos.workers (deprecated; aliased on load).
-	Workers int32 `json:"workers,omitzero" jsonschema:"description=Number of worker nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
+	Workers int32 `json:"workers,omitzero" jsonschema:"minimum=0" jsonschema_description:"Number of worker nodes to create for the cluster (provider/distribution-agnostic)"` //nolint:lll
 
 	// KubernetesVersion pins the Kubernetes version to deploy. Accepts values with
 	// or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Honored by the Talos
@@ -176,12 +176,12 @@ type ClusterSpec struct {
 	// available in the OCI registry (an in-place rolling upgrade for Talos; a
 	// confirmation-gated recreation for Kind/K3d). Override per invocation with the
 	// --kubernetes-version flag (precedence: flag > env > config > default).
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags
 	// and sets up kubeconfig with exec-based OIDC credentials.
-	OIDC OIDCSpec `json:"oidc,omitzero" jsonschema:"description=OIDC authentication configuration for the API server and kubeconfig"` //nolint:lll
+	OIDC OIDCSpec `json:"oidc,omitzero" jsonschema_description:"OIDC authentication configuration for the API server and kubeconfig"` //nolint:lll
 
 	// Distribution-specific options
 
@@ -287,7 +287,7 @@ type FluxConfig struct {
 
 // ChatSpec defines AI chat assistant configuration.
 type ChatSpec struct {
-	Model string `json:"model,omitzero" jsonschema:"description=Chat model (empty or 'auto' for API default)"`
+	Model string `json:"model,omitzero" jsonschema_description:"Chat model (empty or 'auto' for API default)"`
 	// ReasoningEffort specifies the reasoning effort level for chat responses.
 	// Valid values: "low", "medium", "high"
 	ReasoningEffort string `json:"reasoningEffort,omitzero" jsonschema:"enum=low,enum=medium,enum=high" jsonschema_description:"Reasoning effort level for chat responses (low, medium, or high)"` //nolint:lll // Long description required for JSON schema

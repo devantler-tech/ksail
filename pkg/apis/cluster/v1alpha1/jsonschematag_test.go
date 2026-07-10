@@ -117,6 +117,18 @@ func assertNoSeveredTagPieces(
 
 	for piece := range strings.SplitSeq(schemaTag, ",") {
 		key, _, _ := strings.Cut(piece, "=")
+		if key == "description" {
+			t.Errorf(
+				"%s: jsonschema tag carries an inline description= — the tag's options are"+
+					" comma-separated, so any comma in the prose silently truncates the"+
+					" published schema (#6035); move the text to a jsonschema_description tag,"+
+					" which has no option grammar and keeps commas intact",
+				fileSet.Position(field.Tag.Pos()),
+			)
+
+			continue
+		}
+
 		if knownOptionKeys[key] {
 			continue
 		}
@@ -124,7 +136,7 @@ func assertNoSeveredTagPieces(
 		t.Errorf(
 			"%s: jsonschema tag piece %q is not a known option — a raw comma has severed"+
 				" it from the preceding value, silently truncating the published schema;"+
-				" reword the value without commas",
+				" move prose to jsonschema_description or reword the value without commas",
 			fileSet.Position(field.Tag.Pos()), piece,
 		)
 	}

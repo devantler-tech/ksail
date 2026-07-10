@@ -202,7 +202,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `distributionConfig` | string | – | Path to the distribution's own configuration file (kind.yaml / k3d.yaml / vcluster.yaml / eks.yaml / the talos directory). CLI-only; ignored by the operator. |
+| `distributionConfig` | string | – | Path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). CLI-only; ignored by the operator. |
 | `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. CLI-only (local kubeconfig path/context); ignored by the operator. |
 | `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud), or AKS (Azure). |
 | `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |
@@ -411,10 +411,10 @@ NodeAutoscalerConfig defines configuration for node-level autoscaling. When Enab
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `enabled` | enum | – | Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled and false=Disabled). |
+| `enabled` | enum | – | Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled). |
 | `pools` | []NodePool | – | Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only). |
 | `maxNodesTotal` | int32 | – | Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be &lt;= serverLimit |
-| `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (the upstream comma-separated --expander chain). |
+| `expander` | []enum | – | Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste). |
 | `scaleDownUnneededTime` | string | – | How long a node should be unneeded before it is eligible for scale down (e.g. 10m) |
 | `scaleDownUtilizationThreshold` | string | – | Node resource-utilization ratio (0.0–1.0, computed over requests) at or below which the Cluster Autoscaler considers a node for scale down (upstream --scale-down-utilization-threshold, default 0.5). Passed verbatim; leave empty to inherit the upstream default. For agent-heavy clusters prefer ignoreDaemonsetsUtilization, which excludes DaemonSet requests from this calculation. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true). |
 | `capacityBuffers` | boolean | – | Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true) |
