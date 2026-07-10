@@ -88,3 +88,7 @@ https://www.siderolabs.com/
 
 # Intermittent Network Errors (gnu.org returns timeouts in CI occasionally)
 https://www.gnu.org/licenses/
+
+# GitHub Actions OIDC issuer (identity-provider URL value; serves only
+# /.well-known/* — a bare GET of the root returns 404 by design)
+https://token.actions.githubusercontent.com/

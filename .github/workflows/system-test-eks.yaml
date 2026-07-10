@@ -1,5 +1,27 @@
 name: "System Test - EKS"
 
+# AWS authentication: GitHub Actions OIDC (no long-lived access keys).
+#
+# Setup (one-time, AWS side):
+#   1. Create (or reuse) the GitHub OIDC identity provider in the AWS account:
+#      URL https://token.actions.githubusercontent.com, audience sts.amazonaws.com.
+#   2. Create an IAM role whose trust policy allows ONLY this repository's `ci`
+#      environment to assume it:
+#        "Condition": {
+#          "StringEquals": {
+#            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+#            "token.actions.githubusercontent.com:sub": "repo:devantler-tech/ksail:environment:ci"
+#          }
+#        }
+#   3. Attach a least-privilege permission policy: only what `eksctl create/delete
+#      cluster` needs (CloudFormation, EC2, EKS, and the scoped IAM actions from
+#      eksctl's documented minimum policies —
+#      https://eksctl.io/usage/minimum-iam-policies/). Never AdministratorAccess.
+#   4. Set the role's MaxSessionDuration to 7200 seconds — the smoke test job
+#      may run up to 120 minutes and must keep credentials through cleanup.
+#   5. Store the role ARN as the `AWS_OIDC_ROLE_ARN` secret on the `ci`
+#      environment. The workflow skips cleanly while it is absent.
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +37,7 @@ on:
         type: string
         default: us-east-1
   # No schedule yet: this smoke test creates billable AWS resources. Keep it
-  # manual until AWS test credentials and the expected spend envelope exist.
+  # manual until the OIDC role and the expected spend envelope exist.
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
@@ -37,15 +59,14 @@ jobs:
     outputs:
       aws-credentials: ${{ steps.aws.outputs.available }}
     steps:
-      - name: 🔎 Check required AWS secrets
+      - name: 🔎 Check required AWS OIDC role
         id: aws
         shell: bash
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
         run: |
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-            echo "::notice::Skipping EKS smoke test because AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY is not configured."
+          if [ -z "${AWS_OIDC_ROLE_ARN:-}" ]; then
+            echo "::notice::Skipping EKS smoke test because AWS_OIDC_ROLE_ARN is not configured."
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -88,10 +109,8 @@ jobs:
     environment: ci
     permissions:
       contents: read
+      id-token: write
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ inputs.region }}
       AWS_DEFAULT_REGION: ${{ inputs.region }}
       KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}-${{ github.run_attempt }}
@@ -101,6 +120,17 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - name: 🔐 Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-system-test-eks-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          # Must cover the full 120-minute job (create + reconcile + always()
+          # cleanup) — the 1h default would expire mid-run and strand billable
+          # clusters. Requires MaxSessionDuration=7200 on the role.
+          role-duration-seconds: 7200
 
       - name: ⚙️ Setup Go
         id: setup-go
