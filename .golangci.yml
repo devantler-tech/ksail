@@ -28,6 +28,11 @@ linters:
       - linters:
           - paralleltest
         path: pkg/cli/setup/post_cni_internal_test.go
+      # Tests that use t.Chdir to exercise moduleRoot's directory-walking
+      # logic cannot run in parallel (t.Chdir forbids parallel tests/ancestors)
+      - linters:
+          - paralleltest
+        path: pkg/client/kubescape/claircore_linkage_test.go
       # Tests that modify env vars cannot run in parallel
       - linters:
           - paralleltest
