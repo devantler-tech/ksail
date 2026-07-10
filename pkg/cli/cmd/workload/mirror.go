@@ -8,7 +8,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -304,8 +306,16 @@ func captureToOutput(
 		Writer:  cmd.ErrOrStderr(),
 	})
 
+	// Ctrl-C is the documented way to end the capture: cancel the session's
+	// context on SIGINT/SIGTERM instead of letting the default disposition
+	// kill the process, so the session unwinds, the replay drains, the pcap
+	// closes, and the summary still prints (the service layer maps a
+	// cancelled context to a clean stop).
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	captureErr := runCaptureSession(
-		cmd.Context(), client, restConfig, point, opts.port, out,
+		ctx, client, restConfig, point, opts.port, out,
 	)
 
 	captureErr = finishCapture(captureErr, replay, file)

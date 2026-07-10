@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -37,6 +38,10 @@ const (
 
 // errMirrorReplayDialRefused is the static dial failure the --to tests inject.
 var errMirrorReplayDialRefused = errors.New("connection refused")
+
+// errMirrorInterruptIgnored reports that raising the documented interrupt did
+// not cancel the capture context.
+var errMirrorInterruptIgnored = errors.New("interrupt did not cancel the capture context")
 
 // mirrorSelectorLabels is the label set the test Deployment selects on.
 func mirrorSelectorLabels() map[string]string {
@@ -237,6 +242,87 @@ func TestMirrorCmdCapturesToFileAndSummarizes(t *testing.T) {
 
 	_, err := os.Stat(filepath.Join(".", "mirror.pcap"))
 	require.NoError(t, err, "the default capture file must exist")
+}
+
+// stubInterruptingMirrorSession installs mirror-command seams whose capture
+// session writes the given pcap, raises the documented interrupt at the test
+// process, and then blocks until the interrupt cancels the session context —
+// without the command's signal-aware context, the default disposition kills
+// the test process at the raise.
+func stubInterruptingMirrorSession(client kubernetes.Interface, pcap []byte) func() {
+	restoreClients := workload.ExportSetMirrorClients(
+		func(_, _ string) (kubernetes.Interface, *rest.Config, error) {
+			return client, &rest.Config{}, nil
+		},
+	)
+
+	restoreSession := workload.ExportSetRunCaptureSession(
+		func(
+			ctx context.Context,
+			_ kubernetes.Interface,
+			_ *rest.Config,
+			_ *mirror.TapPoint,
+			_ int,
+			out io.Writer,
+			_ ...mirror.CaptureSessionOption,
+		) error {
+			_, err := out.Write(pcap)
+			if err != nil {
+				return fmt.Errorf("write pcap to capture output: %w", err)
+			}
+
+			proc, err := os.FindProcess(os.Getpid())
+			if err != nil {
+				return fmt.Errorf("find own process: %w", err)
+			}
+
+			err = proc.Signal(os.Interrupt)
+			if err != nil {
+				return fmt.Errorf("raise interrupt: %w", err)
+			}
+
+			// Block like the real exec stream until the interrupt cancels the
+			// context, then report the clean stop the service layer maps a
+			// cancelled capture to.
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(10 * time.Second):
+				return errMirrorInterruptIgnored
+			}
+		},
+	)
+
+	return func() {
+		restoreSession()
+		restoreClients()
+	}
+}
+
+//nolint:paralleltest // t.Chdir is incompatible with t.Parallel; the raised SIGINT is process-wide.
+func TestMirrorCmdInterruptStopsCaptureAndSummarizes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("raising os.Interrupt at the running process is not supported on Windows")
+	}
+
+	t.Chdir(t.TempDir())
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newMirrorPod(false))
+
+	restore := stubInterruptingMirrorSession(client, testPcapBytes(t))
+	defer restore()
+
+	cmd := workload.NewMirrorCmd()
+	cmd.SetArgs([]string{mirrorTestDeploy, "--port", "8080"})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute(), "an interrupted capture must end as a clean stop")
+	assert.Contains(t, out.String(), "captured 1 packets (4 bytes)",
+		"the capture summary must still print after Ctrl-C")
 }
 
 //nolint:paralleltest // t.Chdir is incompatible with t.Parallel.
