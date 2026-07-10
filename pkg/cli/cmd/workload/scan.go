@@ -162,23 +162,9 @@ func runScanCmd(
 	flags scanFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(
-			ctx,
-			cmd,
-			func(ctx context.Context, cluster ephemeralCluster) error {
-				sourcePath, pathErr := resolveEphemeralSourcePath(cmd, args)
-				if pathErr != nil {
-					return pathErr
-				}
-
-				installErr := installDeclaredCharts(ctx, cmd, cluster, sourcePath)
-				if installErr != nil {
-					return installErr
-				}
-
-				return runScanCmdInner(ctx, cmd, args, flags)
-			},
-		)
+		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
+			return runScanCmdInner(ctx, cmd, args, flags)
+		})
 	}
 
 	return runScanCmdInner(ctx, cmd, args, flags)

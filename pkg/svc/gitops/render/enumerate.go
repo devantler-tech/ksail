@@ -2,7 +2,6 @@ package render
 
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	"sigs.k8s.io/yaml"
 )
@@ -21,15 +20,7 @@ import (
 // run, and an unparseable HelmRelease document is skipped (CR-schema
 // validation reports it elsewhere).
 func EnumerateChartSpecs(stream []byte) ([]*helm.ChartSpec, []Degradation) {
-	docs := fsutil.SplitYAMLDocuments(stream)
-
-	index := newSourceIndex()
-	metas := make([]objectMeta, len(docs))
-
-	for docIndex, doc := range docs {
-		metas[docIndex] = parseObjectMeta(doc)
-		indexSource(&index, metas[docIndex], doc)
-	}
+	docs, metas, index := parseSourceIndexedDocs(stream)
 
 	var (
 		specs        []*helm.ChartSpec

@@ -82,6 +82,35 @@ func installDeclaredCharts(
 	return nil
 }
 
+// withPreparedEphemeralCluster wraps runFn in a throwaway cluster whose
+// declared charts are installed first (resolve source → installDeclaredCharts
+// → run), the sequence the validate and scan commands share for their
+// --ephemeral mode (ksail#5919 Phase 3b-2).
+func withPreparedEphemeralCluster(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	runFn func(ctx context.Context) error,
+) error {
+	return withEphemeralCluster(
+		ctx,
+		cmd,
+		func(ctx context.Context, cluster ephemeralCluster) error {
+			sourcePath, pathErr := resolveEphemeralSourcePath(cmd, args)
+			if pathErr != nil {
+				return pathErr
+			}
+
+			installErr := installDeclaredCharts(ctx, cmd, cluster, sourcePath)
+			if installErr != nil {
+				return installErr
+			}
+
+			return runFn(ctx)
+		},
+	)
+}
+
 // resolveEphemeralSourcePath derives the workload source path an --ephemeral
 // run installs declared charts from, mirroring exactly how the inner
 // validate/scan run derives its own target: single silent config load →

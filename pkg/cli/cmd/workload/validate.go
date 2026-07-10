@@ -178,23 +178,9 @@ func runValidateCmd(
 	flags validateFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(
-			ctx,
-			cmd,
-			func(ctx context.Context, cluster ephemeralCluster) error {
-				sourcePath, pathErr := resolveEphemeralSourcePath(cmd, args)
-				if pathErr != nil {
-					return pathErr
-				}
-
-				installErr := installDeclaredCharts(ctx, cmd, cluster, sourcePath)
-				if installErr != nil {
-					return installErr
-				}
-
-				return runValidateCmdInner(ctx, cmd, args, flags)
-			},
-		)
+		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
+			return runValidateCmdInner(ctx, cmd, args, flags)
+		})
 	}
 
 	return runValidateCmdInner(ctx, cmd, args, flags)
