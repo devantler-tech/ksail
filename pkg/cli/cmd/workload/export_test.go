@@ -7,6 +7,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
@@ -496,4 +497,26 @@ func ExportWithEphemeralCluster(
 	runFn func(ctx context.Context, cluster EphemeralCluster) error,
 ) error {
 	return withEphemeralCluster(ctx, cmd, runFn)
+}
+
+// ExportSetEphemeralHelmClient swaps the --ephemeral install-capable Helm
+// client factory for tests and returns a restore func.
+func ExportSetEphemeralHelmClient(
+	factory func(kubeconfigPath, kubeContext string) (helm.Interface, error),
+) func() {
+	original := newEphemeralHelmClient
+	newEphemeralHelmClient = factory
+
+	return func() { newEphemeralHelmClient = original }
+}
+
+// ExportInstallDeclaredCharts exposes installDeclaredCharts for
+// external-package tests exercising the Phase 3b-2 install step directly.
+func ExportInstallDeclaredCharts(
+	ctx context.Context,
+	cmd *cobra.Command,
+	cluster EphemeralCluster,
+	sourcePath string,
+) error {
+	return installDeclaredCharts(ctx, cmd, cluster, sourcePath)
 }

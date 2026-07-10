@@ -157,19 +157,20 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		&flags.ephemeral,
 		"ephemeral",
 		false,
-		"EXPERIMENTAL scaffold (ksail#5919): provision a throwaway KWOK cluster for the "+
-			"duration of this command, guaranteed to be torn down afterwards. Does not yet change "+
-			"what is validated — off by default.",
+		"EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of "+
+			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
+			"into it, so declared operators' CRDs are registered. Validating their rendered "+
+			"children against the cluster is not wired yet — off by default.",
 	)
 }
 
 // runValidateCmd dispatches to runValidateCmdInner directly, or — when
 // --ephemeral is set — wraps it in a throwaway KWOK cluster that is
-// guaranteed to be torn down afterwards (see withEphemeralCluster). The
-// cluster's connection handle is resolved and readiness-verified but not yet
-// consumed here: installing the declared operators and validating their
-// rendered children against it is the remainder of ksail#5919 Phase
-// 3b-2/3b-3.
+// guaranteed to be torn down afterwards (see withEphemeralCluster). While the
+// cluster is live, the workload's declared charts are installed into it first
+// (installDeclaredCharts, ksail#5919 Phase 3b-2) so the declared operators'
+// CRDs are registered; applying the rendered manifests and validating their
+// operator-rendered children is the remaining Phase 3b-3.
 func runValidateCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -177,9 +178,23 @@ func runValidateCmd(
 	flags validateFlags,
 ) error {
 	if flags.ephemeral {
-		return withEphemeralCluster(ctx, cmd, func(ctx context.Context, _ ephemeralCluster) error {
-			return runValidateCmdInner(ctx, cmd, args, flags)
-		})
+		return withEphemeralCluster(
+			ctx,
+			cmd,
+			func(ctx context.Context, cluster ephemeralCluster) error {
+				sourcePath, pathErr := resolveEphemeralSourcePath(cmd, args)
+				if pathErr != nil {
+					return pathErr
+				}
+
+				installErr := installDeclaredCharts(ctx, cmd, cluster, sourcePath)
+				if installErr != nil {
+					return installErr
+				}
+
+				return runValidateCmdInner(ctx, cmd, args, flags)
+			},
+		)
 	}
 
 	return runValidateCmdInner(ctx, cmd, args, flags)
