@@ -39,7 +39,7 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
-      --ephemeral                 EXPERIMENTAL scaffold (ksail#5919): provision a throwaway KWOK cluster for the duration of this command, guaranteed to be torn down afterwards. Does not yet change what is validated — off by default.
+      --ephemeral                 EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Validating their rendered children against the cluster is not wired yet — off by default.
       --ignore-missing-schemas    Ignore resources with missing schemas (default true)
       --include-crd-schemas       Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default; a CRD that cannot be converted is warned and skipped)
       --rules string              Path to a YAML CEL rules file. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Overrides spec.workload.validation.rules from ksail.yaml.
