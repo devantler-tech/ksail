@@ -57,6 +57,18 @@ func (p *Provisioner) applyRollingRecreateChanges(
 		return err
 	}
 
+	return p.rollRolesWorkerFirst(ctx, clientset, clusterName, rollWorker, rollControlPlane, result)
+}
+
+// rollRolesWorkerFirst replaces the requested roles' nodes, workers before
+// control planes to minimise control-plane disruption.
+func (p *Provisioner) rollRolesWorkerFirst(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+	rollWorker, rollControlPlane bool,
+	result *clusterupdate.UpdateResult,
+) error {
 	if rollWorker {
 		workerErr := p.rollingReplaceRole(ctx, clientset, clusterName, RoleWorker, result)
 		if workerErr != nil {
@@ -317,30 +329,9 @@ func (p *Provisioner) configureAndWaitReplacement(
 	oldServer, newServer *hcloud.Server,
 	role string,
 ) error {
-	servers := []*hcloud.Server{newServer}
-
-	_, _ = fmt.Fprintf(p.logWriter,
-		"    Waiting for Talos API on replacement %s...\n", newServer.Name)
-
-	apiErr := p.waitForHetznerTalosAPI(ctx, servers)
-	if apiErr != nil {
-		return fmt.Errorf("waiting for Talos API on replacement %s: %w", newServer.Name, apiErr)
-	}
-
-	config := p.configForRole(role)
-	if config == nil {
-		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
-	}
-
-	applyErr := p.applyConfigToNode(ctx, newServer, config)
-	if applyErr != nil {
-		return fmt.Errorf("applying config to replacement %s: %w", newServer.Name, applyErr)
-	}
-
-	reachErr := p.waitForServersToBeReachable(ctx, servers)
-	if reachErr != nil {
-		return fmt.Errorf("waiting for replacement %s to become reachable: %w",
-			newServer.Name, reachErr)
+	configErr := p.applyConfigToReplacement(ctx, newServer, role)
+	if configErr != nil {
+		return configErr
 	}
 
 	waitReady := func() error {
@@ -374,6 +365,43 @@ func (p *Provisioner) configureAndWaitReplacement(
 	}
 
 	return finishControlPlaneReplacement(reattach, waitReady)
+}
+
+// applyConfigToReplacement waits for the Talos API on a freshly provisioned
+// replacement server, applies its role config so it rejoins the cluster, and
+// waits for the server to become reachable again afterwards.
+func (p *Provisioner) applyConfigToReplacement(
+	ctx context.Context,
+	newServer *hcloud.Server,
+	role string,
+) error {
+	servers := []*hcloud.Server{newServer}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"    Waiting for Talos API on replacement %s...\n", newServer.Name)
+
+	apiErr := p.waitForHetznerTalosAPI(ctx, servers)
+	if apiErr != nil {
+		return fmt.Errorf("waiting for Talos API on replacement %s: %w", newServer.Name, apiErr)
+	}
+
+	config := p.configForRole(role)
+	if config == nil {
+		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
+	}
+
+	applyErr := p.applyConfigToNode(ctx, newServer, config)
+	if applyErr != nil {
+		return fmt.Errorf("applying config to replacement %s: %w", newServer.Name, applyErr)
+	}
+
+	reachErr := p.waitForServersToBeReachable(ctx, servers)
+	if reachErr != nil {
+		return fmt.Errorf("waiting for replacement %s to become reachable: %w",
+			newServer.Name, reachErr)
+	}
+
+	return nil
 }
 
 // drainResolvedNode cordons and drains the Kubernetes node backing the given Talos
