@@ -152,10 +152,11 @@ func pumpUntilDone(ctx context.Context, left, right io.ReadWriteCloser) {
 // stream the steering agent opened, dials the developer's local process, and
 // pumps the two together. A failed dial closes the stream — the tunnel's
 // "connection refused", which makes the agent close the redirected cluster
-// connection. It blocks until the context is cancelled or the session closes
-// (both return nil — inspect [TunnelSession.Err] for why a session ended);
-// cancellation also tears down every active pump, and all pumps are drained
-// before it returns.
+// connection. It blocks until the context is cancelled or the session ends: a
+// clean end (context cancelled or the caller closed the session) returns nil,
+// while a session the demux loop tore down on a protocol/codec error returns
+// that error. Cancellation also tears down every active pump, and all pumps are
+// drained before it returns.
 func ServeIntercepted(ctx context.Context, session *TunnelSession, dial LocalDialer) error {
 	pumps := &sync.WaitGroup{}
 	defer pumps.Wait()
@@ -163,15 +164,37 @@ func ServeIntercepted(ctx context.Context, session *TunnelSession, dial LocalDia
 	for {
 		stream, err := session.AcceptStream(ctx)
 		if err != nil {
-			// AcceptStream only fails when the session closed or the context
-			// ended — both are a deliberate end of serving, not a failure.
-			return nil
+			// AcceptStream fails both on a deliberate end of serving (the context
+			// ended or the caller closed the session — nil) and when the demux
+			// loop tore the session down on a protocol/codec error (e.g. non-frame
+			// bytes on the steering channel from a noisy agent image). Surface the
+			// latter so a corrupted tunnel is a diagnosable failure, never a silent
+			// success.
+			return sessionTeardownErr(session)
 		}
 
 		pumps.Go(func() {
 			serveOneStream(ctx, stream, dial)
 		})
 	}
+}
+
+// sessionTeardownErr reports the demux loop's terminal error when the session
+// has already torn itself down — its Done channel is closed and Err is non-nil.
+// teardown records Err before closing Done, so a closed Done means Err is final.
+// A caller-initiated Close or a context cancellation leaves Err nil (Done may
+// still be open), both of which are a clean stop and yield nil here.
+func sessionTeardownErr(session *TunnelSession) error {
+	select {
+	case <-session.Done():
+		loopErr := session.Err()
+		if loopErr != nil {
+			return fmt.Errorf("steering tunnel torn down: %w", loopErr)
+		}
+	default:
+	}
+
+	return nil
 }
 
 // serveOneStream dials the local process for one intercepted stream and pumps
