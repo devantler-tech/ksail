@@ -202,7 +202,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `distributionConfig` | string | – | Path to the distribution's own configuration file (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory). CLI-only; ignored by the operator. |
+| `distributionConfig` | string | – | Path to the distribution's own configuration file or directory (e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml, gke.yaml, or aks.yaml). CLI-only; ignored by the operator. |
 | `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. CLI-only (local kubeconfig path/context); ignored by the operator. |
 | `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), EKS (AWS), GKE (Google Cloud), or AKS (Azure). |
 | `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, GCP, Azure, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |

@@ -28,7 +28,7 @@ export interface KSailClusterConfiguration {
      */
     cluster?: {
       /**
-       * Path to the distribution's own configuration file (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory). CLI-only; ignored by the operator.
+       * Path to the distribution's own configuration file or directory (e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml, gke.yaml, or aks.yaml). CLI-only; ignored by the operator.
        */
       distributionConfig?: string;
       /**
