@@ -19,8 +19,8 @@ Unlike `workload mirror` (read-only pcap, traffic keeps flowing to the
 workload), intercept steers the traffic away from the workload to your local
 process; the agent removes its rule again on exit, restoring the pod.
 
-The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
-lets the in-cluster agent reverse its redirect.
+The intercept runs until interrupted. Ctrl-C stops it cleanly with exit status 0,
+tearing the tunnel down and letting the in-cluster agent reverse its redirect.
 
 By default intercept runs the KSail-shipped steering image and derives the agent
 command from --service-port, so only --service-port and --local-port are needed.

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
@@ -66,8 +69,8 @@ Unlike ` + "`workload mirror`" + ` (read-only pcap, traffic keeps flowing to the
 workload), intercept steers the traffic away from the workload to your local
 process; the agent removes its rule again on exit, restoring the pod.
 
-The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
-lets the in-cluster agent reverse its redirect.
+The intercept runs until interrupted. Ctrl-C stops it cleanly with exit status 0,
+tearing the tunnel down and letting the in-cluster agent reverse its redirect.
 
 By default intercept runs the KSail-shipped steering image and derives the agent
 command from --service-port, so only --service-port and --local-port are needed.
@@ -250,27 +253,32 @@ func deriveSteerCommand(servicePort int) []string {
 // resolve → select injection point → inject/reuse steering agent → wait →
 // tunnel + serve to the local process.
 func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOptions) error {
+	// Install the signal handler before any cluster setup so Ctrl-C also
+	// cancels pod resolution, steering-agent injection, and readiness waits.
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 	client, restConfig, err := newMirrorClients(kubeconfigPath, opts.context)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
 	point, err := resolveInjectionPoint(
-		cmd.Context(),
+		ctx,
 		client,
 		opts.namespace,
 		opts.container,
 		deployment,
 	)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
-	err = ensureSteer(cmd, client, point, opts)
+	err = ensureSteer(ctx, cmd, client, point, opts)
 	if err != nil {
-		return err
+		return cleanInterceptCancellation(ctx, err)
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -280,14 +288,26 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Writer:  cmd.ErrOrStderr(),
 	})
 
-	return runInterceptSession(
-		cmd.Context(),
+	err = runInterceptSession(
+		ctx,
 		client,
 		restConfig,
 		point,
 		opts.steerCommand,
 		opts.localPort,
 	)
+
+	return cleanInterceptCancellation(ctx, err)
+}
+
+// cleanInterceptCancellation maps signal-driven context cancellation to the
+// documented successful Ctrl-C exit while preserving unrelated setup errors.
+func cleanInterceptCancellation(ctx context.Context, err error) error {
+	if errors.Is(ctx.Err(), context.Canceled) && errors.Is(err, context.Canceled) {
+		return nil
+	}
+
+	return err
 }
 
 // ensureSteer injects the steering agent into the injection point's pod —
@@ -297,12 +317,13 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 // by runInterceptSession, matching the agent's design (its stdin/stdout is the
 // exec channel, not the container's entrypoint).
 func ensureSteer(
+	ctx context.Context,
 	cmd *cobra.Command,
 	client kubernetes.Interface,
 	point *mirror.TapPoint,
 	opts interceptOptions,
 ) error {
-	return injectAndWait(cmd, point, ephemeralInjector{
+	return injectAndWait(ctx, cmd, point, ephemeralInjector{
 		inject: func(ctx context.Context) (string, error) {
 			return mirror.InjectSteer(ctx, client, point, mirror.WithSteerImage(opts.steerImage))
 		},
@@ -335,8 +356,13 @@ type ephemeralInjector struct {
 // one, since ephemeral containers cannot be removed) and waits for it to reach
 // Running. Shared by the mirror tap and the intercept steering agent so both
 // take the identical inject → reuse-or-report → wait path.
-func injectAndWait(cmd *cobra.Command, point *mirror.TapPoint, inj ephemeralInjector) error {
-	_, err := inj.inject(cmd.Context())
+func injectAndWait(
+	ctx context.Context,
+	cmd *cobra.Command,
+	point *mirror.TapPoint,
+	inj ephemeralInjector,
+) error {
+	_, err := inj.inject(ctx)
 
 	switch {
 	case errors.Is(err, inj.alreadyErr):
@@ -357,7 +383,7 @@ func injectAndWait(cmd *cobra.Command, point *mirror.TapPoint, inj ephemeralInje
 		})
 	}
 
-	err = inj.wait(cmd.Context())
+	err = inj.wait(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: %w", inj.waitVerb, err)
 	}
