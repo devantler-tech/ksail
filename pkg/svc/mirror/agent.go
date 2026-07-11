@@ -185,7 +185,8 @@ func forwardWithLiveness(ctx context.Context, listener net.Listener, session *Tu
 	// tunnel, so stderr — the container log — is the observable channel.
 	// The teardown path is unchanged; an expiry still ends the forward loop
 	// like a cancellation so the REDIRECT rule is reversed.
-	if cause := context.Cause(forwardCtx); errors.Is(cause, ErrSteerClientExpired) {
+	cause := context.Cause(forwardCtx)
+	if errors.Is(cause, ErrSteerClientExpired) {
 		fmt.Fprintf(os.Stderr, "steer-agent: %v\n", cause)
 	}
 
