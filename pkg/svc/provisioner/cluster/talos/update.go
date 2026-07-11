@@ -419,12 +419,14 @@ func (p *Provisioner) detectOwnedFloatingIP(
 	return floatingIP, true, nil
 }
 
-// classifyFloatingIPDetectionErr splits floating-IP detection failures into
-// definitive failures (ownership collisions and context termination, which
-// must stop the update) and transient provider failures (logged and swallowed,
-// so the caller skips rather than acts on a guess).
+// classifyFloatingIPDetectionErr fails closed on every detection error while
+// floating-IP management is enabled. When management is disabled, ownership
+// collisions and context termination remain definitive, while transient
+// provider failures are logged and skipped because they cannot hide a required
+// reconcile.
 func (p *Provisioner) classifyFloatingIPDetectionErr(err error) error {
-	if errors.Is(err, hetzner.ErrFloatingIPNotOwned) ||
+	if (p.hetznerOpts != nil && p.hetznerOpts.FloatingIPEnabled) ||
+		errors.Is(err, hetzner.ErrFloatingIPNotOwned) ||
 		isContextTermination(err) {
 		return fmt.Errorf("failed to detect floating IP state: %w", err)
 	}
@@ -521,6 +523,8 @@ type updateStep struct {
 // stale machine-config template; otherwise it keeps minting broken nodes that
 // hold the project at its server limit and re-wedge every subsequent update at
 // the same failing step (#5219).
+//
+//nolint:funlen // Ordered update steps are clearer as one declarative sequence.
 func (p *Provisioner) updateApplySteps(
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,

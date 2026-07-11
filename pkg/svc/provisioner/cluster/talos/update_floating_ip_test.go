@@ -472,6 +472,35 @@ func TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate(t *testing.T) {
 		"a collision is a definitive answer, not a warn-and-skip detection failure")
 }
 
+// TestUpdate_FloatingIPDetectionFailure verifies an enabled floating-IP update
+// fails closed when HCloud state cannot be read instead of succeeding without
+// reconciling the endpoint.
+func TestUpdate_FloatingIPDetectionFailure(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			http.Error(responseWriter, "provider unavailable", http.StatusInternalServerError)
+		},
+	)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled: true,
+	}).WithInfraProvider(newFipUpdateProvider(server.URL))
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	_, err := provisioner.Update(
+		t.Context(), "fip-cluster", spec, spec, clusterupdate.UpdateOptions{},
+	)
+
+	require.ErrorContains(t, err, "failed to detect floating IP state")
+}
+
 // TestMergeFloatingIPChanges_PropagatesContextTermination verifies cancellation
 // and deadline errors abort live drift detection instead of degrading into a
 // successful unavailable-state skip and a misleading no-change result.

@@ -441,8 +441,12 @@ func graftNodeManagedSections(
 
 		// Registry mirrors + auth: injected by ApplyMirrorRegistries at create.
 		cfg.MachineConfig.MachineRegistries = runningRaw.MachineConfig.MachineRegistries
-		// Cert SANs: appended by WithCertSANs at create (e.g. DinD exposure address).
-		cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
+		// Cert SANs: preserve create-time SANs only when the desired config has no
+		// authoritative refreshed set (for example after a topology change).
+		if len(cfg.MachineConfig.MachineCertSANs) == 0 {
+			cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
+		}
+
 		graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
 
 		return nil

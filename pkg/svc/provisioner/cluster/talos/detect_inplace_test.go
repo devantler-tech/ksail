@@ -143,6 +143,32 @@ func TestGraftNodeManagedSections(t *testing.T) {
 	assert.True(t, *graftedDevice.DeviceDHCP, "the VIP interface must retain its DHCP prerequisite")
 }
 
+// TestGraftNodeManagedSections_PreservesDesiredCertSANs verifies a freshly
+// rebuilt desired SAN set wins over stale running-node SANs.
+func TestGraftNodeManagedSections_PreservesDesiredCertSANs(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineCertSANs: []string{"existing.example.com", "new-control-plane.example.com"},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineCertSANs: []string{"existing.example.com"},
+		},
+	})
+
+	grafted, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.NoError(t, err)
+
+	assert.Equal(
+		t,
+		[]string{"existing.example.com", "new-control-plane.example.com"},
+		grafted.RawV1Alpha1().MachineConfig.MachineCertSANs,
+	)
+}
+
 // TestGraftNodeManagedSections_PreservesDesiredHCloudVIP verifies that an
 // explicit reconcile target wins over stale runtime VIP state.
 //
