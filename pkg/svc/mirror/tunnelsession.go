@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // ErrTunnelSessionClosed is returned when a stream is opened or accepted on a
@@ -76,6 +78,12 @@ type TunnelSession struct {
 	closeOnce sync.Once
 	closing   chan struct{}
 	done      chan struct{}
+
+	// lastRead is the UnixNano timestamp of the most recent successfully
+	// read frame (any type — data implies liveness as much as a keepalive).
+	// The steering agent's liveness watchdog polls it through
+	// [TunnelSession.LastRead] to detect a dead client (ksail#6040).
+	lastRead atomic.Int64
 }
 
 // NewTunnelSession starts a session over the given channel halves and begins
@@ -103,9 +111,26 @@ func NewTunnelSession(reader io.Reader, writer io.Writer, role TunnelRole) *Tunn
 		done:        make(chan struct{}),
 	}
 
+	session.lastRead.Store(time.Now().UnixNano())
+
 	go session.readLoop()
 
 	return session
+}
+
+// LastRead reports when the session last successfully read a frame off the
+// channel (any type). A session that has read nothing yet reports its
+// creation time, so a liveness deadline measured from LastRead is armed from
+// the start.
+func (s *TunnelSession) LastRead() time.Time {
+	return time.Unix(0, s.lastRead.Load())
+}
+
+// SendKeepalive writes one session-level liveness ping ([FrameKeepalive]) to
+// the peer. The intercept client calls it on a timer so the steering agent's
+// watchdog can distinguish an idle client from a dead one (ksail#6040).
+func (s *TunnelSession) SendKeepalive() error {
+	return s.writeFrame(Frame{StreamID: 0, Type: FrameKeepalive, Payload: nil})
 }
 
 // OpenStream announces a new locally-initiated stream to the peer and returns
@@ -211,6 +236,8 @@ func (s *TunnelSession) readLoop() {
 			break
 		}
 
+		s.lastRead.Store(time.Now().UnixNano())
+
 		err = s.dispatch(frame)
 		if err != nil {
 			// A dispatch parked on the accept queue unblocks through the
@@ -240,6 +267,10 @@ func (s *TunnelSession) dispatch(frame Frame) error {
 	case FrameClose:
 		s.handleClose(frame.StreamID)
 
+		return nil
+	case FrameKeepalive:
+		// Liveness only: readLoop already stamped lastRead before
+		// dispatching, so there is nothing further to route.
 		return nil
 	default:
 		return fmt.Errorf("%w: %d", ErrTunnelUnknownFrameType, frame.Type)

@@ -132,7 +132,18 @@ func RunSteerAgent(
 
 	defer func() { _ = session.Close() }()
 
-	return ForwardRedirected(ctx, listener, session)
+	// Self-terminate when the client goes silent: the exec stream does not
+	// reliably deliver EOF on unclean client death (ksail#6040), and an
+	// ephemeral container cannot be removed from outside, so this liveness
+	// deadline is the only path that removes the REDIRECT rule once the
+	// client is gone. Cancelling forwardCtx ends ForwardRedirected, which
+	// returns into the reverse teardown above.
+	forwardCtx, expire := context.WithCancel(ctx)
+	defer expire()
+
+	go watchSessionLiveness(forwardCtx, session, SteerClientLivenessTimeout, expire)
+
+	return ForwardRedirected(forwardCtx, listener, session)
 }
 
 // installRule builds and installs one steering rule.

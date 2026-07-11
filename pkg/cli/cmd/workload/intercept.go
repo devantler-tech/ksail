@@ -124,6 +124,12 @@ func defaultRunInterceptSession(
 
 	defer func() { _ = session.Close() }()
 
+	// Liveness pings let the agent's watchdog distinguish an idle client
+	// from a dead one, so an uncleanly killed client cannot orphan the
+	// agent and its REDIRECT rule (ksail#6040). The goroutine ends with
+	// ctx / the session; both are torn down before this function returns.
+	go mirror.SendKeepalives(ctx, session, mirror.SteerKeepaliveInterval)
+
 	err = mirror.ServeIntercepted(ctx, session, localProcessDialer(localPort))
 	if err != nil {
 		return fmt.Errorf("serve intercepted traffic: %w", err)
