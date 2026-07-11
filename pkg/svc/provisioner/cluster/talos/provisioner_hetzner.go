@@ -329,6 +329,54 @@ func (p *Provisioner) reconcileFloatingIPEndpoint(
 		return nil
 	}
 
+	return p.applyFloatingIPEndpointConfig(ctx, clusterName)
+}
+
+// refreshFloatingIPEndpointAfterNodeChanges rebuilds the floating-IP endpoint,
+// VIP, and certificate SANs from final live control-plane inventory after a
+// scale or rolling replacement. This refresh is topology-driven rather than
+// drift-driven: the pre-update inventory may have been fully configured and
+// therefore produced no floating-IP change.
+func (p *Provisioner) refreshFloatingIPEndpointAfterNodeChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
+		!hasControlPlaneTopologyChange(oldSpec, newSpec, result) {
+		return nil
+	}
+
+	return p.applyFloatingIPEndpointConfig(ctx, clusterName)
+}
+
+// hasControlPlaneTopologyChange reports whether scaling or rolling replacement
+// changed the set of control-plane servers represented in endpoint SANs.
+func hasControlPlaneTopologyChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) bool {
+	if oldSpec != nil && newSpec != nil && oldSpec.ControlPlanes != newSpec.ControlPlanes {
+		return true
+	}
+
+	if result == nil {
+		return false
+	}
+
+	rollControlPlane, _ := rolesFromRollingChanges(result.RollingRecreate)
+
+	return rollControlPlane
+}
+
+// applyFloatingIPEndpointConfig regenerates the loaded Talos config bundle from
+// live control-plane inventory. Callers decide whether drift or topology makes
+// the operation necessary.
+func (p *Provisioner) applyFloatingIPEndpointConfig(
+	ctx context.Context,
+	clusterName string,
+) error {
 	if p.talosConfigs == nil {
 		return errFloatingIPConfigsUnavailable
 	}

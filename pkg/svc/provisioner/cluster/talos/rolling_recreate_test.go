@@ -267,6 +267,27 @@ func TestApplyRollingRecreateChanges_BlocksAbsentFloatingIP(t *testing.T) {
 	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
 }
 
+// TestValidateUpdatePlan_BlocksFloatingIPReconcileBeforeMutation verifies the
+// incompatible endpoint-repair/control-plane-roll combination is rejected by
+// the first apply step, before endpoint reconciliation can mutate cloud state.
+func TestValidateUpdatePlan_BlocksFloatingIPReconcileBeforeMutation(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field: testFieldHetznerCPServerType,
+	})
+	result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
+		Field: floatingIPEnabledField,
+	})
+
+	err := provisioner.ValidateUpdatePlanForTest(result)
+
+	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
+	assert.Equal(t, "validate update plan", provisioner.UpdateApplyStepNamesForTest()[0])
+}
+
 // TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned verifies that
 // deleting the control plane that owned the endpoint cannot leave its floating
 // IP detached from the replacement server during a rolling recreate.

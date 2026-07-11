@@ -291,6 +291,24 @@ func (p *Provisioner) ReconcileFloatingIPEndpointForTest(
 	return p.reconcileFloatingIPEndpoint(ctx, clusterName, diff)
 }
 
+// RefreshFloatingIPEndpointAfterNodeChangesForTest exposes the post-topology
+// refresh so tests can prove it runs without a floating-IP drift signal.
+func (p *Provisioner) RefreshFloatingIPEndpointAfterNodeChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.refreshFloatingIPEndpointAfterNodeChanges(
+		ctx, clusterName, oldSpec, newSpec, result,
+	)
+}
+
+// ValidateUpdatePlanForTest exposes the pre-mutation update-plan guard.
+func (p *Provisioner) ValidateUpdatePlanForTest(result *clusterupdate.UpdateResult) error {
+	return p.validateUpdatePlan(result)
+}
+
 // ReattachFloatingIPAfterControlPlaneReplacementForTest exposes
 // reattachFloatingIPAfterControlPlaneReplacement for unit testing.
 func (p *Provisioner) ReattachFloatingIPAfterControlPlaneReplacementForTest(

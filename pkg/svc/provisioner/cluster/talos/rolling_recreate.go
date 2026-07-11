@@ -47,10 +47,12 @@ func (p *Provisioner) applyRollingRecreateChanges(
 		return nil
 	}
 
-	rollControlPlane, rollWorker := rolesFromRollingChanges(result.RollingRecreate)
-	if rollControlPlane && hasFloatingIPChange(result) {
-		return ErrFloatingIPReconcileBeforeControlPlaneRoll
+	validateErr := p.validateUpdatePlan(result)
+	if validateErr != nil {
+		return validateErr
 	}
+
+	rollControlPlane, rollWorker := rolesFromRollingChanges(result.RollingRecreate)
 
 	clientset, err := p.createK8sClient(clusterName)
 	if err != nil {

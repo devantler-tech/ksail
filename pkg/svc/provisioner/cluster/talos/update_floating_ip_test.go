@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,6 +52,16 @@ const fipUpdateControlPlaneServerJSON = `{"id":11,"name":"fip-cluster-cp-0","sta
 	`"ksail.node.type":"controlplane","ksail.node.index":"0"},` +
 	`"created":"2026-07-02T00:00:00+00:00"}`
 
+// fipUpdateSecondControlPlaneServerJSON is the post-scale control-plane server
+// used to prove the final floating-IP refresh rebuilds SANs from live inventory.
+const fipUpdateSecondControlPlaneServerJSON = `{"id":12,"name":"fip-cluster-cp-1","status":"running",` +
+	`"public_net":{"ipv4":{"ip":"203.0.113.6","blocked":false,"dns_ptr":""},"ipv6":null,` +
+	`"floating_ips":[]},"private_net":[],` +
+	`"server_type":{"id":1,"name":"cx22","description":"","cores":2,"memory":4,"disk":40},` +
+	`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster",` +
+	`"ksail.node.type":"controlplane","ksail.node.index":"1"},` +
+	`"created":"2026-07-02T00:00:00+00:00"}`
+
 // fipUpdateTestServer answers the hcloud API calls the floating-IP update
 // reconcile path makes: floating-IP get-by-name (present or absent), create,
 // assign, and the /servers list backing ListNodes/GetServerByName with one
@@ -59,6 +70,21 @@ func fipUpdateTestServer(
 	t *testing.T,
 	floatingIPPresent bool,
 	calls *fipUpdateCalls,
+) *httptest.Server {
+	t.Helper()
+
+	return fipUpdateTestServerWithServers(
+		t, floatingIPPresent, calls, fipUpdateControlPlaneServerJSON,
+	)
+}
+
+// fipUpdateTestServerWithServers is fipUpdateTestServer with a caller-supplied
+// server list, used by topology-change refresh tests.
+func fipUpdateTestServerWithServers(
+	t *testing.T,
+	floatingIPPresent bool,
+	calls *fipUpdateCalls,
+	serversJSON ...string,
 ) *httptest.Server {
 	t.Helper()
 
@@ -88,7 +114,27 @@ func fipUpdateTestServer(
 	)
 
 	mux.HandleFunc("/floating_ips/7/actions/assign", fipUpdateAssignHandler(calls))
-	mux.HandleFunc("/servers", fipUpdateServersHandler)
+	mux.HandleFunc(
+		"/servers",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			selected := serversJSON
+			if name := request.URL.Query().Get("name"); name != "" {
+				selected = nil
+
+				for _, candidate := range serversJSON {
+					if strings.Contains(candidate, `"name":"`+name+`"`) {
+						selected = append(selected, candidate)
+					}
+				}
+			}
+
+			_, _ = responseWriter.Write(
+				[]byte(`{"servers":[` + strings.Join(selected, ",") + `]}`),
+			)
+		},
+	)
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -132,15 +178,6 @@ func fipUpdateAssignActionResponse(responseWriter http.ResponseWriter) {
 	if err != nil {
 		http.Error(responseWriter, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-// fipUpdateServersHandler answers the /servers list backing
-// ListNodes/GetServerByName with the canned control-plane server.
-func fipUpdateServersHandler(responseWriter http.ResponseWriter, _ *http.Request) {
-	responseWriter.Header().Set("Content-Type", "application/json")
-	_, _ = responseWriter.Write(
-		[]byte(`{"servers":[` + fipUpdateControlPlaneServerJSON + `]}`),
-	)
 }
 
 // newFipUpdateProvider builds a hetzner.Provider backed by the given httptest
@@ -344,6 +381,34 @@ func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
 		"the deferred disable transition must warn instead of staying silent")
 }
 
+// TestMergeFloatingIPChanges_DisabledIgnoresUnownedCollision verifies external
+// same-name addresses are irrelevant while floating-IP management is disabled.
+func TestMergeFloatingIPChanges_DisabledIgnoresUnownedCollision(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+			_, _ = responseWriter.Write(
+				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`))
+		},
+	)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		WithInfraProvider(newFipUpdateProvider(server.URL))
+	diff := &clusterupdate.UpdateResult{}
+
+	err := provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff)
+
+	require.NoError(t, err)
+	assert.Empty(t, diff.InPlaceChanges)
+}
+
 // TestMergeFloatingIPChanges_NoHetznerOptionsIsNoop verifies that non-Hetzner
 // configurations skip cloud detection.
 func TestMergeFloatingIPChanges_NoHetznerOptionsIsNoop(t *testing.T) {
@@ -460,6 +525,85 @@ func TestMergeFloatingIPChanges_PropagatesContextTermination(t *testing.T) {
 			assert.Empty(t, diff.InPlaceChanges)
 		})
 	}
+}
+
+// TestMergeFloatingIPChanges_ConfigDetectionPropagatesContextTermination pins
+// cancellation handling in the second, running-config detection phase after an
+// owned floating IP has already been found.
+func TestMergeFloatingIPChanges_ConfigDetectionPropagatesContextTermination(t *testing.T) {
+	t.Parallel()
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "deadline exceeded", err: context.DeadlineExceeded},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+				FloatingIPEnabled: true,
+			}).WithInfraProvider(newFipUpdateProvider(server.URL)).
+				WithNodeConfigFetcherForTest(
+					func(context.Context, string) (talosconfig.Provider, error) {
+						return nil, test.err
+					},
+				)
+			diff := &clusterupdate.UpdateResult{}
+
+			err := provisioner.MergeFloatingIPChangesForTest(
+				t.Context(), "fip-cluster", diff,
+			)
+
+			require.ErrorIs(t, err, test.err)
+			assert.Empty(t, diff.InPlaceChanges)
+		})
+	}
+}
+
+// TestRefreshFloatingIPEndpointAfterNodeChanges_RefreshesControlPlaneInventory
+// verifies a control-plane scale refreshes endpoint SANs even when live drift
+// detection was clean before the topology change and produced no floating-IP diff.
+func TestRefreshFloatingIPEndpointAfterNodeChanges_RefreshesControlPlaneInventory(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServerWithServers(
+		t,
+		true,
+		calls,
+		fipUpdateControlPlaneServerJSON,
+		fipUpdateSecondControlPlaneServerJSON,
+	)
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}).WithInfraProvider(newFipUpdateProvider(server.URL))
+
+	err := provisioner.RefreshFloatingIPEndpointAfterNodeChangesForTest(
+		t.Context(),
+		"fip-cluster",
+		&v1alpha1.ClusterSpec{ControlPlanes: 1},
+		&v1alpha1.ClusterSpec{ControlPlanes: 2},
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.NoError(t, err)
+
+	config := provisioner.TalosConfigsForTest().ControlPlane()
+	certSANs := config.Cluster().CertSANs()
+	assert.Contains(t, certSANs, "192.0.2.10")
+	assert.Contains(t, certSANs, "203.0.113.5")
+	assert.Contains(t, certSANs, "203.0.113.6",
+		"the post-scale control plane must be added to endpoint SANs")
+	assert.Equal(t, int32(1), calls.assign.Load())
 }
 
 // TestReconcileFloatingIPEndpoint_NoopWithoutChange verifies that the apply

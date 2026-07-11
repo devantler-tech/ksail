@@ -219,6 +219,7 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 
 	// Full ordered sequence — a snapshot guarding against accidental reordering.
 	assert.Equal(t, []string{
+		"validate update plan",
 		"sync Hetzner firewall rules",
 		"refresh Omni configs",
 		"sync cluster secrets",

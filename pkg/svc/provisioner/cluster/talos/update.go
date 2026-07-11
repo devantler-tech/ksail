@@ -197,6 +197,10 @@ func (p *Provisioner) mergeFloatingIPChanges(
 
 	floatingIP, detected, err := p.detectOwnedFloatingIP(ctx, name)
 	if err != nil {
+		if !p.hetznerOpts.FloatingIPEnabled && errors.Is(err, hetzner.ErrFloatingIPNotOwned) {
+			return nil
+		}
+
 		return err
 	}
 
@@ -206,9 +210,13 @@ func (p *Provisioner) mergeFloatingIPChanges(
 
 	exists := floatingIP != nil
 
-	configured, configDetected := p.detectHetznerFloatingIPConfig(
+	configured, configDetected, configErr := p.detectHetznerFloatingIPConfig(
 		ctx, name, floatingIP,
 	)
+	if configErr != nil {
+		return configErr
+	}
+
 	if !configDetected {
 		return nil
 	}
@@ -258,9 +266,9 @@ func (p *Provisioner) detectHetznerFloatingIPConfig(
 	ctx context.Context,
 	name string,
 	floatingIP *hcloud.FloatingIP,
-) (bool, bool) {
+) (bool, bool, error) {
 	if !p.hetznerOpts.FloatingIPEnabled || floatingIP == nil {
-		return false, true
+		return false, true, nil
 	}
 
 	return p.detectRunningHetznerFloatingIPConfig(
@@ -285,20 +293,27 @@ func floatingIPReconcileReason(exists bool) string {
 // control plane carries the expected endpoint/VIP state. An individual config
 // fetch failure is treated as needing idempotent reconciliation so a partial
 // prior apply is retried; inability to list any control planes remains an
-// unavailable detection and is skipped.
+// unavailable detection and is skipped. Context cancellation and deadlines
+// always propagate so DiffConfig cannot report success after termination.
 func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 	ctx context.Context,
 	clusterName, expectedIP string,
-) (bool, bool) {
+) (bool, bool, error) {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
+		if isContextTermination(err) {
+			return false, false, fmt.Errorf(
+				"failed to list control planes for floating IP config detection: %w", err,
+			)
+		}
+
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ⚠ Failed to list control planes for floating IP config detection: %v\n",
 			err,
 		)
 
-		return false, false
+		return false, false, nil
 	}
 
 	configs := make([]talosconfig.Provider, 0, len(nodes))
@@ -309,6 +324,14 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 
 		config, fetchErr := p.nodeConfigFetcher(ctx, node.IP)
 		if fetchErr != nil {
+			if isContextTermination(fetchErr) {
+				return false, false, fmt.Errorf(
+					"failed to fetch control-plane floating IP config from %s: %w",
+					node.IP,
+					fetchErr,
+				)
+			}
+
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"  ⚠ Failed to fetch control-plane floating IP config from %s: %v\n",
@@ -316,17 +339,17 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 				fetchErr,
 			)
 
-			return false, true
+			return false, true, nil
 		}
 
 		configs = append(configs, config)
 	}
 
 	if len(configs) == 0 {
-		return false, false
+		return false, false, nil
 	}
 
-	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP), true
+	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP), true, nil
 }
 
 // allControlPlanesHaveHetznerFloatingIPConfig reports whether every supplied
@@ -402,8 +425,7 @@ func (p *Provisioner) detectOwnedFloatingIP(
 // so the caller skips rather than acts on a guess).
 func (p *Provisioner) classifyFloatingIPDetectionErr(err error) error {
 	if errors.Is(err, hetzner.ErrFloatingIPNotOwned) ||
-		errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) {
+		isContextTermination(err) {
 		return fmt.Errorf("failed to detect floating IP state: %w", err)
 	}
 
@@ -414,6 +436,12 @@ func (p *Provisioner) classifyFloatingIPDetectionErr(err error) error {
 	)
 
 	return nil
+}
+
+// isContextTermination reports request-scoped termination errors even when
+// provider or transport layers wrap them with additional context.
+func isContextTermination(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // hasFloatingIPChange reports whether diff carries the floatingIPEnabled
@@ -459,6 +487,21 @@ func (p *Provisioner) applyUpdateChanges(
 	return result, nil
 }
 
+// validateUpdatePlan rejects incompatible changes before the apply sequence can
+// mutate cloud or cluster state.
+func (p *Provisioner) validateUpdatePlan(result *clusterupdate.UpdateResult) error {
+	if result == nil {
+		return nil
+	}
+
+	rollControlPlane, _ := rolesFromRollingChanges(result.RollingRecreate)
+	if rollControlPlane && hasFloatingIPChange(result) {
+		return ErrFloatingIPReconcileBeforeControlPlaneRoll
+	}
+
+	return nil
+}
+
 // updateStep is one named step in the post-PrepareUpdate apply sequence. The name
 // carries error context and lets tests assert the step ordering.
 type updateStep struct {
@@ -485,6 +528,9 @@ func (p *Provisioner) updateApplySteps(
 	opts clusterupdate.UpdateOptions,
 ) []updateStep {
 	return []updateStep{
+		{"validate update plan", func(context.Context) error {
+			return p.validateUpdatePlan(result)
+		}},
 		{"sync Hetzner firewall rules", func(ctx context.Context) error {
 			// syncHetznerFirewallRules already wraps its own errors.
 			return p.syncHetznerFirewallRules(ctx, clusterName)
@@ -532,7 +578,9 @@ func (p *Provisioner) updateApplySteps(
 			// the final control-plane set is reflected in certificate SANs and the
 			// address is attached to a surviving server. The first reconcile above
 			// remains load-bearing for the autoscaler template.
-			return wrapStepErr(p.reconcileFloatingIPEndpoint(ctx, clusterName, diff),
+			return wrapStepErr(p.refreshFloatingIPEndpointAfterNodeChanges(
+				ctx, clusterName, oldSpec, newSpec, result,
+			),
 				"failed to refresh floating IP endpoint after node changes")
 		}},
 		{"apply in-place config changes", func(ctx context.Context) error {
