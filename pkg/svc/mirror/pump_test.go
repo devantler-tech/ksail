@@ -356,6 +356,7 @@ func TestServeIntercepted_SurfacesAProtocolErrorThatTearsTheTunnelDown(t *testin
 	}
 
 	serveDone := make(chan error, 1)
+
 	go func() {
 		serveDone <- mirror.ServeIntercepted(context.Background(), session, dial)
 	}()
