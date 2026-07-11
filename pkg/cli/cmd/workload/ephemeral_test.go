@@ -168,6 +168,8 @@ func newTestCommand(t *testing.T) *cobra.Command {
 	return cmd
 }
 
+// newEphemeralTestCommand returns a minimal command wired to the supplied fake
+// provisioner and the default no-op readiness waiter.
 func newEphemeralTestCommand(t *testing.T, fake *fakeEphemeralProvisioner) *cobra.Command {
 	t.Helper()
 
