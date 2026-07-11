@@ -30,7 +30,7 @@ type NodeAutoscalerConfig struct {
 	Pools []NodePool `json:"pools,omitzero"`
 	// MaxNodesTotal caps the total number of nodes in the cluster
 	// (control-planes + workers + autoscaler nodes). 0 disables the global cap.
-	MaxNodesTotal int32 `json:"maxNodesTotal,omitzero" jsonschema:"minimum=0" jsonschema_description:"Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. The value should be <= serverLimit."` //nolint:lll
+	MaxNodesTotal int32 `json:"maxNodesTotal,omitzero" jsonschema:"minimum=0" jsonschema_description:"Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. A positive value should be <= the effective serverLimit (serverLimit: 0 means its default limit of 10)."` //nolint:lll
 	// Expander selects the Cluster Autoscaler expander strategy. It accepts a
 	// single value (e.g. LeastWaste) or an ordered priority list
 	// (e.g. [LeastNodes, LeastWaste]) applied as a chain.

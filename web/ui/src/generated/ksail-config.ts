@@ -249,7 +249,7 @@ export interface KSailClusterConfiguration {
             }[];
           }[];
           /**
-           * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. The value should be <= serverLimit.
+           * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. A positive value should be <= the effective serverLimit (serverLimit: 0 means its default limit of 10).
            */
           maxNodesTotal?: number;
           /**

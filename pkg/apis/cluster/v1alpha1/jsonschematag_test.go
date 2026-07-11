@@ -95,6 +95,44 @@ func TestJSONSchemaTagsContainNoSeveredDescriptions(t *testing.T) {
 	}
 }
 
+// TestGeneratedCRDCarriesCurrentDescriptions pins the generated operator CRD
+// to the doc comments it is rendered from: the schema-focused test above cannot
+// see charts/ksail-operator/crds/ksail.io_clusters.yaml (controller-gen renders
+// CRD descriptions from doc comments, not jsonschema tags), so a doc-comment
+// fix that ships without `make generate` would leave the chart's CRD stale and
+// still pass. YAML wraps long descriptions across indented lines, so the
+// comparison collapses all whitespace before matching.
+func TestGeneratedCRDCarriesCurrentDescriptions(t *testing.T) {
+	t.Parallel()
+
+	crdPath := filepath.Join(
+		"..", "..", "..", "..",
+		"charts", "ksail-operator", "crds", "ksail.io_clusters.yaml",
+	)
+
+	raw, err := os.ReadFile(crdPath)
+	if err != nil {
+		t.Fatalf("reading generated CRD: %v", err)
+	}
+
+	normalized := strings.Join(strings.Fields(string(raw)), " ")
+
+	for _, want := range []string{
+		// ClusterSpec.DistributionConfig doc comment (types.go).
+		"(e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml," +
+			" aks.yaml, or the talos directory).",
+		"When empty, KSail uses the distribution's default configuration path.",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Errorf(
+				"generated CRD %s is stale: missing doc-comment text %q —"+
+					" run `make generate` after editing doc comments",
+				crdPath, want,
+			)
+		}
+	}
+}
+
 // assertNoSeveredTagPieces splits one field's jsonschema tag the way the
 // reflector does and reports any piece that is not a known option key.
 func assertNoSeveredTagPieces(
