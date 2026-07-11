@@ -94,12 +94,30 @@ func DerivePlan(repoRoot, sourceDir string, load ConfigLoader) (Plan, error) {
 		return Plan{}, err
 	}
 
+	entries, declaredNames, err := planEntries(declared, overlays)
+	if err != nil {
+		return Plan{}, err
+	}
+
+	return Plan{
+		Entries: entries,
+		Orphans: orphanOverlays(overlays, declaredNames, baseConfigOverlayName(load)),
+	}, nil
+}
+
+// planEntries pairs each declared environment with its overlay state, rejecting
+// the reserved base name (see DerivePlan), and returns the declared-name set the
+// orphan scan filters against.
+func planEntries(
+	declared []Environment,
+	overlays map[string]struct{},
+) ([]PlanEntry, map[string]struct{}, error) {
 	entries := make([]PlanEntry, 0, len(declared))
 	declaredNames := make(map[string]struct{}, len(declared))
 
 	for _, env := range declared {
 		if env.Name == BaseEnvName {
-			return Plan{}, fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"%w: %s declares environment %q, which is the shared clusters/%s overlay",
 				ErrReservedEnvironmentName, env.ConfigFile, env.Name, BaseEnvName,
 			)
@@ -119,7 +137,17 @@ func DerivePlan(repoRoot, sourceDir string, load ConfigLoader) (Plan, error) {
 		})
 	}
 
-	baseSynced := baseConfigOverlayName(load)
+	return entries, declaredNames, nil
+}
+
+// orphanOverlays lists the overlay directories nothing declares, sorted —
+// excluding the shared base overlay and the overlay the base ksail.yaml syncs
+// (baseSynced, "" when there is none).
+func orphanOverlays(
+	overlays map[string]struct{},
+	declaredNames map[string]struct{},
+	baseSynced string,
+) []string {
 	orphans := make([]string, 0, len(overlays))
 
 	for name := range overlays {
@@ -134,7 +162,7 @@ func DerivePlan(repoRoot, sourceDir string, load ConfigLoader) (Plan, error) {
 
 	slices.SortFunc(orphans, strings.Compare)
 
-	return Plan{Entries: entries, Orphans: orphans}, nil
+	return orphans
 }
 
 // baseConfigOverlayName reports the clusters/<name> overlay the workspace's
