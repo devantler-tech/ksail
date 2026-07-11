@@ -26,4 +26,14 @@ ARG TARGETPLATFORM
 # command exec'd over the tunnel is simply `ksail steer-agent …`.
 COPY ${TARGETPLATFORM}/ksail /usr/local/bin/ksail
 
+# Point the XDG state dir at a writable tmpfs. ksail links k9s's cmd package,
+# whose init() prints "Fail to init k9s logs location …" to STDOUT when it cannot
+# create its state dir (the default ~/.local/state is unwritable under this
+# read-only-rootfs steer container). For `ksail steer-agent` STDOUT *is* the
+# tunnel channel, so that banner would inject non-frame bytes and corrupt the
+# steering tunnel — the intercept client rejects it as an unknown frame type.
+# /dev/shm is a writable tmpfs present in every pod, so InitLogLoc succeeds and
+# emits nothing.
+ENV XDG_STATE_HOME=/dev/shm
+
 ENTRYPOINT ["/usr/local/bin/ksail"]

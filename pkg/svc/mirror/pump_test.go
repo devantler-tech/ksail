@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ type pipeListener struct {
 	closed    chan struct{}
 }
 
+// newPipeListener builds a pipeListener ready to accept delivered connections.
 func newPipeListener() *pipeListener {
 	return &pipeListener{
 		conns:     make(chan net.Conn),
@@ -29,6 +31,7 @@ func newPipeListener() *pipeListener {
 	}
 }
 
+// Accept blocks until a test delivers a connection or the listener closes.
 func (l *pipeListener) Accept() (net.Conn, error) {
 	select {
 	case conn := <-l.conns:
@@ -38,12 +41,14 @@ func (l *pipeListener) Accept() (net.Conn, error) {
 	}
 }
 
+// Close ends the listener; pending and future Accepts return net.ErrClosed.
 func (l *pipeListener) Close() error {
 	l.closeOnce.Do(func() { close(l.closed) })
 
 	return nil
 }
 
+// Addr returns a synthetic address naming the fake listener.
 func (l *pipeListener) Addr() net.Addr {
 	return &net.UnixAddr{Name: "ksail-steer-test", Net: "unix"}
 }
@@ -76,8 +81,10 @@ type failingHalf struct {
 	writeErr error
 }
 
+// Read fails immediately with the configured read error.
 func (f *failingHalf) Read([]byte) (int, error) { return 0, f.readErr }
 
+// Write fails with the configured write error, or accepts the bytes when unset.
 func (f *failingHalf) Write(p []byte) (int, error) {
 	if f.writeErr != nil {
 		return 0, f.writeErr
@@ -86,8 +93,11 @@ func (f *failingHalf) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Close is a no-op — the fake transport holds no resources.
 func (f *failingHalf) Close() error { return nil }
 
+// TestPump_CopiesBothDirectionsAndTearsDownOnEOF pins that Pump relays bytes
+// both ways and, when one side ends, closes both halves so the peer sees EOF.
 func TestPump_CopiesBothDirectionsAndTearsDownOnEOF(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +139,8 @@ func TestPump_CopiesBothDirectionsAndTearsDownOnEOF(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+// TestPump_ReturnsTheErrorThatEndedTheFirstDirection pins that Pump surfaces
+// the transport error that tore the first direction down.
 func TestPump_ReturnsTheErrorThatEndedTheFirstDirection(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +151,8 @@ func TestPump_ReturnsTheErrorThatEndedTheFirstDirection(t *testing.T) {
 	require.ErrorIs(t, err, errTransportTorn)
 }
 
+// TestForwardRedirected_BridgesARedirectedConnectionRoundTrip pins that a
+// redirected connection is bridged over the tunnel and echoes end to end.
 func TestForwardRedirected_BridgesARedirectedConnectionRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +196,8 @@ func TestForwardRedirected_BridgesARedirectedConnectionRoundTrip(t *testing.T) {
 	}
 }
 
+// TestForwardRedirected_ReturnsNilWhenTheSessionIsClosed pins that closing the
+// tunnel session ends forwarding as a clean stop, not an error.
 func TestForwardRedirected_ReturnsNilWhenTheSessionIsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +223,8 @@ func TestForwardRedirected_ReturnsNilWhenTheSessionIsClosed(t *testing.T) {
 	}
 }
 
+// TestForwardRedirected_AFailedStreamOpenClosesTheConnection pins that a
+// connection whose tunnel stream cannot open is closed instead of leaked.
 func TestForwardRedirected_AFailedStreamOpenClosesTheConnection(t *testing.T) {
 	t.Parallel()
 
@@ -246,6 +264,8 @@ func TestForwardRedirected_AFailedStreamOpenClosesTheConnection(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+// TestServeIntercepted_DialsTheLocalProcessAndPumps pins that each intercepted
+// stream dials the developer's local process and pumps bytes both ways.
 func TestServeIntercepted_DialsTheLocalProcessAndPumps(t *testing.T) {
 	t.Parallel()
 
@@ -290,6 +310,8 @@ func TestServeIntercepted_DialsTheLocalProcessAndPumps(t *testing.T) {
 	}
 }
 
+// TestServeIntercepted_AFailedDialClosesTheStream pins that a failed local
+// dial closes the intercepted stream rather than leaving it half-open.
 func TestServeIntercepted_AFailedDialClosesTheStream(t *testing.T) {
 	t.Parallel()
 
@@ -313,6 +335,8 @@ func TestServeIntercepted_AFailedDialClosesTheStream(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+// TestServeIntercepted_ReturnsNilWhenTheSessionCloses pins that a closed
+// session ends serving as a clean stop, not an error.
 func TestServeIntercepted_ReturnsNilWhenTheSessionCloses(t *testing.T) {
 	t.Parallel()
 
@@ -339,6 +363,39 @@ func TestServeIntercepted_ReturnsNilWhenTheSessionCloses(t *testing.T) {
 	}
 }
 
+// TestServeIntercepted_SurfacesAProtocolErrorThatTearsTheTunnelDown pins that a
+// steering channel yielding non-frame bytes (e.g. a stray banner the agent
+// image printed onto its stdout, the tunnel channel) corrupts the demux, tears
+// the session down with a codec error, and ServeIntercepted surfaces that error
+// rather than returning nil — a corrupted tunnel is a diagnosable failure,
+// never a silent success.
+func TestServeIntercepted_SurfacesAProtocolErrorThatTearsTheTunnelDown(t *testing.T) {
+	t.Parallel()
+
+	garbage := io.NopCloser(strings.NewReader("Fail to init k9s logs location\n"))
+	session := mirror.NewTunnelSession(garbage, io.Discard, mirror.TunnelRoleClient)
+
+	dial := func(_ context.Context) (io.ReadWriteCloser, error) {
+		return nil, errTransportTorn
+	}
+
+	serveDone := make(chan error, 1)
+
+	go func() {
+		serveDone <- mirror.ServeIntercepted(context.Background(), session, dial)
+	}()
+
+	select {
+	case serveErr := <-serveDone:
+		require.Error(t, serveErr)
+		require.ErrorIs(t, serveErr, mirror.ErrTunnelUnknownFrameType)
+	case <-time.After(testTimeout):
+		t.Fatal("serve loop did not return after the tunnel was corrupted")
+	}
+}
+
+// TestInterceptPump_EndToEndEchoThroughTheTunnel pins the whole intercept data
+// path: agent-side forwarding and client-side serving echo through the tunnel.
 func TestInterceptPump_EndToEndEchoThroughTheTunnel(t *testing.T) {
 	t.Parallel()
 
