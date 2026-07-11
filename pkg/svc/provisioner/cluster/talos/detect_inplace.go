@@ -228,11 +228,18 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		return nil, err
 	}
 
-	endpointIP := running.Cluster().Endpoint().Hostname()
-	if endpointIP != "" {
-		aligned, err = aligned.WithEndpoint(endpointIP)
-		if err != nil {
-			return nil, fmt.Errorf("align endpoint for config comparison: %w", err)
+	// Most updates must preserve the endpoint the node currently runs. A
+	// floating-IP reconcile is the exception: updateConfigsWithEndpoint has just
+	// made the desired bundle authoritative by pairing its endpoint with an
+	// HCloud VIP. Replacing that endpoint with the stale running direct-node IP
+	// would undo the reconcile immediately before the in-place push (#5947).
+	if !p.hasDesiredHetznerFloatingIPEndpoint() {
+		endpointIP := running.Cluster().Endpoint().Hostname()
+		if endpointIP != "" {
+			aligned, err = aligned.WithEndpoint(endpointIP)
+			if err != nil {
+				return nil, fmt.Errorf("align endpoint for config comparison: %w", err)
+			}
 		}
 	}
 
@@ -263,6 +270,27 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	}
 
 	return graftNodeHostname(grafted, running)
+}
+
+// hasDesiredHetznerFloatingIPEndpoint reports whether the desired bundle carries
+// a self-consistent HCloud VIP and matching cluster endpoint. That pair is only
+// present after floating-IP reconciliation (or an equivalent explicit desired
+// patch), so it is safe to treat as authoritative over stale running endpoints.
+// The control-plane config is the source of truth for both control-plane and
+// worker rebuilds because only control planes carry the VIP block.
+func (p *Provisioner) hasDesiredHetznerFloatingIPEndpoint() bool {
+	if p.talosConfigs == nil {
+		return false
+	}
+
+	controlPlane := p.talosConfigs.ControlPlane()
+	if controlPlane == nil || controlPlane.Cluster().Endpoint() == nil {
+		return false
+	}
+
+	endpointIP := controlPlane.Cluster().Endpoint().Hostname()
+
+	return hasHetznerFloatingIPConfig(controlPlane, endpointIP)
 }
 
 // alignSecretsFromSource regenerates the desired config bundle realigned with the

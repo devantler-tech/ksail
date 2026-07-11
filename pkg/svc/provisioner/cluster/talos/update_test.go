@@ -223,10 +223,11 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"refresh Omni configs",
 		"sync cluster secrets",
 		"apply wipe-required changes",
+		"reconcile floating IP endpoint",
 		"ensure autoscaler config secret",
 		"apply node scaling changes",
 		"apply rolling recreate changes",
-		"reconcile floating IP endpoint",
+		"refresh floating IP endpoint after node changes",
 		"apply in-place config changes",
 		"apply reboot-required changes",
 	}, names)
@@ -240,13 +241,16 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 	assert.Less(t, autoscalerIdx, scalingIdx,
 		"autoscaler config secret must be refreshed before static-node scaling (#5219)")
 
-	// The floating-IP invariant (#5947): the endpoint reconcile regenerates the
-	// stored configs, so it must precede the in-place push that delivers them.
+	// The floating-IP invariants (#5947): endpoint reconciliation regenerates the
+	// stored configs, so it must precede both the autoscaler worker-template render
+	// and the in-place push that delivers the endpoint to running nodes.
 	floatingIPIdx := slices.Index(names, "reconcile floating IP endpoint")
 	inPlaceIdx := slices.Index(names, "apply in-place config changes")
 
 	require.NotEqual(t, -1, floatingIPIdx, "floating IP step must be present")
 	require.NotEqual(t, -1, inPlaceIdx, "in-place config step must be present")
+	assert.Less(t, floatingIPIdx, autoscalerIdx,
+		"floating IP reconcile must refresh configs before autoscaler template rendering (#5947)")
 	assert.Less(t, floatingIPIdx, inPlaceIdx,
 		"floating IP reconcile must regenerate configs before the in-place push (#5947)")
 }

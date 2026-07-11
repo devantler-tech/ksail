@@ -37,20 +37,6 @@ func (p *Provisioner) Update(
 	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
 	p.mergeServerTypeRollingChanges(ctx, name, diff, diffErr)
 
-	// Detect a floatingIPEnabled config whose floating IP does not actually exist
-	// and merge it into diff, so enabling the field on a running cluster is
-	// reconciled instead of silently no-oping (#5947). Skipped when the diff
-	// itself failed (PrepareUpdate surfaces diffErr). An ownership collision (a
-	// same-name floating IP ksail does not own) fails the update: succeeding
-	// without the endpoint reconcile would be exactly the silent no-op this
-	// detection exists to prevent.
-	if diffErr == nil {
-		fipErr := p.mergeFloatingIPChanges(ctx, name, diff)
-		if fipErr != nil {
-			return nil, fipErr
-		}
-	}
-
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
@@ -518,6 +504,13 @@ func (p *Provisioner) updateApplySteps(
 			return wrapStepErr(p.applyWipeRequiredChanges(ctx, clusterName, result),
 				"failed to apply wipe-required changes")
 		}},
+		{"reconcile floating IP endpoint", func(ctx context.Context) error {
+			// The autoscaler Secret embeds p.talosConfigs.Worker(), so establish
+			// the stable endpoint before rendering that template. Secret sync has
+			// already aligned the bundle with the running cluster's PKI.
+			return wrapStepErr(p.reconcileFloatingIPEndpoint(ctx, clusterName, diff),
+				"failed to reconcile floating IP endpoint")
+		}},
 		{"ensure autoscaler config secret", func(ctx context.Context) error {
 			return wrapStepErr(p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result),
 				"failed to ensure autoscaler config secret")
@@ -532,12 +525,13 @@ func (p *Provisioner) updateApplySteps(
 			return wrapStepErr(p.applyRollingRecreateChanges(ctx, clusterName, result),
 				"failed to apply rolling recreate changes")
 		}},
-		{"reconcile floating IP endpoint", func(ctx context.Context) error {
-			// Runs after scaling/rolling recreate (control planes exist) and
-			// before the in-place config push, which delivers the regenerated
-			// VIP config to the running control planes.
+		{"refresh floating IP endpoint after node changes", func(ctx context.Context) error {
+			// Re-run the idempotent reconcile after scaling/rolling replacement so
+			// the final control-plane set is reflected in certificate SANs and the
+			// address is attached to a surviving server. The first reconcile above
+			// remains load-bearing for the autoscaler template.
 			return wrapStepErr(p.reconcileFloatingIPEndpoint(ctx, clusterName, diff),
-				"failed to reconcile floating IP endpoint")
+				"failed to refresh floating IP endpoint after node changes")
 		}},
 		{"apply in-place config changes", func(ctx context.Context) error {
 			if !p.shouldApplyInPlaceChanges(diff) {
@@ -615,6 +609,15 @@ func (p *Provisioner) DiffConfig(
 	p.appendInPlaceMachineConfigDrift(ctx, name, result)
 
 	err := p.appendAutoscalerTemplateDrift(ctx, result)
+	if err != nil {
+		return result, err
+	}
+
+	// Live floating-IP drift must be part of DiffConfig because the CLI uses this
+	// result as its preflight gate. Detecting it only inside Update is unreachable
+	// when floatingIPEnabled is the sole desired change: the CLI would otherwise
+	// report "No changes detected" and never call Update (#5947).
+	err = p.mergeFloatingIPChanges(ctx, name, result)
 	if err != nil {
 		return result, err
 	}
