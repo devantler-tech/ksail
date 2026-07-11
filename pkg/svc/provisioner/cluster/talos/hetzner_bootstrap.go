@@ -208,13 +208,15 @@ func (p *Provisioner) saveHetznerKubeconfig(
 		return fmt.Errorf("failed to fetch kubeconfig: %w", err)
 	}
 
-	// The kubeconfig from Talos uses internal IPs. Rewrite the server endpoint to the
-	// node's reachable address: its public IPv4, or its private-network IP when the
-	// control plane is IPv4-less (in which case the kubeconfig only works from inside
-	// the private network).
+	// The kubeconfig from Talos uses internal IPs. Rewrite the server endpoint to
+	// the cluster's effective API endpoint: the floating IP when enabled (so the
+	// saved file survives control-plane replacement, #6043), else the fetched
+	// node's reachable address — its public IPv4, or its private-network IP when
+	// the control plane is IPv4-less (in which case the kubeconfig only works
+	// from inside the private network).
 	kubeconfig, err = rewriteKubeconfigEndpoint(
 		kubeconfig,
-		"https://"+net.JoinHostPort(nodeIP, "6443"),
+		p.kubeconfigEndpointURL(nodeIP),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
@@ -383,4 +385,17 @@ func (p *Provisioner) discoverHetznerServers(
 	}
 
 	return controlPlaneServers, workerServers, nil
+}
+
+// kubeconfigEndpointURL returns the URL the saved kubeconfig's server entries
+// are rewritten to: the effective cluster endpoint rendered into the machine
+// configs when one exists (the floating IP when FloatingIPEnabled), else the
+// given node's reachable address.
+func (p *Provisioner) kubeconfigEndpointURL(nodeIP string) string {
+	endpointIP := p.clusterEndpointIP
+	if endpointIP == "" {
+		endpointIP = nodeIP
+	}
+
+	return "https://" + net.JoinHostPort(endpointIP, "6443")
 }

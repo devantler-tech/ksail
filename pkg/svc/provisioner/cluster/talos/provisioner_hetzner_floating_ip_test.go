@@ -170,6 +170,21 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 	assert.NotContains(t, configs.ControlPlane().Cluster().CertSANs(), "192.0.2.10")
 	assert.Empty(t, configs.ControlPlane().Machine().Network().Devices(),
 		"disabled floating IP must render no VIP interface block")
+	assert.Equal(t, "https://203.0.113.5:6443",
+		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
+		"disabled path must save the kubeconfig against the node's reachable address")
+}
+
+// TestKubeconfigEndpointURL_FallsBackToNodeIP pins the defensive default: a
+// provisioner that never rendered an endpoint (updateConfigsWithEndpoint not
+// run) rewrites the kubeconfig to the dialed node's address.
+func TestKubeconfigEndpointURL_FallsBackToNodeIP(t *testing.T) {
+	t.Parallel()
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{})
+
+	assert.Equal(t, "https://203.0.113.7:6443",
+		provisioner.KubeconfigEndpointURLForTest("203.0.113.7"))
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabled verifies the opt-in path:
@@ -234,6 +249,13 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 
 	// Workers claim nothing: the VIP patch is control-plane-scoped.
 	assert.Empty(t, configs.Worker().Machine().Network().Devices())
+
+	// The saved kubeconfig must target the stable floating-IP endpoint, not the
+	// first control-plane node it was fetched from (#6043) — otherwise replacing
+	// that cattle node still breaks every saved kubeconfig.
+	assert.Equal(t, "https://192.0.2.10:6443",
+		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
+		"kubeconfig endpoint must be the floating IP when the feature is enabled")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the
