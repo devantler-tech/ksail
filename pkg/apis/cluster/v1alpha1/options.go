@@ -36,14 +36,14 @@ type OptionsTalos struct {
 	// Deprecated: use spec.cluster.controlPlanes. This field is kept as a
 	// migration alias and emits a warning on load. Removal planned in a
 	// future minor release.
-	ControlPlanes int32 `json:"controlPlanes,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.controlPlanes instead,minimum=0"` //nolint:lll
+	ControlPlanes int32 `json:"controlPlanes,omitzero" jsonschema:"minimum=0" jsonschema_description:"DEPRECATED: use spec.cluster.controlPlanes instead"` //nolint:lll
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
 	//
 	// Deprecated: use spec.cluster.workers. This field is kept as a
 	// migration alias and emits a warning on load. Removal planned in a
 	// future minor release.
-	Workers int32 `json:"workers,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.workers instead,minimum=0"` //nolint:lll
+	Workers int32 `json:"workers,omitzero" jsonschema:"minimum=0" jsonschema_description:"DEPRECATED: use spec.cluster.workers instead"` //nolint:lll
 	// Config is the path to the talosconfig file.
 	// Defaults to "~/.talos/config".
 	Config string `default:"~/.talos/config" json:"config,omitzero"`
@@ -83,7 +83,7 @@ type OptionsTalos struct {
 	// Deprecated: use spec.cluster.imageVerification. This field is kept as a
 	// migration alias and emits a warning on load (the value is copied into the
 	// cluster-level field). Removal planned in a future minor release.
-	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.imageVerification instead"` //nolint:lll
+	ImageVerification ImageVerification `json:"imageVerification,omitzero" jsonschema_description:"DEPRECATED: use spec.cluster.imageVerification instead"` //nolint:lll
 	// DrainTimeout is the per-node pod-eviction budget for rolling node drains during
 	// `cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When
 	// unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
@@ -172,7 +172,7 @@ type OptionsHetzner struct {
 	// server creation fails in the primary location due to resource unavailability.
 	// Defaults to ["nbg1", "hel1"] (Nuremberg, Helsinki) as fallbacks for fsn1 (Falkenstein).
 	// All locations should be in the same network zone (eu-central) for consistency.
-	FallbackLocations []string `json:"fallbackLocations,omitzero" jsonschema:"description=Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."` //nolint:lll
+	FallbackLocations []string `json:"fallbackLocations,omitzero" jsonschema_description:"Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."` //nolint:lll
 	// PlacementGroupFallbackToNone allows automatic fallback to no placement group
 	// when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).
 	// When true and placement fails, retries server creation without a placement group.
@@ -207,13 +207,13 @@ type OptionsHetzner struct {
 	// the configured autoscaler capacity from exceeding the account/project server quota.
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
-	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
+	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"minimum=0" jsonschema_description:"Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10"` //nolint:lll
 	// AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
 	// on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
 	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
 	// and the Talos OS-level ingress firewall for defense-in-depth.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
-	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema:"description=CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
 	// nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
 	// IPv4-less workers; ksail then reaches their Talos API over the private network — which
