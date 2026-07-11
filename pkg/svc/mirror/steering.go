@@ -116,14 +116,7 @@ func (r SteeringRedirect) args(action string) ([]string, error) {
 		return nil, err
 	}
 
-	prefix := []string{"-t", steeringTable, action, steeringChain}
-	spec := r.ruleSpec()
-
-	args := make([]string, 0, len(prefix)+len(spec))
-	args = append(args, prefix...)
-	args = append(args, spec...)
-
-	return args, nil
+	return assembleRuleArgs(steeringTable, steeringChain, action, r.ruleSpec()), nil
 }
 
 // guardArgs builds the full iptables argument vector for the guard rule's
@@ -134,14 +127,19 @@ func (r SteeringRedirect) guardArgs(action string) ([]string, error) {
 		return nil, err
 	}
 
-	prefix := []string{"-t", guardTable, action, guardChain}
-	spec := r.guardRuleSpec()
+	return assembleRuleArgs(guardTable, guardChain, action, r.guardRuleSpec()), nil
+}
+
+// assembleRuleArgs concatenates a rule's table/chain prefix and its
+// specification into one iptables argument vector.
+func assembleRuleArgs(table, chain, action string, spec []string) []string {
+	prefix := []string{"-t", table, action, chain}
 
 	args := make([]string, 0, len(prefix)+len(spec))
 	args = append(args, prefix...)
 	args = append(args, spec...)
 
-	return args, nil
+	return args
 }
 
 // ruleSpec is the rule specification shared verbatim by insertion and
