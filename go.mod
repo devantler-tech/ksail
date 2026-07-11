@@ -15,7 +15,7 @@ require (
 	github.com/docker/go-connections v0.7.0
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.1
-	github.com/fluxcd/kustomize-controller/api v1.9.0
+	github.com/fluxcd/kustomize-controller/api v1.9.1
 	github.com/fluxcd/pkg/apis/meta v1.31.0
 	github.com/fluxcd/source-controller/api v1.9.1
 	github.com/getsops/sops/v3 v3.13.2
@@ -77,10 +77,10 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.5
 	github.com/go-jose/go-jose/v4 v4.1.4
-	github.com/google/cel-go v0.28.1
+	github.com/google/cel-go v0.29.1
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.22.0
-	github.com/gopacket/gopacket v1.6.1
+	github.com/gopacket/gopacket v1.7.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.44.0
 	github.com/invopop/jsonschema v0.14.0
@@ -92,11 +92,11 @@ require (
 	github.com/rancher/k3k v1.1.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/siderolabs/crypto v0.6.5
-	github.com/siderolabs/gen v0.8.6
+	github.com/siderolabs/gen v0.8.7
 	github.com/siderolabs/go-kubernetes v0.2.40
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
-	github.com/siderolabs/omni/client v1.9.0
+	github.com/siderolabs/omni/client v1.9.1
 	github.com/sigstore/sigstore v1.10.8
 	github.com/sigstore/sigstore-go v1.2.1
 	github.com/zalando/go-keyring v0.2.8

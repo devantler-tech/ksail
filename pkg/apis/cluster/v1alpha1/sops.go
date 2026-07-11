@@ -15,7 +15,7 @@ type SOPS struct {
 	//   - Enabled = require key (error if not found).
 	//   - Disabled = disable entirely (skip secret creation).
 	// A YAML boolean is still accepted on load (true -> Enabled, false -> Disabled).
-	Enabled SOPSEnabled `json:"enabled,omitzero" jsonschema:"description=Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
+	Enabled SOPSEnabled `json:"enabled,omitzero" jsonschema_description:"Whether the SOPS Age secret is created. Default auto-detects (creates only when an Age key is found); Enabled requires a key (errors if missing); Disabled skips creation. A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
 	// Env configures the environment variable source for the Age private key.
 	Env SOPSEnv `json:"env,omitzero"`
 	// Extract configures extraction of Age private keys from a key file.

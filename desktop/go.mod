@@ -291,7 +291,7 @@ require (
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.1 // indirect
 	github.com/fluxcd/helm-controller/api v1.6.1 // indirect
-	github.com/fluxcd/kustomize-controller/api v1.9.0 // indirect
+	github.com/fluxcd/kustomize-controller/api v1.9.1 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.31.0 // indirect
@@ -364,7 +364,7 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.28.1 // indirect
+	github.com/google/cel-go v0.29.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -383,7 +383,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
-	github.com/gopacket/gopacket v1.6.1 // indirect
+	github.com/gopacket/gopacket v1.7.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
@@ -628,7 +628,7 @@ require (
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/siderolabs/crypto v0.6.5 // indirect
-	github.com/siderolabs/gen v0.8.6 // indirect
+	github.com/siderolabs/gen v0.8.7 // indirect
 	github.com/siderolabs/go-api-signature v0.3.13 // indirect
 	github.com/siderolabs/go-blockdevice/v2 v2.0.29 // indirect
 	github.com/siderolabs/go-cmd v0.2.0 // indirect
@@ -639,7 +639,7 @@ require (
 	github.com/siderolabs/go-talos-support v0.2.1 // indirect
 	github.com/siderolabs/image-factory v1.3.3 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
-	github.com/siderolabs/omni/client v1.9.0 // indirect
+	github.com/siderolabs/omni/client v1.9.1 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/siderolabs/talos v1.14.0-alpha.1 // indirect

@@ -2,9 +2,9 @@
 description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
 metadata:
     github-path: skills/find-skills
-    github-ref: refs/tags/v1.5.13
+    github-ref: refs/tags/v1.5.16
     github-repo: https://github.com/vercel-labs/skills
-    github-tree-sha: eb6a23305aea6e340d14b9de3766e721f9f4861b
+    github-tree-sha: 76a98a285cb0434f3d39e1a873823556330e398b
 name: find-skills
 ---
 # Find Skills
@@ -30,7 +30,6 @@ The Skills CLI (`npx skills`) is the package manager for the open agent skills e
 
 - `npx skills find [query] [--owner <owner>]` - Search for skills interactively or by keyword, optionally scoped to a GitHub owner
 - `npx skills add <package>` - Install a skill from GitHub or other sources
-- `npx skills check` - Check for skill updates
 - `npx skills update` - Update all installed skills
 
 **Browse skills at:** https://skills.sh/
