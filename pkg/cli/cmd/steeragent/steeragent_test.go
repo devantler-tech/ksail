@@ -12,6 +12,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/steeragent"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const waitTimeout = 2 * time.Second
@@ -50,6 +52,18 @@ func (t *fakeTransport) Close() error {
 type blockingListener struct {
 	closeOnce sync.Once
 	closed    chan struct{}
+}
+
+// errorListener fails its first Accept, so tests can let the steering-agent
+// composition install its rules and then return without waiting on a context.
+type errorListener struct{ err error }
+
+func (l *errorListener) Accept() (net.Conn, error) { return nil, l.err }
+
+func (l *errorListener) Close() error { return nil }
+
+func (l *errorListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4zero, Port: 0}
 }
 
 func newBlockingListener() *blockingListener { return &blockingListener{closed: make(chan struct{})} }
@@ -95,6 +109,7 @@ func (rec *callRecorder) run(_ context.Context, name string, args ...string) err
 
 func (rec *callRecorder) assertInstallThenRemove(t *testing.T) {
 	t.Helper()
+
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
@@ -111,6 +126,21 @@ func (rec *callRecorder) assertInstallThenRemove(t *testing.T) {
 	if !slices.Contains(last, "-D") || !slices.Contains(last, "8080") {
 		t.Errorf("last call should delete (-D) service port 8080, got %v", last)
 	}
+}
+
+func (rec *callRecorder) hasSequence(sequence ...string) bool {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	for _, call := range rec.calls {
+		for start := 0; start+len(sequence) <= len(call); start++ {
+			if slices.Equal(call[start:start+len(sequence)], sequence) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func waitFor(t *testing.T, signal <-chan struct{}, msg string) {
@@ -181,16 +211,92 @@ func TestRunForTest_RejectsInvalidPorts(t *testing.T) {
 func TestRunForTest_PropagatesListenError(t *testing.T) {
 	t.Parallel()
 
+	recorder := newCallRecorder()
+
 	err := steeragent.RunForTest(context.Background(), 8080, 19000, newFakeTransport(),
 		func(context.Context, int) (net.Listener, error) { return nil, errBoom },
-		func(context.Context, string, ...string) error {
-			t.Error("runner must not be called when the listener fails to open")
-
-			return nil
-		})
+		recorder.run)
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("expected the wrapped listen error, got %v", err)
 	}
+
+	assert.True(
+		t,
+		recorder.hasSequence("-I", "INPUT"),
+		"the guard installs before the bind attempt",
+	)
+	assert.True(t, recorder.hasSequence("-D", "INPUT"), "the guard is removed after the bind fails")
+	assert.False(
+		t,
+		recorder.hasSequence("-I", "PREROUTING"),
+		"a failed bind never installs the redirect",
+	)
+}
+
+func TestRunForTest_InstallsGuardBeforeOpeningListener(t *testing.T) {
+	t.Parallel()
+
+	var (
+		eventsMu sync.Mutex
+		events   []string
+	)
+
+	record := func(event string) {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+
+		events = append(events, event)
+	}
+	runner := func(_ context.Context, _ string, args ...string) error {
+		switch {
+		case slices.Contains(args, "--ctorigdstport"):
+			if slices.Contains(args, "-I") {
+				record("install guard")
+			} else {
+				record("remove guard")
+			}
+		default:
+			record("redirect")
+		}
+
+		return nil
+	}
+	listen := func(context.Context, int) (net.Listener, error) {
+		record("listen")
+
+		return nil, errBoom
+	}
+
+	err := steeragent.RunForTest(
+		context.Background(), 8080, 19000, newFakeTransport(), listen, runner,
+	)
+
+	require.ErrorIs(t, err, errBoom)
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+
+	require.GreaterOrEqual(t, len(events), 3, "recorded events: %v", events)
+	assert.Equal(t, []string{"install guard", "listen", "remove guard"}, events[:3])
+}
+
+func TestRunForTest_RestrictsGuardToTheServiceRedirect(t *testing.T) {
+	t.Parallel()
+
+	recorder := newCallRecorder()
+	err := steeragent.RunForTest(
+		context.Background(), 8080, 19000, newFakeTransport(),
+		func(context.Context, int) (net.Listener, error) {
+			return &errorListener{err: errBoom}, nil
+		},
+		recorder.run,
+	)
+
+	require.ErrorIs(t, err, errBoom)
+	assert.True(
+		t,
+		recorder.hasSequence("!", "--ctorigdstport", "8080"),
+		"a DNAT path to the intercept port is allowed only when its original destination is the service port",
+	)
 }
 
 func TestRunForTest_PropagatesInstallError(t *testing.T) {
@@ -201,6 +307,29 @@ func TestRunForTest_PropagatesInstallError(t *testing.T) {
 		func(context.Context, string, ...string) error { return errBoom })
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("expected the wrapped install error, got %v", err)
+	}
+}
+
+func TestListenIntercept_BindsAllIPv4Interfaces(t *testing.T) {
+	t.Parallel()
+
+	listener, err := steeragent.ListenInterceptForTest(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+
+	defer func() { _ = listener.Close() }()
+
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("expected a *net.TCPAddr, got %T", listener.Addr())
+	}
+
+	// REDIRECT delivers remote traffic to the pod IP, not loopback (#6039), so
+	// the listener must bind every IPv4 interface; the agent's iptables guard
+	// rule re-establishes least exposure.
+	if !tcpAddr.IP.Equal(net.IPv4zero) {
+		t.Errorf("listener bound %s, want 0.0.0.0 (all IPv4 interfaces)", tcpAddr.IP)
 	}
 }
 

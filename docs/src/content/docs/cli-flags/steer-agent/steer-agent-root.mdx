@@ -10,8 +10,9 @@ Run the KSail traffic-steering agent.
 
 The steering agent runs inside an ephemeral container that shares a target pod's
 network namespace. It installs an iptables NAT REDIRECT rule for the workload's
-service port and forwards the redirected connections over a tunnel — its
-stdin/stdout, the exec channel — to a local process on the developer's machine.
+service port (plus a guard that drops direct hits on the intercept port) and
+forwards the redirected connections over a tunnel — its stdin/stdout, the exec
+channel — to a local process on the developer's machine.
 It is execed by `ksail workload intercept` via the KSail steering image
 rather than run directly.
 
@@ -19,7 +20,7 @@ Usage:
   ksail steer-agent [flags]
 
 Flags:
-      --intercept-port int   The loopback port the agent listens on and redirects the service port to
+      --intercept-port int   The port the agent listens on and redirects the service port to
       --service-port int     The workload port whose inbound TCP is steered
 
 Global Flags:
