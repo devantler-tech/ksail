@@ -8,6 +8,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 )
 
+// ListenInterceptForTest exposes the production listener factory so the
+// black-box test package can pin its bind address.
+func ListenInterceptForTest(ctx context.Context, port int) (net.Listener, error) {
+	return listenIntercept(ctx, port)
+}
+
 // RunForTest exposes the internal run composition to the black-box test package
 // with its port options and seams injected.
 func RunForTest(
