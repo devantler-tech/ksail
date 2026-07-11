@@ -389,7 +389,7 @@ func TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure(t *test
 	)
 
 	require.ErrorIs(t, err, errEphemeralCreateFailed)
-	assert.NotErrorIs(t, err, clustererr.ErrClusterNotFound)
+	require.NotErrorIs(t, err, clustererr.ErrClusterNotFound)
 	assert.Equal(t, 1, backend.cleaned)
 	assert.NoDirExists(t, backend.workspace)
 }
