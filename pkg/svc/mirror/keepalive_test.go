@@ -183,16 +183,98 @@ func TestWatchSessionLiveness_HoldsWhileDispatchBlocked(t *testing.T) {
 	ctx, expire := context.WithCancel(context.Background())
 	defer expire()
 
-	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+	// With a 100ms timeout the parked-dispatch grace deadline is 400ms
+	// (dispatchGraceMultiplier); several plain timeouts fit inside it, so
+	// holding for 250ms proves the watchdog tolerates backpressure beyond
+	// the ordinary deadline without granting the indefinite immunity the
+	// bounded grace replaced.
+	go mirror.WatchSessionLiveness(ctx, server, 100*time.Millisecond, expire)
 
 	select {
 	case <-ctx.Done():
 		t.Fatal("watchdog expired a session whose demux loop was parked on backpressure")
-	case <-time.After(300 * time.Millisecond):
-		// Healthy: several timeouts elapsed while the dispatch was blocked.
+	case <-time.After(250 * time.Millisecond):
+		// Healthy: multiple timeouts elapsed while the dispatch was blocked.
 	}
 
 	drainParkedStream(t, server, writeDone)
+}
+
+// TestWatchSessionLiveness_ExpiresDispatchBlockedPeerAfterGrace pins the
+// bound on the backpressure grace: a client that dies while a stream has the
+// demux loop parked produces no further frames, so the parked dispatch never
+// drains — the watchdog must still expire the session once the extended
+// (timeout × dispatchGraceMultiplier) deadline passes, or the agent's
+// REDIRECT rule would stay orphaned exactly as in the unarmed black-hole
+// case (ksail#6040).
+func TestWatchSessionLiveness_ExpiresDispatchBlockedPeerAfterGrace(t *testing.T) {
+	t.Parallel()
+
+	client, server := newSessionPair(t)
+
+	require.NoError(t, client.SendKeepalive())
+	require.Eventually(t, func() bool {
+		return server.KeepaliveSeen()
+	}, 2*time.Second, 5*time.Millisecond, "the keepalive should arm the peer")
+
+	stream, err := client.OpenStream()
+	require.NoError(t, err)
+
+	// Park the server's demux loop on a backpressured stream, then go
+	// silent — the unclean-death half of the scenario the bounded grace
+	// exists for.
+	go func() {
+		chunk := make([]byte, mirror.MaxTunnelPayload)
+		for range 5 {
+			_, writeErr := stream.Write(chunk)
+			if writeErr != nil {
+				return
+			}
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		return server.DispatchInProgress()
+	}, 2*time.Second, 5*time.Millisecond, "the overfilled stream should park the demux loop")
+
+	ctx, expire := context.WithCancel(context.Background())
+	defer expire()
+
+	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+
+	select {
+	case <-ctx.Done():
+		// Expired: the parked dispatch delayed but did not prevent the
+		// liveness deadline.
+	case <-time.After(2 * time.Second):
+		t.Fatal("watchdog never expired a dead client parked on backpressure")
+	}
+}
+
+// TestWatchSessionLiveness_ExpiresPreArmedSilentPeer covers the
+// --expect-keepalives arming path: the client declared it will ping (so the
+// agent pre-arms via ArmLiveness) but died before delivering its first
+// keepalive — the watchdog must expire the session from LastRead's creation
+// timestamp rather than waiting forever for a first frame (ksail#6040).
+func TestWatchSessionLiveness_ExpiresPreArmedSilentPeer(t *testing.T) {
+	t.Parallel()
+
+	_, server := newSessionPair(t)
+
+	server.ArmLiveness()
+
+	ctx, expire := context.WithCancel(context.Background())
+	defer expire()
+
+	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+
+	select {
+	case <-ctx.Done():
+		// Expired: pre-arming makes total frame silence fatal after the
+		// timeout, measured from the session's creation time.
+	case <-time.After(2 * time.Second):
+		t.Fatal("watchdog never expired a pre-armed, totally silent session")
+	}
 }
 
 // drainParkedStream accepts and reads the backpressured stream so the parked

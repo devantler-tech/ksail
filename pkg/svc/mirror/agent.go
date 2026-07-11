@@ -61,6 +61,15 @@ type SteerListenerFactory func(ctx context.Context, port int) (net.Listener, err
 // in-namespace REDIRECT. runner installs and removes the rules (see
 // [SteerCommandRunner]).
 //
+// expectKeepalives arms the client-liveness watchdog from session start: the
+// intercept client sets it (via the --expect-keepalives agent flag) only
+// after proving the agent image speaks the keepalive protocol, so the agent
+// need not wait for the first ping to know one is coming — a client that
+// dies before that first ping is delivered still expires instead of leaving
+// the REDIRECT rule orphaned (ksail#6040). Without it the watchdog arms on
+// the first received keepalive, preserving the pre-keepalive behaviour for
+// older clients.
+//
 // It blocks until ctx is cancelled or the tunnel session ends (both return
 // nil, matching [ForwardRedirected]) or the listener fails (returns the error).
 // The rule teardown runs on a context detached from ctx and time-bounded, so a
@@ -74,6 +83,7 @@ func RunSteerAgent(
 	listen SteerListenerFactory,
 	redirect SteeringRedirect,
 	runner SteerCommandRunner,
+	expectKeepalives bool,
 ) (err error) {
 	err = checkSteerAgentInputs(transport, listen, runner)
 	if err != nil {
@@ -128,9 +138,26 @@ func RunSteerAgent(
 		}
 	}()
 
+	return serveSteerSession(ctx, listener, transport, expectKeepalives)
+}
+
+// serveSteerSession wraps the transport in the agent's server-role tunnel
+// session — pre-armed when the client declared keepalives (see RunSteerAgent's
+// expectKeepalives) — and forwards redirected connections with the liveness
+// watchdog beside it until the session or context ends.
+func serveSteerSession(
+	ctx context.Context,
+	listener net.Listener,
+	transport io.ReadWriteCloser,
+	expectKeepalives bool,
+) error {
 	session := NewTunnelSession(transport, transport, TunnelRoleServer)
 
 	defer func() { _ = session.Close() }()
+
+	if expectKeepalives {
+		session.ArmLiveness()
+	}
 
 	return forwardWithLiveness(ctx, listener, session)
 }
@@ -141,9 +168,9 @@ func RunSteerAgent(
 // removed from outside, so the liveness deadline is the only path that
 // removes the REDIRECT rule once the client is gone. Cancelling forwardCtx
 // ends ForwardRedirected, which returns into RunSteerAgent's reverse
-// teardown. The watchdog arms itself only after the client has proven it
-// speaks the keepalive protocol (see watchSessionLiveness), so a
-// pre-keepalive client is never expired.
+// teardown. The watchdog arms itself only once the client has proven — or,
+// via --expect-keepalives, declared — that it speaks the keepalive protocol
+// (see watchSessionLiveness), so a pre-keepalive client is never expired.
 func forwardWithLiveness(ctx context.Context, listener net.Listener, session *TunnelSession) error {
 	forwardCtx, expire := context.WithCancel(ctx)
 	defer expire()

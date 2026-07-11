@@ -149,10 +149,12 @@ func defaultRunInterceptSession(
 // command must be the ksail-derived default (a custom --steer-command may run
 // any agent) and the pod's live steering container — which may be a reused
 // injection from an older release, since ephemeral containers cannot be
-// removed — must run exactly this build's version-pinned [mirror.DefaultSteerImage].
-// Anything else falls back to the pre-keepalive behaviour rather than risking
-// the older decoder tearing the tunnel down on an unknown frame type; a
-// lookup failure counts as unsupported for the same reason.
+// removed — must run exactly this build's version-pinned
+// [mirror.DefaultSteerImage] ([mirror.SteerKeepaliveImageProven]; an
+// unstamped dev build's mutable :latest default proves nothing, so it never
+// negotiates). Anything else falls back to the pre-keepalive behaviour rather
+// than risking the older decoder tearing the tunnel down on an unknown frame
+// type; a lookup failure counts as unsupported for the same reason.
 func steerKeepaliveSupported(
 	ctx context.Context,
 	client kubernetes.Interface,
@@ -165,7 +167,26 @@ func steerKeepaliveSupported(
 
 	image, err := mirror.SteerContainerImage(ctx, client, point)
 
-	return err == nil && image == mirror.DefaultSteerImage
+	return err == nil && mirror.SteerKeepaliveImageProven(image)
+}
+
+// steerSessionCommand returns the agent command to exec for this session:
+// the resolved steer command, plus the --expect-keepalives agent flag when
+// keepalives are negotiated, so the agent arms its liveness watchdog from
+// session start instead of waiting for a first ping that an immediately-dead
+// client would never deliver (ksail#6040). The flag is only ever appended to
+// the ksail-derived default command against this build's own agent image
+// (steerKeepaliveSupported), which is guaranteed to understand it; the slice
+// is copied so the resolved options stay untouched.
+func steerSessionCommand(steerCommand []string, keepalive bool) []string {
+	if !keepalive {
+		return steerCommand
+	}
+
+	command := make([]string, 0, len(steerCommand)+1)
+	command = append(command, steerCommand...)
+
+	return append(command, "--"+mirror.SteerExpectKeepalivesFlag)
 }
 
 // localProcessDialer builds the LocalDialer intercept forwards each stream to:
@@ -331,14 +352,16 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Writer:  cmd.ErrOrStderr(),
 	})
 
+	keepalive := steerKeepaliveSupported(ctx, client, point, opts)
+
 	err = runInterceptSession(
 		ctx,
 		client,
 		restConfig,
 		point,
-		opts.steerCommand,
+		steerSessionCommand(opts.steerCommand, keepalive),
 		opts.localPort,
-		steerKeepaliveSupported(ctx, client, point, opts),
+		keepalive,
 	)
 
 	return cleanInterceptCancellation(ctx, err)

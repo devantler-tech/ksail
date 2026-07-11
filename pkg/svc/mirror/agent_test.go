@@ -123,7 +123,9 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	// The ksail side: dial an echo "developer process" for each intercepted stream.
@@ -173,7 +175,9 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	bothInstalled := func() bool { return runner.callCount() >= 2 }
@@ -211,6 +215,7 @@ func TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails(t *testing
 		listen,
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errSteerGuardDenied)
@@ -232,6 +237,7 @@ func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errSteerInstallDenied)
@@ -254,7 +260,9 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	installed := func() bool { return runner.sawAction("-I") }
@@ -283,6 +291,7 @@ func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errForwardBroken, "the forwarding failure must surface")
@@ -304,6 +313,7 @@ func TestRunSteerAgent_RejectsAnInvalidRedirect(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, mirror.ErrSteeringPortInvalid)
@@ -339,6 +349,7 @@ func TestRunSteerAgent_RejectsNilDependencies(t *testing.T) {
 				testCase.listen,
 				redirect,
 				testCase.runner,
+				false,
 			)
 
 			require.ErrorIs(t, err, testCase.wantErr)

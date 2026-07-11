@@ -50,6 +50,49 @@ func TestDefaultSteerImageForVersion(t *testing.T) {
 	}
 }
 
+// TestSteerKeepaliveImageProven pins the negotiation gate's image rule: only
+// an exact match against a version-pinned default proves the agent speaks the
+// keepalive protocol — the mutable :latest dev fallback proves nothing even
+// when the tags are equal, because the running container may predate this
+// build (codex finding on ksail#6061).
+func TestSteerKeepaliveImageProven(t *testing.T) {
+	t.Parallel()
+
+	pinned := mirror.DefaultSteerImageForVersion("7.199.0")
+	latest := mirror.DefaultSteerImageForVersion("dev")
+
+	tests := map[string]struct {
+		liveImage    string
+		defaultImage string
+		want         bool
+	}{
+		"matching version-pinned image proves the protocol": {
+			liveImage: pinned, defaultImage: pinned, want: true,
+		},
+		"mismatched image never proves the protocol": {
+			liveImage: latest, defaultImage: pinned, want: false,
+		},
+		"matching :latest dev fallback proves nothing": {
+			liveImage: latest, defaultImage: latest, want: false,
+		},
+		"empty live image proves nothing": {
+			liveImage: "", defaultImage: pinned, want: false,
+		},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(
+				t,
+				testCase.want,
+				mirror.SteerKeepaliveImageProvenFor(testCase.liveImage, testCase.defaultImage),
+			)
+		})
+	}
+}
+
 // steeredPod builds a Running pod that already carries a steering ephemeral
 // container, for the idempotency test.
 func steeredPod() *corev1.Pod {

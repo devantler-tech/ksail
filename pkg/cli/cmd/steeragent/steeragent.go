@@ -40,10 +40,11 @@ import (
 // (non-REDIRECTed) hits on the intercept port.
 const listenHost = "0.0.0.0"
 
-// options carries the steering agent's port configuration.
+// options carries the steering agent's port and liveness configuration.
 type options struct {
-	servicePort   int
-	interceptPort int
+	servicePort      int
+	interceptPort    int
+	expectKeepalives bool
 }
 
 // deps are the injectable seams that keep [run] unit-testable without a live
@@ -102,6 +103,13 @@ rather than run directly.`,
 		0,
 		"The port the agent listens on and redirects the service port to",
 	)
+	cmd.Flags().BoolVar(
+		&opts.expectKeepalives,
+		mirror.SteerExpectKeepalivesFlag,
+		false,
+		"Arm the client-liveness watchdog from session start"+
+			" (set by intercept clients that will send keepalive pings)",
+	)
 
 	return cmd
 }
@@ -128,6 +136,7 @@ func run(ctx context.Context, opts options, dependencies deps) error {
 		dependencies.listen,
 		redirect,
 		dependencies.runner,
+		opts.expectKeepalives,
 	)
 	if err != nil {
 		return fmt.Errorf("running the steering agent: %w", err)

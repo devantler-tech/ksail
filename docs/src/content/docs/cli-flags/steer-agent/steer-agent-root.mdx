@@ -20,6 +20,7 @@ Usage:
   ksail steer-agent [flags]
 
 Flags:
+      --expect-keepalives    Arm the client-liveness watchdog from session start (set by intercept clients that will send keepalive pings)
       --intercept-port int   The port the agent listens on and redirects the service port to
       --service-port int     The workload port whose inbound TCP is steered
 

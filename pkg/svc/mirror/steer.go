@@ -51,6 +51,32 @@ func defaultSteerImage(version string) string {
 	return steerImageRepo + ":v" + strings.TrimPrefix(version, "v")
 }
 
+// SteerExpectKeepalivesFlag is the steer-agent flag the intercept client
+// appends to the derived agent command once keepalive support is negotiated
+// ([SteerKeepaliveImageProven]): it tells the agent to arm its liveness
+// watchdog from session start instead of waiting for the first keepalive
+// frame, so a client that dies before its first ping is delivered still
+// expires instead of leaving the REDIRECT rule orphaned (ksail#6040).
+const SteerExpectKeepalivesFlag = "expect-keepalives"
+
+// SteerKeepaliveImageProven reports whether the live steering container image
+// proves the agent binary speaks the keepalive protocol: it must equal this
+// build's [DefaultSteerImage] AND that default must be a version-pinned
+// release reference. The dev/unstamped fallback (:latest) is mutable — a
+// reused container tagged :latest may run an older binary than this build,
+// or the registry tag may lag the local binary — so tag equality proves
+// nothing there and keepalives stay off.
+func SteerKeepaliveImageProven(liveImage string) bool {
+	return steerKeepaliveImageProven(liveImage, DefaultSteerImage)
+}
+
+// steerKeepaliveImageProven is the pure core of [SteerKeepaliveImageProven],
+// split out so both branches (pinned vs mutable default) are unit-testable
+// regardless of the test binary's own build stamp.
+func steerKeepaliveImageProven(liveImage, defaultImage string) bool {
+	return liveImage == defaultImage && defaultImage != steerImageRepo+":latest"
+}
+
 // ErrSteerAlreadyInjected is returned when the tap point's pod already carries
 // a steering container. Ephemeral containers cannot be removed or restarted,
 // so the existing agent is the one to use (or the pod must be replaced).

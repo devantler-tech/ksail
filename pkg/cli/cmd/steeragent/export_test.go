@@ -25,7 +25,7 @@ func RunForTest(
 ) error {
 	return run(
 		ctx,
-		options{servicePort: servicePort, interceptPort: interceptPort},
+		options{servicePort: servicePort, interceptPort: interceptPort, expectKeepalives: false},
 		deps{transport: transport, listen: listen, runner: runner},
 	)
 }

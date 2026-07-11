@@ -86,10 +86,12 @@ type TunnelSession struct {
 	lastRead atomic.Int64
 
 	// keepaliveSeen flips once the session has received its first
-	// [FrameKeepalive]. The liveness watchdog only arms after that proof
-	// that the peer speaks the keepalive protocol, so a pre-keepalive peer
-	// (e.g. an older client execing into a reused agent container) is never
-	// expired for not pinging — it keeps the pre-keepalive behaviour.
+	// [FrameKeepalive], or immediately when the composition pre-arms the
+	// session via [TunnelSession.ArmLiveness] (the client declared it will
+	// ping). The liveness watchdog only arms on that proof that the peer
+	// speaks the keepalive protocol, so a pre-keepalive peer (e.g. an older
+	// client execing into a reused agent container) is never expired for
+	// not pinging — it keeps the pre-keepalive behaviour.
 	keepaliveSeen atomic.Bool
 
 	// dispatching is true while the demux loop is inside dispatch. A
@@ -148,12 +150,26 @@ func (s *TunnelSession) SendKeepalive() error {
 	return s.writeFrame(Frame{StreamID: 0, Type: FrameKeepalive, Payload: nil})
 }
 
-// KeepaliveSeen reports whether the session has received at least one
-// [FrameKeepalive] from its peer. The liveness watchdog uses it as the arming
-// condition: only a peer that has proven it speaks the keepalive protocol is
-// ever expired for frame silence (see the keepaliveSeen field).
+// KeepaliveSeen reports whether the session's liveness watchdog is armed:
+// the session has received at least one [FrameKeepalive] from its peer, or
+// [TunnelSession.ArmLiveness] pre-armed it. The liveness watchdog uses it as
+// the arming condition: only a peer that has proven — or whose client has
+// declared — it speaks the keepalive protocol is ever expired for frame
+// silence (see the keepaliveSeen field).
 func (s *TunnelSession) KeepaliveSeen() bool {
 	return s.keepaliveSeen.Load()
+}
+
+// ArmLiveness arms the liveness watchdog without waiting for the first
+// [FrameKeepalive]. The steering agent calls it when the intercept client
+// declared keepalive support up front (the --expect-keepalives agent flag,
+// appended only after the client proved the agent image speaks the
+// protocol): [TunnelSession.LastRead] starts at the session's creation time,
+// so a client that dies before its very first ping is delivered still
+// expires after the liveness timeout instead of orphaning the agent's
+// REDIRECT rule (ksail#6040).
+func (s *TunnelSession) ArmLiveness() {
+	s.keepaliveSeen.Store(true)
 }
 
 // DispatchInProgress reports whether the demux loop is currently inside

@@ -26,6 +26,17 @@ const SteerClientLivenessTimeout = 30 * time.Second
 // timeout + timeout/livenessPollDivisor without a busy loop.
 const livenessPollDivisor = 4
 
+// dispatchGraceMultiplier extends the liveness deadline while the demux loop
+// is parked inside a dispatch: a backpressured stream legitimately blocks
+// frame reads (the peer's pings sit unread in the channel), so silence there
+// is weaker evidence of death — but it must not grant immunity, or a client
+// that dies while a stream is backpressured never expires and its REDIRECT
+// rule stays orphaned. A parked session therefore gets timeout ×
+// dispatchGraceMultiplier before it is expired: long enough for any live
+// consumer to make progress and drain the queued frames (which stamp
+// LastRead), bounded enough that a dead client's rule is still removed.
+const dispatchGraceMultiplier = 4
+
 // SendKeepalives pings the peer immediately and then every interval until ctx
 // is cancelled, the session ends, or a ping fails to write (the session
 // teardown owns surfacing that failure — a dead channel already ends the
@@ -74,12 +85,16 @@ func SendKeepalives(ctx context.Context, session *TunnelSession, interval time.D
 //     ksail over a reused agent container) never pings, so frame silence
 //     proves nothing about it; such sessions keep the pre-keepalive
 //     behaviour instead of being cut off mid-use.
-//   - It holds off while a dispatch is in progress
-//     ([TunnelSession.DispatchInProgress]) — a backpressured stream parks
-//     the demux loop, so the client's pings sit unread in the channel;
-//     silence while parked means "cannot measure", not "dead". Once the
-//     dispatch drains, the queued frames are read and stamp LastRead before
-//     the next tick can expire the session.
+//   - It extends the deadline (× dispatchGraceMultiplier) while a dispatch
+//     is in progress ([TunnelSession.DispatchInProgress]) — a backpressured
+//     stream parks the demux loop, so the client's pings sit unread in the
+//     channel; silence while parked is weak evidence, not proof of death.
+//     Once the dispatch drains, the queued frames are read and stamp
+//     LastRead. The grace is bounded rather than an indefinite hold-off: a
+//     client that dies while a stream is backpressured leaves the dispatch
+//     parked forever (no more frames can ever unblock it), so an unbounded
+//     skip would orphan the REDIRECT rule — the exact black hole the
+//     watchdog exists to prevent.
 func watchSessionLiveness(
 	ctx context.Context,
 	session *TunnelSession,
@@ -96,11 +111,16 @@ func watchSessionLiveness(
 		case <-session.Done():
 			return
 		case <-ticker.C:
-			if !session.KeepaliveSeen() || session.DispatchInProgress() {
+			if !session.KeepaliveSeen() {
 				continue
 			}
 
-			if time.Since(session.LastRead()) > timeout {
+			deadline := timeout
+			if session.DispatchInProgress() {
+				deadline = timeout * dispatchGraceMultiplier
+			}
+
+			if time.Since(session.LastRead()) > deadline {
 				expire()
 
 				return
