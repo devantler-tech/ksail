@@ -8,16 +8,22 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// runRm executes the rm command standalone with args and returns its combined
-// output and error.
+// runRm executes the rm command standalone with args — with the experimental
+// gate satisfied, mirroring the intercept precedent — and returns its combined
+// output and error. rm ships behind experimental.Guard (state-modifying
+// net-new command); the disabled state is covered by
+// TestHandleRmRunE_ExperimentalDisabled.
 func runRm(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
 	cmd := env.NewRmCmd()
+	cmd.Flags().Bool(flags.ExperimentalFlagName, true, "")
 
 	var out bytes.Buffer
 
@@ -28,6 +34,28 @@ func runRm(t *testing.T, args ...string) (string, error) {
 	err := cmd.Execute()
 
 	return out.String(), err
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_ExperimentalDisabled(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+	t.Chdir(repoRoot)
+
+	cmd := env.NewRmCmd()
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"prod"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "experimental")
+
+	// The gate refused before anything was deleted.
+	_, statErr := os.Stat(filepath.Join(repoRoot, "ksail.prod.yaml"))
+	require.NoError(t, statErr)
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
@@ -84,7 +112,10 @@ func TestHandleRmRunE_MissingEnvironmentListsAvailable(t *testing.T) {
 	t.Chdir(repoRoot)
 
 	_, err := runRm(t, "nosuch")
-	require.ErrorIs(t, err, env.ErrSourceConfigLoad)
+	// The default removal no longer loads the config (only --purge does), so a
+	// mistyped name surfaces as the missing config file — still enriched with
+	// what is actually declared.
+	require.ErrorIs(t, err, environment.ErrEnvironmentConfigMissing)
 	assert.Contains(t, err.Error(), "available environments: prod")
 
 	// Nothing was deleted on the failed lookup.
@@ -115,4 +146,55 @@ func TestNewRmCmd_Structure(t *testing.T) {
 
 	// The write annotation marks the command as state-modifying.
 	assert.Equal(t, "write", cmd.Annotations[annotations.AnnotationPermission])
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_NonPurgeSucceedsOnUnloadableConfig(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(repoRoot, "ksail.prod.yaml"),
+		[]byte(":\tthis is not yaml"),
+		0o600,
+	))
+	t.Chdir(repoRoot)
+
+	// The default removal only deletes the root config; it must not require
+	// that config to load (only --purge needs its sourceDirectory).
+	out, err := runRm(t, "prod")
+	require.NoError(t, err)
+	assert.Contains(t, out, "removed environment")
+
+	_, statErr := os.Stat(filepath.Join(repoRoot, "ksail.prod.yaml"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	// The overlay is untouched (and the retained-overlay hint is skipped,
+	// since locating the overlay needs the unloadable config).
+	_, statErr = os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "prod"))
+	require.NoError(t, statErr)
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_PurgeFailureRetainsConfig(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+
+	// Turn k8s/clusters into a symlink to an outside directory holding the
+	// overlay: the purge must refuse to traverse it — and, refusing, must leave
+	// the environment config in place so a retry still sees the environment.
+	outside := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(outside, "prod"), 0o750))
+	clustersDir := filepath.Join(repoRoot, "k8s", "clusters")
+	require.NoError(t, os.RemoveAll(clustersDir))
+	require.NoError(t, os.Symlink(outside, clustersDir))
+	t.Chdir(repoRoot)
+
+	_, err := runRm(t, "prod", "--purge")
+	require.Error(t, err)
+
+	// Config retained: the failed purge did not un-declare the environment.
+	_, statErr := os.Stat(filepath.Join(repoRoot, "ksail.prod.yaml"))
+	require.NoError(t, statErr)
+
+	// The outside target was not deleted.
+	_, statErr = os.Stat(filepath.Join(outside, "prod"))
+	require.NoError(t, statErr)
 }

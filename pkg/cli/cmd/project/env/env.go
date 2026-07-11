@@ -36,6 +36,22 @@ func NewEnvCmd() *cobra.Command {
 	return cmd
 }
 
+// NewDeprecatedAddEnvironmentDelegate returns the former flat `add-environment`
+// name as a hidden, deprecated delegate of `project env add` (issues #5626 and
+// #6057). Both the cluster and project groups mount it, so the rebadging lives
+// here once instead of byte-identical constructors in each group. Hidden keeps
+// it out of help and the MCP/chat tool surface (toolgen skips hidden commands);
+// the docs generator still emits its page — with the deprecation notice —
+// matching the repo's other hidden commands.
+func NewDeprecatedAddEnvironmentDelegate() *cobra.Command {
+	cmd := NewAddCmd()
+	cmd.Use = "add-environment <name>"
+	cmd.Hidden = true
+	cmd.Deprecated = `use "ksail project env add" instead`
+
+	return cmd
+}
+
 //nolint:gochecknoglobals // Injected for testability to simulate help failures.
 var helpRunner = func(cmd *cobra.Command) error {
 	return cmd.Help()

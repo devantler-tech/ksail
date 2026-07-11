@@ -128,16 +128,10 @@ func newDeprecatedInitCmd() *cobra.Command {
 // add-environment` (issue #5626) and then into the `project env` group as
 // `ksail project env add` (issue #6057); this alias keeps the previously
 // released `ksail cluster add-environment` working for one deprecation cycle,
-// printing a notice that points at the new location. It is Hidden so it stays
-// out of help, the generated docs, and the MCP/chat tool surface (toolgen skips
-// hidden commands) — the canonical `project env add` is the only surfaced form.
+// printing a notice that points at the new location. The rebadging is shared
+// with the project group's delegate (projectenv.NewDeprecatedAddEnvironmentDelegate).
 func newDeprecatedAddEnvironmentCmd() *cobra.Command {
-	cmd := projectenv.NewAddCmd()
-	cmd.Use = "add-environment <name>"
-	cmd.Hidden = true
-	cmd.Deprecated = `use "ksail project env add" instead`
-
-	return cmd
+	return projectenv.NewDeprecatedAddEnvironmentDelegate()
 }
 
 //nolint:gochecknoglobals // Injected for testability to simulate help failures.

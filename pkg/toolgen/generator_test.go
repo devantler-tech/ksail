@@ -561,10 +561,13 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 		// verbs are nested under the `env` group (issue #6057) so they fold into
 		// project_write with an "env_" prefix, mirroring workload's cipher group.
 		// The hidden deprecated aliases (cluster and flat project names) are
-		// skipped by toolgen.
+		// skipped by toolgen — as is `env rm`, which ships experimental-gated
+		// (hidden until graduation), so it must NOT appear on the tool surface.
 		assertToolContainsSubcommands(t, toolMap, "project_write",
-			"init", "env_add", "env_rm",
+			"init", "env_add",
 		)
+
+		assertToolOmitsSubcommand(t, toolMap, "project_write", "env_rm")
 	})
 
 	t.Run("workload_write", func(t *testing.T) {
@@ -590,6 +593,26 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 			}
 		}
 	})
+}
+
+// assertToolOmitsSubcommand asserts the named tool does NOT advertise the given
+// subcommand — used to pin that experimental-gated (hidden) commands stay off
+// the generated tool surface until they graduate.
+func assertToolOmitsSubcommand(
+	t *testing.T,
+	toolMap map[string]toolgen.ToolDefinition,
+	toolName, sub string,
+) {
+	t.Helper()
+
+	tool, ok := toolMap[toolName]
+	if !ok {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	if _, exists := tool.Subcommands[sub]; exists {
+		t.Errorf("%s should not contain experimental-gated subcommand %q", toolName, sub)
+	}
 }
 
 func assertToolContainsSubcommands(

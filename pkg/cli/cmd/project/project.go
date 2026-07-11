@@ -40,30 +40,18 @@ func NewProjectCmd() *cobra.Command {
 
 	cmd.AddCommand(NewInitCmd())
 	cmd.AddCommand(env.NewEnvCmd())
-	cmd.AddCommand(newDeprecatedAddEnvironmentCmd())
+	cmd.AddCommand(env.NewDeprecatedAddEnvironmentDelegate())
 	cmd.AddCommand(newDeprecatedListEnvironmentsCmd())
-
-	return cmd
-}
-
-// newDeprecatedAddEnvironmentCmd returns the former flat `project
-// add-environment` name as a hidden, deprecated delegate of `project env add`
-// (issue #6057). It keeps previously released invocations working for one
-// deprecation cycle while staying out of help, the generated docs prose, and
-// the MCP/chat tool surface (toolgen skips hidden commands) — mirroring the
-// `cluster add-environment` delegate from the issue-#5626 move.
-func newDeprecatedAddEnvironmentCmd() *cobra.Command {
-	cmd := env.NewAddCmd()
-	cmd.Use = "add-environment <name>"
-	cmd.Hidden = true
-	cmd.Deprecated = `use "ksail project env add" instead`
 
 	return cmd
 }
 
 // newDeprecatedListEnvironmentsCmd returns the former flat `project
 // list-environments` name as a hidden, deprecated delegate of `project env
-// list` (issue #6057). The `ls` alias is stripped so the short form belongs to
+// list` (issue #6057). Hidden keeps it out of help and the MCP/chat tool
+// surface (toolgen skips hidden commands); the docs generator still emits its
+// page with the deprecation notice, matching the repo's other hidden commands.
+// The `ls` alias is stripped so the short form belongs to
 // the canonical `project env ls` only.
 func newDeprecatedListEnvironmentsCmd() *cobra.Command {
 	cmd := env.NewListCmd()

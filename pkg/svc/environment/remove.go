@@ -55,9 +55,7 @@ func RemoveEnvironmentConfig(repoRoot, configRel string) error {
 func RemoveOverlay(repoRoot, overlayRelDir string) (bool, error) {
 	overlayRelDir = filepath.ToSlash(overlayRelDir)
 
-	segments := strings.Split(strings.Trim(overlayRelDir, "/"), "/")
-	if len(segments) >= 2 && segments[len(segments)-1] == BaseEnvName &&
-		segments[len(segments)-2] == ClustersDir {
+	if isSharedBaseOverlay(overlayRelDir) {
 		return false, fmt.Errorf("%w: %s", ErrSharedBaseOverlay, overlayRelDir)
 	}
 
@@ -88,12 +86,59 @@ func RemoveOverlay(repoRoot, overlayRelDir string) (bool, error) {
 		return true, nil
 	}
 
-	err = os.RemoveAll(abs)
+	canonAbs, err := canonicalContainedOverlay(repoRoot, abs, overlayRelDir)
+	if err != nil {
+		return false, err
+	}
+
+	err = os.RemoveAll(canonAbs)
 	if err != nil {
 		return false, fmt.Errorf("removing overlay %s: %w", overlayRelDir, err)
 	}
 
 	return true, nil
+}
+
+// canonicalContainedOverlay re-verifies the overlay's containment on the
+// symlink-RESOLVED path before a recursive delete: containedPath is purely
+// lexical, so an intermediate symlinked segment (e.g. k8s/clusters pointing at
+// a shared checkout outside the repository) passes it while os.RemoveAll would
+// traverse the link and recursively delete the outside target. The resolved
+// path must still sit under the resolved repository root and must not resolve
+// onto the shared base overlay (a parent link could alias another name onto
+// clusters/base, sidestepping the lexical base refusal).
+func canonicalContainedOverlay(repoRoot, abs, overlayRelDir string) (string, error) {
+	canonRoot, err := fsutil.EvalCanonicalPath(repoRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolving repository root: %w", err)
+	}
+
+	canonAbs, err := fsutil.EvalCanonicalPath(abs)
+	if err != nil {
+		return "", fmt.Errorf("resolving overlay %s: %w", overlayRelDir, err)
+	}
+
+	rel, err := filepath.Rel(canonRoot, canonAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("overlay %s escapes the repository root: %w",
+			overlayRelDir, fsutil.ErrPathOutsideBase)
+	}
+
+	if isSharedBaseOverlay(rel) {
+		return "", fmt.Errorf("%w: %s", ErrSharedBaseOverlay, overlayRelDir)
+	}
+
+	return canonAbs, nil
+}
+
+// isSharedBaseOverlay reports whether the slash- or OS-delimited relative path
+// ends in the shared base overlay (clusters/[BaseEnvName]), which no single
+// environment owns and RemoveOverlay always refuses to delete.
+func isSharedBaseOverlay(rel string) bool {
+	segments := strings.Split(strings.Trim(filepath.ToSlash(rel), "/"), "/")
+
+	return len(segments) >= 2 && segments[len(segments)-1] == BaseEnvName &&
+		segments[len(segments)-2] == ClustersDir
 }
 
 // containedPath joins relPath onto repoRoot and rejects a result that escapes

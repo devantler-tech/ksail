@@ -8,6 +8,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
@@ -54,7 +55,12 @@ func NewRmCmd() *cobra.Command {
 		return HandleRmRunE(cmd, args[0])
 	}
 
-	return cmd
+	// env rm is a net-new, state-modifying (file-deleting) command, so it ships
+	// behind the experimental gate per the repo's feature-flag-first convention;
+	// the visible-command carve-out covers only low-risk read-only additions
+	// (like env list). Graduate by dropping this Guard call once the command
+	// has settled through a release.
+	return experimental.Guard(cmd)
 }
 
 // HandleRmRunE handles the `project env rm` command. It resolves the declared
@@ -84,37 +90,54 @@ func HandleRmRunE(cmd *cobra.Command, name string) error {
 
 	configRel := "ksail." + name + ".yaml"
 
-	cfg, err := loadEnvironmentConfig(cmd, configRel)
+	// Locating the overlay needs the environment's config (for its declared
+	// sourceDirectory). Only --purge REQUIRES that resolution — it must know
+	// what it is about to delete — so a config that fails to load or resolve
+	// blocks a purge but not the default removal, which only deletes the root
+	// config and retains the overlay (the retained-overlay hint is then
+	// skipped).
+	overlayRel, overlayErr := resolveOverlayRel(cmd, repoRoot, name)
+	if purge && overlayErr != nil {
+		return overlayErr
+	}
+
+	return removeEnvironment(cmd, repoRoot, configRel, overlayRel, purge)
+}
+
+// resolveOverlayRel loads the environment's config and derives its overlay
+// directory (sourceDirectory/clusters/<name>) relative to the repository root,
+// enriching a load failure with the environments that are actually declared.
+func resolveOverlayRel(cmd *cobra.Command, repoRoot, name string) (string, error) {
+	cfg, err := loadEnvironmentConfig(cmd, "ksail."+name+".yaml")
 	if err != nil {
-		return enrichSourceConfigError(cmd, repoRoot, err)
+		return "", enrichSourceConfigError(cmd, repoRoot, err)
 	}
 
 	sourceDir, err := repoRelativeSourceDir(repoRoot, cfg.Spec.Workload.SourceDirectory)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	overlayRel := path.Join(sourceDir, clustersDirSegment, name)
-
-	return removeEnvironment(cmd, repoRoot, configRel, overlayRel, purge)
+	return path.Join(sourceDir, clustersDirSegment, name), nil
 }
 
 // removeEnvironment performs the actual removal and reports what happened: the
 // config always goes; the overlay goes only with --purge, and is otherwise
 // pointed out so the user knows the retained files exist.
+//
+// The purge deletes the overlay BEFORE the config: a failed overlay purge
+// (permissions, containment) then leaves the config untouched, so the
+// environment stays declared and a retry of `env rm --purge` still sees it. The
+// reverse order stranded the user — config gone, overlay left behind, nothing
+// declared to retry against. The intermediate state of this order (overlay
+// removed, config still present) is a declared environment without an overlay,
+// which is legal.
 func removeEnvironment(
 	cmd *cobra.Command,
 	repoRoot, configRel, overlayRel string,
 	purge bool,
 ) error {
 	out := cmd.OutOrStdout()
-
-	err := environment.RemoveEnvironmentConfig(repoRoot, configRel)
-	if err != nil {
-		return fmt.Errorf("removing environment config: %w", err)
-	}
-
-	notify.Activityf(out, "removed %s", configRel)
 
 	if purge {
 		removed, err := environment.RemoveOverlay(repoRoot, overlayRel)
@@ -127,7 +150,20 @@ func removeEnvironment(
 		} else {
 			notify.Infof(out, "no overlay at %s: nothing to purge", overlayRel)
 		}
-	} else if overlayExists(repoRoot, overlayRel) {
+	}
+
+	err := environment.RemoveEnvironmentConfig(repoRoot, configRel)
+	if err != nil {
+		// Enrich with the declared environments so a mistyped name on the
+		// default (no-config-load) path still reports what is available.
+		return enrichSourceConfigError(
+			cmd, repoRoot, fmt.Errorf("removing environment config: %w", err),
+		)
+	}
+
+	notify.Activityf(out, "removed %s", configRel)
+
+	if !purge && overlayRel != "" && overlayExists(repoRoot, overlayRel) {
 		notify.Infof(out, "overlay %s retained (use --purge to also delete it)", overlayRel)
 	}
 
