@@ -10,7 +10,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
+
+const distributionConfigDescription = "Path to the distribution's own configuration file or directory " +
+	"(e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml, gke.yaml, or aks.yaml). " +
+	"CLI-only; ignored by the operator."
 
 // jsonschemaTagOptionKeys returns the struct-tag option keys the
 // invopop/jsonschema reflector understands. Everything the tag parser splits
@@ -119,8 +125,8 @@ func TestGeneratedCRDCarriesCurrentDescriptions(t *testing.T) {
 
 	for _, want := range []string{
 		// ClusterSpec.DistributionConfig doc comment (types.go).
-		"(e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml," +
-			" aks.yaml, or the talos directory).",
+		"(e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml," +
+			" gke.yaml, or aks.yaml).",
 		"When empty, KSail uses the distribution's default configuration path.",
 	} {
 		if !strings.Contains(normalized, want) {
@@ -128,6 +134,59 @@ func TestGeneratedCRDCarriesCurrentDescriptions(t *testing.T) {
 				"generated CRD %s is stale: missing doc-comment text %q —"+
 					" run `make generate` after editing doc comments",
 				crdPath, want,
+			)
+		}
+	}
+}
+
+// TestDistributionConfigDescriptionUsesCanonicalDefaultPaths prevents the
+// published description from drifting away from the filenames and directories
+// used by the distribution metadata table. It checks both the source tag and
+// the generated user-facing artifacts so regeneration cannot preserve a stale
+// path such as the former kwok.yaml value.
+func TestDistributionConfigDescriptionUsesCanonicalDefaultPaths(t *testing.T) {
+	t.Parallel()
+
+	field, ok := reflect.TypeFor[v1alpha1.ClusterSpec]().FieldByName("DistributionConfig")
+	if !ok {
+		t.Fatal("ClusterSpec.DistributionConfig field not found")
+	}
+
+	if got := field.Tag.Get("jsonschema_description"); got != distributionConfigDescription {
+		t.Errorf(
+			"DistributionConfig jsonschema description = %q, want %q",
+			got,
+			distributionConfigDescription,
+		)
+	}
+
+	repoRoot := filepath.Join("..", "..", "..", "..")
+	artifacts := []string{
+		filepath.Join(repoRoot, "schemas", "ksail-config.schema.json"),
+		filepath.Join(
+			repoRoot,
+			"docs",
+			"src",
+			"content",
+			"docs",
+			"configuration",
+			"declarative-configuration.mdx",
+		),
+	}
+
+	for _, artifact := range artifacts {
+		//nolint:gosec // artifact paths are fixed test inputs within this repository.
+		contents, err := os.ReadFile(artifact)
+		if err != nil {
+			t.Errorf("reading generated artifact %s: %v", artifact, err)
+
+			continue
+		}
+
+		if !strings.Contains(string(contents), distributionConfigDescription) {
+			t.Errorf(
+				"generated artifact %s does not contain canonical DistributionConfig description",
+				artifact,
 			)
 		}
 	}

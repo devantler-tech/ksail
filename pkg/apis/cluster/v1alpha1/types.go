@@ -87,11 +87,11 @@ type ProviderSpec struct {
 
 // ClusterSpec defines cluster-related configuration.
 type ClusterSpec struct {
-	// DistributionConfig is the path to the distribution's own configuration file
-	// (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory).
+	// DistributionConfig is the path to the distribution's own configuration file or directory
+	// (e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml, gke.yaml, or aks.yaml).
 	// When empty, KSail uses the distribution's default configuration path.
 	// CLI-only (a local file path on the CLI host); ignored by the operator.
-	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema_description:"Path to the distribution's own configuration file (e.g. kind.yaml, k3d.yaml, vcluster.yaml, kwok.yaml, eks.yaml, gke.yaml, aks.yaml, or the talos directory). CLI-only; ignored by the operator."` //nolint:lll
+	DistributionConfig string `json:"distributionConfig,omitzero" jsonschema_description:"Path to the distribution's own configuration file or directory (e.g. kind.yaml, k3d.yaml, talos/, vcluster.yaml, kwok/, eks.yaml, gke.yaml, or aks.yaml). CLI-only; ignored by the operator."` //nolint:lll
 	// Connection defines how KSail connects to the cluster: the kubeconfig path,
 	// context name, and operation timeout.
 	// CLI-only (local kubeconfig path/context); ignored by the operator.
