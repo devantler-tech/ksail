@@ -55,6 +55,7 @@ func TestClusterCmd_RegistersDeprecatedAddEnvironmentAlias(t *testing.T) {
 	// Delegation: the alias is the shared env command with the historical flat
 	// name restored, so its Short must match the canonical projectenv.NewAddCmd.
 	canonical := projectenv.NewAddCmd()
+
 	require.Equal(
 		t,
 		"add-environment <name>",
