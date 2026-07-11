@@ -38,6 +38,8 @@ type fakeEphemeralProvisioner struct {
 	deleted []string
 }
 
+// Create records the requested cluster name and returns the configured
+// creation error.
 func (f *fakeEphemeralProvisioner) Create(_ context.Context, name string) error {
 	f.created = append(f.created, name)
 	if f.events != nil {
@@ -47,6 +49,8 @@ func (f *fakeEphemeralProvisioner) Create(_ context.Context, name string) error 
 	return f.createErr
 }
 
+// Delete records the requested cluster name and returns the configured
+// deletion error.
 func (f *fakeEphemeralProvisioner) Delete(_ context.Context, name string) error {
 	f.deleted = append(f.deleted, name)
 	if f.events != nil {
@@ -79,6 +83,8 @@ type fakeEphemeralWaiter struct {
 	contexts        []string
 }
 
+// wait records the kubeconfig and context supplied to the readiness gate and
+// returns the configured wait error.
 func (f *fakeEphemeralWaiter) wait(_ context.Context, kubeconfigPath, contextName string) error {
 	f.kubeconfigPaths = append(f.kubeconfigPaths, kubeconfigPath)
 

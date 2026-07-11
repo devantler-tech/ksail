@@ -486,6 +486,8 @@ func TestStopSuccess(t *testing.T) {
 
 // --- internals ---
 
+// newProvisionerForTest builds the shared provisioner fixture with the
+// historical default kubeconfig path used by existing tests.
 func newProvisionerForTest(
 	t *testing.T,
 ) (

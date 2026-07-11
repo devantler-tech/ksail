@@ -204,6 +204,8 @@ func CreateMinimalProvisioner(
 	}
 }
 
+// createMinimalKindProvisioner builds the smallest valid Kind provisioner
+// while preserving the caller-owned kubeconfig path.
 func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provisioner, error) {
 	kindConfig := &v1alpha4.Cluster{
 		TypeMeta: v1alpha4.TypeMeta{
