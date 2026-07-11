@@ -132,12 +132,19 @@ func RunSteerAgent(
 
 	defer func() { _ = session.Close() }()
 
-	// Self-terminate when the client goes silent: the exec stream does not
-	// reliably deliver EOF on unclean client death (ksail#6040), and an
-	// ephemeral container cannot be removed from outside, so this liveness
-	// deadline is the only path that removes the REDIRECT rule once the
-	// client is gone. Cancelling forwardCtx ends ForwardRedirected, which
-	// returns into the reverse teardown above.
+	return forwardWithLiveness(ctx, listener, session)
+}
+
+// forwardWithLiveness runs the agent's forward loop with the client-liveness
+// watchdog beside it: the exec stream does not reliably deliver EOF on
+// unclean client death (ksail#6040), and an ephemeral container cannot be
+// removed from outside, so the liveness deadline is the only path that
+// removes the REDIRECT rule once the client is gone. Cancelling forwardCtx
+// ends ForwardRedirected, which returns into RunSteerAgent's reverse
+// teardown. The watchdog arms itself only after the client has proven it
+// speaks the keepalive protocol (see watchSessionLiveness), so a
+// pre-keepalive client is never expired.
+func forwardWithLiveness(ctx context.Context, listener net.Listener, session *TunnelSession) error {
 	forwardCtx, expire := context.WithCancel(ctx)
 	defer expire()
 

@@ -96,10 +96,17 @@ func TestSendKeepalives_PingsUntilCancelled(t *testing.T) {
 	}
 }
 
-func TestWatchSessionLiveness_ExpiresSilentPeer(t *testing.T) {
+func TestWatchSessionLiveness_ExpiresSilentArmedPeer(t *testing.T) {
 	t.Parallel()
 
-	_, server := newSessionPair(t)
+	client, server := newSessionPair(t)
+
+	// Arm the watchdog: one keepalive proves the client speaks the
+	// protocol; then it goes silent (an unclean death).
+	require.NoError(t, client.SendKeepalive())
+	require.Eventually(t, func() bool {
+		return server.KeepaliveSeen()
+	}, 2*time.Second, 5*time.Millisecond, "the keepalive should arm the peer")
 
 	ctx, expire := context.WithCancel(context.Background())
 	defer expire()
@@ -109,10 +116,127 @@ func TestWatchSessionLiveness_ExpiresSilentPeer(t *testing.T) {
 	select {
 	case <-ctx.Done():
 		// Expired: the watchdog cancelled the context because no frame
-		// arrived within the timeout.
+		// arrived within the timeout after the client had armed it.
 	case <-time.After(2 * time.Second):
-		t.Fatal("watchdog did not expire a frame-silent session")
+		t.Fatal("watchdog did not expire a frame-silent armed session")
 	}
+}
+
+func TestWatchSessionLiveness_NeverExpiresUnarmedPeer(t *testing.T) {
+	t.Parallel()
+
+	// The peer never sends a keepalive — a pre-keepalive client (an older
+	// ksail over a reused agent container). Frame silence proves nothing
+	// about such a client, so the watchdog must not expire it.
+	_, server := newSessionPair(t)
+
+	ctx, expire := context.WithCancel(context.Background())
+	defer expire()
+
+	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("watchdog expired a peer that never spoke the keepalive protocol")
+	case <-time.After(300 * time.Millisecond):
+		// Healthy: several timeouts elapsed without the unarmed session
+		// being expired.
+	}
+}
+
+func TestWatchSessionLiveness_HoldsWhileDispatchBlocked(t *testing.T) {
+	t.Parallel()
+
+	client, server := newSessionPair(t)
+
+	// Arm the watchdog first, as a live keepalive-speaking client would.
+	require.NoError(t, client.SendKeepalive())
+	require.Eventually(t, func() bool {
+		return server.KeepaliveSeen()
+	}, 2*time.Second, 5*time.Millisecond, "the keepalive should arm the peer")
+
+	stream, err := client.OpenStream()
+	require.NoError(t, err)
+
+	// Overfill the server-side stream's receive budget without reading it:
+	// the server's demux loop parks inside dispatch on the backpressured
+	// stream and can no longer consume frames — exactly the state the
+	// watchdog must not confuse with a dead client.
+	writeDone := make(chan struct{})
+
+	go func() {
+		defer close(writeDone)
+
+		chunk := make([]byte, mirror.MaxTunnelPayload)
+		for range 5 {
+			_, writeErr := stream.Write(chunk)
+			if writeErr != nil {
+				return
+			}
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		return server.DispatchInProgress()
+	}, 2*time.Second, 5*time.Millisecond, "the overfilled stream should park the demux loop")
+
+	ctx, expire := context.WithCancel(context.Background())
+	defer expire()
+
+	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("watchdog expired a session whose demux loop was parked on backpressure")
+	case <-time.After(300 * time.Millisecond):
+		// Healthy: several timeouts elapsed while the dispatch was blocked.
+	}
+
+	drainParkedStream(t, server, writeDone)
+}
+
+// drainParkedStream accepts and reads the backpressured stream so the parked
+// dispatch completes and the writer goroutine finishes; the session-pair
+// cleanup can then close both ends cleanly.
+func drainParkedStream(t *testing.T, server *mirror.TunnelSession, writeDone <-chan struct{}) {
+	t.Helper()
+
+	acceptCtx, cancelAccept := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelAccept()
+
+	accepted, err := server.AcceptStream(acceptCtx)
+	require.NoError(t, err)
+
+	go func() {
+		buf := make([]byte, mirror.MaxTunnelPayload)
+		for {
+			_, readErr := accepted.Read(buf)
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-writeDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("draining the stream did not unblock the writer")
+	}
+}
+
+func TestSendKeepalives_PingsImmediately(t *testing.T) {
+	t.Parallel()
+
+	client, server := newSessionPair(t)
+
+	// An interval far beyond the assertion window proves the first ping is
+	// immediate rather than ticker-driven: it is what arms the agent's
+	// watchdog at session start instead of one interval in.
+	go mirror.SendKeepalives(t.Context(), client, time.Hour)
+
+	require.Eventually(t, func() bool {
+		return server.KeepaliveSeen()
+	}, 2*time.Second, 5*time.Millisecond, "SendKeepalives should ping before the first tick")
 }
 
 func TestWatchSessionLiveness_SurvivesWhileKeepalivesFlow(t *testing.T) {

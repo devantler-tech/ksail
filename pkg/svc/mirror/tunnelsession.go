@@ -84,6 +84,21 @@ type TunnelSession struct {
 	// The steering agent's liveness watchdog polls it through
 	// [TunnelSession.LastRead] to detect a dead client (ksail#6040).
 	lastRead atomic.Int64
+
+	// keepaliveSeen flips once the session has received its first
+	// [FrameKeepalive]. The liveness watchdog only arms after that proof
+	// that the peer speaks the keepalive protocol, so a pre-keepalive peer
+	// (e.g. an older client execing into a reused agent container) is never
+	// expired for not pinging — it keeps the pre-keepalive behaviour.
+	keepaliveSeen atomic.Bool
+
+	// dispatching is true while the demux loop is inside dispatch. A
+	// dispatch may legitimately block for longer than the liveness timeout
+	// (a stream past its receive budget parks the loop — the deliberate
+	// head-of-line backpressure above), during which no further frames can
+	// be read; the watchdog treats that as "cannot measure liveness", not
+	// "peer is dead" ([TunnelSession.DispatchInProgress]).
+	dispatching atomic.Bool
 }
 
 // NewTunnelSession starts a session over the given channel halves and begins
@@ -131,6 +146,23 @@ func (s *TunnelSession) LastRead() time.Time {
 // watchdog can distinguish an idle client from a dead one (ksail#6040).
 func (s *TunnelSession) SendKeepalive() error {
 	return s.writeFrame(Frame{StreamID: 0, Type: FrameKeepalive, Payload: nil})
+}
+
+// KeepaliveSeen reports whether the session has received at least one
+// [FrameKeepalive] from its peer. The liveness watchdog uses it as the arming
+// condition: only a peer that has proven it speaks the keepalive protocol is
+// ever expired for frame silence (see the keepaliveSeen field).
+func (s *TunnelSession) KeepaliveSeen() bool {
+	return s.keepaliveSeen.Load()
+}
+
+// DispatchInProgress reports whether the demux loop is currently inside
+// dispatch. While true, frame silence proves nothing about the peer — the
+// loop cannot read the channel while a backpressured stream blocks it — so
+// the liveness watchdog holds off instead of expiring the session (see the
+// dispatching field).
+func (s *TunnelSession) DispatchInProgress() bool {
+	return s.dispatching.Load()
 }
 
 // OpenStream announces a new locally-initiated stream to the peer and returns
@@ -238,7 +270,17 @@ func (s *TunnelSession) readLoop() {
 
 		s.lastRead.Store(time.Now().UnixNano())
 
+		s.dispatching.Store(true)
 		err = s.dispatch(frame)
+
+		// Re-stamp before clearing the in-progress flag: a dispatch can
+		// block past the liveness timeout (backpressure), and the watchdog
+		// must never observe "not dispatching" together with the stale
+		// pre-dispatch timestamp — completing a dispatch is channel
+		// progress just like reading the frame was.
+		s.lastRead.Store(time.Now().UnixNano())
+		s.dispatching.Store(false)
+
 		if err != nil {
 			// A dispatch parked on the accept queue unblocks through the
 			// closing channel during a deliberate Close; that is a clean
@@ -270,7 +312,10 @@ func (s *TunnelSession) dispatch(frame Frame) error {
 		return nil
 	case FrameKeepalive:
 		// Liveness only: readLoop already stamped lastRead before
-		// dispatching, so there is nothing further to route.
+		// dispatching. Recording that the peer speaks the keepalive
+		// protocol is what arms the liveness watchdog (KeepaliveSeen).
+		s.keepaliveSeen.Store(true)
+
 		return nil
 	default:
 		return fmt.Errorf("%w: %d", ErrTunnelUnknownFrameType, frame.Type)

@@ -368,3 +368,48 @@ func TestWaitForSteerIgnoresTapStatus(t *testing.T) {
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, mirror.ErrSteerTerminated)
 }
+
+func TestSteerContainerImage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reports the injected container's image", func(t *testing.T) {
+		t.Parallel()
+
+		clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+
+		_, err := mirror.InjectSteer(t.Context(), clientset, newTapPoint())
+		require.NoError(t, err)
+
+		image, err := mirror.SteerContainerImage(t.Context(), clientset, newTapPoint())
+		require.NoError(t, err)
+		assert.Equal(t, mirror.DefaultSteerImage, image)
+	})
+
+	t.Run("reports a reused container's live image, not this build's default", func(t *testing.T) {
+		t.Parallel()
+
+		pod := steeredPod()
+		pod.Spec.EphemeralContainers[0].Image = "ghcr.io/devantler-tech/ksail-steer:v0.0.1"
+		clientset := k8sfake.NewClientset(pod)
+
+		image, err := mirror.SteerContainerImage(t.Context(), clientset, newTapPoint())
+		require.NoError(t, err)
+		assert.Equal(t, "ghcr.io/devantler-tech/ksail-steer:v0.0.1", image)
+	})
+
+	t.Run("errors when no steering container is injected", func(t *testing.T) {
+		t.Parallel()
+
+		clientset := k8sfake.NewClientset(newPod("api-0", selectorLabels(), corev1.PodRunning))
+
+		_, err := mirror.SteerContainerImage(t.Context(), clientset, newTapPoint())
+		require.ErrorIs(t, err, mirror.ErrSteerNotInjected)
+	})
+
+	t.Run("errors on a nil tap point", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := mirror.SteerContainerImage(t.Context(), k8sfake.NewClientset(), nil)
+		require.ErrorIs(t, err, mirror.ErrTapPointNil)
+	})
+}

@@ -60,6 +60,7 @@ type interceptCall struct {
 	point        *mirror.TapPoint
 	steerCommand []string
 	localPort    int
+	keepalive    bool
 }
 
 // newSteerPod extends the shared running test pod with a steering container so
@@ -112,11 +113,13 @@ func stubInterceptSession(client kubernetes.Interface) (func(), *interceptCall) 
 			point *mirror.TapPoint,
 			steerCommand []string,
 			localPort int,
+			keepalive bool,
 		) error {
 			call.ran = true
 			call.point = point
 			call.steerCommand = steerCommand
 			call.localPort = localPort
+			call.keepalive = keepalive
 
 			return nil
 		},
@@ -151,6 +154,7 @@ func stubTerminatingInterceptSession(
 			_ *mirror.TapPoint,
 			_ []string,
 			_ int,
+			_ bool,
 		) error {
 			proc, err := os.FindProcess(os.Getpid())
 			if err != nil {
@@ -419,6 +423,9 @@ func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
 		"ksail", "steer-agent", "--service-port=9090", "--intercept-port=19000",
 	}, call.steerCommand)
 	assert.Equal(t, 8080, call.localPort)
+	// Fresh injection of this build's own steer image: the agent provably
+	// speaks the keepalive protocol, so liveness pings are enabled.
+	assert.True(t, call.keepalive, "derived command against this build's image enables keepalives")
 }
 
 // TestInterceptCmdExplicitSteerCommandOverridesServicePort verifies that the
@@ -448,6 +455,9 @@ func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
 
 	assert.True(t, call.ran, "the steering session must run")
 	assert.Equal(t, []string{"custom-agent", "--flag"}, call.steerCommand)
+	// A custom agent's protocol support is unknown: keepalives stay off so
+	// an older decoder is never fed a frame type it would reject.
+	assert.False(t, call.keepalive, "a custom --steer-command disables keepalives")
 }
 
 // TestInterceptCmdReusesExistingSteer verifies that an injected ephemeral
@@ -474,4 +484,38 @@ func TestInterceptCmdReusesExistingSteer(t *testing.T) {
 
 	assert.True(t, call.ran, "the steering session must run")
 	assert.Contains(t, out.String(), "reusing the steering agent already injected")
+}
+
+// TestInterceptCmdDisablesKeepalivesOnReusedForeignImage verifies the
+// version-skew guard: a reused steering container from another release (its
+// live image differs from this build's pinned default) may run a
+// pre-keepalive agent, so the client must not send it keepalive frames its
+// decoder would reject (ksail#6040 / ksail#6061 review).
+//
+//nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
+func TestInterceptCmdDisablesKeepalivesOnReusedForeignImage(t *testing.T) {
+	pod := newSteerPod(true)
+	pod.Spec.EphemeralContainers[0].Image = "ghcr.io/devantler-tech/ksail-steer:v0.0.1"
+	client := k8sfake.NewClientset(newMirrorDeployment(), pod)
+
+	restore, call := stubInterceptSession(client)
+	defer restore()
+
+	cmd := experimentalInterceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.True(t, call.ran, "the steering session must run")
+	assert.False(
+		t, call.keepalive,
+		"a reused container from another release must not receive keepalive frames",
+	)
 }

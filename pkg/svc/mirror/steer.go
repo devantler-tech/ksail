@@ -3,11 +3,13 @@ package mirror
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -117,6 +119,42 @@ func InjectSteer(
 // nothing else (notably NOT the tap's NET_RAW).
 func steerSecurityContext() *corev1.SecurityContext {
 	return hardenedSecurityContext("NET_ADMIN")
+}
+
+// ErrSteerNotInjected is returned by SteerContainerImage when the tap point's
+// pod carries no steering container.
+var ErrSteerNotInjected = errors.New("no steering container injected")
+
+// SteerContainerImage reports the image the pod's steering container actually
+// runs. Ephemeral containers cannot be removed, so an intercept may be
+// reusing a container injected by an older ksail release; the client compares
+// this live image against its own [DefaultSteerImage] to decide whether the
+// agent provably speaks the current tunnel protocol (keepalives — ksail#6040)
+// before sending frames an older decoder would reject as unknown.
+func SteerContainerImage(
+	ctx context.Context,
+	client kubernetes.Interface,
+	point *TapPoint,
+) (string, error) {
+	if point == nil {
+		return "", ErrTapPointNil
+	}
+
+	pod, err := client.CoreV1().Pods(point.Namespace).Get(ctx, point.Pod, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("getting pod %q in %s: %w", point.Pod, point.Namespace, err)
+	}
+
+	for _, ephemeral := range pod.Spec.EphemeralContainers {
+		if ephemeral.Name == SteerContainerName {
+			return ephemeral.Image, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"%w: pod %q in %s has no %q ephemeral container",
+		ErrSteerNotInjected, point.Pod, point.Namespace, SteerContainerName,
+	)
 }
 
 // WaitForSteer blocks until the steering container on the tap point's pod
