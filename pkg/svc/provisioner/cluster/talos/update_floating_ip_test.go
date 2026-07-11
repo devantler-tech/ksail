@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -406,6 +407,61 @@ func TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate(t *testing.T) {
 		"a collision is a definitive answer, not a warn-and-skip detection failure")
 }
 
+// TestMergeFloatingIPChanges_PropagatesContextTermination verifies cancellation
+// and deadline errors abort live drift detection instead of degrading into a
+// successful unavailable-state skip and a misleading no-change result.
+func TestMergeFloatingIPChanges_PropagatesContextTermination(t *testing.T) {
+	t.Parallel()
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, false, calls)
+
+	tests := []struct {
+		name       string
+		newContext func() context.Context
+		want       error
+	}{
+		{
+			name: "canceled",
+			newContext: func() context.Context {
+				ctx, cancel := context.WithCancel(t.Context())
+				cancel()
+
+				return ctx
+			},
+			want: context.Canceled,
+		},
+		{
+			name: "deadline exceeded",
+			newContext: func() context.Context {
+				ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+				cancel()
+
+				return ctx
+			},
+			want: context.DeadlineExceeded,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+				FloatingIPEnabled: true,
+			}).WithInfraProvider(newFipUpdateProvider(server.URL))
+			diff := &clusterupdate.UpdateResult{}
+
+			err := provisioner.MergeFloatingIPChangesForTest(
+				test.newContext(), "fip-cluster", diff,
+			)
+
+			require.ErrorIs(t, err, test.want)
+			assert.Empty(t, diff.InPlaceChanges)
+		})
+	}
+}
+
 // TestReconcileFloatingIPEndpoint_NoopWithoutChange verifies that the apply
 // step does not contact the provider without a matching diff.
 func TestReconcileFloatingIPEndpoint_NoopWithoutChange(t *testing.T) {
@@ -496,6 +552,8 @@ func TestBuildDesiredNodeConfig_PreservesReconciledFloatingIPEndpoint(t *testing
 		t.Context(), hzProvider, "fip-cluster",
 		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
 	))
+	require.True(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest(),
+		"the fixture must exercise the authoritative desired-endpoint branch")
 
 	tests := []struct {
 		name    string

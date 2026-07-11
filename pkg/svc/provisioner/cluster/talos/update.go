@@ -397,11 +397,13 @@ func (p *Provisioner) detectOwnedFloatingIP(
 }
 
 // classifyFloatingIPDetectionErr splits floating-IP detection failures into
-// the ownership collision (returned, wrapped — a definitive answer the update
-// must fail on) and everything else (logged and swallowed — detection is
-// genuinely unavailable, so the caller skips rather than acts on a guess).
+// definitive failures (ownership collisions and context termination, which
+// must stop the update) and transient provider failures (logged and swallowed,
+// so the caller skips rather than acts on a guess).
 func (p *Provisioner) classifyFloatingIPDetectionErr(err error) error {
-	if errors.Is(err, hetzner.ErrFloatingIPNotOwned) {
+	if errors.Is(err, hetzner.ErrFloatingIPNotOwned) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("failed to detect floating IP state: %w", err)
 	}
 

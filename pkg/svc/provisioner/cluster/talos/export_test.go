@@ -727,6 +727,13 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
 }
 
+// HasDesiredHetznerFloatingIPEndpointForTest exposes the authoritative desired
+// endpoint predicate so endpoint-preservation tests prove they exercise its
+// true branch rather than passing through unrelated config grafting.
+func (p *Provisioner) HasDesiredHetznerFloatingIPEndpointForTest() bool {
+	return p.hasDesiredHetznerFloatingIPEndpoint()
+}
+
 // DetectRoleMachineConfigDriftForTest exposes detectRoleMachineConfigDrift for
 // unit testing per-role (control-plane vs worker) patch drift detection.
 func (p *Provisioner) DetectRoleMachineConfigDriftForTest(
