@@ -289,7 +289,7 @@ func (r *LiveReplay) newFlow() *replayFlow {
 		finished:     false,
 	}
 
-	conn, err := r.dial("tcp", r.address)
+	conn, err := r.dial(protocolTCP, r.address)
 	if err != nil {
 		r.recordErr(fmt.Errorf("dial replay address %q: %w", r.address, err))
 

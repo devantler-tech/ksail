@@ -17,6 +17,7 @@ import (
 
 var (
 	errSteerInstallDenied  = errors.New("iptables: permission denied")
+	errSteerGuardDenied    = errors.New("iptables: guard denied")
 	errSteerTeardownDenied = errors.New("iptables: delete denied")
 	errForwardBroken       = errors.New("accept: connection reset")
 )
@@ -73,6 +74,34 @@ func (r *recordingRunner) sawAction(action string) bool {
 	return false
 }
 
+// callCount reports how many commands the runner has recorded so far.
+func (r *recordingRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return len(r.calls)
+}
+
+// callHas reports whether the index-th recorded call carries every one of the
+// given argument tokens — used to pin the install/teardown rule ordering.
+func (r *recordingRunner) callHas(t *testing.T, index int, tokens ...string) bool {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if index >= len(r.calls) {
+		t.Fatalf("no call at index %d, recorded %d: %v", index, len(r.calls), r.calls)
+	}
+
+	for _, token := range tokens {
+		if !slices.Contains(r.calls[index], token) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +148,68 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	cancel()
 	require.NoError(t, <-agentDone)
 	assert.True(t, runner.sawAction("-D"), "the redirect rule should be torn down on exit")
+}
+
+func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T) {
+	t.Parallel()
+
+	// The listener binds all interfaces (#6039), so the agent must pair the
+	// REDIRECT rule with an INPUT guard that drops direct (non-REDIRECTed,
+	// ctstate != DNAT) hits on the intercept port — installed after the
+	// redirect, removed before it (first in, last out).
+	runner := &recordingRunner{}
+	agentTransport, _ := net.Pipe()
+	listener := newPipeListener()
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	agentDone := make(chan error, 1)
+
+	go func() {
+		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
+	}()
+
+	bothInstalled := func() bool { return runner.callCount() >= 2 }
+	require.Eventually(t, bothInstalled, time.Second, time.Millisecond,
+		"both steering rules should be installed")
+	cancel()
+	require.NoError(t, <-agentDone)
+
+	require.Equal(t, 4, runner.callCount(), "expected redirect+guard installs and teardowns")
+	assert.True(t, runner.callHas(t, 0, "-I", "REDIRECT", "--dport", "8080"),
+		"the redirect installs first")
+	assert.True(t, runner.callHas(t, 1, "-I", "DROP", "--dport", "15006"),
+		"the guard installs second")
+	assert.True(t, runner.callHas(t, 2, "-D", "DROP", "--dport", "15006"),
+		"the guard is removed first on teardown")
+	assert.True(t, runner.callHas(t, 3, "-D", "REDIRECT", "--dport", "8080"),
+		"the redirect is removed last on teardown")
+}
+
+func TestRunSteerAgent_RollsBackTheRedirectWhenTheGuardInstallFails(t *testing.T) {
+	t.Parallel()
+
+	// A redirect without its guard would steer traffic to an unguarded
+	// all-interfaces listener; a guard-install failure must abort the agent AND
+	// remove the already-installed redirect rule.
+	runner := &recordingRunner{failOn: "DROP", err: errSteerGuardDenied}
+	agentTransport, _ := net.Pipe()
+	listener := newPipeListener()
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+
+	err := mirror.RunSteerAgent(
+		context.Background(),
+		agentTransport,
+		listener,
+		redirect,
+		runner.run,
+	)
+
+	require.ErrorIs(t, err, errSteerGuardDenied)
+	require.Equal(t, 3, runner.callCount(), "expected redirect install, guard attempt, rollback")
+	assert.True(t, runner.callHas(t, 2, "-D", "REDIRECT", "--dport", "8080"),
+		"the dangling redirect must be rolled back")
 }
 
 func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {

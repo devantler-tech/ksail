@@ -1,14 +1,15 @@
 // Package steeragent provides the hidden `ksail steer-agent` command: the
 // in-cluster steering-agent entrypoint that `ksail workload intercept` execs
 // inside the ephemeral steering container. It installs the pod's inbound
-// REDIRECT rule and forwards the redirected traffic over the tunnel (its
-// stdin/stdout, the exec channel) to the developer's local process.
+// steering rules (the NAT REDIRECT plus its intercept-port guard) and forwards
+// the redirected traffic over the tunnel (its stdin/stdout, the exec channel)
+// to the developer's local process.
 //
 // It exists so a KSail-shipped steering image can run the tunnel-speaking agent
 // out of the box: the default `--steer-image` (netshoot) carries `iptables` but
 // no binary that speaks the tunnel protocol, so `workload intercept` today needs
 // an operator-supplied `--steer-command`. This command is that command — the
-// concrete os/exec runner, loopback listener, and stdio transport the merged
+// concrete os/exec runner, intercept listener, and stdio transport the merged
 // [mirror.RunSteerAgent] composition (ksail#5871) documented as "supplied by the
 // CLI wiring that launches the agent" (ksail#5851 / #5882). It is intended to be
 // launched by the steering image, not run directly, so it is hidden.
@@ -30,10 +31,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// loopbackHost is the address the steering listener binds to. The agent shares
-// the pod's network namespace and the REDIRECT rule retargets traffic here, so
-// binding to loopback (not all interfaces) is both sufficient and least-exposure.
-const loopbackHost = "127.0.0.1"
+// listenHost is the address the steering listener binds to: all IPv4
+// interfaces, NOT loopback. For traffic arriving from outside the pod,
+// iptables REDIRECT rewrites the destination to the address of the interface
+// the packet came in on (the pod IP) — never to 127.0.0.1 — so a loopback
+// listener would refuse every intercepted connection (#6039). Least exposure
+// is re-established by the agent's INPUT guard rule, which drops direct
+// (non-REDIRECTed) hits on the intercept port.
+const listenHost = "0.0.0.0"
 
 // options carries the steering agent's port configuration.
 type options struct {
@@ -44,7 +49,7 @@ type options struct {
 // deps are the injectable seams that keep [run] unit-testable without a live
 // network namespace: the byte transport to the ksail side, the listener
 // factory, and the iptables command runner. Production wires the concrete
-// stdio transport, loopback listener, and os/exec runner via [defaultDeps];
+// stdio transport, intercept listener, and os/exec runner via [defaultDeps];
 // tests inject fakes.
 type deps struct {
 	transport io.ReadWriteCloser
@@ -63,8 +68,9 @@ func NewSteerAgentCmd() *cobra.Command {
 
 The steering agent runs inside an ephemeral container that shares a target pod's
 network namespace. It installs an iptables NAT REDIRECT rule for the workload's
-service port and forwards the redirected connections over a tunnel — its
-stdin/stdout, the exec channel — to a local process on the developer's machine.
+service port (plus a guard that drops direct hits on the intercept port) and
+forwards the redirected connections over a tunnel — its stdin/stdout, the exec
+channel — to a local process on the developer's machine.
 It is execed by ` + "`ksail workload intercept`" + ` via the KSail steering image
 rather than run directly.`,
 		Hidden: true,
@@ -94,14 +100,14 @@ rather than run directly.`,
 		&opts.interceptPort,
 		"intercept-port",
 		0,
-		"The loopback port the agent listens on and redirects the service port to",
+		"The port the agent listens on and redirects the service port to",
 	)
 
 	return cmd
 }
 
 // run composes the merged steering seams into a running agent: it builds the
-// redirect from opts, opens the loopback listener, and hands both to
+// redirect from opts, opens the intercept listener, and hands both to
 // [mirror.RunSteerAgent] with the transport and iptables runner. It blocks
 // until ctx is cancelled or the tunnel ends, and returns nil on a graceful stop.
 func run(ctx context.Context, opts options, dependencies deps) error {
@@ -134,18 +140,21 @@ func run(ctx context.Context, opts options, dependencies deps) error {
 func defaultDeps() deps {
 	return deps{
 		transport: stdioTransport{},
-		listen:    listenLoopback,
+		listen:    listenIntercept,
 		runner:    execRunner,
 	}
 }
 
-// listenLoopback binds a TCP listener to [loopbackHost] on port.
-func listenLoopback(ctx context.Context, port int) (net.Listener, error) {
+// listenIntercept binds a TCP listener to [listenHost] on port. The network is
+// pinned to tcp4 — a plain "tcp" wildcard bind can yield a dual-stack socket
+// that also accepts direct IPv6 connections, which the IPv4 iptables guard
+// rule cannot drop; the REDIRECT rule only ever delivers IPv4.
+func listenIntercept(ctx context.Context, port int) (net.Listener, error) {
 	var config net.ListenConfig
 
-	listener, err := config.Listen(ctx, "tcp", net.JoinHostPort(loopbackHost, strconv.Itoa(port)))
+	listener, err := config.Listen(ctx, "tcp4", net.JoinHostPort(listenHost, strconv.Itoa(port)))
 	if err != nil {
-		return nil, fmt.Errorf("binding the loopback listener: %w", err)
+		return nil, fmt.Errorf("binding the intercept listener: %w", err)
 	}
 
 	return listener, nil

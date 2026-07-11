@@ -41,25 +41,26 @@ var ErrSteerRunnerNil = errors.New("steering command runner must not be nil")
 type SteerCommandRunner func(ctx context.Context, name string, args ...string) error
 
 // RunSteerAgent is the steering agent's in-container entrypoint composition: it
-// installs the iptables NAT REDIRECT rule for redirect, accepts the redirected
-// connections on listener and forwards each over the tunnel
-// ([ForwardRedirected]), and — win or lose — removes the rule again before
-// returning. Reversible teardown is a hard requirement of the #5839 design:
-// an ephemeral container cannot be removed, so its rules must be, or the pod's
-// traffic stays redirected to a dead agent.
+// installs the iptables steering rules for redirect (the NAT REDIRECT plus the
+// intercept-port guard that keeps the all-interfaces listener reachable only
+// via that REDIRECT — #6039), accepts the redirected connections on listener
+// and forwards each over the tunnel ([ForwardRedirected]), and — win or lose —
+// removes the rules again before returning. Reversible teardown is a hard
+// requirement of the #5839 design: an ephemeral container cannot be removed,
+// so its rules must be, or the pod's traffic stays redirected to a dead agent.
 //
 // transport is the agent's byte pipe to the ksail side; when the agent runs as
 // the ksail-steer container's process it is the exec channel
 // [OpenExecTransport] opens, and tests pair it with the ksail side over an
 // in-memory pipe. listener receives the connections the in-namespace REDIRECT
-// delivers. runner installs and removes the rule (see [SteerCommandRunner]).
+// delivers. runner installs and removes the rules (see [SteerCommandRunner]).
 //
 // It blocks until ctx is cancelled or the tunnel session ends (both return
 // nil, matching [ForwardRedirected]) or the listener fails (returns the error).
 // The rule teardown runs on a context detached from ctx and time-bounded, so a
 // cancelled agent still cleans up; a teardown failure is joined onto any
 // forwarding error (via [errors.Join]) and surfaced as the returned error, so a
-// dangling REDIRECT rule on an ephemeral pod is observable rather than silent —
+// dangling steering rule on an ephemeral pod is observable rather than silent —
 // even when forwarding failed too.
 func RunSteerAgent(
 	ctx context.Context,
@@ -73,22 +74,17 @@ func RunSteerAgent(
 		return err
 	}
 
-	insertArgs, err := redirect.InsertArgs()
+	err = installSteeringRules(ctx, redirect, runner)
 	if err != nil {
-		return fmt.Errorf("building the steering install rule: %w", err)
-	}
-
-	err = runner(ctx, steerIptablesBinary, insertArgs...)
-	if err != nil {
-		return fmt.Errorf("installing the steering redirect rule: %w", err)
+		return err
 	}
 
 	defer func() {
-		teardownErr := removeSteeringRule(ctx, redirect, runner)
+		teardownErr := removeSteeringRules(ctx, redirect, runner)
 		if teardownErr != nil {
 			// Join rather than only surfacing teardown when forwarding
 			// succeeded: a teardown failure that coincides with a forwarding
-			// failure still leaves a dangling REDIRECT rule on an ephemeral
+			// failure still leaves a dangling steering rule on an ephemeral
 			// pod, so both must be observable, not just the first.
 			err = errors.Join(err, teardownErr)
 		}
@@ -99,6 +95,58 @@ func RunSteerAgent(
 	defer func() { _ = session.Close() }()
 
 	return ForwardRedirected(ctx, listener, session)
+}
+
+// installSteeringRules installs the redirect and then its intercept-port
+// guard. A guard-install failure rolls the already-installed redirect back
+// before returning (joined with the rollback error if that fails too): a
+// redirect without its guard would steer traffic to an unguarded
+// all-interfaces listener, so the pair is installed atomically-or-not-at-all.
+func installSteeringRules(
+	ctx context.Context,
+	redirect SteeringRedirect,
+	runner SteerCommandRunner,
+) error {
+	insertArgs, err := redirect.InsertArgs()
+	if err != nil {
+		return fmt.Errorf("building the steering install rule: %w", err)
+	}
+
+	err = runner(ctx, steerIptablesBinary, insertArgs...)
+	if err != nil {
+		return fmt.Errorf("installing the steering redirect rule: %w", err)
+	}
+
+	guardArgs, err := redirect.GuardInsertArgs()
+	if err == nil {
+		err = runner(ctx, steerIptablesBinary, guardArgs...)
+		if err != nil {
+			err = fmt.Errorf("installing the intercept-port guard rule: %w", err)
+		}
+	} else {
+		err = fmt.Errorf("building the intercept-port guard rule: %w", err)
+	}
+
+	if err != nil {
+		return errors.Join(err, removeRule(ctx, redirect.DeleteArgs, runner, "steering redirect"))
+	}
+
+	return nil
+}
+
+// removeSteeringRules removes both steering rules in reverse install order —
+// the guard first, the redirect last (first in, last out) — and attempts the
+// second removal even when the first fails, joining the failures: each rule
+// left dangling on an ephemeral pod must be observable.
+func removeSteeringRules(
+	ctx context.Context,
+	redirect SteeringRedirect,
+	runner SteerCommandRunner,
+) error {
+	return errors.Join(
+		removeRule(ctx, redirect.GuardDeleteArgs, runner, "intercept-port guard"),
+		removeRule(ctx, redirect.DeleteArgs, runner, "steering redirect"),
+	)
 }
 
 // checkSteerAgentInputs rejects the nil dependencies that would otherwise
@@ -124,21 +172,23 @@ func checkSteerAgentInputs(
 	return nil
 }
 
-// removeSteeringRule runs the redirect's delete rule on a context detached from
-// the agent's own — the agent stops precisely because ctx was cancelled, so
-// reusing it would kill the teardown command before it could undo the rule. It
+// removeRule runs one rule's delete vector on a context detached from the
+// agent's own — the agent stops precisely because ctx was cancelled, so
+// reusing it would kill the teardown command before it could undo the rule —
+// and time-bounded, so a wedged iptables cannot hang teardown forever. It
 // returns the build-or-run failure rather than swallowing it: an ephemeral
 // container cannot be removed, so a rule the container failed to delete has no
-// future cleanup path, and [RunSteerAgent] surfaces the error so the dangling
-// REDIRECT is observable.
-func removeSteeringRule(
+// future cleanup path, and the callers surface the error so the dangling rule
+// is observable.
+func removeRule(
 	ctx context.Context,
-	redirect SteeringRedirect,
+	buildArgs func() ([]string, error),
 	runner SteerCommandRunner,
+	ruleName string,
 ) error {
-	deleteArgs, err := redirect.DeleteArgs()
+	deleteArgs, err := buildArgs()
 	if err != nil {
-		return fmt.Errorf("building the steering teardown rule: %w", err)
+		return fmt.Errorf("building the %s teardown rule: %w", ruleName, err)
 	}
 
 	teardownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), steerTeardownTimeout)
@@ -146,7 +196,7 @@ func removeSteeringRule(
 
 	err = runner(teardownCtx, steerIptablesBinary, deleteArgs...)
 	if err != nil {
-		return fmt.Errorf("removing the steering redirect rule: %w", err)
+		return fmt.Errorf("removing the %s rule: %w", ruleName, err)
 	}
 
 	return nil

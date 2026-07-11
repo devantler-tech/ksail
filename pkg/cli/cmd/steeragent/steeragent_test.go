@@ -204,6 +204,29 @@ func TestRunForTest_PropagatesInstallError(t *testing.T) {
 	}
 }
 
+func TestListenIntercept_BindsAllIPv4Interfaces(t *testing.T) {
+	t.Parallel()
+
+	listener, err := steeragent.ListenInterceptForTest(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+
+	defer func() { _ = listener.Close() }()
+
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("expected a *net.TCPAddr, got %T", listener.Addr())
+	}
+
+	// REDIRECT delivers remote traffic to the pod IP, not loopback (#6039), so
+	// the listener must bind every IPv4 interface; the agent's iptables guard
+	// rule re-establishes least exposure.
+	if !tcpAddr.IP.Equal(net.IPv4zero) {
+		t.Errorf("listener bound %s, want 0.0.0.0 (all IPv4 interfaces)", tcpAddr.IP)
+	}
+}
+
 func TestNewSteerAgentCmd(t *testing.T) {
 	t.Parallel()
 

@@ -15,10 +15,25 @@ const (
 	steeringChain = "PREROUTING"
 )
 
+// Guard rule placement: the agent's listener binds all interfaces (REDIRECT
+// delivers remote traffic to the pod IP, not loopback — #6039), so a filter
+// INPUT rule re-establishes least exposure by dropping every connection to the
+// intercept port that was NOT steered there by the REDIRECT (conntrack state
+// DNAT) — e.g. another pod dialling `<podIP>:<interceptPort>` directly.
+const (
+	guardTable = "filter"
+	guardChain = "INPUT"
+)
+
 // SteeringRuleComment tags every rule the steering agent writes, so cleanup
 // (and the idle-watchdog increment) can identify ksail's rules — and only
 // ksail's — inside a chain that may carry unrelated entries.
 const SteeringRuleComment = "ksail-steer"
+
+// protocolTCP is the TCP protocol name as every mirror surface spells it: the
+// iptables `-p` argument, the tcpdump BPF filter keyword, and the net.Dial
+// network.
+const protocolTCP = "tcp"
 
 // Valid TCP port bounds for a steering redirect.
 const (
@@ -78,6 +93,21 @@ func (r SteeringRedirect) DeleteArgs() ([]string, error) {
 	return r.args("-D")
 }
 
+// GuardInsertArgs returns the iptables argument vector that installs the
+// intercept-port guard at the head of the filter INPUT chain: only REDIRECTed
+// connections (conntrack state DNAT) may reach the agent's all-interfaces
+// listener; direct hits on the intercept port are dropped.
+func (r SteeringRedirect) GuardInsertArgs() ([]string, error) {
+	return r.guardArgs("-I")
+}
+
+// GuardDeleteArgs returns the iptables argument vector that removes the
+// intercept-port guard — the exact inverse of [SteeringRedirect.GuardInsertArgs],
+// for the same reversibility requirement as the redirect rule (#5839).
+func (r SteeringRedirect) GuardDeleteArgs() ([]string, error) {
+	return r.guardArgs("-D")
+}
+
 // args builds the full iptables argument vector for the given chain action,
 // validating the redirect first so no malformed rule ever reaches a chain.
 func (r SteeringRedirect) args(action string) ([]string, error) {
@@ -96,15 +126,45 @@ func (r SteeringRedirect) args(action string) ([]string, error) {
 	return args, nil
 }
 
+// guardArgs builds the full iptables argument vector for the guard rule's
+// chain action, with the same validate-first discipline as [SteeringRedirect.args].
+func (r SteeringRedirect) guardArgs(action string) ([]string, error) {
+	err := r.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	prefix := []string{"-t", guardTable, action, guardChain}
+	spec := r.guardRuleSpec()
+
+	args := make([]string, 0, len(prefix)+len(spec))
+	args = append(args, prefix...)
+	args = append(args, spec...)
+
+	return args, nil
+}
+
 // ruleSpec is the rule specification shared verbatim by insertion and
 // deletion — iptables `-D` only matches a rule whose specification is
 // byte-identical to the one `-I` installed.
 func (r SteeringRedirect) ruleSpec() []string {
 	return []string{
-		"-p", "tcp",
+		"-p", protocolTCP,
 		"--dport", strconv.Itoa(r.ServicePort),
 		"-m", "comment", "--comment", SteeringRuleComment,
 		"-j", "REDIRECT",
 		"--to-ports", strconv.Itoa(r.InterceptPort),
+	}
+}
+
+// guardRuleSpec is the guard rule specification shared verbatim by insertion
+// and deletion, for the same byte-identical `-D` matching as [SteeringRedirect.ruleSpec].
+func (r SteeringRedirect) guardRuleSpec() []string {
+	return []string{
+		"-p", protocolTCP,
+		"--dport", strconv.Itoa(r.InterceptPort),
+		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "comment", "--comment", SteeringRuleComment,
+		"-j", "DROP",
 	}
 }

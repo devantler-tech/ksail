@@ -129,6 +129,82 @@ func TestSteeringRedirectDeleteIsExactInverseOfInsert(t *testing.T) {
 	}
 }
 
+func TestSteeringRedirectGuardInsertArgs(t *testing.T) {
+	t.Parallel()
+
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 9090}
+
+	args, err := redirect.GuardInsertArgs()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"-t", "filter", "-I", "INPUT",
+		"-p", "tcp",
+		"--dport", "9090",
+		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "comment", "--comment", mirror.SteeringRuleComment,
+		"-j", "DROP",
+	}, args)
+}
+
+func TestSteeringRedirectGuardDeleteArgs(t *testing.T) {
+	t.Parallel()
+
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 9090}
+
+	args, err := redirect.GuardDeleteArgs()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"-t", "filter", "-D", "INPUT",
+		"-p", "tcp",
+		"--dport", "9090",
+		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "comment", "--comment", mirror.SteeringRuleComment,
+		"-j", "DROP",
+	}, args)
+}
+
+func TestSteeringRedirectGuardDeleteIsExactInverseOfInsert(t *testing.T) {
+	t.Parallel()
+
+	// Same reversibility requirement as the redirect rule (#5839): iptables -D
+	// only matches a byte-identical specification.
+	redirect := mirror.SteeringRedirect{ServicePort: 443, InterceptPort: 18443}
+
+	insert, err := redirect.GuardInsertArgs()
+	require.NoError(t, err)
+
+	deleteArgs, err := redirect.GuardDeleteArgs()
+	require.NoError(t, err)
+
+	require.Len(t, deleteArgs, len(insert))
+
+	for index := range insert {
+		if insert[index] == "-I" {
+			assert.Equal(t, "-D", deleteArgs[index], "index %d", index)
+
+			continue
+		}
+
+		assert.Equal(t, insert[index], deleteArgs[index], "index %d", index)
+	}
+}
+
+func TestSteeringRedirectGuardArgsInvalid(t *testing.T) {
+	t.Parallel()
+
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 0}
+
+	insert, err := redirect.GuardInsertArgs()
+	require.ErrorIs(t, err, mirror.ErrSteeringPortInvalid)
+	assert.Nil(t, insert)
+
+	deleteArgs, err := redirect.GuardDeleteArgs()
+	require.ErrorIs(t, err, mirror.ErrSteeringPortInvalid)
+	assert.Nil(t, deleteArgs)
+}
+
 func TestSteeringRedirectArgsInvalid(t *testing.T) {
 	t.Parallel()
 
