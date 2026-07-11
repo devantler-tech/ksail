@@ -140,7 +140,7 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 Filter paths
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter
         with:
           filters: |
@@ -270,7 +270,7 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@f8672a9111aeb957224fb969636b78a97471e0ec # v9.0.3
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@84813ae61fb21741e0a6193b5c14c6941a448577 # v9.0.7
     permissions:
       contents: write
       issues: write
@@ -1082,16 +1082,20 @@ jobs:
           # Enable Kubernetes provider tests on the default (init=true, args="")
           # entry for each distribution. This tests all 4 nested distributions
           # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
+          # The three mirror-supported distributions also opt into their smoke
+          # test here so it runs once per distribution rather than for all args.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           - distribution: K3s
             provider: Docker
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           - distribution: Talos
             provider: Docker
             init: true
@@ -1102,6 +1106,7 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            test-workload-mirror: "true"
           # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
           # chart ships MutatingAdmissionPolicy resources that need the v1beta1
           # admissionregistration API enabled on the embedded k3s server via the k3k
@@ -1132,7 +1137,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -1167,6 +1172,7 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
+          test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
@@ -1318,7 +1324,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@f8672a9111aeb957224fb969636b78a97471e0ec # v9.0.3
+      - uses: devantler-tech/actions/aggregate-job-checks@84813ae61fb21741e0a6193b5c14c6941a448577 # v9.0.7
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}

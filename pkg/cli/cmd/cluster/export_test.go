@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -36,8 +37,9 @@ func ExportAWSProviderStatus(
 	client *eksctlclient.Client,
 	clusterName string,
 	region string,
+	opts ...awsprovider.Option,
 ) (*provider.ClusterStatus, error) {
-	return awsProviderStatus(ctx, client, clusterName, region)
+	return awsProviderStatus(ctx, client, clusterName, region, opts...)
 }
 
 // ErrProviderNotConfigured exports errProviderNotConfigured for testing.

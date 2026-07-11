@@ -7,9 +7,12 @@ import (
 	"os"
 	"testing"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +20,21 @@ import (
 // errEksctlStubEmptyArgs is returned when the stub runner is invoked with no
 // positional arguments (should never happen in real test cases).
 var errEksctlStubEmptyArgs = errors.New("eksctl stub: empty args")
+
+// stubEndpoint is the EKS control-plane endpoint the stub describer returns so
+// the AWS status tests never resolve real AWS credentials.
+const stubEndpoint = "https://ABCDEF.gr7.us-east-1.eks.amazonaws.com"
+
+// stubDescriber is a credential-free stand-in for the EKS DescribeCluster
+// seam, returning a cluster carrying stubEndpoint.
+type stubDescriber struct{}
+
+func (stubDescriber) DescribeCluster(
+	_ context.Context,
+	_ string,
+) (*ekstypes.Cluster, error) {
+	return &ekstypes.Cluster{Endpoint: awssdk.String(stubEndpoint)}, nil
+}
 
 // eksctlStubRunner replays canned eksctl responses keyed by the first two
 // positional arguments (e.g. "get cluster", "get nodegroup"), mirroring the
@@ -78,12 +96,16 @@ func TestAWSProviderStatus_AggregatesNodegroups(t *testing.T) {
 		),
 	})
 
-	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo", "")
+	status, err := cluster.ExportAWSProviderStatus(
+		t.Context(), client, "demo", "",
+		awsprovider.WithClusterDescriber(stubDescriber{}),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, status)
 	assert.Equal(t, 2, status.NodesTotal)
 	assert.Equal(t, 2, status.NodesReady)
 	assert.True(t, status.Ready)
+	assert.Equal(t, stubEndpoint, status.Endpoint)
 }
 
 func TestAWSProviderStatus_ClusterNotFound(t *testing.T) {
@@ -133,7 +155,10 @@ func TestAWSProviderStatus_ForwardsRegion(t *testing.T) {
 		eksctlclient.WithRunner(runner),
 	)
 
-	status, err := cluster.ExportAWSProviderStatus(t.Context(), client, "demo", "eu-west-1")
+	status, err := cluster.ExportAWSProviderStatus(
+		t.Context(), client, "demo", "eu-west-1",
+		awsprovider.WithClusterDescriber(stubDescriber{}),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, status)
 

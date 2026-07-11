@@ -96,6 +96,7 @@ type validateFlags struct {
 	ignoreMissingSchemas bool
 	skipHelmRender       bool
 	includeCRDSchemas    bool
+	ephemeral            bool
 	skipKinds            []string
 	schemaLocations      []string
 	rules                string
@@ -152,9 +153,40 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"validation, a warning-severity violation is reported without failing. "+
 			"Overrides spec.workload.validation.rules from ksail.yaml.",
 	)
+	cmd.Flags().BoolVar(
+		&flags.ephemeral,
+		"ephemeral",
+		false,
+		"EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of "+
+			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
+			"into it, so declared operators' CRDs are registered. Validating their rendered "+
+			"children against the cluster is not wired yet — off by default.",
+	)
 }
 
+// runValidateCmd dispatches to runValidateCmdInner directly, or — when
+// --ephemeral is set — wraps it in a throwaway KWOK cluster that is
+// guaranteed to be torn down afterwards (see withEphemeralCluster). While the
+// cluster is live, the workload's declared charts are installed into it first
+// (installDeclaredCharts, ksail#5919 Phase 3b-2) so the declared operators'
+// CRDs are registered; applying the rendered manifests and validating their
+// operator-rendered children is the remaining Phase 3b-3.
 func runValidateCmd(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	flags validateFlags,
+) error {
+	if flags.ephemeral {
+		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
+			return runValidateCmdInner(ctx, cmd, args, flags)
+		})
+	}
+
+	return runValidateCmdInner(ctx, cmd, args, flags)
+}
+
+func runValidateCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,

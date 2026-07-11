@@ -207,8 +207,10 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		return err
 	}
 
-	// Update the stored configs
+	// Update the stored configs and remember the effective endpoint for the
+	// kubeconfig rewrite in saveHetznerKubeconfig.
 	p.talosConfigs = updatedConfigs
+	p.clusterEndpointIP = endpointIP
 
 	return nil
 }

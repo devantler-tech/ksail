@@ -56,6 +56,7 @@ func NewScanCmd() *cobra.Command {
 		verbose             bool
 		noRender            bool
 		exceptions          string
+		ephemeral           bool
 	)
 
 	cmd := &cobra.Command{
@@ -76,6 +77,7 @@ func NewScanCmd() *cobra.Command {
 					verbose:             verbose,
 					noRender:            noRender,
 					exceptions:          exceptions,
+					ephemeral:           ephemeral,
 				},
 			)
 		},
@@ -91,6 +93,7 @@ func NewScanCmd() *cobra.Command {
 		&verbose,
 		&noRender,
 		&exceptions,
+		&ephemeral,
 	)
 
 	return cmd
@@ -105,6 +108,7 @@ type scanFlags struct {
 	verbose             bool
 	noRender            bool
 	exceptions          string
+	ephemeral           bool
 }
 
 // addScanFlags registers the flags for the scan command.
@@ -115,6 +119,7 @@ func addScanFlags(
 	complianceThreshold *float32,
 	verbose, noRender *bool,
 	exceptions *string,
+	ephemeral *bool,
 ) {
 	cmd.Flags().StringSliceVar(frameworks, "framework", []string{"nsa"},
 		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss) "+
@@ -135,9 +140,37 @@ func addScanFlags(
 		"Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy "+
 			"objects) forwarded to Kubescape's --exceptions "+
 			"(overrides spec.workload.scan.exceptions from ksail.yaml)")
+	cmd.Flags().BoolVar(ephemeral, "ephemeral", false,
+		"EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of "+
+			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
+			"into it, so declared operators' CRDs are registered. Scanning their rendered "+
+			"children against the cluster is not wired yet — off by default.")
 }
 
+// runScanCmd dispatches to runScanCmdInner directly, or — when --ephemeral is
+// set — wraps it in a throwaway KWOK cluster that is guaranteed to be torn
+// down afterwards (see withEphemeralCluster, shared with the validate
+// command). While the cluster is live, the workload's declared charts are
+// installed into it first (installDeclaredCharts, ksail#5919 Phase 3b-2) so
+// the declared operators' CRDs are registered; applying the rendered
+// manifests and scanning their operator-rendered children is the remaining
+// Phase 3b-3.
 func runScanCmd(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	flags scanFlags,
+) error {
+	if flags.ephemeral {
+		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
+			return runScanCmdInner(ctx, cmd, args, flags)
+		})
+	}
+
+	return runScanCmdInner(ctx, cmd, args, flags)
+}
+
+func runScanCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,

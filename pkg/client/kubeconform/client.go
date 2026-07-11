@@ -1,6 +1,7 @@
 package kubeconform
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/yannh/kubeconform/pkg/validator"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
 // ErrValidationFailed indicates that validation failed.
@@ -118,16 +120,57 @@ func (c *Client) validateData(
 		return fmt.Errorf("%w", ctx.Err())
 	}
 
+	documents, err := splitDocumentsForValidation(data)
+	if err != nil {
+		return fmt.Errorf("split manifests: %w", err)
+	}
+
 	kubeValidator, err := c.createValidator(opts)
 	if err != nil {
 		return fmt.Errorf("create validator: %w", err)
 	}
 
 	return c.validateWithRetry(ctx, func() error {
-		results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
+		results := make([]validator.Result, 0, len(documents))
+		for _, document := range documents {
+			if ctx.Err() != nil {
+				return fmt.Errorf("%w", ctx.Err())
+			}
+
+			results = append(
+				results,
+				kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(document)))...,
+			)
+		}
 
 		return c.processResults(results, opts.Attribution)
 	})
+}
+
+// splitDocumentsForValidation reads a YAML stream into stable, non-empty
+// document byte slices so validation retries never reuse scanner-owned buffers.
+func splitDocumentsForValidation(data []byte) ([][]byte, error) {
+	reader := k8syaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
+	documents := [][]byte{}
+
+	for {
+		document, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("read YAML document: %w", err)
+		}
+
+		if len(bytes.TrimSpace(document)) == 0 {
+			continue
+		}
+
+		documents = append(documents, bytes.Clone(document))
+	}
+
+	return documents, nil
 }
 
 // validateWithRetry runs validate up to c.maxRetryAttempts times, retrying only

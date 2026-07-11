@@ -1,0 +1,255 @@
+name: "System Test - EKS"
+
+# AWS authentication: GitHub Actions OIDC (no long-lived access keys).
+#
+# Setup (one-time, AWS side):
+#   1. Create (or reuse) the GitHub OIDC identity provider in the AWS account:
+#      URL https://token.actions.githubusercontent.com, audience sts.amazonaws.com.
+#   2. Create an IAM role whose trust policy allows ONLY this repository's `ci`
+#      environment to assume it:
+#        "Condition": {
+#          "StringEquals": {
+#            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+#            "token.actions.githubusercontent.com:sub": "repo:devantler-tech/ksail:environment:ci"
+#          }
+#        }
+#   3. Attach a least-privilege permission policy: only what `eksctl create/delete
+#      cluster` needs (CloudFormation, EC2, EKS, and the scoped IAM actions from
+#      eksctl's documented minimum policies —
+#      https://eksctl.io/usage/minimum-iam-policies/). Never AdministratorAccess.
+#   4. Set the role's MaxSessionDuration to 7200 seconds — the smoke test job
+#      may run up to 120 minutes and must keep credentials through cleanup.
+#   5. Store the role ARN as the `AWS_OIDC_ROLE_ARN` secret on the `ci`
+#      environment. The workflow skips cleanly while it is absent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gitops_engine:
+        description: "GitOps engine to bootstrap and reconcile"
+        required: false
+        type: choice
+        options: [None, Flux, ArgoCD]
+        default: Flux
+      region:
+        description: "AWS region for the smoke-test cluster"
+        required: false
+        type: string
+        default: us-east-1
+  # No schedule yet: this smoke test creates billable AWS resources. Keep it
+  # manual until the OIDC role and the expected spend envelope exist.
+
+env:
+  GOPROXY: "https://proxy.golang.org|direct"
+  GOMEMLIMIT: "6GiB"
+  EKSCTL_VERSION: "v0.229.0"
+
+concurrency:
+  group: system-test-eks
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  preflight:
+    name: 🔎 Check AWS Credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    environment: ci
+    outputs:
+      aws-credentials: ${{ steps.aws.outputs.available }}
+    steps:
+      - name: 🔎 Check required AWS OIDC role
+        id: aws
+        shell: bash
+        env:
+          AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+        run: |
+          if [ -z "${AWS_OIDC_ROLE_ARN:-}" ]; then
+            echo "::notice::Skipping EKS smoke test because AWS_OIDC_ROLE_ARN is not configured."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+  build-artifact:
+    name: 🏗️ Build KSail Binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [preflight]
+    if: needs.preflight.outputs.aws-credentials == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+
+  smoke-test:
+    name: 🧪 EKS Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: [preflight, build-artifact]
+    if: needs.preflight.outputs.aws-credentials == 'true'
+    environment: ci
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ inputs.region }}
+      AWS_DEFAULT_REGION: ${{ inputs.region }}
+      KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_CLUSTER_NAME: st-eks-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-system-test-eks-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          # Must cover the full 120-minute job (create + reconcile + always()
+          # cleanup) — the 1h default would expire mid-run and strand billable
+          # clusters. Requires MaxSessionDuration=7200 on the role.
+          role-duration-seconds: 7200
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 📥 Install eksctl
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/eksctl"
+          gh release download "$EKSCTL_VERSION" \
+            --repo eksctl-io/eksctl \
+            --pattern eksctl_Linux_amd64.tar.gz \
+            --pattern eksctl_checksums.txt \
+            --dir "$RUNNER_TEMP/eksctl"
+          (
+            cd "$RUNNER_TEMP/eksctl"
+            grep 'Linux_amd64' eksctl_checksums.txt | sha256sum --check
+          )
+          tar -xzf "$RUNNER_TEMP/eksctl/eksctl_Linux_amd64.tar.gz" -C "$RUNNER_TEMP/eksctl"
+          sudo install "$RUNNER_TEMP/eksctl/eksctl" /usr/local/bin/eksctl
+          eksctl version
+
+      - name: 🔧 Initialize EKS project
+        id: init
+        shell: bash
+        env:
+          GITOPS_ENGINE: ${{ inputs.gitops_engine }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$KSAIL_EKS_WORKDIR"
+          cd "$KSAIL_EKS_WORKDIR"
+
+          args=(
+            project init
+            --name "$KSAIL_EKS_CLUSTER_NAME"
+            --distribution EKS
+            --provider AWS
+          )
+          if [ "$GITOPS_ENGINE" != "None" ]; then
+            args+=(--gitops-engine "$GITOPS_ENGINE")
+          fi
+
+          ksail "${args[@]}"
+
+          ruby -ryaml -e '
+            path = "eks.yaml"
+            data = YAML.load_file(path)
+            data.fetch("metadata")["region"] = ENV.fetch("AWS_REGION")
+            Array(data["managedNodeGroups"]).each do |nodegroup|
+              nodegroup["desiredCapacity"] = 1
+              nodegroup["minSize"] = 1
+              nodegroup["maxSize"] = 1
+            end
+            File.write(path, data.to_yaml)
+          '
+
+      - name: 🧪 ksail cluster create
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail cluster create
+
+      - name: 🧪 ksail cluster info
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail cluster info
+
+      - name: 🧪 ksail workload reconcile
+        if: inputs.gitops_engine != 'None'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail workload reconcile --timeout 10m
+
+      - name: 🧹 Delete EKS smoke cluster
+        if: always()
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set +e
+          if [ ! -d "$KSAIL_EKS_WORKDIR" ]; then
+            echo "No EKS smoke workdir exists; nothing to clean up."
+            exit 0
+          fi
+
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail cluster delete --provider AWS --name "$KSAIL_EKS_CLUSTER_NAME" --force
+          delete_status=$?
+          if [ "$delete_status" -ne 0 ]; then
+            echo "::warning::ksail cluster delete failed; falling back to eksctl delete cluster."
+            eksctl delete cluster \
+              --name "$KSAIL_EKS_CLUSTER_NAME" \
+              --region "$AWS_REGION" \
+              --wait
+            delete_status=$?
+          fi
+
+          if [ "$delete_status" -ne 0 ]; then
+            echo "::warning::EKS cleanup did not complete. Check AWS for cluster '$KSAIL_EKS_CLUSTER_NAME' in region '$AWS_REGION'."
+            exit "$delete_status"
+          fi

@@ -196,6 +196,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
+      --ephemeral                      EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Scanning their rendered children against the cluster is not wired yet — off by default.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
@@ -240,6 +241,7 @@ Usage:
   validate [PATH] [flags]
 
 Flags:
+      --ephemeral                 EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Validating their rendered children against the cluster is not wired yet — off by default.
   -h, --help                      help for validate
       --ignore-missing-schemas    Ignore resources with missing schemas (default true)
       --include-crd-schemas       Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default; a CRD that cannot be converted is warned and skipped)
@@ -3256,6 +3258,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
+      --ephemeral                      EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Scanning their rendered children against the cluster is not wired yet — off by default.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
@@ -3305,6 +3308,7 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
+      --ephemeral                 EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Validating their rendered children against the cluster is not wired yet — off by default.
   -h, --help                      help for validate
       --ignore-missing-schemas    Ignore resources with missing schemas (default true)
       --include-crd-schemas       Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default; a CRD that cannot be converted is warned and skipped)
@@ -3827,9 +3831,9 @@ container holding only CAP_NET_RAW), and streams a tcpdump pcap capture of the
 service port over the Kubernetes exec channel — no reverse tunnel, no traffic
 interception, the workload keeps serving untouched.
 
-The capture runs until interrupted (Ctrl-C). By default it is written to
-mirror.pcap and summarized on stop; --output - streams the raw pcap to stdout
-for piping into tshark/wireshark.
+The capture runs until interrupted. Ctrl-C stops it cleanly with exit status 0.
+By default it is written to mirror.pcap and summarized on stop; --output -
+streams the raw pcap to stdout for piping into tshark/wireshark.
 
 With --to, the mirrored inbound TCP payloads are additionally replayed LIVE to
 a locally-running process (one local connection per mirrored flow) while the

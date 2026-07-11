@@ -7,11 +7,13 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -457,4 +459,64 @@ func ExportSetRunInterceptSession(
 	runInterceptSession = session
 
 	return func() { runInterceptSession = original }
+}
+
+// ExportSetEphemeralProvisioner swaps the --ephemeral cluster provisioner
+// factory so tests can substitute a fake without a live Docker/KWOK
+// dependency. It returns a restore function that reinstates the original.
+func ExportSetEphemeralProvisioner(
+	factory func(name string) clusterprovisioner.Provisioner,
+) func() {
+	original := newEphemeralProvisioner
+	newEphemeralProvisioner = factory
+
+	return func() { newEphemeralProvisioner = original }
+}
+
+// EphemeralCluster re-exports the internal --ephemeral connection handle so
+// external-package tests can assert on what runFn receives.
+type EphemeralCluster = ephemeralCluster
+
+// ExportSetEphemeralClusterWaiter swaps the --ephemeral cluster readiness
+// waiter so tests can substitute a fake without a live cluster to poll. It
+// returns a restore function that reinstates the original.
+func ExportSetEphemeralClusterWaiter(
+	wait func(ctx context.Context, kubeconfigPath, contextName string) error,
+) func() {
+	original := waitForEphemeralCluster
+	waitForEphemeralCluster = wait
+
+	return func() { waitForEphemeralCluster = original }
+}
+
+// ExportWithEphemeralCluster exposes withEphemeralCluster for external-package
+// tests exercising the provision/readiness/guaranteed-teardown seam directly.
+func ExportWithEphemeralCluster(
+	ctx context.Context,
+	cmd *cobra.Command,
+	runFn func(ctx context.Context, cluster EphemeralCluster) error,
+) error {
+	return withEphemeralCluster(ctx, cmd, runFn)
+}
+
+// ExportSetEphemeralHelmClient swaps the --ephemeral install-capable Helm
+// client factory for tests and returns a restore func.
+func ExportSetEphemeralHelmClient(
+	factory func(kubeconfigPath, kubeContext string) (helm.Interface, error),
+) func() {
+	original := newEphemeralHelmClient
+	newEphemeralHelmClient = factory
+
+	return func() { newEphemeralHelmClient = original }
+}
+
+// ExportInstallDeclaredCharts exposes installDeclaredCharts for
+// external-package tests exercising the Phase 3b-2 install step directly.
+func ExportInstallDeclaredCharts(
+	ctx context.Context,
+	cmd *cobra.Command,
+	cluster EphemeralCluster,
+	sourcePath string,
+) error {
+	return installDeclaredCharts(ctx, cmd, cluster, sourcePath)
 }

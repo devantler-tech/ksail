@@ -120,11 +120,13 @@ runs:
 
         # Append CI test workload images that are not part of any cluster component
         # but are used by ksail-test-workload, ksail-test-backup-restore,
-        # ksail-test-workload-watch, and the in-cluster API connectivity pre-flight
-        # pod. Without pre-warming, transient Docker Hub or proxy registry errors can
-        # cause ImagePullBackOff timeouts in system tests (see issue #3822).
+        # ksail-test-workload-watch, ksail-test-workload-mirror, and the in-cluster
+        # API connectivity pre-flight pod. Without pre-warming, transient Docker Hub
+        # or proxy registry errors can cause ImagePullBackOff timeouts in system tests
+        # (see issue #3822).
         echo "docker.io/traefik/whoami:v1.10" >> "$IMAGES_FILE"
         echo "docker.io/library/busybox:1.36.1" >> "$IMAGES_FILE"
+        echo "docker.io/nicolaka/netshoot:v0.16" >> "$IMAGES_FILE"
 
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt

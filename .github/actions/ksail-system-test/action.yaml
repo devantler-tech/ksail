@@ -82,6 +82,12 @@ inputs:
       per host type to avoid redundant testing.
     required: false
     default: "false"
+  test-workload-mirror:
+    description: |
+      When 'true', smoke-tests workload mirror against a live HTTP deployment.
+      Enable on one Docker matrix entry per supported distribution.
+    required: false
+    default: "false"
   kubernetes-provider-distributions:
     description: |
       Comma-separated list of distributions to test on the Kubernetes provider.
@@ -285,6 +291,14 @@ runs:
         ghcr-user: ${{ inputs.ghcr-user }}
         ghcr-token: ${{ inputs.ghcr-token }}
         gitops-path: ${{ inputs.gitops-path }}
+
+    - name: 🧪 Workload Mirror Tests
+      id: workload-mirror-tests
+      if: inputs.provider == 'Docker' && inputs.test-workload-mirror == 'true'
+      uses: ./.github/actions/ksail-test-workload-mirror
+      with:
+        distribution: ${{ inputs.distribution }}
+        workload-timeout: ${{ inputs.workload-timeout }}
 
     - name: 🧪 Image Export/Import Tests
       id: image-export-import-tests
@@ -530,7 +544,7 @@ runs:
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-mirror-tests.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
