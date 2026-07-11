@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	cmdrunner "github.com/devantler-tech/ksail/v7/pkg/runner"
@@ -83,6 +84,24 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 	err := provisioner.Create(context.Background(), "my-cluster")
 
 	require.ErrorIs(t, err, errCreateClusterFailed, "Create()")
+}
+
+func TestCreateIncludesExpandedKubeconfigFlag(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	provisioner, _, runner := newProvisionerForTest(t)
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
+
+	err := provisioner.Create(context.Background(), "")
+
+	require.NoError(t, err, "Create()")
+	assertFlagValue(
+		t,
+		runner.lastArgs,
+		"--kubeconfig",
+		filepath.Join(homeDir, ".kube", "config"),
+	)
 }
 
 func TestDeleteSuccess(t *testing.T) {

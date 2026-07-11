@@ -141,14 +141,14 @@ func addScanFlags(
 			"objects) forwarded to Kubescape's --exceptions "+
 			"(overrides spec.workload.scan.exceptions from ksail.yaml)")
 	cmd.Flags().BoolVar(ephemeral, "ephemeral", false,
-		"EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of "+
+		"EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of "+
 			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
-			"into it, so declared operators' CRDs are registered. Scanning their rendered "+
-			"children against the cluster is not wired yet — off by default.")
+			"into it, so declared operators' CRDs are registered. Applying rendered manifests "+
+			"and scanning operator-rendered children is the next slice — off by default.")
 }
 
 // runScanCmd dispatches to runScanCmdInner directly, or — when --ephemeral is
-// set — wraps it in a throwaway KWOK cluster that is guaranteed to be torn
+// set — wraps it in an isolated throwaway Kind cluster that is guaranteed to be torn
 // down afterwards (see withEphemeralCluster, shared with the validate
 // command). While the cluster is live, the workload's declared charts are
 // installed into it first (installDeclaredCharts, ksail#5919 Phase 3b-2) so

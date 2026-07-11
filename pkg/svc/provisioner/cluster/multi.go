@@ -185,7 +185,7 @@ func CreateMinimalProvisioner(
 
 	switch dist {
 	case v1alpha1.DistributionVanilla:
-		return createMinimalKindProvisioner(clusterName)
+		return createMinimalKindProvisioner(clusterName, kubeconfigPath)
 	case v1alpha1.DistributionK3s:
 		return createMinimalK3dProvisioner(clusterName), nil
 	case v1alpha1.DistributionTalos:
@@ -204,10 +204,16 @@ func CreateMinimalProvisioner(
 	}
 }
 
-func createMinimalKindProvisioner(clusterName string) (Provisioner, error) {
-	kindConfig := &v1alpha4.Cluster{Name: clusterName}
+func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provisioner, error) {
+	kindConfig := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: clusterName,
+	}
 
-	provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
+	provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
 	}

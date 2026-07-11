@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -12,73 +14,101 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
-	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	"github.com/spf13/cobra"
 )
 
 // ephemeralClusterNamePrefix names throwaway clusters provisioned for
 // --ephemeral validate/scan runs, distinguishing them from user-managed
-// clusters in `docker ps` / `kwokctl get clusters` output.
+// clusters in `docker ps` / `kind get clusters` output.
 const ephemeralClusterNamePrefix = "ksail-ephemeral-"
 
 // ephemeralDeleteTimeout bounds the guaranteed-teardown delete call so a
 // wedged provisioner delete cannot hang the CLI forever after a signal.
 const ephemeralDeleteTimeout = 2 * time.Minute
 
-// newEphemeralProvisioner builds the cluster provisioner an --ephemeral run
-// provisions and tears down. KWOK is the only backend for now (Phase 3b-1 of
-// ksail#5919): cheap, API-only cluster expansion with no real workload
-// scheduling, which is all a provision/teardown scaffold needs. A package var
-// so tests can substitute a fake without a live Docker/KWOK dependency.
-//
-//nolint:gochecknoglobals // test seam, mirrors newFlowObserver/newMirrorClients in this package
-var newEphemeralProvisioner = func(name string) clusterprovisioner.Provisioner {
-	return kwokprovisioner.NewProvisioner(name, "", nil)
-}
-
 // waitForEphemeralCluster verifies a freshly provisioned --ephemeral cluster
 // is genuinely usable — the API server answers /readyz AND a basic authorized
 // read succeeds — before runFn is invoked, so downstream steps never race the
 // control plane's warm-up window. A package var so tests can substitute a
-// fake without a live Docker/KWOK dependency.
+// fake without a live Docker/Kind dependency.
 //
-//nolint:gochecknoglobals // test seam, mirrors newEphemeralProvisioner above
+//nolint:gochecknoglobals // test seam, mirrors newEphemeralBackend below
 var waitForEphemeralCluster = k8s.WaitForClusterReady
 
-// ephemeralCluster describes how a --ephemeral run reaches its throwaway
-// cluster once provisioned: the kubeconfig file the embedded kwokctl merged
-// the new context into, and that context's name. Phase 3b-2 of ksail#5919
-// consumes this handle to install the workload's declared operators into the
-// cluster; Phase 3b-3 applies the rendered manifests and scans their children.
+// ephemeralCluster describes how a --ephemeral run reaches its throwaway Kind
+// cluster once provisioned. Phase 3b-2 of ksail#5919 consumes this handle to
+// install the workload's declared operators into the cluster; Phase 3b-3
+// applies the rendered manifests and scans their children.
 type ephemeralCluster struct {
 	// Name is the throwaway cluster's own name (ksail-ephemeral-<nanos>).
 	Name string
-	// KubeconfigPath is the kubeconfig file holding the cluster's context —
-	// the same file kwokctl writes to ($KUBECONFIG, or ~/.kube/config).
+	// KubeconfigPath is the isolated temporary kubeconfig file holding the
+	// cluster's context. It is removed after the cluster is deleted.
 	KubeconfigPath string
-	// Context is the kubeconfig context kwokctl created ("kwok-<name>").
+	// Context is the kubeconfig context Kind created ("kind-<name>").
 	Context string
 }
 
-// resolveEphemeralCluster derives the connection handle for a provisioned
-// --ephemeral cluster. The KWOK provisioner does not hand back a kubeconfig;
-// the embedded kwokctl merges the cluster's context into the kubeconfig at
-// $KUBECONFIG (or ~/.kube/config) under the distribution's context naming
-// convention, so the handle is derived from the cluster name.
-func resolveEphemeralCluster(name string) (ephemeralCluster, error) {
-	kubeconfigPath, err := k8s.ResolveKubeconfigPath("")
+// ephemeralBackend owns both halves of an --ephemeral run: the cluster
+// provisioner and connection handle, plus local-only resources that must be
+// removed after cluster deletion.
+type ephemeralBackend struct {
+	provisioner clusterprovisioner.Provisioner
+	cluster     ephemeralCluster
+	cleanup     func() error
+}
+
+// newEphemeralBackend builds a controller-capable Kind backend with a
+// per-invocation kubeconfig. It is a package variable so lifecycle tests can
+// substitute a fake backend without Docker.
+//
+//nolint:gochecknoglobals // test seam, mirrors newFlowObserver/newMirrorClients in this package
+var newEphemeralBackend = createEphemeralBackend
+
+// createEphemeralBackend constructs the production Kind backend without
+// touching the user's shared kubeconfig. Constructing the backend does not
+// create a cluster; Provisioner.Create does that after the lifecycle's cleanup
+// defers are armed.
+func createEphemeralBackend(name string) (ephemeralBackend, error) {
+	workspace, err := os.MkdirTemp("", ephemeralClusterNamePrefix)
 	if err != nil {
-		return ephemeralCluster{}, fmt.Errorf(
-			"resolve kubeconfig path for ephemeral cluster %q: %w", name, err,
+		return ephemeralBackend{}, fmt.Errorf("create ephemeral backend workspace: %w", err)
+	}
+
+	cleanup := func() error {
+		removeErr := os.RemoveAll(workspace)
+		if removeErr != nil {
+			return fmt.Errorf("remove ephemeral backend workspace %q: %w", workspace, removeErr)
+		}
+
+		return nil
+	}
+
+	kubeconfigPath := filepath.Join(workspace, "kubeconfig")
+
+	provisioner, err := clusterprovisioner.CreateMinimalProvisioner(
+		v1alpha1.DistributionVanilla,
+		name,
+		kubeconfigPath,
+		v1alpha1.ProviderDocker,
+	)
+	if err != nil {
+		return ephemeralBackend{}, errors.Join(
+			fmt.Errorf("create Kind provisioner for ephemeral cluster %q: %w", name, err),
+			cleanup(),
 		)
 	}
 
-	distribution := v1alpha1.DistributionKWOK
+	distribution := v1alpha1.DistributionVanilla
 
-	return ephemeralCluster{
-		Name:           name,
-		KubeconfigPath: kubeconfigPath,
-		Context:        distribution.ContextName(name),
+	return ephemeralBackend{
+		provisioner: provisioner,
+		cluster: ephemeralCluster{
+			Name:           name,
+			KubeconfigPath: kubeconfigPath,
+			Context:        distribution.ContextName(name),
+		},
+		cleanup: cleanup,
 	}, nil
 }
 
@@ -86,9 +116,9 @@ func resolveEphemeralCluster(name string) (ephemeralCluster, error) {
 // genuinely ready, runs runFn with the cluster's connection handle while it
 // is live, and guarantees the cluster is deleted afterwards — on success, on
 // an error from any step, and on SIGINT/SIGTERM. runFn receives a verified
-// ephemeralCluster (kubeconfig path + context); wiring it into the
-// installer/apply/scan pipeline is the remainder of ksail#5919 Phase
-// 3b-2/3b-3.
+// ephemeralCluster (kubeconfig path + context). Applying workload manifests,
+// waiting for operator reconciliation, and inspecting generated children are
+// deliberately left to ksail#5919 Phase 3b-3.
 //
 // ctx should be the caller's own context (typically cmd.Context()); cmd is
 // used only for output (notify) and is not read for its context here, so the
@@ -99,8 +129,8 @@ func resolveEphemeralCluster(name string) (ephemeralCluster, error) {
 // always torn down: it exists only for the duration of this command and was
 // never meant to survive it.
 //
-// If both runFn and the deferred delete fail, both errors are returned via
-// errors.Join so neither is silently dropped.
+// Errors from runFn, cluster deletion, and local workspace cleanup are joined
+// so none is silently dropped.
 func withEphemeralCluster(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -110,27 +140,22 @@ func withEphemeralCluster(
 	defer stop()
 
 	name := ephemeralClusterName()
-	provisioner := newEphemeralProvisioner(name)
 
-	deleteCluster := func() error {
-		// context.WithoutCancel: the outer ctx may already be Done() (the
-		// SIGINT/SIGTERM that triggered this deferred call, or runFn's own
-		// early-return on context cancellation) — teardown must run
-		// regardless, bounded only by its own fresh timeout. Mirrors the
-		// KWOK provisioner's own cleanupAttempt pattern
-		// (pkg/svc/provisioner/cluster/kwok/provisioner.go).
-		deleteCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ephemeralDeleteTimeout)
-		defer cancel()
+	backend, backendErr := newEphemeralBackend(name)
+	if backendErr != nil {
+		return fmt.Errorf("create ephemeral cluster backend: %w", backendErr)
+	}
 
-		notify.Infof(cmd.OutOrStdout(), "tearing down ephemeral cluster %q...", name)
-
-		deleteErr := provisioner.Delete(deleteCtx, name)
-		if deleteErr != nil {
-			return fmt.Errorf("delete ephemeral cluster %q: %w", name, deleteErr)
+	defer func() {
+		if backend.cleanup == nil {
+			return
 		}
 
-		return nil
-	}
+		err = errors.Join(err, backend.cleanup())
+	}()
+
+	provisioner := backend.provisioner
+	cluster := backend.cluster
 
 	notify.Infof(cmd.OutOrStdout(), "provisioning ephemeral cluster %q for --ephemeral...", name)
 
@@ -138,18 +163,13 @@ func withEphemeralCluster(
 	if createErr != nil {
 		return errors.Join(
 			fmt.Errorf("provision ephemeral cluster %q: %w", name, createErr),
-			deleteCluster(),
+			deleteEphemeralCluster(ctx, cmd, provisioner, name),
 		)
 	}
 
 	defer func() {
-		err = errors.Join(err, deleteCluster())
+		err = errors.Join(err, deleteEphemeralCluster(ctx, cmd, provisioner, name))
 	}()
-
-	cluster, resolveErr := resolveEphemeralCluster(name)
-	if resolveErr != nil {
-		return resolveErr
-	}
 
 	notify.Infof(cmd.OutOrStdout(), "waiting for ephemeral cluster %q to become ready...", name)
 
@@ -159,6 +179,28 @@ func withEphemeralCluster(
 	}
 
 	return runFn(ctx, cluster)
+}
+
+// deleteEphemeralCluster tears down the cluster with a fresh bounded context.
+// The outer context may already be cancelled by SIGINT/SIGTERM or runFn, but
+// cleanup must still run.
+func deleteEphemeralCluster(
+	ctx context.Context,
+	cmd *cobra.Command,
+	provisioner clusterprovisioner.Provisioner,
+	name string,
+) error {
+	deleteCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ephemeralDeleteTimeout)
+	defer cancel()
+
+	notify.Infof(cmd.OutOrStdout(), "tearing down ephemeral cluster %q...", name)
+
+	deleteErr := provisioner.Delete(deleteCtx, name)
+	if deleteErr != nil {
+		return fmt.Errorf("delete ephemeral cluster %q: %w", name, deleteErr)
+	}
+
+	return nil
 }
 
 // ephemeralClusterName generates a unique, DNS-1123-safe name for a throwaway
