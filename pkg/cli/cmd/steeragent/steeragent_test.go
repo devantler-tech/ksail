@@ -95,6 +95,7 @@ func (rec *callRecorder) run(_ context.Context, name string, args ...string) err
 
 func (rec *callRecorder) assertInstallThenRemove(t *testing.T) {
 	t.Helper()
+
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 

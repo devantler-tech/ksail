@@ -25,19 +25,19 @@ type NodeAutoscalerConfig struct {
 	// Enabled controls whether the Cluster Autoscaler is installed to manage
 	// worker node counts dynamically (Enabled or Disabled). A YAML boolean is
 	// still accepted on load (true -> Enabled, false -> Disabled).
-	Enabled NodeAutoscalerEnabled `json:"enabled,omitzero" jsonschema:"description=Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
+	Enabled NodeAutoscalerEnabled `json:"enabled,omitzero" jsonschema_description:"Whether the Cluster Autoscaler is installed to manage worker node counts dynamically (Enabled or Disabled). A YAML boolean is accepted as an alias (true=Enabled, false=Disabled)."` //nolint:lll
 	// Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only).
 	Pools []NodePool `json:"pools,omitzero"`
 	// MaxNodesTotal caps the total number of nodes in the cluster
 	// (control-planes + workers + autoscaler nodes). 0 disables the global cap.
-	MaxNodesTotal int32 `json:"maxNodesTotal,omitzero" jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
+	MaxNodesTotal int32 `json:"maxNodesTotal,omitzero" jsonschema:"minimum=0" jsonschema_description:"Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. A positive value should be <= the effective serverLimit (serverLimit: 0 means its default limit of 10)."` //nolint:lll
 	// Expander selects the Cluster Autoscaler expander strategy. It accepts a
 	// single value (e.g. LeastWaste) or an ordered priority list
 	// (e.g. [LeastNodes, LeastWaste]) applied as a chain.
-	Expander AutoscalerExpanderList `json:"expander,omitzero" jsonschema:"description=Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."` //nolint:lll
+	Expander AutoscalerExpanderList `json:"expander,omitzero" jsonschema_description:"Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste)."` //nolint:lll
 	// ScaleDownUnneededTime is how long a node must be unneeded before it is
 	// eligible for scale down (e.g. "10m").
-	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	ScaleDownUnneededTime string `json:"scaleDownUnneededTime,omitzero" jsonschema_description:"How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 	// ScaleDownUtilizationThreshold is the node resource-utilization ratio
 	// (0.0–1.0, computed over requests) at or below which the Cluster Autoscaler
 	// considers a node for scale down (upstream --scale-down-utilization-threshold,
@@ -50,7 +50,7 @@ type NodeAutoscalerConfig struct {
 	// and pod-injection flags, so CapacityBuffer resources reserve scale-up
 	// headroom as virtual (pod-less) chunks — a native replacement for
 	// low-priority balloon-pod overprovisioning.
-	CapacityBuffers bool `json:"capacityBuffers,omitzero" jsonschema:"description=Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
+	CapacityBuffers bool `json:"capacityBuffers,omitzero" jsonschema_description:"Enable the Cluster Autoscaler capacity-buffers feature: KSail installs the CapacityBuffer CRD (capacitybuffers.autoscaling.x-k8s.io) and enables the buffer controller and pod-injection flags. CapacityBuffer resources then reserve scale-up headroom as virtual (pod-less) chunks simulated in autoscaler memory — a native replacement for low-priority balloon-pod overprovisioning. Ignored unless the node autoscaler is installed (Talos on Hetzner with enabled: true)"` //nolint:lll
 	// IgnoreDaemonsetsUtilization excludes DaemonSet pods from a node's
 	// resource-utilization calculation when the autoscaler decides whether a node
 	// is unneeded (upstream --ignore-daemonsets-utilization, off by default). Set
@@ -96,13 +96,13 @@ type NodePool struct {
 	// so they land on the real Node object, and are also attributed to the pool's
 	// scale-from-zero template so the autoscaler scales the pool for pods that
 	// select these labels. Keys must be valid Kubernetes label keys.
-	Labels map[string]string `json:"labels,omitzero" jsonschema:"description=Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."` //nolint:lll
+	Labels map[string]string `json:"labels,omitzero" jsonschema_description:"Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."` //nolint:lll
 	// Taints are Kubernetes node taints applied to every node provisioned in this
 	// pool. They are baked into the pool's Talos worker config (machine.nodeTaints)
 	// so they land on the real Node object, and are also attributed to the pool's
 	// scale-from-zero template so the autoscaler only scales the pool for pods that
 	// tolerate the taints.
-	Taints []NodePoolTaint `json:"taints,omitzero" jsonschema:"description=Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."` //nolint:lll
+	Taints []NodePoolTaint `json:"taints,omitzero" jsonschema_description:"Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."` //nolint:lll
 }
 
 // NodePoolTaint defines a Kubernetes node taint applied to every node in an

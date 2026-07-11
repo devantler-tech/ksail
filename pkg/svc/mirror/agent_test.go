@@ -86,6 +86,7 @@ func (r *recordingRunner) callCount() int {
 // given argument tokens — used to pin the install/teardown rule ordering.
 func (r *recordingRunner) callHas(t *testing.T, index int, tokens ...string) bool {
 	t.Helper()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
