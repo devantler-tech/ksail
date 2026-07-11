@@ -112,14 +112,19 @@ func installEphemeralWaiter(t *testing.T, fake *fakeEphemeralWaiter) {
 	t.Cleanup(restore)
 }
 
-// installEphemeralProvisioner wires the fake provisioner AND a no-op
-// readiness waiter: with a fake provisioner there is never a real cluster to
-// poll, so the real waiter would always time out.
+// installEphemeralProvisioner wires the fake provisioner and the supplied
+// readiness waiter. A nil waiter selects a no-op fake because there is never a
+// real cluster to poll under the fake provisioner.
 func installEphemeralProvisioner(
 	t *testing.T,
 	fake *fakeEphemeralProvisioner,
+	waiter *fakeEphemeralWaiter,
 ) *fakeEphemeralBackend {
 	t.Helper()
+
+	if waiter == nil {
+		waiter = &fakeEphemeralWaiter{}
+	}
 
 	backend := &fakeEphemeralBackend{}
 	restore := workload.ExportSetEphemeralBackendFactory(
@@ -147,7 +152,7 @@ func installEphemeralProvisioner(
 	)
 	t.Cleanup(restore)
 
-	installEphemeralWaiter(t, &fakeEphemeralWaiter{})
+	installEphemeralWaiter(t, waiter)
 
 	return backend
 }
@@ -166,7 +171,7 @@ func newTestCommand(t *testing.T) *cobra.Command {
 func newEphemeralTestCommand(t *testing.T, fake *fakeEphemeralProvisioner) *cobra.Command {
 	t.Helper()
 
-	installEphemeralProvisioner(t, fake)
+	installEphemeralProvisioner(t, fake, nil)
 
 	return newTestCommand(t)
 }
@@ -198,7 +203,7 @@ func TestWithEphemeralClusterProvisionsAndTearsDownOnSuccess(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
 	ran := false
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	backend := installEphemeralProvisioner(t, fake, nil)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -239,9 +244,9 @@ func TestWithEphemeralClusterOrdersBackendLifecycle(t *testing.T) {
 	events := []string{}
 	fake := &fakeEphemeralProvisioner{events: &events}
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	waiter := &fakeEphemeralWaiter{events: &events}
+	backend := installEphemeralProvisioner(t, fake, waiter)
 	backend.events = &events
-	installEphemeralWaiter(t, &fakeEphemeralWaiter{events: &events})
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -265,9 +270,9 @@ func TestWithEphemeralClusterOrdersBackendLifecycle(t *testing.T) {
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterWaitsForReadinessBeforeFn(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
-	cmd := newEphemeralTestCommand(t, fake)
+	cmd := newTestCommand(t)
 	waiter := &fakeEphemeralWaiter{}
-	installEphemeralWaiter(t, waiter)
+	installEphemeralProvisioner(t, fake, waiter)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -288,8 +293,9 @@ func TestWithEphemeralClusterSkipsFnAndTearsDownWhenWaitFails(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
 	ran := false
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
-	installEphemeralWaiter(t, &fakeEphemeralWaiter{waitErr: errEphemeralWaitFailed})
+	backend := installEphemeralProvisioner(
+		t, fake, &fakeEphemeralWaiter{waitErr: errEphemeralWaitFailed},
+	)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -311,7 +317,7 @@ func TestWithEphemeralClusterSkipsFnAndTearsDownWhenWaitFails(t *testing.T) {
 func TestWithEphemeralClusterTearsDownEvenWhenFnFails(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	backend := installEphemeralProvisioner(t, fake, nil)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -331,7 +337,7 @@ func TestWithEphemeralClusterSkipsFnAndTearsDownWhenCreateFails(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{createErr: errEphemeralCreateFailed}
 	ran := false
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	backend := installEphemeralProvisioner(t, fake, nil)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -371,7 +377,7 @@ func TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure(t *test
 		deleteErr: clustererr.ErrClusterNotFound,
 	}
 	cmd := newTestCommand(t)
-	installEphemeralProvisioner(t, fake)
+	installEphemeralProvisioner(t, fake, nil)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -414,7 +420,7 @@ func TestWithEphemeralClusterJoinsFnAndDeleteErrors(t *testing.T) {
 func TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{deleteErr: errEphemeralDeleteFailed}
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	backend := installEphemeralProvisioner(t, fake, nil)
 	backend.cleanupErr = errEphemeralCleanupFailed
 
 	err := workload.ExportWithEphemeralCluster(
@@ -437,7 +443,7 @@ func TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors(t *testing.T) {
 func TestWithEphemeralClusterCleansUpAfterCancellation(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
 	cmd := newTestCommand(t)
-	backend := installEphemeralProvisioner(t, fake)
+	backend := installEphemeralProvisioner(t, fake, nil)
 	ctx, cancel := context.WithCancel(cmd.Context())
 	cancel()
 
@@ -526,7 +532,7 @@ func TestScanCmdRegistersEphemeralFlagDefaultOff(t *testing.T) {
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestValidateEphemeralFlagProvisionsAndTearsDownCluster(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
-	installEphemeralProvisioner(t, fake)
+	installEphemeralProvisioner(t, fake, nil)
 
 	dir := t.TempDir()
 
