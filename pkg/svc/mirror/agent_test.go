@@ -103,6 +103,12 @@ func (r *recordingRunner) callHas(t *testing.T, index int, tokens ...string) boo
 	return true
 }
 
+func listenerFactory(listener net.Listener) mirror.SteerListenerFactory {
+	return func(context.Context, int) (net.Listener, error) {
+		return listener, nil
+	}
+}
+
 func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	t.Parallel()
 
@@ -117,7 +123,7 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
 	}()
 
 	// The ksail side: dial an echo "developer process" for each intercepted stream.
@@ -155,9 +161,8 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 	t.Parallel()
 
 	// The listener binds all interfaces (#6039), so the agent must pair the
-	// REDIRECT rule with an INPUT guard that drops direct (non-REDIRECTed,
-	// ctstate != DNAT) hits on the intercept port — installed after the
-	// redirect, removed before it (first in, last out).
+	// INPUT guard that drops direct or unrelated-DNAT hits on the intercept
+	// port. The guard brackets both the all-interfaces listener and REDIRECT.
 	runner := &recordingRunner{}
 	agentTransport, _ := net.Pipe()
 	listener := newPipeListener()
@@ -168,7 +173,7 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
 	}()
 
 	bothInstalled := func() bool { return runner.callCount() >= 2 }
@@ -178,39 +183,39 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 	require.NoError(t, <-agentDone)
 
 	require.Equal(t, 4, runner.callCount(), "expected redirect+guard installs and teardowns")
-	assert.True(t, runner.callHas(t, 0, "-I", "REDIRECT", "--dport", "8080"),
-		"the redirect installs first")
-	assert.True(t, runner.callHas(t, 1, "-I", "DROP", "--dport", "15006"),
-		"the guard installs second")
-	assert.True(t, runner.callHas(t, 2, "-D", "DROP", "--dport", "15006"),
-		"the guard is removed first on teardown")
-	assert.True(t, runner.callHas(t, 3, "-D", "REDIRECT", "--dport", "8080"),
-		"the redirect is removed last on teardown")
+	assert.True(t, runner.callHas(t, 0, "-I", "DROP", "--dport", "15006"),
+		"the guard installs before the listener opens")
+	assert.True(t, runner.callHas(t, 1, "-I", "REDIRECT", "--dport", "8080"),
+		"the redirect installs after the listener opens")
+	assert.True(t, runner.callHas(t, 2, "-D", "REDIRECT", "--dport", "8080"),
+		"the redirect is removed before the listener closes")
+	assert.True(t, runner.callHas(t, 3, "-D", "DROP", "--dport", "15006"),
+		"the guard is removed after the listener closes")
 }
 
-func TestRunSteerAgent_RollsBackTheRedirectWhenTheGuardInstallFails(t *testing.T) {
+func TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails(t *testing.T) {
 	t.Parallel()
 
-	// A redirect without its guard would steer traffic to an unguarded
-	// all-interfaces listener; a guard-install failure must abort the agent AND
-	// remove the already-installed redirect rule.
 	runner := &recordingRunner{failOn: "DROP", err: errSteerGuardDenied}
 	agentTransport, _ := net.Pipe()
-	listener := newPipeListener()
 	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+	listen := func(context.Context, int) (net.Listener, error) {
+		t.Error("listener must not open when its guard failed to install")
+
+		return nil, errSteerGuardDenied
+	}
 
 	err := mirror.RunSteerAgent(
 		context.Background(),
 		agentTransport,
-		listener,
+		listen,
 		redirect,
 		runner.run,
 	)
 
 	require.ErrorIs(t, err, errSteerGuardDenied)
-	require.Equal(t, 3, runner.callCount(), "expected redirect install, guard attempt, rollback")
-	assert.True(t, runner.callHas(t, 2, "-D", "REDIRECT", "--dport", "8080"),
-		"the dangling redirect must be rolled back")
+	require.Equal(t, 1, runner.callCount(), "only the guard install should be attempted")
+	assert.False(t, runner.sawAction("-D"), "a failed guard install leaves nothing to remove")
 }
 
 func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
@@ -224,7 +229,7 @@ func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 	err := mirror.RunSteerAgent(
 		context.Background(),
 		agentTransport,
-		listener,
+		listenerFactory(listener),
 		redirect,
 		runner.run,
 	)
@@ -249,7 +254,7 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listener, redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
 	}()
 
 	installed := func() bool { return runner.sawAction("-I") }
@@ -275,7 +280,7 @@ func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
 	err := mirror.RunSteerAgent(
 		context.Background(),
 		agentTransport,
-		listener,
+		listenerFactory(listener),
 		redirect,
 		runner.run,
 	)
@@ -296,7 +301,7 @@ func TestRunSteerAgent_RejectsAnInvalidRedirect(t *testing.T) {
 	err := mirror.RunSteerAgent(
 		context.Background(),
 		agentTransport,
-		listener,
+		listenerFactory(listener),
 		redirect,
 		runner.run,
 	)
@@ -315,13 +320,13 @@ func TestRunSteerAgent_RejectsNilDependencies(t *testing.T) {
 
 	tests := map[string]struct {
 		transport io.ReadWriteCloser
-		listener  net.Listener
+		listen    mirror.SteerListenerFactory
 		runner    mirror.SteerCommandRunner
 		wantErr   error
 	}{
-		"nil transport": {nil, listener, runner, mirror.ErrSteerTransportNil},
+		"nil transport": {nil, listenerFactory(listener), runner, mirror.ErrSteerTransportNil},
 		"nil listener":  {agentTransport, nil, runner, mirror.ErrSteerListenerNil},
-		"nil runner":    {agentTransport, listener, nil, mirror.ErrSteerRunnerNil},
+		"nil runner":    {agentTransport, listenerFactory(listener), nil, mirror.ErrSteerRunnerNil},
 	}
 
 	for name, testCase := range tests {
@@ -331,7 +336,7 @@ func TestRunSteerAgent_RejectsNilDependencies(t *testing.T) {
 			err := mirror.RunSteerAgent(
 				context.Background(),
 				testCase.transport,
-				testCase.listener,
+				testCase.listen,
 				redirect,
 				testCase.runner,
 			)

@@ -107,9 +107,10 @@ rather than run directly.`,
 }
 
 // run composes the merged steering seams into a running agent: it builds the
-// redirect from opts, opens the intercept listener, and hands both to
-// [mirror.RunSteerAgent] with the transport and iptables runner. It blocks
-// until ctx is cancelled or the tunnel ends, and returns nil on a graceful stop.
+// redirect and hands the listener factory, transport, and iptables runner to
+// [mirror.RunSteerAgent]. That composition installs the guard before opening
+// the all-interfaces listener. It blocks until ctx is cancelled or the tunnel
+// ends, and returns nil on a graceful stop.
 func run(ctx context.Context, opts options, dependencies deps) error {
 	redirect := mirror.SteeringRedirect{
 		ServicePort:   opts.servicePort,
@@ -121,14 +122,13 @@ func run(ctx context.Context, opts options, dependencies deps) error {
 		return fmt.Errorf("validating the steering redirect: %w", err)
 	}
 
-	listener, err := dependencies.listen(ctx, opts.interceptPort)
-	if err != nil {
-		return fmt.Errorf("opening the steering listener on port %d: %w", opts.interceptPort, err)
-	}
-
-	defer func() { _ = listener.Close() }()
-
-	err = mirror.RunSteerAgent(ctx, dependencies.transport, listener, redirect, dependencies.runner)
+	err = mirror.RunSteerAgent(
+		ctx,
+		dependencies.transport,
+		dependencies.listen,
+		redirect,
+		dependencies.runner,
+	)
 	if err != nil {
 		return fmt.Errorf("running the steering agent: %w", err)
 	}

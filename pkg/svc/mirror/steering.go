@@ -18,8 +18,8 @@ const (
 // Guard rule placement: the agent's listener binds all interfaces (REDIRECT
 // delivers remote traffic to the pod IP, not loopback — #6039), so a filter
 // INPUT rule re-establishes least exposure by dropping every connection to the
-// intercept port that was NOT steered there by the REDIRECT (conntrack state
-// DNAT) — e.g. another pod dialling `<podIP>:<interceptPort>` directly.
+// intercept port whose conntrack original destination was not this redirect's
+// service port — e.g. a direct hit or an unrelated DNAT path.
 const (
 	guardTable = "filter"
 	guardChain = "INPUT"
@@ -42,8 +42,8 @@ const (
 )
 
 // ErrSteeringPortInvalid is returned when a redirect names a port outside the
-// valid TCP range.
-var ErrSteeringPortInvalid = errors.New("steering port out of range")
+// valid TCP range or uses the same port for the workload and agent listener.
+var ErrSteeringPortInvalid = errors.New("steering port configuration invalid")
 
 // SteeringRedirect describes one traffic-steering rule: inbound TCP to the
 // workload's ServicePort is redirected — same network namespace, via iptables
@@ -74,6 +74,14 @@ func (r SteeringRedirect) Validate() error {
 		}
 	}
 
+	if r.ServicePort == r.InterceptPort {
+		return fmt.Errorf(
+			"%w: service and intercept ports must differ (both are %d)",
+			ErrSteeringPortInvalid,
+			r.ServicePort,
+		)
+	}
+
 	return nil
 }
 
@@ -94,9 +102,10 @@ func (r SteeringRedirect) DeleteArgs() ([]string, error) {
 }
 
 // GuardInsertArgs returns the iptables argument vector that installs the
-// intercept-port guard at the head of the filter INPUT chain: only REDIRECTed
-// connections (conntrack state DNAT) may reach the agent's all-interfaces
-// listener; direct hits on the intercept port are dropped.
+// intercept-port guard at the head of the filter INPUT chain. Only connections
+// whose conntrack original destination was this redirect's service port may
+// reach the all-interfaces listener; direct hits and unrelated DNAT paths are
+// dropped.
 func (r SteeringRedirect) GuardInsertArgs() ([]string, error) {
 	return r.guardArgs("-I")
 }
@@ -161,7 +170,7 @@ func (r SteeringRedirect) guardRuleSpec() []string {
 	return []string{
 		"-p", protocolTCP,
 		"--dport", strconv.Itoa(r.InterceptPort),
-		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "conntrack", "!", "--ctorigdstport", strconv.Itoa(r.ServicePort),
 		"-m", "comment", "--comment", SteeringRuleComment,
 		"-j", "DROP",
 	}

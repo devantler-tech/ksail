@@ -45,6 +45,11 @@ func TestSteeringRedirectValidate(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name:     "identical service and intercept ports",
+			redirect: mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 8080},
+			wantErr:  true,
+		},
+		{
 			name:     "intercept port too high",
 			redirect: mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 70000},
 			wantErr:  true,
@@ -141,7 +146,7 @@ func TestSteeringRedirectGuardInsertArgs(t *testing.T) {
 		"-t", "filter", "-I", "INPUT",
 		"-p", "tcp",
 		"--dport", "9090",
-		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "conntrack", "!", "--ctorigdstport", "8080",
 		"-m", "comment", "--comment", mirror.SteeringRuleComment,
 		"-j", "DROP",
 	}, args)
@@ -159,7 +164,7 @@ func TestSteeringRedirectGuardDeleteArgs(t *testing.T) {
 		"-t", "filter", "-D", "INPUT",
 		"-p", "tcp",
 		"--dport", "9090",
-		"-m", "conntrack", "!", "--ctstate", "DNAT",
+		"-m", "conntrack", "!", "--ctorigdstport", "8080",
 		"-m", "comment", "--comment", mirror.SteeringRuleComment,
 		"-j", "DROP",
 	}, args)

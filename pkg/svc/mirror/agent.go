@@ -24,8 +24,8 @@ const steerTeardownTimeout = 10 * time.Second
 var ErrSteerTransportNil = errors.New("steering tunnel transport must not be nil")
 
 // ErrSteerListenerNil is returned when RunSteerAgent is called without a
-// listener for the redirected connections.
-var ErrSteerListenerNil = errors.New("steering listener must not be nil")
+// listener factory for the redirected connections.
+var ErrSteerListenerNil = errors.New("steering listener factory must not be nil")
 
 // ErrSteerRunnerNil is returned when RunSteerAgent is called without a command
 // runner — the agent cannot install or remove its redirect rule without one.
@@ -40,20 +40,26 @@ var ErrSteerRunnerNil = errors.New("steering command runner must not be nil")
 // non-nil error from the install call aborts the agent before it forwards.
 type SteerCommandRunner func(ctx context.Context, name string, args ...string) error
 
+// SteerListenerFactory opens the all-interfaces listener after the guard is in
+// place. Keeping the bind behind this seam lets RunSteerAgent guarantee that no
+// reachable listener exists before its fail-closed INPUT rule.
+type SteerListenerFactory func(ctx context.Context, port int) (net.Listener, error)
+
 // RunSteerAgent is the steering agent's in-container entrypoint composition: it
-// installs the iptables steering rules for redirect (the NAT REDIRECT plus the
-// intercept-port guard that keeps the all-interfaces listener reachable only
-// via that REDIRECT — #6039), accepts the redirected connections on listener
-// and forwards each over the tunnel ([ForwardRedirected]), and — win or lose —
-// removes the rules again before returning. Reversible teardown is a hard
+// installs the intercept-port guard, opens the all-interfaces listener, then
+// installs the NAT REDIRECT. It accepts redirected connections and forwards
+// each over the tunnel ([ForwardRedirected]), then tears the resources down in
+// reverse: REDIRECT, listener, guard. This ordering means the listener is never
+// reachable without its guard (#6039). Reversible teardown is a hard
 // requirement of the #5839 design: an ephemeral container cannot be removed,
 // so its rules must be, or the pod's traffic stays redirected to a dead agent.
 //
 // transport is the agent's byte pipe to the ksail side; when the agent runs as
 // the ksail-steer container's process it is the exec channel
 // [OpenExecTransport] opens, and tests pair it with the ksail side over an
-// in-memory pipe. listener receives the connections the in-namespace REDIRECT
-// delivers. runner installs and removes the rules (see [SteerCommandRunner]).
+// in-memory pipe. listen opens the listener that receives connections from the
+// in-namespace REDIRECT. runner installs and removes the rules (see
+// [SteerCommandRunner]).
 //
 // It blocks until ctx is cancelled or the tunnel session ends (both return
 // nil, matching [ForwardRedirected]) or the listener fails (returns the error).
@@ -65,22 +71,54 @@ type SteerCommandRunner func(ctx context.Context, name string, args ...string) e
 func RunSteerAgent(
 	ctx context.Context,
 	transport io.ReadWriteCloser,
-	listener net.Listener,
+	listen SteerListenerFactory,
 	redirect SteeringRedirect,
 	runner SteerCommandRunner,
 ) (err error) {
-	err = checkSteerAgentInputs(transport, listener, runner)
+	err = checkSteerAgentInputs(transport, listen, runner)
 	if err != nil {
 		return err
 	}
 
-	err = installSteeringRules(ctx, redirect, runner)
+	err = redirect.Validate()
+	if err != nil {
+		return fmt.Errorf("validating the steering redirect: %w", err)
+	}
+
+	err = installRule(ctx, redirect.GuardInsertArgs, runner, "intercept-port guard")
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		teardownErr := removeSteeringRules(ctx, redirect, runner)
+		teardownErr := removeRule(ctx, redirect.GuardDeleteArgs, runner, "intercept-port guard")
+		if teardownErr != nil {
+			err = errors.Join(err, teardownErr)
+		}
+	}()
+
+	listener, err := listen(ctx, redirect.InterceptPort)
+	if err != nil {
+		return fmt.Errorf(
+			"opening the steering listener on port %d: %w",
+			redirect.InterceptPort,
+			err,
+		)
+	}
+
+	if listener == nil {
+		return ErrSteerListenerNil
+	}
+
+	defer func() { _ = listener.Close() }()
+
+	err = installRule(ctx, redirect.InsertArgs, runner, "steering redirect")
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		teardownErr := removeRule(ctx, redirect.DeleteArgs, runner, "steering redirect")
 		if teardownErr != nil {
 			// Join rather than only surfacing teardown when forwarding
 			// succeeded: a teardown failure that coincides with a forwarding
@@ -97,56 +135,24 @@ func RunSteerAgent(
 	return ForwardRedirected(ctx, listener, session)
 }
 
-// installSteeringRules installs the redirect and then its intercept-port
-// guard. A guard-install failure rolls the already-installed redirect back
-// before returning (joined with the rollback error if that fails too): a
-// redirect without its guard would steer traffic to an unguarded
-// all-interfaces listener, so the pair is installed atomically-or-not-at-all.
-func installSteeringRules(
+// installRule builds and installs one steering rule.
+func installRule(
 	ctx context.Context,
-	redirect SteeringRedirect,
+	buildArgs func() ([]string, error),
 	runner SteerCommandRunner,
+	ruleName string,
 ) error {
-	insertArgs, err := redirect.InsertArgs()
+	insertArgs, err := buildArgs()
 	if err != nil {
-		return fmt.Errorf("building the steering install rule: %w", err)
+		return fmt.Errorf("building the %s install rule: %w", ruleName, err)
 	}
 
 	err = runner(ctx, steerIptablesBinary, insertArgs...)
 	if err != nil {
-		return fmt.Errorf("installing the steering redirect rule: %w", err)
-	}
-
-	guardArgs, err := redirect.GuardInsertArgs()
-	if err == nil {
-		err = runner(ctx, steerIptablesBinary, guardArgs...)
-		if err != nil {
-			err = fmt.Errorf("installing the intercept-port guard rule: %w", err)
-		}
-	} else {
-		err = fmt.Errorf("building the intercept-port guard rule: %w", err)
-	}
-
-	if err != nil {
-		return errors.Join(err, removeRule(ctx, redirect.DeleteArgs, runner, "steering redirect"))
+		return fmt.Errorf("installing the %s rule: %w", ruleName, err)
 	}
 
 	return nil
-}
-
-// removeSteeringRules removes both steering rules in reverse install order —
-// the guard first, the redirect last (first in, last out) — and attempts the
-// second removal even when the first fails, joining the failures: each rule
-// left dangling on an ephemeral pod must be observable.
-func removeSteeringRules(
-	ctx context.Context,
-	redirect SteeringRedirect,
-	runner SteerCommandRunner,
-) error {
-	return errors.Join(
-		removeRule(ctx, redirect.GuardDeleteArgs, runner, "intercept-port guard"),
-		removeRule(ctx, redirect.DeleteArgs, runner, "steering redirect"),
-	)
 }
 
 // checkSteerAgentInputs rejects the nil dependencies that would otherwise
@@ -154,14 +160,14 @@ func removeSteeringRules(
 // instead of a crash mid-stream.
 func checkSteerAgentInputs(
 	transport io.ReadWriteCloser,
-	listener net.Listener,
+	listen SteerListenerFactory,
 	runner SteerCommandRunner,
 ) error {
 	if transport == nil {
 		return ErrSteerTransportNil
 	}
 
-	if listener == nil {
+	if listen == nil {
 		return ErrSteerListenerNil
 	}
 
