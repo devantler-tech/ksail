@@ -2,8 +2,16 @@ package mirror
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
+
+// ErrSteerClientExpired is the cancel cause the liveness watchdog sets when
+// it expires a session, wrapped with which deadline was hit (plain frame
+// silence vs. the extended backpressure grace) so the agent can surface WHY
+// it tore down instead of an indistinguishable context cancellation.
+var ErrSteerClientExpired = errors.New("steering client liveness expired")
 
 // SteerKeepaliveInterval is how often the intercept client pings the steering
 // agent ([TunnelSession.SendKeepalive]). It is deliberately a small fraction
@@ -99,7 +107,7 @@ func watchSessionLiveness(
 	ctx context.Context,
 	session *TunnelSession,
 	timeout time.Duration,
-	expire context.CancelFunc,
+	expire context.CancelCauseFunc,
 ) {
 	ticker := time.NewTicker(timeout / livenessPollDivisor)
 	defer ticker.Stop()
@@ -116,12 +124,19 @@ func watchSessionLiveness(
 			}
 
 			deadline := timeout
+			reason := "frame silence"
+
 			if session.DispatchInProgress() {
 				deadline = timeout * dispatchGraceMultiplier
+				reason = "frame silence with the dispatch backpressured (bounded grace)"
 			}
 
-			if time.Since(session.LastRead()) > deadline {
-				expire()
+			silence := time.Since(session.LastRead())
+			if silence > deadline {
+				expire(fmt.Errorf(
+					"%w: %s of %s exceeded the %s deadline",
+					ErrSteerClientExpired, silence.Round(time.Millisecond), reason, deadline,
+				))
 
 				return
 			}

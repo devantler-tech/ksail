@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"time"
 )
 
@@ -172,12 +173,23 @@ func serveSteerSession(
 // via --expect-keepalives, declared — that it speaks the keepalive protocol
 // (see watchSessionLiveness), so a pre-keepalive client is never expired.
 func forwardWithLiveness(ctx context.Context, listener net.Listener, session *TunnelSession) error {
-	forwardCtx, expire := context.WithCancel(ctx)
-	defer expire()
+	forwardCtx, expire := context.WithCancelCause(ctx)
+	defer expire(nil)
 
 	go watchSessionLiveness(forwardCtx, session, SteerClientLivenessTimeout, expire)
 
-	return ForwardRedirected(forwardCtx, listener, session)
+	err := ForwardRedirected(forwardCtx, listener, session)
+
+	// Surface WHY the session ended when the watchdog expired it (plain
+	// silence vs. the bounded backpressure grace): the exec stream is the
+	// tunnel, so stderr — the container log — is the observable channel.
+	// The teardown path is unchanged; an expiry still ends the forward loop
+	// like a cancellation so the REDIRECT rule is reversed.
+	if cause := context.Cause(forwardCtx); errors.Is(cause, ErrSteerClientExpired) {
+		fmt.Fprintf(os.Stderr, "steer-agent: %v\n", cause)
+	}
+
+	return err
 }
 
 // installRule builds and installs one steering rule.

@@ -26,7 +26,7 @@ func WatchSessionLiveness(
 	ctx context.Context,
 	session *TunnelSession,
 	timeout time.Duration,
-	expire context.CancelFunc,
+	expire context.CancelCauseFunc,
 ) {
 	watchSessionLiveness(ctx, session, timeout, expire)
 }

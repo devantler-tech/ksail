@@ -108,8 +108,8 @@ func TestWatchSessionLiveness_ExpiresSilentArmedPeer(t *testing.T) {
 		return server.KeepaliveSeen()
 	}, 2*time.Second, 5*time.Millisecond, "the keepalive should arm the peer")
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
 
@@ -130,8 +130,8 @@ func TestWatchSessionLiveness_NeverExpiresUnarmedPeer(t *testing.T) {
 	// about such a client, so the watchdog must not expire it.
 	_, server := newSessionPair(t)
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
 
@@ -180,8 +180,8 @@ func TestWatchSessionLiveness_HoldsWhileDispatchBlocked(t *testing.T) {
 		return server.DispatchInProgress()
 	}, 2*time.Second, 5*time.Millisecond, "the overfilled stream should park the demux loop")
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	// With a 100ms timeout the parked-dispatch grace deadline is 400ms
 	// (dispatchGraceMultiplier); several plain timeouts fit inside it, so
@@ -237,8 +237,8 @@ func TestWatchSessionLiveness_ExpiresDispatchBlockedPeerAfterGrace(t *testing.T)
 		return server.DispatchInProgress()
 	}, 2*time.Second, 5*time.Millisecond, "the overfilled stream should park the demux loop")
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
 
@@ -263,8 +263,8 @@ func TestWatchSessionLiveness_ExpiresPreArmedSilentPeer(t *testing.T) {
 
 	server.ArmLiveness()
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
 
@@ -331,8 +331,8 @@ func TestWatchSessionLiveness_SurvivesWhileKeepalivesFlow(t *testing.T) {
 
 	go mirror.SendKeepalives(pingCtx, client, 10*time.Millisecond)
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	// Generous timeout relative to the ping interval so scheduler jitter
 	// cannot expire a healthy session on a loaded runner.
@@ -351,8 +351,8 @@ func TestWatchSessionLiveness_ReturnsWhenSessionEnds(t *testing.T) {
 
 	_, server := newSessionPair(t)
 
-	ctx, expire := context.WithCancel(context.Background())
-	defer expire()
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
 
 	done := make(chan struct{})
 
