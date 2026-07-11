@@ -342,6 +342,103 @@ func TestConfigManager_Load_MigratesLegacyCNIPatchForMultiDocumentConfig(t *test
 	assert.Nil(t, controlPlane.K8sFlannelCNIConfig())
 }
 
+func TestConfigManager_Load_MigratesLegacyAPIServerPatchWithoutOIDC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{"audit-log-maxage": {"30"}}, apiServer.ExtraArgs())
+}
+
+func TestConfigManager_Load_RejectsDuplicateLegacyAPIServerDocuments(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+---
+cluster:
+  apiServer:
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "multiple legacy cluster.apiServer documents are not supported")
+}
+
+func TestConfigManager_Load_PreservesLegacyAPIServerPatchBeforeMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-113", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_13)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	patches := configs.Patches()
+	require.Len(t, patches, 1)
+	assert.Equal(t, legacyAPIServer, patches[0].Content)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{"audit-log-maxage": {"30"}}, apiServer.ExtraArgs())
+}
+
 func TestConfigManager_Load_MigratesLegacyOIDCPatchForMultiDocumentConfig(t *testing.T) {
 	t.Parallel()
 
@@ -390,6 +487,52 @@ cluster:
 	assert.Equal(t, []any{"ksail"}, issuer["audiences"])
 	assert.Contains(t, issuer["certificateAuthority"], "test-ca")
 	assert.Empty(t, controlPlane.K8sAPIServerConfig().ExtraArgs())
+}
+
+func TestConfigManager_Load_RejectsUnsupportedLegacyOIDCExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-required-claim: "tenant=engineering"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unsupported legacy OIDC extra argument "oidc-required-claim"`)
+}
+
+func TestConfigManager_Load_RejectsOrphanedLegacyOIDCExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-required-claim: "tenant=engineering"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unsupported legacy OIDC extra argument "oidc-required-claim"`)
 }
 
 func TestConfigManager_Load_MigratesLegacyOIDCAndAPIServerFields(t *testing.T) {

@@ -13,12 +13,13 @@ import (
 )
 
 var (
-	errLegacyOIDCExtraArgsMissing = errors.New(
-		"cluster.apiServer.extraArgs with oidc-issuer-url is missing",
+	errLegacyAPIServerMultipleDocuments = errors.New(
+		"multiple legacy cluster.apiServer documents are not supported",
 	)
-	errLegacyOIDCRequiredFields            = errors.New("issuer URL and client ID are required")
-	errLegacyOIDCCAMissing                 = errors.New("CA content is missing")
-	errLegacyOIDCUnsupportedAPIServerField = errors.New(
+	errLegacyOIDCRequiredFields        = errors.New("issuer URL and client ID are required")
+	errLegacyOIDCCAMissing             = errors.New("CA content is missing")
+	errLegacyOIDCUnsupportedExtraArg   = errors.New("unsupported legacy OIDC extra argument")
+	errLegacyUnsupportedAPIServerField = errors.New(
 		"API server field has no Talos 1.14 KubeAPIServerConfig equivalent",
 	)
 )
@@ -147,12 +148,12 @@ func migrateKubernetesPatchesForContract(
 		case strings.TrimSpace(legacyAPIServerFeatureGatesPatchYAML):
 			migrated[idx].Content = []byte(multiDocumentAPIServerFeatureGatesPatchYAML)
 		default:
-			if bytes.Contains(migrated[idx].Content, []byte("oidc-issuer-url:")) {
-				content, migrationErr := migrateLegacyOIDCPatch(migrated[idx])
-				if migrationErr != nil {
-					return nil, migrationErr
-				}
+			content, found, migrationErr := migrateLegacyAPIServerPatch(migrated[idx])
+			if migrationErr != nil {
+				return nil, migrationErr
+			}
 
+			if found {
 				migrated[idx].Content = content
 			}
 		}
@@ -161,7 +162,7 @@ func migrateKubernetesPatchesForContract(
 	return migrated, nil
 }
 
-type legacyOIDCPatchValues struct {
+type legacyAPIServerPatchValues struct {
 	documents       []map[string]any
 	clusterDocument map[string]any
 	cluster         map[string]any
@@ -169,64 +170,81 @@ type legacyOIDCPatchValues struct {
 	extraArgs       map[string]any
 }
 
-func migrateLegacyOIDCPatch(patch Patch) ([]byte, error) {
-	values, err := parseLegacyOIDCPatch(patch)
+func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
+	documents, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	config, err := values.oidcConfig(patch.Path)
+	if !mapDocuments {
+		return patch.Content, false, nil
+	}
+
+	values, found, err := findLegacyAPIServerValues(documents)
 	if err != nil {
-		return nil, err
+		return nil, false, fmt.Errorf(
+			"migrate legacy API server patch %q: %w",
+			patch.Path,
+			err,
+		)
+	}
+
+	if !found {
+		return patch.Content, false, nil
+	}
+
+	authenticationDocument, err := values.migrateOIDCAuthenticationDocument(patch.Path)
+	if err != nil {
+		return nil, false, err
 	}
 
 	apiServerDocument, err := values.migrateAPIServerDocument(patch.Path)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	values.removeMigratedValues()
 
-	return marshalMigratedOIDCDocuments(
+	content, err := marshalMigratedKubernetesDocuments(
 		patch.Path,
-		values.documents,
+		documents,
 		apiServerDocument,
-		StructuredOIDCPatchYAML(config),
+		authenticationDocument,
 	)
-}
-
-func parseLegacyOIDCPatch(patch Patch) (*legacyOIDCPatchValues, error) {
-	documents, err := decodeLegacyOIDCDocuments(patch)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	values, found := findLegacyOIDCValues(documents)
-	if !found {
-		return nil, fmt.Errorf(
-			"migrate legacy OIDC patch %q: %w",
-			patch.Path,
-			errLegacyOIDCExtraArgsMissing,
-		)
-	}
-
-	return values, nil
+	return content, true, nil
 }
 
-func decodeLegacyOIDCDocuments(patch Patch) ([]map[string]any, error) {
+func decodeLegacyKubernetesDocuments(patch Patch) ([]map[string]any, bool, error) {
 	decoder := yamlv3.NewDecoder(bytes.NewReader(patch.Content))
 	documents := []map[string]any{}
 
 	for {
-		var document map[string]any
+		var value any
 
-		decodeErr := decoder.Decode(&document)
+		decodeErr := decoder.Decode(&value)
 		if errors.Is(decodeErr, io.EOF) {
 			break
 		}
 
 		if decodeErr != nil {
-			return nil, fmt.Errorf("decode legacy OIDC patch %q: %w", patch.Path, decodeErr)
+			return nil, false, fmt.Errorf(
+				"decode legacy Kubernetes patch %q: %w",
+				patch.Path,
+				decodeErr,
+			)
+		}
+
+		if value == nil {
+			continue
+		}
+
+		document, isMap := value.(map[string]any)
+		if !isMap {
+			return nil, false, nil
 		}
 
 		if len(document) > 0 {
@@ -234,10 +252,14 @@ func decodeLegacyOIDCDocuments(patch Patch) ([]map[string]any, error) {
 		}
 	}
 
-	return documents, nil
+	return documents, true, nil
 }
 
-func findLegacyOIDCValues(documents []map[string]any) (*legacyOIDCPatchValues, bool) {
+func findLegacyAPIServerValues(
+	documents []map[string]any,
+) (*legacyAPIServerPatchValues, bool, error) {
+	var values *legacyAPIServerPatchValues
+
 	for _, document := range documents {
 		cluster, found := mapValue(document, "cluster")
 		if !found {
@@ -249,28 +271,51 @@ func findLegacyOIDCValues(documents []map[string]any) (*legacyOIDCPatchValues, b
 			continue
 		}
 
-		extraArgs, found := mapValue(apiServer, "extraArgs")
-		if !found {
-			continue
+		extraArgs, _ := mapValue(apiServer, "extraArgs")
+
+		if values != nil {
+			return nil, false, errLegacyAPIServerMultipleDocuments
 		}
 
-		if _, found = extraArgs["oidc-issuer-url"]; !found {
-			continue
-		}
-
-		return &legacyOIDCPatchValues{
+		values = &legacyAPIServerPatchValues{
 			documents:       documents,
 			clusterDocument: document,
 			cluster:         cluster,
 			apiServer:       apiServer,
 			extraArgs:       extraArgs,
-		}, true
+		}
 	}
 
-	return nil, false
+	return values, values != nil, nil
 }
 
-func (values *legacyOIDCPatchValues) oidcConfig(patchPath string) (OIDCPatchConfig, error) {
+func (values *legacyAPIServerPatchValues) migrateOIDCAuthenticationDocument(
+	patchPath string,
+) ([]byte, error) {
+	var authenticationDocument []byte
+
+	if _, hasOIDCIssuer := values.extraArgs["oidc-issuer-url"]; hasOIDCIssuer {
+		config, err := values.oidcConfig(patchPath)
+		if err != nil {
+			return nil, err
+		}
+
+		authenticationDocument = StructuredOIDCPatchYAML(config)
+	}
+
+	if extraArg := unsupportedLegacyOIDCExtraArg(values.extraArgs); extraArg != "" {
+		return nil, fmt.Errorf(
+			"migrate legacy OIDC patch %q: %w %q",
+			patchPath,
+			errLegacyOIDCUnsupportedExtraArg,
+			extraArg,
+		)
+	}
+
+	return authenticationDocument, nil
+}
+
+func (values *legacyAPIServerPatchValues) oidcConfig(patchPath string) (OIDCPatchConfig, error) {
 	config := OIDCPatchConfig{
 		IssuerURL:      popString(values.extraArgs, "oidc-issuer-url"),
 		ClientID:       popString(values.extraArgs, "oidc-client-id"),
@@ -304,10 +349,28 @@ func (values *legacyOIDCPatchValues) oidcConfig(patchPath string) (OIDCPatchConf
 	return config, nil
 }
 
-func (values *legacyOIDCPatchValues) migrateAPIServerDocument(
+func unsupportedLegacyOIDCExtraArg(extraArgs map[string]any) string {
+	unsupported := ""
+
+	for extraArg := range extraArgs {
+		if !strings.HasPrefix(extraArg, "oidc-") {
+			continue
+		}
+
+		if unsupported == "" || extraArg < unsupported {
+			unsupported = extraArg
+		}
+	}
+
+	return unsupported
+}
+
+func (values *legacyAPIServerPatchValues) migrateAPIServerDocument(
 	patchPath string,
 ) (map[string]any, error) {
-	removeEmptyMap(values.apiServer, "extraArgs", values.extraArgs)
+	if extraArgs, found := mapValue(values.apiServer, "extraArgs"); found {
+		removeEmptyMap(values.apiServer, "extraArgs", extraArgs)
+	}
 
 	if len(values.apiServer) == 0 {
 		return map[string]any{}, nil
@@ -322,10 +385,10 @@ func (values *legacyOIDCPatchValues) migrateAPIServerDocument(
 		newField, supported := multiDocumentAPIServerFieldName(field)
 		if !supported {
 			return nil, fmt.Errorf(
-				"migrate legacy OIDC patch %q field %q: %w",
+				"migrate legacy API server patch %q field %q: %w",
 				patchPath,
 				field,
-				errLegacyOIDCUnsupportedAPIServerField,
+				errLegacyUnsupportedAPIServerField,
 			)
 		}
 
@@ -346,12 +409,12 @@ func multiDocumentAPIServerFieldName(field string) (string, bool) {
 	}
 }
 
-func (values *legacyOIDCPatchValues) removeMigratedValues() {
+func (values *legacyAPIServerPatchValues) removeMigratedValues() {
 	delete(values.cluster, "apiServer")
 	removeEmptyMap(values.clusterDocument, "cluster", values.cluster)
 }
 
-func marshalMigratedOIDCDocuments(
+func marshalMigratedKubernetesDocuments(
 	patchPath string,
 	legacyDocuments []map[string]any,
 	apiServerDocument map[string]any,
@@ -366,7 +429,7 @@ func marshalMigratedOIDCDocuments(
 
 		encoded, err := yaml.Marshal(document)
 		if err != nil {
-			return nil, fmt.Errorf("marshal migrated OIDC patch %q: %w", patchPath, err)
+			return nil, fmt.Errorf("marshal migrated Kubernetes patch %q: %w", patchPath, err)
 		}
 
 		documents = append(documents, bytes.TrimSpace(encoded))
@@ -381,7 +444,9 @@ func marshalMigratedOIDCDocuments(
 		documents = append(documents, bytes.TrimSpace(encoded))
 	}
 
-	documents = append(documents, bytes.TrimSpace(authenticationDocument))
+	if len(authenticationDocument) > 0 {
+		documents = append(documents, bytes.TrimSpace(authenticationDocument))
+	}
 
 	return append(bytes.Join(documents, []byte("\n---\n")), '\n'), nil
 }
