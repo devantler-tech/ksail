@@ -15,6 +15,10 @@ import (
 // against in these tests.
 const sourceDir = "k8s"
 
+// localOverlayDir is the overlay directory the base config's kustomizationFile
+// points at in the base-sync test cases.
+const localOverlayDir = "clusters/local"
+
 // mkOverlays creates <dir>/<sourceDir>/clusters/<name> directories.
 func mkOverlays(t *testing.T, dir string, names ...string) {
 	t.Helper()
@@ -46,7 +50,7 @@ func TestDerivePlanReportsPresentAndMissingOverlays(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plan.Entries, 2)
 	assert.Equal(t, "local", plan.Entries[0].Environment.Name)
-	assert.Equal(t, "clusters/local", plan.Entries[0].OverlayDir)
+	assert.Equal(t, localOverlayDir, plan.Entries[0].OverlayDir)
 	assert.Equal(t, environment.OverlayMissing, plan.Entries[0].State)
 	assert.Equal(t, "prod", plan.Entries[1].Environment.Name)
 	assert.Equal(t, "clusters/prod", plan.Entries[1].OverlayDir)
@@ -195,7 +199,7 @@ func TestDerivePlanKeepsBaseConfigSyncedOverlayOutOfOrphans(t *testing.T) {
 	mkOverlays(t, dir, "local", "prod", "attic")
 
 	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	base.Spec.Workload.KustomizationFile = "clusters/local"
+	base.Spec.Workload.KustomizationFile = localOverlayDir
 
 	loader := stubLoader(map[string]*v1alpha1.Cluster{
 		"ksail.yaml":      base,
@@ -226,7 +230,7 @@ func TestDerivePlanReportsBaseSyncedOverlayMissing(t *testing.T) {
 	mkOverlays(t, dir, "attic")
 
 	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	base.Spec.Workload.KustomizationFile = "clusters/local"
+	base.Spec.Workload.KustomizationFile = localOverlayDir
 
 	loader := stubLoader(map[string]*v1alpha1.Cluster{"ksail.yaml": base})
 
@@ -250,7 +254,7 @@ func TestDerivePlanPrefersDeclaredConfigOverBaseSync(t *testing.T) {
 	mkOverlays(t, dir, "local")
 
 	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	base.Spec.Workload.KustomizationFile = "clusters/local"
+	base.Spec.Workload.KustomizationFile = localOverlayDir
 
 	loader := stubLoader(map[string]*v1alpha1.Cluster{
 		"ksail.yaml":       base,
