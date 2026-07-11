@@ -116,6 +116,7 @@ func TestGeneratedCRDCarriesCurrentDescriptions(t *testing.T) {
 		"charts", "ksail-operator", "crds", "ksail.io_clusters.yaml",
 	)
 
+	//nolint:gosec // crdPath is a fixed test input within this repository.
 	raw, err := os.ReadFile(crdPath)
 	if err != nil {
 		t.Fatalf("reading generated CRD: %v", err)
