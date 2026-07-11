@@ -349,7 +349,15 @@ func TestConfigManager_Load_MigratesLegacyOIDCPatchForMultiDocumentConfig(t *tes
 	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
 	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
-	legacyOIDC := []byte(`cluster:
+	legacyOIDC := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/ca.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        test-ca
+        -----END CERTIFICATE-----
+---
+cluster:
   apiServer:
     extraArgs:
       oidc-issuer-url: "https://dex.example.com"
@@ -359,13 +367,6 @@ func TestConfigManager_Load_MigratesLegacyOIDCPatchForMultiDocumentConfig(t *tes
       oidc-groups-claim: "groups"
       oidc-groups-prefix: "oidc:"
       oidc-ca-file: "/etc/kubernetes/oidc/ca.crt"
-machine:
-  files:
-    - path: "/etc/kubernetes/oidc/ca.crt"
-      content: |
-        -----BEGIN CERTIFICATE-----
-        test-ca
-        -----END CERTIFICATE-----
 `)
 	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
 
@@ -389,4 +390,35 @@ machine:
 	assert.Equal(t, []any{"ksail"}, issuer["audiences"])
 	assert.Contains(t, issuer["certificateAuthority"], "test-ca")
 	assert.Empty(t, controlPlane.K8sAPIServerConfig().ExtraArgs())
+}
+
+func TestConfigManager_Load_MigratesLegacyOIDCAndAPIServerFields(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      feature-gates: MutatingAdmissionPolicy=true
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{
+		"feature-gates": {"MutatingAdmissionPolicy=true"},
+	}, apiServer.ExtraArgs())
 }

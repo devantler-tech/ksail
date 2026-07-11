@@ -4,18 +4,23 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	yamlv3 "gopkg.in/yaml.v3"
 	"sigs.k8s.io/yaml"
 )
 
 var (
-	errLegacyOIDCClusterMissing   = errors.New("cluster is missing")
-	errLegacyOIDCAPIServerMissing = errors.New("cluster.apiServer is missing")
-	errLegacyOIDCExtraArgsMissing = errors.New("cluster.apiServer.extraArgs is missing")
-	errLegacyOIDCRequiredFields   = errors.New("issuer URL and client ID are required")
-	errLegacyOIDCCAMissing        = errors.New("CA content is missing")
+	errLegacyOIDCExtraArgsMissing = errors.New(
+		"cluster.apiServer.extraArgs with oidc-issuer-url is missing",
+	)
+	errLegacyOIDCRequiredFields            = errors.New("issuer URL and client ID are required")
+	errLegacyOIDCCAMissing                 = errors.New("CA content is missing")
+	errLegacyOIDCUnsupportedAPIServerField = errors.New(
+		"API server field has no Talos 1.14 KubeAPIServerConfig equivalent",
+	)
 )
 
 const (
@@ -157,10 +162,11 @@ func migrateKubernetesPatchesForContract(
 }
 
 type legacyOIDCPatchValues struct {
-	document  map[string]any
-	cluster   map[string]any
-	apiServer map[string]any
-	extraArgs map[string]any
+	documents       []map[string]any
+	clusterDocument map[string]any
+	cluster         map[string]any
+	apiServer       map[string]any
+	extraArgs       map[string]any
 }
 
 func migrateLegacyOIDCPatch(patch Patch) ([]byte, error) {
@@ -174,51 +180,28 @@ func migrateLegacyOIDCPatch(patch Patch) ([]byte, error) {
 		return nil, err
 	}
 
+	apiServerDocument, err := values.migrateAPIServerDocument(patch.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	values.removeMigratedValues()
 
-	structured := StructuredOIDCPatchYAML(config)
-	if len(values.document) == 0 {
-		return structured, nil
-	}
-
-	legacyRemainder, err := yaml.Marshal(values.document)
-	if err != nil {
-		return nil, fmt.Errorf("marshal migrated OIDC patch %q: %w", patch.Path, err)
-	}
-
-	return bytes.Join([][]byte{
-		bytes.TrimSpace(legacyRemainder),
-		structured,
-	}, []byte("\n---\n")), nil
+	return marshalMigratedOIDCDocuments(
+		patch.Path,
+		values.documents,
+		apiServerDocument,
+		StructuredOIDCPatchYAML(config),
+	)
 }
 
 func parseLegacyOIDCPatch(patch Patch) (*legacyOIDCPatchValues, error) {
-	var document map[string]any
-
-	err := yaml.Unmarshal(patch.Content, &document)
+	documents, err := decodeLegacyOIDCDocuments(patch)
 	if err != nil {
-		return nil, fmt.Errorf("migrate legacy OIDC patch %q: %w", patch.Path, err)
+		return nil, err
 	}
 
-	cluster, found := mapValue(document, "cluster")
-	if !found {
-		return nil, fmt.Errorf(
-			"migrate legacy OIDC patch %q: %w",
-			patch.Path,
-			errLegacyOIDCClusterMissing,
-		)
-	}
-
-	apiServer, found := mapValue(cluster, "apiServer")
-	if !found {
-		return nil, fmt.Errorf(
-			"migrate legacy OIDC patch %q: %w",
-			patch.Path,
-			errLegacyOIDCAPIServerMissing,
-		)
-	}
-
-	extraArgs, found := mapValue(apiServer, "extraArgs")
+	values, found := findLegacyOIDCValues(documents)
 	if !found {
 		return nil, fmt.Errorf(
 			"migrate legacy OIDC patch %q: %w",
@@ -227,12 +210,64 @@ func parseLegacyOIDCPatch(patch Patch) (*legacyOIDCPatchValues, error) {
 		)
 	}
 
-	return &legacyOIDCPatchValues{
-		document:  document,
-		cluster:   cluster,
-		apiServer: apiServer,
-		extraArgs: extraArgs,
-	}, nil
+	return values, nil
+}
+
+func decodeLegacyOIDCDocuments(patch Patch) ([]map[string]any, error) {
+	decoder := yamlv3.NewDecoder(bytes.NewReader(patch.Content))
+	documents := []map[string]any{}
+
+	for {
+		var document map[string]any
+
+		decodeErr := decoder.Decode(&document)
+		if errors.Is(decodeErr, io.EOF) {
+			break
+		}
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode legacy OIDC patch %q: %w", patch.Path, decodeErr)
+		}
+
+		if len(document) > 0 {
+			documents = append(documents, document)
+		}
+	}
+
+	return documents, nil
+}
+
+func findLegacyOIDCValues(documents []map[string]any) (*legacyOIDCPatchValues, bool) {
+	for _, document := range documents {
+		cluster, found := mapValue(document, "cluster")
+		if !found {
+			continue
+		}
+
+		apiServer, found := mapValue(cluster, "apiServer")
+		if !found {
+			continue
+		}
+
+		extraArgs, found := mapValue(apiServer, "extraArgs")
+		if !found {
+			continue
+		}
+
+		if _, found = extraArgs["oidc-issuer-url"]; !found {
+			continue
+		}
+
+		return &legacyOIDCPatchValues{
+			documents:       documents,
+			clusterDocument: document,
+			cluster:         cluster,
+			apiServer:       apiServer,
+			extraArgs:       extraArgs,
+		}, true
+	}
+
+	return nil, false
 }
 
 func (values *legacyOIDCPatchValues) oidcConfig(patchPath string) (OIDCPatchConfig, error) {
@@ -255,7 +290,7 @@ func (values *legacyOIDCPatchValues) oidcConfig(patchPath string) (OIDCPatchConf
 	}
 
 	if caPath != "" {
-		config.CertificateAuthority = machineFileContent(values.document, caPath)
+		config.CertificateAuthority = machineFileContent(values.documents, caPath)
 		if config.CertificateAuthority == "" {
 			return OIDCPatchConfig{}, fmt.Errorf(
 				"migrate legacy OIDC patch %q for %q: %w",
@@ -269,10 +304,86 @@ func (values *legacyOIDCPatchValues) oidcConfig(patchPath string) (OIDCPatchConf
 	return config, nil
 }
 
-func (values *legacyOIDCPatchValues) removeMigratedValues() {
+func (values *legacyOIDCPatchValues) migrateAPIServerDocument(
+	patchPath string,
+) (map[string]any, error) {
 	removeEmptyMap(values.apiServer, "extraArgs", values.extraArgs)
-	removeEmptyMap(values.cluster, "apiServer", values.apiServer)
-	removeEmptyMap(values.document, "cluster", values.cluster)
+
+	if len(values.apiServer) == 0 {
+		return map[string]any{}, nil
+	}
+
+	document := map[string]any{
+		"apiVersion": "v1alpha1",
+		"kind":       "KubeAPIServerConfig",
+	}
+
+	for field, value := range values.apiServer {
+		newField, supported := multiDocumentAPIServerFieldName(field)
+		if !supported {
+			return nil, fmt.Errorf(
+				"migrate legacy OIDC patch %q field %q: %w",
+				patchPath,
+				field,
+				errLegacyOIDCUnsupportedAPIServerField,
+			)
+		}
+
+		document[newField] = value
+	}
+
+	return document, nil
+}
+
+func multiDocumentAPIServerFieldName(field string) (string, bool) {
+	switch field {
+	case "image", "extraArgs", "env", "resources":
+		return field, true
+	case "certSANs":
+		return "certExtraSANs", true
+	default:
+		return "", false
+	}
+}
+
+func (values *legacyOIDCPatchValues) removeMigratedValues() {
+	delete(values.cluster, "apiServer")
+	removeEmptyMap(values.clusterDocument, "cluster", values.cluster)
+}
+
+func marshalMigratedOIDCDocuments(
+	patchPath string,
+	legacyDocuments []map[string]any,
+	apiServerDocument map[string]any,
+	authenticationDocument []byte,
+) ([]byte, error) {
+	documents := make([][]byte, 0, len(legacyDocuments))
+
+	for _, document := range legacyDocuments {
+		if len(document) == 0 {
+			continue
+		}
+
+		encoded, err := yaml.Marshal(document)
+		if err != nil {
+			return nil, fmt.Errorf("marshal migrated OIDC patch %q: %w", patchPath, err)
+		}
+
+		documents = append(documents, bytes.TrimSpace(encoded))
+	}
+
+	if len(apiServerDocument) > 0 {
+		encoded, err := yaml.Marshal(apiServerDocument)
+		if err != nil {
+			return nil, fmt.Errorf("marshal migrated API server patch %q: %w", patchPath, err)
+		}
+
+		documents = append(documents, bytes.TrimSpace(encoded))
+	}
+
+	documents = append(documents, bytes.TrimSpace(authenticationDocument))
+
+	return append(bytes.Join(documents, []byte("\n---\n")), '\n'), nil
 }
 
 func mapValue(parent map[string]any, key string) (map[string]any, bool) {
@@ -305,7 +416,17 @@ func removeEmptyMap(parent map[string]any, key string, value map[string]any) {
 	}
 }
 
-func machineFileContent(document map[string]any, path string) string {
+func machineFileContent(documents []map[string]any, path string) string {
+	for _, document := range documents {
+		if content := machineFileContentInDocument(document, path); content != "" {
+			return content
+		}
+	}
+
+	return ""
+}
+
+func machineFileContentInDocument(document map[string]any, path string) string {
 	machine, found := mapValue(document, "machine")
 	if !found {
 		return ""
