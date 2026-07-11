@@ -145,3 +145,88 @@ func TestDerivePlanErrorsOnUnreadableClustersTree(t *testing.T) {
 
 	require.ErrorIs(t, err, environment.ErrDerivePlan)
 }
+
+func TestDerivePlanAcceptsAbsoluteSourceDirectory(t *testing.T) {
+	t.Parallel()
+
+	// The ksail config manager absolutizes Spec.Workload.SourceDirectory before
+	// handing it downstream; joining that against repoRoot again would probe
+	// <repo>/<repo>/k8s/clusters and misread every overlay as Missing.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.prod.yaml")
+	mkOverlays(t, dir, "prod", "attic")
+
+	plan, err := environment.DerivePlan(dir, filepath.Join(dir, sourceDir), planLoader())
+
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+	assert.Equal(t, environment.OverlayPresent, plan.Entries[0].State)
+	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
+}
+
+func TestDerivePlanRejectsReservedBaseEnvironment(t *testing.T) {
+	t.Parallel()
+
+	// ksail.base.yaml would map onto the SHARED clusters/base overlay; the plan
+	// must surface the name collision DeriveMultiClusterLayout reserves instead
+	// of reporting the shared base as that environment's Present overlay.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.base.yaml", "ksail.prod.yaml")
+	mkOverlays(t, dir, "base", "prod")
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.base.yaml": clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker),
+		"ksail.prod.yaml": clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+	})
+
+	_, err := environment.DerivePlan(dir, sourceDir, loader)
+
+	require.ErrorIs(t, err, environment.ErrReservedEnvironmentName)
+}
+
+func TestDerivePlanKeepsBaseConfigSyncedOverlayOutOfOrphans(t *testing.T) {
+	t.Parallel()
+
+	// `project init --multi-cluster local` scaffolds ksail.yaml with
+	// kustomizationFile clusters/local and NO ksail.local.yaml: that initial
+	// overlay is declared by the base config, not an orphan.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml", "ksail.prod.yaml")
+	mkOverlays(t, dir, "local", "prod", "attic")
+
+	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	base.Spec.Workload.KustomizationFile = "clusters/local"
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.yaml":      base,
+		"ksail.prod.yaml": clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+	})
+
+	plan, err := environment.DerivePlan(dir, sourceDir, loader)
+
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+	assert.Equal(t, "prod", plan.Entries[0].Environment.Name)
+	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
+}
+
+func TestDerivePlanIgnoresBaseConfigSyncPathsOutsideClusters(t *testing.T) {
+	t.Parallel()
+
+	// A base config syncing something that is not exactly clusters/<name>
+	// (deeper path, empty, or elsewhere) declares no initial environment.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml")
+	mkOverlays(t, dir, "attic")
+
+	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	base.Spec.Workload.KustomizationFile = "clusters/local/deeper"
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{"ksail.yaml": base})
+
+	plan, err := environment.DerivePlan(dir, sourceDir, loader)
+
+	require.NoError(t, err)
+	assert.Empty(t, plan.Entries)
+	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
+}
