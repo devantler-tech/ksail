@@ -170,6 +170,8 @@ func runScanCmd(
 	return runScanCmdInner(ctx, cmd, args, flags)
 }
 
+// runScanCmdInner runs the scan itself — config load, target resolution, and
+// the Kubescape pass — after any ephemeral-cluster preparation has completed.
 func runScanCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,

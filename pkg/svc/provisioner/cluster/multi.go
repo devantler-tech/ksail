@@ -223,6 +223,8 @@ func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provision
 	return provisioner, nil
 }
 
+// createMinimalK3dProvisioner builds a K3d provisioner from just a cluster
+// name, for lifecycle actions that need no full ksail config.
 func createMinimalK3dProvisioner(clusterName string) Provisioner {
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
 		ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
@@ -231,6 +233,9 @@ func createMinimalK3dProvisioner(clusterName string) Provisioner {
 	return k3dprovisioner.CreateProvisioner(k3dConfig, "")
 }
 
+// createMinimalTalosProvisioner builds a Talos provisioner from just a
+// cluster name and provider, for lifecycle actions that need no full ksail
+// config.
 func createMinimalTalosProvisioner(
 	clusterName string,
 	kubeconfigPath string,
@@ -255,6 +260,8 @@ func createMinimalTalosProvisioner(
 	return provisioner, nil
 }
 
+// createMinimalVClusterProvisioner builds a vCluster provisioner from just a
+// cluster name, for lifecycle actions that need no full ksail config.
 func createMinimalVClusterProvisioner(clusterName string) (Provisioner, error) {
 	provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "", false)
 	if err != nil {

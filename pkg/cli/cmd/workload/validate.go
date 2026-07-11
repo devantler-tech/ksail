@@ -186,6 +186,9 @@ func runValidateCmd(
 	return runValidateCmdInner(ctx, cmd, args, flags)
 }
 
+// runValidateCmdInner runs the validation itself — config load, target
+// resolution, and the kubeconform pass — after any ephemeral-cluster
+// preparation has completed.
 func runValidateCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,

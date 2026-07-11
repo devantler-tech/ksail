@@ -32,18 +32,22 @@ type streamLogger struct {
 	writer io.Writer
 }
 
+// Warn streams a kind warning line to the writer.
 func (l *streamLogger) Warn(message string) {
 	l.write(message)
 }
 
+// Warnf streams a formatted kind warning line to the writer.
 func (l *streamLogger) Warnf(format string, args ...any) {
 	l.write(fmt.Sprintf(format, args...))
 }
 
+// Error streams a kind error line to the writer.
 func (l *streamLogger) Error(message string) {
 	l.write(message)
 }
 
+// Errorf streams a formatted kind error line to the writer.
 func (l *streamLogger) Errorf(format string, args ...any) {
 	l.write(fmt.Sprintf(format, args...))
 }
@@ -51,10 +55,17 @@ func (l *streamLogger) Errorf(format string, args ...any) {
 // noopInfoLogger discards verbose/debug messages (V(1) and higher).
 type noopInfoLogger struct{}
 
-func (noopInfoLogger) Info(string)          {}
-func (noopInfoLogger) Infof(string, ...any) {}
-func (noopInfoLogger) Enabled() bool        { return false }
+// Info discards a verbose kind info line.
+func (noopInfoLogger) Info(string) {}
 
+// Infof discards a formatted verbose kind info line.
+func (noopInfoLogger) Infof(string, ...any) {}
+
+// Enabled reports that verbose logging is off.
+func (noopInfoLogger) Enabled() bool { return false }
+
+// V returns the logger for the given verbosity: the streaming logger for
+// info-level (V(0)) output, a no-op for verbose/debug levels.
 func (l *streamLogger) V(level log.Level) log.InfoLogger {
 	// Only enable info-level messages (V(0)), suppress verbose/debug (V(1+))
 	if level > 0 {
@@ -64,18 +75,23 @@ func (l *streamLogger) V(level log.Level) log.InfoLogger {
 	return l
 }
 
+// Info streams a kind info line to the writer.
 func (l *streamLogger) Info(message string) {
 	l.write(message)
 }
 
+// Infof streams a formatted kind info line to the writer.
 func (l *streamLogger) Infof(format string, args ...any) {
 	l.write(fmt.Sprintf(format, args...))
 }
 
+// Enabled reports that info-level streaming is on.
 func (l *streamLogger) Enabled() bool {
 	return true
 }
 
+// write emits one line to the writer, tolerating a nil logger and blank
+// messages (kind emits those as progress separators).
 func (l *streamLogger) write(message string) {
 	if l == nil {
 		return
@@ -401,6 +417,8 @@ func (k *Provisioner) withProvider(
 	return nil
 }
 
+// setName resolves the effective cluster name: the explicit name when given,
+// otherwise the name declared in the kind config.
 func setName(name string, kindConfigName string) string {
 	target := name
 	if target == "" {
