@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -336,6 +337,35 @@ func TestServeIntercepted_ReturnsNilWhenTheSessionCloses(t *testing.T) {
 		require.NoError(t, serveErr)
 	case <-time.After(testTimeout):
 		t.Fatal("serve loop did not stop after the session closed")
+	}
+}
+
+func TestServeIntercepted_SurfacesAProtocolErrorThatTearsTheTunnelDown(t *testing.T) {
+	t.Parallel()
+
+	// A steering channel that yields non-frame bytes (e.g. a stray banner the
+	// agent image printed onto its stdout, the tunnel channel) corrupts the
+	// demux and tears the session down with a codec error. ServeIntercepted must
+	// surface it rather than returning nil — a corrupted tunnel is a diagnosable
+	// failure, never a silent success.
+	garbage := io.NopCloser(strings.NewReader("Fail to init k9s logs location\n"))
+	session := mirror.NewTunnelSession(garbage, io.Discard, mirror.TunnelRoleClient)
+
+	dial := func(_ context.Context) (io.ReadWriteCloser, error) {
+		return nil, errTransportTorn
+	}
+
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- mirror.ServeIntercepted(context.Background(), session, dial)
+	}()
+
+	select {
+	case serveErr := <-serveDone:
+		require.Error(t, serveErr)
+		require.ErrorIs(t, serveErr, mirror.ErrTunnelUnknownFrameType)
+	case <-time.After(testTimeout):
+		t.Fatal("serve loop did not return after the tunnel was corrupted")
 	}
 }
 
