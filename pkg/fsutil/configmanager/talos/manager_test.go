@@ -317,3 +317,76 @@ func TestConfigManager_WithVersionContract_InvalidatesCachedConfig(t *testing.T)
 	assert.NotSame(t, configs1, configs2,
 		"WithVersionContract should invalidate the cached config so Load regenerates it")
 }
+
+func TestConfigManager_Load_MigratesLegacyCNIPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "disable-default-cni.yaml"),
+		[]byte("cluster:\n  network:\n    cni:\n      name: none\n"),
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	require.NotNil(t, controlPlane.K8sNetworkConfig())
+	assert.Nil(t, controlPlane.K8sFlannelCNIConfig())
+}
+
+func TestConfigManager_Load_MigratesLegacyOIDCPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-username-claim: "email"
+      oidc-username-prefix: "oidc:"
+      oidc-groups-claim: "groups"
+      oidc-groups-prefix: "oidc:"
+      oidc-ca-file: "/etc/kubernetes/oidc/ca.crt"
+machine:
+  files:
+    - path: "/etc/kubernetes/oidc/ca.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        test-ca
+        -----END CERTIFICATE-----
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	authConfig := controlPlane.K8sAuthenticationConfig().Configuration()
+	jwt, found := authConfig["jwt"].([]any)
+	require.True(t, found)
+	require.Len(t, jwt, 1)
+	authenticator, found := jwt[0].(map[string]any)
+	require.True(t, found)
+	issuer, found := authenticator["issuer"].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, "https://dex.example.com", issuer["url"])
+	assert.Equal(t, []any{"ksail"}, issuer["audiences"])
+	assert.Contains(t, issuer["certificateAuthority"], "test-ca")
+	assert.Empty(t, controlPlane.K8sAPIServerConfig().ExtraArgs())
+}

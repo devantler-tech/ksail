@@ -3,7 +3,9 @@ package talos_test
 import (
 	"testing"
 
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +24,22 @@ func TestAPIServerFeatureGatesPatch(t *testing.T) {
 	assert.Equal(t, "ksail-apiserver-feature-gates", patch.Path)
 	assert.Equal(t, talos.PatchScopeCluster, patch.Scope)
 	assert.Equal(t, []byte(expectedContent), patch.Content)
+}
+
+func TestAPIServerFeatureGatesPatch_AppliesToTalos14Config(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager(t.TempDir(), "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14).
+		WithAdditionalPatches([]talos.Patch{talos.APIServerFeatureGatesPatch()})
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string][]string{
+		"feature-gates":  {"MutatingAdmissionPolicy=true"},
+		"runtime-config": {"admissionregistration.k8s.io/v1beta1=true"},
+	}, configs.ControlPlane().K8sAPIServerConfig().ExtraArgs())
 }
 
 // TestAPIServerFeatureGatesPatch_AppliesToTalosConfig verifies the patch is a

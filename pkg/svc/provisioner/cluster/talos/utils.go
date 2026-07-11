@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
+	talosimages "github.com/siderolabs/talos/pkg/images"
 )
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
@@ -117,11 +119,17 @@ func (p *Provisioner) resolveSchematicID() string {
 // schematicId or auto-computed from extensions) it returns the Image Factory
 // installer factory.talos.dev/installer/<schematicID>:<tag> so the upgrade
 // preserves system extensions — matching the create/snapshot/autoscaler paths.
-// It falls back to the bare ghcr.io/siderolabs/installer:<tag> only when no
-// schematic is configured.
+// Without a custom schematic, Talos 1.14+ uses the Image Factory's default
+// metal-installer schematic because release installers are no longer published
+// to ghcr.io; older releases retain the legacy ghcr.io installer.
 func (p *Provisioner) resolveInstallerImage(toVersion string) string {
 	if schematicID := p.resolveSchematicID(); schematicID != "" {
 		return talosconfigmanager.SchematicInstallerImage(schematicID, toVersion)
+	}
+
+	parsed, err := versionresolver.ParseVersion(toVersion)
+	if err == nil && (parsed.Major > 1 || parsed.Major == 1 && parsed.Minor >= 14) {
+		return talosimages.InstallerImageRepository("metal") + ":" + toVersion
 	}
 
 	return installerImageFromTag(toVersion)

@@ -508,7 +508,7 @@ func disableDefaultCNIPatch() talosconfigmanager.Patch {
 	return talosconfigmanager.Patch{
 		Path:    "disable-default-cni",
 		Scope:   talosconfigmanager.PatchScopeCluster,
-		Content: []byte(talosgenerator.DisableDefaultCNIPatchYAML),
+		Content: []byte(talosconfigmanager.DisableDefaultCNIPatchYAML(false)),
 	}
 }
 

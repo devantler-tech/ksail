@@ -5,8 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -683,6 +686,81 @@ func TestGenerator_Generate_OverwritesExistingPatchesWithForce(t *testing.T) {
 	assert.Contains(t, string(content), "cluster:")
 	assert.Contains(t, string(content), "cni:")
 	assert.Contains(t, string(content), "name: none")
+}
+
+func TestGenerator_Generate_Talos14KubernetesDocuments(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+	caContent := "-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----\n"
+	caPath := filepath.Join(tempDir, "oidc-ca.crt")
+	require.NoError(t, os.WriteFile(caPath, []byte(caContent), 0o600))
+
+	config := &talosgenerator.Config{
+		PatchesDir:                    "talos",
+		WorkerNodes:                   1,
+		DisableDefaultCNI:             true,
+		EnableOIDC:                    true,
+		OIDCIssuerURL:                 "https://dex.example.com",
+		OIDCClientID:                  "ksail",
+		OIDCUsernameClaim:             "email",
+		OIDCUsernamePrefix:            "oidc:",
+		OIDCGroupsClaim:               "groups",
+		OIDCGroupsPrefix:              "oidc:",
+		OIDCCAFile:                    caPath,
+		MultiDocumentKubernetesConfig: true,
+	}
+
+	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir})
+	require.NoError(t, err)
+
+	cniContent, err := os.ReadFile( //nolint:gosec // Test file path is safe
+		filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml"),
+	)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"apiVersion: v1alpha1\nkind: KubeFlannelCNIConfig\n$patch: delete\n",
+		string(cniContent),
+	)
+
+	oidcContent, err := os.ReadFile( //nolint:gosec // Test file path is safe
+		filepath.Join(tempDir, "talos", "cluster", "oidc.yaml"),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, string(oidcContent), "kind: KubeAuthenticationConfig")
+	assert.Contains(t, string(oidcContent), "url: \"https://dex.example.com\"")
+	assert.Contains(t, string(oidcContent), "audiences:\n          - \"ksail\"")
+	assert.Contains(t, string(oidcContent), "claim: \"email\"")
+	assert.Contains(t, string(oidcContent), "prefix: \"oidc:\"")
+	assert.Contains(t, string(oidcContent), "certificateAuthority: |")
+	assert.Contains(t, string(oidcContent), "          test-ca")
+	assert.NotContains(t, string(oidcContent), "cluster:\n  apiServer:")
+	assert.NotContains(t, string(oidcContent), "machine:\n  files:")
+
+	assertTalos14OIDCConfigLoads(t, tempDir, caContent)
+}
+
+func assertTalos14OIDCConfigLoads(t *testing.T, tempDir, caContent string) {
+	t.Helper()
+
+	manager := talosconfigmanager.
+		NewConfigManager(filepath.Join(tempDir, "talos"), "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	authConfig := configs.ControlPlane().K8sAuthenticationConfig().Configuration()
+	jwt, found := authConfig["jwt"].([]any)
+	require.True(t, found)
+	require.Len(t, jwt, 1)
+	authenticator, found := jwt[0].(map[string]any)
+	require.True(t, found)
+	issuer, found := authenticator["issuer"].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, "https://dex.example.com", issuer["url"])
+	assert.Equal(t, caContent, issuer["certificateAuthority"])
 }
 
 func TestGenerator_Generate_ImageVerification(t *testing.T) {

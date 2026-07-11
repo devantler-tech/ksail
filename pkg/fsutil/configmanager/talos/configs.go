@@ -259,28 +259,37 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 	return c.regenerate(func(params *regenParams) error {
 		patches := make([]Patch, 0, len(c.patches)+1)
 		patches = append(patches, c.patches...)
-		patches = append(patches, buildCertSANsPatch(sans))
+		patches = append(patches, buildCertSANsPatch(sans, c.versionContract))
 		params.patches = patches
 
 		return c.preserveSecrets(params)
 	})
 }
 
-// buildCertSANsPatch builds a cluster-scope patch that sets the API server and machine certificate
-// SANs. Talos applies these as strategic-merge replacements, so the patch carries the full set.
-func buildCertSANsPatch(sans []string) Patch {
+// buildCertSANsPatch builds a cluster-scope patch that sets the API server and
+// machine certificate SANs. Talos 1.14 uses KubeAPIServerConfig for the API
+// server values; older contracts use cluster.apiServer. The machine SANs remain
+// in MachineConfig for both forms.
+func buildCertSANsPatch(
+	sans []string,
+	versionContract *talosconfig.VersionContract,
+) Patch {
 	var sansList strings.Builder
 	for _, san := range sans {
-		fmt.Fprintf(&sansList, "    - %q\n", san)
+		_, _ = fmt.Fprintf(&sansList, "    - %q\n", san)
 	}
 
 	var machineSANs strings.Builder
 	for _, san := range sans {
-		fmt.Fprintf(&machineSANs, "  - %q\n", san)
+		_, _ = fmt.Fprintf(&machineSANs, "  - %q\n", san)
 	}
 
 	content := "cluster:\n  apiServer:\n    certSANs:\n" + sansList.String() +
 		"machine:\n  certSANs:\n" + machineSANs.String()
+	if versionContract != nil && versionContract.MultidocKubernetesConfigSupported() {
+		content = "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\ncertExtraSANs:\n" +
+			sansList.String() + "---\nmachine:\n  certSANs:\n" + machineSANs.String()
+	}
 
 	return Patch{
 		Path:    "ksail-exposure-cert-sans",
@@ -353,9 +362,9 @@ func buildHetznerVIPPatch(vip, hcloudAPIToken string) Patch {
 // APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
 // API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
-// its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
-// string→string map, so values carry no leading dashes. Apply it only for clusters
-// using the Calico CNI.
+// its CRD chart that require this API. Values carry no leading dashes. The config
+// manager translates the legacy cluster.apiServer patch to KubeAPIServerConfig
+// for Talos 1.14 contracts. Apply it only for clusters using the Calico CNI.
 func APIServerFeatureGatesPatch() Patch {
 	content := "cluster:\n" +
 		"  apiServer:\n" +

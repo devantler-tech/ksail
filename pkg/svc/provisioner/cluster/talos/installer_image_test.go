@@ -30,6 +30,26 @@ func TestResolveInstallerImageNoSchematic(t *testing.T) {
 	assert.Empty(t, provisioner.ResolveSchematicIDForTest())
 }
 
+// TestResolveInstallerImageNoSchematicTalos14 verifies extension-less Talos
+// 1.14 upgrades use the Image Factory's empty metal installer schematic. Talos
+// 1.14 no longer publishes ghcr.io/siderolabs/installer release images.
+func TestResolveInstallerImageNoSchematicTalos14(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	got := provisioner.ResolveInstallerImageForTest("v1.14.0-alpha.2")
+
+	assert.Equal(
+		t,
+		"factory.talos.dev/metal-installer/"+
+			"376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba:"+
+			"v1.14.0-alpha.2",
+		got,
+	)
+	assert.False(t, provisioner.HasSchematicConfiguredForTest())
+}
+
 // TestResolveInstallerImageExplicitSchematic verifies that an explicit
 // talosOpts.SchematicID produces the Image Factory installer so the rolling OS
 // upgrade preserves system extensions (issue #5077, problem 1).
