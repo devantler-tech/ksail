@@ -205,9 +205,64 @@ func TestDerivePlanKeepsBaseConfigSyncedOverlayOutOfOrphans(t *testing.T) {
 	plan, err := environment.DerivePlan(dir, sourceDir, loader)
 
 	require.NoError(t, err)
-	require.Len(t, plan.Entries, 1)
-	assert.Equal(t, "prod", plan.Entries[0].Environment.Name)
+	// The base-synced environment is a first-class entry (ConfigFile
+	// ksail.yaml), not merely excluded from the orphans.
+	require.Len(t, plan.Entries, 2)
+	assert.Equal(t, "local", plan.Entries[0].Environment.Name)
+	assert.Equal(t, "ksail.yaml", plan.Entries[0].Environment.ConfigFile)
+	assert.Equal(t, environment.OverlayPresent, plan.Entries[0].State)
+	assert.Equal(t, "prod", plan.Entries[1].Environment.Name)
 	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
+}
+
+func TestDerivePlanReportsBaseSyncedOverlayMissing(t *testing.T) {
+	t.Parallel()
+
+	// The init-scaffolded initial environment has no ksail.<env>.yaml; when its
+	// clusters/<env> overlay was deleted, the plan must report it Missing so a
+	// reconcile can regenerate it — not silently omit it.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml")
+	mkOverlays(t, dir, "attic")
+
+	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	base.Spec.Workload.KustomizationFile = "clusters/local"
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{"ksail.yaml": base})
+
+	plan, err := environment.DerivePlan(dir, sourceDir, loader)
+
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+	assert.Equal(t, "local", plan.Entries[0].Environment.Name)
+	assert.Equal(t, "ksail.yaml", plan.Entries[0].Environment.ConfigFile)
+	assert.Equal(t, environment.OverlayMissing, plan.Entries[0].State)
+	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
+}
+
+func TestDerivePlanPrefersDeclaredConfigOverBaseSync(t *testing.T) {
+	t.Parallel()
+
+	// When ksail.local.yaml exists AND the base config syncs clusters/local,
+	// the dedicated config's entry wins — no duplicate.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml", "ksail.local.yaml")
+	mkOverlays(t, dir, "local")
+
+	base := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	base.Spec.Workload.KustomizationFile = "clusters/local"
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.yaml":       base,
+		"ksail.local.yaml": clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+	})
+
+	plan, err := environment.DerivePlan(dir, sourceDir, loader)
+
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+	assert.Equal(t, "ksail.local.yaml", plan.Entries[0].Environment.ConfigFile)
+	assert.Empty(t, plan.Orphans)
 }
 
 func TestDerivePlanIgnoresBaseConfigSyncPathsOutsideClusters(t *testing.T) {
