@@ -146,6 +146,27 @@ func controlPlaneServer(id int64, name, publicIPv4 string) *hcloud.Server {
 	}
 }
 
+// assertSavedKubeconfigServer runs the fetched-from-Talos kubeconfig fixture
+// (talosFetchedKubeconfig, shared with connector_test.go) through the same
+// rewrite saveHetznerKubeconfig performs and asserts the serialized file's
+// server value — pinning the final artifact, not just the endpoint-URL helper.
+func assertSavedKubeconfigServer(
+	t *testing.T,
+	provisioner *talosprovisioner.Provisioner,
+	nodeIP string,
+	wantServer string,
+) {
+	t.Helper()
+
+	rewritten, err := talosprovisioner.RewriteKubeconfigEndpointForTest(
+		[]byte(talosFetchedKubeconfig),
+		provisioner.KubeconfigEndpointURLForTest(nodeIP),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, string(rewritten), "server: "+wantServer,
+		"saved kubeconfig must target the effective cluster endpoint")
+}
+
 // TestUpdateConfigsWithEndpoint_FloatingIPDisabled verifies the default path
 // is unchanged: the endpoint is the first control-plane node's IP, no
 // exposure cert-SANs patch is added, and the Hetzner API is never called (the
@@ -173,6 +194,16 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 	assert.Equal(t, "https://203.0.113.5:6443",
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
 		"disabled path must save the kubeconfig against the node's reachable address")
+	assertSavedKubeconfigServer(t, provisioner, "203.0.113.5", "https://203.0.113.5:6443")
+
+	// Connection metadata must agree with the saved kubeconfig.
+	cluster, err := provisioner.NewHetznerClusterWithEndpointForTest(
+		"fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
+		nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "https://203.0.113.5:6443", cluster.Info().KubernetesEndpoint)
 }
 
 // TestKubeconfigEndpointURL_FallsBackToNodeIP pins the defensive default: a
@@ -185,6 +216,7 @@ func TestKubeconfigEndpointURL_FallsBackToNodeIP(t *testing.T) {
 
 	assert.Equal(t, "https://203.0.113.7:6443",
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.7"))
+	assertSavedKubeconfigServer(t, provisioner, "203.0.113.7", "https://203.0.113.7:6443")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabled verifies the opt-in path:
@@ -256,6 +288,22 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	assert.Equal(t, "https://192.0.2.10:6443",
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
 		"kubeconfig endpoint must be the floating IP when the feature is enabled")
+	assertSavedKubeconfigServer(t, provisioner, "203.0.113.5", "https://192.0.2.10:6443")
+
+	// Connection metadata must expose the same effective endpoint as the saved
+	// kubeconfig — not the first control-plane node's address — so consumers of
+	// HetznerClusterResult survive control-plane replacement too.
+	cluster, err := provisioner.NewHetznerClusterWithEndpointForTest(
+		"fip-cluster",
+		[]*hcloud.Server{
+			controlPlaneServer(1, "cp-1", "203.0.113.5"),
+			controlPlaneServer(2, "cp-2", "203.0.113.6"),
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "https://192.0.2.10:6443", cluster.Info().KubernetesEndpoint,
+		"connection metadata endpoint must be the floating IP when the feature is enabled")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the

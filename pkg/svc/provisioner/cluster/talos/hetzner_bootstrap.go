@@ -231,11 +231,14 @@ func (p *Provisioner) saveHetznerKubeconfig(
 	return nil
 }
 
-// newHetznerClusterWithEndpoint constructs a HetznerClusterResult with the
-// Kubernetes API endpoint derived from the first control-plane server's reachable
-// address (its public IPv4, or its private-network IP when the control plane is
-// IPv4-less).
-func newHetznerClusterWithEndpoint(
+// newHetznerClusterWithEndpoint constructs a HetznerClusterResult whose
+// Kubernetes API endpoint is the cluster's effective endpoint — the same one
+// the saved kubeconfig is rewritten to (the floating IP when enabled), so
+// connection metadata and the kubeconfig can never disagree — falling back to
+// the first control-plane server's reachable address (its public IPv4, or its
+// private-network IP when the control plane is IPv4-less) when no effective
+// endpoint was recorded.
+func (p *Provisioner) newHetznerClusterWithEndpoint(
 	clusterName string,
 	controlPlaneServers []*hcloud.Server,
 	workerServers []*hcloud.Server,
@@ -245,7 +248,7 @@ func newHetznerClusterWithEndpoint(
 		return nil, addrErr
 	}
 
-	kubeEndpoint := "https://" + net.JoinHostPort(cpIP, "6443")
+	kubeEndpoint := p.kubeconfigEndpointURL(cpIP)
 
 	return NewHetznerClusterResult(clusterName, controlPlaneServers, workerServers, kubeEndpoint)
 }
@@ -266,7 +269,7 @@ func (p *Provisioner) waitForHetznerClusterReady(
 	workerServers []*hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	hetznerCluster, err := newHetznerClusterWithEndpoint(
+	hetznerCluster, err := p.newHetznerClusterWithEndpoint(
 		clusterName,
 		controlPlaneServers,
 		workerServers,
@@ -308,7 +311,7 @@ func (p *Provisioner) waitForHetznerClusterReadyAfterStart(
 	}
 
 	// Build the cluster result from the discovered servers
-	hetznerCluster, err := newHetznerClusterWithEndpoint(
+	hetznerCluster, err := p.newHetznerClusterWithEndpoint(
 		clusterName,
 		controlPlaneServers,
 		workerServers,
