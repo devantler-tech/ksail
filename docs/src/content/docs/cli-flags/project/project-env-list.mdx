@@ -1,5 +1,5 @@
 ---
-title: "ksail project list-environments"
+title: "ksail project env list"
 description: "List the cluster environments declared in the workspace"
 ---
 
@@ -32,7 +32,10 @@ Examples:
   ksail project env list --output json
 
 Usage:
-  ksail project list-environments [flags]
+  ksail project env list [flags]
+
+Aliases:
+  list, ls
 
 Flags:
       --output string   Output format: text or json. Use json for machine-readable output (array of {name, distribution, provider, config}). (default "text")

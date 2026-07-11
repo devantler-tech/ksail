@@ -5,6 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
+	projectenv "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -46,25 +47,25 @@ func TestClusterCmd_RegistersDeprecatedAddEnvironmentAlias(t *testing.T) {
 
 	require.True(t, alias.Hidden, "cluster add-environment alias must be Hidden")
 	require.Equal(t,
-		`use "ksail project add-environment" instead`,
+		`use "ksail project env add" instead`,
 		alias.Deprecated,
-		"alias must carry the deprecation notice pointing at the project group",
+		"alias must carry the deprecation notice pointing at the project env group",
 	)
 
-	// Delegation: the alias is the shared project command, so its Use and Short
-	// must match the canonical project.NewAddEnvironmentCmd.
-	canonical := project.NewAddEnvironmentCmd()
+	// Delegation: the alias is the shared env command with the historical flat
+	// name restored, so its Short must match the canonical projectenv.NewAddCmd.
+	canonical := projectenv.NewAddCmd()
 	require.Equal(
 		t,
-		canonical.Use,
+		"add-environment <name>",
 		alias.Use,
-		"alias must delegate to project.NewAddEnvironmentCmd",
+		"alias must keep the previously released flat name",
 	)
 	require.Equal(
 		t,
 		canonical.Short,
 		alias.Short,
-		"alias must delegate to project.NewAddEnvironmentCmd",
+		"alias must delegate to projectenv.NewAddCmd",
 	)
 }
 

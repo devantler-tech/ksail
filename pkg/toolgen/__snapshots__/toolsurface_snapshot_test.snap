@@ -2165,7 +2165,7 @@ workload_write
   "parameters": {
     "properties": {
       "allowed-cidrs": {
-        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)...",
+        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: init)",
         "items": {
           "type": "string"
         },
@@ -2179,48 +2179,49 @@ workload_write
         "type": "array"
       },
       "cdi": {
-        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
+        "description": "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI) (applies to: init)",
         "type": "string"
       },
       "cert-manager": {
-        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip)",
+        "description": "Cert-Manager configuration (Enabled: install, Disabled: skip) (applies to: init)",
         "type": "string"
       },
       "cni": {
-        "description": "Container Network Interface (CNI) to use",
+        "description": "Container Network Interface (CNI) to use (applies to: init)",
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nadd-environment: Clone an existing cluster environment into a new one\ninit: Initialize a new project",
+        "description": "The subcommand to execute. Options:\nenv_add: Clone an existing cluster environment into a new one\nenv_rm: Remove a declared cluster environment\ninit: Initialize a new project",
         "enum": [
-          "add-environment",
+          "env_add",
+          "env_rm",
           "init"
         ],
         "type": "string"
       },
       "context": {
-        "description": "Kubernetes context of cluster",
+        "description": "Kubernetes context of cluster (applies to: init)",
         "type": "string"
       },
       "control-planes": {
         "default": 1,
-        "description": "Number of control-plane nodes",
+        "description": "Number of control-plane nodes (applies to: init)",
         "type": "integer"
       },
       "csi": {
-        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)",
+        "description": "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI) (applies to: init)",
         "type": "string"
       },
       "distribution": {
-        "description": "Kubernetes distribution to use",
+        "description": "Kubernetes distribution to use (applies to: init)",
         "type": "string"
       },
       "distribution-config": {
-        "description": "Configuration file for the distribution",
+        "description": "Configuration file for the distribution (applies to: init)",
         "type": "string"
       },
       "distribution-version": {
-        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version...",
+        "description": "Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: init)",
         "type": "string"
       },
       "force": {
@@ -2228,84 +2229,84 @@ workload_write
         "type": "boolean"
       },
       "from": {
-        "description": "Source environment to clone from (required)",
+        "description": "Source environment to clone from (required) (applies to: env_add)",
         "type": "string"
       },
       "gitops-engine": {
         "default": "None",
-        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD)",
+        "description": "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (applies to: init)",
         "type": "string"
       },
       "image-verification": {
-        "description": "Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch...",
+        "description": "Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch... (applies to: init)",
         "type": "string"
       },
       "import-images": {
-        "description": "Path to tar archive with container images to import after cluster creation but before component installation",
+        "description": "Path to tar archive with container images to import after cluster creation but before component installation (applies to: init)",
         "type": "string"
       },
       "kubeconfig": {
         "default": "~/.kube/config",
-        "description": "Path to kubeconfig file",
+        "description": "Path to kubeconfig file (applies to: init)",
         "type": "string"
       },
       "kubernetes-version": {
-        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version...",
+        "description": "Kubernetes version to deploy and reconcile toward. When unset KSail follows the latest supported version; set it to pin a specific version... (applies to: init)",
         "type": "string"
       },
       "kustomization-file": {
-        "description": "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)",
+        "description": "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local) (applies to: init)",
         "type": "string"
       },
       "load-balancer": {
-        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)",
+        "description": "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall) (applies to: init)",
         "type": "string"
       },
       "local-registry": {
-        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)",
+        "description": "Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org) (applies to: init)",
         "type": "string"
       },
       "metrics-server": {
-        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)",
+        "description": "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (applies to: init)",
         "type": "string"
       },
       "mirror-registry": {
-        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]...",
+        "description": "Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]... (applies to: init)",
         "items": {
           "type": "string"
         },
         "type": "array"
       },
       "multi-cluster": {
-        "description": "Scaffold a multi-cluster source layout (clusters/base/ + clusters/\u003cenv\u003e/) with the given initial environment name; the generated ksail.yaml points its kustomizationFile at the environment overlay",
+        "description": "Scaffold a multi-cluster source layout (clusters/base/ + clusters/\u003cenv\u003e/) with the given initial environment name; the generated ksail.yaml points its kustomizationFile at the environment overlay (applies to: init)",
         "type": "string"
       },
       "name": {
-        "description": "Cluster name used for container names, registry names, and kubeconfig context",
+        "description": "Cluster name used for container names, registry names, and kubeconfig context (applies to: init)",
         "type": "string"
       },
       "no-devcontainer": {
-        "description": "Skip scaffolding .devcontainer/devcontainer.json",
+        "description": "Skip scaffolding .devcontainer/devcontainer.json (applies to: init)",
         "type": "boolean"
       },
       "node-autoscaler-enabled": {
-        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+        "description": "Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting) (applies to: init)",
         "type": "string"
       },
       "node-autoscaling": {
-        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts...",
+        "description": "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts... (applies to: init)",
         "type": "string"
       },
       "oidc-ca-file": {
-        "description": "Path to CA certificate for self-signed OIDC providers",
+        "description": "Path to CA certificate for self-signed OIDC providers (applies to: init)",
         "type": "string"
       },
       "oidc-client-id": {
-        "description": "OIDC client ID for kubectl authentication",
+        "description": "OIDC client ID for kubectl authentication (applies to: init)",
         "type": "string"
       },
       "oidc-extra-scope": {
-        "description": "Additional OIDC scopes beyond openid (repeatable)",
+        "description": "Additional OIDC scopes beyond openid (repeatable) (applies to: init)",
         "items": {
           "type": "string"
         },
@@ -2313,48 +2314,52 @@ workload_write
       },
       "oidc-groups-claim": {
         "default": "groups",
-        "description": "JWT claim for Kubernetes groups",
+        "description": "JWT claim for Kubernetes groups (applies to: init)",
         "type": "string"
       },
       "oidc-groups-prefix": {
         "default": "oidc:",
-        "description": "Prefix for OIDC groups in Kubernetes",
+        "description": "Prefix for OIDC groups in Kubernetes (applies to: init)",
         "type": "string"
       },
       "oidc-issuer-url": {
-        "description": "OIDC provider issuer URL (e.g. https://dex.example.com)",
+        "description": "OIDC provider issuer URL (e.g. https://dex.example.com) (applies to: init)",
         "type": "string"
       },
       "oidc-username-claim": {
         "default": "email",
-        "description": "JWT claim for Kubernetes username",
+        "description": "JWT claim for Kubernetes username (applies to: init)",
         "type": "string"
       },
       "oidc-username-prefix": {
         "default": "oidc:",
-        "description": "Prefix for OIDC usernames in Kubernetes",
+        "description": "Prefix for OIDC usernames in Kubernetes (applies to: init)",
         "type": "string"
       },
       "output": {
-        "description": "Output directory for the project",
+        "description": "Output directory for the project (applies to: init)",
         "type": "string"
       },
       "policy-engine": {
-        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)",
+        "description": "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper) (applies to: init)",
         "type": "string"
       },
       "provider": {
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
+      "purge": {
+        "description": "Also delete the environment's cluster overlay (\u003csourceDirectory\u003e/clusters/\u003cname\u003e) (applies to: env_rm)",
+        "type": "boolean"
+      },
       "source-directory": {
         "default": "k8s",
-        "description": "Directory containing workloads to deploy",
+        "description": "Directory containing workloads to deploy (applies to: init)",
         "type": "string"
       },
       "workers": {
         "default": 0,
-        "description": "Number of worker nodes",
+        "description": "Number of worker nodes (applies to: init)",
         "type": "integer"
       }
     },
@@ -2384,9 +2389,9 @@ workload_write
   "parameters": {
     "properties": {
       "command": {
-        "description": "The subcommand to execute. Options:\nlist-environments: List the cluster environments declared in the workspace",
+        "description": "The subcommand to execute. Options:\nenv_list: List the cluster environments declared in the workspace",
         "enum": [
-          "list-environments"
+          "env_list"
         ],
         "type": "string"
       },

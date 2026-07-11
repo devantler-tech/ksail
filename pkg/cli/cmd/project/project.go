@@ -4,26 +4,32 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
 	"github.com/spf13/cobra"
 )
 
+// permissionWrite is the annotations.AnnotationPermission value that marks a
+// command as state-modifying (and therefore requiring user confirmation).
+const permissionWrite = "write"
+
 // NewProjectCmd creates the parent project command and wires subcommands beneath
 // it. The project group hosts commands that operate solely on the GitOps project
-// files (scaffolding, environment cloning) with no live cluster involved. Both
-// init and add-environment moved here from `cluster` (see issue #5626): init
-// scaffolds a new project and add-environment clones an environment overlay.
+// files (scaffolding, environment management) with no live cluster involved:
+// init scaffolds a new project and the `env` group manages the declared cluster
+// environments (issue #6057; init and environment cloning originally moved here
+// from `cluster`, see issue #5626).
 //
 // The group carries subcommands so it joins the generated MCP/chat tool surface
 // via the toolgen consolidate annotation (mirroring the cluster group), so
-// `project init` and `project add-environment` are exposed as tools.
+// `project init` and the `project env` verbs are exposed as tools.
 func NewProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
 		Short: "Manage GitOps project files",
 		Long: `Manage the GitOps project files (the on-disk project structure) without ` +
 			`contacting a live cluster. These commands scaffold and transform the project ` +
-			`— e.g. initializing a new project and cloning environments — as opposed to ` +
-			`the cluster commands that operate on a running cluster.`,
+			`— e.g. initializing a new project and managing its cluster environments — as ` +
+			`opposed to the cluster commands that operate on a running cluster.`,
 		Args:         cobra.NoArgs,
 		RunE:         handleProjectRunE,
 		SilenceUsage: true,
@@ -33,8 +39,38 @@ func NewProjectCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(NewInitCmd())
-	cmd.AddCommand(NewAddEnvironmentCmd())
-	cmd.AddCommand(NewListEnvironmentsCmd())
+	cmd.AddCommand(env.NewEnvCmd())
+	cmd.AddCommand(newDeprecatedAddEnvironmentCmd())
+	cmd.AddCommand(newDeprecatedListEnvironmentsCmd())
+
+	return cmd
+}
+
+// newDeprecatedAddEnvironmentCmd returns the former flat `project
+// add-environment` name as a hidden, deprecated delegate of `project env add`
+// (issue #6057). It keeps previously released invocations working for one
+// deprecation cycle while staying out of help, the generated docs prose, and
+// the MCP/chat tool surface (toolgen skips hidden commands) — mirroring the
+// `cluster add-environment` delegate from the issue-#5626 move.
+func newDeprecatedAddEnvironmentCmd() *cobra.Command {
+	cmd := env.NewAddCmd()
+	cmd.Use = "add-environment <name>"
+	cmd.Hidden = true
+	cmd.Deprecated = `use "ksail project env add" instead`
+
+	return cmd
+}
+
+// newDeprecatedListEnvironmentsCmd returns the former flat `project
+// list-environments` name as a hidden, deprecated delegate of `project env
+// list` (issue #6057). The `ls` alias is stripped so the short form belongs to
+// the canonical `project env ls` only.
+func newDeprecatedListEnvironmentsCmd() *cobra.Command {
+	cmd := env.NewListCmd()
+	cmd.Use = "list-environments"
+	cmd.Aliases = nil
+	cmd.Hidden = true
+	cmd.Deprecated = `use "ksail project env list" instead`
 
 	return cmd
 }

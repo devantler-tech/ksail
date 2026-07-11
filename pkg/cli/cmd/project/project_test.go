@@ -47,14 +47,44 @@ func TestProjectCmd_ConsolidatedIntoToolSurface(t *testing.T) {
 	var found bool
 
 	for _, sub := range cmd.Commands() {
-		if sub.Name() == "add-environment" {
+		if sub.Name() == "env" {
 			found = true
 
 			break
 		}
 	}
 
-	require.True(t, found, "project group should host the add-environment subcommand")
+	require.True(t, found, "project group should host the env subcommand group")
+}
+
+// TestProjectCmd_DeprecatedEnvironmentDelegates pins the compatibility contract
+// of issue #6057: the former flat names still exist under `project` but are
+// hidden, deprecated delegates pointing at the `project env` verbs, and the
+// stripped `ls` alias belongs to `project env list` only.
+func TestProjectCmd_DeprecatedEnvironmentDelegates(t *testing.T) {
+	t.Parallel()
+
+	cmd := projectpkg.NewProjectCmd()
+
+	delegates := map[string]string{
+		"add-environment":   `use "ksail project env add" instead`,
+		"list-environments": `use "ksail project env list" instead`,
+	}
+
+	for _, sub := range cmd.Commands() {
+		deprecated, ok := delegates[sub.Name()]
+		if !ok {
+			continue
+		}
+
+		require.True(t, sub.Hidden, "%s delegate should be hidden", sub.Name())
+		require.Equal(t, deprecated, sub.Deprecated)
+		require.Empty(t, sub.Aliases, "%s delegate should carry no aliases", sub.Name())
+
+		delete(delegates, sub.Name())
+	}
+
+	require.Empty(t, delegates, "missing deprecated delegates: %v", delegates)
 }
 
 func TestProjectCmd_RejectsArgs(t *testing.T) {

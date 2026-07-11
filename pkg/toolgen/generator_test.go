@@ -557,11 +557,13 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 	t.Run("project_write", func(t *testing.T) {
 		t.Parallel()
 
-		// init and add-environment moved from cluster to project (issue #5626);
-		// they are surfaced via project_write, not cluster_write. The hidden
-		// deprecated aliases under cluster are skipped by toolgen.
+		// init moved from cluster to project (issue #5626), and the environment
+		// verbs are nested under the `env` group (issue #6057) so they fold into
+		// project_write with an "env_" prefix, mirroring workload's cipher group.
+		// The hidden deprecated aliases (cluster and flat project names) are
+		// skipped by toolgen.
 		assertToolContainsSubcommands(t, toolMap, "project_write",
-			"init", "add-environment",
+			"init", "env_add", "env_rm",
 		)
 	})
 

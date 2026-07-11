@@ -1,4 +1,4 @@
-package project_test
+package env_test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +53,7 @@ func writeListEnvRepo(t *testing.T) string {
 func runListEnvironments(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
-	cmd := project.NewListEnvironmentsCmd()
+	cmd := env.NewListCmd()
 
 	var out bytes.Buffer
 
@@ -163,15 +163,16 @@ func TestHandleListEnvironmentsRunE_RejectsInvalidOutputFormat(t *testing.T) {
 	t.Chdir(repoRoot)
 
 	_, err := runListEnvironments(t, "--output", "yaml")
-	require.ErrorIs(t, err, project.ErrInvalidOutputFormat)
+	require.ErrorIs(t, err, env.ErrInvalidOutputFormat)
 }
 
-func TestNewListEnvironmentsCmd_Structure(t *testing.T) {
+func TestNewListCmd_Structure(t *testing.T) {
 	t.Parallel()
 
-	cmd := project.NewListEnvironmentsCmd()
+	cmd := env.NewListCmd()
 
-	assert.Equal(t, "list-environments", cmd.Use)
+	assert.Equal(t, "list", cmd.Use)
+	assert.Equal(t, []string{"ls"}, cmd.Aliases)
 	assert.NotEmpty(t, cmd.Short)
 	require.NotNil(t, cmd.Flags().Lookup("output"))
 

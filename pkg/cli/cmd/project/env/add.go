@@ -1,4 +1,4 @@
-package project
+package env
 
 import (
 	"errors"
@@ -57,15 +57,16 @@ repointed; re-encrypt them to the new environment's recipients afterwards with
 
 Examples:
   # Clone the "prod" environment into a new "staging" environment
-  ksail project add-environment staging --from prod
+  ksail project env add staging --from prod
 
   # Clone "prod" into "dev" on a different provider, overwriting any existing files
-  ksail project add-environment dev --from prod --provider Docker --force`
+  ksail project env add dev --from prod --provider Docker --force`
 
-// NewAddEnvironmentCmd creates and returns the add-environment command.
-func NewAddEnvironmentCmd() *cobra.Command {
+// NewAddCmd creates and returns the `project env add` command (formerly
+// `project add-environment`; the deprecated aliases delegate here).
+func NewAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "add-environment <name>",
+		Use:          "add <name>",
 		Short:        "Clone an existing cluster environment into a new one",
 		Long:         addEnvironmentLongDesc,
 		Args:         cobra.ExactArgs(1),
@@ -84,7 +85,7 @@ func NewAddEnvironmentCmd() *cobra.Command {
 	cmd.Flags().Bool("force", false, "Overwrite existing destination files")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return HandleAddEnvironmentRunE(cmd, args[0])
+		return HandleAddRunE(cmd, args[0])
 	}
 
 	return cmd
@@ -102,9 +103,9 @@ type addEnvironmentParams struct {
 	force        bool
 }
 
-// HandleAddEnvironmentRunE handles the add-environment command. It is exported for
+// HandleAddRunE handles the `project env add` command. It is exported for
 // testing.
-func HandleAddEnvironmentRunE(cmd *cobra.Command, dstName string) error {
+func HandleAddRunE(cmd *cobra.Command, dstName string) error {
 	params, err := resolveAddEnvironmentParams(cmd, dstName)
 	if err != nil {
 		return err
