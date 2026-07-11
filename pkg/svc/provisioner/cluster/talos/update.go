@@ -289,12 +289,13 @@ func floatingIPReconcileReason(exists bool) string {
 		"receive the VIP config without reboot"
 }
 
-// detectRunningHetznerFloatingIPConfig reports whether every inventoried
-// control plane carries the expected endpoint/VIP state. An individual config
-// fetch failure is treated as needing idempotent reconciliation so a partial
-// prior apply is retried; inability to list any control planes remains an
-// unavailable detection and is skipped. Context cancellation and deadlines
-// always propagate so DiffConfig cannot report success after termination.
+// detectRunningHetznerFloatingIPConfig reports whether every inventoried node
+// carries the expected endpoint state, with the HCloud VIP additionally
+// required on control planes. An individual config fetch failure is treated as
+// needing idempotent reconciliation so a partial prior apply is retried;
+// inability to list any control planes remains an unavailable detection and is
+// skipped. Context cancellation and deadlines always propagate so DiffConfig
+// cannot report success after termination.
 func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 	ctx context.Context,
 	clusterName, expectedIP string,
@@ -316,40 +317,70 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 		return false, false, nil
 	}
 
-	configs := make([]talosconfig.Provider, 0, len(nodes))
+	controlPlaneConfigs := make([]talosconfig.Provider, 0, len(nodes))
+	workerConfigs := make([]talosconfig.Provider, 0, len(nodes))
+
 	for _, node := range nodes {
-		if node.Role != RoleControlPlane {
+		if node.Role != RoleControlPlane && node.Role != RoleWorker {
 			continue
 		}
 
-		config, fetchErr := p.nodeConfigFetcher(ctx, node.IP)
+		config, fetched, fetchErr := p.fetchFloatingIPNodeConfig(ctx, node)
 		if fetchErr != nil {
-			if isContextTermination(fetchErr) {
-				return false, false, fmt.Errorf(
-					"failed to fetch control-plane floating IP config from %s: %w",
-					node.IP,
-					fetchErr,
-				)
-			}
+			return false, false, fetchErr
+		}
 
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"  ⚠ Failed to fetch control-plane floating IP config from %s: %v\n",
-				node.IP,
-				fetchErr,
-			)
-
+		if !fetched {
 			return false, true, nil
 		}
 
-		configs = append(configs, config)
+		if node.Role == RoleControlPlane {
+			controlPlaneConfigs = append(controlPlaneConfigs, config)
+		} else {
+			workerConfigs = append(workerConfigs, config)
+		}
 	}
 
-	if len(configs) == 0 {
+	if len(controlPlaneConfigs) == 0 {
 		return false, false, nil
 	}
 
-	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP), true, nil
+	configured := allControlPlanesHaveHetznerFloatingIPConfig(controlPlaneConfigs, expectedIP) &&
+		allWorkersHaveHetznerFloatingIPEndpoint(workerConfigs, expectedIP)
+
+	return configured, true, nil
+}
+
+// fetchFloatingIPNodeConfig fetches one running node config. Context
+// termination is fatal; other transient failures are logged and represented by
+// a nil config so the caller schedules idempotent reconciliation.
+func (p *Provisioner) fetchFloatingIPNodeConfig(
+	ctx context.Context,
+	node nodeWithRole,
+) (talosconfig.Provider, bool, error) {
+	config, err := p.nodeConfigFetcher(ctx, node.IP)
+	if err == nil {
+		return config, true, nil
+	}
+
+	if isContextTermination(err) {
+		return nil, false, fmt.Errorf(
+			"failed to fetch %s floating IP config from %s: %w",
+			node.Role,
+			node.IP,
+			err,
+		)
+	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  ⚠ Failed to fetch %s floating IP config from %s: %v\n",
+		node.Role,
+		node.IP,
+		err,
+	)
+
+	return nil, false, nil
 }
 
 // allControlPlanesHaveHetznerFloatingIPConfig reports whether every supplied
@@ -371,15 +402,36 @@ func allControlPlanesHaveHetznerFloatingIPConfig(
 	return true
 }
 
-// hasHetznerFloatingIPConfig reports whether config carries a Hetzner-managed
-// VIP matching both the expected cloud address and cluster endpoint.
-func hasHetznerFloatingIPConfig(config talosconfig.Provider, expectedIP string) bool {
-	if config == nil || expectedIP == "" {
+// allWorkersHaveHetznerFloatingIPEndpoint reports whether every supplied worker
+// uses the stable floating-IP cluster endpoint. Workers do not carry the HCloud
+// VIP block, so endpoint equality is the complete invariant for that role.
+func allWorkersHaveHetznerFloatingIPEndpoint(
+	configs []talosconfig.Provider,
+	expectedIP string,
+) bool {
+	for _, config := range configs {
+		if !hasHetznerFloatingIPEndpoint(config, expectedIP) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// hasHetznerFloatingIPEndpoint reports whether config uses the expected stable
+// floating IP as its cluster endpoint.
+func hasHetznerFloatingIPEndpoint(config talosconfig.Provider, expectedIP string) bool {
+	if config == nil || expectedIP == "" || config.Cluster().Endpoint() == nil {
 		return false
 	}
 
-	endpoint := config.Cluster().Endpoint()
-	if endpoint == nil || endpoint.Hostname() != expectedIP {
+	return config.Cluster().Endpoint().Hostname() == expectedIP
+}
+
+// hasHetznerFloatingIPConfig reports whether config carries a Hetzner-managed
+// VIP matching both the expected cloud address and cluster endpoint.
+func hasHetznerFloatingIPConfig(config talosconfig.Provider, expectedIP string) bool {
+	if !hasHetznerFloatingIPEndpoint(config, expectedIP) {
 		return false
 	}
 
@@ -560,7 +612,9 @@ func (p *Provisioner) updateApplySteps(
 			// The autoscaler Secret embeds p.talosConfigs.Worker(), so establish
 			// the stable endpoint before rendering that template. Secret sync has
 			// already aligned the bundle with the running cluster's PKI.
-			return wrapStepErr(p.reconcileFloatingIPEndpoint(ctx, clusterName, diff),
+			return wrapStepErr(p.prepareFloatingIPEndpointBeforeNodeChanges(
+				ctx, clusterName, oldSpec, newSpec, diff, result,
+			),
 				"failed to reconcile floating IP endpoint")
 		}},
 		{"ensure autoscaler config secret", func(ctx context.Context) error {
@@ -594,6 +648,11 @@ func (p *Provisioner) updateApplySteps(
 
 			return wrapStepErr(p.applyInPlaceConfigChanges(ctx, clusterName, result),
 				"failed to apply in-place config changes")
+		}},
+		{"refresh floating IP kubeconfig", func(ctx context.Context) error {
+			return wrapStepErr(p.refreshFloatingIPKubeconfigAfterChanges(
+				ctx, clusterName, oldSpec, newSpec, diff, result,
+			), "failed to refresh floating IP kubeconfig")
 		}},
 		{"apply reboot-required changes", func(ctx context.Context) error {
 			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),

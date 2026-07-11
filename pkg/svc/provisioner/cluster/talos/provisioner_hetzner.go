@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"os"
 	"slices"
 	"strconv"
@@ -330,6 +331,173 @@ func (p *Provisioner) reconcileFloatingIPEndpoint(
 	}
 
 	return p.applyFloatingIPEndpointConfig(ctx, clusterName)
+}
+
+// prepareFloatingIPEndpointBeforeNodeChanges makes the desired bundle safe for
+// control-plane scaling or rolling replacement before topology is mutated. A
+// clean running cluster emits no floating-IP drift, but replacement nodes still
+// need the runtime VIP patch that a fresh generated bundle does not contain.
+func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	hasEndpointDrift := hasFloatingIPChange(diff)
+
+	hasControlPlaneChange, rollControlPlane := p.floatingIPControlPlaneChange(
+		oldSpec, newSpec, result,
+	)
+	if !hasEndpointDrift && !hasControlPlaneChange {
+		return nil
+	}
+
+	err := p.requireCleanFloatingIPEndpointBeforeRoll(
+		ctx, clusterName, rollControlPlane, hasEndpointDrift,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = p.applyFloatingIPEndpointConfig(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// A topology-only refresh means live detection proved every node already uses
+	// the floating endpoint. Persist it before createK8sClient starts a destructive
+	// roll. Drift repairs wait for the in-place push before switching kubeconfig.
+	if rollControlPlane && !hasEndpointDrift {
+		return p.refreshFloatingIPKubeconfig(ctx, clusterName)
+	}
+
+	return nil
+}
+
+// floatingIPControlPlaneChange reports whether an enabled floating-IP update
+// changes control-plane topology and whether that change includes a roll.
+func (p *Provisioner) floatingIPControlPlaneChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) (bool, bool) {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
+		return false, false
+	}
+
+	var rolling bool
+
+	if result != nil {
+		rolling, _ = rolesFromRollingChanges(result.RollingRecreate)
+	}
+
+	return hasControlPlaneTopologyChange(oldSpec, newSpec, result), rolling
+}
+
+// requireCleanFloatingIPEndpointBeforeRoll fails closed when a topology-only
+// control-plane roll cannot positively verify the live stable endpoint.
+func (p *Provisioner) requireCleanFloatingIPEndpointBeforeRoll(
+	ctx context.Context,
+	clusterName string,
+	rollControlPlane, hasEndpointDrift bool,
+) error {
+	if !rollControlPlane || hasEndpointDrift {
+		return nil
+	}
+
+	verified, err := p.runningFloatingIPEndpointIsClean(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if !verified {
+		return ErrFloatingIPReconcileBeforeControlPlaneRoll
+	}
+
+	return nil
+}
+
+// runningFloatingIPEndpointIsClean positively verifies the cloud address and
+// every running node's endpoint state before a topology-only control-plane roll
+// switches kubeconfig to the floating IP. Unavailable detection is not clean.
+func (p *Provisioner) runningFloatingIPEndpointIsClean(
+	ctx context.Context,
+	clusterName string,
+) (bool, error) {
+	floatingIP, detected, err := p.detectOwnedFloatingIP(ctx, clusterName)
+	if err != nil {
+		return false, err
+	}
+
+	if !detected || floatingIP == nil {
+		return false, nil
+	}
+
+	configured, configDetected, err := p.detectHetznerFloatingIPConfig(
+		ctx, clusterName, floatingIP,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return configDetected && configured, nil
+}
+
+// refreshFloatingIPKubeconfigAfterChanges persists the stable endpoint after
+// endpoint drift has been pushed to running nodes or control-plane topology has
+// changed. The operation is idempotent and skipped for unrelated updates.
+func (p *Provisioner) refreshFloatingIPKubeconfigAfterChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
+		(!hasFloatingIPChange(diff) && !hasControlPlaneTopologyChange(oldSpec, newSpec, result)) {
+		return nil
+	}
+
+	if result != nil && result.HasFailedChanges() {
+		return nil
+	}
+
+	return p.refreshFloatingIPKubeconfig(ctx, clusterName)
+}
+
+// refreshFloatingIPKubeconfig fetches credentials through a directly reachable
+// control-plane Talos API while persisting the stable floating IP as the
+// Kubernetes API endpoint.
+func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterName string) error {
+	if p.options == nil || p.options.KubeconfigPath == "" {
+		return nil
+	}
+
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
+		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	endpointIP := p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	if endpointIP == "" {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	if err != nil {
+		return fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+	}
+
+	talosEndpoint, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	kubernetesEndpoint := "https://" + net.JoinHostPort(endpointIP, "6443")
+
+	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
 }
 
 // refreshFloatingIPEndpointAfterNodeChanges rebuilds the floating-IP endpoint,

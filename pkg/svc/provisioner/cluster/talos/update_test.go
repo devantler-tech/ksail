@@ -230,6 +230,7 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"apply rolling recreate changes",
 		"refresh floating IP endpoint after node changes",
 		"apply in-place config changes",
+		"refresh floating IP kubeconfig",
 		"apply reboot-required changes",
 	}, names)
 

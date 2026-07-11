@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -23,6 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
+
+var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
 type NodeWithRoleForTest = nodeWithRole
@@ -513,6 +516,33 @@ func (p *Provisioner) UpdateApplyStepNamesForTest() []string {
 	}
 
 	return names
+}
+
+// RunUpdateApplyStepForTest runs one named post-PrepareUpdate apply step with
+// caller-supplied update state, so tests can exercise ordering-sensitive steps
+// without driving the full cluster update sequence.
+func (p *Provisioner) RunUpdateApplyStepForTest(
+	ctx context.Context,
+	name, clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	steps := p.updateApplySteps(
+		clusterName,
+		oldSpec,
+		newSpec,
+		diff,
+		result,
+		clusterupdate.UpdateOptions{},
+	)
+
+	for _, step := range steps {
+		if step.name == name {
+			return step.run(ctx)
+		}
+	}
+
+	return fmt.Errorf("%w: %s", errUpdateApplyStepNotFoundForTest, name)
 }
 
 // SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.

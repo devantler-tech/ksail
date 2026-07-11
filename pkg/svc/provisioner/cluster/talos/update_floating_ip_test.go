@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -60,6 +62,16 @@ const fipUpdateSecondControlPlaneServerJSON = `{"id":12,"name":"fip-cluster-cp-1
 	`"server_type":{"id":1,"name":"cx22","description":"","cores":2,"memory":4,"disk":40},` +
 	`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster",` +
 	`"ksail.node.type":"controlplane","ksail.node.index":"1"},` +
+	`"created":"2026-07-02T00:00:00+00:00"}`
+
+// fipUpdateWorkerServerJSON is the running worker used to detect a partial
+// floating-IP apply that updated control planes but left workers stale.
+const fipUpdateWorkerServerJSON = `{"id":21,"name":"fip-cluster-worker-0","status":"running",` +
+	`"public_net":{"ipv4":{"ip":"203.0.113.20","blocked":false,"dns_ptr":""},"ipv6":null,` +
+	`"floating_ips":[]},"private_net":[],` +
+	`"server_type":{"id":1,"name":"cx22","description":"","cores":2,"memory":4,"disk":40},` +
+	`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster",` +
+	`"ksail.node.type":"worker","ksail.node.index":"0"},` +
 	`"created":"2026-07-02T00:00:00+00:00"}`
 
 // fipUpdateTestServer answers the hcloud API calls the floating-IP update
@@ -289,7 +301,9 @@ func TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop(t *testing.T) {
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
 
 	calls := &fipUpdateCalls{}
-	server := fipUpdateTestServer(t, true, calls)
+	server := fipUpdateTestServerWithServers(
+		t, true, calls, fipUpdateControlPlaneServerJSON, fipUpdateWorkerServerJSON,
+	)
 	hzProvider := newFipUpdateProvider(server.URL)
 
 	configuredProvisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
@@ -302,7 +316,8 @@ func TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop(t *testing.T) {
 		t.Context(), hzProvider, "fip-cluster",
 		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
 	))
-	runningConfig := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+	runningControlPlane := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+	runningWorker := configuredProvisioner.TalosConfigsForTest().Worker()
 
 	// A fresh provisioner models the next CLI invocation: its generated config
 	// has no runtime VIP patch, so idempotency must be based on the running node.
@@ -312,8 +327,12 @@ func TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop(t *testing.T) {
 		TokenEnvVar:        testFloatingIPTokenEnvVar,
 	}).WithInfraProvider(hzProvider).
 		WithNodeConfigFetcherForTest(
-			func(context.Context, string) (talosconfig.Provider, error) {
-				return runningConfig, nil
+			func(_ context.Context, nodeIP string) (talosconfig.Provider, error) {
+				if nodeIP == "203.0.113.20" {
+					return runningWorker, nil
+				}
+
+				return runningControlPlane, nil
 			},
 		)
 
@@ -323,6 +342,53 @@ func TestMergeFloatingIPChanges_EnabledAndConfiguredIsNoop(t *testing.T) {
 
 	assert.Empty(t, diff.InPlaceChanges,
 		"an existing owned floating IP with stored VIP config must not re-diff")
+}
+
+// TestMergeFloatingIPChanges_ConfiguredControlPlanesStaleWorkerAddsChange
+// verifies a partial prior apply is retried when control planes carry the
+// floating endpoint/VIP but a worker still points at a direct control-plane IP.
+func TestMergeFloatingIPChanges_ConfiguredControlPlanesStaleWorkerAddsChange(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServerWithServers(
+		t, true, calls, fipUpdateControlPlaneServerJSON, fipUpdateWorkerServerJSON,
+	)
+	hzProvider := newFipUpdateProvider(server.URL)
+	options := v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}
+
+	configuredProvisioner := newFloatingIPTestProvisioner(t, options).
+		WithInfraProvider(hzProvider)
+	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+	configuredControlPlane := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+	staleWorker := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		TalosConfigsForTest().Worker()
+
+	provisioner := newFloatingIPTestProvisioner(t, options).
+		WithInfraProvider(hzProvider).
+		WithNodeConfigFetcherForTest(
+			func(_ context.Context, nodeIP string) (talosconfig.Provider, error) {
+				if nodeIP == "203.0.113.20" {
+					return staleWorker, nil
+				}
+
+				return configuredControlPlane, nil
+			},
+		)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
+
+	require.Len(t, diff.InPlaceChanges, 1)
+	assert.Equal(t, floatingIPEnabledField, diff.InPlaceChanges[0].Field)
 }
 
 // TestAllControlPlanesHaveHetznerFloatingIPConfig_RequiresEveryNode verifies
@@ -633,6 +699,273 @@ func TestRefreshFloatingIPEndpointAfterNodeChanges_RefreshesControlPlaneInventor
 	assert.Contains(t, certSANs, "203.0.113.6",
 		"the post-scale control plane must be added to endpoint SANs")
 	assert.Equal(t, int32(1), calls.assign.Load())
+}
+
+// TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll verifies a
+// topology-only update refreshes the generated VIP bundle before replacement,
+// even when live drift detection was clean and emitted no floating-IP change.
+func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	hzProvider := newFipUpdateProvider(server.URL)
+	options := v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}
+	configuredProvisioner := newFloatingIPTestProvisioner(t, options).
+		WithInfraProvider(hzProvider)
+	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+	runningControlPlane := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+	kubeconfigPath := t.TempDir() + "/kubeconfig"
+	provisioner := newFloatingIPTestProvisionerWithOptions(
+		t, options, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
+	).
+		WithInfraProvider(hzProvider).
+		WithNodeConfigFetcherForTest(
+			func(context.Context, string) (talosconfig.Provider, error) {
+				return runningControlPlane, nil
+			},
+		)
+	capture := &floatingIPKubeconfigCapture{}
+
+	provisioner.WithTalosClientFactoryForTest(
+		func(_ context.Context, endpoint string) (talosprovisioner.KubeconfigFetcherForTest, error) {
+			capture.calls++
+			capture.talosEndpoint = endpoint
+
+			return &mockKubeconfigFetcher{kubeconfig: minimalKubeconfigBytes()}, nil
+		},
+	)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field:    "provider.hetzner.controlPlaneServerType",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	})
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 3}
+
+	require.False(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest())
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "reconcile floating IP endpoint", "fip-cluster",
+		spec, spec, diff, result,
+	))
+	assert.True(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest(),
+		"replacement control planes must receive the VIP config before the roll starts")
+	assert.Equal(t, 1, capture.calls)
+	assert.Equal(t, "203.0.113.5", capture.talosEndpoint)
+
+	written, err := os.ReadFile(kubeconfigPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "https://192.0.2.10:6443")
+}
+
+// TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll keeps the pre-roll
+// refresh bounded to control-plane topology: a worker-only roll must not touch
+// the Hetzner floating-IP API.
+func TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll(t *testing.T) {
+	t.Parallel()
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled: true,
+	})
+	diff := clusterupdate.NewEmptyUpdateResult()
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field:    "provider.hetzner.workerServerType",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	})
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 3, Workers: 1}
+
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "reconcile floating IP endpoint", "fip-cluster",
+		spec, spec, diff, result,
+	))
+	assert.False(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest())
+}
+
+type floatingIPKubeconfigCapture struct {
+	calls         int
+	talosEndpoint string
+}
+
+// newFloatingIPKubeconfigTestProvisioner builds an already-reconciled
+// floating-IP provisioner with a captured Talos kubeconfig fetcher.
+func newFloatingIPKubeconfigTestProvisioner(
+	t *testing.T,
+	serverURL string,
+) (*talosprovisioner.Provisioner, string, *floatingIPKubeconfigCapture) {
+	t.Helper()
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	kubeconfigPath := t.TempDir() + "/kubeconfig"
+	hzProvider := newFipUpdateProvider(serverURL)
+	options := talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)
+	provisioner := newFloatingIPTestProvisionerWithOptions(
+		t,
+		v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+			TokenEnvVar:        testFloatingIPTokenEnvVar,
+		},
+		options,
+	).WithInfraProvider(hzProvider)
+	require.NoError(t, provisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+
+	capture := &floatingIPKubeconfigCapture{}
+
+	provisioner.WithTalosClientFactoryForTest(
+		func(_ context.Context, endpoint string) (talosprovisioner.KubeconfigFetcherForTest, error) {
+			capture.calls++
+			capture.talosEndpoint = endpoint
+
+			return &mockKubeconfigFetcher{kubeconfig: minimalKubeconfigBytes()}, nil
+		},
+	)
+
+	return provisioner, kubeconfigPath, capture
+}
+
+func floatingIPChangeResult() *clusterupdate.UpdateResult {
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    floatingIPEnabledField,
+		Category: clusterupdate.ChangeCategoryInPlace,
+	})
+
+	return diff
+}
+
+// TestUpdateApplyStep_RefreshesFloatingIPKubeconfig verifies the update fetches
+// kubeconfig through a reachable direct control-plane Talos endpoint while the
+// persisted Kubernetes server uses the stable floating IP.
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_RefreshesFloatingIPKubeconfig(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, kubeconfigPath, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	))
+	assert.Equal(t, "203.0.113.5", capture.talosEndpoint,
+		"Talos API fetches must keep using a directly reachable node")
+
+	written, err := os.ReadFile(kubeconfigPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "https://192.0.2.10:6443",
+		"the persisted Kubernetes endpoint must use the floating IP")
+}
+
+// TestUpdateApplyStep_DoesNotRefreshKubeconfigAfterPartialApply verifies a
+// failed node config push never switches client access to an endpoint that may
+// not have reached every node.
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_DoesNotRefreshKubeconfigAfterPartialApply(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, kubeconfigPath, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{Field: "talos.config"})
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), result,
+	))
+	assert.Zero(t, capture.calls)
+
+	_, err := os.Stat(kubeconfigPath)
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// TestUpdateApplyStep_RefreshKubeconfigWithoutControlPlaneFails verifies an
+// empty live inventory returns a typed error instead of indexing an empty list.
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_RefreshKubeconfigWithoutControlPlaneFails(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	configuredServer := fipUpdateTestServer(t, true, calls)
+	provisioner, _, _ := newFloatingIPKubeconfigTestProvisioner(t, configuredServer.URL)
+	emptyServer := fipUpdateTestServerWithServers(t, true, calls)
+	provisioner.WithInfraProvider(newFipUpdateProvider(emptyServer.URL))
+
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	err := provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForRefresh)
+}
+
+// TestUpdateApplyStep_ControlPlaneRollRequiresVerifiedFloatingIPState verifies
+// an unavailable live config read fails closed before kubeconfig is switched.
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_ControlPlaneRollRequiresVerifiedFloatingIPState(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, kubeconfigPath, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+	provisioner.WithNodeConfigFetcherForTest(
+		func(context.Context, string) (talosconfig.Provider, error) {
+			return nil, assert.AnError
+		},
+	)
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field:    "provider.hetzner.controlPlaneServerType",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	})
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 3}
+
+	err := provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "reconcile floating IP endpoint", "fip-cluster",
+		spec, spec, clusterupdate.NewEmptyUpdateResult(), result,
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
+	assert.Zero(t, capture.calls)
+
+	_, statErr := os.Stat(kubeconfigPath)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+// TestUpdateApplySteps_FloatingIPEndpointOrdering pins the safe sequence: plan
+// validation first, pre-roll VIP preparation before replacement, and kubeconfig
+// persistence only after the refreshed bundle has been pushed to running nodes.
+func TestUpdateApplySteps_FloatingIPEndpointOrdering(t *testing.T) {
+	t.Parallel()
+
+	names := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		UpdateApplyStepNamesForTest()
+	require.NotEmpty(t, names)
+	assert.Equal(t, "validate update plan", names[0])
+
+	reconcileIndex := slices.Index(names, "reconcile floating IP endpoint")
+	rollIndex := slices.Index(names, "apply rolling recreate changes")
+	applyIndex := slices.Index(names, "apply in-place config changes")
+	refreshKubeconfigIndex := slices.Index(names, "refresh floating IP kubeconfig")
+	rebootIndex := slices.Index(names, "apply reboot-required changes")
+
+	require.NotEqual(t, -1, refreshKubeconfigIndex)
+	assert.Less(t, reconcileIndex, rollIndex)
+	assert.Less(t, rollIndex, applyIndex)
+	assert.Less(t, applyIndex, refreshKubeconfigIndex)
+	assert.Less(t, refreshKubeconfigIndex, rebootIndex)
 }
 
 // TestReconcileFloatingIPEndpoint_NoopWithoutChange verifies that the apply

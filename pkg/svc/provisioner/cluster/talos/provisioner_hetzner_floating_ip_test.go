@@ -110,12 +110,24 @@ func newFloatingIPTestProvisioner(
 ) *talosprovisioner.Provisioner {
 	t.Helper()
 
+	return newFloatingIPTestProvisionerWithOptions(t, hetznerOpts, nil)
+}
+
+// newFloatingIPTestProvisionerWithOptions is newFloatingIPTestProvisioner with
+// caller-supplied runtime paths, used by kubeconfig persistence tests.
+func newFloatingIPTestProvisionerWithOptions(
+	t *testing.T,
+	hetznerOpts v1alpha1.OptionsHetzner,
+	options *talosprovisioner.Options,
+) *talosprovisioner.Provisioner {
+	t.Helper()
+
 	manager := talos.NewConfigManager(t.TempDir(), "fip-cluster", "1.32.0", "10.5.0.0/24")
 	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
-	return talosprovisioner.NewProvisioner(nil, nil).
+	return talosprovisioner.NewProvisioner(nil, options).
 		WithHetznerOptions(hetznerOpts).
 		WithTalosConfigsForTest(configs).
 		WithLogWriter(io.Discard)
