@@ -124,6 +124,7 @@ func recordingDialer(t *testing.T) (mirror.ReplayDialer, func() []string) {
 		resultsMu.Lock()
 
 		results = append(results, buffer)
+
 		resultsMu.Unlock()
 
 		wait.Go(func() {

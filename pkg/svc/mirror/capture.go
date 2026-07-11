@@ -28,6 +28,6 @@ func CaptureCommand(port int) ([]string, error) {
 
 	return []string{
 		"tcpdump", "-p", "-i", "any", "-U", "-w", "-",
-		"tcp", "port", strconv.Itoa(port),
+		protocolTCP, "port", strconv.Itoa(port),
 	}, nil
 }
