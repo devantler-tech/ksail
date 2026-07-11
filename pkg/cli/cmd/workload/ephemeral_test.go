@@ -377,7 +377,7 @@ func TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure(t *test
 		deleteErr: clustererr.ErrClusterNotFound,
 	}
 	cmd := newTestCommand(t)
-	installEphemeralProvisioner(t, fake, nil)
+	backend := installEphemeralProvisioner(t, fake, nil)
 
 	err := workload.ExportWithEphemeralCluster(
 		cmd.Context(), cmd,
@@ -390,6 +390,8 @@ func TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure(t *test
 
 	require.ErrorIs(t, err, errEphemeralCreateFailed)
 	assert.NotErrorIs(t, err, clustererr.ErrClusterNotFound)
+	assert.Equal(t, 1, backend.cleaned)
+	assert.NoDirExists(t, backend.workspace)
 }
 
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
@@ -434,6 +436,7 @@ func TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors(t *testing.T) {
 	require.ErrorIs(t, err, errEphemeralDeleteFailed)
 	require.ErrorIs(t, err, errEphemeralCleanupFailed)
 	assert.Equal(t, 1, backend.cleaned)
+	assert.NoDirExists(t, backend.workspace)
 }
 
 // TestWithEphemeralClusterCleansUpAfterCancellation verifies a cancelled run
