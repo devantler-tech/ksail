@@ -7,10 +7,37 @@
 package env
 
 import (
+	"errors"
 	"fmt"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/spf13/cobra"
 )
+
+// ErrEmptyEnvironmentName is returned when an environment verb receives an
+// empty name. [v1alpha1.ValidateClusterName] accepts "" (an empty cluster
+// name means "use the default"), but for environments an empty name would
+// silently target the malformed ksail..yaml — for `rm`, a destructive
+// deletion of a file that was never a declared environment — so the env verbs
+// reject it explicitly before any path is constructed.
+var ErrEmptyEnvironmentName = errors.New("environment name must not be empty")
+
+// validateEnvironmentName rejects empty names, then applies the cluster-name
+// rules. Every env verb that turns a name into ksail.<name>.yaml or
+// clusters/<name>/ paths validates through this shared gate.
+func validateEnvironmentName(name string) error {
+	if name == "" {
+		return ErrEmptyEnvironmentName
+	}
+
+	err := v1alpha1.ValidateClusterName(name)
+	if err != nil {
+		//nolint:wrapcheck // The callers wrap with their own role context (source/destination).
+		return err
+	}
+
+	return nil
+}
 
 // NewEnvCmd creates the `project env` group command and wires the environment
 // verbs beneath it. It mirrors the `workload gen` sub-package precedent: the

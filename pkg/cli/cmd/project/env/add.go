@@ -119,12 +119,12 @@ func HandleAddRunE(cmd *cobra.Command, dstName string) error {
 // (ksail.<env>.yaml, clusters/<env>) — defence in depth ahead of the clone's
 // downstream containment guard — and rejects cloning an environment onto itself.
 func validateEnvironmentNames(srcName, dstName string) error {
-	err := v1alpha1.ValidateClusterName(srcName)
+	err := validateEnvironmentName(srcName)
 	if err != nil {
 		return fmt.Errorf("invalid source environment name: %w", err)
 	}
 
-	err = v1alpha1.ValidateClusterName(dstName)
+	err = validateEnvironmentName(dstName)
 	if err != nil {
 		return fmt.Errorf("invalid environment name: %w", err)
 	}

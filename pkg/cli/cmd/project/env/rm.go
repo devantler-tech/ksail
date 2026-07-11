@@ -6,7 +6,6 @@ import (
 	"path"
 	"path/filepath"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -71,7 +70,7 @@ func NewRmCmd() *cobra.Command {
 func HandleRmRunE(cmd *cobra.Command, name string) error {
 	purge, _ := cmd.Flags().GetBool("purge")
 
-	err := v1alpha1.ValidateClusterName(name)
+	err := validateEnvironmentName(name)
 	if err != nil {
 		return fmt.Errorf("invalid environment name: %w", err)
 	}

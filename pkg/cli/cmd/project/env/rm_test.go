@@ -133,6 +133,28 @@ func TestHandleRmRunE_InvalidName(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid environment name")
 }
 
+// TestHandleRmRunE_EmptyName pins the empty-name guard: ValidateClusterName
+// accepts "" (empty means "use the default cluster"), but an empty
+// environment name would target the malformed ksail..yaml — and rm would
+// DELETE it if present — so the env verbs reject "" explicitly before any
+// path is constructed (ksail#6059 review).
+//
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_EmptyName(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+
+	// A stray malformed ksail..yaml must survive an empty-name rm.
+	strayConfig := filepath.Join(repoRoot, "ksail..yaml")
+	require.NoError(t, os.WriteFile(strayConfig, []byte("# stray\n"), 0o600))
+	t.Chdir(repoRoot)
+
+	_, err := runRm(t, "")
+	require.ErrorIs(t, err, env.ErrEmptyEnvironmentName)
+
+	_, statErr := os.Stat(strayConfig)
+	require.NoError(t, statErr, "an empty-name rm must not touch ksail..yaml")
+}
+
 func TestNewRmCmd_Structure(t *testing.T) {
 	t.Parallel()
 

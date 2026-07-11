@@ -158,6 +158,23 @@ func TestHandleAddEnvironmentRunE_RejectsInvalidName(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid environment name")
 }
 
+// TestHandleAddEnvironmentRunE_RejectsEmptyNames pins the shared empty-name
+// gate on the add verb: ValidateClusterName accepts "" (empty means "use the
+// default cluster"), but an empty destination or --from would target the
+// malformed ksail..yaml (ksail#6059 review).
+//
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleAddEnvironmentRunE_RejectsEmptyNames(t *testing.T) {
+	repoRoot := writeAddEnvSourceRepo(t)
+	t.Chdir(repoRoot)
+
+	_, err := runAddEnvironment(t, "", "--from", "prod")
+	require.ErrorIs(t, err, env.ErrEmptyEnvironmentName)
+
+	_, err = runAddEnvironment(t, "staging", "--from", "")
+	require.ErrorIs(t, err, env.ErrEmptyEnvironmentName)
+}
+
 //nolint:paralleltest // uses t.Chdir to set the working directory
 func TestHandleAddEnvironmentRunE_RejectsInvalidSourceName(t *testing.T) {
 	repoRoot := writeAddEnvSourceRepo(t)
