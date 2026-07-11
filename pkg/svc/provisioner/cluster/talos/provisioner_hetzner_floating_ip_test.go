@@ -167,6 +167,25 @@ func assertSavedKubeconfigServer(
 		"saved kubeconfig must target the effective cluster endpoint")
 }
 
+// assertClusterMetadataEndpoint pins HetznerClusterResult's connection
+// metadata to the same effective endpoint the saved kubeconfig targets, so
+// consumers of the metadata survive control-plane replacement too.
+func assertClusterMetadataEndpoint(
+	t *testing.T,
+	provisioner *talosprovisioner.Provisioner,
+	servers []*hcloud.Server,
+	want string,
+) {
+	t.Helper()
+
+	cluster, err := provisioner.NewHetznerClusterWithEndpointForTest(
+		"fip-cluster", servers, nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, want, cluster.Info().KubernetesEndpoint,
+		"connection metadata must expose the effective cluster endpoint")
+}
+
 // TestUpdateConfigsWithEndpoint_FloatingIPDisabled verifies the default path
 // is unchanged: the endpoint is the first control-plane node's IP, no
 // exposure cert-SANs patch is added, and the Hetzner API is never called (the
@@ -195,15 +214,9 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
 		"disabled path must save the kubeconfig against the node's reachable address")
 	assertSavedKubeconfigServer(t, provisioner, "203.0.113.5", "https://203.0.113.5:6443")
-
-	// Connection metadata must agree with the saved kubeconfig.
-	cluster, err := provisioner.NewHetznerClusterWithEndpointForTest(
-		"fip-cluster",
+	assertClusterMetadataEndpoint(t, provisioner,
 		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
-		nil,
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "https://203.0.113.5:6443", cluster.Info().KubernetesEndpoint)
+		"https://203.0.113.5:6443")
 }
 
 // TestKubeconfigEndpointURL_FallsBackToNodeIP pins the defensive default: a
@@ -217,6 +230,39 @@ func TestKubeconfigEndpointURL_FallsBackToNodeIP(t *testing.T) {
 	assert.Equal(t, "https://203.0.113.7:6443",
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.7"))
 	assertSavedKubeconfigServer(t, provisioner, "203.0.113.7", "https://203.0.113.7:6443")
+}
+
+// assertFloatingIPRenderedConfigs pins the enabled-path rendering: the
+// floating IP as the cluster endpoint, the floating IP plus every
+// control-plane node IP in the certificate SAN set, and a Talos VIP block
+// (with hcloud API management) on the control-plane machine configs only —
+// the node-side ownership handover that makes the elected leader claim the
+// address on every leader change.
+func assertFloatingIPRenderedConfigs(t *testing.T, configs *talos.Configs) {
+	t.Helper()
+
+	endpoint := configs.ControlPlane().Cluster().Endpoint()
+	require.NotNil(t, endpoint)
+	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
+		"endpoint must be the floating IP")
+
+	sans := configs.ControlPlane().Cluster().CertSANs()
+	assert.Contains(t, sans, "192.0.2.10")
+	assert.Contains(t, sans, "203.0.113.5")
+	assert.Contains(t, sans, "203.0.113.6")
+
+	devices := configs.ControlPlane().Machine().Network().Devices()
+	require.Len(t, devices, 1)
+	assert.Equal(t, "eth0", devices[0].Interface())
+
+	vip := devices[0].VIPConfig()
+	require.NotNil(t, vip)
+	assert.Equal(t, "192.0.2.10", vip.IP())
+	require.NotNil(t, vip.HCloud())
+	assert.Equal(t, "vip-test-token", vip.HCloud().APIToken())
+
+	// Workers claim nothing: the VIP patch is control-plane-scoped.
+	assert.Empty(t, configs.Worker().Machine().Network().Devices())
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabled verifies the opt-in path:
@@ -256,31 +302,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&assignCalls),
 		"floating IP must be attached to the first control-plane server")
 
-	configs := provisioner.TalosConfigsForTest()
-	endpoint := configs.ControlPlane().Cluster().Endpoint()
-	require.NotNil(t, endpoint)
-	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
-		"endpoint must be the floating IP")
-
-	sans := configs.ControlPlane().Cluster().CertSANs()
-	assert.Contains(t, sans, "192.0.2.10")
-	assert.Contains(t, sans, "203.0.113.5")
-	assert.Contains(t, sans, "203.0.113.6")
-
-	// Node-side ownership handover: the control-plane configs must carry the
-	// Talos VIP block for the floating IP, with hcloud API management.
-	devices := configs.ControlPlane().Machine().Network().Devices()
-	require.Len(t, devices, 1)
-	assert.Equal(t, "eth0", devices[0].Interface())
-
-	vip := devices[0].VIPConfig()
-	require.NotNil(t, vip)
-	assert.Equal(t, "192.0.2.10", vip.IP())
-	require.NotNil(t, vip.HCloud())
-	assert.Equal(t, "vip-test-token", vip.HCloud().APIToken())
-
-	// Workers claim nothing: the VIP patch is control-plane-scoped.
-	assert.Empty(t, configs.Worker().Machine().Network().Devices())
+	assertFloatingIPRenderedConfigs(t, provisioner.TalosConfigsForTest())
 
 	// The saved kubeconfig must target the stable floating-IP endpoint, not the
 	// first control-plane node it was fetched from (#6043) — otherwise replacing
@@ -289,21 +311,12 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 		provisioner.KubeconfigEndpointURLForTest("203.0.113.5"),
 		"kubeconfig endpoint must be the floating IP when the feature is enabled")
 	assertSavedKubeconfigServer(t, provisioner, "203.0.113.5", "https://192.0.2.10:6443")
-
-	// Connection metadata must expose the same effective endpoint as the saved
-	// kubeconfig — not the first control-plane node's address — so consumers of
-	// HetznerClusterResult survive control-plane replacement too.
-	cluster, err := provisioner.NewHetznerClusterWithEndpointForTest(
-		"fip-cluster",
+	assertClusterMetadataEndpoint(t, provisioner,
 		[]*hcloud.Server{
 			controlPlaneServer(1, "cp-1", "203.0.113.5"),
 			controlPlaneServer(2, "cp-2", "203.0.113.6"),
 		},
-		nil,
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "https://192.0.2.10:6443", cluster.Info().KubernetesEndpoint,
-		"connection metadata endpoint must be the floating IP when the feature is enabled")
+		"https://192.0.2.10:6443")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the
