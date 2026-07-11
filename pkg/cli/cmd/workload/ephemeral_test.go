@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -353,6 +354,32 @@ func TestWithEphemeralClusterSkipsFnAndTearsDownWhenCreateFails(t *testing.T) {
 	assert.NoDirExists(t, backend.workspace)
 }
 
+// TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure verifies
+// a failed create reports its real cause without adding the expected absence
+// of a partially-created cluster as a second failure.
+//
+//nolint:paralleltest // swaps shared backend and readiness seams.
+func TestWithEphemeralClusterSuppressesNotFoundCleanupAfterCreateFailure(t *testing.T) {
+	fake := &fakeEphemeralProvisioner{
+		createErr: errEphemeralCreateFailed,
+		deleteErr: clustererr.ErrClusterNotFound,
+	}
+	cmd := newTestCommand(t)
+	installEphemeralProvisioner(t, fake)
+
+	err := workload.ExportWithEphemeralCluster(
+		cmd.Context(), cmd,
+		func(context.Context, workload.EphemeralCluster) error {
+			t.Fatal("callback must not run after create failure")
+
+			return nil
+		},
+	)
+
+	require.ErrorIs(t, err, errEphemeralCreateFailed)
+	assert.NotErrorIs(t, err, clustererr.ErrClusterNotFound)
+}
+
 //nolint:paralleltest // swaps the shared package-level provisioner seam; cannot run in parallel.
 func TestWithEphemeralClusterJoinsFnAndDeleteErrors(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{deleteErr: errEphemeralDeleteFailed}
@@ -374,6 +401,9 @@ func TestWithEphemeralClusterJoinsFnAndDeleteErrors(t *testing.T) {
 	)
 }
 
+// TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors verifies all three
+// independent lifecycle failures remain inspectable in the returned error.
+//
 //nolint:paralleltest // swaps shared backend and readiness seams.
 func TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{deleteErr: errEphemeralDeleteFailed}
@@ -394,6 +424,9 @@ func TestWithEphemeralClusterJoinsFnDeleteAndCleanupErrors(t *testing.T) {
 	assert.Equal(t, 1, backend.cleaned)
 }
 
+// TestWithEphemeralClusterCleansUpAfterCancellation verifies a cancelled run
+// still deletes the cluster and removes the local backend workspace.
+//
 //nolint:paralleltest // swaps shared backend and readiness seams.
 func TestWithEphemeralClusterCleansUpAfterCancellation(t *testing.T) {
 	fake := &fakeEphemeralProvisioner{}
@@ -415,6 +448,9 @@ func TestWithEphemeralClusterCleansUpAfterCancellation(t *testing.T) {
 	assert.NoDirExists(t, backend.workspace)
 }
 
+// TestWithEphemeralClusterStopsWhenBackendCreationFails verifies provisioning
+// and the callback are never attempted without a usable backend.
+//
 //nolint:paralleltest // swaps shared backend seam.
 func TestWithEphemeralClusterStopsWhenBackendCreationFails(t *testing.T) {
 	restore := workload.ExportSetEphemeralBackendFactory(

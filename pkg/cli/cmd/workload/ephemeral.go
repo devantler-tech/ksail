@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/spf13/cobra"
 )
 
@@ -161,9 +162,14 @@ func withEphemeralCluster(
 
 	createErr := provisioner.Create(ctx, name)
 	if createErr != nil {
+		cleanupErr := deleteEphemeralCluster(ctx, cmd, provisioner, name)
+		if errors.Is(cleanupErr, clustererr.ErrClusterNotFound) {
+			cleanupErr = nil
+		}
+
 		return errors.Join(
 			fmt.Errorf("provision ephemeral cluster %q: %w", name, createErr),
-			deleteEphemeralCluster(ctx, cmd, provisioner, name),
+			cleanupErr,
 		)
 	}
 

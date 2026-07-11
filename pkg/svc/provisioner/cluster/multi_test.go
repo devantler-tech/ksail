@@ -64,6 +64,8 @@ func TestCreateMinimalProvisioner_K3s_Succeeds(t *testing.T) {
 	assert.IsType(t, &k3dprovisioner.Provisioner{}, provisioner)
 }
 
+// TestCreateMinimalProvisioner_VanillaForwardsKubeconfigPath verifies richer
+// callers can isolate Kind from the shared kubeconfig.
 func TestCreateMinimalProvisioner_VanillaForwardsKubeconfigPath(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +87,8 @@ func TestCreateMinimalProvisioner_VanillaForwardsKubeconfigPath(t *testing.T) {
 	assert.Equal(t, kubeconfigPath, value.FieldByName("kubeConfig").String())
 }
 
+// TestCreateMinimalProvisioner_VanillaBuildsValidKindConfig verifies the
+// minimal path still emits the TypeMeta required by Kind create.
 func TestCreateMinimalProvisioner_VanillaBuildsValidKindConfig(t *testing.T) {
 	t.Parallel()
 

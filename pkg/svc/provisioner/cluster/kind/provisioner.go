@@ -225,12 +225,12 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	args := []string{"--name", target, "--config", tmpFile.Name()}
 
-	kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
-	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
-	}
+	if k.kubeConfig != "" {
+		kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
+		if err != nil {
+			return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+		}
 
-	if kubeconfigPath != "" {
 		args = append(args, "--kubeconfig", kubeconfigPath)
 	}
 

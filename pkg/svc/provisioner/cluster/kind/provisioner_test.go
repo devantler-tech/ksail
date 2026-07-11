@@ -86,6 +86,8 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 	require.ErrorIs(t, err, errCreateClusterFailed, "Create()")
 }
 
+// TestCreateIncludesExpandedKubeconfigFlag verifies Kind writes to the
+// provisioner's expanded kubeconfig path instead of an implicit default.
 func TestCreateIncludesExpandedKubeconfigFlag(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -102,6 +104,20 @@ func TestCreateIncludesExpandedKubeconfigFlag(t *testing.T) {
 		"--kubeconfig",
 		filepath.Join(homeDir, ".kube", "config"),
 	)
+}
+
+// TestCreateOmitsKubeconfigFlagWhenPathEmpty covers direct provisioner callers
+// that deliberately leave kubeconfig ownership to Kind.
+func TestCreateOmitsKubeconfigFlagWhenPathEmpty(t *testing.T) {
+	t.Parallel()
+
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "")
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
+
+	err := provisioner.Create(context.Background(), "")
+
+	require.NoError(t, err, "Create()")
+	assert.NotContains(t, runner.lastArgs, "--kubeconfig")
 }
 
 func TestDeleteSuccess(t *testing.T) {
@@ -478,6 +494,21 @@ func newProvisionerForTest(
 	*mockCommandRunner,
 ) {
 	t.Helper()
+
+	return newProvisionerWithKubeconfigForTest(t, "~/.kube/config")
+}
+
+// newProvisionerWithKubeconfigForTest builds the shared provisioner fixture
+// while allowing kubeconfig-specific tests to select the stored path.
+func newProvisionerWithKubeconfigForTest(
+	t *testing.T,
+	kubeconfigPath string,
+) (
+	*kindprovisioner.Provisioner,
+	*provider.MockProvider,
+	*mockCommandRunner,
+) {
+	t.Helper()
 	kindProvider := kindprovisioner.NewMockProvider(t)
 	infraProvider := provider.NewMockProvider()
 	runner := &mockCommandRunner{}
@@ -491,7 +522,7 @@ func newProvisionerForTest(
 	}
 	provisioner := kindprovisioner.NewProvisionerWithRunner(
 		cfg,
-		"~/.kube/config",
+		kubeconfigPath,
 		kindProvider,
 		infraProvider,
 		runner,
