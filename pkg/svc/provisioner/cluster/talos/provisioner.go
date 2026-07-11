@@ -144,6 +144,12 @@ type Provisioner struct {
 	talosOpts *v1alpha1.OptionsTalos
 	// hetznerOpts holds Hetzner-specific options when using the Hetzner provider.
 	hetznerOpts *v1alpha1.OptionsHetzner
+	// clusterEndpointIP is the effective Kubernetes API endpoint rendered into
+	// the machine configs by updateConfigsWithEndpoint — the cluster's floating
+	// IP when FloatingIPEnabled, else the first control-plane node's reachable
+	// address. saveHetznerKubeconfig rewrites the saved kubeconfig to it so the
+	// file survives control-plane replacement when the endpoint is stable.
+	clusterEndpointIP string
 	// omniOpts holds Omni-specific options when using the Omni provider.
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)

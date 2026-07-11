@@ -262,6 +262,21 @@ func ApplyHetznerDefaultsForTest(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsH
 	return applyHetznerDefaults(opts)
 }
 
+// KubeconfigEndpointURLForTest exposes kubeconfigEndpointURL for unit testing.
+func (p *Provisioner) KubeconfigEndpointURLForTest(nodeIP string) string {
+	return p.kubeconfigEndpointURL(nodeIP)
+}
+
+// NewHetznerClusterWithEndpointForTest exposes newHetznerClusterWithEndpoint
+// for unit testing.
+func (p *Provisioner) NewHetznerClusterWithEndpointForTest(
+	clusterName string,
+	controlPlaneServers []*hcloud.Server,
+	workerServers []*hcloud.Server,
+) (*HetznerClusterResult, error) {
+	return p.newHetznerClusterWithEndpoint(clusterName, controlPlaneServers, workerServers)
+}
+
 // UpdateConfigsWithEndpointForTest exposes updateConfigsWithEndpoint for unit testing.
 func (p *Provisioner) UpdateConfigsWithEndpointForTest(
 	ctx context.Context,
