@@ -133,6 +133,7 @@ jobs:
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
       desktop: ${{ steps.filter.outputs.desktop }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
+      cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -266,6 +267,42 @@ jobs:
               # so guard a bump to this file with validate-calico-chart.
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
+            cask-pr-handoff:
+              - '.github/fixtures/cask-pr-handoff/**'
+              - '.github/scripts/cask-pr-handoff-workflow.test.sh'
+              - '.github/scripts/collect-cask-pr-handoff.sh'
+              - '.github/scripts/collect-cask-pr-handoff.test.sh'
+              - '.github/scripts/validate-cask-pr-handoff.sh'
+              - '.github/scripts/validate-cask-pr-handoff.test.sh'
+              - '.github/workflows/cd.yaml'
+              - '.github/workflows/ci.yaml'
+
+  cask-pr-handoff:
+    name: 🔐 Validate Cask PR Handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Verify fail-closed cask PR handoff
+        run: |
+          shellcheck \
+            .github/fixtures/cask-pr-handoff/fake-bin/gh \
+            .github/scripts/collect-cask-pr-handoff.sh \
+            .github/scripts/collect-cask-pr-handoff.test.sh \
+            .github/scripts/validate-cask-pr-handoff.sh \
+            .github/scripts/validate-cask-pr-handoff.test.sh \
+            .github/scripts/cask-pr-handoff-workflow.test.sh
+          .github/scripts/collect-cask-pr-handoff.test.sh
+          .github/scripts/validate-cask-pr-handoff.test.sh
+          .github/scripts/cask-pr-handoff-workflow.test.sh
 
   ci-go:
     name: ✅ Validate Go Project
@@ -1321,6 +1358,7 @@ jobs:
         operator-chart-e2e,
         verify-desktop-tidy,
         validate-calico-chart,
+        cask-pr-handoff,
       ]
     if: ${{ always() }}
     steps:
@@ -1347,3 +1385,4 @@ jobs:
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.verify-desktop-tidy.result }}
             ${{ needs.validate-calico-chart.result }}
+            ${{ needs.cask-pr-handoff.result }}
