@@ -10,11 +10,14 @@ import (
 )
 
 // ErrUnsafeOverlayPath is returned by GenerateMissingOverlays when a path it
-// would render through exists but is not what generation expects — a directory
-// segment that is a symlink or regular file, or a layout file that exists as a
-// symlink. DerivePlan classifies such an overlay as Missing (it only counts
-// real directories), but writing through the entry would follow the link and
-// escape the source tree, so generation refuses instead.
+// would render through exists but is not what generation expects — a source
+// directory or directory segment that is a symlink or regular file, or a
+// layout file that exists as anything but a regular file (a symlink would be
+// written through; a directory makes the force-off writer skip the file while
+// reporting it, leaving a silently broken layout). DerivePlan classifies such
+// an overlay as Missing (it only counts real directories), but writing
+// through the entry would follow the link and escape the source tree, so
+// generation refuses instead.
 var ErrUnsafeOverlayPath = errors.New(
 	"refusing to generate through a non-directory overlay path",
 )
@@ -32,11 +35,13 @@ var ErrUnsafeOverlayPath = errors.New(
 // writer's contract an existing, untouched file is still reported, so a
 // second run reports the same paths while rewriting nothing.
 //
-// Every path is containment-checked before writing: a clusters/ or
-// clusters/<env>/ segment that exists as a symlink or regular file — which
-// DerivePlan reports as Missing but a write would follow out of the source
-// tree — is rejected with [ErrUnsafeOverlayPath], as is a layout file that
-// exists as a symlink (a dangling one would otherwise be written through).
+// Every path is containment-checked before writing: sourceDir itself and any
+// clusters/ or clusters/<env>/ segment that exists as a symlink or regular
+// file — which DerivePlan reports as Missing but a write would follow out of
+// the source tree — is rejected with [ErrUnsafeOverlayPath], as is a layout
+// file that exists as anything but a regular file (a dangling symlink would
+// be written through; a directory would make the force-off writer skip the
+// file while still reporting it as resolved).
 func GenerateMissingOverlays(
 	gen KustomizationGenerator,
 	sourceDir string,
@@ -68,6 +73,13 @@ func GenerateMissingOverlays(
 		}
 	}
 
+	if len(files) > 0 {
+		err := ensureSafeSourceDir(sourceDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	for _, file := range files {
 		err := ensureSafeOverlayPath(sourceDir, file.RelPath)
 		if err != nil {
@@ -78,12 +90,35 @@ func GenerateMissingOverlays(
 	return WriteMultiClusterLayout(gen, sourceDir, files, false)
 }
 
+// ensureSafeSourceDir rejects a sourceDir that exists as anything but a real
+// directory. The per-file walk starts below sourceDir, so a symlinked source
+// root would never be inspected there while every write still goes through
+// it into the link target. A sourceDir that does not exist yet is fine — the
+// writer creates it fresh.
+func ensureSafeSourceDir(sourceDir string) error {
+	info, err := os.Lstat(sourceDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("inspect source directory %q: %w", sourceDir, err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("%w: %s is not a directory", ErrUnsafeOverlayPath, sourceDir)
+	}
+
+	return nil
+}
+
 // ensureSafeOverlayPath walks relPath's segments under sourceDir with Lstat:
 // every directory segment that already exists must be a real directory (not a
 // symlink or file), and the leaf — preserved by the force-off writer when
-// present — must not be a symlink (a dangling one would be written through).
-// A segment that does not exist ends the walk: everything below it is created
-// fresh by the writer.
+// present — must be a regular file (a dangling symlink would be written
+// through; a directory or other non-regular node would make the writer skip
+// the file while reporting it as resolved). A segment that does not exist
+// ends the walk: everything below it is created fresh by the writer.
 func ensureSafeOverlayPath(sourceDir, relPath string) error {
 	current := sourceDir
 	segments := strings.Split(path.Clean(relPath), "/")
@@ -101,8 +136,8 @@ func ensureSafeOverlayPath(sourceDir, relPath string) error {
 		}
 
 		if index == len(segments)-1 {
-			if info.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf("%w: %s is a symlink", ErrUnsafeOverlayPath, current)
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("%w: %s is not a regular file", ErrUnsafeOverlayPath, current)
 			}
 
 			return nil
