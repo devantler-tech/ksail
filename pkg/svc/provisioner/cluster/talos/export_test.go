@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -23,6 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
+
+var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
 type NodeWithRoleForTest = nodeWithRole
@@ -287,6 +290,81 @@ func (p *Provisioner) UpdateConfigsWithEndpointForTest(
 	return p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 }
 
+// MergeFloatingIPChangesForTest exposes mergeFloatingIPChanges for unit testing.
+func (p *Provisioner) MergeFloatingIPChangesForTest(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	return p.mergeFloatingIPChanges(ctx, name, diff)
+}
+
+// ReconcileFloatingIPEndpointForTest exposes reconcileFloatingIPEndpoint for
+// unit testing.
+func (p *Provisioner) ReconcileFloatingIPEndpointForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	return p.reconcileFloatingIPEndpoint(ctx, clusterName, diff)
+}
+
+// PrepareFloatingIPConfigForNewControlPlaneForTest exposes the read-only
+// pre-first-boot config refresh for control-plane scaling/replacement tests.
+func (p *Provisioner) PrepareFloatingIPConfigForNewControlPlaneForTest(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	return p.prepareFloatingIPConfigForNewControlPlane(ctx, hzProvider, clusterName, role)
+}
+
+// RefreshFloatingIPEndpointAfterNodeChangesForTest exposes the post-topology
+// refresh so tests can prove it runs without a floating-IP drift signal.
+func (p *Provisioner) RefreshFloatingIPEndpointAfterNodeChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.refreshFloatingIPEndpointAfterNodeChanges(
+		ctx, clusterName, oldSpec, newSpec, result,
+	)
+}
+
+// ValidateUpdatePlanForTest exposes the pre-mutation update-plan guard.
+func (p *Provisioner) ValidateUpdatePlanForTest(result *clusterupdate.UpdateResult) error {
+	return p.validateUpdatePlan(result)
+}
+
+// ReattachFloatingIPAfterControlPlaneReplacementForTest exposes
+// reattachFloatingIPAfterControlPlaneReplacement for unit testing.
+func (p *Provisioner) ReattachFloatingIPAfterControlPlaneReplacementForTest(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	oldServer, newServer *hcloud.Server,
+) error {
+	return p.reattachFloatingIPAfterControlPlaneReplacement(
+		ctx, hzProvider, clusterName, oldServer, newServer,
+	)
+}
+
+// FinishControlPlaneReplacementForTest exposes finishControlPlaneReplacement
+// for unit testing.
+func FinishControlPlaneReplacementForTest(reattach, waitReady func() error) error {
+	return finishControlPlaneReplacement(reattach, waitReady)
+}
+
+// AllControlPlanesHaveHetznerFloatingIPConfigForTest exposes
+// allControlPlanesHaveHetznerFloatingIPConfig for unit testing.
+func AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+	configs []talosconfig.Provider,
+	expectedIP string,
+) bool {
+	return allControlPlanesHaveHetznerFloatingIPConfig(configs, expectedIP)
+}
+
 // RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
 func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName, action string) {
 	recordAppliedChange(result, role, nodeName, action)
@@ -463,6 +541,33 @@ func (p *Provisioner) UpdateApplyStepNamesForTest() []string {
 	}
 
 	return names
+}
+
+// RunUpdateApplyStepForTest runs one named post-PrepareUpdate apply step with
+// caller-supplied update state, so tests can exercise ordering-sensitive steps
+// without driving the full cluster update sequence.
+func (p *Provisioner) RunUpdateApplyStepForTest(
+	ctx context.Context,
+	name, clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	steps := p.updateApplySteps(
+		clusterName,
+		oldSpec,
+		newSpec,
+		diff,
+		result,
+		clusterupdate.UpdateOptions{},
+	)
+
+	for _, step := range steps {
+		if step.name == name {
+			return step.run(ctx)
+		}
+	}
+
+	return fmt.Errorf("%w: %s", errUpdateApplyStepNotFoundForTest, name)
 }
 
 // SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
@@ -693,6 +798,13 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	role string,
 ) (talosconfig.Provider, error) {
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
+}
+
+// HasDesiredHetznerFloatingIPEndpointForTest exposes the authoritative desired
+// endpoint predicate so endpoint-preservation tests prove they exercise its
+// true branch rather than passing through unrelated config grafting.
+func (p *Provisioner) HasDesiredHetznerFloatingIPEndpointForTest() bool {
+	return p.hasDesiredHetznerFloatingIPEndpoint()
 }
 
 // DetectRoleMachineConfigDriftForTest exposes detectRoleMachineConfigDrift for

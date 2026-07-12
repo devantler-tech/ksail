@@ -2,8 +2,10 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"os"
 	"slices"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	corev1 "k8s.io/api/core/v1"
@@ -188,6 +191,21 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		certSANs = sans
 	}
 
+	return p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
+}
+
+// regenerateHetznerEndpointConfigs rebuilds the loaded Talos configs around
+// the supplied endpoint and certificate SAN set. Cloud-side floating-IP
+// lifecycle belongs to callers so the same renderer can support a read-only
+// pre-first-boot refresh after a new control plane has been created.
+func (p *Provisioner) regenerateHetznerEndpointConfigs(
+	endpointIP string,
+	certSANs []string,
+) error {
+	if p.talosConfigs == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", endpointIP)
 
 	updatedConfigs, err := p.talosConfigs.WithEndpoint(endpointIP)
@@ -213,6 +231,49 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 	p.clusterEndpointIP = endpointIP
 
 	return nil
+}
+
+// prepareFloatingIPConfigForNewControlPlane refreshes the in-memory bundle
+// after a control-plane server is created but before its first config apply.
+// The existing cluster-owned address is read without ensuring or attaching it;
+// only the endpoint, VIP, and full live control-plane SAN set are regenerated.
+func (p *Provisioner) prepareFloatingIPConfigForNewControlPlane(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	if role != RoleControlPlane || p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
+		return nil
+	}
+
+	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("looking up floating IP before control-plane config apply: %w", err)
+	}
+
+	if floatingIP == nil {
+		return fmt.Errorf("%w: %s", ErrFloatingIPMissingForControlPlaneConfig, clusterName)
+	}
+
+	controlPlaneServers, err := p.listHetznerNodesByRole(
+		ctx, hzProvider, clusterName, RoleControlPlane,
+	)
+	if err != nil {
+		return fmt.Errorf("listing control planes before config apply: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
+	}
+
+	endpointIP := floatingIP.IP.String()
+
+	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
+	if err != nil {
+		return err
+	}
+
+	return p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
 }
 
 // withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
@@ -290,19 +351,287 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		controlPlaneServers[0].Name,
 	)
 
+	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return endpointIP, certSANs, nil
+}
+
+// hetznerFloatingIPEndpointCertSANs returns the stable endpoint plus every
+// directly reachable control-plane address required for TLS-safe first boot
+// and readiness checks.
+func hetznerFloatingIPEndpointCertSANs(
+	endpointIP string,
+	controlPlaneServers []*hcloud.Server,
+) ([]string, error) {
 	certSANs := make([]string, 0, len(controlPlaneServers)+1)
 	certSANs = append(certSANs, endpointIP)
 
 	for _, server := range controlPlaneServers {
 		nodeIP, nodeAddrErr := hetznerNodeTalosAddress(server)
 		if nodeAddrErr != nil {
-			return "", nil, nodeAddrErr
+			return nil, nodeAddrErr
 		}
 
 		certSANs = append(certSANs, nodeIP)
 	}
 
-	return endpointIP, certSANs, nil
+	return certSANs, nil
+}
+
+// errFloatingIPConfigsUnavailable reports that the floating-IP change cannot be
+// reconciled because the Talos configs are not loaded — failing loudly here
+// beats the silent no-op the change was detected to fix (#5947).
+var errFloatingIPConfigsUnavailable = errors.New(
+	"cannot reconcile floating IP: talos configs are not loaded",
+)
+
+// reconcileFloatingIPEndpoint applies a detected floatingIPEnabled change
+// during `cluster update` (#5947): it ensures + attaches the cluster's
+// floating IP and regenerates the stored configs with the floating-IP
+// endpoint, certificate SANs, and control-plane VIP block (the same
+// updateConfigsWithEndpoint path the create flow uses), so the subsequent
+// in-place config step pushes the VIP onto the running control planes and the
+// elected leader claims the address. A diff without the floating-IP change is
+// a no-op.
+func (p *Provisioner) reconcileFloatingIPEndpoint(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	if !hasFloatingIPChange(diff) {
+		return nil
+	}
+
+	return p.applyFloatingIPEndpointConfig(ctx, clusterName)
+}
+
+// prepareFloatingIPEndpointBeforeNodeChanges makes the desired bundle safe for
+// control-plane scaling or rolling replacement before topology is mutated. A
+// clean running cluster emits no floating-IP drift, but replacement nodes still
+// need the runtime VIP patch that a fresh generated bundle does not contain.
+func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	hasEndpointDrift := hasFloatingIPChange(diff)
+
+	hasControlPlaneChange, rollControlPlane := p.floatingIPControlPlaneChange(
+		oldSpec, newSpec, result,
+	)
+	if !hasEndpointDrift && !hasControlPlaneChange {
+		return nil
+	}
+
+	err := p.requireCleanFloatingIPEndpointBeforeRoll(
+		ctx, clusterName, rollControlPlane, hasEndpointDrift,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = p.applyFloatingIPEndpointConfig(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// A topology-only refresh means live detection proved every node already uses
+	// the floating endpoint. Persist it before createK8sClient starts a destructive
+	// roll. Drift repairs wait for the in-place push before switching kubeconfig.
+	if rollControlPlane && !hasEndpointDrift {
+		return p.refreshFloatingIPKubeconfig(ctx, clusterName)
+	}
+
+	return nil
+}
+
+// floatingIPControlPlaneChange reports whether an enabled floating-IP update
+// changes control-plane topology and whether that change includes a roll.
+func (p *Provisioner) floatingIPControlPlaneChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) (bool, bool) {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
+		return false, false
+	}
+
+	var rolling bool
+
+	if result != nil {
+		rolling, _ = rolesFromRollingChanges(result.RollingRecreate)
+	}
+
+	return hasControlPlaneTopologyChange(oldSpec, newSpec, result), rolling
+}
+
+// requireCleanFloatingIPEndpointBeforeRoll fails closed when a topology-only
+// control-plane roll cannot positively verify the live stable endpoint.
+func (p *Provisioner) requireCleanFloatingIPEndpointBeforeRoll(
+	ctx context.Context,
+	clusterName string,
+	rollControlPlane, hasEndpointDrift bool,
+) error {
+	if !rollControlPlane || hasEndpointDrift {
+		return nil
+	}
+
+	verified, err := p.runningFloatingIPEndpointIsClean(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if !verified {
+		return ErrFloatingIPReconcileBeforeControlPlaneRoll
+	}
+
+	return nil
+}
+
+// runningFloatingIPEndpointIsClean positively verifies the cloud address and
+// every running node's endpoint state before a topology-only control-plane roll
+// switches kubeconfig to the floating IP. Unavailable detection is not clean.
+func (p *Provisioner) runningFloatingIPEndpointIsClean(
+	ctx context.Context,
+	clusterName string,
+) (bool, error) {
+	floatingIP, detected, err := p.detectOwnedFloatingIP(ctx, clusterName)
+	if err != nil {
+		return false, err
+	}
+
+	if !detected || floatingIP == nil {
+		return false, nil
+	}
+
+	configured, configDetected, err := p.detectHetznerFloatingIPConfig(
+		ctx, clusterName, floatingIP,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return configDetected && configured, nil
+}
+
+// refreshFloatingIPKubeconfigAfterChanges persists the stable endpoint after
+// endpoint drift has been pushed to running nodes or control-plane topology has
+// changed. The operation is idempotent and skipped for unrelated updates.
+func (p *Provisioner) refreshFloatingIPKubeconfigAfterChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
+		(!hasFloatingIPChange(diff) && !hasControlPlaneTopologyChange(oldSpec, newSpec, result)) {
+		return nil
+	}
+
+	if result != nil && result.HasFailedChanges() {
+		return nil
+	}
+
+	return p.refreshFloatingIPKubeconfig(ctx, clusterName)
+}
+
+// refreshFloatingIPKubeconfig fetches credentials through a directly reachable
+// control-plane Talos API while persisting the stable floating IP as the
+// Kubernetes API endpoint.
+func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterName string) error {
+	if p.options == nil || p.options.KubeconfigPath == "" {
+		return nil
+	}
+
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
+		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	endpointIP := p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	if endpointIP == "" {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	if err != nil {
+		return fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+	}
+
+	talosEndpoint, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	kubernetesEndpoint := "https://" + net.JoinHostPort(endpointIP, "6443")
+
+	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
+}
+
+// refreshFloatingIPEndpointAfterNodeChanges rebuilds the floating-IP endpoint,
+// VIP, and certificate SANs from final live control-plane inventory after a
+// scale or rolling replacement. This refresh is topology-driven rather than
+// drift-driven: the pre-update inventory may have been fully configured and
+// therefore produced no floating-IP change.
+func (p *Provisioner) refreshFloatingIPEndpointAfterNodeChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
+		!hasControlPlaneTopologyChange(oldSpec, newSpec, result) {
+		return nil
+	}
+
+	return p.applyFloatingIPEndpointConfig(ctx, clusterName)
+}
+
+// hasControlPlaneTopologyChange reports whether scaling or rolling replacement
+// changed the set of control-plane servers represented in endpoint SANs.
+func hasControlPlaneTopologyChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) bool {
+	if oldSpec != nil && newSpec != nil && oldSpec.ControlPlanes != newSpec.ControlPlanes {
+		return true
+	}
+
+	if result == nil {
+		return false
+	}
+
+	rollControlPlane, _ := rolesFromRollingChanges(result.RollingRecreate)
+
+	return rollControlPlane
+}
+
+// applyFloatingIPEndpointConfig regenerates the loaded Talos config bundle from
+// live control-plane inventory. Callers decide whether drift or topology makes
+// the operation necessary.
+func (p *Provisioner) applyFloatingIPEndpointConfig(
+	ctx context.Context,
+	clusterName string,
+) error {
+	if p.talosConfigs == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
+	hzProvider, controlPlaneServers, err := p.hetznerNodesForRole(
+		ctx, clusterName, RoleControlPlane,
+	)
+	if err != nil {
+		return fmt.Errorf("list control-plane servers: %w", err)
+	}
+
+	return p.updateConfigsWithEndpoint(ctx, hzProvider, clusterName, controlPlaneServers)
 }
 
 // prepareAndApplyConfigs prepares config bundle and applies configuration to all nodes.

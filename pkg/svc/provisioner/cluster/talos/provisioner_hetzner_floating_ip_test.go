@@ -1,7 +1,6 @@
 package talosprovisioner_test
 
 import (
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -64,16 +63,8 @@ func TestApplyHetznerDefaults_FloatingIPLocation(t *testing.T) {
 // path makes: GET /floating_ips (GetByName) with an existing ksail-owned,
 // unassigned floating IP, and POST /floating_ips/7/actions/assign counting
 // assignments.
-func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Server {
+func floatingIPEndpointTestServer(t *testing.T, assignCalls *atomic.Int32) *httptest.Server {
 	t.Helper()
-
-	const ownedFloatingIP = `{"id":7,"name":"fip-cluster-floating-ip","description":"",` +
-		`"ip":"192.0.2.10","type":"ipv4","server":null,"dns_ptr":[],` +
-		`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
-		`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
-		`"blocked":false,"protection":{"delete":false},` +
-		`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster"},` +
-		`"created":"2026-07-02T00:00:00+00:00"}`
 
 	mux := http.NewServeMux()
 
@@ -88,25 +79,19 @@ func floatingIPEndpointTestServer(t *testing.T, assignCalls *int32) *httptest.Se
 				return
 			}
 
-			_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + ownedFloatingIP + `]}`))
+			// The canned owned floating IP is shared with the update-reconcile
+			// tests (update_floating_ip_test.go).
+			_, _ = responseWriter.Write(
+				[]byte(`{"floating_ips":[` + fipUpdateOwnedFloatingIPJSON + `]}`),
+			)
 		},
 	)
 
 	mux.HandleFunc(
 		"/floating_ips/7/actions/assign",
 		func(responseWriter http.ResponseWriter, _ *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
-			atomic.AddInt32(assignCalls, 1)
-
-			body := map[string]any{
-				"action": map[string]any{
-					"id":       1,
-					"command":  "assign_floating_ip",
-					"status":   "success",
-					"progress": 100,
-				},
-			}
-			_ = json.NewEncoder(responseWriter).Encode(body)
+			assignCalls.Add(1)
+			fipUpdateAssignActionResponse(responseWriter)
 		},
 	)
 
@@ -125,17 +110,31 @@ func newFloatingIPTestProvisioner(
 ) *talosprovisioner.Provisioner {
 	t.Helper()
 
+	return newFloatingIPTestProvisionerWithOptions(t, hetznerOpts, nil)
+}
+
+// newFloatingIPTestProvisionerWithOptions is newFloatingIPTestProvisioner with
+// caller-supplied runtime paths, used by kubeconfig persistence tests.
+func newFloatingIPTestProvisionerWithOptions(
+	t *testing.T,
+	hetznerOpts v1alpha1.OptionsHetzner,
+	options *talosprovisioner.Options,
+) *talosprovisioner.Provisioner {
+	t.Helper()
+
 	manager := talos.NewConfigManager(t.TempDir(), "fip-cluster", "1.32.0", "10.5.0.0/24")
 	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
-	return talosprovisioner.NewProvisioner(nil, nil).
+	return talosprovisioner.NewProvisioner(nil, options).
 		WithHetznerOptions(hetznerOpts).
 		WithTalosConfigsForTest(configs).
 		WithLogWriter(io.Discard)
 }
 
+// controlPlaneServer builds the minimal public-network server fixture used by
+// floating-IP endpoint rendering tests.
 func controlPlaneServer(id int64, name, publicIPv4 string) *hcloud.Server {
 	return &hcloud.Server{
 		ID:   id,
@@ -274,7 +273,7 @@ func assertFloatingIPRenderedConfigs(t *testing.T, configs *talos.Configs) {
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
 
-	var assignCalls int32
+	var assignCalls atomic.Int32
 
 	server := floatingIPEndpointTestServer(t, &assignCalls)
 	client := hcloud.NewClient(
@@ -299,7 +298,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&assignCalls),
+	assert.Equal(t, int32(1), assignCalls.Load(),
 		"floating IP must be attached to the first control-plane server")
 
 	assertFloatingIPRenderedConfigs(t, provisioner.TalosConfigsForTest())
@@ -327,7 +326,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 	t.Parallel()
 
-	var assignCalls int32
+	var assignCalls atomic.Int32
 
 	server := floatingIPEndpointTestServer(t, &assignCalls)
 	client := hcloud.NewClient(
@@ -348,7 +347,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset(t *testing.T) {
 		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
 	)
 	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
-	assert.Equal(t, int32(0), atomic.LoadInt32(&assignCalls),
+	assert.Equal(t, int32(0), assignCalls.Load(),
 		"missing token must fail before any hcloud assign call")
 }
 

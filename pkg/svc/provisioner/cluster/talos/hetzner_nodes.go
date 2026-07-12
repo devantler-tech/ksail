@@ -33,6 +33,26 @@ const yamlIndent = 4
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
 
+// requireHetznerServer returns the authoritative server named by an
+// infrastructure-inventory entry, failing closed when the lookup errors or the
+// server disappears between the list and get operations.
+func requireHetznerServer(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	name string,
+) (*hcloud.Server, error) {
+	server, err := hzProvider.GetServerByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server %s: %w", name, err)
+	}
+
+	if server == nil {
+		return nil, fmt.Errorf("%w: %s", ErrHetznerServerMissingFromInventory, name)
+	}
+
+	return server, nil
+}
+
 // maxNodeNameLength is the maximum length of a Hetzner node name. The name is
 // used as the Hetzner server name, the Talos hostname (set in applyConfigToNode),
 // and the Kubernetes node name the Hetzner CCM matches against — all DNS-1123

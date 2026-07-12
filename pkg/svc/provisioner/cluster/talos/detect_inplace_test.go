@@ -76,10 +76,14 @@ func TestMachineConfigDiff(t *testing.T) {
 }
 
 // TestGraftNodeManagedSections verifies the create-time-injected node-managed
-// sections (registry mirrors + cert SANs) are copied from running into desired,
-// while desired's own content is preserved — the mirror-reversion fix.
+// sections (registry mirrors, cert SANs, and HCloud VIP) are copied from running
+// into desired, while desired's own content is preserved.
+//
+//nolint:staticcheck // test fixture exercises the active Talos v1alpha1 config API
 func TestGraftNodeManagedSections(t *testing.T) {
 	t.Parallel()
+
+	dhcp := true
 
 	running := wrapConfig(&v1alpha1.Config{
 		MachineConfig: &v1alpha1.MachineConfig{
@@ -89,6 +93,22 @@ func TestGraftNodeManagedSections(t *testing.T) {
 				},
 			},
 			MachineCertSANs: []string{"injected.example.com"},
+			MachineNetwork: &v1alpha1.NetworkConfig{
+				NetworkInterfaces: v1alpha1.NetworkDeviceList{
+					{
+						DeviceInterface: "eth0",
+						DeviceAddresses: []string{"203.0.113.5/32"},
+						DeviceMTU:       9000,
+						DeviceDHCP:      &dhcp,
+						DeviceVIPConfig: &v1alpha1.DeviceVIPConfig{
+							SharedIP: "192.0.2.10",
+							HCloudConfig: &v1alpha1.VIPHCloudConfig{
+								HCloudAPIToken: "test-token",
+							},
+						},
+					},
+				},
+			},
 		},
 	})
 	desired := sysctlsConfig(map[string]string{sysctlRmemMax: "1"})
@@ -107,6 +127,88 @@ func TestGraftNodeManagedSections(t *testing.T) {
 		"certSANs grafted from running",
 	)
 	assert.Contains(t, string(graftedBytes), sysctlRmemMax, "desired's own content preserved")
+
+	devices := grafted.Machine().Network().Devices()
+	require.Len(t, devices, 1)
+	require.NotNil(t, devices[0].VIPConfig())
+	assert.Equal(t, "192.0.2.10", devices[0].VIPConfig().IP())
+	require.NotNil(t, devices[0].VIPConfig().HCloud())
+
+	graftedDevice := grafted.RawV1Alpha1().MachineConfig.MachineNetwork.NetworkInterfaces[0]
+	assert.Empty(t, graftedDevice.DeviceAddresses,
+		"unmanaged runtime addresses must remain visible as removable drift")
+	assert.Zero(t, graftedDevice.DeviceMTU,
+		"unmanaged runtime MTU must remain visible as removable drift")
+	require.NotNil(t, graftedDevice.DeviceDHCP)
+	assert.True(t, *graftedDevice.DeviceDHCP, "the VIP interface must retain its DHCP prerequisite")
+}
+
+// TestGraftNodeManagedSections_PreservesDesiredCertSANs verifies a freshly
+// rebuilt desired SAN set wins over stale running-node SANs.
+func TestGraftNodeManagedSections_PreservesDesiredCertSANs(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineCertSANs: []string{"existing.example.com", "new-control-plane.example.com"},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineCertSANs: []string{"existing.example.com"},
+		},
+	})
+
+	grafted, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.NoError(t, err)
+
+	assert.Equal(
+		t,
+		[]string{"existing.example.com", "new-control-plane.example.com"},
+		grafted.RawV1Alpha1().MachineConfig.MachineCertSANs,
+	)
+}
+
+// TestGraftNodeManagedSections_PreservesDesiredHCloudVIP verifies that an
+// explicit reconcile target wins over stale runtime VIP state.
+//
+//nolint:staticcheck // test fixture exercises the active Talos v1alpha1 config API
+func TestGraftNodeManagedSections_PreservesDesiredHCloudVIP(t *testing.T) {
+	t.Parallel()
+
+	configWithVIP := func(address, token string) talosconfig.Provider {
+		return wrapConfig(&v1alpha1.Config{
+			MachineConfig: &v1alpha1.MachineConfig{
+				MachineNetwork: &v1alpha1.NetworkConfig{
+					NetworkInterfaces: v1alpha1.NetworkDeviceList{
+						{
+							DeviceInterface: "eth0",
+							DeviceVIPConfig: &v1alpha1.DeviceVIPConfig{
+								SharedIP: address,
+								HCloudConfig: &v1alpha1.VIPHCloudConfig{
+									HCloudAPIToken: token,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}
+
+	grafted, err := talosprovisioner.GraftNodeManagedSectionsForTest(
+		configWithVIP("192.0.2.20", "new-token"),
+		configWithVIP("192.0.2.10", "old-token"),
+	)
+	require.NoError(t, err)
+
+	devices := grafted.Machine().Network().Devices()
+	require.Len(t, devices, 1)
+	vip := devices[0].VIPConfig()
+	require.NotNil(t, vip)
+	assert.Equal(t, "192.0.2.20", vip.IP())
+	require.NotNil(t, vip.HCloud())
+	assert.Equal(t, "new-token", vip.HCloud().APIToken())
 }
 
 // TestBuildDesiredNodeConfig_NoFalsePositive is the no-false-positive guard: an
@@ -176,6 +278,39 @@ func TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors(t *testing.T) {
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
 	require.NoError(t, err)
 	assert.Empty(t, diff, "create-injected mirrors must not read as drift on an unchanged config")
+}
+
+// TestBuildDesiredNodeConfig_PreservesRuntimeHetznerVIP verifies that a fresh
+// CLI invocation does not detect or apply removal of the runtime-injected
+// HCloud VIP endpoint from an otherwise unchanged control plane.
+func TestBuildDesiredNodeConfig_PreservesRuntimeHetznerVIP(t *testing.T) {
+	t.Parallel()
+
+	runningConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+	runningConfigs, err = runningConfigs.WithEndpoint("192.0.2.10")
+	require.NoError(t, err)
+	runningConfigs, err = runningConfigs.WithHetznerVIP("192.0.2.10", "test-token")
+	require.NoError(t, err)
+
+	runningBytes, err := runningConfigs.ControlPlane().Bytes()
+	require.NoError(t, err)
+	running, err := configloader.NewFromBytes(runningBytes)
+	require.NoError(t, err)
+
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(desiredConfigs, nil)
+
+	desired, err := provisioner.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff, "runtime HCloud VIP must not read as removable config drift")
 }
 
 // TestBuildDesiredNodeConfig_DetectsRemoval is the key test for the fix: a sysctl
