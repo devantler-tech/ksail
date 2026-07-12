@@ -1,12 +1,14 @@
 package talosprovisioner_test
 
 import (
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -127,9 +129,16 @@ func newFloatingIPTestProvisionerWithOptions(
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
+	// The floating-IP fixtures use TEST-NET addresses nothing answers on, so
+	// pin the endpoint reachability probe to success here; the verified-
+	// endpoint fallback itself is covered by the dedicated endpoint_probe and
+	// fallback tests.
 	return talosprovisioner.NewProvisioner(nil, options).
 		WithHetznerOptions(hetznerOpts).
 		WithTalosConfigsForTest(configs).
+		WithAPIEndpointReachabilityCheckForTest(
+			func(context.Context, string, time.Duration) error { return nil },
+		).
 		WithLogWriter(io.Discard)
 }
 

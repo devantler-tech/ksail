@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,21 @@ import (
 // floatingIPEnabledField mirrors the diff field name mergeFloatingIPChanges
 // emits, asserted literally so a rename shows up in this test.
 const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
+
+// errEndpointProbeFailed is the canned probe failure the ksail#6070 fallback
+// tests inject for an unreachable Kubernetes API endpoint.
+var errEndpointProbeFailed = errors.New("kubernetes api endpoint unreachable")
+
+// withUnreachableEndpointProbe overrides the endpoint reachability probe to
+// always fail, simulating a floating IP that was attached but never claimed
+// on the node (ksail#6070).
+func withUnreachableEndpointProbe(p *talosprovisioner.Provisioner) {
+	p.WithAPIEndpointReachabilityCheckForTest(
+		func(context.Context, string, time.Duration) error {
+			return errEndpointProbeFailed
+		},
+	)
+}
 
 // fipUpdateCalls counts the hcloud API calls the update-reconcile tests care
 // about.
@@ -805,11 +821,16 @@ func TestRefreshFloatingIPEndpointAfterNodeChanges_RefreshesControlPlaneInventor
 	assert.Equal(t, int32(1), calls.assign.Load())
 }
 
-// TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll verifies a
-// topology-only update refreshes the generated VIP bundle before replacement,
-// even when live drift detection was clean and emitted no floating-IP change.
-func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) {
-	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+// newFloatingIPRunningClusterProvisioner builds a provisioner backed by the
+// fake hcloud fixtures whose node-config fetcher serves a running control-
+// plane config that already carries the floating-IP endpoint — the state a
+// live cluster is in when an update's sync/reconcile steps run. Runtime
+// options are optional (kubeconfig persistence tests pass a kubeconfig path).
+func newFloatingIPRunningClusterProvisioner(
+	t *testing.T,
+	runtimeOptions *talosprovisioner.Options,
+) *talosprovisioner.Provisioner {
+	t.Helper()
 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
@@ -826,16 +847,30 @@ func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) 
 		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
 	))
 	runningControlPlane := configuredProvisioner.TalosConfigsForTest().ControlPlane()
-	kubeconfigPath := t.TempDir() + "/kubeconfig"
-	provisioner := newFloatingIPTestProvisionerWithOptions(
-		t, options, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
-	).
+
+	return newFloatingIPTestProvisionerWithOptions(t, options, runtimeOptions).
 		WithInfraProvider(hzProvider).
 		WithNodeConfigFetcherForTest(
 			func(context.Context, string) (talosconfig.Provider, error) {
 				return runningControlPlane, nil
 			},
 		)
+}
+
+// runFloatingIPEndpointReconcileStep drives the "reconcile floating IP
+// endpoint" update step against the running-cluster fixtures, optionally
+// mutating the provisioner first (e.g. overriding the reachability probe),
+// and returns the kubeconfig capture plus the written kubeconfig path.
+func runFloatingIPEndpointReconcileStep(
+	t *testing.T,
+	mutate func(*talosprovisioner.Provisioner),
+) (*floatingIPKubeconfigCapture, string) {
+	t.Helper()
+
+	kubeconfigPath := t.TempDir() + "/kubeconfig"
+	provisioner := newFloatingIPRunningClusterProvisioner(
+		t, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
+	)
 	capture := &floatingIPKubeconfigCapture{}
 
 	provisioner.WithTalosClientFactoryForTest(
@@ -846,6 +881,10 @@ func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) 
 			return &mockKubeconfigFetcher{kubeconfig: minimalKubeconfigBytes()}, nil
 		},
 	)
+
+	if mutate != nil {
+		mutate(provisioner)
+	}
 
 	diff := clusterupdate.NewEmptyUpdateResult()
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -862,12 +901,40 @@ func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) 
 	))
 	assert.True(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest(),
 		"replacement control planes must receive the VIP config before the roll starts")
+
+	return capture, kubeconfigPath
+}
+
+// TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll verifies a
+// topology-only update refreshes the generated VIP bundle before replacement,
+// even when live drift detection was clean and emitted no floating-IP change.
+func TestUpdateApplyStep_PreparesFloatingIPBeforeControlPlaneRoll(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	capture, kubeconfigPath := runFloatingIPEndpointReconcileStep(t, nil)
+
 	assert.Equal(t, 1, capture.calls)
 	assert.Equal(t, "203.0.113.5", capture.talosEndpoint)
 
 	written, err := os.ReadFile(kubeconfigPath) //nolint:gosec // test-owned path
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "https://192.0.2.10:6443")
+}
+
+// TestUpdateApplyStep_KubeconfigFallsBackWhenFloatingIPUnreachable pins the
+// ksail#6070 guard: a floating IP that never becomes reachable must not be
+// persisted as the kubeconfig endpoint — the directly reachable control-plane
+// address (already in the cert SANs) is written instead.
+func TestUpdateApplyStep_KubeconfigFallsBackWhenFloatingIPUnreachable(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	_, kubeconfigPath := runFloatingIPEndpointReconcileStep(t, withUnreachableEndpointProbe)
+
+	written, err := os.ReadFile(kubeconfigPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "https://203.0.113.5:6443",
+		"an unreachable floating IP must fall back to the control-plane address")
+	assert.NotContains(t, string(written), "192.0.2.10")
 }
 
 // TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll keeps the pre-roll
@@ -895,35 +962,21 @@ func TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll(t *testing.T) {
 	assert.False(t, provisioner.HasDesiredHetznerFloatingIPEndpointForTest())
 }
 
-// TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll verifies the
-// secrets-sync step that precedes topology changes copies the live stable
-// endpoint into the worker config used for first boot.
-func TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll(t *testing.T) {
-	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+// runFloatingIPWorkerRollSecretsSync drives the "sync cluster secrets" update
+// step against the running-cluster fixtures, optionally mutating the
+// provisioner first, and returns it for endpoint assertions.
+func runFloatingIPWorkerRollSecretsSync(
+	t *testing.T,
+	mutate func(*talosprovisioner.Provisioner),
+) *talosprovisioner.Provisioner {
+	t.Helper()
 
-	calls := &fipUpdateCalls{}
-	server := fipUpdateTestServer(t, true, calls)
-	hzProvider := newFipUpdateProvider(server.URL)
-	options := v1alpha1.OptionsHetzner{
-		FloatingIPEnabled:  true,
-		FloatingIPLocation: "fsn1",
-		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	provisioner := newFloatingIPRunningClusterProvisioner(t, nil)
+
+	if mutate != nil {
+		mutate(provisioner)
 	}
-	configuredProvisioner := newFloatingIPTestProvisioner(t, options).
-		WithInfraProvider(hzProvider)
-	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
-		t.Context(), hzProvider, "fip-cluster",
-		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
-	))
-	runningControlPlane := configuredProvisioner.TalosConfigsForTest().ControlPlane()
 
-	provisioner := newFloatingIPTestProvisioner(t, options).
-		WithInfraProvider(hzProvider).
-		WithNodeConfigFetcherForTest(
-			func(context.Context, string) (talosconfig.Provider, error) {
-				return runningControlPlane, nil
-			},
-		)
 	result := clusterupdate.NewEmptyUpdateResult()
 	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
 		Field:    "provider.hetzner.workerServerType",
@@ -935,7 +988,32 @@ func TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll(t *testing.T) {
 		t.Context(), "sync cluster secrets", "fip-cluster",
 		spec, spec, clusterupdate.NewEmptyUpdateResult(), result,
 	))
+
+	return provisioner
+}
+
+// TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll verifies the
+// secrets-sync step that precedes topology changes copies the live stable
+// endpoint into the worker config used for first boot.
+func TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	provisioner := runFloatingIPWorkerRollSecretsSync(t, nil)
+
 	assert.Equal(t, "192.0.2.10",
+		provisioner.TalosConfigsForTest().Worker().Cluster().Endpoint().Hostname())
+}
+
+// TestUpdateApplyStep_SecretsSyncFallsBackWhenEndpointUnreachable pins the
+// ksail#6070 guard on the secrets-sync side: a dead endpoint read from the
+// running config must not be re-recorded into the rebuilt bundle — the sync
+// falls back to the control-plane node it fetched the config from.
+func TestUpdateApplyStep_SecretsSyncFallsBackWhenEndpointUnreachable(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	provisioner := runFloatingIPWorkerRollSecretsSync(t, withUnreachableEndpointProbe)
+
+	assert.Equal(t, "203.0.113.5",
 		provisioner.TalosConfigsForTest().Worker().Cluster().Endpoint().Hostname())
 }
 
