@@ -379,13 +379,9 @@ func (p *Provisioner) listHetznerNodesByRole(
 			continue
 		}
 
-		server, serverErr := hzProvider.GetServerByName(ctx, node.Name)
+		server, serverErr := requireHetznerServer(ctx, hzProvider, node.Name)
 		if serverErr != nil {
-			return nil, fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
-		}
-
-		if server == nil {
-			return nil, fmt.Errorf("%w: %s", ErrHetznerServerMissingFromInventory, node.Name)
+			return nil, serverErr
 		}
 
 		servers = append(servers, server)
