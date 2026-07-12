@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	dirPerm  = 0o750
-	filePerm = 0o600
+	// dirPerm is the restrictive permission mode for directories the cluster
+	// commands create (e.g. backup output directories).
+	dirPerm = 0o750
 	// bytesPerMB is the number of bytes in a megabyte.
 	bytesPerMB = 1024 * 1024
 	// minCompressionLevel is the minimum gzip compression level.
@@ -139,6 +140,8 @@ var helpRunner = func(cmd *cobra.Command) error {
 	return cmd.Help()
 }
 
+// handleClusterRunE prints the cluster group's help: the group itself is a pure
+// parent with no action of its own, so running it bare just shows the subcommands.
 func handleClusterRunE(cmd *cobra.Command, _ []string) error {
 	// Cobra Help() can return an error (e.g., output stream or template issues); wrap it for clarity.
 	err := helpRunner(cmd)

@@ -261,6 +261,9 @@ func TestHandleAddEnvironmentRunE_ForceOverwritesExisting(t *testing.T) {
 	assert.Contains(t, config, "name: staging")
 }
 
+// TestNewAddCmd_Structure pins the command shape of `project env add`: its Use
+// line, the from/provider/force flags, and the write permission annotation that
+// marks it state-modifying.
 func TestNewAddCmd_Structure(t *testing.T) {
 	t.Parallel()
 

@@ -31,6 +31,8 @@ const (
 // ErrInvalidOutputFormat is returned when --output is neither text nor json.
 var ErrInvalidOutputFormat = errors.New("invalid output format")
 
+// listEnvironmentsLongDesc is the long help text for `project env list`,
+// shared with the deprecated `project list-environments` delegate.
 const listEnvironmentsLongDesc = `List the cluster environments declared in the workspace.
 
 An environment is a ksail.<name>.yaml root config in the workspace root (the same

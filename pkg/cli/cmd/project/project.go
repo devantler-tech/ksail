@@ -68,6 +68,8 @@ var helpRunner = func(cmd *cobra.Command) error {
 	return cmd.Help()
 }
 
+// handleProjectRunE prints the project group's help: the group itself is a pure
+// parent with no action of its own, so running it bare just shows the subcommands.
 func handleProjectRunE(cmd *cobra.Command, _ []string) error {
 	err := helpRunner(cmd)
 	if err != nil {

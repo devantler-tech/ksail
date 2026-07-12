@@ -84,6 +84,8 @@ var helpRunner = func(cmd *cobra.Command) error {
 	return cmd.Help()
 }
 
+// handleEnvRunE prints the env group's help: the group itself is a pure parent
+// with no action of its own, so running it bare just shows the subcommands.
 func handleEnvRunE(cmd *cobra.Command, _ []string) error {
 	err := helpRunner(cmd)
 	if err != nil {

@@ -155,6 +155,9 @@ func TestHandleRmRunE_EmptyName(t *testing.T) {
 	require.NoError(t, statErr, "an empty-name rm must not touch ksail..yaml")
 }
 
+// TestNewRmCmd_Structure pins the command shape of `project env rm`: its Use
+// line, the `remove` alias, the --purge flag, and the write permission
+// annotation that marks it state-modifying.
 func TestNewRmCmd_Structure(t *testing.T) {
 	t.Parallel()
 

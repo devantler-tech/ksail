@@ -33,6 +33,8 @@ func writeRemoveFixture(t *testing.T) string {
 	return repoRoot
 }
 
+// TestRemoveEnvironmentConfig_RemovesFile pins the happy path: removing a
+// declared environment config deletes its ksail.<name>.yaml file.
 func TestRemoveEnvironmentConfig_RemovesFile(t *testing.T) {
 	t.Parallel()
 
@@ -45,6 +47,8 @@ func TestRemoveEnvironmentConfig_RemovesFile(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
+// TestRemoveEnvironmentConfig_MissingFile pins that removing a config that was
+// never declared fails with ErrEnvironmentConfigMissing.
 func TestRemoveEnvironmentConfig_MissingFile(t *testing.T) {
 	t.Parallel()
 
@@ -54,6 +58,8 @@ func TestRemoveEnvironmentConfig_MissingFile(t *testing.T) {
 	require.ErrorIs(t, err, environment.ErrEnvironmentConfigMissing)
 }
 
+// TestRemoveEnvironmentConfig_RejectsEscape pins that a config path escaping
+// the repository root is refused and the outside file is left untouched.
 func TestRemoveEnvironmentConfig_RejectsEscape(t *testing.T) {
 	t.Parallel()
 
@@ -72,6 +78,9 @@ func TestRemoveEnvironmentConfig_RejectsEscape(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
+// TestRemoveOverlay_RemovesDirectory pins the happy path: the environment's
+// overlay directory is deleted recursively while the sibling shared base
+// overlay survives.
 func TestRemoveOverlay_RemovesDirectory(t *testing.T) {
 	t.Parallel()
 
@@ -89,6 +98,8 @@ func TestRemoveOverlay_RemovesDirectory(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
+// TestRemoveOverlay_MissingIsNotAnError pins that a nonexistent overlay is not
+// an error: RemoveOverlay reports removed=false and succeeds.
 func TestRemoveOverlay_MissingIsNotAnError(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +130,8 @@ func TestRemoveOverlay_RefusesRootEquivalentPaths(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
+// TestRemoveOverlay_RefusesSharedBase pins that the shared clusters/base
+// overlay is refused with ErrSharedBaseOverlay and left in place.
 func TestRemoveOverlay_RefusesSharedBase(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +144,8 @@ func TestRemoveOverlay_RefusesSharedBase(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
+// TestRemoveOverlay_RejectsEscape pins that an overlay path escaping the
+// repository root is refused with fsutil.ErrPathOutsideBase.
 func TestRemoveOverlay_RejectsEscape(t *testing.T) {
 	t.Parallel()
 
@@ -140,6 +155,8 @@ func TestRemoveOverlay_RejectsEscape(t *testing.T) {
 	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
 }
 
+// TestRemoveOverlay_SymlinkRemovesLinkOnly pins that an overlay which is itself
+// a symlink only has the link removed — the outside target directory survives.
 func TestRemoveOverlay_SymlinkRemovesLinkOnly(t *testing.T) {
 	t.Parallel()
 
@@ -163,6 +180,9 @@ func TestRemoveOverlay_SymlinkRemovesLinkOnly(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
+// TestRemoveOverlay_RejectsSymlinkedParentEscape pins that a parent segment
+// symlinked to a directory outside the repository is refused — the lexical
+// containment check alone must not let the delete traverse the link.
 func TestRemoveOverlay_RejectsSymlinkedParentEscape(t *testing.T) {
 	t.Parallel()
 
@@ -184,6 +204,9 @@ func TestRemoveOverlay_RejectsSymlinkedParentEscape(t *testing.T) {
 	require.NoError(t, statErr, "the outside target must survive")
 }
 
+// TestRemoveOverlay_AllowsInRepoSymlinkedParent pins that a symlinked parent
+// segment which still resolves inside the repository is treated as legitimate
+// layout: the overlay is removed, not refused as an escape.
 func TestRemoveOverlay_AllowsInRepoSymlinkedParent(t *testing.T) {
 	t.Parallel()
 
@@ -204,6 +227,9 @@ func TestRemoveOverlay_AllowsInRepoSymlinkedParent(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
+// TestRemoveOverlay_RefusesBaseAliasedThroughSymlink pins that aliasing the
+// shared base overlay through a symlinked parent still trips the base refusal:
+// the resolved-path check catches what the lexical check would miss.
 func TestRemoveOverlay_RefusesBaseAliasedThroughSymlink(t *testing.T) {
 	t.Parallel()
 
@@ -235,6 +261,9 @@ func TestRemoveOverlay_RefusesBaseAliasedThroughSymlink(t *testing.T) {
 	require.NoError(t, statErr, "the shared base overlay must survive")
 }
 
+// TestRemoveEnvironmentConfig_RejectsSymlinkTarget pins that a config path
+// whose final component is a symlink is refused as missing — only a regular
+// file counts as a declared config, and the link's outside target survives.
 func TestRemoveEnvironmentConfig_RejectsSymlinkTarget(t *testing.T) {
 	t.Parallel()
 

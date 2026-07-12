@@ -12,10 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain wires the snapshot test runner so obsolete snapshots are cleaned
+// and snapshot files are kept sorted.
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
 
+// TestProjectCmd_ShowsHelp pins that running the bare project group prints its
+// help text (the group has no action of its own), snapshotting the output.
 func TestProjectCmd_ShowsHelp(t *testing.T) {
 	t.Parallel()
 
@@ -34,6 +38,10 @@ func TestProjectCmd_ShowsHelp(t *testing.T) {
 	snaps.MatchSnapshot(t, output)
 }
 
+// TestProjectCmd_ConsolidatedIntoToolSurface pins that the project group
+// carries the toolgen consolidate annotation (and no exclude annotation) and
+// hosts the env subcommand group, so it joins the generated MCP/chat tool
+// surface like the cluster group.
 func TestProjectCmd_ConsolidatedIntoToolSurface(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +95,8 @@ func TestProjectCmd_DeprecatedEnvironmentDelegates(t *testing.T) {
 	require.Empty(t, delegates, "missing deprecated delegates: %v", delegates)
 }
 
+// TestProjectCmd_RejectsArgs pins that the project group rejects positional
+// arguments (cobra.NoArgs) instead of silently ignoring them.
 func TestProjectCmd_RejectsArgs(t *testing.T) {
 	t.Parallel()
 

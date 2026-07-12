@@ -166,6 +166,9 @@ func TestHandleListEnvironmentsRunE_RejectsInvalidOutputFormat(t *testing.T) {
 	require.ErrorIs(t, err, env.ErrInvalidOutputFormat)
 }
 
+// TestNewListCmd_Structure pins the command shape of `project env list`: its
+// Use line, the `ls` alias, the --output flag, and that a read-only enumeration
+// ships visible with no write permission annotation.
 func TestNewListCmd_Structure(t *testing.T) {
 	t.Parallel()
 
