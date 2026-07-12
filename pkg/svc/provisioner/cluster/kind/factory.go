@@ -3,12 +3,24 @@ package kindprovisioner
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-const defaultKubeconfigPath = "~/.kube/config"
+// resolveKubeconfigPath resolves the effective kubeconfig path for kind
+// through the shared resolver (explicit path → first KUBECONFIG entry →
+// ~/.kube/config), matching kind's own --kubeconfig fallback semantics so
+// env-based setups keep working when no path is configured.
+func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
+	resolved, err := k8s.ResolveKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	return resolved, nil
+}
 
 // CreateProvisioner creates a Provisioner from a pre-loaded configuration.
 // The Kind config should be loaded via the configmanager before calling this function,
@@ -16,13 +28,15 @@ const defaultKubeconfigPath = "~/.kube/config"
 //
 // Parameters:
 //   - kindConfig: Pre-loaded Kind cluster configuration
-//   - kubeconfigPath: Path where the kubeconfig should be written (defaults to ~/.kube/config)
+//   - kubeconfigPath: Path where the kubeconfig should be written (defaults to
+//     the first KUBECONFIG entry, then ~/.kube/config)
 func CreateProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeconfigPath string,
 ) (*Provisioner, error) {
-	if kubeconfigPath == "" {
-		kubeconfigPath = defaultKubeconfigPath
+	kubeconfigPath, err := resolveKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return nil, err
 	}
 
 	kindSDKProvider := NewDefaultProviderAdapter()
@@ -52,8 +66,9 @@ func CreateProvisionerWithProvider(
 	kubeconfigPath string,
 	infraProvider provider.Provider,
 ) (*Provisioner, error) {
-	if kubeconfigPath == "" {
-		kubeconfigPath = defaultKubeconfigPath
+	kubeconfigPath, err := resolveKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return nil, err
 	}
 
 	kindSDKProvider := NewDefaultProviderAdapter()

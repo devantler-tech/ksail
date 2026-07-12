@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
@@ -277,7 +278,7 @@ func TestCreateProvisioner_WithConfig(t *testing.T) {
 }
 
 func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
-	t.Parallel()
+	t.Setenv("KUBECONFIG", "")
 
 	cfg := &v1alpha4.Cluster{
 		TypeMeta: v1alpha4.TypeMeta{
@@ -292,5 +293,24 @@ func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, provisioner)
-	assert.Equal(t, "~/.kube/config", provisioner.KubeConfigForTest())
+	assert.Equal(t, k8s.DefaultKubeconfigPath(), provisioner.KubeConfigForTest())
+}
+
+func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/tmp/env-kubeconfig")
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "/tmp/env-kubeconfig", provisioner.KubeConfigForTest())
 }
