@@ -2,6 +2,8 @@ package kindprovisioner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -313,4 +315,53 @@ func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, provisioner)
 	assert.Equal(t, "/tmp/env-kubeconfig", provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile pins kind's
+// write-target rule for KUBECONFIG path lists: the first entry naming an
+// existing file wins, even when it is not the list's first entry.
+func TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile(t *testing.T) {
+	existing := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(existing, []byte("{}"), 0o600))
+	t.Setenv("KUBECONFIG", "/tmp/nosuch-kubeconfig"+string(os.PathListSeparator)+existing)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, existing, provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry pins the other
+// half of kind's rule: when no listed file exists, the LAST entry is the
+// write target.
+func TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry(t *testing.T) {
+	t.Setenv(
+		"KUBECONFIG",
+		"/tmp/nosuch-one"+string(os.PathListSeparator)+"/tmp/nosuch-two",
+	)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "/tmp/nosuch-two", provisioner.KubeConfigForTest())
 }

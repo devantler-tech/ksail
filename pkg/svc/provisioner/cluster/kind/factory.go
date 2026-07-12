@@ -2,6 +2,9 @@ package kindprovisioner
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -9,17 +12,68 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// resolveKubeconfigPath resolves the effective kubeconfig path for kind
-// through the shared resolver (explicit path → first KUBECONFIG entry →
-// ~/.kube/config), matching kind's own --kubeconfig fallback semantics so
-// env-based setups keep working when no path is configured.
+// resolveKubeconfigPath resolves the effective kubeconfig write target for
+// kind. An explicit configured path wins (expanded). Otherwise it mirrors
+// kind's own KUBECONFIG handling for the write side (kind v0.32.0: with a
+// path list, write to the first EXISTING file, or the last entry when none
+// exist) — the resolved path is later passed as --kubeconfig, which disables
+// kind's own selection, so this must not diverge from what kind would have
+// chosen. With no KUBECONFIG either, it falls back to ~/.kube/config.
 func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
-	resolved, err := k8s.ResolveKubeconfigPath(kubeconfigPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+	if kubeconfigPath != "" {
+		resolved, err := k8s.ResolveKubeconfigPath(kubeconfigPath)
+		if err != nil {
+			return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+		}
+
+		return resolved, nil
 	}
 
-	return resolved, nil
+	if target := kindKubeconfigEnvWriteTarget(); target != "" {
+		return target, nil
+	}
+
+	return k8s.DefaultKubeconfigPath(), nil
+}
+
+// kindKubeconfigEnvWriteTarget applies kind's kubeconfig write-target rule to
+// the KUBECONFIG environment variable. Empty when KUBECONFIG is unset or
+// holds no usable entry.
+func kindKubeconfigEnvWriteTarget() string {
+	return kindKubeconfigWriteTarget(os.Getenv("KUBECONFIG"))
+}
+
+// kindKubeconfigWriteTarget picks kind's kubeconfig write target from a
+// KUBECONFIG-style path list: entries are kept literal (kind does not expand
+// them), empties are dropped, the first entry naming an existing regular file
+// wins, and when none exist the last entry does.
+func kindKubeconfigWriteTarget(envValue string) string {
+	if envValue == "" {
+		return ""
+	}
+
+	entries := make([]string, 0)
+
+	for entry := range strings.SplitSeq(envValue, string(os.PathListSeparator)) {
+		if entry != "" {
+			entries = append(entries, entry)
+		}
+	}
+
+	if len(entries) == 0 {
+		return ""
+	}
+
+	for _, entry := range entries {
+		// Stat-only existence probe of a path the user controls by design
+		// (KUBECONFIG carries the same trust kubectl gives it).
+		info, err := os.Stat(filepath.Clean(entry))
+		if err == nil && info.Mode().IsRegular() {
+			return entry
+		}
+	}
+
+	return entries[len(entries)-1]
 }
 
 // CreateProvisioner creates a Provisioner from a pre-loaded configuration.
