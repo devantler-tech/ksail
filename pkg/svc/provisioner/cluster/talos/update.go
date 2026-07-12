@@ -317,28 +317,14 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 		return false, false, nil
 	}
 
-	controlPlaneConfigs := make([]talosconfig.Provider, 0, len(nodes))
-	workerConfigs := make([]talosconfig.Provider, 0, len(nodes))
+	controlPlaneConfigs, workerConfigs, fetchedAll, err :=
+		p.fetchFloatingIPConfigsByRole(ctx, nodes)
+	if err != nil {
+		return false, false, err
+	}
 
-	for _, node := range nodes {
-		if node.Role != RoleControlPlane && node.Role != RoleWorker {
-			continue
-		}
-
-		config, fetched, fetchErr := p.fetchFloatingIPNodeConfig(ctx, node)
-		if fetchErr != nil {
-			return false, false, fetchErr
-		}
-
-		if !fetched {
-			return false, true, nil
-		}
-
-		if node.Role == RoleControlPlane {
-			controlPlaneConfigs = append(controlPlaneConfigs, config)
-		} else {
-			workerConfigs = append(workerConfigs, config)
-		}
+	if !fetchedAll {
+		return false, true, nil
 	}
 
 	if len(controlPlaneConfigs) == 0 {
@@ -349,6 +335,40 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 		allWorkersHaveHetznerFloatingIPEndpoint(workerConfigs, expectedIP)
 
 	return configured, true, nil
+}
+
+// fetchFloatingIPConfigsByRole fetches the running configuration for every
+// inventoried control plane and worker. A transient fetch miss is reported via
+// fetchedAll so detection can request idempotent reconciliation.
+func (p *Provisioner) fetchFloatingIPConfigsByRole(
+	ctx context.Context,
+	nodes []nodeWithRole,
+) ([]talosconfig.Provider, []talosconfig.Provider, bool, error) {
+	controlPlaneConfigs := make([]talosconfig.Provider, 0, len(nodes))
+	workerConfigs := make([]talosconfig.Provider, 0, len(nodes))
+
+	for _, node := range nodes {
+		if node.Role != RoleControlPlane && node.Role != RoleWorker {
+			continue
+		}
+
+		config, fetched, err := p.fetchFloatingIPNodeConfig(ctx, node)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		if !fetched {
+			return nil, nil, false, nil
+		}
+
+		if node.Role == RoleControlPlane {
+			controlPlaneConfigs = append(controlPlaneConfigs, config)
+		} else {
+			workerConfigs = append(workerConfigs, config)
+		}
+	}
+
+	return controlPlaneConfigs, workerConfigs, true, nil
 }
 
 // fetchFloatingIPNodeConfig fetches one running node config. Context
