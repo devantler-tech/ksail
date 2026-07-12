@@ -99,6 +99,26 @@ func TestRemoveOverlay_MissingIsNotAnError(t *testing.T) {
 	assert.False(t, removed)
 }
 
+// TestRemoveOverlay_RefusesRootEquivalentPaths pins the guard against a
+// root-equivalent overlay path reaching the recursive delete: containedPath
+// accepts the repository root as "contained", so without the refusal
+// `env rm --purge` with an empty/"."/"clusters/.." path would delete the
+// whole workspace.
+func TestRemoveOverlay_RefusesRootEquivalentPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRemoveFixture(t)
+
+	for _, overlay := range []string{"", ".", "./", "/", "k8s/clusters/../.."} {
+		_, err := environment.RemoveOverlay(repoRoot, overlay)
+		require.ErrorIs(t, err, environment.ErrRootEquivalentOverlay, "path %q", overlay)
+	}
+
+	// The fixture tree is untouched by every refused call.
+	_, statErr := os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "base"))
+	require.NoError(t, statErr)
+}
+
 func TestRemoveOverlay_RefusesSharedBase(t *testing.T) {
 	t.Parallel()
 

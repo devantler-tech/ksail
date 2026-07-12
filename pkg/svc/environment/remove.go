@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +19,13 @@ var ErrEnvironmentConfigMissing = errors.New("environment config not found")
 // is the shared base overlay (clusters/base), which every environment builds
 // on and which no single environment owns.
 var ErrSharedBaseOverlay = errors.New("refusing to delete the shared base overlay")
+
+// ErrRootEquivalentOverlay is returned by RemoveOverlay when the overlay path
+// cleans to the repository root itself (empty, ".", "/", "clusters/..", …):
+// containedPath accepts the root as "contained", so without this refusal the
+// recursive delete behind `env rm --purge` would remove the entire workspace
+// instead of one environment's overlay.
+var ErrRootEquivalentOverlay = errors.New("refusing to delete a root-equivalent overlay path")
 
 // RemoveEnvironmentConfig deletes a single root environment config file (e.g.
 // ksail.<name>.yaml) under repoRoot. The path is containment-checked against
@@ -55,14 +63,9 @@ func RemoveEnvironmentConfig(repoRoot, configRel string) error {
 func RemoveOverlay(repoRoot, overlayRelDir string) (bool, error) {
 	overlayRelDir = filepath.ToSlash(overlayRelDir)
 
-	if isSharedBaseOverlay(overlayRelDir) {
-		return false, fmt.Errorf("%w: %s", ErrSharedBaseOverlay, overlayRelDir)
-	}
-
-	abs, err := containedPath(repoRoot, filepath.FromSlash(overlayRelDir))
+	abs, err := guardedOverlayPath(repoRoot, overlayRelDir)
 	if err != nil {
-		return false, fmt.Errorf("overlay %s escapes the repository root: %w",
-			overlayRelDir, fsutil.ErrPathOutsideBase)
+		return false, err
 	}
 
 	info, err := os.Lstat(abs)
@@ -97,6 +100,30 @@ func RemoveOverlay(repoRoot, overlayRelDir string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// guardedOverlayPath runs RemoveOverlay's lexical pre-delete guards over a
+// slash-form overlay path and returns the contained absolute path: a
+// root-equivalent path (one that cleans to the repository root — empty, ".",
+// "/", "clusters/..") is refused because containedPath accepts the root as
+// contained, the shared base overlay is refused because every environment
+// builds on it, and an escaping path is refused by the containment check.
+func guardedOverlayPath(repoRoot, overlayRelDir string) (string, error) {
+	if cleaned := path.Clean(overlayRelDir); cleaned == "." || cleaned == "/" {
+		return "", fmt.Errorf("%w: %q", ErrRootEquivalentOverlay, overlayRelDir)
+	}
+
+	if isSharedBaseOverlay(overlayRelDir) {
+		return "", fmt.Errorf("%w: %s", ErrSharedBaseOverlay, overlayRelDir)
+	}
+
+	abs, err := containedPath(repoRoot, filepath.FromSlash(overlayRelDir))
+	if err != nil {
+		return "", fmt.Errorf("overlay %s escapes the repository root: %w",
+			overlayRelDir, fsutil.ErrPathOutsideBase)
+	}
+
+	return abs, nil
 }
 
 // canonicalContainedOverlay re-verifies the overlay's containment on the
