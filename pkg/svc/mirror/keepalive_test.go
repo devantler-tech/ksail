@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWriteReadFrame_KeepaliveRoundTrip verifies a keepalive frame survives a
+// write/read round trip with stream ID 0 and an empty payload.
 func TestWriteReadFrame_KeepaliveRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -28,6 +30,8 @@ func TestWriteReadFrame_KeepaliveRoundTrip(t *testing.T) {
 	assert.Empty(t, got.Payload)
 }
 
+// TestWriteFrame_RejectsKeepalivePayload verifies WriteFrame refuses to emit a
+// keepalive carrying a payload — keepalives are control-only frames.
 func TestWriteFrame_RejectsKeepalivePayload(t *testing.T) {
 	t.Parallel()
 
@@ -41,6 +45,9 @@ func TestWriteFrame_RejectsKeepalivePayload(t *testing.T) {
 	require.ErrorIs(t, err, mirror.ErrTunnelControlFramePayload)
 }
 
+// TestSendKeepalive_RefreshesPeerLastReadAndKeepsSessionUsable verifies a
+// keepalive advances the peer's LastRead while leaving the session fully
+// usable — ordinary streams still open afterwards.
 func TestSendKeepalive_RefreshesPeerLastReadAndKeepsSessionUsable(t *testing.T) {
 	t.Parallel()
 
@@ -66,6 +73,9 @@ func TestSendKeepalive_RefreshesPeerLastReadAndKeepsSessionUsable(t *testing.T) 
 	assert.Equal(t, stream.StreamID(), accepted.StreamID())
 }
 
+// TestSendKeepalives_PingsUntilCancelled verifies the keepalive loop keeps
+// refreshing the peer's LastRead and returns promptly once its context is
+// cancelled.
 func TestSendKeepalives_PingsUntilCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +106,9 @@ func TestSendKeepalives_PingsUntilCancelled(t *testing.T) {
 	}
 }
 
+// TestWatchSessionLiveness_ExpiresSilentArmedPeer verifies the watchdog
+// cancels the context when a peer that armed it with a keepalive then goes
+// frame-silent past the timeout — the unclean-death detection path.
 func TestWatchSessionLiveness_ExpiresSilentArmedPeer(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +135,38 @@ func TestWatchSessionLiveness_ExpiresSilentArmedPeer(t *testing.T) {
 	}
 }
 
+// TestWatchSessionLiveness_ClosesSessionOnExpiry verifies an expiry tears the
+// session itself down, not just the forward context — pumps blocked on the
+// dead client's exec stream only unblock when the session closes.
+func TestWatchSessionLiveness_ClosesSessionOnExpiry(t *testing.T) {
+	t.Parallel()
+
+	client, server := newSessionPair(t)
+
+	require.NoError(t, client.SendKeepalive())
+	require.Eventually(t, func() bool {
+		return server.KeepaliveSeen()
+	}, 2*time.Second, 5*time.Millisecond, "the keepalive should arm the peer")
+
+	ctx, expire := context.WithCancelCause(context.Background())
+	defer expire(nil)
+
+	go mirror.WatchSessionLiveness(ctx, server, 40*time.Millisecond, expire)
+
+	// An expiry must tear the session down, not just cancel the forward
+	// context: pumps blocked writing to the dead client's exec stream only
+	// unblock when the session closes its channel halves, and the REDIRECT
+	// teardown runs only after the forward loop returns.
+	select {
+	case <-server.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("watchdog expiry did not close the session")
+	}
+}
+
+// TestWatchSessionLiveness_NeverExpiresUnarmedPeer verifies frame silence
+// never expires a peer that has not armed the watchdog — a pre-keepalive
+// client over a reused agent container must not be killed.
 func TestWatchSessionLiveness_NeverExpiresUnarmedPeer(t *testing.T) {
 	t.Parallel()
 
@@ -144,6 +189,9 @@ func TestWatchSessionLiveness_NeverExpiresUnarmedPeer(t *testing.T) {
 	}
 }
 
+// TestWatchSessionLiveness_HoldsWhileDispatchBlocked verifies the watchdog
+// tolerates a demux loop parked on stream backpressure past the ordinary
+// deadline (the bounded dispatch grace) instead of expiring a live session.
 func TestWatchSessionLiveness_HoldsWhileDispatchBlocked(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +354,9 @@ func drainParkedStream(t *testing.T, server *mirror.TunnelSession, writeDone <-c
 	}
 }
 
+// TestSendKeepalives_PingsImmediately verifies the first keepalive is sent at
+// once rather than one ticker interval in — it is what arms the agent's
+// watchdog at session start.
 func TestSendKeepalives_PingsImmediately(t *testing.T) {
 	t.Parallel()
 
@@ -321,6 +372,9 @@ func TestSendKeepalives_PingsImmediately(t *testing.T) {
 	}, 2*time.Second, 5*time.Millisecond, "SendKeepalives should ping before the first tick")
 }
 
+// TestWatchSessionLiveness_SurvivesWhileKeepalivesFlow verifies flowing
+// keepalives keep refreshing the deadline so a healthy session outlives the
+// watchdog timeout without being expired.
 func TestWatchSessionLiveness_SurvivesWhileKeepalivesFlow(t *testing.T) {
 	t.Parallel()
 
@@ -346,6 +400,8 @@ func TestWatchSessionLiveness_SurvivesWhileKeepalivesFlow(t *testing.T) {
 	}
 }
 
+// TestWatchSessionLiveness_ReturnsWhenSessionEnds verifies the watchdog
+// returns when the session closes cleanly, without expiring its context.
 func TestWatchSessionLiveness_ReturnsWhenSessionEnds(t *testing.T) {
 	t.Parallel()
 

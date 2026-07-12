@@ -138,6 +138,14 @@ func watchSessionLiveness(
 					ErrSteerClientExpired, silence.Round(time.Millisecond), reason, deadline,
 				))
 
+				// Cancelling the forward context alone cannot end a forward
+				// loop whose pumps sit blocked in a stream write/close against
+				// the dead client's exec stream — the deferred session close
+				// only runs after the loop returns. Close never blocks and
+				// closes the channel halves, unblocking those writers so
+				// ForwardRedirected can return into the REDIRECT teardown.
+				_ = session.Close()
+
 				return
 			}
 		}

@@ -85,6 +85,23 @@ func RunSteerAgent(
 	redirect SteeringRedirect,
 	runner SteerCommandRunner,
 	expectKeepalives bool,
+) error {
+	return runSteerAgent(
+		ctx, transport, listen, redirect, runner, expectKeepalives, SteerClientLivenessTimeout,
+	)
+}
+
+// runSteerAgent is RunSteerAgent with the liveness deadline injected, so
+// tests can drive the full expiry path with a test-sized deadline instead of
+// the 30s production constant.
+func runSteerAgent(
+	ctx context.Context,
+	transport io.ReadWriteCloser,
+	listen SteerListenerFactory,
+	redirect SteeringRedirect,
+	runner SteerCommandRunner,
+	expectKeepalives bool,
+	livenessTimeout time.Duration,
 ) (err error) {
 	err = checkSteerAgentInputs(transport, listen, runner)
 	if err != nil {
@@ -139,7 +156,7 @@ func RunSteerAgent(
 		}
 	}()
 
-	return serveSteerSession(ctx, listener, transport, expectKeepalives)
+	return serveSteerSession(ctx, listener, transport, expectKeepalives, livenessTimeout)
 }
 
 // serveSteerSession wraps the transport in the agent's server-role tunnel
@@ -151,6 +168,7 @@ func serveSteerSession(
 	listener net.Listener,
 	transport io.ReadWriteCloser,
 	expectKeepalives bool,
+	livenessTimeout time.Duration,
 ) error {
 	session := NewTunnelSession(transport, transport, TunnelRoleServer)
 
@@ -160,23 +178,29 @@ func serveSteerSession(
 		session.ArmLiveness()
 	}
 
-	return forwardWithLiveness(ctx, listener, session)
+	return forwardWithLiveness(ctx, listener, session, livenessTimeout)
 }
 
 // forwardWithLiveness runs the agent's forward loop with the client-liveness
 // watchdog beside it: the exec stream does not reliably deliver EOF on
 // unclean client death (ksail#6040), and an ephemeral container cannot be
 // removed from outside, so the liveness deadline is the only path that
-// removes the REDIRECT rule once the client is gone. Cancelling forwardCtx
-// ends ForwardRedirected, which returns into RunSteerAgent's reverse
-// teardown. The watchdog arms itself only once the client has proven — or,
+// removes the REDIRECT rule once the client is gone. An expiry cancels
+// forwardCtx AND closes the session — a cancel alone cannot unblock pumps
+// stuck writing to the dead exec stream — so ForwardRedirected returns into
+// RunSteerAgent's reverse teardown. The watchdog arms itself only once the client has proven — or,
 // via --expect-keepalives, declared — that it speaks the keepalive protocol
 // (see watchSessionLiveness), so a pre-keepalive client is never expired.
-func forwardWithLiveness(ctx context.Context, listener net.Listener, session *TunnelSession) error {
+func forwardWithLiveness(
+	ctx context.Context,
+	listener net.Listener,
+	session *TunnelSession,
+	livenessTimeout time.Duration,
+) error {
 	forwardCtx, expire := context.WithCancelCause(ctx)
 	defer expire(nil)
 
-	go watchSessionLiveness(forwardCtx, session, SteerClientLivenessTimeout, expire)
+	go watchSessionLiveness(forwardCtx, session, livenessTimeout, expire)
 
 	err := ForwardRedirected(forwardCtx, listener, session)
 

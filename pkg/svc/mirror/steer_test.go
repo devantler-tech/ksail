@@ -16,6 +16,9 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+// TestDefaultSteerImageForVersion pins the steering-image tag derivation:
+// release versions map to a v-prefixed tag (never doubled) and dev or empty
+// versions fall back to :latest.
 func TestDefaultSteerImageForVersion(t *testing.T) {
 	t.Parallel()
 
@@ -141,6 +144,9 @@ func injectIntoFreshPod(
 	return name, pod.Spec.EphemeralContainers[0]
 }
 
+// TestInjectSteerDefaults verifies InjectSteer's default ephemeral container:
+// name, default image, sleep-infinity command, target container, and the
+// hardened NET_ADMIN-only security context.
 func TestInjectSteerDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -174,6 +180,8 @@ func assertHardenedSteerSecurityContext(t *testing.T, secCtx *corev1.SecurityCon
 	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, secCtx.SeccompProfile.Type)
 }
 
+// TestInjectSteerOptions verifies WithSteerImage and WithSteerCommand override
+// the injected container's image and command.
 func TestInjectSteerOptions(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +208,8 @@ func TestInjectSteerOptions(t *testing.T) {
 	)
 }
 
+// TestInjectSteerNilPoint verifies InjectSteer rejects a nil tap point with
+// ErrTapPointNil.
 func TestInjectSteerNilPoint(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +219,8 @@ func TestInjectSteerNilPoint(t *testing.T) {
 	assert.Empty(t, name)
 }
 
+// TestInjectSteerAlreadyInjected verifies a pod that already carries the
+// steering container is reported via ErrSteerAlreadyInjected, not re-injected.
 func TestInjectSteerAlreadyInjected(t *testing.T) {
 	t.Parallel()
 
@@ -220,6 +232,8 @@ func TestInjectSteerAlreadyInjected(t *testing.T) {
 	assert.Empty(t, name)
 }
 
+// TestInjectSteerCoexistsWithTap verifies the steering agent injects cleanly
+// into a pod that already carries the mirror tap (#5839 independence).
 func TestInjectSteerCoexistsWithTap(t *testing.T) {
 	t.Parallel()
 
@@ -242,6 +256,8 @@ func TestInjectSteerCoexistsWithTap(t *testing.T) {
 	assert.Equal(t, mirror.SteerContainerName, pod.Spec.EphemeralContainers[1].Name)
 }
 
+// TestInjectTapCoexistsWithSteer verifies the reverse ordering: the tap
+// injects cleanly into a pod that already carries the steering agent.
 func TestInjectTapCoexistsWithSteer(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +275,8 @@ func TestInjectTapCoexistsWithSteer(t *testing.T) {
 	require.Len(t, pod.Spec.EphemeralContainers, 2)
 }
 
+// TestInjectSteerUpdateError verifies a failed ephemeralcontainers update
+// surfaces its error and returns no container name.
 func TestInjectSteerUpdateError(t *testing.T) {
 	t.Parallel()
 
@@ -278,6 +296,8 @@ func TestInjectSteerUpdateError(t *testing.T) {
 	assert.Empty(t, name)
 }
 
+// TestInjectSteerConflictRetriesAndSucceeds verifies a 409 conflict on the
+// ephemeralcontainers update is retried and the injection then succeeds.
 func TestInjectSteerConflictRetriesAndSucceeds(t *testing.T) {
 	t.Parallel()
 
@@ -303,6 +323,8 @@ func TestInjectSteerConflictRetriesAndSucceeds(t *testing.T) {
 	assert.True(t, conflicted)
 }
 
+// TestWaitForSteerNilPoint verifies WaitForSteer rejects a nil tap point with
+// ErrTapPointNil.
 func TestWaitForSteerNilPoint(t *testing.T) {
 	t.Parallel()
 
@@ -311,6 +333,8 @@ func TestWaitForSteerNilPoint(t *testing.T) {
 	require.ErrorIs(t, err, mirror.ErrTapPointNil)
 }
 
+// TestWaitForSteerRunning verifies the wait returns cleanly once the steering
+// container reports a Running state.
 func TestWaitForSteerRunning(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +346,8 @@ func TestWaitForSteerRunning(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestWaitForSteerTerminated verifies a terminated steering container fails
+// the wait with ErrSteerTerminated carrying the exit code.
 func TestWaitForSteerTerminated(t *testing.T) {
 	t.Parallel()
 
@@ -336,6 +362,8 @@ func TestWaitForSteerTerminated(t *testing.T) {
 	assert.ErrorContains(t, err, "exit code 3")
 }
 
+// TestWaitForSteerTimeout verifies the poll gives up at the timeout when the
+// pod never reports a steering-container status, rather than spinning forever.
 func TestWaitForSteerTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -349,6 +377,9 @@ func TestWaitForSteerTimeout(t *testing.T) {
 	assert.NotErrorIs(t, err, mirror.ErrSteerTerminated)
 }
 
+// TestWaitForEphemeralContainerRetriesTransientGetError verifies a momentary
+// apiserver error does not abort the wait — the poll retries and succeeds on
+// the next Get.
 func TestWaitForEphemeralContainerRetriesTransientGetError(t *testing.T) {
 	t.Parallel()
 
@@ -378,6 +409,9 @@ func TestWaitForEphemeralContainerRetriesTransientGetError(t *testing.T) {
 	assert.True(t, failed, "expected the transient Get error to have fired")
 }
 
+// TestWaitForEphemeralContainerPropagatesTerminalGetError verifies a terminal
+// Get error (forbidden) surfaces its own cause instead of being swallowed into
+// a timeout.
 func TestWaitForEphemeralContainerPropagatesTerminalGetError(t *testing.T) {
 	t.Parallel()
 
@@ -398,6 +432,8 @@ func TestWaitForEphemeralContainerPropagatesTerminalGetError(t *testing.T) {
 	assert.ErrorContains(t, err, "forbidden")
 }
 
+// TestWaitForSteerIgnoresTapStatus verifies a Running tap status does not
+// satisfy the steer wait — the two flavours' statuses are independent.
 func TestWaitForSteerIgnoresTapStatus(t *testing.T) {
 	t.Parallel()
 
@@ -412,6 +448,9 @@ func TestWaitForSteerIgnoresTapStatus(t *testing.T) {
 	assert.NotErrorIs(t, err, mirror.ErrSteerTerminated)
 }
 
+// TestSteerContainerImage verifies SteerContainerImage reports the injected
+// container's live image (a reused container's, not this build's default) and
+// errors on a missing container or nil tap point.
 func TestSteerContainerImage(t *testing.T) {
 	t.Parallel()
 

@@ -193,6 +193,8 @@ func execRunner(ctx context.Context, name string, args ...string) error {
 // Close is a no-op — process exit closes the streams.
 type stdioTransport struct{}
 
+// Read reads inbound tunnel bytes from the process's stdin — the ksail side of
+// the exec channel.
 func (stdioTransport) Read(p []byte) (int, error) {
 	count, err := os.Stdin.Read(p)
 	if err != nil {
@@ -202,6 +204,8 @@ func (stdioTransport) Read(p []byte) (int, error) {
 	return count, nil
 }
 
+// Write sends outbound tunnel bytes to the process's stdout — the ksail side
+// of the exec channel.
 func (stdioTransport) Write(p []byte) (int, error) {
 	count, err := os.Stdout.Write(p)
 	if err != nil {
@@ -211,4 +215,5 @@ func (stdioTransport) Write(p []byte) (int, error) {
 	return count, nil
 }
 
+// Close is a no-op: process exit closes the stdio streams.
 func (stdioTransport) Close() error { return nil }

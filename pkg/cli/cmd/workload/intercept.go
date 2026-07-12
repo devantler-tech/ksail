@@ -56,6 +56,7 @@ const steerAgentInterceptPort = 19000
 // developer's local process listens on loopback, never a routable interface.
 const loopbackHost = "127.0.0.1"
 
+// interceptCmdLong holds the long help text for `ksail workload intercept`.
 const interceptCmdLong = `Intercept a Deployment's inbound traffic to a local process (reverse dev bridge).
 
 Resolves the Deployment to a running pod, injects a steering container (an
@@ -79,6 +80,7 @@ Pass an explicit --steer-image and --steer-command to run a custom agent instead
 Ephemeral containers cannot be removed, so an already-injected steering agent on
 the target pod is reused rather than treated as an error.`
 
+// interceptCmdExample holds the usage examples for `ksail workload intercept`.
 const interceptCmdExample = `  # Intercept the traffic my-app serves on :8080 and forward it to localhost:8080
   ksail workload intercept my-app --service-port 8080 --local-port 8080
 
