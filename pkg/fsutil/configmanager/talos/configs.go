@@ -150,16 +150,6 @@ func NewDefaultConfigsWithVersionContractAndPatches(
 	)
 }
 
-// NewDefaultConfigsWithVersionAndName builds a default Talos config bundle at the
-// given Kubernetes version and names it after the cluster (the name is baked into
-// the PKI, so it must be set via WithName, which regenerates the bundle). It is
-// the backward-compatible "default Talos config for cluster <name> at version
-// <v>" helper using the conservative default contract. Callers with a pinned
-// Talos version use NewDefaultConfigsWithVersionContractAndName.
-func NewDefaultConfigsWithVersionAndName(kubernetesVersion, name string) (*Configs, error) {
-	return NewDefaultConfigsWithVersionContractAndName(kubernetesVersion, name, nil)
-}
-
 // NewDefaultConfigsWithVersionContractAndName builds the named default Talos
 // bundle used by the operator and local provisioner. Its generated document
 // shape matches the target Talos contract.
