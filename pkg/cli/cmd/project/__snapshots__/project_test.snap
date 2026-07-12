@@ -1,17 +1,16 @@
 
 [TestProjectCmd_ShowsHelp - 1]
-Manage the GitOps project files (the on-disk project structure) without contacting a live cluster. These commands scaffold and transform the project — e.g. initializing a new project and cloning environments — as opposed to the cluster commands that operate on a running cluster.
+Manage the GitOps project files (the on-disk project structure) without contacting a live cluster. These commands scaffold and transform the project — e.g. initializing a new project and managing its cluster environments — as opposed to the cluster commands that operate on a running cluster.
 
 Usage:
   project [flags]
   project [command]
 
 Available Commands:
-  add-environment   Clone an existing cluster environment into a new one
   completion        Generate the autocompletion script for the specified shell
+  env               Manage the cluster environments declared in the workspace
   help              Help about any command
   init              Initialize a new project
-  list-environments List the cluster environments declared in the workspace
 
 Flags:
   -h, --help   help for project

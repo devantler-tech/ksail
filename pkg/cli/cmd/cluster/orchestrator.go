@@ -856,8 +856,9 @@ func resolveKubeContext(ctx *localregistry.Context) string {
 }
 
 // computeUpdateDiff retrieves current config and computes the full diff.
-// Returns an error if current config could not be retrieved; the caller should
-// surface the error rather than silently recreating the cluster.
+// Returns an error if current config or the provisioner diff could not be
+// retrieved; the caller should surface the error rather than silently
+// recreating the cluster or reporting no changes.
 func (o *updateOrchestrator) computeUpdateDiff(
 	updater clusterprovisioner.Updater,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
@@ -881,9 +882,11 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	provisionerDiff, diffErr := updater.DiffConfig(
 		o.cmd.Context(), o.clusterName, currentSpec, &o.ctx.ClusterCfg.Spec.Cluster,
 	)
-	if diffErr == nil {
-		specdiff.MergeProvisionerDiff(diff, provisionerDiff)
+	if diffErr != nil {
+		return nil, nil, fmt.Errorf("could not compute provisioner configuration diff: %w", diffErr)
 	}
+
+	specdiff.MergeProvisionerDiff(diff, provisionerDiff)
 
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(o.cmd, o.ctx, diffEngine, diff)

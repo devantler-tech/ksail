@@ -169,6 +169,22 @@ func ExportApplyInPlaceChanges(
 	)
 }
 
+// ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
+func ExportComputeUpdateDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.computeUpdateDiff(updater)
+}
+
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
 func ExportReportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	reportNoApplicableChanges(cmd, diff)

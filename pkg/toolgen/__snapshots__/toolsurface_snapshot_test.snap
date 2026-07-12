@@ -2191,9 +2191,9 @@ workload_write
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nadd-environment: Clone an existing cluster environment into a new one\ninit: Initialize a new project",
+        "description": "The subcommand to execute. Options:\nenv_add: Clone an existing cluster environment into a new one\ninit: Initialize a new project",
         "enum": [
-          "add-environment",
+          "env_add",
           "init"
         ],
         "type": "string"
@@ -2384,9 +2384,9 @@ workload_write
   "parameters": {
     "properties": {
       "command": {
-        "description": "The subcommand to execute. Options:\nlist-environments: List the cluster environments declared in the workspace",
+        "description": "The subcommand to execute. Options:\nenv_list: List the cluster environments declared in the workspace",
         "enum": [
-          "list-environments"
+          "env_list"
         ],
         "type": "string"
       },

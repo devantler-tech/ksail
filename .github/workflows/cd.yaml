@@ -658,36 +658,31 @@ jobs:
   # GoReleaser opens the Homebrew cask PRs during the build (CLI in `goreleaser`, macOS in
   # `desktop-macos`) as DRAFTS, so the tap cannot merge them while the cask still points at a draft
   # (not-yet-public, 404) release. Now that `publish-release` has made the release public, this job
-  # promotes both PRs and drives them to merge — the final action of a release.
+  # style-cleans and normalizes both PRs, then leaves them as drafts for the maintainer checkpoint.
   #
-  # We do NOT rely on the tap to merge them. The tap's `enable-auto-merge.yaml` is a ruleset-injected
-  # REQUIRED workflow, and GitHub does not re-dispatch required workflows on the `ready_for_review`
-  # activity — only its draft-open run fires, and that run `if: !draft`-skips — so the tap never arms
-  # auto-merge for these PRs (they sat open until merged by hand). Instead we mark each PR ready (so
-  # the tap's Cask audit re-runs against the now-public asset; a draft also can't be merged), wait for
-  # the fresh required checks to pass, then squash-merge from here. Waiting for the post-ready status
-  # (rather than arming auto-merge right after `gh pr ready`) avoids racing the stale draft-time green
-  # status (see #5080). All gates are satisfiable: 0 required approvals, the audit passes against the
-  # public asset, and the required-workflow gate is satisfied by the draft-open skipped run. Keeps the
-  # tap bump strictly after the GitHub release exists. Branches mirror `.goreleaser*.yaml`
-  # (goreleaser/<project>-<tag>).
+  # Promotion and merge are intentionally outside this privileged release job. Review threads,
+  # reviewer verdicts, and editable pre-merge summaries cannot be atomically bound to a client-side
+  # `gh pr merge` call, so even a final poll can race a new negative review without changing the head
+  # SHA. The standard maintainer lane promotes and merges only after its live pentad is green. This job
+  # validates the trusted same-repository draft and exact cask-only scope before and after its style
+  # mutation, normalizes metadata, and records the pending handoff without failing an already-published
+  # release. Branches mirror `.goreleaser*.yaml` (`goreleaser/<project>-<tag>`). See #6067.
   homebrew:
-    name: 🍺 Promote and merge Homebrew cask PRs
+    name: 🍺 Prepare Homebrew cask PRs
     runs-on: ubuntu-latest
-    # Backstop only — the script self-bounds its runtime: brew-style prep (2 clones + `brew style`,
-    # which can bootstrap rubocop on a cold Linuxbrew runner) + `sleep 30` + two sequential
-    # `merge_cask_pr` polls that are additive (each computes `SECONDS + 600`, and bash `SECONDS` is
-    # whole-job elapsed time, never reset) for up to 600s apiece = ~1230s of polling. Worst case is
-    # ~prep + 30s + 1200s, which crowds a 25-min budget; a kill mid-poll would skip the second cask's
-    # fail-soft `--auto` fallback and exit non-zero, failing an already-published release. Keep this
-    # comfortably above the script's own ceiling so its fail-soft logic — not this timeout — is the
-    # binding limit.
-    timeout-minutes: 35
+    # `brew style` can bootstrap rubocop on a cold Linuxbrew runner. Keep enough room for two clones
+    # and style passes; every GitHub mutation below is fail-soft because the release is already public.
+    timeout-minutes: 20
     needs: [publish-release]
     permissions:
       contents: read
     steps:
-      - name: 🍺 Style-clean cask PRs, then drive them to merge
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: 🍺 Style-clean and prepare cask PR handoffs
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           TAP: devantler-tech/homebrew-tap
@@ -695,61 +690,67 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Poll a ready cask PR until its required checks pass (mergeStateStatus CLEAN), then
-          # squash-merge it. Fail-soft: a stuck cask must never fail an already-published release, so
-          # on timeout we arm auto-merge as a fallback (safe here — we have already waited past the
-          # stale draft-time window) and warn rather than exit non-zero.
-          merge_cask_pr() {
-            local pr="$1" deadline=$((SECONDS + 600)) info state status
-            while [ "$SECONDS" -lt "$deadline" ]; do
-              info="$(gh pr view "$pr" --repo "$TAP" \
-                --json state,mergeStateStatus --jq '.state, .mergeStateStatus' 2>/dev/null || true)"
-              state="$(printf '%s\n' "$info" | sed -n 1p)"
-              status="$(printf '%s\n' "$info" | sed -n 2p)"
-              case "$state" in
-                MERGED) echo "Merged ${TAP}#${pr}"; return 0 ;;
-                CLOSED) echo "::warning::${TAP}#${pr} was closed without merging"; return 0 ;;
-              esac
-              case "$status" in
-                CLEAN)
-                  if gh pr merge "$pr" --repo "$TAP" --squash; then
-                    echo "Merged ${TAP}#${pr}"
-                    return 0
-                  fi
-                  ;;
-                DIRTY)
-                  echo "::warning::${TAP}#${pr} has merge conflicts; merge it manually"
-                  return 0
-                  ;;
-              esac
-              sleep 20
-            done
-            echo "::warning::Timed out waiting for ${TAP}#${pr} to become mergeable; arming auto-merge as a fallback"
-            gh pr merge "$pr" --repo "$TAP" --auto --squash \
-              || echo "::warning::Could not arm auto-merge for ${TAP}#${pr}; merge it manually"
+          collect_handoff_evidence() {
+            .github/scripts/collect-cask-pr-handoff.sh \
+              --tap "$TAP" \
+              --pr "$1" \
+              --output "$2"
           }
 
-          prs=()
+          validate_handoff() {
+            local pr="$1" name="$2" evidence="$3" mode="${4:-draft}"
+            local args=(
+              --evidence "$evidence"
+              --tap "$TAP"
+              --cask-name "$name"
+              --tag "$TAG"
+            )
+            if [ "$mode" = prepared ]; then
+              args+=(--prepared)
+            fi
+            collect_handoff_evidence "$pr" "$evidence" \
+              && .github/scripts/validate-cask-pr-handoff.sh "${args[@]}"
+          }
+
+          if ! evidence_dir="$(mktemp -d)"; then
+            echo "::warning::Could not create cask handoff evidence directory; leaving generated PRs untouched"
+            exit 0
+          fi
+          trap 'rm -rf "$evidence_dir"' EXIT
+
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}-${TAG}"
             # `|| true` keeps the job fail-soft: a transient `gh pr list` failure (5xx, rate limit,
             # network blip) must not abort the step under `set -e` after the release is already public —
-            # the `-z "$pr"` guard below then warns and skips, same as the no-PR-found case.
-            pr="$(gh pr list --repo "$TAP" --head "$branch" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)"
-            if [ -z "$pr" ]; then
-              echo "::warning::No open cask PR found on $TAP for branch ${branch}; skipping"
+            # invalid evidence below then warns and skips, same as the no-PR-found case.
+            matches="$(gh pr list --repo "$TAP" --head "$branch" --state open \
+              --limit 2 --json number 2>/dev/null || true)"
+            if ! count="$(jq -er 'length' <<<"$matches" 2>/dev/null)"; then
+              echo "::warning::Could not enumerate cask PRs on $TAP for branch ${branch}; leaving it pending"
               continue
             fi
-            echo "Promoting ${TAP}#${pr} (${branch})"
+            if [ "$count" -ne 1 ]; then
+              echo "::warning::Expected exactly one open cask PR on $TAP for branch ${branch}, found ${count}; leaving it pending"
+              continue
+            fi
+            pr="$(jq -r '.[0].number' <<<"$matches")"
+            evidence="${evidence_dir}/${pr}.json"
+            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
+              validation="${validation//$'\n'/; }"
+              echo "::warning::Refusing to mutate ${TAP}#${pr}: ${validation}"
+              printf -- '- %s#%s left untouched: %s\n' "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            echo "Preparing ${TAP}#${pr} (${branch})"
 
             # GoReleaser's cask template emits a few `brew style` offenses no config knob can reach
             # (Layout/ArgumentAlignment on url/verified, Cask/StanzaOrder for the custom_block stanzas).
-            # Autocorrect them on the PR branch before promoting so the cask that lands in the tap is
+            # Autocorrect them on the draft PR branch before handoff so the eventual cask is
             # brew-style-clean — letting the tap enforce a `brew style` gate (devantler-tech/homebrew-tap#734).
-            # Fail-soft throughout: a style/clone/push hiccup must never block the release; the cask
-            # still lands (uncorrected) exactly as it does today.
+            # Fail-soft throughout: a style/clone/push hiccup must never block the published release;
+            # the draft remains open for the maintainer lane to correct.
             # `mktemp -d` under `set -e` would abort the job on a tempdir failure; guard it so a
-            # hiccup just skips the (best-effort) autocorrect and still promotes the cask below.
+            # hiccup just skips the (best-effort) autocorrect and continues to the draft handoff.
             if work="$(mktemp -d)"; then
               if git clone --depth 1 --branch "$branch" \
                   "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
@@ -768,34 +769,57 @@ jobs:
                       commit -am 'style: brew style --fix generated cask' \
                     && git -C "$work" push \
                     && echo "Pushed brew style --fix autocorrections to ${branch}" \
-                    || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; promoting as-is"
+                    || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; leaving the draft as-is"
                 fi
               else
-                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix; promoting as-is"
+                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix; leaving the draft as-is"
               fi
               rm -rf "$work"
             else
-              echo "::warning::Could not create tempdir for brew style --fix; promoting ${name} cask as-is"
+              echo "::warning::Could not create tempdir for brew style --fix; leaving ${name} draft as-is"
             fi
 
-            # Mark the PR ready so its Cask audit re-runs against the now-public asset and the PR
-            # becomes mergeable; the merge itself is driven below by `merge_cask_pr`. Non-fatal under
-            # `set -e`: the PR may already be ready.
-            gh pr ready "$pr" --repo "$TAP" \
-              || echo "::warning::Could not mark ${TAP}#${pr} ready; it may already be ready"
-            prs+=("$pr")
-          done
+            # Recollect after the possible style push. A concurrent promotion, cross-repository head,
+            # or extra changed file stops all further mutation and leaves the PR to the maintainer.
+            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
+              validation="${validation//$'\n'/; }"
+              echo "::warning::Post-style validation failed for ${TAP}#${pr}: ${validation}"
+              printf -- '- %s#%s remains open after style validation failed: %s\n' \
+                "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              continue
+            fi
 
-          # Let the ready_for_review-triggered required checks register as pending before polling, so
-          # the first status read can't catch the stale draft-time CLEAN status (see #5080). Marking
-          # all PRs ready first lets their audits run in parallel.
-          if [ "${#prs[@]}" -gt 0 ]; then
-            sleep 30
-          fi
+            title="chore(cask): update ${name} to ${TAG}"
+            if ! gh pr edit "$pr" --repo "$TAP" --title "$title"; then
+              echo "::warning::Could not normalize the title on ${TAP}#${pr}; leaving it draft/open"
+              continue
+            fi
+            metadata_ok=true
+            for label in automation dependencies; do
+              if jq -e --arg label "$label" \
+                  '.availableLabels | any(.name == $label)' "$evidence" >/dev/null; then
+                if ! gh pr edit "$pr" --repo "$TAP" --add-label "$label"; then
+                  echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
+                  metadata_ok=false
+                fi
+              fi
+            done
+            if [ "$metadata_ok" != true ]; then
+              echo "::warning::${TAP}#${pr} metadata is incomplete; leaving it draft/open"
+              continue
+            fi
 
-          # Drive each ready PR to merge — the last thing the release does.
-          for pr in "${prs[@]}"; do
-            merge_cask_pr "$pr"
+            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" prepared 2>&1)"; then
+              validation="${validation//$'\n'/; }"
+              echo "::warning::Prepared handoff validation failed for ${TAP}#${pr}: ${validation}"
+              printf -- '- %s#%s remains open with incomplete handoff metadata: %s\n' \
+                "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            echo "::notice::${TAP}#${pr} remains draft/open for maintainer promotion"
+            printf -- '- %s#%s remains draft/open for maintainer promotion after live pentad review\n' \
+              "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
           done
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
