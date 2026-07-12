@@ -11,17 +11,17 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
 if [[ ! -x "${fake_bin}/gh" ]]; then
-  printf 'FAIL: tracked fake gh executable is missing: %s\n' "${fake_bin}/gh" >&2
-  exit 1
+	printf 'FAIL: tracked fake gh executable is missing: %s\n' "${fake_bin}/gh" >&2
+	exit 1
 fi
 
 run_collector() {
-  local scenario="$1" output="$2"
-  PATH="${fake_bin}:${PATH}" FAKE_GH_SCENARIO="${scenario}" \
-    "${collector}" \
-      --tap devantler-tech/homebrew-tap \
-      --pr 42 \
-      --output "${output}"
+	local scenario="$1" output="$2"
+	PATH="${fake_bin}:${PATH}" FAKE_GH_SCENARIO="${scenario}" \
+		"${collector}" \
+		--tap devantler-tech/homebrew-tap \
+		--pr 42 \
+		--output "${output}"
 }
 
 valid="${tmp_dir}/valid.json"
@@ -32,33 +32,33 @@ jq -e '
   and (.availableLabels | map(.name)) == ["automation", "dependencies"]
 ' "${valid}" >/dev/null
 "${validator}" \
-  --evidence "${valid}" \
-  --tap devantler-tech/homebrew-tap \
-  --cask-name ksail \
-  --tag v7.166.1 \
-  --prepared >/dev/null
+	--evidence "${valid}" \
+	--tap devantler-tech/homebrew-tap \
+	--cask-name ksail \
+	--tag v7.166.1 \
+	--prepared >/dev/null
 printf 'PASS: collector-to-validator round trip\n'
 
 paginated="${tmp_dir}/paginated.json"
 run_collector paginated-files "${paginated}"
 jq -e '(.files | map(.filename)) == ["Casks/ksail.rb", "README.md"]' \
-  "${paginated}" >/dev/null
+	"${paginated}" >/dev/null
 if "${validator}" \
-    --evidence "${paginated}" \
-    --tap devantler-tech/homebrew-tap \
-    --cask-name ksail \
-    --tag v7.166.1 >/dev/null 2>&1; then
-  printf 'FAIL: validator accepted an extra file from a later API page\n' >&2
-  exit 1
+	--evidence "${paginated}" \
+	--tap devantler-tech/homebrew-tap \
+	--cask-name ksail \
+	--tag v7.166.1 >/dev/null 2>&1; then
+	printf 'FAIL: validator accepted an extra file from a later API page\n' >&2
+	exit 1
 fi
 printf 'PASS: paginated extra file remains visible and blocks\n'
 
 for scenario in pr-failure files-failure labels-failure malformed-files malformed-labels; do
-  if run_collector "${scenario}" "${tmp_dir}/${scenario}.json" >/dev/null 2>&1; then
-    printf 'FAIL: collector accepted %s\n' "${scenario}" >&2
-    exit 1
-  fi
-  printf 'PASS: collector fails closed on %s\n' "${scenario}"
+	if run_collector "${scenario}" "${tmp_dir}/${scenario}.json" >/dev/null 2>&1; then
+		printf 'FAIL: collector accepted %s\n' "${scenario}" >&2
+		exit 1
+	fi
+	printf 'PASS: collector fails closed on %s\n' "${scenario}"
 done
 
 printf 'All cask PR handoff collector cases passed.\n'

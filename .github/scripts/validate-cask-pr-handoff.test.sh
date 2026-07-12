@@ -11,34 +11,34 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 pass_count=0
 
 run_case() {
-  local name="$1" expected_status="$2" expected_output="$3"
-  local filter="${4:-.}" prepared="${5:-false}"
-  local evidence="${tmp_dir}/${name}.json" output status
-  local args=(--evidence "${evidence}" --tap devantler-tech/homebrew-tap --cask-name ksail --tag v7.166.1)
+	local name="$1" expected_status="$2" expected_output="$3"
+	local filter="${4:-.}" prepared="${5:-false}"
+	local evidence="${tmp_dir}/${name}.json" output status
+	local args=(--evidence "${evidence}" --tap devantler-tech/homebrew-tap --cask-name ksail --tag v7.166.1)
 
-  jq "${filter}" "${fixture}" >"${evidence}"
-  if [[ "${prepared}" == true ]]; then
-    args+=(--prepared)
-  fi
+	jq "${filter}" "${fixture}" >"${evidence}"
+	if [[ "${prepared}" == true ]]; then
+		args+=(--prepared)
+	fi
 
-  set +e
-  output="$(${validator} "${args[@]}" 2>&1)"
-  status=$?
-  set -e
+	set +e
+	output="$(${validator} "${args[@]}" 2>&1)"
+	status=$?
+	set -e
 
-  if [[ "${status}" -ne "${expected_status}" ]]; then
-    printf 'FAIL: %s: expected status %s, got %s\n%s\n' \
-      "${name}" "${expected_status}" "${status}" "${output}" >&2
-    return 1
-  fi
-  if [[ "${output}" != *"${expected_output}"* ]]; then
-    printf 'FAIL: %s: expected output containing %q, got:\n%s\n' \
-      "${name}" "${expected_output}" "${output}" >&2
-    return 1
-  fi
+	if [[ "${status}" -ne "${expected_status}" ]]; then
+		printf 'FAIL: %s: expected status %s, got %s\n%s\n' \
+			"${name}" "${expected_status}" "${status}" "${output}" >&2
+		return 1
+	fi
+	if [[ "${output}" != *"${expected_output}"* ]]; then
+		printf 'FAIL: %s: expected output containing %q, got:\n%s\n' \
+			"${name}" "${expected_output}" "${output}" >&2
+		return 1
+	fi
 
-  pass_count=$((pass_count + 1))
-  printf 'PASS: %s\n' "${name}"
+	pass_count=$((pass_count + 1))
+	printf 'PASS: %s\n' "${name}"
 }
 
 run_case valid-draft 0 'PASS: generated cask PR identity and scope are valid'
