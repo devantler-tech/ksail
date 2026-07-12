@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	runner "github.com/devantler-tech/ksail/v7/pkg/runner"
@@ -141,8 +140,9 @@ type Provisioner struct {
 	waitForReady func(ctx context.Context, kubeconfigPath, contextName string) error
 }
 
-// NewProvisioner constructs a Provisioner with explicit dependencies
-// for the kind SDK provider and infrastructure provider.
+// NewProvisioner constructs a Provisioner with explicit dependencies for the
+// kind SDK provider and infrastructure provider. kubeConfig is used verbatim;
+// callers that accept an explicit user path must resolve it before construction.
 func NewProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeConfig string,
@@ -242,12 +242,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 	args := []string{"--name", target, "--config", tmpFile.Name()}
 
 	if k.kubeConfig != "" {
-		kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
-		if err != nil {
-			return fmt.Errorf("failed to expand kubeconfig path: %w", err)
-		}
-
-		args = append(args, "--kubeconfig", kubeconfigPath)
+		args = append(args, "--kubeconfig", k.kubeConfig)
 	}
 
 	_, err = k.runner.Run(ctx, cmd, args)
@@ -273,11 +268,6 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
-	kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
-	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
-	}
-
 	// Kind writes output through its logger interface - send directly to stdout
 	logger := &streamLogger{writer: os.Stdout}
 
@@ -290,8 +280,8 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 	cmd := deletecluster.NewCommand(logger, streams)
 
 	args := []string{"--name", target}
-	if kubeconfigPath != "" {
-		args = append(args, "--kubeconfig", kubeconfigPath)
+	if k.kubeConfig != "" {
+		args = append(args, "--kubeconfig", k.kubeConfig)
 	}
 
 	_, err = k.runner.Run(ctx, cmd, args)

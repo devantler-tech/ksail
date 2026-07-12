@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	cmdrunner "github.com/devantler-tech/ksail/v7/pkg/runner"
@@ -86,13 +85,10 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 	require.ErrorIs(t, err, errCreateClusterFailed, "Create()")
 }
 
-// TestCreateIncludesExpandedKubeconfigFlag verifies Kind writes to the
-// provisioner's expanded kubeconfig path instead of an implicit default.
-func TestCreateIncludesExpandedKubeconfigFlag(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	provisioner, _, runner := newProvisionerForTest(t)
+// TestCreatePreservesLiteralKubeconfigFlag verifies a Kind environment target
+// is not expanded a second time by the lower-level provisioner lifecycle.
+func TestCreatePreservesLiteralKubeconfigFlag(t *testing.T) {
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "~/literal-kubeconfig")
 	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
 
 	err := provisioner.Create(context.Background(), "")
@@ -102,7 +98,7 @@ func TestCreateIncludesExpandedKubeconfigFlag(t *testing.T) {
 		t,
 		runner.lastArgs,
 		"--kubeconfig",
-		filepath.Join(homeDir, ".kube", "config"),
+		"~/literal-kubeconfig",
 	)
 }
 
@@ -158,10 +154,12 @@ func TestDeleteSuccess(t *testing.T) {
 	}
 }
 
-func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
+// TestDeletePreservesLiteralKubeconfigFlag pins the same Kind-compatible path
+// semantics for cluster deletion.
+func TestDeletePreservesLiteralKubeconfigFlag(t *testing.T) {
 	t.Parallel()
 
-	provisioner, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "~/literal-kubeconfig")
 	// First call: List (via Exists) - return cluster name so cluster exists
 	runner.On("Run").Return(cmdrunner.CommandResult{
 		Stdout: "cfg-name\n",
@@ -172,7 +170,7 @@ func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
 	err := provisioner.Delete(context.Background(), "")
 
 	require.NoError(t, err, "Delete()")
-	require.Contains(t, runner.lastArgs, "--kubeconfig", "Delete() should pass kubeconfig flag")
+	assertFlagValue(t, runner.lastArgs, "--kubeconfig", "~/literal-kubeconfig")
 }
 
 func TestCreateUsesProvidedName(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -45,19 +44,27 @@ func kindKubeconfigEnvWriteTarget() string {
 
 // kindKubeconfigWriteTarget picks kind's kubeconfig write target from a
 // KUBECONFIG-style path list: entries are kept literal (kind does not expand
-// them), empties are dropped, the first entry naming an existing regular file
-// wins, and when none exist the last entry does.
+// them), empty and duplicate entries are dropped, the first entry naming an
+// existing regular file wins, and when none exist the last entry does.
 func kindKubeconfigWriteTarget(envValue string) string {
 	if envValue == "" {
 		return ""
 	}
 
 	entries := make([]string, 0)
+	seen := make(map[string]struct{})
 
-	for entry := range strings.SplitSeq(envValue, string(os.PathListSeparator)) {
-		if entry != "" {
-			entries = append(entries, entry)
+	for _, entry := range filepath.SplitList(envValue) {
+		if entry == "" {
+			continue
 		}
+
+		if _, duplicate := seen[entry]; duplicate {
+			continue
+		}
+
+		seen[entry] = struct{}{}
+		entries = append(entries, entry)
 	}
 
 	if len(entries) == 0 {

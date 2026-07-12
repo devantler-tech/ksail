@@ -319,6 +319,40 @@ func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
 	assert.Equal(t, "/tmp/env-kubeconfig", provisioner.KubeConfigForTest())
 }
 
+// TestCreateProvisioner_KubeconfigEnvPreservesLiteralPath verifies that an
+// environment-derived target is not expanded like an explicit user path.
+func TestCreateProvisioner_KubeconfigEnvPreservesLiteralPath(t *testing.T) {
+	t.Setenv("KUBECONFIG", "~/literal-kubeconfig")
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "~/literal-kubeconfig", provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_ExplicitKubeconfigExpandsHome keeps expansion at the
+// factory boundary for explicitly configured paths.
+func TestCreateProvisioner_ExplicitKubeconfigExpandsHome(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("KUBECONFIG", "~/ignored-environment-target")
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(
+		cfg,
+		"~/.kube/config",
+		infraProvider,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, filepath.Join(homeDir, ".kube", "config"), provisioner.KubeConfigForTest())
+}
+
 // TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile pins kind's
 // write-target rule for KUBECONFIG path lists: the first entry naming an
 // existing file wins, even when it is not the list's first entry.
@@ -366,4 +400,31 @@ func TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, provisioner)
 	assert.Equal(t, "/tmp/nosuch-two", provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListDeduplicates pins Kind's ordered
+// de-duplication before the last-entry fallback is selected.
+func TestCreateProvisioner_KubeconfigEnvListDeduplicates(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "nosuch-one")
+	second := filepath.Join(root, "nosuch-two")
+	t.Setenv(
+		"KUBECONFIG",
+		first+string(os.PathListSeparator)+second+string(os.PathListSeparator)+first,
+	)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, second, provisioner.KubeConfigForTest())
 }
