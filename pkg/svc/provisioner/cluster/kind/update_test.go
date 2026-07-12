@@ -377,6 +377,29 @@ func TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile(t *testing.T) {
 	assert.Equal(t, existing, provisioner.KubeConfigForTest())
 }
 
+// TestCreateProvisioner_KubeconfigEnvListProbesEntriesLiterally verifies that
+// a trailing separator is not cleaned before Kind's existence check. A regular
+// file with a trailing slash is not a usable path, so the fallback must win.
+func TestCreateProvisioner_KubeconfigEnvListProbesEntriesLiterally(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "config")
+	fallback := filepath.Join(root, "fallback")
+
+	require.NoError(t, os.WriteFile(existing, []byte("{}"), 0o600))
+	t.Setenv(
+		"KUBECONFIG",
+		existing+string(os.PathSeparator)+string(os.PathListSeparator)+fallback,
+	)
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, fallback, provisioner.KubeConfigForTest())
+}
+
 // TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry pins the other
 // half of kind's rule: when no listed file exists, the LAST entry is the
 // write target.

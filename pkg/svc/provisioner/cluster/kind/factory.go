@@ -74,8 +74,8 @@ func kindKubeconfigWriteTarget(envValue string) string {
 	for _, entry := range entries {
 		// Stat-only existence probe of a path the user controls by design
 		// (KUBECONFIG carries the same trust kubectl gives it).
-		info, err := os.Stat(filepath.Clean(entry))
-		if err == nil && info.Mode().IsRegular() {
+		info, err := os.Stat(entry) //nolint:gosec // KUBECONFIG is a user-controlled path by design.
+		if err == nil && !info.IsDir() {
 			return entry
 		}
 	}

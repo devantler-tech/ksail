@@ -88,6 +88,8 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 // TestCreatePreservesLiteralKubeconfigFlag verifies a Kind environment target
 // is not expanded a second time by the lower-level provisioner lifecycle.
 func TestCreatePreservesLiteralKubeconfigFlag(t *testing.T) {
+	t.Parallel()
+
 	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "~/literal-kubeconfig")
 	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
 
