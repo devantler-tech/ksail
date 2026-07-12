@@ -1193,5 +1193,12 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 		endpointIP = cpIP
 	}
 
+	// The running config can carry a dead endpoint — a floating IP that was
+	// attached but never claimed on the node (ksail#6070) — and adopting it
+	// verbatim would re-record the dead address into the rebuilt bundle. cpIP
+	// is the node this sync just fetched the config from, so it is known
+	// reachable.
+	endpointIP = p.verifiedEndpointIP(ctx, endpointIP, cpIP, secretsSyncEndpointProbeTimeout)
+
 	return existingSecrets, endpointIP, nil
 }

@@ -86,6 +86,26 @@ func (p *Provisioner) WithNodeReachabilityCheckForTest(
 	return p
 }
 
+// WithAPIEndpointReachabilityCheckForTest overrides the Kubernetes API
+// endpoint reachability probe so unit tests can pin the verified-endpoint
+// fallback (ksail#6070) without real network I/O.
+func (p *Provisioner) WithAPIEndpointReachabilityCheckForTest(
+	fn func(ctx context.Context, ip string, timeout time.Duration) error,
+) *Provisioner {
+	p.apiEndpointReachabilityCheck = fn
+
+	return p
+}
+
+// VerifiedEndpointIPForTest exposes verifiedEndpointIP for unit testing.
+func (p *Provisioner) VerifiedEndpointIPForTest(
+	ctx context.Context,
+	candidateIP, fallbackIP string,
+	timeout time.Duration,
+) string {
+	return p.verifiedEndpointIP(ctx, candidateIP, fallbackIP, timeout)
+}
+
 // WaitForNewDockerNodesReachableForTest exposes waitForNewDockerNodesReachable
 // for unit testing. Each IP in nodeIPs is turned into a node spec (the IP doubles
 // as the node name in log/error output).

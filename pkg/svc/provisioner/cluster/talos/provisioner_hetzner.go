@@ -570,7 +570,15 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 		return err
 	}
 
-	kubernetesEndpoint := "https://" + net.JoinHostPort(endpointIP, "6443")
+	// The floating IP is attached via the cloud API, but only the Talos hcloud
+	// VIP controller makes it answer — persisting it unverified can bake a
+	// dead endpoint into the kubeconfig (ksail#6070). The node address stays
+	// in the cert SANs, so falling back to it keeps the kubeconfig working.
+	verifiedIP := p.verifiedEndpointIP(
+		ctx, endpointIP, talosEndpoint, floatingIPEndpointProbeTimeout,
+	)
+
+	kubernetesEndpoint := "https://" + net.JoinHostPort(verifiedIP, "6443")
 
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
 }
