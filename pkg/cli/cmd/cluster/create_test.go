@@ -241,6 +241,100 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest,funlen // end-to-end GitOps table mutates shared test hooks
+func TestCreate_EKS_GitOps_UsesEksctlContext(t *testing.T) {
+	testCases := []struct {
+		name   string
+		engine v1alpha1.GitOpsEngine
+		arg    string
+	}{
+		{name: "ArgoCD", engine: v1alpha1.GitOpsEngineArgoCD, arg: "ArgoCD"},
+		{name: "Flux", engine: v1alpha1.GitOpsEngineFlux, arg: "Flux"},
+	}
+
+	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			workingDir := t.TempDir()
+			t.Chdir(workingDir)
+			setupMockRegistryBackend(t)
+
+			writeFile(t, workingDir, "ksail.yaml", `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: st-eks
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eks.yaml
+    metricsServer: Disabled
+    localRegistry:
+      registry: ""
+    connection:
+      kubeconfig: ./kubeconfig
+`)
+			writeFile(t, workingDir, "eks.yaml", `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: st-eks
+  region: eu-west-1
+`)
+			writeFile(t, workingDir, "kubeconfig", `apiVersion: v1
+kind: Config
+current-context: `+eksctlContext+`
+clusters:
+  - cluster:
+      server: https://example.invalid
+    name: `+eksctlContext+`
+contexts:
+  - context:
+      cluster: `+eksctlContext+`
+      user: `+eksctlContext+`
+    name: `+eksctlContext+`
+users:
+  - name: `+eksctlContext+`
+    user:
+      token: fake
+`)
+
+			setupGitOpsTestMocks(t, testCase.engine)
+
+			capturedContext := ""
+
+			switch testCase.engine {
+			case v1alpha1.GitOpsEngineArgoCD:
+				t.Cleanup(cluster.SetEnsureArgoCDResourcesForTests(
+					func(_ context.Context, _ string, cfg *v1alpha1.Cluster, _ string) error {
+						capturedContext = cfg.Spec.Cluster.Connection.Context
+
+						return nil
+					},
+				))
+			case v1alpha1.GitOpsEngineFlux:
+				t.Cleanup(cluster.SetSetupFluxInstanceForTests(
+					func(_ context.Context, _ string, cfg *v1alpha1.Cluster, _, _ string) error {
+						capturedContext = cfg.Spec.Cluster.Connection.Context
+
+						return nil
+					},
+				))
+			case v1alpha1.GitOpsEngineNone:
+				t.Fatalf("GitOpsEngineNone is not supported in this test")
+			}
+
+			cmd := cluster.NewCreateCmd()
+			cmd.SetContext(context.Background())
+			cmd.SetArgs([]string{"--gitops-engine", testCase.arg})
+
+			err := cmd.Execute()
+			require.NoError(t, err)
+			assert.Equal(t, eksctlContext, capturedContext)
+		})
+	}
+}
+
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_CSIEnabled_InstallsOnKind(t *testing.T) {
 	workingDir := t.TempDir()

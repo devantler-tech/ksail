@@ -1,15 +1,37 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
+	kubeconfigutil "github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+var (
+	errEKSConfigurationUnavailable = errors.New("EKS configuration is unavailable")
+	errEKSClusterNameRequired      = errors.New("cluster name is required")
+	errNoMatchingEKSContext        = errors.New("no kubeconfig context matches EKS cluster")
+	errAmbiguousEKSContext         = errors.New("multiple kubeconfig contexts match EKS cluster")
+)
+
+const explicitEKSContextHint = "set spec.cluster.connection.context explicitly"
+
+const eksKubeconfigDirMode = 0o700
 
 // defaultClusterMutationFieldSelectors returns the full set of field selectors
 // used by commands that modify cluster state (create, update).
@@ -193,6 +215,11 @@ func runClusterCreationWorkflow(
 		return err
 	}
 
+	err = prepareEKSCreateConfig(ctx)
+	if err != nil {
+		return err
+	}
+
 	configureProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
@@ -242,18 +269,245 @@ func runClusterCreationWorkflow(
 	// For Omni clusters, the kubeconfig context is now renamed during saveOmniKubeconfig
 	// to match the configured context or the Talos convention (admin@<name>).
 	// If an explicit context is already configured, preserve it.
-	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
-			ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ctx.ClusterCfg.Spec.Cluster.Provider,
-			clusterName,
-		)
+	err = resolvePostCreateContext(ctx)
+	if err != nil {
+		return err
 	}
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// prepareEKSCreateConfig resolves the effective AWS region and pins the
+// kubeconfig path shared by eksctl creation and post-create setup.
+func prepareEKSCreateConfig(ctx *localregistry.Context) error {
+	if ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS ||
+		ctx.EKSConfig == nil {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfigutil.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		return fmt.Errorf("resolve EKS kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = prepareEKSOutputKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return err
+	}
+
+	ctx.EKSConfig.KubeconfigPath = kubeconfigPath
+	ctx.EKSConfig.Region = lifecycle.ResolveAWSRegion(
+		ctx.ClusterCfg.Spec.Provider.AWS,
+		&clusterprovisioner.DistributionConfig{EKS: ctx.EKSConfig},
+	)
+
+	return nil
+}
+
+// prepareEKSOutputKubeconfigPath creates and canonicalizes the user-selected
+// output location before passing it to the external eksctl process.
+func prepareEKSOutputKubeconfigPath(kubeconfigPath string) (string, error) {
+	err := os.MkdirAll(filepath.Dir(kubeconfigPath), eksKubeconfigDirMode)
+	if err != nil {
+		return "", fmt.Errorf("create EKS kubeconfig directory: %w", err)
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize EKS kubeconfig path: %w", err)
+	}
+
+	return canonicalPath, nil
+}
+
+// resolvePostCreateContext selects the kubeconfig context created by the
+// provisioner. Most distributions use a deterministic name, while eksctl
+// prefixes EKS contexts with the AWS identity that created the cluster.
+func resolvePostCreateContext(ctx *localregistry.Context) error {
+	connection := &ctx.ClusterCfg.Spec.Cluster.Connection
+	if connection.Context != "" {
+		return nil
+	}
+
+	distribution := ctx.ClusterCfg.Spec.Cluster.Distribution
+	if distribution != v1alpha1.DistributionEKS {
+		connection.Context = resolveCreatedContextName(
+			distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+			resolveClusterNameFromContext(ctx),
+		)
+
+		return nil
+	}
+
+	return resolveEKSPostCreateContext(ctx)
+}
+
+// resolveEKSPostCreateContext selects the identity-qualified context that
+// eksctl wrote for the configured cluster and region.
+func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
+	clusterName, region, config, err := loadEKSContextConfig(ctx)
+	if err != nil {
+		return err
+	}
+
+	matches := make([]string, 0, len(config.Contexts))
+
+	for contextName := range config.Contexts {
+		if matchesEKSContext(contextName, clusterName, region) {
+			matches = append(matches, contextName)
+		}
+	}
+
+	sort.Strings(matches)
+
+	selected, err := selectEKSContext(matches, config.CurrentContext, clusterName, region)
+	if err != nil {
+		return err
+	}
+
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = selected
+
+	return nil
+}
+
+// loadEKSContextConfig loads the kubeconfig plus the cluster and effective
+// region needed to select the identity-qualified eksctl context.
+func loadEKSContextConfig(
+	ctx *localregistry.Context,
+) (string, string, *clientcmdapi.Config, error) {
+	if ctx.EKSConfig == nil {
+		return "", "", nil, fmt.Errorf(
+			"resolve EKS kubeconfig context: %w; %s",
+			errEKSConfigurationUnavailable,
+			explicitEKSContextHint,
+		)
+	}
+
+	clusterName := strings.TrimSpace(ctx.EKSConfig.Name)
+	if clusterName == "" {
+		return "", "", nil, fmt.Errorf(
+			"resolve EKS kubeconfig context: %w; %s",
+			errEKSClusterNameRequired,
+			explicitEKSContextHint,
+		)
+	}
+
+	kubeconfigPath, err := resolveEKSPostCreateKubeconfigPath(ctx)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("load EKS kubeconfig %q: %w", kubeconfigPath, err)
+	}
+
+	return clusterName, strings.TrimSpace(ctx.EKSConfig.Region), config, nil
+}
+
+// resolveEKSPostCreateKubeconfigPath returns the path pinned for eksctl,
+// falling back to the loaded cluster configuration for direct helper callers.
+func resolveEKSPostCreateKubeconfigPath(ctx *localregistry.Context) (string, error) {
+	kubeconfigPath := strings.TrimSpace(ctx.EKSConfig.KubeconfigPath)
+	if kubeconfigPath != "" {
+		return kubeconfigPath, nil
+	}
+
+	path, err := kubeconfigutil.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		return "", fmt.Errorf("resolve EKS kubeconfig path: %w", err)
+	}
+
+	return path, nil
+}
+
+// selectEKSContext prefers the current matching context, then a unique match,
+// and otherwise fails closed with an explicit-context recovery hint.
+func selectEKSContext(matches []string, current, clusterName, region string) (string, error) {
+	if slices.Contains(matches, current) {
+		return current, nil
+	}
+
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+
+	if len(matches) == 0 {
+		return "", newEKSContextSelectionError(
+			errNoMatchingEKSContext,
+			clusterName,
+			region,
+			nil,
+		)
+	}
+
+	return "", newEKSContextSelectionError(
+		errAmbiguousEKSContext,
+		clusterName,
+		region,
+		matches,
+	)
+}
+
+// newEKSContextSelectionError formats a fail-closed selection error while
+// retaining a static cause for errors.Is callers and err113 compliance.
+func newEKSContextSelectionError(
+	cause error,
+	clusterName, region string,
+	matches []string,
+) error {
+	if len(matches) > 0 && region != "" {
+		return fmt.Errorf(
+			"%w %q in region %q: %v; %s",
+			cause,
+			clusterName,
+			region,
+			matches,
+			explicitEKSContextHint,
+		)
+	}
+
+	if len(matches) > 0 {
+		return fmt.Errorf("%w %q: %v; %s", cause, clusterName, matches, explicitEKSContextHint)
+	}
+
+	if region != "" {
+		return fmt.Errorf(
+			"%w %q in region %q; %s",
+			cause,
+			clusterName,
+			region,
+			explicitEKSContextHint,
+		)
+	}
+
+	return fmt.Errorf("%w %q; %s", cause, clusterName, explicitEKSContextHint)
+}
+
+// matchesEKSContext reports whether an identity-qualified eksctl context
+// targets the configured cluster and, when known, the effective AWS region.
+func matchesEKSContext(contextName, clusterName, region string) bool {
+	if region != "" {
+		return strings.HasSuffix(
+			contextName,
+			"@"+clusterName+"."+region+".eksctl.io",
+		)
+	}
+
+	marker := "@" + clusterName + "."
+
+	markerIndex := strings.LastIndex(contextName, marker)
+	if markerIndex < 0 || !strings.HasSuffix(contextName, ".eksctl.io") {
+		return false
+	}
+
+	regionStart := markerIndex + len(marker)
+	regionEnd := len(contextName) - len(".eksctl.io")
+
+	return regionStart < regionEnd && !strings.Contains(contextName[regionStart:regionEnd], ".")
 }
 
 // resolveCreatedContextName returns the kubeconfig context name a freshly created

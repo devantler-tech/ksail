@@ -27,6 +27,8 @@ type Provisioner struct {
 	// Required for Create; preferred over --name/--region for Delete and
 	// Upgrade because it keeps CloudFormation stack naming consistent.
 	configPath string
+	// kubeconfigPath is the exact file eksctl writes and KSail reads after create.
+	kubeconfigPath string
 	// client is the eksctl binary wrapper.
 	client *eksctl.Client
 	// infraProvider is the AWS provider used for Start/Stop semantics
@@ -48,6 +50,13 @@ type Option func(*Provisioner)
 func WithAWSClusterAPI(api AWSClusterAPI) Option {
 	return func(p *Provisioner) {
 		p.awsClient = api
+	}
+}
+
+// WithKubeconfigPath pins where eksctl writes the created cluster context.
+func WithKubeconfigPath(path string) Option {
+	return func(p *Provisioner) {
+		p.kubeconfigPath = path
 	}
 }
 
@@ -99,7 +108,12 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
-	err = p.client.CreateCluster(ctx, p.configPath, p.region)
+	err = p.client.CreateClusterWithKubeconfig(
+		ctx,
+		p.configPath,
+		p.region,
+		p.kubeconfigPath,
+	)
 	if err != nil {
 		return fmt.Errorf("eksctl create cluster: %w", err)
 	}

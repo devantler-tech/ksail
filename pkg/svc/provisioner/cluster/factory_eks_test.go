@@ -2,6 +2,10 @@ package clusterprovisioner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -17,6 +21,49 @@ func eksTestCluster() *v1alpha1.Cluster {
 	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
 
 	return cluster
+}
+
+func TestCreateEKSProvisionerPinsKubeconfigPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script eksctl fixture is not portable to Windows")
+	}
+
+	binDir := t.TempDir()
+	argsPath := filepath.Join(t.TempDir(), "args")
+	eksctlPath := filepath.Join(binDir, "eksctl")
+	//nolint:gosec // the test fixture must be executable and contains no user input
+	require.NoError(t, os.WriteFile(
+		eksctlPath,
+		[]byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$KSAIL_EKSCTL_ARGS\"\n"),
+		0o700,
+	))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("KSAIL_EKSCTL_ARGS", argsPath)
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Name:           "test-eks",
+				Region:         "eu-west-1",
+				ConfigPath:     "eks.yaml",
+				KubeconfigPath: "/tmp/ksail-kubeconfig",
+			},
+		},
+	}
+
+	provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
+	require.NoError(t, err)
+	require.NoError(t, provisioner.Create(t.Context(), "test-eks"))
+
+	//nolint:gosec // argsPath is created inside this test's private temporary directory
+	args, err := os.ReadFile(argsPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"create", "cluster",
+		"--config-file", "eks.yaml",
+		"--region", "eu-west-1",
+		"--kubeconfig", "/tmp/ksail-kubeconfig",
+	}, strings.Fields(string(args)))
 }
 
 // TestCreateEKSProvisionerWithConfig asserts a populated EKSConfig yields an EKS
