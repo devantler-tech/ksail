@@ -298,6 +298,8 @@ func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
 	assert.Equal(t, k8s.DefaultKubeconfigPath(), provisioner.KubeConfigForTest())
 }
 
+// TestCreateProvisioner_KubeconfigEnvFallback pins a single KUBECONFIG entry
+// as Kind's write target when no kubeconfig path is configured explicitly.
 func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/tmp/env-kubeconfig")
 
