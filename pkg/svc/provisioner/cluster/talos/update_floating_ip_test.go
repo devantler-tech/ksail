@@ -1154,7 +1154,20 @@ func TestUpdateApplySteps_FloatingIPEndpointOrdering(t *testing.T) {
 	refreshKubeconfigIndex := slices.Index(names, "refresh floating IP kubeconfig")
 	rebootIndex := slices.Index(names, "apply reboot-required changes")
 
-	require.NotEqual(t, -1, refreshKubeconfigIndex)
+	steps := []struct {
+		name  string
+		index int
+	}{
+		{name: "reconcile floating IP endpoint", index: reconcileIndex},
+		{name: "apply rolling recreate changes", index: rollIndex},
+		{name: "apply in-place config changes", index: applyIndex},
+		{name: "refresh floating IP kubeconfig", index: refreshKubeconfigIndex},
+		{name: "apply reboot-required changes", index: rebootIndex},
+	}
+	for _, step := range steps {
+		require.NotEqual(t, -1, step.index, "%s step must exist", step.name)
+	}
+
 	assert.Less(t, reconcileIndex, rollIndex)
 	assert.Less(t, rollIndex, applyIndex)
 	assert.Less(t, applyIndex, refreshKubeconfigIndex)
