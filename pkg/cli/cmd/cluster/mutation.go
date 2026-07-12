@@ -1,14 +1,19 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // defaultClusterMutationFieldSelectors returns the full set of field selectors
@@ -242,14 +247,12 @@ func runClusterCreationWorkflow(
 	// For Omni clusters, the kubeconfig context is now renamed during saveOmniKubeconfig
 	// to match the configured context or the Talos convention (admin@<name>).
 	// If an explicit context is already configured, preserve it.
-	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
-			ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ctx.ClusterCfg.Spec.Cluster.Provider,
-			clusterName,
-		)
+	createdContext, err := resolveCreatedContext(ctx, resolveClusterNameFromContext(ctx))
+	if err != nil {
+		return err
 	}
+
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = createdContext
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
@@ -275,4 +278,119 @@ func resolveCreatedContextName(
 	}
 
 	return distribution.ContextName(clusterName)
+}
+
+// ErrEKSContextNotFound is returned when no kubeconfig context matches the
+// freshly created EKS cluster, so post-create GitOps bootstrapping would
+// target a context that does not exist.
+var ErrEKSContextNotFound = errors.New(
+	"no kubeconfig context matches the created EKS cluster; " +
+		"set spec.cluster.connection.context to the context eksctl wrote",
+)
+
+// ErrEKSContextAmbiguous is returned when more than one kubeconfig context
+// matches the freshly created EKS cluster and none of them is current-context.
+var ErrEKSContextAmbiguous = errors.New(
+	"multiple kubeconfig contexts match the created EKS cluster; " +
+		"set spec.cluster.connection.context to the context eksctl wrote",
+)
+
+// resolveCreatedContext returns the kubeconfig context post-creation setup
+// (CNI install, helm, Flux/ArgoCD bootstrap) should target. An explicitly
+// configured context is always preserved unchanged. Most distributions write
+// a deterministic context name (resolveCreatedContextName); EKS is the
+// exception — eksctl qualifies the context with the caller's IAM identity as
+// "<identity>@<name>.<region>.eksctl.io", and the identity is unknown until
+// eksctl has written the kubeconfig, so the actual context is read back from
+// the configured kubeconfig after creation.
+func resolveCreatedContext(
+	ctx *localregistry.Context,
+	clusterName string,
+) (string, error) {
+	cluster := &ctx.ClusterCfg.Spec.Cluster
+	if cluster.Connection.Context != "" {
+		return cluster.Connection.Context, nil
+	}
+
+	if cluster.Distribution == v1alpha1.DistributionEKS {
+		region := ""
+		if ctx.EKSConfig != nil {
+			region = ctx.EKSConfig.Region
+		}
+
+		return resolveEKSCreatedContext(cluster.Connection.Kubeconfig, clusterName, region)
+	}
+
+	return resolveCreatedContextName(cluster.Distribution, cluster.Provider, clusterName), nil
+}
+
+// resolveEKSCreatedContext reads the kubeconfig eksctl just wrote and resolves
+// the identity-qualified context ("<identity>@<name>.<region>.eksctl.io") for
+// the created cluster. A matching current-context wins; otherwise exactly one
+// matching context is accepted. Zero or multiple ambiguous matches fail closed
+// with a hint to configure the context explicitly, rather than letting the
+// GitOps bootstrap target a context that does not exist.
+func resolveEKSCreatedContext(kubeconfigSpec, name, region string) (string, error) {
+	path, err := k8s.ResolveKubeconfigPath(kubeconfigSpec)
+	if err != nil {
+		return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	config, err := clientcmd.LoadFromFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read kubeconfig after EKS creation: %w", err)
+	}
+
+	if config.CurrentContext != "" && eksContextMatches(config.CurrentContext, name, region) {
+		return config.CurrentContext, nil
+	}
+
+	matches := make([]string, 0, 1)
+
+	for contextName := range config.Contexts {
+		if eksContextMatches(contextName, name, region) {
+			matches = append(matches, contextName)
+		}
+	}
+
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return "", fmt.Errorf(
+			"%w: no context matching %q in %q",
+			ErrEKSContextNotFound, "@"+name+"."+region+".eksctl.io", path,
+		)
+	default:
+		sort.Strings(matches)
+
+		return "", fmt.Errorf(
+			"%w: candidates %s in %q",
+			ErrEKSContextAmbiguous, strings.Join(matches, ", "), path,
+		)
+	}
+}
+
+// eksContextMatches reports whether an existing kubeconfig context name is the
+// eksctl-written context for the given cluster name and region. eksctl writes
+// "<iam-identity>@<name>.<region>.eksctl.io"; the identity part is arbitrary.
+// When the region is unknown (no parsed eks.yaml metadata), any region segment
+// is accepted.
+func eksContextMatches(contextName, name, region string) bool {
+	atIdx := strings.LastIndex(contextName, "@")
+	if atIdx < 0 || atIdx+1 >= len(contextName) {
+		return false
+	}
+
+	qualifier := contextName[atIdx+1:]
+	if region != "" {
+		return qualifier == name+"."+region+".eksctl.io"
+	}
+
+	rest, found := strings.CutSuffix(qualifier, ".eksctl.io")
+	if !found {
+		return false
+	}
+
+	return strings.HasPrefix(rest, name+".")
 }

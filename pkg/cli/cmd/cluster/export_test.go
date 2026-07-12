@@ -81,6 +81,19 @@ func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, er
 	return resolveClusterContext(kubeconfigPath, clusterName)
 }
 
+// ExportResolveCreatedContext exports resolveCreatedContext for testing.
+func ExportResolveCreatedContext(
+	ctx *localregistry.Context,
+	clusterName string,
+) (string, error) {
+	return resolveCreatedContext(ctx, clusterName)
+}
+
+// ExportResolveEKSCreatedContext exports resolveEKSCreatedContext for testing.
+func ExportResolveEKSCreatedContext(kubeconfigSpec, name, region string) (string, error) {
+	return resolveEKSCreatedContext(kubeconfigSpec, name, region)
+}
+
 // ExportEnsureConfiguredContextResolvable exports ensureConfiguredContextResolvable for testing.
 func ExportEnsureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error {
 	return ensureConfiguredContextResolvable(clusterCfg)
