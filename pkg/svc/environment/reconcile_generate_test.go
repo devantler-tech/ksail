@@ -11,6 +11,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// canonicalTempDir returns t.TempDir() with symlinked ancestors resolved
+// (macOS's /var → /private/var): generation canonicalizes sourceDir
+// ancestors, so tests asserting absolute output paths need the physical path.
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	return dir
+}
+
 // populatedBase is a hand-authored shared base kustomization whose bytes the
 // generation step must preserve (force is hardwired off).
 const populatedBase = "resources:\n  - podinfo.yaml\n"
@@ -48,7 +60,7 @@ func generatePlan(t *testing.T, dir string) (environment.Plan, []string) {
 func TestGenerateMissingOverlaysScaffoldsMissingEntryPreservingBase(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.yaml", "ksail.local.yaml", "ksail.prod.yaml")
 	mkOverlays(t, dir, "prod")
 	basePath := writeBaseKustomization(t, dir)
@@ -66,7 +78,7 @@ func TestGenerateMissingOverlaysScaffoldsMissingEntryPreservingBase(t *testing.T
 func TestGenerateMissingOverlaysScaffoldsPreScaffoldTreeWithSharedBaseOnce(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 
 	_, written := generatePlan(t, dir)
@@ -87,7 +99,7 @@ func TestGenerateMissingOverlaysScaffoldsPreScaffoldTreeWithSharedBaseOnce(t *te
 func TestGenerateMissingOverlaysIsANoOpForPresentEntriesAndOrphans(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 	mkOverlays(t, dir, "local", "prod", "attic")
 
@@ -102,7 +114,7 @@ func TestGenerateMissingOverlaysIsANoOpForPresentEntriesAndOrphans(t *testing.T)
 func TestGenerateMissingOverlaysIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 
 	_, first := generatePlan(t, dir)
@@ -176,7 +188,7 @@ func generateExpectingUnsafePath(t *testing.T, dir string) {
 func TestGenerateMissingOverlaysRejectsSymlinkedOverlayDir(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 	mkOverlays(t, dir, "prod")
 
@@ -193,7 +205,7 @@ func TestGenerateMissingOverlaysRejectsSymlinkedOverlayDir(t *testing.T) {
 func TestGenerateMissingOverlaysRejectsSymlinkedClustersRoot(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 
 	target := filepath.Join(dir, "outside-clusters")
@@ -208,7 +220,7 @@ func TestGenerateMissingOverlaysRejectsSymlinkedClustersRoot(t *testing.T) {
 func TestGenerateMissingOverlaysRejectsSymlinkedLayoutFile(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 	mkOverlays(t, dir, environment.BaseEnvName)
 
@@ -226,7 +238,7 @@ func TestGenerateMissingOverlaysRejectsSymlinkedLayoutFile(t *testing.T) {
 func TestGenerateMissingOverlaysRejectsSymlinkedSourceDir(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 
 	// The per-file walk starts below sourceDir, so a symlinked source root
@@ -239,10 +251,40 @@ func TestGenerateMissingOverlaysRejectsSymlinkedSourceDir(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(target, environment.ClustersDir))
 }
 
+func TestGenerateMissingOverlaysResolvesSymlinkedAncestorOfSourceDir(t *testing.T) {
+	t.Parallel()
+
+	dir := canonicalTempDir(t)
+
+	// A symlinked ANCESTOR of sourceDir (macOS's /var → /private/var class) is
+	// canonicalized up front, not rejected and not blindly followed at write
+	// time: generation succeeds and the layout lands in the physical target.
+	physical := filepath.Join(dir, "physical")
+	require.NoError(t, os.MkdirAll(physical, 0o750))
+
+	link := filepath.Join(dir, "link")
+	symlinkOrSkip(t, physical, link)
+
+	writeFiles(t, dir, "ksail.local.yaml")
+
+	plan, err := environment.DerivePlan(dir, sourceDir, planLoader())
+	require.NoError(t, err)
+
+	written, err := environment.GenerateMissingOverlays(
+		kustomizationgenerator.NewGenerator(), filepath.Join(link, sourceDir), plan,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, written)
+
+	assert.FileExists(t, filepath.Join(
+		physical, sourceDir, environment.ClustersDir, environment.BaseEnvName, "kustomization.yaml",
+	))
+}
+
 func TestGenerateMissingOverlaysRejectsDirectoryLayoutLeaf(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
 
 	// A directory at clusters/base/kustomization.yaml Stats as existing, so

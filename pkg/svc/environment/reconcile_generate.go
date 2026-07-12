@@ -35,7 +35,10 @@ var ErrUnsafeOverlayPath = errors.New(
 // writer's contract an existing, untouched file is still reported, so a
 // second run reports the same paths while rewriting nothing.
 //
-// Every path is containment-checked before writing: sourceDir itself and any
+// Every path is containment-checked before writing: sourceDir's existing
+// ancestors are first canonicalized (so the checks and the writes agree on
+// one physical tree — a symlinked ancestor like macOS's /var is resolved up
+// front, never followed blindly at write time), then sourceDir itself and any
 // clusters/ or clusters/<env>/ segment that exists as a symlink or regular
 // file — which DerivePlan reports as Missing but a write would follow out of
 // the source tree — is rejected with [ErrUnsafeOverlayPath], as is a layout
@@ -74,10 +77,12 @@ func GenerateMissingOverlays(
 	}
 
 	if len(files) > 0 {
-		err := ensureSafeSourceDir(sourceDir)
+		resolved, err := prepareSourceDir(sourceDir)
 		if err != nil {
 			return nil, err
 		}
+
+		sourceDir = resolved
 	}
 
 	for _, file := range files {
@@ -88,6 +93,58 @@ func GenerateMissingOverlays(
 	}
 
 	return WriteMultiClusterLayout(gen, sourceDir, files, false)
+}
+
+// prepareSourceDir canonicalizes sourceDir's existing ancestors and then
+// fail-closes on an unsafe source root, returning the physical path every
+// guard and write below operates on.
+func prepareSourceDir(sourceDir string) (string, error) {
+	resolved, err := resolveSourceDirAncestors(sourceDir)
+	if err != nil {
+		return "", err
+	}
+
+	err = ensureSafeSourceDir(resolved)
+	if err != nil {
+		return "", err
+	}
+
+	return resolved, nil
+}
+
+// resolveSourceDirAncestors canonicalizes every EXISTING ancestor of
+// sourceDir with [filepath.EvalSymlinks] (macOS `/var` → `/private/var` and
+// the like), leaving the leaf untouched so ensureSafeSourceDir still rejects
+// a symlinked source root itself. The guards and the writer then agree on
+// one physical path: an ancestor symlink is resolved to its canonical target
+// up front instead of being silently followed at write time, so every
+// Lstat-based check below the root inspects the same tree the writes land
+// in. Ancestors that do not exist yet are kept verbatim — the writer creates
+// them fresh.
+func resolveSourceDirAncestors(sourceDir string) (string, error) {
+	parent := filepath.Dir(sourceDir)
+	if parent == sourceDir {
+		// Filesystem root (or a bare "." / ".."): nothing left to resolve.
+		return sourceDir, nil
+	}
+
+	base := filepath.Base(sourceDir)
+
+	resolved, err := filepath.EvalSymlinks(parent)
+	if errors.Is(err, os.ErrNotExist) {
+		resolvedParent, parentErr := resolveSourceDirAncestors(parent)
+		if parentErr != nil {
+			return "", parentErr
+		}
+
+		return filepath.Join(resolvedParent, base), nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory ancestors of %q: %w", sourceDir, err)
+	}
+
+	return filepath.Join(resolved, base), nil
 }
 
 // ensureSafeSourceDir rejects a sourceDir that exists as anything but a real
