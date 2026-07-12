@@ -27,6 +27,12 @@ var ErrSharedBaseOverlay = errors.New("refusing to delete the shared base overla
 // instead of one environment's overlay.
 var ErrRootEquivalentOverlay = errors.New("refusing to delete a root-equivalent overlay path")
 
+// ErrNonDirectoryOverlay is returned by RemoveOverlay when the overlay path
+// exists but is a regular file (or other non-directory): an overlay is by
+// definition a directory, so a non-directory there marks a malformed
+// workspace that a purge must surface, not silently delete.
+var ErrNonDirectoryOverlay = errors.New("refusing to delete a non-directory overlay path")
+
 // RemoveEnvironmentConfig deletes a single root environment config file (e.g.
 // ksail.<name>.yaml) under repoRoot. The path is containment-checked against
 // repoRoot — a configRel with ".." segments or a symlink escape is rejected
@@ -89,6 +95,12 @@ func RemoveOverlay(repoRoot, overlayRelDir string) (bool, error) {
 		return true, nil
 	}
 
+	// An overlay is by definition a directory; a regular file at the overlay
+	// path is a malformed workspace, not something to recursively delete.
+	if !info.IsDir() {
+		return false, fmt.Errorf("%w: %s", ErrNonDirectoryOverlay, overlayRelDir)
+	}
+
 	canonAbs, err := canonicalContainedOverlay(repoRoot, abs, overlayRelDir)
 	if err != nil {
 		return false, err
@@ -149,6 +161,15 @@ func canonicalContainedOverlay(repoRoot, abs, overlayRelDir string) (string, err
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("overlay %s escapes the repository root: %w",
 			overlayRelDir, fsutil.ErrPathOutsideBase)
+	}
+
+	// The lexical root-equivalence guard ran on the UNRESOLVED path; an
+	// intermediate symlink can still collapse the RESOLVED overlay onto the
+	// repository root itself (e.g. clusters -> the workspace root plus an
+	// environment named like the checkout), which would make the recursive
+	// delete below wipe the whole repository.
+	if rel == "." {
+		return "", fmt.Errorf("%w: %q", ErrRootEquivalentOverlay, overlayRelDir)
 	}
 
 	if isSharedBaseOverlay(rel) {

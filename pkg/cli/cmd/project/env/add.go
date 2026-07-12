@@ -247,6 +247,15 @@ func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Clu
 		return nil, fmt.Errorf("%w (%s): %w", ErrSourceConfigLoad, configFile, err)
 	}
 
+	// This silent, validation-skipping load does not apply field defaults, so
+	// a config relying on the documented sourceDirectory default ("k8s") would
+	// derive overlay paths from "" — clusters/<name> instead of
+	// k8s/clusters/<name> — making a purge miss the real overlay and a clone
+	// write to the wrong tree.
+	if cfg.Spec.Workload.SourceDirectory == "" {
+		cfg.Spec.Workload.SourceDirectory = v1alpha1.DefaultSourceDirectory
+	}
+
 	return cfg, nil
 }
 

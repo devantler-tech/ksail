@@ -283,3 +283,44 @@ func TestRemoveEnvironmentConfig_RejectsSymlinkTarget(t *testing.T) {
 	_, statErr := os.Stat(outside)
 	require.NoError(t, statErr)
 }
+
+// TestRemoveOverlay_RefusesRootCollapsedThroughSymlink pins that an overlay
+// whose RESOLVED path is the repository root itself (an intermediate symlink
+// pointing at the workspace's parent plus an environment named like the
+// checkout) trips the root-equivalence refusal on the canonical path — the
+// lexical guard alone cannot see it, and RemoveAll would wipe the workspace.
+func TestRemoveOverlay_RefusesRootCollapsedThroughSymlink(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	repoRoot := filepath.Join(parent, "ksail")
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, "k8s"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "keep.yaml"), []byte("x"), 0o600))
+	require.NoError(t, os.Symlink(parent, filepath.Join(repoRoot, "k8s", "clusters")))
+
+	removed, err := environment.RemoveOverlay(repoRoot, "k8s/clusters/ksail")
+	require.ErrorIs(t, err, environment.ErrRootEquivalentOverlay)
+	assert.False(t, removed)
+
+	_, statErr := os.Stat(filepath.Join(repoRoot, "keep.yaml"))
+	require.NoError(t, statErr, "the workspace must survive")
+}
+
+// TestRemoveOverlay_RefusesNonDirectoryOverlay pins that a regular file at the
+// overlay path is refused: an overlay is by definition a directory, so a file
+// there is a malformed workspace to surface, not content to delete.
+func TestRemoveOverlay_RefusesNonDirectoryOverlay(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, "k8s", "clusters"), 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(repoRoot, "k8s", "clusters", "prod"), []byte("not a dir"), 0o600))
+
+	removed, err := environment.RemoveOverlay(repoRoot, "k8s/clusters/prod")
+	require.ErrorIs(t, err, environment.ErrNonDirectoryOverlay)
+	assert.False(t, removed)
+
+	_, statErr := os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "prod"))
+	require.NoError(t, statErr, "the file must survive")
+}

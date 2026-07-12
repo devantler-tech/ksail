@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -222,4 +223,25 @@ func TestHandleRmRunE_PurgeFailureRetainsConfig(t *testing.T) {
 	// The outside target was not deleted.
 	_, statErr = os.Stat(filepath.Join(outside, "prod"))
 	require.NoError(t, statErr)
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_PurgeAppliesDefaultSourceDirectory(t *testing.T) {
+	// A config relying on the documented sourceDirectory default ("k8s") must
+	// purge k8s/clusters/<name>, not clusters/<name>: the silent loader does
+	// not apply field defaults, so the purge path has to.
+	repoRoot := writeAddEnvSourceRepo(t)
+
+	defaultRelying := strings.Replace(addEnvSourceConfig, "    sourceDirectory: k8s\n", "", 1)
+	require.NotEqual(t, addEnvSourceConfig, defaultRelying,
+		"fixture must drop the explicit sourceDirectory")
+	require.NoError(t,
+		os.WriteFile(filepath.Join(repoRoot, "ksail.prod.yaml"), []byte(defaultRelying), 0o600))
+	t.Chdir(repoRoot)
+
+	_, err := runRm(t, "prod", "--purge")
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "prod"))
+	require.ErrorIs(t, statErr, os.ErrNotExist, "the real overlay must be purged")
 }
