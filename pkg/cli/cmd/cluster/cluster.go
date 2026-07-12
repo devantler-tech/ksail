@@ -7,12 +7,14 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster/oidc"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project"
+	projectenv "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
 	"github.com/spf13/cobra"
 )
 
 const (
-	dirPerm  = 0o750
-	filePerm = 0o600
+	// dirPerm is the restrictive permission mode for directories the cluster
+	// commands create (e.g. backup output directories).
+	dirPerm = 0o750
 	// bytesPerMB is the number of bytes in a megabyte.
 	bytesPerMB = 1024 * 1024
 	// minCompressionLevel is the minimum gzip compression level.
@@ -124,17 +126,13 @@ func newDeprecatedInitCmd() *cobra.Command {
 
 // newDeprecatedAddEnvironmentCmd returns the add-environment command as a hidden,
 // deprecated alias under `cluster`. The command moved to `ksail project
-// add-environment` (issue #5626); this alias keeps the previously released
-// `ksail cluster add-environment` working for one deprecation cycle, printing a
-// notice that points at the new location. It is Hidden so it stays out of help,
-// the generated docs, and the MCP/chat tool surface (toolgen skips hidden
-// commands) — the canonical `project add-environment` is the only surfaced form.
+// add-environment` (issue #5626) and then into the `project env` group as
+// `ksail project env add` (issue #6057); this alias keeps the previously
+// released `ksail cluster add-environment` working for one deprecation cycle,
+// printing a notice that points at the new location. The rebadging is shared
+// with the project group's delegate (projectenv.NewDeprecatedAddEnvironmentDelegate).
 func newDeprecatedAddEnvironmentCmd() *cobra.Command {
-	cmd := project.NewAddEnvironmentCmd()
-	cmd.Hidden = true
-	cmd.Deprecated = `use "ksail project add-environment" instead`
-
-	return cmd
+	return projectenv.NewDeprecatedAddEnvironmentDelegate()
 }
 
 //nolint:gochecknoglobals // Injected for testability to simulate help failures.
@@ -142,6 +140,8 @@ var helpRunner = func(cmd *cobra.Command) error {
 	return cmd.Help()
 }
 
+// handleClusterRunE prints the cluster group's help: the group itself is a pure
+// parent with no action of its own, so running it bare just shows the subcommands.
 func handleClusterRunE(cmd *cobra.Command, _ []string) error {
 	// Cobra Help() can return an error (e.g., output stream or template issues); wrap it for clarity.
 	err := helpRunner(cmd)

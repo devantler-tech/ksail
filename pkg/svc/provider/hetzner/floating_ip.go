@@ -21,31 +21,14 @@ func (p *Provider) EnsureFloatingIP(
 	clusterName string,
 	homeLocation string,
 ) (*hcloud.FloatingIP, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
 	floatingIPName := clusterName + FloatingIPSuffix
 
-	// Check if the floating IP already exists
-	floatingIP, _, err := p.client.FloatingIP.GetByName(ctx, floatingIPName)
+	floatingIP, err := p.GetOwnedFloatingIP(ctx, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get floating IP %s: %w", floatingIPName, err)
+		return nil, err
 	}
 
 	if floatingIP != nil {
-		// Only adopt a ksail-owned IP. A user-managed reserved address that
-		// merely shares the conventional name must never be claimed for the
-		// cluster (deleteFloatingIP applies the same ownership guard), and
-		// creating a second IP under the same name would fail Hetzner's name
-		// uniqueness anyway — so surface the collision instead.
-		if floatingIP.Labels[LabelOwned] != LabelOwnedValue {
-			return nil, fmt.Errorf(
-				"%w: %s (release or rename it, or choose a different cluster name)",
-				ErrFloatingIPNotOwned, floatingIPName,
-			)
-		}
-
 		return floatingIP, nil
 	}
 
@@ -60,6 +43,67 @@ func (p *Provider) EnsureFloatingIP(
 	}
 
 	return result.FloatingIP, nil
+}
+
+// GetOwnedFloatingIP returns the cluster's existing ksail-owned floating IP
+// without creating one. A same-name address that KSail does not own is returned
+// as an ownership error rather than adopted.
+func (p *Provider) GetOwnedFloatingIP(
+	ctx context.Context,
+	clusterName string,
+) (*hcloud.FloatingIP, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	floatingIPName := clusterName + FloatingIPSuffix
+
+	floatingIP, _, err := p.client.FloatingIP.GetByName(ctx, floatingIPName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get floating IP %s: %w", floatingIPName, err)
+	}
+
+	if floatingIP == nil {
+		return nil, nil //nolint:nilnil // absence is a valid read-only lookup result
+	}
+
+	ownershipErr := validateFloatingIPOwnership(floatingIP, floatingIPName)
+	if ownershipErr != nil {
+		return nil, ownershipErr
+	}
+
+	return floatingIP, nil
+}
+
+// OwnedFloatingIPExists reports whether the cluster's ksail-owned floating IP
+// currently exists — the read-only companion to EnsureFloatingIP, used by
+// `cluster update` to diff the desired floatingIPEnabled state against what
+// the cloud actually carries (#5947). It applies the same ownership guard: a
+// floating IP that merely shares the conventional name but is not ksail-owned
+// is surfaced as an error rather than counted as the cluster's.
+func (p *Provider) OwnedFloatingIPExists(
+	ctx context.Context,
+	clusterName string,
+) (bool, error) {
+	floatingIP, err := p.GetOwnedFloatingIP(ctx, clusterName)
+	if err != nil {
+		return false, err
+	}
+
+	return floatingIP != nil, nil
+}
+
+// validateFloatingIPOwnership rejects a same-name floating IP that KSail does
+// not own, keeping the adoption rule identical across lookup and create paths.
+func validateFloatingIPOwnership(floatingIP *hcloud.FloatingIP, floatingIPName string) error {
+	if floatingIP.Labels[LabelOwned] == LabelOwnedValue {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: %s (release or rename it, or choose a different cluster name)",
+		ErrFloatingIPNotOwned, floatingIPName,
+	)
 }
 
 // AttachFloatingIPToServer assigns the floating IP to the given server. It is

@@ -33,6 +33,26 @@ const yamlIndent = 4
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
 
+// requireHetznerServer returns the authoritative server named by an
+// infrastructure-inventory entry, failing closed when the lookup errors or the
+// server disappears between the list and get operations.
+func requireHetznerServer(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	name string,
+) (*hcloud.Server, error) {
+	server, err := hzProvider.GetServerByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server %s: %w", name, err)
+	}
+
+	if server == nil {
+		return nil, fmt.Errorf("%w: %s", ErrHetznerServerMissingFromInventory, name)
+	}
+
+	return server, nil
+}
+
 // maxNodeNameLength is the maximum length of a Hetzner node name. The name is
 // used as the Hetzner server name, the Talos hostname (set in applyConfigToNode),
 // and the Kubernetes node name the Hetzner CCM matches against — all DNS-1123
@@ -421,7 +441,9 @@ func (p *Provisioner) waitForServerReachable(
 		return addrErr
 	}
 
-	err := dialTCPUntilReachable(ctx, serverIP, clusterReadinessTimeout, longRetryInterval)
+	err := dialTCPUntilReachable(
+		ctx, serverIP, talosAPIPort, clusterReadinessTimeout, longRetryInterval,
+	)
 	if err != nil {
 		return diagnoseUnreachableNode(server, fmt.Errorf(
 			"timeout waiting for %s to become reachable after install: %w",
@@ -433,29 +455,30 @@ func (p *Provisioner) waitForServerReachable(
 	return nil
 }
 
-// dialTCPUntilReachable polls ip:talosAPIPort until a TCP connection succeeds or
-// the context is done, retrying every interval up to timeout. A successful dial
-// means the Talos apid service is accepting connections on the node. This is
+// dialTCPUntilReachable polls ip:port until a TCP connection succeeds or
+// the context is done, retrying every interval up to timeout. A successful
+// dial means the service is accepting connections at the address. This is
 // shared by the Hetzner install/reboot wait (waitForServerReachable) and the
-// Docker scale-up wait (waitForNewDockerNodesReachable); each caller wraps the
+// Docker scale-up wait (waitForNewDockerNodesReachable) — both dialing the
+// Talos API at talosAPIPort — and by the cluster-endpoint reachability probe
+// dialing the Kubernetes API at kubernetesAPIPort; each caller wraps the
 // returned error with its own server/node context.
 func dialTCPUntilReachable(
 	ctx context.Context,
 	nodeIP string,
+	port int,
 	timeout, interval time.Duration,
 ) error {
+	address := net.JoinHostPort(nodeIP, strconv.Itoa(port))
+
 	err := retry.Constant(timeout, retry.WithUnits(interval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			dialer := &net.Dialer{Timeout: retryInterval}
 
-			conn, dialErr := dialer.DialContext(
-				ctx,
-				"tcp",
-				net.JoinHostPort(nodeIP, strconv.Itoa(talosAPIPort)),
-			)
+			conn, dialErr := dialer.DialContext(ctx, "tcp", address)
 			if dialErr != nil {
 				return retry.ExpectedError(
-					fmt.Errorf("waiting for Talos API to become reachable: %w", dialErr),
+					fmt.Errorf("waiting for %s to accept connections: %w", address, dialErr),
 				)
 			}
 
@@ -464,7 +487,7 @@ func dialTCPUntilReachable(
 			return nil
 		})
 	if err != nil {
-		return fmt.Errorf("dialing Talos API at %s: %w", nodeIP, err)
+		return fmt.Errorf("dialing %s: %w", address, err)
 	}
 
 	return nil
