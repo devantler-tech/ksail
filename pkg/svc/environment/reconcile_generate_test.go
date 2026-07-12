@@ -281,6 +281,53 @@ func TestGenerateMissingOverlaysResolvesSymlinkedAncestorOfSourceDir(t *testing.
 	))
 }
 
+func TestGenerateMissingOverlaysNormalizesTrailingSeparator(t *testing.T) {
+	t.Parallel()
+
+	dir := canonicalTempDir(t)
+	writeFiles(t, dir, "ksail.local.yaml")
+
+	plan, err := environment.DerivePlan(dir, sourceDir, planLoader())
+	require.NoError(t, err)
+
+	// A trailing separator must not make Dir/Base duplicate the leaf
+	// (`/repo/k8s/` once resolved as `/repo/k8s/k8s`).
+	trailing := filepath.Join(dir, sourceDir) + string(filepath.Separator)
+	written, err := environment.GenerateMissingOverlays(
+		kustomizationgenerator.NewGenerator(), trailing, plan,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, written)
+
+	assert.FileExists(t, filepath.Join(
+		dir, sourceDir, environment.ClustersDir, environment.BaseEnvName, "kustomization.yaml",
+	))
+	assert.NoDirExists(t, filepath.Join(dir, sourceDir, sourceDir))
+}
+
+func TestGenerateMissingOverlaysExpandsHomePrefixedSourceDir(t *testing.T) {
+	home := canonicalTempDir(t)
+	t.Setenv("HOME", home)
+
+	dir := canonicalTempDir(t)
+	writeFiles(t, dir, "ksail.local.yaml")
+
+	plan, err := environment.DerivePlan(dir, sourceDir, planLoader())
+	require.NoError(t, err)
+
+	// `~/` must resolve to the user's home, never to a literal `./~/` dir.
+	written, err := environment.GenerateMissingOverlays(
+		kustomizationgenerator.NewGenerator(), "~/"+sourceDir, plan,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, written)
+
+	assert.FileExists(t, filepath.Join(
+		home, sourceDir, environment.ClustersDir, environment.BaseEnvName, "kustomization.yaml",
+	))
+	assert.NoDirExists(t, "~")
+}
+
 func TestGenerateMissingOverlaysRejectsDirectoryLayoutLeaf(t *testing.T) {
 	t.Parallel()
 

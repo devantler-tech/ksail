@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 // ErrUnsafeOverlayPath is returned by GenerateMissingOverlays when a path it
@@ -95,11 +97,18 @@ func GenerateMissingOverlays(
 	return WriteMultiClusterLayout(gen, sourceDir, files, false)
 }
 
-// prepareSourceDir canonicalizes sourceDir's existing ancestors and then
-// fail-closes on an unsafe source root, returning the physical path every
-// guard and write below operates on.
+// prepareSourceDir expands a `~/` prefix and normalizes sourceDir (a
+// trailing separator would make Dir/Base split the leaf as duplicated),
+// canonicalizes its existing ancestors, and then fail-closes on an unsafe
+// source root — returning the physical path every guard and write below
+// operates on.
 func prepareSourceDir(sourceDir string) (string, error) {
-	resolved, err := resolveSourceDirAncestors(sourceDir)
+	expanded, err := fsutil.ExpandHomePath(sourceDir)
+	if err != nil {
+		return "", fmt.Errorf("expand source directory %q: %w", sourceDir, err)
+	}
+
+	resolved, err := resolveSourceDirAncestors(filepath.Clean(expanded))
 	if err != nil {
 		return "", err
 	}
