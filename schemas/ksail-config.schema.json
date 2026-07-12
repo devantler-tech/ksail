@@ -691,7 +691,7 @@
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "Extensions lists Talos Image Factory official system extension names to include in the\nnode image. KSail automatically computes the Image Factory schematic ID from this list\nand sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},\nwhere {version} is derived from the Talos config bundle's existing install image tag.\nFor Hetzner, the schematic is also used for snapshot building.\nExtension names follow the Image Factory convention (e.g., \"siderolabs/iscsi-tools\").\nThe Image Factory resolves extension versions automatically per Talos release.\nWhen SchematicID is also set, it takes precedence over Extensions."
+                  "description": "Extensions lists Talos Image Factory official system extension names to include in the\nnode image. KSail automatically computes the Image Factory schematic ID from this list\nand sets machine.install.image to the version-appropriate factory installer repository\n(`factory.talos.dev/installer` before Talos 1.14, `factory.talos.dev/metal-installer`\nfor Talos 1.14+) using the Talos config bundle's existing install image tag.\nFor Hetzner, the schematic is also used for snapshot building.\nExtension names follow the Image Factory convention (e.g., \"siderolabs/iscsi-tools\").\nThe Image Factory resolves extension versions automatically per Talos release.\nWhen SchematicID is also set, it takes precedence over Extensions."
                 },
                 "extraPortMappings": {
                   "items": {

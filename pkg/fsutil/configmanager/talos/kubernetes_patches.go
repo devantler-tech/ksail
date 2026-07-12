@@ -19,12 +19,20 @@ var (
 	errLegacyOIDCRequiredFields        = errors.New("issuer URL and client ID are required")
 	errLegacyOIDCCAMissing             = errors.New("CA content is missing")
 	errLegacyOIDCUnsupportedExtraArg   = errors.New("unsupported legacy OIDC extra argument")
+	errLegacyAPIServerFieldObject      = errors.New("expected an object")
+	errLegacyAPIServerFieldObjectList  = errors.New("expected a list of objects")
 	errLegacyUnsupportedAPIServerField = errors.New(
 		"API server field has no Talos 1.14 KubeAPIServerConfig equivalent",
 	)
 )
 
 const (
+	multiDocumentAPIVersion  = "v1alpha1"
+	migratedDocumentSlack    = 2
+	kubeAuthorizerConfigKind = "KubeAuthorizerConfig"
+	apiVersionField          = "apiVersion"
+	kindField                = "kind"
+
 	legacyDisableDefaultCNIPatchYAML = `cluster:
   network:
     cni:
@@ -198,6 +206,11 @@ func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
+	structuredDocuments, err := values.migrateStructuredAPIServerDocuments(patch.Path)
+	if err != nil {
+		return nil, false, err
+	}
+
 	apiServerDocument, err := values.migrateAPIServerDocument(patch.Path)
 	if err != nil {
 		return nil, false, err
@@ -209,6 +222,7 @@ func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
 		patch.Path,
 		documents,
 		apiServerDocument,
+		structuredDocuments,
 		authenticationDocument,
 	)
 	if err != nil {
@@ -365,6 +379,159 @@ func unsupportedLegacyOIDCExtraArg(extraArgs map[string]any) string {
 	return unsupported
 }
 
+func (values *legacyAPIServerPatchValues) migrateStructuredAPIServerDocuments(
+	patchPath string,
+) ([]map[string]any, error) {
+	documents, err := values.popNamedAPIServerDocuments(
+		patchPath,
+		"admissionControl",
+		"KubeAdmissionControlConfig",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if auditPolicy, found := values.apiServer["auditPolicy"]; found {
+		configuration, isMap := auditPolicy.(map[string]any)
+		if !isMap {
+			return nil, structuredAPIServerFieldTypeError(
+				patchPath,
+				"auditPolicy",
+				errLegacyAPIServerFieldObject,
+			)
+		}
+
+		delete(values.apiServer, "auditPolicy")
+
+		documents = append(documents, map[string]any{
+			apiVersionField: multiDocumentAPIVersion,
+			kindField:       "KubeAuditPolicyConfig",
+			"configuration": configuration,
+		})
+	}
+
+	authorizerDocuments, err := values.popAuthorizerDocuments(patchPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(documents, authorizerDocuments...), nil
+}
+
+func (values *legacyAPIServerPatchValues) popAuthorizerDocuments(
+	patchPath string,
+) ([]map[string]any, error) {
+	documents, err := values.popNamedAPIServerDocuments(
+		patchPath,
+		"authorizationConfig",
+		kubeAuthorizerConfigKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	defaultAuthorizers := []struct {
+		authorizerType string
+		name           string
+	}{
+		{authorizerType: "Node", name: "node"},
+		{authorizerType: "RBAC", name: "rbac"},
+	}
+
+	deletions := make([]map[string]any, 0, len(defaultAuthorizers))
+	for _, defaultAuthorizer := range defaultAuthorizers {
+		if shouldDeleteDefaultAuthorizer(
+			documents,
+			defaultAuthorizer.authorizerType,
+			defaultAuthorizer.name,
+		) {
+			deletions = append(deletions, map[string]any{
+				apiVersionField: multiDocumentAPIVersion,
+				kindField:       kubeAuthorizerConfigKind,
+				"name":          defaultAuthorizer.name,
+				"$patch":        "delete",
+			})
+		}
+	}
+
+	return append(deletions, documents...), nil
+}
+
+func shouldDeleteDefaultAuthorizer(
+	documents []map[string]any,
+	authorizerType string,
+	defaultName string,
+) bool {
+	hasType := false
+
+	for _, document := range documents {
+		currentType, _ := document["type"].(string)
+		if currentType != authorizerType {
+			continue
+		}
+
+		hasType = true
+
+		name, _ := document["name"].(string)
+		if name == defaultName {
+			return false
+		}
+	}
+
+	return hasType
+}
+
+func (values *legacyAPIServerPatchValues) popNamedAPIServerDocuments(
+	patchPath string,
+	field string,
+	kind string,
+) ([]map[string]any, error) {
+	value, found := values.apiServer[field]
+	if !found {
+		return nil, nil
+	}
+
+	items, isList := value.([]any)
+	if !isList {
+		return nil, structuredAPIServerFieldTypeError(
+			patchPath,
+			field,
+			errLegacyAPIServerFieldObjectList,
+		)
+	}
+
+	documents := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		document, isMap := item.(map[string]any)
+		if !isMap {
+			return nil, fmt.Errorf(
+				"migrate legacy API server patch %q field %q item %d: %w",
+				patchPath,
+				field,
+				index,
+				errLegacyAPIServerFieldObject,
+			)
+		}
+
+		document[apiVersionField] = multiDocumentAPIVersion
+		document[kindField] = kind
+		documents = append(documents, document)
+	}
+
+	delete(values.apiServer, field)
+
+	return documents, nil
+}
+
+func structuredAPIServerFieldTypeError(patchPath, field string, cause error) error {
+	return fmt.Errorf(
+		"migrate legacy API server patch %q field %q: %w",
+		patchPath,
+		field,
+		cause,
+	)
+}
+
 func (values *legacyAPIServerPatchValues) migrateAPIServerDocument(
 	patchPath string,
 ) (map[string]any, error) {
@@ -377,8 +544,8 @@ func (values *legacyAPIServerPatchValues) migrateAPIServerDocument(
 	}
 
 	document := map[string]any{
-		"apiVersion": "v1alpha1",
-		"kind":       "KubeAPIServerConfig",
+		apiVersionField: multiDocumentAPIVersion,
+		kindField:       "KubeAPIServerConfig",
 	}
 
 	for field, value := range values.apiServer {
@@ -418,9 +585,14 @@ func marshalMigratedKubernetesDocuments(
 	patchPath string,
 	legacyDocuments []map[string]any,
 	apiServerDocument map[string]any,
+	structuredDocuments []map[string]any,
 	authenticationDocument []byte,
 ) ([]byte, error) {
-	documents := make([][]byte, 0, len(legacyDocuments))
+	documents := make(
+		[][]byte,
+		0,
+		len(legacyDocuments)+len(structuredDocuments)+migratedDocumentSlack,
+	)
 
 	for _, document := range legacyDocuments {
 		if len(document) == 0 {
@@ -439,6 +611,19 @@ func marshalMigratedKubernetesDocuments(
 		encoded, err := yaml.Marshal(apiServerDocument)
 		if err != nil {
 			return nil, fmt.Errorf("marshal migrated API server patch %q: %w", patchPath, err)
+		}
+
+		documents = append(documents, bytes.TrimSpace(encoded))
+	}
+
+	for _, document := range structuredDocuments {
+		encoded, err := yaml.Marshal(document)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"marshal migrated structured API server patch %q: %w",
+				patchPath,
+				err,
+			)
 		}
 
 		documents = append(documents, bytes.TrimSpace(encoded))

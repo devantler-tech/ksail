@@ -63,8 +63,9 @@ type OptionsTalos struct {
 	SchematicID string `json:"schematicId,omitzero"`
 	// Extensions lists Talos Image Factory official system extension names to include in the
 	// node image. KSail automatically computes the Image Factory schematic ID from this list
-	// and sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},
-	// where {version} is derived from the Talos config bundle's existing install image tag.
+	// and sets machine.install.image to the version-appropriate factory installer repository
+	// (`factory.talos.dev/installer` before Talos 1.14, `factory.talos.dev/metal-installer`
+	// for Talos 1.14+) using the Talos config bundle's existing install image tag.
 	// For Hetzner, the schematic is also used for snapshot building.
 	// Extension names follow the Image Factory convention (e.g., "siderolabs/iscsi-tools").
 	// The Image Factory resolves extension versions automatically per Talos release.

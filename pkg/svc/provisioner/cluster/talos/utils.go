@@ -116,9 +116,10 @@ func (p *Provisioner) resolveSchematicID() string {
 
 // resolveInstallerImage returns the Talos installer image reference for an OS
 // upgrade to the given version tag. When a schematic is configured (explicit
-// schematicId or auto-computed from extensions) it returns the Image Factory
-// installer factory.talos.dev/installer/<schematicID>:<tag> so the upgrade
-// preserves system extensions — matching the create/snapshot/autoscaler paths.
+// schematicId or auto-computed from extensions) it returns the version-appropriate
+// Image Factory installer so the upgrade preserves system extensions — matching
+// the create/snapshot/autoscaler paths. Talos 1.14+ uses the platform-specific
+// factory.talos.dev/metal-installer/<schematicID>:<tag> repository.
 // Without a custom schematic, Talos 1.14+ uses the Image Factory's default
 // metal-installer schematic because release installers are no longer published
 // to ghcr.io; older releases retain the legacy ghcr.io installer.

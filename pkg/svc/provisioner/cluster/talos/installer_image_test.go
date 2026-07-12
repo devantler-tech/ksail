@@ -73,6 +73,26 @@ func TestResolveInstallerImageExplicitSchematic(t *testing.T) {
 	assert.Equal(t, schematicID, provisioner.ResolveSchematicIDForTest())
 }
 
+// TestResolveInstallerImageExplicitSchematicTalos14 verifies that custom
+// schematics use Talos 1.14's platform-specific metal installer repository.
+func TestResolveInstallerImageExplicitSchematicTalos14(t *testing.T) {
+	t.Parallel()
+
+	const schematicID = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard).
+		WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: schematicID})
+
+	got := provisioner.ResolveInstallerImageForTest("v1.14.0-alpha.2")
+
+	assert.Equal(
+		t,
+		"factory.talos.dev/metal-installer/"+schematicID+":v1.14.0-alpha.2",
+		got,
+	)
+}
+
 // TestResolveInstallerImageFromExtensions verifies that a schematic auto-computed
 // from spec.cluster.talos.extensions (via talosConfigs) produces the Image Factory
 // installer — the path that was previously dropped on upgrade, stripping

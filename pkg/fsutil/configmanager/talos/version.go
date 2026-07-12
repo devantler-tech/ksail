@@ -17,6 +17,31 @@ func normalizeKubernetesVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimSpace(version), "v")
 }
 
+// ParseVersionContract resolves a pinned Talos version to the machinery
+// contract used for config generation. An empty pin retains the conservative
+// Talos 1.12 contract used by the default Hetzner bootstrap ISO.
+func ParseVersionContract(pinnedVersion string) (*talosconfig.VersionContract, error) {
+	pinnedVersion = strings.TrimSpace(pinnedVersion)
+	if pinnedVersion == "" {
+		return talosconfig.TalosVersion1_12, nil
+	}
+
+	if !strings.HasPrefix(pinnedVersion, "v") {
+		pinnedVersion = "v" + pinnedVersion
+	}
+
+	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"parse Talos version contract for pinned version %q: %w",
+			pinnedVersion,
+			err,
+		)
+	}
+
+	return contract, nil
+}
+
 // ResolveKubernetesVersion determines the Kubernetes version a freshly generated
 // Talos machine config should target, given an optional explicit pin
 // (spec.cluster.kubernetesVersion) and an optional pinned Talos OS version

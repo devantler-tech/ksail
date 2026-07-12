@@ -104,6 +104,22 @@ func NewDefaultConfigsWithVersionAndPatches(
 	kubernetesVersion string,
 	additionalPatches []Patch,
 ) (*Configs, error) {
+	return NewDefaultConfigsWithVersionContractAndPatches(
+		kubernetesVersion,
+		nil,
+		additionalPatches,
+	)
+}
+
+// NewDefaultConfigsWithVersionContractAndPatches builds the no-scaffold
+// default bundle for a specific Talos version contract. Version-gated patches
+// are migrated before bundle generation so their shape matches the generated
+// configuration documents.
+func NewDefaultConfigsWithVersionContractAndPatches(
+	kubernetesVersion string,
+	versionContract *talosconfig.VersionContract,
+	additionalPatches []Patch,
+) (*Configs, error) {
 	if kubernetesVersion == "" {
 		kubernetesVersion = DefaultKubernetesVersion
 	}
@@ -120,22 +136,43 @@ func NewDefaultConfigsWithVersionAndPatches(
 	patches = append(patches, allowSchedulingPatch)
 	patches = append(patches, additionalPatches...)
 
+	patches, err := migrateKubernetesPatchesForContract(patches, versionContract)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate Kubernetes patches: %w", err)
+	}
+
 	return newConfigs(
 		DefaultClusterName,
 		kubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
-		nil,
+		versionContract,
 	)
 }
 
 // NewDefaultConfigsWithVersionAndName builds a default Talos config bundle at the
 // given Kubernetes version and names it after the cluster (the name is baked into
 // the PKI, so it must be set via WithName, which regenerates the bundle). It is
-// the shared "default Talos config for cluster <name> at version <v>" used by both
-// the operator backend and the local ksail provisioner factory.
+// the backward-compatible "default Talos config for cluster <name> at version
+// <v>" helper using the conservative default contract. Callers with a pinned
+// Talos version use NewDefaultConfigsWithVersionContractAndName.
 func NewDefaultConfigsWithVersionAndName(kubernetesVersion, name string) (*Configs, error) {
-	configs, err := NewDefaultConfigsWithVersionAndPatches(kubernetesVersion, nil)
+	return NewDefaultConfigsWithVersionContractAndName(kubernetesVersion, name, nil)
+}
+
+// NewDefaultConfigsWithVersionContractAndName builds the named default Talos
+// bundle used by the operator and local provisioner. Its generated document
+// shape matches the target Talos contract.
+func NewDefaultConfigsWithVersionContractAndName(
+	kubernetesVersion string,
+	name string,
+	versionContract *talosconfig.VersionContract,
+) (*Configs, error) {
+	configs, err := NewDefaultConfigsWithVersionContractAndPatches(
+		kubernetesVersion,
+		versionContract,
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build talos config: %w", err)
 	}

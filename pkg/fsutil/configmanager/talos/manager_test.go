@@ -565,3 +565,176 @@ func TestConfigManager_Load_MigratesLegacyOIDCAndAPIServerFields(t *testing.T) {
 		"feature-gates": {"MutatingAdmissionPolicy=true"},
 	}, apiServer.ExtraArgs())
 }
+
+const legacyStructuredAPIServerPatch = `cluster:
+  apiServer:
+    admissionControl:
+      - name: EventRateLimit
+        configuration:
+          apiVersion: eventratelimit.admission.k8s.io/v1alpha1
+          kind: Configuration
+          limits:
+            - type: Server
+              qps: 100
+              burst: 200
+    auditPolicy:
+      apiVersion: audit.k8s.io/v1
+      kind: Policy
+      rules:
+        - level: RequestResponse
+    authorizationConfig:
+      - name: custom-webhook
+        type: Webhook
+        webhook:
+          timeout: 3s
+          subjectAccessReviewVersion: v1
+          matchConditionSubjectAccessReviewVersion: v1
+          failurePolicy: Deny
+          connectionInfo:
+            type: InClusterConfig
+`
+
+func TestConfigManager_Load_MigratesLegacyStructuredAPIServerFields(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(clusterDir, "structured-api-server.yaml"),
+			[]byte(legacyStructuredAPIServerPatch),
+			0o600,
+		),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	assertMigratedStructuredAPIServerFields(t, controlPlane)
+}
+
+func assertMigratedStructuredAPIServerFields(
+	t *testing.T,
+	controlPlane talosconfig.Provider,
+) {
+	t.Helper()
+
+	admissionConfigs := make(map[string]map[string]any)
+	for _, config := range controlPlane.K8sAdmissionControlPluginConfigs() {
+		admissionConfigs[config.Name()] = config.Configuration()
+	}
+
+	assert.Equal(t, map[string]any{
+		"apiVersion": "eventratelimit.admission.k8s.io/v1alpha1",
+		"kind":       "Configuration",
+		"limits": []any{
+			map[string]any{"type": "Server", "qps": 100, "burst": 200},
+		},
+	}, admissionConfigs["EventRateLimit"])
+	assert.Equal(t, map[string]any{
+		"apiVersion": "audit.k8s.io/v1",
+		"kind":       "Policy",
+		"rules": []any{
+			map[string]any{"level": "RequestResponse"},
+		},
+	}, controlPlane.K8sAuditPolicyConfig().Configuration())
+
+	authorizers := make(map[string]struct {
+		kind    string
+		webhook map[string]any
+	})
+	for _, config := range controlPlane.K8sAuthorizerConfigs() {
+		authorizers[config.Name()] = struct {
+			kind    string
+			webhook map[string]any
+		}{kind: config.Type(), webhook: config.Webhook()}
+	}
+
+	require.Len(t, authorizers, 3)
+	assert.Equal(t, "Node", authorizers["node"].kind)
+	assert.Equal(t, "RBAC", authorizers["rbac"].kind)
+	assert.Equal(t, "Webhook", authorizers["custom-webhook"].kind)
+	assert.Equal(t, map[string]any{
+		"timeout":                    "3s",
+		"subjectAccessReviewVersion": "v1",
+		"matchConditionSubjectAccessReviewVersion": "v1",
+		"failurePolicy": "Deny",
+		"connectionInfo": map[string]any{
+			"type": "InClusterConfig",
+		},
+	}, authorizers["custom-webhook"].webhook)
+}
+
+func TestConfigManager_Load_RejectsLegacyAPIServerExtraVolumesForMultiDocumentConfig(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    extraVolumes:
+      - hostPath: /var/lib/example
+        mountPath: /var/lib/example
+        readonly: true
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "extra-volumes.yaml"), legacyAPIServer, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, `field "extraVolumes"`)
+	require.ErrorContains(t, err, "has no Talos 1.14 KubeAPIServerConfig equivalent")
+}
+
+func TestConfigManager_Load_MigratesCustomNamedDefaultAuthorizers(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAuthorizers := []byte(`cluster:
+  apiServer:
+    authorizationConfig:
+      - type: Node
+        name: custom-node
+      - type: RBAC
+        name: custom-rbac
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "authorizers.yaml"), legacyAuthorizers, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	authorizers := make(map[string]string)
+	for _, config := range configs.ControlPlane().K8sAuthorizerConfigs() {
+		authorizers[config.Name()] = config.Type()
+	}
+
+	assert.Equal(t, map[string]string{
+		"custom-node": "Node",
+		"custom-rbac": "RBAC",
+	}, authorizers)
+}
