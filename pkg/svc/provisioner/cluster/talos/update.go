@@ -317,8 +317,10 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 		return false, false, nil
 	}
 
-	controlPlaneConfigs, workerConfigs, fetchedAll, err :=
-		p.fetchFloatingIPConfigsByRole(ctx, nodes)
+	controlPlaneConfigs, workerConfigs, fetchedAll, err := p.fetchFloatingIPConfigsByRole(
+		ctx,
+		nodes,
+	)
 	if err != nil {
 		return false, false, err
 	}
