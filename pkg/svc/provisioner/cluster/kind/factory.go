@@ -83,7 +83,8 @@ func kindKubeconfigWriteTarget(envValue string) string {
 // Parameters:
 //   - kindConfig: Pre-loaded Kind cluster configuration
 //   - kubeconfigPath: Path where the kubeconfig should be written (defaults to
-//     the first KUBECONFIG entry, then ~/.kube/config)
+//     the first existing KUBECONFIG entry, or its last entry when none exist;
+//     with no usable KUBECONFIG entry, defaults to ~/.kube/config)
 func CreateProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeconfigPath string,
