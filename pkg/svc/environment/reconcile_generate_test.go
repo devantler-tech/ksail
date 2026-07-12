@@ -146,3 +146,77 @@ func TestGenerateMissingOverlaysRejectsReservedBaseName(t *testing.T) {
 
 	require.ErrorIs(t, err, environment.ErrReservedEnvironmentName)
 }
+
+// generateExpectingUnsafePath derives the plan for dir and asserts generation
+// refuses it with ErrUnsafeOverlayPath.
+func generateExpectingUnsafePath(t *testing.T, dir string) {
+	t.Helper()
+
+	plan, err := environment.DerivePlan(dir, sourceDir, planLoader())
+	require.NoError(t, err)
+
+	_, err = environment.GenerateMissingOverlays(
+		kustomizationgenerator.NewGenerator(), filepath.Join(dir, sourceDir), plan,
+	)
+
+	require.ErrorIs(t, err, environment.ErrUnsafeOverlayPath)
+}
+
+func TestGenerateMissingOverlaysRejectsSymlinkedOverlayDir(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
+	mkOverlays(t, dir, "prod")
+
+	// DerivePlan reports a symlinked clusters/local as Missing (only real
+	// directories count), but writing through it would land in the target.
+	target := filepath.Join(dir, "outside-target")
+	require.NoError(t, os.MkdirAll(target, 0o750))
+	require.NoError(
+		t,
+		os.Symlink(target, filepath.Join(dir, sourceDir, environment.ClustersDir, "local")),
+	)
+
+	generateExpectingUnsafePath(t, dir)
+	assert.NoFileExists(t, filepath.Join(target, "kustomization.yaml"))
+}
+
+func TestGenerateMissingOverlaysRejectsSymlinkedClustersRoot(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
+
+	target := filepath.Join(dir, "outside-clusters")
+	require.NoError(t, os.MkdirAll(target, 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, sourceDir), 0o750))
+	require.NoError(
+		t,
+		os.Symlink(target, filepath.Join(dir, sourceDir, environment.ClustersDir)),
+	)
+
+	generateExpectingUnsafePath(t, dir)
+	assert.NoDirExists(t, filepath.Join(target, "base"))
+}
+
+func TestGenerateMissingOverlaysRejectsSymlinkedLayoutFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.local.yaml", "ksail.prod.yaml")
+	mkOverlays(t, dir, environment.BaseEnvName)
+
+	// A dangling symlink at clusters/base/kustomization.yaml Lstats as a
+	// symlink but Stats as absent, so a force-off write would follow it.
+	escape := filepath.Join(dir, "escape-file.yaml")
+	require.NoError(t, os.Symlink(
+		escape,
+		filepath.Join(
+			dir, sourceDir, environment.ClustersDir, environment.BaseEnvName, "kustomization.yaml",
+		),
+	))
+
+	generateExpectingUnsafePath(t, dir)
+	assert.NoFileExists(t, escape)
+}
