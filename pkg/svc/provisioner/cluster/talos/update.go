@@ -292,29 +292,18 @@ func floatingIPReconcileReason(exists bool) string {
 // detectRunningHetznerFloatingIPConfig reports whether every inventoried node
 // carries the expected endpoint state, with the HCloud VIP additionally
 // required on control planes. An individual config fetch failure is treated as
-// needing idempotent reconciliation so a partial prior apply is retried;
-// inability to list any control planes remains an unavailable detection and is
-// skipped. Context cancellation and deadlines always propagate so DiffConfig
-// cannot report success after termination.
+// needing idempotent reconciliation so a partial prior apply is retried.
+// Inventory failures and an empty control-plane set fail closed: a lossy or
+// empty view cannot prove every node carries the stable endpoint.
 func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 	ctx context.Context,
 	clusterName, expectedIP string,
 ) (bool, bool, error) {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
-		if isContextTermination(err) {
-			return false, false, fmt.Errorf(
-				"failed to list control planes for floating IP config detection: %w", err,
-			)
-		}
-
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  ⚠ Failed to list control planes for floating IP config detection: %v\n",
-			err,
+		return false, false, fmt.Errorf(
+			"failed to inventory nodes for floating IP config detection: %w", err,
 		)
-
-		return false, false, nil
 	}
 
 	controlPlaneConfigs, workerConfigs, fetchedAll, err := p.fetchFloatingIPConfigsByRole(
@@ -330,7 +319,7 @@ func (p *Provisioner) detectRunningHetznerFloatingIPConfig(
 	}
 
 	if len(controlPlaneConfigs) == 0 {
-		return false, false, nil
+		return false, false, fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
 	configured := allControlPlanesHaveHetznerFloatingIPConfig(controlPlaneConfigs, expectedIP) &&
@@ -1179,9 +1168,10 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	// fetchNodeConfig retries transient gRPC failures (flaky TLS handshakes to
-	// apid on public IPs). The returned Provider satisfies config.Config.
-	runningConfig, err := p.fetchNodeConfig(ctx, cpIP)
+	// The default nodeConfigFetcher retries transient gRPC failures (flaky TLS
+	// handshakes to apid on public IPs). Keeping this path on the shared fetcher
+	// also lets tests pin endpoint propagation without opening a real Talos API.
+	runningConfig, err := p.nodeConfigFetcher(ctx, cpIP)
 	if err != nil {
 		return nil, "", err
 	}

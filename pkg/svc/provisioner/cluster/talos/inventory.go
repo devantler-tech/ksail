@@ -60,8 +60,12 @@ func (p *Provisioner) getHetznerNodesByRole(
 
 	for _, node := range listed {
 		server, serverErr := hzProvider.GetServerByName(ctx, node.Name)
-		if serverErr != nil || server == nil {
-			continue
+		if serverErr != nil {
+			return nil, fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
+		}
+
+		if server == nil {
+			return nil, fmt.Errorf("%w: %s", ErrHetznerServerMissingFromInventory, node.Name)
 		}
 
 		// Fail closed: a node with no reachable address would otherwise be silently

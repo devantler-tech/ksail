@@ -51,6 +51,13 @@ func (p *Provisioner) addHetznerNodes(
 		return err
 	}
 
+	if len(servers) > 0 {
+		err = p.prepareFloatingIPConfigForNewControlPlane(ctx, hzProvider, clusterName, role)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = p.configureNewHetznerNodes(ctx, servers, role, result)
 	if err != nil {
 		return err
@@ -377,9 +384,11 @@ func (p *Provisioner) listHetznerNodesByRole(
 			return nil, fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
 		}
 
-		if server != nil {
-			servers = append(servers, server)
+		if server == nil {
+			return nil, fmt.Errorf("%w: %s", ErrHetznerServerMissingFromInventory, node.Name)
 		}
+
+		servers = append(servers, server)
 	}
 
 	slices.SortFunc(servers, func(a, b *hcloud.Server) int {

@@ -191,6 +191,21 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		certSANs = sans
 	}
 
+	return p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
+}
+
+// regenerateHetznerEndpointConfigs rebuilds the loaded Talos configs around
+// the supplied endpoint and certificate SAN set. Cloud-side floating-IP
+// lifecycle belongs to callers so the same renderer can support a read-only
+// pre-first-boot refresh after a new control plane has been created.
+func (p *Provisioner) regenerateHetznerEndpointConfigs(
+	endpointIP string,
+	certSANs []string,
+) error {
+	if p.talosConfigs == nil {
+		return errFloatingIPConfigsUnavailable
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", endpointIP)
 
 	updatedConfigs, err := p.talosConfigs.WithEndpoint(endpointIP)
@@ -214,6 +229,49 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 	p.talosConfigs = updatedConfigs
 
 	return nil
+}
+
+// prepareFloatingIPConfigForNewControlPlane refreshes the in-memory bundle
+// after a control-plane server is created but before its first config apply.
+// The existing cluster-owned address is read without ensuring or attaching it;
+// only the endpoint, VIP, and full live control-plane SAN set are regenerated.
+func (p *Provisioner) prepareFloatingIPConfigForNewControlPlane(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	if role != RoleControlPlane || p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
+		return nil
+	}
+
+	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("looking up floating IP before control-plane config apply: %w", err)
+	}
+
+	if floatingIP == nil {
+		return fmt.Errorf("%w: %s", ErrFloatingIPMissingForControlPlaneConfig, clusterName)
+	}
+
+	controlPlaneServers, err := p.listHetznerNodesByRole(
+		ctx, hzProvider, clusterName, RoleControlPlane,
+	)
+	if err != nil {
+		return fmt.Errorf("listing control planes before config apply: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
+	}
+
+	endpointIP := floatingIP.IP.String()
+
+	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
+	if err != nil {
+		return err
+	}
+
+	return p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
 }
 
 // withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
@@ -291,19 +349,34 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		controlPlaneServers[0].Name,
 	)
 
+	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return endpointIP, certSANs, nil
+}
+
+// hetznerFloatingIPEndpointCertSANs returns the stable endpoint plus every
+// directly reachable control-plane address required for TLS-safe first boot
+// and readiness checks.
+func hetznerFloatingIPEndpointCertSANs(
+	endpointIP string,
+	controlPlaneServers []*hcloud.Server,
+) ([]string, error) {
 	certSANs := make([]string, 0, len(controlPlaneServers)+1)
 	certSANs = append(certSANs, endpointIP)
 
 	for _, server := range controlPlaneServers {
 		nodeIP, nodeAddrErr := hetznerNodeTalosAddress(server)
 		if nodeAddrErr != nil {
-			return "", nil, nodeAddrErr
+			return nil, nodeAddrErr
 		}
 
 		certSANs = append(certSANs, nodeIP)
 	}
 
-	return endpointIP, certSANs, nil
+	return certSANs, nil
 }
 
 // errFloatingIPConfigsUnavailable reports that the floating-IP change cannot be

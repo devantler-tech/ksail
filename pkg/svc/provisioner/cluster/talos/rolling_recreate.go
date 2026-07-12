@@ -324,6 +324,13 @@ func (p *Provisioner) configureAndWaitReplacement(
 	oldServer, newServer *hcloud.Server,
 	role string,
 ) error {
+	prepareErr := p.prepareFloatingIPConfigForNewControlPlane(
+		ctx, hzProvider, clusterName, role,
+	)
+	if prepareErr != nil {
+		return prepareErr
+	}
+
 	configErr := p.applyConfigToReplacement(ctx, newServer, role)
 	if configErr != nil {
 		return configErr

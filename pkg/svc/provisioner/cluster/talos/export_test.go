@@ -294,6 +294,16 @@ func (p *Provisioner) ReconcileFloatingIPEndpointForTest(
 	return p.reconcileFloatingIPEndpoint(ctx, clusterName, diff)
 }
 
+// PrepareFloatingIPConfigForNewControlPlaneForTest exposes the read-only
+// pre-first-boot config refresh for control-plane scaling/replacement tests.
+func (p *Provisioner) PrepareFloatingIPConfigForNewControlPlaneForTest(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	return p.prepareFloatingIPConfigForNewControlPlane(ctx, hzProvider, clusterName, role)
+}
+
 // RefreshFloatingIPEndpointAfterNodeChangesForTest exposes the post-topology
 // refresh so tests can prove it runs without a floating-IP drift signal.
 func (p *Provisioner) RefreshFloatingIPEndpointAfterNodeChangesForTest(
