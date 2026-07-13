@@ -140,6 +140,7 @@ func applyExternalRegistryOptions(
 	username, password := localRegistry.ResolvePullCredentials()
 	opts.Username = username
 	opts.Password = password
+	opts.PullOnlyCredentials = localRegistry.UsesDedicatedPullCredentials()
 	opts.Insecure = false
 }
 

@@ -44,3 +44,13 @@ func TestPullEnvLookup_PrefersDedicatedPullToken(t *testing.T) {
 	assert.True(t, exists)
 	assert.Equal(t, "pull-token", value)
 }
+
+func TestPullEnvLookup_LegacyNamePrefersDedicatedPullToken(t *testing.T) {
+	t.Setenv(registryauth.GHCRPullTokenEnvVar, "pull-token")
+	t.Setenv(registryauth.GHCRTokenEnvVar, "push-token")
+
+	value, exists := registryauth.PullEnvLookup(registryauth.GHCRTokenEnvVar)
+
+	assert.True(t, exists)
+	assert.Equal(t, "pull-token", value)
+}

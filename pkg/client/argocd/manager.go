@@ -74,10 +74,11 @@ func (m *ManagerImpl) Ensure(ctx context.Context, opts EnsureOptions) error {
 	}
 
 	err = m.upsertRepositorySecret(ctx, repositorySecretOptions{
-		repositoryURL: opts.RepositoryURL,
-		username:      opts.Username,
-		password:      opts.Password,
-		insecure:      opts.Insecure,
+		repositoryURL:       opts.RepositoryURL,
+		username:            opts.Username,
+		password:            opts.Password,
+		pullOnlyCredentials: opts.PullOnlyCredentials,
+		insecure:            opts.Insecure,
 	})
 	if err != nil {
 		return err

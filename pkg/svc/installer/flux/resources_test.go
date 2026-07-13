@@ -412,6 +412,11 @@ func TestBuildRegistrySecret_UsesDedicatedGHCRPullToken(t *testing.T) {
 	auth := dockerConfig.Auths["ghcr.io"]
 	assert.Equal(t, "user", auth.Username)
 	assert.Equal(t, "pull-token", auth.Password)
+	assert.Equal(
+		t,
+		"pull",
+		secret.Annotations["ksail.io/credential-purpose"],
+	)
 }
 
 func TestIsTransientAPIError(t *testing.T) {

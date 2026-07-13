@@ -455,6 +455,32 @@ func TestLocalRegistry_ResolvePullCredentialsKeepsPushCredentialsSeparate(t *tes
 	assert.Equal(t, "pull-token", pullPassword)
 }
 
+func TestLocalRegistry_ResolvePullCredentialsIgnoresAmbientTokenWithoutConfiguredAuth(
+	t *testing.T,
+) {
+	t.Setenv("GHCR_PULL_TOKEN", "ambient-pull-token")
+
+	reg := v1alpha1.LocalRegistry{Registry: "ghcr.io/org/public-repo"}
+	username, password := reg.ResolvePullCredentials()
+
+	assert.Empty(t, username)
+	assert.Empty(t, password)
+}
+
+func TestLocalRegistry_ResolvePullCredentialsRejectsPasswordOnlyAuth(t *testing.T) {
+	t.Setenv("GHCR_USERNAME", "")
+	t.Setenv("GHCR_TOKEN", "push-token")
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	reg := v1alpha1.LocalRegistry{
+		Registry: "${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io/org/private-repo",
+	}
+	username, password := reg.ResolvePullCredentials()
+
+	assert.Empty(t, username)
+	assert.Empty(t, password)
+}
+
 func TestOptionsHetzner_PublicNetAccessors(t *testing.T) {
 	t.Parallel()
 

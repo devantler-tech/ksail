@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -54,14 +56,8 @@ func tryFluxSecret(ctx context.Context, clientset kubernetes.Interface, info *In
 	}
 
 	username, password := parseDockerConfigCredentials(dockerConfigData, info.Host)
-	if username != "" {
-		info.Username = username
-		info.Password = password
 
-		return true
-	}
-
-	return false
+	return applyClusterSecretCredentials(secret, info, username, password)
 }
 
 // tryArgoCDSecret attempts to retrieve credentials from the ArgoCD repository secret.
@@ -84,14 +80,39 @@ func tryArgoCDSecret(
 	username := string(secret.Data["username"])
 	password := string(secret.Data["password"])
 
-	if username != "" {
-		info.Username = username
-		info.Password = password
+	return applyClusterSecretCredentials(secret, info, username, password)
+}
 
-		return true
+// applyClusterSecretCredentials merges credentials into a push target while
+// refusing to reuse cluster-resident pull-only passwords. For marked GHCR
+// secrets, an ambient GHCR_TOKEN is the only eligible push credential.
+func applyClusterSecretCredentials(
+	secret *corev1.Secret,
+	info *Info,
+	username, password string,
+) bool {
+	if username == "" {
+		return false
 	}
 
-	return false
+	purpose := secret.Annotations[registryauth.CredentialPurposeAnnotation]
+	if purpose == registryauth.PullCredentialPurpose {
+		if !strings.EqualFold(strings.TrimSpace(info.Host), registryauth.GHCRHost) {
+			return false
+		}
+
+		pushToken, exists := os.LookupEnv(registryauth.GHCRTokenEnvVar)
+		if !exists || pushToken == "" {
+			return false
+		}
+
+		password = pushToken
+	}
+
+	info.Username = username
+	info.Password = password
+
+	return true
 }
 
 // dockerConfig represents the Docker config.json structure.

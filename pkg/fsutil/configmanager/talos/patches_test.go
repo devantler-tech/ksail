@@ -18,6 +18,14 @@ const ghcrPullTokenPatch = `machine:
           password: ${GHCR_PULL_TOKEN}
 `
 
+const legacyGHCRTokenPatch = `machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          password: ${GHCR_TOKEN}
+`
+
 func TestPatchScope_Constants(t *testing.T) {
 	t.Parallel()
 
@@ -301,6 +309,25 @@ func TestLoadPatches_GHCRPullTokenPrefersDedicatedToken(t *testing.T) {
 	patchContent := []byte(ghcrPullTokenPatch)
 	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
 	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+	t.Setenv("GHCR_TOKEN", "push-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.Contains(t, string(patches[0].Content), "password: pull-token")
+}
+
+func TestLoadPatches_LegacyGHCRTokenPlaceholderPrefersDedicatedPullToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, []byte(legacyGHCRTokenPatch), 0o600))
 
 	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
 	t.Setenv("GHCR_TOKEN", "push-token")

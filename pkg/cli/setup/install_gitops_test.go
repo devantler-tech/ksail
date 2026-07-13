@@ -138,4 +138,25 @@ func TestBuildArgoCDEnsureOptions_UsesDedicatedGHCRPullToken(t *testing.T) {
 
 	assert.Equal(t, "user", opts.Username)
 	assert.Equal(t, "pull-token", opts.Password)
+	assert.True(t, opts.PullOnlyCredentials)
+}
+
+func TestBuildArgoCDEnsureOptions_IgnoresAmbientPullTokenForPublicRegistry(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "ambient-pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "ghcr.io/example/public-repo",
+				},
+			},
+		},
+	}
+
+	opts := setup.BuildArgoCDEnsureOptions(clusterCfg, "test-cluster", "")
+
+	assert.Empty(t, opts.Username)
+	assert.Empty(t, opts.Password)
+	assert.False(t, opts.PullOnlyCredentials)
 }

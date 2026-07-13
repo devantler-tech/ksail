@@ -14,6 +14,12 @@ const (
 	// GHCRPullTokenEnvVar is the optional least-privilege token used by cluster pull paths.
 	//nolint:gosec // This is an environment variable name, not a credential.
 	GHCRPullTokenEnvVar = "GHCR_PULL_TOKEN"
+	// CredentialPurposeAnnotation marks the intended operation for credentials
+	// persisted in a cluster so a pull-only secret is never reused for pushes.
+	//nolint:gosec // G101: this is a Kubernetes annotation key, not a credential.
+	CredentialPurposeAnnotation = "ksail.io/credential-purpose"
+	// PullCredentialPurpose identifies credentials that may only be used for pulls.
+	PullCredentialPurpose = "pull"
 )
 
 // PullPassword returns the dedicated GHCR pull token when configured, otherwise
@@ -35,9 +41,13 @@ func PullPassword(host, configuredPassword string) string {
 // PullEnvLookup resolves environment variables for cluster pull configuration.
 // An unset or empty GHCR_PULL_TOKEN falls back to GHCR_TOKEN for compatibility.
 func PullEnvLookup(name string) (string, bool) {
-	value, exists := os.LookupEnv(name)
-	if name != GHCRPullTokenEnvVar || (exists && value != "") {
-		return value, exists
+	if name != GHCRPullTokenEnvVar && name != GHCRTokenEnvVar {
+		return os.LookupEnv(name)
+	}
+
+	pullToken, exists := os.LookupEnv(GHCRPullTokenEnvVar)
+	if exists && pullToken != "" {
+		return pullToken, true
 	}
 
 	return os.LookupEnv(GHCRTokenEnvVar)

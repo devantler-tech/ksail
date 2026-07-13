@@ -190,9 +190,26 @@ func (r LocalRegistry) ResolveCredentials() (username, password string) {
 //nolint:nonamedreturns // Named returns document the returned values for clarity.
 func (r LocalRegistry) ResolvePullCredentials() (username, password string) {
 	parsed := r.Parse()
+
 	username, password = r.ResolveCredentials()
+	if strings.TrimSpace(username) == "" {
+		return "", ""
+	}
 
 	return username, registryauth.PullPassword(parsed.Host, password)
+}
+
+// UsesDedicatedPullCredentials reports whether the registry resolves to a
+// separate pull password rather than its configured push password.
+func (r LocalRegistry) UsesDedicatedPullCredentials() bool {
+	parsed := r.Parse()
+
+	username, pushPassword := r.ResolveCredentials()
+	if strings.TrimSpace(username) == "" {
+		return false
+	}
+
+	return registryauth.PullPassword(parsed.Host, pushPassword) != pushPassword
 }
 
 // HasCredentials returns true if the registry has non-empty username or password configured.
