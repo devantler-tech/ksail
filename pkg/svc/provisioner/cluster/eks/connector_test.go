@@ -174,7 +174,8 @@ func TestKubeconfigRequiresClusterName(t *testing.T) {
 	require.ErrorIs(t, err, eksprovisioner.ErrClusterNameRequired)
 }
 
-// TestKubeconfigFailsClosedOnIncompleteMappedCredentials verifies connector setup rejects partial aliased static credentials.
+// TestKubeconfigFailsClosedOnIncompleteMappedCredentials verifies connector
+// setup rejects partial aliased static credentials.
 func TestKubeconfigFailsClosedOnIncompleteMappedCredentials(t *testing.T) {
 	t.Parallel()
 
