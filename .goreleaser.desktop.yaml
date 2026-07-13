@@ -82,12 +82,16 @@ homebrew_casks:
       owner: devantler-tech
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
-      branch: "goreleaser/{{ .ProjectName }}-{{ .Tag }}"
+      branch: "goreleaser/{{ .ProjectName }}"
       pull_request:
         enabled: true
         # Open as a draft so the tap cannot auto-merge it while the GitHub release is still a draft
-        # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job marks the
-        # PR ready after `publish-release` flips the release public, letting the tap merge it then.
+        # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job
+        # style-cleans and normalizes the draft; promotion stays with the maintainer.
+        # The branch is deliberately version-less (evergreen): a new release commits onto the same
+        # branch so the ONE open cask PR updates in place instead of a new PR superseding it each
+        # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
+        # the tap deletes the branch on merge, so it is recreated fresh from main next release).
         draft: true
     # The cask schema has no first-class `app`, `depends_on` or `uninstall` field; emit them via a
     # custom stanza. `depends_on macos` satisfies `brew style` (Homebrew/OSDependsOn) for this

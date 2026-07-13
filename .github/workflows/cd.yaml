@@ -148,8 +148,8 @@ jobs:
   # The macOS desktop app ships as a Homebrew cask. The desktop app is a separate Go module that
   # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
   # a second GoReleaser config on a macOS runner: it builds the darwin binary, packages it as a
-  # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job marks it ready
-  # and merges it after publication). GoReleaser's release pipe is disabled (see .goreleaser.desktop.yaml); the built
+  # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job style-cleans
+  # and normalizes it; the maintainer promotes and the tap merges). GoReleaser's release pipe is disabled (see .goreleaser.desktop.yaml); the built
   # archive is emitted as a workflow artifact and attached to the draft by `publish-release`. No
   # `needs: [goreleaser]` — this builds in parallel with the CLI release.
   desktop-macos:
@@ -666,7 +666,8 @@ jobs:
   # SHA. The standard maintainer lane promotes and merges only after its live pentad is green. This job
   # validates the trusted same-repository draft and exact cask-only scope before and after its style
   # mutation, normalizes metadata, and records the pending handoff without failing an already-published
-  # release. Branches mirror `.goreleaser*.yaml` (`goreleaser/<project>-<tag>`). See #6067.
+  # release. Branches mirror `.goreleaser*.yaml` (`goreleaser/<project>` — evergreen, version-less:
+  # each release updates the ONE open cask PR in place instead of superseding it, tap#1172). See #6067.
   homebrew:
     name: 🍺 Prepare Homebrew cask PRs
     runs-on: ubuntu-latest
@@ -719,7 +720,7 @@ jobs:
           trap 'rm -rf "$evidence_dir"' EXIT
 
           for name in ksail ksail-desktop; do
-            branch="goreleaser/${name}-${TAG}"
+            branch="goreleaser/${name}"
             # `|| true` keeps the job fail-soft: a transient `gh pr list` failure (5xx, rate limit,
             # network blip) must not abort the step under `set -e` after the release is already public —
             # invalid evidence below then warns and skips, same as the no-PR-found case.
