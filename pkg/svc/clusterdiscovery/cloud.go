@@ -86,20 +86,12 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 		}
 
 		auth := credentials.ResolveAWS(d.resolver())
-		eksctlOptions := []eksctlclient.Option{
-			eksctlclient.WithEnvironment(auth.ChildEnvironment(os.Environ())),
-		}
-
-		providerOptions := []awsprovider.Option{awsprovider.WithCredentialValues(
-			auth.Profile,
-			auth.AccessKeyID,
-			auth.SecretAccessKey,
-			auth.SessionToken,
-		)}
-		if auth.HasCustomCredentialSources() {
-			eksctlOptions = append(eksctlOptions, eksctlclient.RequireCredentialValues())
-			providerOptions = append(providerOptions, awsprovider.RequireCredentialValues())
-		}
+		eksctlOptions := credentials.OptionsForAWSChildEnvironment(
+			auth, os.Environ(), eksctlclient.WithEnvironment, eksctlclient.RequireCredentialValues,
+		)
+		providerOptions := credentials.OptionsForAWSResolution(
+			auth, awsprovider.WithCredentialValues, awsprovider.RequireCredentialValues,
+		)
 
 		client := eksctlclient.NewClient(eksctlOptions...)
 

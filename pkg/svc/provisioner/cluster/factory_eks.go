@@ -57,27 +57,15 @@ func resolveEKSCredentialOptions(
 	awsOptions v1alpha1.OptionsAWS,
 ) (*eksctlclient.Client, []awsprovider.Option, []eksprovisioner.Option) {
 	auth := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOptions))
-	eksctlOptions := []eksctlclient.Option{
-		eksctlclient.WithEnvironment(auth.ChildEnvironment(os.Environ())),
-	}
-	providerOptions := []awsprovider.Option{awsprovider.WithCredentialValues(
-		auth.Profile,
-		auth.AccessKeyID,
-		auth.SecretAccessKey,
-		auth.SessionToken,
-	)}
-
-	provisionerOptions := []eksprovisioner.Option{eksprovisioner.WithCredentialValues(
-		auth.Profile,
-		auth.AccessKeyID,
-		auth.SecretAccessKey,
-		auth.SessionToken,
-	)}
-	if auth.HasCustomCredentialSources() {
-		eksctlOptions = append(eksctlOptions, eksctlclient.RequireCredentialValues())
-		providerOptions = append(providerOptions, awsprovider.RequireCredentialValues())
-		provisionerOptions = append(provisionerOptions, eksprovisioner.RequireCredentialValues())
-	}
+	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
+		auth, os.Environ(), eksctlclient.WithEnvironment, eksctlclient.RequireCredentialValues,
+	)
+	providerOptions := credentials.OptionsForAWSResolution(
+		auth, awsprovider.WithCredentialValues, awsprovider.RequireCredentialValues,
+	)
+	provisionerOptions := credentials.OptionsForAWSResolution(
+		auth, eksprovisioner.WithCredentialValues, eksprovisioner.RequireCredentialValues,
+	)
 
 	return eksctlclient.NewClient(eksctlOptions...), providerOptions, provisionerOptions
 }

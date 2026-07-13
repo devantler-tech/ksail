@@ -131,6 +131,22 @@ func RequireCredentialValues() Option {
 	}
 }
 
+// NewClientWithCredentialRequirement constructs a Client from an immutable
+// option snapshot, adding the fail-closed credential requirement when needed.
+func NewClientWithCredentialRequirement(
+	ctx context.Context,
+	region string,
+	required bool,
+	options ...Option,
+) (*Client, error) {
+	result := append([]Option(nil), options...)
+	if required {
+		result = append(result, RequireCredentialValues())
+	}
+
+	return NewClient(ctx, region, result...)
+}
+
 // NewClient constructs a Client. Unless both seams are injected, it resolves
 // the AWS default configuration (env, shared config, IRSA / instance
 // role) once and builds the real SDK clients from it.

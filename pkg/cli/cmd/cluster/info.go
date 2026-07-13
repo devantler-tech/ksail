@@ -342,20 +342,12 @@ func getAWSProviderStatus(
 	region string,
 ) (*provider.ClusterStatus, error) {
 	auth := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOpts))
-	eksctlOptions := []eksctlclient.Option{
-		eksctlclient.WithEnvironment(auth.ChildEnvironment(os.Environ())),
-	}
-
-	providerOptions := []awsprovider.Option{awsprovider.WithCredentialValues(
-		auth.Profile,
-		auth.AccessKeyID,
-		auth.SecretAccessKey,
-		auth.SessionToken,
-	)}
-	if auth.HasCustomCredentialSources() {
-		eksctlOptions = append(eksctlOptions, eksctlclient.RequireCredentialValues())
-		providerOptions = append(providerOptions, awsprovider.RequireCredentialValues())
-	}
+	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
+		auth, os.Environ(), eksctlclient.WithEnvironment, eksctlclient.RequireCredentialValues,
+	)
+	providerOptions := credentials.OptionsForAWSResolution(
+		auth, awsprovider.WithCredentialValues, awsprovider.RequireCredentialValues,
+	)
 
 	return awsProviderStatus(
 		ctx,

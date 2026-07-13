@@ -189,6 +189,90 @@ func TestAWSResolution_ReportsCustomCredentialSourcesEvenWhenUnset(t *testing.T)
 	assert.True(t, resolution.HasCustomCredentialSources())
 }
 
+func TestOptionsForAWSResolutionMapsValuesAndCustomRequirement(t *testing.T) {
+	t.Parallel()
+
+	type option struct {
+		profile      string
+		accessKeyID  string
+		secretKey    string
+		sessionToken string
+		required     bool
+	}
+
+	resolution := credentials.ResolveAWS(awsResolverFixture{
+		envVars: map[credentials.Key]string{
+			credentials.AWSProfile: "KSAIL_PROFILE",
+		},
+		values: map[credentials.Key]string{
+			credentials.AWSProfile:         "selected-profile",
+			credentials.AWSAccessKeyID:     "selected-access",
+			credentials.AWSSecretAccessKey: "selected-secret",
+			credentials.AWSSessionToken:    "selected-session",
+		},
+	})
+	options := credentials.OptionsForAWSResolution(
+		resolution,
+		func(profile, accessKeyID, secretKey, sessionToken string) option {
+			return option{
+				profile:      profile,
+				accessKeyID:  accessKeyID,
+				secretKey:    secretKey,
+				sessionToken: sessionToken,
+				required:     false,
+			}
+		},
+		func() option { return option{required: true} },
+	)
+
+	require.Len(t, options, 2)
+	assert.Equal(t, option{
+		profile:      "selected-profile",
+		accessKeyID:  "selected-access",
+		secretKey:    "selected-secret",
+		sessionToken: "selected-session",
+		required:     false,
+	}, options[0])
+	assert.True(t, options[1].required)
+}
+
+func TestOptionsForAWSResolutionPreservesDefaultCredentialChain(t *testing.T) {
+	t.Parallel()
+
+	resolution := credentials.ResolveAWS(awsResolverFixture{})
+	options := credentials.OptionsForAWSResolution(
+		resolution,
+		func(_, _, _, _ string) string { return "values" },
+		func() string { return "required" },
+	)
+
+	assert.Equal(t, []string{"values"}, options)
+}
+
+func TestOptionsForAWSChildEnvironmentCanonicalizesAndRequiresCustomSources(t *testing.T) {
+	t.Parallel()
+
+	resolution := credentials.ResolveAWS(awsResolverFixture{
+		envVars: map[credentials.Key]string{
+			credentials.AWSProfile: "KSAIL_PROFILE",
+		},
+		values: map[credentials.Key]string{
+			credentials.AWSProfile: "selected-profile",
+		},
+	})
+	options := credentials.OptionsForAWSChildEnvironment(
+		resolution,
+		[]string{"PATH=/usr/bin", "AWS_PROFILE=stale-profile"},
+		func(environment []string) []string { return environment },
+		func() []string { return []string{"required"} },
+	)
+
+	require.Len(t, options, 2)
+	assertEnvEntry(t, options[0], "PATH", "usr/bin")
+	assertEnvEntry(t, options[0], "AWS_PROFILE", "selected-profile")
+	assert.Equal(t, []string{"required"}, options[1])
+}
+
 func TestAWSResolution_ChildEnvironmentPreservesCanonicalDefaults(t *testing.T) {
 	t.Parallel()
 

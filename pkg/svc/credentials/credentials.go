@@ -234,6 +234,57 @@ func (r AWSResolution) HasCustomCredentialSources() bool {
 	return r.hasCustomCredentialEnv
 }
 
+// OptionsForAWSResolution maps a resolved AWS identity into a consumer's
+// option type. Custom source names add the consumer's fail-closed option so an
+// unset alias cannot silently fall back to an unrelated ambient identity.
+func OptionsForAWSResolution[T any](
+	resolution AWSResolution,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) T,
+	requireCredentialValues func() T,
+) []T {
+	option := withCredentialValues(
+		resolution.Profile,
+		resolution.AccessKeyID,
+		resolution.SecretAccessKey,
+		resolution.SessionToken,
+	)
+
+	return optionsWithCredentialRequirement(
+		option,
+		resolution.HasCustomCredentialSources(),
+		requireCredentialValues,
+	)
+}
+
+// OptionsForAWSChildEnvironment maps an AWS resolution's isolated child
+// environment into a consumer's option type and adds its fail-closed option
+// when credential aliases are custom.
+func OptionsForAWSChildEnvironment[T any](
+	resolution AWSResolution,
+	parent []string,
+	withEnvironment func(environment []string) T,
+	requireCredentialValues func() T,
+) []T {
+	return optionsWithCredentialRequirement(
+		withEnvironment(resolution.ChildEnvironment(parent)),
+		resolution.HasCustomCredentialSources(),
+		requireCredentialValues,
+	)
+}
+
+func optionsWithCredentialRequirement[T any](
+	option T,
+	required bool,
+	requireCredentialValues func() T,
+) []T {
+	options := []T{option}
+	if required {
+		options = append(options, requireCredentialValues())
+	}
+
+	return options
+}
+
 // ChildEnvironment returns a copy of parent with AWS credential aliases and
 // stale canonical values removed, followed by the non-empty resolved values
 // under the canonical names eksctl understands. When a custom credential source

@@ -256,6 +256,35 @@ func TestRequireCredentialValuesRejectsAmbientFallback(t *testing.T) {
 	require.ErrorIs(t, err, eksclient.ErrExplicitCredentialsUnavailable)
 }
 
+func TestNewClientWithCredentialRequirementRejectsAmbientFallbackWhenRequired(t *testing.T) {
+	t.Parallel()
+
+	base := []eksclient.Option{
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+		eksclient.WithCredentialValues("", "", "", ""),
+	}
+	_, err := eksclient.NewClientWithCredentialRequirement(
+		t.Context(), "eu-central-1", true, base...,
+	)
+	require.ErrorIs(t, err, eksclient.ErrExplicitCredentialsUnavailable)
+	require.Len(t, base, 3, "the caller-owned option slice must remain unchanged")
+}
+
+func TestNewClientWithCredentialRequirementPreservesDefaultChainWhenOptional(t *testing.T) {
+	t.Parallel()
+
+	base := []eksclient.Option{
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+	}
+	client, err := eksclient.NewClientWithCredentialRequirement(
+		t.Context(), "eu-central-1", false, base...,
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, client)
+}
+
 func assertTokenCredentialPrefix(t *testing.T, token, expected string) {
 	t.Helper()
 
