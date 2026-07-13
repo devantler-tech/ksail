@@ -1515,8 +1515,8 @@ github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 h1:ADOGhVZ995JR3mqdL
 github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343/go.mod h1:niVPRwWFUSA8FihY9e5hGAp5IbKmbCdckGxJGSTKTUs=
 github.com/loft-sh/utils v0.0.29 h1:P/MObccXToAZy2QoJSQDJ+OJx1qHitpFHEVj3QBSNJs=
 github.com/loft-sh/utils v0.0.29/go.mod h1:9hlX9cGpWHg3mNi/oBlv3X4ePGDMK66k8MbOZGFMDTI=
-github.com/loft-sh/vcluster v0.35.1 h1:UP0sAK14Hze+gB7eupjadBYYHODmYma7pQq2RC2ghAQ=
-github.com/loft-sh/vcluster v0.35.1/go.mod h1:hL6w+h2hcPrhRj0nmJmJm6AxA/2xIyyff4qGYxbk/nY=
+github.com/loft-sh/vcluster v0.35.2 h1:LUON8JrpzNErrTu3ZhZwVfpSoeizmtAM9J88vwBjipc=
+github.com/loft-sh/vcluster v0.35.2/go.mod h1:hL6w+h2hcPrhRj0nmJmJm6AxA/2xIyyff4qGYxbk/nY=
 github.com/logrusorgru/aurora v2.0.3+incompatible h1:tOpm7WcpBTn4fjmVfgpQq0EfczGlG91VSDkswnjF5A8=
 github.com/logrusorgru/aurora v2.0.3+incompatible/go.mod h1:7rIyQOR62GCctdiQpZ/zOJlFyk6y+94wXzv6RNZgaR4=
 github.com/lucasb-eyer/go-colorful v1.4.0 h1:UtrWVfLdarDgc44HcS7pYloGHJUjHV/4FwW4TvVgFr4=

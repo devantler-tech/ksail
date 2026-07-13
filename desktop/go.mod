@@ -490,7 +490,7 @@ require (
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
-	github.com/loft-sh/vcluster v0.35.1 // indirect
+	github.com/loft-sh/vcluster v0.35.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mackerelio/go-osstat v0.2.6 // indirect
 	github.com/magefile/mage v1.17.2 // indirect
