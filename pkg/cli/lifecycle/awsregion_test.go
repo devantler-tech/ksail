@@ -52,6 +52,8 @@ func TestResolveAWSRegion(t *testing.T) {
 	})
 }
 
+// TestResolveClusterInfoRetainsAWSCredentialMappings verifies lifecycle
+// resolution preserves immutable AWS credential-name mappings.
 func TestResolveClusterInfoRetainsAWSCredentialMappings(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)

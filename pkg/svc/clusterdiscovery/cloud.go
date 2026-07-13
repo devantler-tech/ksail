@@ -85,12 +85,13 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 			return nil, nil
 		}
 
-		auth := credentials.ResolveAWS(d.resolver())
-		eksctlOptions := credentials.OptionsForAWSChildEnvironment(
-			auth, os.Environ(), eksctlclient.WithEnvironment, eksctlclient.RequireCredentialValues,
-		)
-		providerOptions := credentials.OptionsForAWSResolution(
-			auth, awsprovider.WithCredentialValues, awsprovider.RequireCredentialValues,
+		_, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
+			d.resolver(),
+			os.Environ(),
+			eksctlclient.WithEnvironment,
+			eksctlclient.RequireCredentialValues,
+			awsprovider.WithCredentialValues,
+			awsprovider.RequireCredentialValues,
 		)
 
 		client := eksctlclient.NewClient(eksctlOptions...)

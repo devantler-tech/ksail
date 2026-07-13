@@ -33,6 +33,7 @@ type fakeRunner struct {
 
 type legacyRunner struct{}
 
+// Run implements the legacy runner contract without explicit-environment support for fail-closed tests.
 func (legacyRunner) Run(
 	context.Context,
 	string,
@@ -51,6 +52,7 @@ func (f *fakeRunner) Run(
 	return f.run(ctx, name, args, stdin, nil)
 }
 
+// RunWithEnvironment records an explicitly supplied environment through the shared fake execution path.
 func (f *fakeRunner) RunWithEnvironment(
 	ctx context.Context,
 	name string,
@@ -61,6 +63,7 @@ func (f *fakeRunner) RunWithEnvironment(
 	return f.run(ctx, name, args, stdin, environment)
 }
 
+// run records one fake invocation and can mutate its input to exercise defensive-copy guarantees.
 func (f *fakeRunner) run(
 	_ context.Context,
 	name string,
@@ -113,6 +116,8 @@ func TestWithBinary_EmptyIgnored(t *testing.T) {
 	assert.Equal(t, eksctl.DefaultBinary, client.Binary())
 }
 
+// TestWithEnvironment_ForwardsAnIsolatedSnapshot verifies callers and runners
+// cannot mutate the client's saved environment.
 func TestWithEnvironment_ForwardsAnIsolatedSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +147,8 @@ func TestWithEnvironment_ForwardsAnIsolatedSnapshot(t *testing.T) {
 	assert.Equal(t, []string{"HOME=/tmp/ksail", "AWS_PROFILE=custom-profile"}, runner.lastEnv)
 }
 
+// TestNewClient_DefaultEnvironmentInheritsParent verifies a nil explicit
+// environment retains normal process inheritance.
 func TestNewClient_DefaultEnvironmentInheritsParent(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +160,7 @@ func TestNewClient_DefaultEnvironmentInheritsParent(t *testing.T) {
 	assert.Nil(t, runner.lastEnv)
 }
 
+// TestWithEnvironment_FailsClosedForLegacyRunner verifies isolation is never silently dropped by an older runner.
 func TestWithEnvironment_FailsClosedForLegacyRunner(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +173,8 @@ func TestWithEnvironment_FailsClosedForLegacyRunner(t *testing.T) {
 	require.ErrorIs(t, err, eksctl.ErrRunnerEnvironmentUnsupported)
 }
 
+// TestExec_RedactsCredentialValuesFromStderrErrors verifies secret values are
+// absent from returned stderr and wrapped errors.
 func TestExec_RedactsCredentialValuesFromStderrErrors(t *testing.T) {
 	t.Parallel()
 
@@ -187,6 +197,32 @@ func TestExec_RedactsCredentialValuesFromStderrErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "[REDACTED]")
 }
 
+// TestExec_PreservesProfileNamesWhileRedactingSecrets verifies diagnostic
+// selectors remain readable while secrets are removed.
+func TestExec_PreservesProfileNamesWhileRedactingSecrets(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{
+		stderr: []byte("provider rejected selected-profile using fixture-secret-value"),
+		err:    errExitStatus1,
+	}
+	client := eksctl.NewClient(
+		eksctl.WithRunner(runner),
+		eksctl.WithEnvironment([]string{
+			"AWS_PROFILE=selected-profile",
+			"AWS_SECRET_ACCESS_KEY=fixture-secret-value",
+		}),
+	)
+
+	_, stderr, err := client.Exec(t.Context(), "get", "cluster")
+	require.Error(t, err)
+	assert.Contains(t, string(stderr), "selected-profile")
+	assert.NotContains(t, string(stderr), "fixture-secret-value")
+	assert.Contains(t, err.Error(), "selected-profile")
+	assert.NotContains(t, err.Error(), "fixture-secret-value")
+}
+
+// TestExec_RedactsOverlappingCredentialValuesLongestFirst verifies longer secrets are removed before their prefixes.
 func TestExec_RedactsOverlappingCredentialValuesLongestFirst(t *testing.T) {
 	t.Parallel()
 
@@ -197,7 +233,7 @@ func TestExec_RedactsOverlappingCredentialValuesLongestFirst(t *testing.T) {
 	client := eksctl.NewClient(
 		eksctl.WithRunner(runner),
 		eksctl.WithEnvironment([]string{
-			"AWS_PROFILE=fixture-secret",
+			"AWS_ACCESS_KEY_ID=fixture-secret",
 			"AWS_SECRET_ACCESS_KEY=fixture-secret-long",
 		}),
 	)
@@ -208,6 +244,8 @@ func TestExec_RedactsOverlappingCredentialValuesLongestFirst(t *testing.T) {
 	assert.NotContains(t, err.Error(), "-long")
 }
 
+// TestRequireCredentialValuesRejectsMissingAndPartialSelections verifies every
+// unusable explicit selection fails before execution.
 func TestRequireCredentialValuesRejectsMissingAndPartialSelections(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +289,7 @@ func TestRequireCredentialValuesRejectsMissingAndPartialSelections(t *testing.T)
 	}
 }
 
+// TestRequireCredentialValuesAcceptsProfileOrStaticPair verifies either supported complete credential form can execute.
 func TestRequireCredentialValuesAcceptsProfileOrStaticPair(t *testing.T) {
 	t.Parallel()
 

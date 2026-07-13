@@ -17,8 +17,10 @@ type namedAWSResolver struct {
 	names  map[credentials.Key]string
 }
 
+// Value returns the fixture value associated with a credential key.
 func (r namedAWSResolver) Value(key credentials.Key) string { return r.values[key] }
 
+// EnvVar returns the fixture's configured source name or the credential's canonical default.
 func (r namedAWSResolver) EnvVar(key credentials.Key) string {
 	if name := r.names[key]; name != "" {
 		return name
@@ -27,6 +29,8 @@ func (r namedAWSResolver) EnvVar(key credentials.Key) string {
 	return credentials.DefaultEnvVar(key)
 }
 
+// TestDiscoverAWS_UsesCanonicalIsolatedChildEnvironment verifies discovery
+// canonicalizes aliases without leaking ambient credentials.
 func TestDiscoverAWS_UsesCanonicalIsolatedChildEnvironment(t *testing.T) {
 	// Not parallel: the real ExecRunner resolves the fixture from PATH.
 	binDir := t.TempDir()
@@ -82,6 +86,7 @@ printf '[{"Name":"mapped-eks","Region":"eu-west-1","EksctlCreated":"True"}]\n'
 	assert.Equal(t, "parent-custom-profile", os.Getenv("KSAIL_PROFILE"))
 }
 
+// writeExecutableFixture writes a private executable used to stand in for eksctl.
 func writeExecutableFixture(t *testing.T, path, contents string) {
 	t.Helper()
 

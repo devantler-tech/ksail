@@ -201,25 +201,23 @@ func ResolveAWS(resolver Resolver) AWSResolution {
 		AccessKeyID:     resolver.Value(AWSAccessKeyID),
 		SecretAccessKey: resolver.Value(AWSSecretAccessKey),
 		SessionToken:    resolver.Value(AWSSessionToken),
-		sourceEnvVars: [4]string{
-			resolver.EnvVar(AWSProfile),
-			resolver.EnvVar(AWSAccessKeyID),
-			resolver.EnvVar(AWSSecretAccessKey),
-			resolver.EnvVar(AWSSessionToken),
-		},
 	}
 
-	canonicalNames := [...]string{
-		defaultAWSProfileEnvVar,
-		defaultAWSAccessKeyIDEnvVar,
-		defaultAWSSecretAccessEnvVar,
-		defaultAWSSessionTokenEnvVar,
+	credentialSources := [...]struct {
+		key           Key
+		canonicalName string
+	}{
+		{key: AWSProfile, canonicalName: defaultAWSProfileEnvVar},
+		{key: AWSAccessKeyID, canonicalName: defaultAWSAccessKeyIDEnvVar},
+		{key: AWSSecretAccessKey, canonicalName: defaultAWSSecretAccessEnvVar},
+		{key: AWSSessionToken, canonicalName: defaultAWSSessionTokenEnvVar},
 	}
-	for index, sourceName := range resolution.sourceEnvVars {
-		if sourceName != "" && sourceName != canonicalNames[index] {
+	for index, source := range credentialSources {
+		sourceName := resolver.EnvVar(source.key)
+		resolution.sourceEnvVars[index] = sourceName
+
+		if sourceName != "" && sourceName != source.canonicalName {
 			resolution.hasCustomCredentialEnv = true
-
-			break
 		}
 	}
 
@@ -272,6 +270,37 @@ func OptionsForAWSChildEnvironment[T any](
 	)
 }
 
+// ResolveAWSClientOptions snapshots one AWS identity and builds the paired
+// option sets that isolate an environment-based client and pin an SDK-backed
+// client to that same identity. Both option sets inherit the same fail-closed
+// custom-source requirement, preventing call sites from wiring only half of
+// the credential boundary. The returned resolution can feed additional AWS
+// consumers without re-reading mutable process state.
+func ResolveAWSClientOptions[EnvironmentOption, CredentialOption any](
+	resolver Resolver,
+	parentEnvironment []string,
+	withEnvironment func(environment []string) EnvironmentOption,
+	requireEnvironmentCredentialValues func() EnvironmentOption,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) CredentialOption,
+	requireCredentialValues func() CredentialOption,
+) (AWSResolution, []EnvironmentOption, []CredentialOption) {
+	resolution := ResolveAWS(resolver)
+
+	return resolution,
+		OptionsForAWSChildEnvironment(
+			resolution,
+			parentEnvironment,
+			withEnvironment,
+			requireEnvironmentCredentialValues,
+		),
+		OptionsForAWSResolution(
+			resolution,
+			withCredentialValues,
+			requireCredentialValues,
+		)
+}
+
+// optionsWithCredentialRequirement appends the fail-closed option only when custom credential sources require it.
 func optionsWithCredentialRequirement[T any](
 	option T,
 	required bool,
@@ -313,6 +342,8 @@ func (r AWSResolution) ChildEnvironment(parent []string) []string {
 	return child
 }
 
+// strippedEnvironmentNames returns normalized aliases and competing provider
+// names that must not reach the child process.
 func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string]struct{} {
 	strippedNames := make(map[string]struct{})
 	for _, name := range []string{
@@ -346,6 +377,7 @@ func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string
 	return strippedNames
 }
 
+// filterEnvironment copies parent entries whose normalized names are not marked for removal.
 func filterEnvironment(
 	parent []string,
 	strippedNames map[string]struct{},
@@ -366,6 +398,7 @@ func filterEnvironment(
 	return child
 }
 
+// normalizeEnvironmentName folds case only when the target platform treats environment names case-insensitively.
 func normalizeEnvironmentName(name string, caseInsensitive bool) string {
 	if caseInsensitive {
 		return strings.ToUpper(name)

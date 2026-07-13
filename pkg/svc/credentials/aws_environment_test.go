@@ -19,6 +19,7 @@ type awsResolverFixture struct {
 	values  map[credentials.Key]string
 }
 
+// EnvVar returns the fixture's configured source name or the credential's canonical default.
 func (f awsResolverFixture) EnvVar(key credentials.Key) string {
 	if name := f.envVars[key]; name != "" {
 		return name
@@ -27,8 +28,11 @@ func (f awsResolverFixture) EnvVar(key credentials.Key) string {
 	return credentials.DefaultEnvVar(key)
 }
 
+// Value returns the fixture value associated with a credential key.
 func (f awsResolverFixture) Value(key credentials.Key) string { return f.values[key] }
 
+// TestNewAWSOptionsResolver_UsesConfiguredNamesWithoutMutatingParent verifies
+// immutable alias lookup leaves process state untouched.
 func TestNewAWSOptionsResolver_UsesConfiguredNamesWithoutMutatingParent(t *testing.T) {
 	// Not parallel: t.Setenv changes the process environment.
 	t.Setenv("KSAIL_PROFILE", "selected-profile")
@@ -53,6 +57,8 @@ func TestNewAWSOptionsResolver_UsesConfiguredNamesWithoutMutatingParent(t *testi
 	assert.Equal(t, "stale-profile", os.Getenv("AWS_PROFILE"))
 }
 
+// TestAWSResolution_ChildEnvironmentCanonicalizesAndIsolatesCredentials
+// verifies aliases become canonical values in an isolated child environment.
 func TestAWSResolution_ChildEnvironmentCanonicalizesAndIsolatesCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +111,8 @@ func TestAWSResolution_ChildEnvironmentCanonicalizesAndIsolatesCredentials(t *te
 	assertEnvKeyCount(t, child, "KSAIL_SESSION", 0)
 }
 
+// TestAWSResolution_ChildEnvironmentRemovesStaleOptionalValues verifies omitted
+// optional credentials cannot survive from ambient state.
 func TestAWSResolution_ChildEnvironmentRemovesStaleOptionalValues(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +137,8 @@ func TestAWSResolution_ChildEnvironmentRemovesStaleOptionalValues(t *testing.T) 
 	assertEnvKeyCount(t, child, "KSAIL_SESSION", 0)
 }
 
+// TestAWSResolution_CustomSourcesRemoveCompetingAmbientCredentialProviders
+// verifies aliases suppress competing environment identity providers.
 func TestAWSResolution_CustomSourcesRemoveCompetingAmbientCredentialProviders(t *testing.T) {
 	t.Parallel()
 
@@ -176,6 +186,8 @@ func TestAWSResolution_CustomSourcesRemoveCompetingAmbientCredentialProviders(t 
 	assertEnvEntry(t, child, "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", "selected-auth-token")
 }
 
+// TestAWSResolution_ReportsCustomCredentialSourcesEvenWhenUnset verifies
+// configured aliases remain fail-closed when their values are absent.
 func TestAWSResolution_ReportsCustomCredentialSourcesEvenWhenUnset(t *testing.T) {
 	t.Parallel()
 
@@ -189,6 +201,8 @@ func TestAWSResolution_ReportsCustomCredentialSourcesEvenWhenUnset(t *testing.T)
 	assert.True(t, resolution.HasCustomCredentialSources())
 }
 
+// TestOptionsForAWSResolutionMapsValuesAndCustomRequirement verifies resolved
+// values and fail-closed intent reach credential consumers together.
 func TestOptionsForAWSResolutionMapsValuesAndCustomRequirement(t *testing.T) {
 	t.Parallel()
 
@@ -236,6 +250,8 @@ func TestOptionsForAWSResolutionMapsValuesAndCustomRequirement(t *testing.T) {
 	assert.True(t, options[1].required)
 }
 
+// TestOptionsForAWSResolutionPreservesDefaultCredentialChain verifies canonical
+// defaults do not impose an explicit credential requirement.
 func TestOptionsForAWSResolutionPreservesDefaultCredentialChain(t *testing.T) {
 	t.Parallel()
 
@@ -249,6 +265,8 @@ func TestOptionsForAWSResolutionPreservesDefaultCredentialChain(t *testing.T) {
 	assert.Equal(t, []string{"values"}, options)
 }
 
+// TestOptionsForAWSChildEnvironmentCanonicalizesAndRequiresCustomSources
+// verifies child-process isolation and its requirement stay paired.
 func TestOptionsForAWSChildEnvironmentCanonicalizesAndRequiresCustomSources(t *testing.T) {
 	t.Parallel()
 
@@ -273,6 +291,53 @@ func TestOptionsForAWSChildEnvironmentCanonicalizesAndRequiresCustomSources(t *t
 	assert.Equal(t, []string{"required"}, options[1])
 }
 
+// TestResolveAWSClientOptionsBuildsBothCredentialBoundaries verifies one
+// snapshot configures child-process and SDK consumers consistently.
+func TestResolveAWSClientOptionsBuildsBothCredentialBoundaries(t *testing.T) {
+	t.Parallel()
+
+	type environmentOption struct {
+		environment []string
+		required    bool
+	}
+
+	type credentialOption struct {
+		profile  string
+		required bool
+	}
+
+	resolution, environmentOptions, credentialOptions := credentials.ResolveAWSClientOptions(
+		awsResolverFixture{
+			envVars: map[credentials.Key]string{
+				credentials.AWSProfile: "KSAIL_PROFILE",
+			},
+			values: map[credentials.Key]string{
+				credentials.AWSProfile: "selected-profile",
+			},
+		},
+		[]string{"PATH=/usr/bin", "AWS_PROFILE=stale-profile"},
+		func(environment []string) environmentOption {
+			return environmentOption{environment: environment}
+		},
+		func() environmentOption { return environmentOption{required: true} },
+		func(profile, _, _, _ string) credentialOption {
+			return credentialOption{profile: profile}
+		},
+		func() credentialOption { return credentialOption{required: true} },
+	)
+
+	assert.Equal(t, "selected-profile", resolution.Profile)
+	require.Len(t, environmentOptions, 2)
+	assertEnvEntry(t, environmentOptions[0].environment, "PATH", "usr/bin")
+	assertEnvEntry(t, environmentOptions[0].environment, "AWS_PROFILE", "selected-profile")
+	assert.True(t, environmentOptions[1].required)
+	require.Len(t, credentialOptions, 2)
+	assert.Equal(t, "selected-profile", credentialOptions[0].profile)
+	assert.True(t, credentialOptions[1].required)
+}
+
+// TestAWSResolution_ChildEnvironmentPreservesCanonicalDefaults verifies
+// canonical selection retains unrelated default-chain inputs.
 func TestAWSResolution_ChildEnvironmentPreservesCanonicalDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -300,6 +365,8 @@ func TestAWSResolution_ChildEnvironmentPreservesCanonicalDefaults(t *testing.T) 
 	assertEnvEntry(t, child, "AWS_ROLE_ARN", "role/default")
 }
 
+// TestAWSResolution_ChildEnvironmentIsSafeForConcurrentInvocations verifies
+// immutable resolution safely produces independent environments.
 func TestAWSResolution_ChildEnvironmentIsSafeForConcurrentInvocations(t *testing.T) {
 	t.Parallel()
 
@@ -326,6 +393,7 @@ func TestAWSResolution_ChildEnvironmentIsSafeForConcurrentInvocations(t *testing
 	require.Empty(t, errCh)
 }
 
+// assertEnvEntry verifies exactly one environment entry carries the expected value fragment.
 func assertEnvEntry(t *testing.T, environment []string, key, valueFragment string) {
 	t.Helper()
 
@@ -341,12 +409,14 @@ func assertEnvEntry(t *testing.T, environment []string, key, valueFragment strin
 	assert.Fail(t, "expected environment key is missing", key)
 }
 
+// assertEnvKeyCount verifies an environment name occurs the expected number of times.
 func assertEnvKeyCount(t *testing.T, environment []string, key string, expected int) {
 	t.Helper()
 
 	assert.Equal(t, expected, envKeyCount(environment, key), "unexpected count for %s", key)
 }
 
+// envKeyCount counts exact environment names independently of their values.
 func envKeyCount(environment []string, key string) int {
 	count := 0
 

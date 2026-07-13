@@ -220,6 +220,8 @@ func TestAWSProviderStatus_ForwardsRegion(t *testing.T) {
 	)
 }
 
+// TestInfoCommandMapsCustomAWSCredentialsIntoEksctl verifies custom aliases
+// reach eksctl canonically without mutating ambient credentials.
 func TestInfoCommandMapsCustomAWSCredentialsIntoEksctl(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
@@ -276,6 +278,7 @@ func TestInfoCommandMapsCustomAWSCredentialsIntoEksctl(t *testing.T) {
 	assert.Equal(t, "stale-profile", os.Getenv("AWS_PROFILE"))
 }
 
+// writeExecutableFixture writes a private executable used to stand in for eksctl.
 func writeExecutableFixture(t *testing.T, path, contents string) {
 	t.Helper()
 

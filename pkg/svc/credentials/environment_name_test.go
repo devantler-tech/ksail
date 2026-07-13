@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestNormalizeEnvironmentNameHonorsPlatformCaseSensitivity verifies filtering
+// follows the host's environment-name semantics.
 func TestNormalizeEnvironmentNameHonorsPlatformCaseSensitivity(t *testing.T) {
 	t.Parallel()
 

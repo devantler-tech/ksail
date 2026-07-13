@@ -178,6 +178,7 @@ func TestMintTokenSignsClusterBindingHeaders(t *testing.T) {
 	assert.Contains(t, query.Get("X-Amz-SignedHeaders"), "x-k8s-aws-id")
 }
 
+// TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity verifies explicit static credentials win over ambient identity.
 func TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity(t *testing.T) {
 	// Not parallel: t.Setenv changes the process environment.
 	t.Setenv("AWS_ACCESS_KEY_ID", "STALEAMBIENT")
@@ -201,6 +202,7 @@ func TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity(t *testin
 	assertTokenCredentialPrefix(t, token, "SELECTEDACCESS/")
 }
 
+// TestWithCredentialValues_ProfileOverridesAmbientStaticCredentials verifies an explicit profile wins over ambient static credentials.
 func TestWithCredentialValues_ProfileOverridesAmbientStaticCredentials(t *testing.T) {
 	// Not parallel: t.Setenv changes the process environment.
 	credentialsFile := filepath.Join(t.TempDir(), "credentials")
@@ -229,6 +231,7 @@ func TestWithCredentialValues_ProfileOverridesAmbientStaticCredentials(t *testin
 	assertTokenCredentialPrefix(t, token, "PROFILEACCESS/")
 }
 
+// TestWithCredentialValues_RejectsPartialStaticCredentials verifies incomplete explicit key pairs fail closed.
 func TestWithCredentialValues_RejectsPartialStaticCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -242,6 +245,7 @@ func TestWithCredentialValues_RejectsPartialStaticCredentials(t *testing.T) {
 	require.ErrorIs(t, err, eksclient.ErrIncompleteStaticCredentials)
 }
 
+// TestRequireCredentialValuesRejectsAmbientFallback verifies required explicit credentials cannot fall back to ambient identity.
 func TestRequireCredentialValuesRejectsAmbientFallback(t *testing.T) {
 	t.Parallel()
 
@@ -256,6 +260,7 @@ func TestRequireCredentialValuesRejectsAmbientFallback(t *testing.T) {
 	require.ErrorIs(t, err, eksclient.ErrExplicitCredentialsUnavailable)
 }
 
+// TestNewClientWithCredentialRequirementRejectsAmbientFallbackWhenRequired verifies required construction rejects empty resolved credentials.
 func TestNewClientWithCredentialRequirementRejectsAmbientFallbackWhenRequired(t *testing.T) {
 	t.Parallel()
 
@@ -271,6 +276,7 @@ func TestNewClientWithCredentialRequirementRejectsAmbientFallbackWhenRequired(t 
 	require.Len(t, base, 3, "the caller-owned option slice must remain unchanged")
 }
 
+// TestNewClientWithCredentialRequirementPreservesDefaultChainWhenOptional verifies optional construction retains the AWS default chain.
 func TestNewClientWithCredentialRequirementPreservesDefaultChainWhenOptional(t *testing.T) {
 	t.Parallel()
 
@@ -285,6 +291,7 @@ func TestNewClientWithCredentialRequirementPreservesDefaultChainWhenOptional(t *
 	assert.NotNil(t, client)
 }
 
+// assertTokenCredentialPrefix verifies the minted token was signed by the expected access key.
 func assertTokenCredentialPrefix(t *testing.T, token, expected string) {
 	t.Helper()
 

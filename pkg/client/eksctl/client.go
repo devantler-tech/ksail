@@ -206,6 +206,7 @@ func (c *Client) ExecWithStdin(
 	return stdout, stderr, nil
 }
 
+// run validates the credential boundary before invoking the runner with a defensive environment snapshot.
 func (c *Client) run(
 	ctx context.Context,
 	args []string,
@@ -244,6 +245,7 @@ func (c *Client) run(
 	return stdout, stderr, nil
 }
 
+// validateCredentialValues rejects incomplete or required-but-empty explicit selections before process execution.
 func (c *Client) validateCredentialValues() error {
 	if !c.requireCredentialValues {
 		return nil
@@ -268,6 +270,7 @@ func (c *Client) validateCredentialValues() error {
 	return nil
 }
 
+// cloneStrings returns a defensive copy while preserving nil as the parent-environment inheritance sentinel.
 func cloneStrings(values []string) []string {
 	if values == nil {
 		return nil
@@ -276,6 +279,7 @@ func cloneStrings(values []string) []string {
 	return append([]string{}, values...)
 }
 
+// redactCredentialValues removes resolved secret values from stderr before it reaches callers or wrapped errors.
 func (c *Client) redactCredentialValues(stderr []byte) []byte {
 	if len(stderr) == 0 || len(c.environment) == 0 {
 		return stderr
@@ -290,7 +294,7 @@ func (c *Client) redactCredentialValues(stderr []byte) []byte {
 		}
 
 		switch name {
-		case "AWS_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN":
+		case "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN":
 			uniqueValues[value] = struct{}{}
 		}
 	}
@@ -312,6 +316,7 @@ func (c *Client) redactCredentialValues(stderr []byte) []byte {
 	return []byte(redacted)
 }
 
+// environmentValues parses child-environment entries with the last value for each name taking precedence.
 func environmentValues(environment []string) map[string]string {
 	values := make(map[string]string, len(environment))
 	for _, entry := range environment {

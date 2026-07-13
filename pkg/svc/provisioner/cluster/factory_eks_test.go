@@ -87,6 +87,7 @@ printf '%s\n' "$@" > "$KSAIL_EKSCTL_ARGS"
 	}, strings.Fields(string(args)))
 }
 
+// writeExecutableFixture writes a private executable used to stand in for eksctl.
 func writeExecutableFixture(t *testing.T, path, contents string) {
 	t.Helper()
 

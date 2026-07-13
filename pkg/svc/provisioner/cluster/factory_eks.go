@@ -53,15 +53,18 @@ func (f DefaultFactory) createEKSProvisioner(
 	return provisioner, eksConfig, nil
 }
 
+// resolveEKSCredentialOptions snapshots one AWS resolution and derives aligned
+// eksctl, provider, and provisioner options.
 func resolveEKSCredentialOptions(
 	awsOptions v1alpha1.OptionsAWS,
 ) (*eksctlclient.Client, []awsprovider.Option, []eksprovisioner.Option) {
-	auth := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOptions))
-	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
-		auth, os.Environ(), eksctlclient.WithEnvironment, eksctlclient.RequireCredentialValues,
-	)
-	providerOptions := credentials.OptionsForAWSResolution(
-		auth, awsprovider.WithCredentialValues, awsprovider.RequireCredentialValues,
+	auth, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
+		credentials.NewAWSOptionsResolver(awsOptions),
+		os.Environ(),
+		eksctlclient.WithEnvironment,
+		eksctlclient.RequireCredentialValues,
+		awsprovider.WithCredentialValues,
+		awsprovider.RequireCredentialValues,
 	)
 	provisionerOptions := credentials.OptionsForAWSResolution(
 		auth, eksprovisioner.WithCredentialValues, eksprovisioner.RequireCredentialValues,
