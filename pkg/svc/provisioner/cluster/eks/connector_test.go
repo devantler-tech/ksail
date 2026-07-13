@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
@@ -171,6 +172,25 @@ func TestKubeconfigRequiresClusterName(t *testing.T) {
 
 	_, err := provisioner.Kubeconfig(t.Context(), "")
 	require.ErrorIs(t, err, eksprovisioner.ErrClusterNameRequired)
+}
+
+// TestKubeconfigFailsClosedOnIncompleteMappedCredentials verifies connector
+// setup rejects partial aliased static credentials.
+func TestKubeconfigFailsClosedOnIncompleteMappedCredentials(t *testing.T) {
+	t.Parallel()
+
+	provisioner, err := eksprovisioner.NewProvisioner(
+		"eks-default",
+		"eu-central-1",
+		"",
+		eksctlclient.NewClient(),
+		nil,
+		eksprovisioner.WithCredentialValues("", "access-without-secret", "", ""),
+	)
+	require.NoError(t, err)
+
+	_, err = provisioner.Kubeconfig(t.Context(), "")
+	require.ErrorIs(t, err, eksclient.ErrIncompleteStaticCredentials)
 }
 
 func TestKubeconfigPropagatesDescribeClusterError(t *testing.T) {
