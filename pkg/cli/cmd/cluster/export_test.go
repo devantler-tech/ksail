@@ -116,6 +116,21 @@ func ExportResolveCreatedContextName(
 	return resolveCreatedContextName(distribution, provider, clusterName)
 }
 
+// ExportResolvePostCreateContext exports resolvePostCreateContext for testing.
+func ExportResolvePostCreateContext(ctx *localregistry.Context) error {
+	return resolvePostCreateContext(ctx)
+}
+
+// ExportPrepareEKSCreateConfig exports prepareEKSCreateConfig for testing.
+func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
+	return prepareEKSCreateConfig(ctx)
+}
+
+// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
+	return applyClusterNameOverride(ctx, name)
+}
+
 // ExportResolveConsent exports resolveConsent for testing.
 func ExportResolveConsent(viperForce bool, yesFlag *pflag.Flag) bool {
 	return resolveConsent(viperForce, yesFlag)

@@ -611,8 +611,10 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	// Update the ksail.yaml context to match the pattern the created cluster uses.
 	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
 	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
-	// install can resolve it.
-	if ctx.ClusterCfg != nil {
+	// install can resolve it. eksctl adds the creating AWS identity to EKS context
+	// names, so that context is resolved from the written kubeconfig after creation.
+	if ctx.ClusterCfg != nil &&
+		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
 		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
 			ctx.ClusterCfg.Spec.Cluster.Provider,

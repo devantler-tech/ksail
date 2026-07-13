@@ -17,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
@@ -81,6 +82,7 @@ func runInfoCmd(
 		resolved.Provider,
 		resolved.ClusterName,
 		resolved.OmniOpts,
+		resolved.AWSOpts,
 		resolved.AWSRegion,
 	)
 
@@ -211,6 +213,7 @@ func getProviderStatus(
 	prov v1alpha1.Provider,
 	clusterName string,
 	omniOpts v1alpha1.OptionsOmni,
+	awsOpts v1alpha1.OptionsAWS,
 	awsRegion string,
 ) (*provider.ClusterStatus, error) {
 	switch prov {
@@ -221,7 +224,7 @@ func getProviderStatus(
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
 	case v1alpha1.ProviderAWS:
-		return getAWSProviderStatus(cmd.Context(), clusterName, awsRegion)
+		return getAWSProviderStatus(cmd.Context(), clusterName, awsOpts, awsRegion)
 	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
 		// GCP/GKE and Azure/AKS status inspection is not yet implemented. Return
 		// a minimal stub so callers that rely on this helper do not fail for them.
@@ -335,9 +338,25 @@ func getOmniProviderStatus(
 func getAWSProviderStatus(
 	ctx context.Context,
 	clusterName string,
+	awsOpts v1alpha1.OptionsAWS,
 	region string,
 ) (*provider.ClusterStatus, error) {
-	return awsProviderStatus(ctx, eksctlclient.NewClient(), clusterName, region)
+	_, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
+		credentials.NewAWSOptionsResolver(awsOpts),
+		os.Environ(),
+		eksctlclient.WithEnvironment,
+		eksctlclient.RequireCredentialValues,
+		awsprovider.WithCredentialValues,
+		awsprovider.RequireCredentialValues,
+	)
+
+	return awsProviderStatus(
+		ctx,
+		eksctlclient.NewClient(eksctlOptions...),
+		clusterName,
+		region,
+		providerOptions...,
+	)
 }
 
 // awsProviderStatus is the injectable core of getAWSProviderStatus: it accepts

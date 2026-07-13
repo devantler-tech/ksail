@@ -206,6 +206,19 @@ func resolveAddEnvironmentParams(
 // CloneOverlay can join it onto repoRoot without escaping. A value that is already
 // relative is returned unchanged.
 func repoRelativeSourceDir(repoRoot, sourceDir string) (string, error) {
+	// The silent, validation-skipping load leaves a home-relative ("~/...")
+	// sourceDirectory unexpanded (the config manager defers that to
+	// ExpandHomePath), so expand it here — otherwise it would be joined onto
+	// repoRoot as a literal "~" directory.
+	if strings.HasPrefix(sourceDir, "~/") {
+		expanded, err := fsutil.ExpandHomePath(sourceDir)
+		if err != nil {
+			return "", fmt.Errorf("expanding source directory: %w", err)
+		}
+
+		sourceDir = expanded
+	}
+
 	if !filepath.IsAbs(sourceDir) {
 		return sourceDir, nil
 	}
