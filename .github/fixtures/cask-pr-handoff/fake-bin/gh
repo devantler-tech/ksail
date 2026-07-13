@@ -32,6 +32,13 @@ elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebr
 	else
 		printf '%s\n' '[[{"name":"automation"}],[{"name":"dependencies"}]]'
 	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=1111111111111111111111111111111111111111" ]]; then
+	[[ "${scenario}" == contents-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-contents ]]; then
+		printf '%s\n' '{"path":"Casks/ksail.rb"}'
+	else
+		printf '%s\n' '{"path":"Casks/ksail.rb","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+	fi
 else
 	printf 'unexpected fake gh invocation: %s\n' "${command_line}" >&2
 	exit 2

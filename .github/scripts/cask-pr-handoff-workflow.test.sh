@@ -22,6 +22,7 @@ awk '1' \
 	"${homebrew_block}" \
 	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	>"${execution_surface}"
 
 fail() {
@@ -51,16 +52,19 @@ assert_contains 'title="chore(cask): update ${name} to ${TAG}"' "${homebrew_bloc
 	'release job must normalize the Conventional title'
 assert_contains 'for label in automation dependencies' "${homebrew_block}" \
 	'release job must add available automation/dependencies labels'
-assert_contains 'remains draft/open for maintainer promotion' "${homebrew_block}" \
-	'release job must record the draft PR handoff'
-assert_contains 'convertPullRequestToDraft' "${homebrew_block}" \
-	'release job must re-arm the draft checkpoint on a reused promoted evergreen PR'
-assert_not_contains 'gh pr ready' "${execution_surface}" \
-	'release job and its helpers must never self-promote a generated draft'
+assert_contains 'headRepositoryOwner.login == $owner' "${homebrew_block}" \
+	'release job must scope branch-name matches to the tap-owned devantler PR'
+# Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
+# validation the job marks the PR ready so the tap's checks gate its auto-merge — but ONLY after
+# the prepared validation, and never by merging or bypassing anything itself.
+assert_contains 'gh pr ready "$pr" --repo "$TAP"' "${homebrew_block}" \
+	'release job must hand the validated cask PR to the tap check-gated auto-merge path'
+assert_contains 'marked ready for check-gated auto-merge' "${homebrew_block}" \
+	'release job must record the ready-for-auto-merge handoff'
 assert_not_contains 'gh pr merge' "${execution_surface}" \
 	'release job and its helpers must never merge a generated cask PR'
 assert_not_contains '--auto' "${execution_surface}" \
-	'release job and its helpers must never arm auto-merge'
+	'release job and its helpers must never arm auto-merge themselves'
 assert_not_contains '--admin' "${execution_surface}" \
 	'release job and its helpers must never bypass branch protections'
 
@@ -68,6 +72,27 @@ validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || t
 if [ "${validator_calls}" -lt 3 ]; then
 	fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
 fi
+ready_line="$(grep -Fn -- 'gh pr ready "$pr" --repo "$TAP"' "${homebrew_block}" | head -1 | cut -d: -f1)"
+prepared_line="$(grep -Fn -- '"$evidence" prepared' "${homebrew_block}" | head -1 | cut -d: -f1)"
+if [ -z "${ready_line}" ] || [ -z "${prepared_line}" ] || [ "${ready_line}" -le "${prepared_line}" ]; then
+	fail 'the ready-for-auto-merge handoff must come after the prepared validation'
+fi
+
+# The pre-release checkpoint: a reused, still-promoted evergreen PR is demoted BEFORE GoReleaser
+# rewrites its branch, so the tap can never auto-merge unvalidated freshly-rewritten content.
+assert_contains 'cask-checkpoint:' "${cd_workflow}" \
+	'cd must define the pre-release cask draft checkpoint job'
+assert_contains 'redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap ksail ksail-desktop' "${cd_workflow}" \
+	'the checkpoint job must re-draft both evergreen cask PRs'
+if [ "$(grep -Fc -- 'needs: [cask-checkpoint]' "${cd_workflow}")" -lt 2 ]; then
+	fail 'both cask-writing release jobs (goreleaser, desktop-macos) must gate on cask-checkpoint'
+fi
+assert_contains 'convertPullRequestToDraft' \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+	'the checkpoint script must demote via the draft conversion mutation'
+assert_contains 'headRepositoryOwner.login == $owner' \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+	'the checkpoint script must scope branch-name matches to the tap-owned devantler PR'
 
 assert_contains 'if: always() && needs.publish-release.result != '\''success'\''' "${cd_workflow}" \
 	'a pending cask handoff must not delete a published release'

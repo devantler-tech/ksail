@@ -22,10 +22,32 @@ permissions:
   contents: read
 
 jobs:
+  # A reused evergreen cask PR can still be ready-for-review (auto-merge armed by the tap) from a
+  # previous release that never merged. Demote it to draft BEFORE GoReleaser rewrites its branch —
+  # otherwise the tap could auto-merge freshly rewritten, not-yet-validated cask content while this
+  # release's assets are still a draft. Fail-closed: nothing is published yet, so aborting here is
+  # safe and the release run is simply re-run after the wedge is cleared.
+  cask-checkpoint:
+    name: 🍺 Re-arm cask PR draft checkpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: 🍺 Re-draft reused evergreen cask PRs
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: .github/scripts/redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap ksail ksail-desktop
+
   goreleaser:
     name: 🧩 Release CLI
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: [cask-checkpoint]
     permissions:
       contents: write
       packages: write
@@ -148,14 +170,17 @@ jobs:
   # The macOS desktop app ships as a Homebrew cask. The desktop app is a separate Go module that
   # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
   # a second GoReleaser config on a macOS runner: it builds the darwin binary, packages it as a
-  # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job style-cleans
-  # and normalizes it; the maintainer promotes and the tap merges). GoReleaser's release pipe is disabled (see .goreleaser.desktop.yaml); the built
+  # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job style-cleans,
+  # validates, and marks it ready for the tap's check-gated auto-merge — a trusted programmed release
+  # path, no review/promotion step per maintainer direction ksail#6095). GoReleaser's release pipe is disabled (see .goreleaser.desktop.yaml); the built
   # archive is emitted as a workflow artifact and attached to the draft by `publish-release`. No
-  # `needs: [goreleaser]` — this builds in parallel with the CLI release.
+  # `needs: [goreleaser]` — this builds in parallel with the CLI release (both gate only on the
+  # seconds-long cask-checkpoint job so neither can rewrite a still-promoted evergreen cask PR).
   desktop-macos:
     name: 🧩 Release Desktop App (macOS cask)
     runs-on: macos-latest
     timeout-minutes: 40
+    needs: [cask-checkpoint]
     permissions:
       contents: read
     steps:
@@ -724,36 +749,26 @@ jobs:
             # `|| true` keeps the job fail-soft: a transient `gh pr list` failure (5xx, rate limit,
             # network blip) must not abort the step under `set -e` after the release is already public —
             # invalid evidence below then warns and skips, same as the no-PR-found case.
+            # `--head` filters by branch NAME only, so a fork branch named goreleaser/<name> would
+            # match too — keep only the tap's own devantler-authored PR before touching anything.
             matches="$(gh pr list --repo "$TAP" --head "$branch" --state open \
-              --limit 2 --json number,isDraft,id 2>/dev/null || true)"
+              --limit 10 --json number,isDraft,author,headRepositoryOwner 2>/dev/null \
+              | jq -ec --arg owner "${TAP%%/*}" \
+                  '[.[] | select(.headRepositoryOwner.login == $owner and .author.login == "devantler")]' \
+              2>/dev/null || true)"
             if ! count="$(jq -er 'length' <<<"$matches" 2>/dev/null)"; then
               echo "::warning::Could not enumerate cask PRs on $TAP for branch ${branch}; leaving it pending"
               continue
             fi
             if [ "$count" -ne 1 ]; then
-              echo "::warning::Expected exactly one open cask PR on $TAP for branch ${branch}, found ${count}; leaving it pending"
+              echo "::warning::Expected exactly one open tap-owned cask PR on $TAP for branch ${branch}, found ${count}; leaving it pending"
               continue
             fi
             pr="$(jq -r '.[0].number' <<<"$matches")"
 
-            # A reused evergreen PR can still be ready-for-review from a PREVIOUS release the
-            # maintainer promoted but never merged; GoReleaser has just rewritten its cask, so the
-            # promotion checkpoint must re-arm for the new content. Demotion only — this converts
-            # TO draft; the job never promotes (enforced by the workflow contract test).
-            if [ "$(jq -r '.[0].isDraft' <<<"$matches")" = "false" ]; then
-              node_id="$(jq -r '.[0].id' <<<"$matches")"
-              # shellcheck disable=SC2016 # $id is a GraphQL variable, not a shell expansion.
-              if gh api graphql \
-                  -f query='mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{isDraft}}}' \
-                  -f id="$node_id" >/dev/null 2>&1; then
-                echo "Re-drafted ${TAP}#${pr}: this release rewrote the cask, so maintainer promotion re-arms"
-              else
-                echo "::warning::Could not convert reused ${TAP}#${pr} back to draft; leaving it untouched"
-                printf -- '- %s#%s left untouched: reused promoted PR could not be re-drafted\n' \
-                  "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
-                continue
-              fi
-            fi
+            # The cask-checkpoint job re-drafted any reused promoted PR before GoReleaser rewrote
+            # the branch, so a non-draft here means someone raced this run — validation below
+            # requires draft state and fails soft, leaving the PR untouched.
             evidence="${evidence_dir}/${pr}.json"
             if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
               validation="${validation//$'\n'/; }"
@@ -837,9 +852,20 @@ jobs:
               continue
             fi
 
-            echo "::notice::${TAP}#${pr} remains draft/open for maintainer promotion"
-            printf -- '- %s#%s remains draft/open for maintainer promotion after live pentad review\n' \
-              "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
+            # Cask PRs are a trusted programmed release path: no review and no maintainer
+            # promotion step (maintainer direction, ksail#6095, 2026-07-13). With identity, scope,
+            # current-version content, title, and labels all validated above — and the release
+            # assets now public — mark it ready so the tap's own automation arms auto-merge and its
+            # checks gate the merge. Fail-soft: a draft left behind is handed to the maintainer.
+            if gh pr ready "$pr" --repo "$TAP"; then
+              echo "::notice::${TAP}#${pr} validated and marked ready — the tap's checks gate its auto-merge"
+              printf -- '- %s#%s validated and marked ready for check-gated auto-merge\n' \
+                "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::Could not mark ${TAP}#${pr} ready; it remains draft/open for the maintainer"
+              printf -- '- %s#%s remains draft/open: could not mark it ready after validation\n' \
+                "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
+            fi
           done
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,

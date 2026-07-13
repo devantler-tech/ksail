@@ -57,8 +57,10 @@ homebrew_casks:
       pull_request:
         enabled: true
         # Open as a draft so the tap cannot auto-merge it while the GitHub release is still a draft
-        # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job
-        # style-cleans and normalizes the draft; promotion stays with the maintainer.
+        # (the cask download URL would 404 for `brew install`). Once the release is public the
+        # cd.yaml `homebrew` job style-cleans, validates, and marks the PR ready for the tap's
+        # check-gated auto-merge — a trusted programmed release path with no review or maintainer
+        # promotion step (maintainer direction ksail#6095).
         # The branch is deliberately version-less (evergreen): a new release commits onto the same
         # branch so the ONE open cask PR updates in place instead of a new PR superseding it each
         # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;

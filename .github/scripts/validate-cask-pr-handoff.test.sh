@@ -55,6 +55,10 @@ run_case invalid-head 1 'head SHA is missing or invalid' '.pr.head.sha = "short"
 run_case missing-files 1 'changed-file evidence is missing' 'del(.files)'
 run_case extra-file 1 'only Casks/ksail.rb may change' '.files += [{"filename":"README.md"}]'
 run_case wrong-file 1 'only Casks/ksail.rb may change' '.files = [{"filename":"Casks/other.rb"}]'
+run_case missing-head-content 1 'cask head-content evidence is missing' 'del(.headFile)'
+run_case wrong-head-content-path 1 'cask head-content evidence is missing' '.headFile.path = "Casks/other.rb"'
+# base64 of a cask pinning 7.160.0 — a previous release the evergreen branch rewrite never replaced.
+run_case stale-head-version 1 'cask at head must pin version 7.166.1' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjAuMCIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2MC4wL2tzYWlsXzcuMTYwLjBfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="'
 run_case missing-title 1 'title must exactly equal chore(cask): update ksail to v7.166.1' '.pr.title = "Brew cask update"' true
 run_case missing-label-inventory 1 'available-label inventory is missing' 'del(.availableLabels)' true
 run_case malformed-label-inventory 1 'available-label inventory is malformed' '.availableLabels = [{}] | .pr.labels = []' true

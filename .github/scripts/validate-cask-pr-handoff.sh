@@ -116,6 +116,19 @@ elif ! jq -e --arg path "${expected_path}" \
 	block "only ${expected_path} may change"
 fi
 
+# Evergreen branches are reused across releases, so PR identity alone cannot prove
+# the cask carries THIS release: require the head file content to pin the current
+# version (a stale PR whose rewrite was skipped or failed must never be handed off).
+expected_version="${tag#v}"
+if ! jq -e --arg path "${expected_path}" \
+	'.headFile | type == "object" and .path == $path and (.content | type == "string")' \
+	"${evidence_file}" >/dev/null 2>&1; then
+	block 'cask head-content evidence is missing'
+elif ! jq -r '.headFile.content' "${evidence_file}" | base64 -d 2>/dev/null |
+	grep -Fq "version \"${expected_version}\""; then
+	block "cask at head must pin version ${expected_version}"
+fi
+
 if [[ "${prepared}" == true ]]; then
 	if [[ "$(json_string '.pr.title')" != "${expected_title}" ]]; then
 		block "title must exactly equal ${expected_title}"

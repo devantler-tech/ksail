@@ -30,6 +30,8 @@ jq -e '
   .pr.head.repo.full_name == "devantler-tech/homebrew-tap"
   and (.files | map(.filename)) == ["Casks/ksail.rb"]
   and (.availableLabels | map(.name)) == ["automation", "dependencies"]
+  and .headFile.path == "Casks/ksail.rb"
+  and (.headFile.content | type == "string" and length > 0)
 ' "${valid}" >/dev/null
 "${validator}" \
 	--evidence "${valid}" \
@@ -41,8 +43,10 @@ printf 'PASS: collector-to-validator round trip\n'
 
 paginated="${tmp_dir}/paginated.json"
 run_collector paginated-files "${paginated}"
-jq -e '(.files | map(.filename)) == ["Casks/ksail.rb", "README.md"]' \
-	"${paginated}" >/dev/null
+jq -e '
+  (.files | map(.filename)) == ["Casks/ksail.rb", "README.md"]
+  and .headFile == null
+' "${paginated}" >/dev/null
 if "${validator}" \
 	--evidence "${paginated}" \
 	--tap devantler-tech/homebrew-tap \
@@ -53,7 +57,7 @@ if "${validator}" \
 fi
 printf 'PASS: paginated extra file remains visible and blocks\n'
 
-for scenario in pr-failure files-failure labels-failure malformed-files malformed-labels; do
+for scenario in pr-failure files-failure labels-failure malformed-files malformed-labels contents-failure malformed-contents; do
 	if run_collector "${scenario}" "${tmp_dir}/${scenario}.json" >/dev/null 2>&1; then
 		printf 'FAIL: collector accepted %s\n' "${scenario}" >&2
 		exit 1
