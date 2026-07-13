@@ -10,6 +10,8 @@ package credentials
 
 import (
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
@@ -126,9 +128,28 @@ type Resolver interface {
 	EnvVar(key Key) string
 }
 
-// EnvResolver resolves purely from the process environment using the default variable names. It is
-// the zero-config resolver used when no secure store / Settings overrides are configured.
+// EnvResolver resolves purely from the process environment using canonical
+// variable names. Its zero value remains the default resolver.
 type EnvResolver struct{}
+
+// AWSOptionsResolver resolves from immutable per-cluster AWS variable-name
+// overrides without mutating the process environment.
+type AWSOptionsResolver struct {
+	envVars map[Key]string
+}
+
+// NewAWSOptionsResolver returns an environment-only resolver honoring the
+// variable names configured on one AWS provider spec. Empty names retain their
+// canonical defaults. The resolver owns its map and is safe for concurrent use.
+func NewAWSOptionsResolver(options v1alpha1.OptionsAWS) AWSOptionsResolver {
+	return AWSOptionsResolver{envVars: map[Key]string{
+		AWSRegion:          options.RegionEnvVar,
+		AWSProfile:         options.ProfileEnvVar,
+		AWSAccessKeyID:     options.AccessKeyIDEnvVar,
+		AWSSecretAccessKey: options.SecretAccessKeyEnvVar,
+		AWSSessionToken:    options.SessionTokenEnvVar,
+	}}
+}
 
 // EnvVar returns the default environment-variable name for key.
 func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
@@ -136,6 +157,170 @@ func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
 // Value returns the process-environment value for key's default variable, or "".
 func (EnvResolver) Value(key Key) string {
 	return resolveEnvValue(key, DefaultEnvVar(key))
+}
+
+// EnvVar returns the configured environment-variable name for key, falling
+// back to its canonical default.
+func (r AWSOptionsResolver) EnvVar(key Key) string {
+	if name := r.envVars[key]; name != "" {
+		return name
+	}
+
+	return DefaultEnvVar(key)
+}
+
+// Value returns the process-environment value for key's configured variable, or "".
+func (r AWSOptionsResolver) Value(key Key) string {
+	return resolveEnvValue(key, r.EnvVar(key))
+}
+
+// AWSResolution is an immutable snapshot of the credential selection for one
+// AWS operation. Source variable names are retained privately so child process
+// environments can remove both stale canonical values and custom aliases.
+type AWSResolution struct {
+	Profile         string
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+
+	sourceEnvVars          [4]string
+	hasCustomCredentialEnv bool
+}
+
+// ResolveAWS snapshots all AWS credential values and their configured source
+// names from resolver. A nil resolver uses the canonical process environment.
+func ResolveAWS(resolver Resolver) AWSResolution {
+	if resolver == nil {
+		resolver = EnvResolver{}
+	}
+
+	// Resolve every value before constructing the child environment. No parent
+	// environment mutation is needed, so concurrent invocations remain isolated.
+	resolution := AWSResolution{
+		Profile:         resolver.Value(AWSProfile),
+		AccessKeyID:     resolver.Value(AWSAccessKeyID),
+		SecretAccessKey: resolver.Value(AWSSecretAccessKey),
+		SessionToken:    resolver.Value(AWSSessionToken),
+		sourceEnvVars: [4]string{
+			resolver.EnvVar(AWSProfile),
+			resolver.EnvVar(AWSAccessKeyID),
+			resolver.EnvVar(AWSSecretAccessKey),
+			resolver.EnvVar(AWSSessionToken),
+		},
+	}
+
+	canonicalNames := [...]string{
+		defaultAWSProfileEnvVar,
+		defaultAWSAccessKeyIDEnvVar,
+		defaultAWSSecretAccessEnvVar,
+		defaultAWSSessionTokenEnvVar,
+	}
+	for index, sourceName := range resolution.sourceEnvVars {
+		if sourceName != "" && sourceName != canonicalNames[index] {
+			resolution.hasCustomCredentialEnv = true
+
+			break
+		}
+	}
+
+	return resolution
+}
+
+// HasCustomCredentialSources reports whether at least one credential is
+// configured to resolve from a non-canonical variable name. Callers use this
+// to fail closed instead of letting an SDK read stale canonical credentials
+// when every configured custom source is unset.
+func (r AWSResolution) HasCustomCredentialSources() bool {
+	return r.hasCustomCredentialEnv
+}
+
+// ChildEnvironment returns a copy of parent with AWS credential aliases and
+// stale canonical values removed, followed by the non-empty resolved values
+// under the canonical names eksctl understands. When a custom credential source
+// is configured, competing environment-based identity providers are also
+// removed so they cannot override the explicit selection. Unrelated entries
+// such as PATH, HOME, and AWS_CONFIG_FILE are preserved.
+func (r AWSResolution) ChildEnvironment(parent []string) []string {
+	caseInsensitiveNames := runtime.GOOS == "windows"
+	strippedNames := r.strippedEnvironmentNames(caseInsensitiveNames)
+	child := filterEnvironment(parent, strippedNames, caseInsensitiveNames)
+
+	for _, binding := range []struct {
+		name  string
+		value string
+	}{
+		{name: defaultAWSProfileEnvVar, value: r.Profile},
+		{name: defaultAWSAccessKeyIDEnvVar, value: r.AccessKeyID},
+		{name: defaultAWSSecretAccessEnvVar, value: r.SecretAccessKey},
+		{name: defaultAWSSessionTokenEnvVar, value: r.SessionToken},
+	} {
+		if binding.value != "" {
+			child = append(child, binding.name+"="+binding.value)
+		}
+	}
+
+	return child
+}
+
+func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string]struct{} {
+	strippedNames := make(map[string]struct{})
+	for _, name := range []string{
+		defaultAWSProfileEnvVar,
+		defaultAWSAccessKeyIDEnvVar,
+		defaultAWSSecretAccessEnvVar,
+		defaultAWSSessionTokenEnvVar,
+	} {
+		strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+	}
+
+	for _, name := range r.sourceEnvVars {
+		if name != "" {
+			strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+		}
+	}
+
+	if r.hasCustomCredentialEnv {
+		for _, name := range []string{
+			"AWS_DEFAULT_PROFILE",
+			"AWS_ACCESS_KEY",
+			"AWS_SECRET_KEY",
+			"AWS_WEB_IDENTITY_TOKEN_FILE",
+			"AWS_ROLE_ARN",
+			"AWS_ROLE_SESSION_NAME",
+		} {
+			strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+		}
+	}
+
+	return strippedNames
+}
+
+func filterEnvironment(
+	parent []string,
+	strippedNames map[string]struct{},
+	caseInsensitive bool,
+) []string {
+	child := make([]string, 0, len(parent))
+	for _, entry := range parent {
+		name, _, found := strings.Cut(entry, "=")
+		if found {
+			if _, stripped := strippedNames[normalizeEnvironmentName(name, caseInsensitive)]; stripped {
+				continue
+			}
+		}
+
+		child = append(child, entry)
+	}
+
+	return child
+}
+
+func normalizeEnvironmentName(name string, caseInsensitive bool) string {
+	if caseInsensitive {
+		return strings.ToUpper(name)
+	}
+
+	return name
 }
 
 // resolveEnvValue reads key's value from the process environment under envVar, applying the Copilot
@@ -160,3 +345,6 @@ func resolveEnvValue(key Key, envVar string) string {
 
 // Ensure EnvResolver satisfies Resolver.
 var _ Resolver = EnvResolver{}
+
+// Ensure AWSOptionsResolver satisfies Resolver.
+var _ Resolver = AWSOptionsResolver{}

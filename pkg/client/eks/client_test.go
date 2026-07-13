@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -174,4 +176,93 @@ func TestMintTokenSignsClusterBindingHeaders(t *testing.T) {
 	assert.Equal(t, "GetCallerIdentity", query.Get("Action"))
 	assert.Equal(t, "60", query.Get("X-Amz-Expires"))
 	assert.Contains(t, query.Get("X-Amz-SignedHeaders"), "x-k8s-aws-id")
+}
+
+func TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity(t *testing.T) {
+	// Not parallel: t.Setenv changes the process environment.
+	t.Setenv("AWS_ACCESS_KEY_ID", "STALEAMBIENT")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-ambient-secret")
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCredentialValues(
+			"ignored-profile",
+			"SELECTEDACCESS",
+			"selected-secret",
+			"selected-session",
+		),
+	)
+	require.NoError(t, err)
+
+	token, err := client.MintToken(t.Context(), "eks-default")
+	require.NoError(t, err)
+	assertTokenCredentialPrefix(t, token, "SELECTEDACCESS/")
+}
+
+func TestWithCredentialValues_ProfileOverridesAmbientStaticCredentials(t *testing.T) {
+	// Not parallel: t.Setenv changes the process environment.
+	credentialsFile := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.WriteFile(
+		credentialsFile,
+		[]byte(
+			"[selected-profile]\naws_access_key_id = PROFILEACCESS\naws_secret_access_key = profile-secret\n",
+		),
+		0o600,
+	))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credentialsFile)
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("AWS_ACCESS_KEY_ID", "STALEAMBIENT")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-ambient-secret")
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCredentialValues("selected-profile", "", "", ""),
+	)
+	require.NoError(t, err)
+
+	token, err := client.MintToken(t.Context(), "eks-default")
+	require.NoError(t, err)
+	assertTokenCredentialPrefix(t, token, "PROFILEACCESS/")
+}
+
+func TestWithCredentialValues_RejectsPartialStaticCredentials(t *testing.T) {
+	t.Parallel()
+
+	_, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+		eksclient.WithCredentialValues("", "access-without-secret", "", ""),
+	)
+	require.ErrorIs(t, err, eksclient.ErrIncompleteStaticCredentials)
+}
+
+func TestRequireCredentialValuesRejectsAmbientFallback(t *testing.T) {
+	t.Parallel()
+
+	_, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+		eksclient.WithCredentialValues("", "", "", ""),
+		eksclient.RequireCredentialValues(),
+	)
+	require.ErrorIs(t, err, eksclient.ErrExplicitCredentialsUnavailable)
+}
+
+func assertTokenCredentialPrefix(t *testing.T, token, expected string) {
+	t.Helper()
+
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "k8s-aws-v1."))
+	require.NoError(t, err)
+
+	signedURL, err := url.Parse(string(decoded))
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(signedURL.Query().Get("X-Amz-Credential"), expected))
 }

@@ -119,6 +119,9 @@ type ResolvedClusterInfo struct {
 	// AWSRegion is the resolved AWS region for read-only EKS status lookups.
 	// Empty defers region resolution to eksctl (AWS_REGION env / active profile).
 	AWSRegion string
+	// AWSOpts retains the credential environment-variable mappings from the
+	// loaded cluster config for read-only EKS status lookups.
+	AWSOpts v1alpha1.OptionsAWS
 }
 
 // awsRegionEnvVarDefault is the fallback environment variable name for the AWS
@@ -172,11 +175,19 @@ func ResolveClusterInfo(
 	var (
 		omniOpts       v1alpha1.OptionsOmni
 		kubernetesOpts v1alpha1.OptionsKubernetes
+		awsOpts        v1alpha1.OptionsAWS
 		awsRegion      string
 	)
 
 	resolveFromConfig(
-		cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts, &awsRegion,
+		cmd,
+		&clusterName,
+		&provider,
+		&kubeconfigPath,
+		&omniOpts,
+		&kubernetesOpts,
+		&awsOpts,
+		&awsRegion,
 	)
 
 	// Fall back to kubeconfig context detection
@@ -203,6 +214,7 @@ func ResolveClusterInfo(
 		KubeconfigPath: resolvedPath,
 		OmniOpts:       omniOpts,
 		KubernetesOpts: kubernetesOpts,
+		AWSOpts:        awsOpts,
 		AWSRegion:      awsRegion,
 	}, nil
 }
@@ -239,6 +251,7 @@ func resolveFromConfig(
 	kubeconfigPath *string,
 	omniOpts *v1alpha1.OptionsOmni,
 	kubernetesOpts *v1alpha1.OptionsKubernetes,
+	awsOpts *v1alpha1.OptionsAWS,
 	awsRegion *string,
 ) {
 	cfg, distCfg := loadConfig(cmd)
@@ -266,6 +279,7 @@ func resolveFromConfig(
 
 	*omniOpts = cfg.Spec.Provider.Omni
 	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
+	*awsOpts = cfg.Spec.Provider.AWS
 	*awsRegion = ResolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
 }
 

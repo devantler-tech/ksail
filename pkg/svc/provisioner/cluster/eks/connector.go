@@ -116,7 +116,12 @@ func (p *Provisioner) resolveAWSClient(ctx context.Context) (AWSClusterAPI, erro
 		return p.awsClient, nil
 	}
 
-	client, err := eksclient.NewClient(ctx, p.region)
+	options := append([]eksclient.Option{}, p.eksClientOptions...)
+	if p.requireCredentialValues {
+		options = append(options, eksclient.RequireCredentialValues())
+	}
+
+	client, err := eksclient.NewClient(ctx, p.region, options...)
 	if err != nil {
 		return nil, fmt.Errorf("creating aws eks client: %w", err)
 	}
