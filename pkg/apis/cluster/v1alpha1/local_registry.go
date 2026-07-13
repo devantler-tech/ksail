@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 )
 
 // ParsedRegistry contains the parsed components of a registry specification.
@@ -180,6 +181,18 @@ func (r LocalRegistry) ResolveCredentials() (username, password string) {
 	parsed := r.Parse()
 
 	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
+}
+
+// ResolvePullCredentials returns credentials suitable for cluster-side image
+// and artifact pulls. GHCR uses GHCR_PULL_TOKEN when it is set and non-empty,
+// while other registries and legacy configurations keep their configured password.
+//
+//nolint:nonamedreturns // Named returns document the returned values for clarity.
+func (r LocalRegistry) ResolvePullCredentials() (username, password string) {
+	parsed := r.Parse()
+	username, password = r.ResolveCredentials()
+
+	return username, registryauth.PullPassword(parsed.Host, password)
 }
 
 // HasCredentials returns true if the registry has non-empty username or password configured.

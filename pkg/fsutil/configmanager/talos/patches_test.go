@@ -10,6 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const ghcrPullTokenPatch = `machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          password: ${GHCR_PULL_TOKEN}
+`
+
 func TestPatchScope_Constants(t *testing.T) {
 	t.Parallel()
 
@@ -262,6 +270,46 @@ func TestLoadPatches_ExpandsEnvVars(t *testing.T) {
 	// Verify the content was expanded
 	assert.Contains(t, string(patches[0].Content), "hostname: expanded-host")
 	assert.NotContains(t, string(patches[0].Content), "${TEST_HOSTNAME}")
+}
+
+func TestLoadPatches_GHCRPullTokenFallsBackToLegacyToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchContent := []byte(ghcrPullTokenPatch)
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "")
+	t.Setenv("GHCR_TOKEN", "legacy-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.Contains(t, string(patches[0].Content), "password: legacy-token")
+}
+
+func TestLoadPatches_GHCRPullTokenPrefersDedicatedToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchContent := []byte(ghcrPullTokenPatch)
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+	t.Setenv("GHCR_TOKEN", "push-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.Contains(t, string(patches[0].Content), "password: pull-token")
 }
 
 //nolint:paralleltest // Uses t.Setenv

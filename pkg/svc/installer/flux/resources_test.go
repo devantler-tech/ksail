@@ -5,6 +5,7 @@ package fluxinstaller_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -382,6 +383,35 @@ func TestBuildRegistrySecret(t *testing.T) {
 			assert.NotEmpty(t, secret.Data[".dockerconfigjson"])
 		})
 	}
+}
+
+func TestBuildRegistrySecret_UsesDedicatedGHCRPullToken(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user:push-token@ghcr.io/example/repo",
+				},
+			},
+		},
+	}
+
+	secret, err := fluxinstaller.BuildRegistrySecret(clusterCfg)
+	require.NoError(t, err)
+
+	var dockerConfig struct {
+		Auths map[string]struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"auths"`
+	}
+	require.NoError(t, json.Unmarshal(secret.Data[".dockerconfigjson"], &dockerConfig))
+
+	auth := dockerConfig.Auths["ghcr.io"]
+	assert.Equal(t, "user", auth.Username)
+	assert.Equal(t, "pull-token", auth.Password)
 }
 
 func TestIsTransientAPIError(t *testing.T) {

@@ -77,8 +77,10 @@ machine:
 ```
 
 Because patch files are expanded too, you can inject **registry credentials** into the Talos
-machine config as config-as-code — keeping the secret in the environment, never committed. This is
-the supported way to give nodes registry auth (for example, so containerd can fetch cosign
+machine config as config-as-code — keeping the secret in the environment, never committed. Use a
+`GHCR_PULL_TOKEN` scoped to `read:packages` for credentials that land on cluster nodes. If it is unset or
+empty, KSail falls back to the legacy `GHCR_TOKEN` variable so existing configurations keep working.
+This is the supported way to give nodes registry auth (for example, so containerd can fetch cosign
 signatures for **private** packages during image verification) without passing credentials via CLI
 flags:
 
@@ -90,8 +92,12 @@ machine:
       ghcr.io:
         auth:
           username: my-user
-          password: ${GHCR_TOKEN} # expanded at load; commit the placeholder, not the token
+          password: ${GHCR_PULL_TOKEN} # expanded at load; commit the placeholder, not the token
 ```
+
+Keep `GHCR_TOKEN` as the write-capable credential referenced by `spec.cluster.localRegistry.registry`
+when `ksail workload push` must publish artifacts. KSail uses `GHCR_PULL_TOKEN` instead for the
+Flux registry Secret, Argo CD repository credentials, and Talos node authentication.
 
 ### Example: Credentials
 

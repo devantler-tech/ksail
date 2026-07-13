@@ -120,3 +120,22 @@ func TestBuildArgoCDEnsureOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildArgoCDEnsureOptions_UsesDedicatedGHCRPullToken(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user:push-token@ghcr.io/example/repo",
+				},
+			},
+		},
+	}
+
+	opts := setup.BuildArgoCDEnsureOptions(clusterCfg, "test-cluster", "")
+
+	assert.Equal(t, "user", opts.Username)
+	assert.Equal(t, "pull-token", opts.Password)
+}

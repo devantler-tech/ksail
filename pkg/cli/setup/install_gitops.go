@@ -137,7 +137,7 @@ func applyExternalRegistryOptions(
 ) {
 	parsed := localRegistry.Parse()
 	opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
-	username, password := localRegistry.ResolveCredentials()
+	username, password := localRegistry.ResolvePullCredentials()
 	opts.Username = username
 	opts.Password = password
 	opts.Insecure = false

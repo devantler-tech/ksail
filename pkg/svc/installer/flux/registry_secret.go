@@ -83,7 +83,7 @@ func newCoreV1Client(restConfig *rest.Config) (client.Client, error) {
 func buildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	parsed := localRegistry.Parse()
-	username, password := localRegistry.ResolveCredentials()
+	username, password := localRegistry.ResolvePullCredentials()
 
 	dockerConfig, err := buildDockerConfigJSON(parsed.Host, username, password)
 	if err != nil {

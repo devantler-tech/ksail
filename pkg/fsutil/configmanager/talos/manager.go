@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"sigs.k8s.io/yaml"
 )
@@ -232,7 +233,11 @@ func forEachYAMLFile(dir string, callback func(filePath string, content []byte) 
 	//nolint:wrapcheck // pass-through adapter; fsutil and callbacks wrap their own errors
 	return fsutil.ForEachYAMLFile(dir, func(filePath string, content []byte) error {
 		// Expand environment variables in file content before handing to the caller.
-		return callback(filePath, envvar.ExpandBytes(content))
+		// Pull-only Talos configuration can use GHCR_PULL_TOKEN while retaining
+		// GHCR_TOKEN as a backward-compatible fallback.
+		expanded := envvar.ExpandWithLookup(string(content), registryauth.PullEnvLookup)
+
+		return callback(filePath, []byte(expanded))
 	})
 }
 
