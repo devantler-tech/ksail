@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "KSail — Kubernetes SDK for local GitOps development. Plugin exposing the ksail MCP server and an expert skill.",
-    "version": "7.168.2"
+    "version": "7.169.0"
   },
   "plugins": [
     {
       "name": "ksail",
       "description": "KSail MCP server + expertise skill",
-      "version": "7.168.2",
+      "version": "7.169.0",
       "source": "./copilot-plugin"
     }
   ]
