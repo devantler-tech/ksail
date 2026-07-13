@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -24,6 +25,45 @@ var errEksctlStubEmptyArgs = errors.New("eksctl stub: empty args")
 // stubEndpoint is the EKS control-plane endpoint the stub describer returns so
 // the AWS status tests never resolve real AWS credentials.
 const stubEndpoint = "https://ABCDEF.gr7.us-east-1.eks.amazonaws.com"
+
+const mappedAWSEksctlFixture = `#!/bin/sh
+[ "${AWS_PROFILE-}" = "selected-profile" ] || exit 41
+[ "${AWS_ACCESS_KEY_ID-}" = "fixture-access" ] || exit 42
+[ "${AWS_SECRET_ACCESS_KEY-}" = "fixture-secret" ] || exit 43
+[ "${AWS_SESSION_TOKEN-}" = "fixture-session" ] || exit 44
+[ -z "${KSAIL_PROFILE+x}" ] || exit 45
+[ -z "${KSAIL_ACCESS+x}" ] || exit 46
+[ -z "${KSAIL_SECRET+x}" ] || exit 47
+[ -z "${KSAIL_SESSION+x}" ] || exit 48
+printf mapped > "$KSAIL_EKSCTL_MARKER"
+printf 'null\n'
+`
+
+const mappedAWSClusterFixture = `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: mapped-eks
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eks.yaml
+    connection:
+      kubeconfig: kubeconfig
+  provider:
+    aws:
+      profileEnvVar: KSAIL_PROFILE
+      accessKeyIdEnvVar: KSAIL_ACCESS
+      secretAccessKeyEnvVar: KSAIL_SECRET
+      sessionTokenEnvVar: KSAIL_SESSION
+`
+
+const mappedAWSEksConfigFixture = `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: mapped-eks
+  region: eu-west-1
+`
 
 // stubDescriber is a credential-free stand-in for the EKS DescribeCluster
 // seam, returning a cluster carrying stubEndpoint.
@@ -177,5 +217,75 @@ func TestAWSProviderStatus_ForwardsRegion(t *testing.T) {
 		sawRegion,
 		"expected eksctl to be invoked with --region eu-west-1, got %v",
 		runner.gotArgs,
+	)
+}
+
+// TestInfoCommandMapsCustomAWSCredentialsIntoEksctl verifies custom aliases
+// reach eksctl canonically without mutating ambient credentials.
+func TestInfoCommandMapsCustomAWSCredentialsIntoEksctl(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	binDir := t.TempDir()
+	markerPath := filepath.Join(t.TempDir(), "mapped")
+	eksctlPath := filepath.Join(binDir, "eksctl")
+	writeExecutableFixture(t, eksctlPath, mappedAWSEksctlFixture)
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(workingDir, "ksail.yaml"),
+			[]byte(mappedAWSClusterFixture),
+			0o600,
+		),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(workingDir, "eks.yaml"),
+			[]byte(mappedAWSEksConfigFixture),
+			0o600,
+		),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(workingDir, "kubeconfig"),
+			[]byte("apiVersion: v1\nkind: Config\n"),
+			0o600,
+		),
+	)
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
+	t.Setenv("KSAIL_PROFILE", "selected-profile")
+	t.Setenv("KSAIL_ACCESS", "fixture-access")
+	t.Setenv("KSAIL_SECRET", "fixture-secret")
+	t.Setenv("KSAIL_SESSION", "fixture-session")
+	t.Setenv("AWS_PROFILE", "stale-profile")
+	t.Setenv("AWS_ACCESS_KEY_ID", "stale-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "stale-session")
+
+	cmd := cluster.NewInfoCmd()
+	cmd.SetArgs([]string{})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	_ = cmd.Execute()
+
+	marker, err := os.ReadFile(markerPath) //nolint:gosec // path is test-private.
+	require.NoError(t, err)
+	assert.Equal(t, "mapped", string(marker))
+	assert.Equal(t, "stale-profile", os.Getenv("AWS_PROFILE"))
+}
+
+// writeExecutableFixture writes a private executable used to stand in for eksctl.
+func writeExecutableFixture(t *testing.T, path, contents string) {
+	t.Helper()
+
+	require.NoError(t, os.WriteFile(path, []byte(contents), 0o600))
+	require.NoError(
+		t,
+		//nolint:gosec // owner execute is required for the fixture.
+		os.Chmod(path, 0o700),
 	)
 }

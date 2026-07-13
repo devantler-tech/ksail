@@ -2,15 +2,17 @@ package clusterprovisioner
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 )
 
 func (f DefaultFactory) createEKSProvisioner(
-	_ *v1alpha1.Cluster,
+	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	if f.DistributionConfig.EKS == nil {
 		return nil, nil, fmt.Errorf(
@@ -20,9 +22,18 @@ func (f DefaultFactory) createEKSProvisioner(
 	}
 
 	eksConfig := f.DistributionConfig.EKS
-	client := eksctlclient.NewClient()
+	client, providerOptions, provisionerOptions := resolveEKSCredentialOptions(
+		cluster.Spec.Provider.AWS,
+	)
+	provisionerOptions = append(provisionerOptions,
+		eksprovisioner.WithKubeconfigPath(eksConfig.KubeconfigPath),
+	)
 
-	infraProvider, err := awsprovider.NewProvider(client, eksConfig.Region)
+	infraProvider, err := awsprovider.NewProvider(
+		client,
+		eksConfig.Region,
+		providerOptions...,
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
@@ -33,11 +44,31 @@ func (f DefaultFactory) createEKSProvisioner(
 		eksConfig.ConfigPath,
 		client,
 		infraProvider,
-		eksprovisioner.WithKubeconfigPath(eksConfig.KubeconfigPath),
+		provisionerOptions...,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
 	}
 
 	return provisioner, eksConfig, nil
+}
+
+// resolveEKSCredentialOptions snapshots one AWS resolution and derives aligned
+// eksctl, provider, and provisioner options.
+func resolveEKSCredentialOptions(
+	awsOptions v1alpha1.OptionsAWS,
+) (*eksctlclient.Client, []awsprovider.Option, []eksprovisioner.Option) {
+	auth, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
+		credentials.NewAWSOptionsResolver(awsOptions),
+		os.Environ(),
+		eksctlclient.WithEnvironment,
+		eksctlclient.RequireCredentialValues,
+		awsprovider.WithCredentialValues,
+		awsprovider.RequireCredentialValues,
+	)
+	provisionerOptions := credentials.OptionsForAWSResolution(
+		auth, eksprovisioner.WithCredentialValues, eksprovisioner.RequireCredentialValues,
+	)
+
+	return eksctlclient.NewClient(eksctlOptions...), providerOptions, provisionerOptions
 }
