@@ -748,18 +748,17 @@ jobs:
 
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
-            # `|| true` keeps the job fail-soft: a transient `gh pr list` failure (5xx, rate limit,
+            # `|| true` keeps the job fail-soft: a transient API failure (5xx, rate limit,
             # network blip) must not abort the step under `set -e` after the release is already public —
             # invalid evidence below then warns and skips, same as the no-PR-found case.
-            # `--head` filters by branch NAME only, so a branch named goreleaser/<name> in a fork
-            # OR in another same-owner repository would match too — keep only the PR whose head
-            # lives in the tap itself (owner AND repo name) and is devantler-authored.
-            matches="$(gh pr list --repo "$TAP" --head "$branch" --state open \
-              --limit 10 --json number,isDraft,author,headRepositoryOwner,headRepository 2>/dev/null \
-              | jq -ec --arg owner "${TAP%%/*}" --arg repo "${TAP#*/}" \
-                  '[.[] | select(.headRepositoryOwner.login == $owner
-                    and .headRepository.name == $repo
-                    and .author.login == "devantler")]' \
+            # REST `head=<owner>:<branch>` filters SERVER-side (a bare branch-name filter would let
+            # same-name fork branches fill a client-side page before any jq filter runs); the owner
+            # qualifier still admits a same-owner sibling repo's branch, so keep the full_name +
+            # author checks.
+            matches="$(gh api \
+              "repos/$TAP/pulls?state=open&head=${TAP%%/*}:${branch}&per_page=100" 2>/dev/null \
+              | jq -ec --arg full "$TAP" \
+                  '[.[] | select(.head.repo.full_name == $full and .user.login == "devantler")]' \
               2>/dev/null || true)"
             if ! count="$(jq -er 'length' <<<"$matches" 2>/dev/null)"; then
               echo "::warning::Could not enumerate cask PRs on $TAP for branch ${branch}; leaving it pending"

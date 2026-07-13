@@ -52,10 +52,10 @@ assert_contains 'title="chore(cask): update ${name} to ${TAG}"' "${homebrew_bloc
 	'release job must normalize the Conventional title'
 assert_contains 'for label in automation dependencies' "${homebrew_block}" \
 	'release job must add available automation/dependencies labels'
-assert_contains 'headRepositoryOwner.login == $owner' "${homebrew_block}" \
-	'release job must scope branch-name matches to the tap-owned devantler PR'
-assert_contains 'headRepository.name == $repo' "${homebrew_block}" \
-	'release job must also match the head repository NAME, not just its owner'
+assert_contains 'pulls?state=open&head=' "${homebrew_block}" \
+	'release job must enumerate cask PRs with the server-side head filter (no client-side page cap)'
+assert_contains 'head.repo.full_name == $full' "${homebrew_block}" \
+	'release job must scope matches to the tap-owned devantler PR (full head-repo name)'
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
@@ -94,12 +94,12 @@ fi
 assert_contains 'convertPullRequestToDraft' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	'the checkpoint script must demote via the draft conversion mutation'
-assert_contains 'headRepositoryOwner.login == $owner' \
+assert_contains 'pulls?state=open&head=' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must scope branch-name matches to the tap-owned devantler PR'
-assert_contains 'headRepository.name == $repo' \
+	'the checkpoint script must enumerate cask PRs with the server-side head filter (no client-side page cap)'
+assert_contains 'head.repo.full_name == $full' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must also match the head repository NAME, not just its owner'
+	'the checkpoint script must scope matches to the tap-owned devantler PR (full head-repo name)'
 # The checkpoint script is release-critical: CI must both re-run this suite when it
 # changes and shellcheck it (a filter/shellcheck omission lets it break unnoticed).
 assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.sh'" "${ci_workflow}" \
