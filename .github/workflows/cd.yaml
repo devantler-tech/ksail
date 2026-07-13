@@ -265,10 +265,10 @@ jobs:
     name: 🧩 Release Copilot CLI Plugin
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Runs in parallel with the other releases — it only opens an auto-merging version-bump
-    # PR and consumes no GoReleaser artifact, so it does not wait on `goreleaser`. The gated
-    # `publish-release` and `pages-deploy` jobs both list it in `needs`, so a failure here
-    # still blocks the GitHub release publish and the docs deploy.
+    # Runs in parallel with the other releases — it only opens a version-bump PR for CI and
+    # the standard maintainer review gates, and consumes no GoReleaser artifact, so it does
+    # not wait on `goreleaser`. The gated `publish-release` and `pages-deploy` jobs both list
+    # it in `needs`, so a failure here still blocks the GitHub release publish and docs deploy.
     environment: ci
     permissions:
       contents: write
@@ -292,8 +292,8 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       # Instead of pushing directly to main (which is blocked by the required
-      # "✅ Validate Go Project" workflow rule), open a PR so CI can run on the
-      # version bump commit and auto-merge once checks pass.
+      # "✅ Validate Go Project" workflow rule), open a PR so CI and the standard
+      # maintainer review gates can run on the version bump commit.
       - name: 📤 Create version bump PR
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
@@ -356,15 +356,6 @@ jobs:
               --head "${BRANCH}" \
               --title "chore(copilot-plugin): release v${VERSION}" \
               --body "Automated version bump for copilot plugin manifests to v${VERSION}."
-          fi
-
-          # Ensure auto-merge is enabled at the repository level (idempotent).
-          if ! gh api "repos/{owner}/{repo}" --method PATCH -f allow_auto_merge=true --silent; then
-            echo "::warning::Could not enable auto-merge at the repository level (token may lack administration permissions)."
-          fi
-
-          if ! gh pr merge "${BRANCH}" --auto --squash; then
-            echo "::warning::Auto-merge could not be enabled; the PR must be merged manually or auto-merge must be enabled in repository settings."
           fi
 
   operator-chart:

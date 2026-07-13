@@ -10,6 +10,7 @@ ci_workflow="${repo_root}/.github/workflows/ci.yaml"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 homebrew_block="${tmp_dir}/homebrew.yaml"
+copilot_plugin_block="${tmp_dir}/copilot-plugin.yaml"
 execution_surface="${tmp_dir}/execution-surface.sh"
 
 awk '
@@ -18,8 +19,15 @@ awk '
   in_homebrew { print }
 ' "${cd_workflow}" >"${homebrew_block}"
 
+awk '
+  /^  copilot-plugin:/ { in_copilot_plugin = 1 }
+  /^  operator-chart:/ { in_copilot_plugin = 0 }
+  in_copilot_plugin { print }
+' "${cd_workflow}" >"${copilot_plugin_block}"
+
 awk '1' \
 	"${homebrew_block}" \
+	"${copilot_plugin_block}" \
 	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
 	>"${execution_surface}"
@@ -53,14 +61,20 @@ assert_contains 'for label in automation dependencies' "${homebrew_block}" \
 	'release job must add available automation/dependencies labels'
 assert_contains 'remains draft/open for maintainer promotion' "${homebrew_block}" \
 	'release job must record the draft PR handoff'
+assert_contains 'name: 🧩 Release Copilot CLI Plugin' "${copilot_plugin_block}" \
+	'workflow contract must find the Copilot plugin release job'
+assert_contains 'gh pr create' "${copilot_plugin_block}" \
+	'Copilot plugin release job must create its generated PR'
+assert_not_contains 'allow_auto_merge=true' "${execution_surface}" \
+	'release jobs must never enable repository auto-merge'
 assert_not_contains 'gh pr ready' "${execution_surface}" \
-	'release job and its helpers must never self-promote a generated draft'
+	'release jobs and helpers must never self-promote a generated draft'
 assert_not_contains 'gh pr merge' "${execution_surface}" \
-	'release job and its helpers must never merge a generated cask PR'
+	'release jobs and helpers must never merge a generated PR'
 assert_not_contains '--auto' "${execution_surface}" \
-	'release job and its helpers must never arm auto-merge'
+	'release jobs and helpers must never arm auto-merge'
 assert_not_contains '--admin' "${execution_surface}" \
-	'release job and its helpers must never bypass branch protections'
+	'release jobs and helpers must never bypass branch protections'
 
 validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || true)"
 if [ "${validator_calls}" -lt 3 ]; then
