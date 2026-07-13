@@ -172,6 +172,71 @@ func TestHandleReconcileRunE_NothingMissing(t *testing.T) {
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleReconcileRunE_RunsFromSubdirectory(t *testing.T) {
+	repoRoot := writeReconcileRepo(t)
+	subDir := filepath.Join(repoRoot, "k8s", "clusters", "prod")
+	t.Chdir(subDir)
+
+	out, err := runReconcile(t)
+	require.NoError(t, err)
+
+	// The workspace root was resolved by upward traversal, so the plan and the
+	// scaffold land at the repo root — not relative to the subdirectory.
+	assert.Contains(t, out, "staging")
+	assert.Contains(t, out, "Missing")
+
+	_, statErr := os.Stat(
+		filepath.Join(repoRoot, "k8s", "clusters", "staging", "kustomization.yaml"),
+	)
+	require.NoError(t, statErr)
+
+	_, statErr = os.Stat(filepath.Join(subDir, "k8s"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestHandleReconcileRunE_HomeRelativeSourceDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	repoRoot := t.TempDir()
+	files := map[string]string{
+		"ksail.yaml": `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: base
+spec:
+  cluster:
+    distribution: Vanilla
+    provider: Docker
+  workload:
+    sourceDirectory: ~/k8s
+`,
+		"ksail.staging.yaml": addEnvSourceConfig,
+	}
+
+	for rel, content := range files {
+		abs := filepath.Join(repoRoot, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
+		require.NoError(t, os.WriteFile(abs, []byte(content), 0o600))
+	}
+
+	t.Chdir(repoRoot)
+
+	_, err := runReconcile(t)
+	require.NoError(t, err)
+
+	// The home-relative source directory was expanded, not joined onto the
+	// repo root as a literal "~" directory.
+	_, statErr := os.Stat(
+		filepath.Join(homeDir, "k8s", "clusters", "staging", "kustomization.yaml"),
+	)
+	require.NoError(t, statErr)
+
+	_, statErr = os.Stat(filepath.Join(repoRoot, "~"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
 func TestHandleReconcileRunE_MissingBaseConfig(t *testing.T) {
 	repoRoot := t.TempDir()
 	t.Chdir(repoRoot)

@@ -76,15 +76,21 @@ func HandleReconcileRunE(cmd *cobra.Command) error {
 
 	// Canonicalise so the workspace root matches the symlink-resolved paths the
 	// config loader derives, mirroring the other env verbs.
-	repoRoot, err := fsutil.EvalCanonicalPath(workDir)
+	canonWorkDir, err := fsutil.EvalCanonicalPath(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve current directory: %w", err)
 	}
 
+	// The explicit per-file loads below skip the config manager's
+	// parent-directory traversal, so resolve the workspace root the same way
+	// it would — the nearest ancestor holding ksail.yaml — letting the command
+	// run from any subdirectory of the workspace.
+	repoRoot := resolveWorkspaceRoot(canonWorkDir)
+
 	// The plan spans the whole workspace, so the source directory comes from
 	// the base ksail.yaml (the same root config the multi-cluster scaffold
 	// derives the tree from), not from any single environment's config.
-	baseCfg, err := loadEnvironmentConfig(cmd, "ksail.yaml")
+	baseCfg, err := loadEnvironmentConfig(cmd, filepath.Join(repoRoot, "ksail.yaml"))
 	if err != nil {
 		return fmt.Errorf("loading workspace base config: %w", err)
 	}
@@ -95,7 +101,7 @@ func HandleReconcileRunE(cmd *cobra.Command) error {
 	}
 
 	loader := func(configFile string) (*v1alpha1.Cluster, error) {
-		return loadEnvironmentConfig(cmd, configFile)
+		return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, configFile))
 	}
 
 	plan, err := environment.DerivePlan(repoRoot, sourceDir, loader)
@@ -106,6 +112,24 @@ func HandleReconcileRunE(cmd *cobra.Command) error {
 	displayPlan(out, plan)
 
 	return generateMissing(out, repoRoot, sourceDir, plan)
+}
+
+// resolveWorkspaceRoot walks upward from workDir to the nearest directory
+// containing the workspace base config (ksail.yaml), mirroring the config
+// manager's parent-directory traversal that the explicit per-file loads here
+// skip. It returns workDir unchanged when no ksail.yaml exists on the walk —
+// the base-config load then fails with its normal error.
+func resolveWorkspaceRoot(workDir string) string {
+	for dir := workDir; ; dir = filepath.Dir(dir) {
+		_, statErr := os.Stat(filepath.Join(dir, "ksail.yaml"))
+		if statErr == nil {
+			return dir
+		}
+
+		if filepath.Dir(dir) == dir {
+			return workDir
+		}
+	}
 }
 
 // displayPlan prints one line per declared environment with its overlay state,
