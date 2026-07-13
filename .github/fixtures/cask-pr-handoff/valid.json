@@ -6,7 +6,7 @@
       "login": "devantler"
     },
     "head": {
-      "ref": "goreleaser/ksail-v7.166.1",
+      "ref": "goreleaser/ksail",
       "sha": "1111111111111111111111111111111111111111",
       "repo": {
         "full_name": "devantler-tech/homebrew-tap"

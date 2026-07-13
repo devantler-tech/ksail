@@ -69,7 +69,9 @@ if ! jq -e . "${evidence_file}" >/dev/null 2>&1; then
 	exit 1
 fi
 
-expected_head="goreleaser/${cask_name}-${tag}"
+# Evergreen, version-less branch (mirrors .goreleaser*.yaml): each release updates the ONE
+# open cask PR in place, so the head never carries the tag (tap#1172).
+expected_head="goreleaser/${cask_name}"
 expected_path="Casks/${cask_name}.rb"
 expected_title="chore(cask): update ${cask_name} to ${tag}"
 failures=()

@@ -53,6 +53,8 @@ assert_contains 'for label in automation dependencies' "${homebrew_block}" \
 	'release job must add available automation/dependencies labels'
 assert_contains 'remains draft/open for maintainer promotion' "${homebrew_block}" \
 	'release job must record the draft PR handoff'
+assert_contains 'convertPullRequestToDraft' "${homebrew_block}" \
+	'release job must re-arm the draft checkpoint on a reused promoted evergreen PR'
 assert_not_contains 'gh pr ready' "${execution_surface}" \
 	'release job and its helpers must never self-promote a generated draft'
 assert_not_contains 'gh pr merge' "${execution_surface}" \
