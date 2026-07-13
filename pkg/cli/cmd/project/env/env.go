@@ -58,6 +58,7 @@ func NewEnvCmd() *cobra.Command {
 
 	cmd.AddCommand(NewAddCmd())
 	cmd.AddCommand(NewListCmd())
+	cmd.AddCommand(NewReconcileCmd())
 	cmd.AddCommand(NewRmCmd())
 
 	return cmd

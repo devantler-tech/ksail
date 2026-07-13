@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
+	awscredentials "github.com/aws/aws-sdk-go-v2/credentials"
 	awseks "github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -56,8 +57,12 @@ type callerIdentityPresigner interface {
 // Client reads EKS cluster connection details and mints bearer tokens for
 // them, hiding the SDK's request shapes and the token encoding scheme.
 type Client struct {
-	describer clusterDescriber
-	presigner callerIdentityPresigner
+	describer                 clusterDescriber
+	presigner                 callerIdentityPresigner
+	loadOptions               []func(*config.LoadOptions) error
+	credentialValuesAvailable bool
+	requireCredentialValues   bool
+	optionErr                 error
 }
 
 // Option customises a Client.
@@ -79,21 +84,101 @@ func WithCallerIdentityPresigner(presigner callerIdentityPresigner) Option {
 	}
 }
 
+// WithCredentialValues pins the AWS identity used by the SDK-backed EKS and
+// STS clients without mutating process environment. A complete static pair
+// takes precedence over profile, matching the canonical AWS credential chain.
+// Partial static credentials fail closed rather than falling back to an
+// unrelated ambient identity.
+func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
+	return func(client *Client) {
+		hasAccessKey := accessKeyID != ""
+		hasSecretKey := secretAccessKey != ""
+
+		if hasAccessKey != hasSecretKey || (sessionToken != "" && !hasAccessKey) {
+			client.optionErr = ErrIncompleteStaticCredentials
+
+			return
+		}
+
+		if hasAccessKey {
+			client.credentialValuesAvailable = true
+			client.loadOptions = append(
+				client.loadOptions,
+				config.WithCredentialsProvider(awscredentials.NewStaticCredentialsProvider(
+					accessKeyID,
+					secretAccessKey,
+					sessionToken,
+				)),
+			)
+
+			return
+		}
+
+		if profile != "" {
+			client.credentialValuesAvailable = true
+			client.loadOptions = append(client.loadOptions, config.WithSharedConfigProfile(profile))
+		}
+	}
+}
+
+// RequireCredentialValues makes a custom credential selection fail closed
+// when it resolves neither a profile nor a complete static key pair. This
+// prevents the SDK from silently falling back to stale canonical environment
+// credentials that the corresponding eksctl child environment removed.
+func RequireCredentialValues() Option {
+	return func(client *Client) {
+		client.requireCredentialValues = true
+	}
+}
+
+// NewClientWithCredentialRequirement constructs a Client from an immutable
+// option snapshot, adding the fail-closed credential requirement when needed.
+func NewClientWithCredentialRequirement(
+	ctx context.Context,
+	region string,
+	required bool,
+	options ...Option,
+) (*Client, error) {
+	result := append([]Option(nil), options...)
+	if required {
+		result = append(result, RequireCredentialValues())
+	}
+
+	return NewClient(ctx, region, result...)
+}
+
 // NewClient constructs a Client. Unless both seams are injected, it resolves
 // the AWS default configuration (env, shared config, IRSA / instance
 // role) once and builds the real SDK clients from it.
 func NewClient(ctx context.Context, region string, opts ...Option) (*Client, error) {
 	client := &Client{
-		describer: nil,
-		presigner: nil,
+		describer:                 nil,
+		presigner:                 nil,
+		loadOptions:               nil,
+		credentialValuesAvailable: false,
+		requireCredentialValues:   false,
+		optionErr:                 nil,
 	}
 
 	for _, opt := range opts {
 		opt(client)
 	}
 
+	if client.optionErr != nil {
+		return nil, client.optionErr
+	}
+
+	if client.requireCredentialValues && !client.credentialValuesAvailable {
+		return nil, ErrExplicitCredentialsUnavailable
+	}
+
 	if client.describer == nil || client.presigner == nil {
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+		loadOptions := append(
+			[]func(*config.LoadOptions) error{config.WithRegion(region)},
+			client.loadOptions...,
+		)
+
+		cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
 		if err != nil {
 			return nil, fmt.Errorf("loading aws configuration: %w", err)
 		}

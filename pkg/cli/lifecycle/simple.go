@@ -119,6 +119,9 @@ type ResolvedClusterInfo struct {
 	// AWSRegion is the resolved AWS region for read-only EKS status lookups.
 	// Empty defers region resolution to eksctl (AWS_REGION env / active profile).
 	AWSRegion string
+	// AWSOpts retains the credential environment-variable mappings from the
+	// loaded cluster config for read-only EKS status lookups.
+	AWSOpts v1alpha1.OptionsAWS
 }
 
 // awsRegionEnvVarDefault is the fallback environment variable name for the AWS
@@ -163,48 +166,42 @@ func ResolveClusterInfo(
 	providerFlag v1alpha1.Provider,
 	kubeconfigFlag string,
 ) (*ResolvedClusterInfo, error) {
-	clusterName := nameFlag
-	provider := providerFlag
-	kubeconfigPath := kubeconfigFlag
-
-	// Always load config to fill missing fields and extract Omni/Kubernetes options.
-	// Even when --name is provided, we still need Omni endpoint from config.
-	var (
-		omniOpts       v1alpha1.OptionsOmni
-		kubernetesOpts v1alpha1.OptionsKubernetes
-		awsRegion      string
-	)
-
-	resolveFromConfig(
-		cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts, &awsRegion,
-	)
-
-	// Fall back to kubeconfig context detection
-	if clusterName == "" {
-		resolveFromKubecontext(commandContext(cmd), &clusterName, &provider, kubeconfigPath)
+	resolved := ResolvedClusterInfo{
+		ClusterName:    nameFlag,
+		Provider:       providerFlag,
+		KubeconfigPath: kubeconfigFlag,
 	}
 
-	if clusterName == "" {
+	// Always load config to fill missing fields and extract provider options.
+	// Even when --name is provided, provider-specific settings are still needed.
+	resolveFromConfig(cmd, &resolved)
+
+	// Fall back to kubeconfig context detection
+	if resolved.ClusterName == "" {
+		resolveFromKubecontext(
+			commandContext(cmd),
+			&resolved.ClusterName,
+			&resolved.Provider,
+			resolved.KubeconfigPath,
+		)
+	}
+
+	if resolved.ClusterName == "" {
 		return nil, ErrClusterNameRequired
 	}
 
-	if provider == "" {
-		provider = v1alpha1.ProviderDocker
+	if resolved.Provider == "" {
+		resolved.Provider = v1alpha1.ProviderDocker
 	}
 
-	resolvedPath, err := clusterdetector.ResolveKubeconfigPath(kubeconfigPath)
+	resolvedPath, err := clusterdetector.ResolveKubeconfigPath(resolved.KubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
-	return &ResolvedClusterInfo{
-		ClusterName:    clusterName,
-		Provider:       provider,
-		KubeconfigPath: resolvedPath,
-		OmniOpts:       omniOpts,
-		KubernetesOpts: kubernetesOpts,
-		AWSRegion:      awsRegion,
-	}, nil
+	resolved.KubeconfigPath = resolvedPath
+
+	return &resolved, nil
 }
 
 // loadConfig loads the ksail.yaml config, honoring the --config flag when cmd is non-nil.
@@ -234,39 +231,35 @@ func loadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.Dist
 // Fields that already have values (from flags) are not overwritten.
 func resolveFromConfig(
 	cmd *cobra.Command,
-	clusterName *string,
-	provider *v1alpha1.Provider,
-	kubeconfigPath *string,
-	omniOpts *v1alpha1.OptionsOmni,
-	kubernetesOpts *v1alpha1.OptionsKubernetes,
-	awsRegion *string,
+	resolved *ResolvedClusterInfo,
 ) {
 	cfg, distCfg := loadConfig(cmd)
 	if cfg == nil {
 		return
 	}
 
-	if *clusterName == "" && cfg.Name != "" {
+	if resolved.ClusterName == "" && cfg.Name != "" {
 		if v1alpha1.ValidateClusterName(cfg.Name) == nil {
-			*clusterName = cfg.Name
+			resolved.ClusterName = cfg.Name
 		}
 	}
 
-	if *clusterName == "" {
-		*clusterName = ClusterNameFromDistributionConfig(distCfg)
+	if resolved.ClusterName == "" {
+		resolved.ClusterName = ClusterNameFromDistributionConfig(distCfg)
 	}
 
-	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
-		*provider = cfg.Spec.Cluster.Provider
+	if resolved.Provider == "" && cfg.Spec.Cluster.Provider != "" {
+		resolved.Provider = cfg.Spec.Cluster.Provider
 	}
 
-	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
-		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+	if resolved.KubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
+		resolved.KubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
 	}
 
-	*omniOpts = cfg.Spec.Provider.Omni
-	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
-	*awsRegion = ResolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
+	resolved.OmniOpts = cfg.Spec.Provider.Omni
+	resolved.KubernetesOpts = cfg.Spec.Provider.Kubernetes
+	resolved.AWSOpts = cfg.Spec.Provider.AWS
+	resolved.AWSRegion = ResolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
 }
 
 // commandContext returns cmd's context, falling back to context.Background()
