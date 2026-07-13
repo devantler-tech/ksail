@@ -4,9 +4,17 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 )
+
+// NewStdioTransportForTest exposes the production stdio transport with
+// injected pipe ends so the black-box test package can prove Close interrupts
+// blocked reads and writes.
+func NewStdioTransportForTest(in, out *os.File) io.ReadWriteCloser {
+	return stdioTransport{in: in, out: out}
+}
 
 // ListenInterceptForTest exposes the production listener factory so the
 // black-box test package can pin its bind address.
