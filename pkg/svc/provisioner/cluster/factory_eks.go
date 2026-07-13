@@ -33,6 +33,7 @@ func (f DefaultFactory) createEKSProvisioner(
 		eksConfig.ConfigPath,
 		client,
 		infraProvider,
+		eksprovisioner.WithKubeconfigPath(eksConfig.KubeconfigPath),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)

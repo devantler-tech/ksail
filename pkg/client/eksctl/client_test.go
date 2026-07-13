@@ -105,6 +105,31 @@ func TestCreateCluster_NoRegionOmitsFlag(t *testing.T) {
 	)
 }
 
+func TestCreateCluster_WithKubeconfigPinsOutputPath(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	client := newTestClient(runner)
+
+	err := client.CreateClusterWithKubeconfig(
+		t.Context(),
+		"eks.yaml",
+		"eu-west-1",
+		"/tmp/ksail-kubeconfig",
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t,
+		[]string{
+			"create", "cluster",
+			"--config-file", "eks.yaml",
+			"--region", "eu-west-1",
+			"--kubeconfig", "/tmp/ksail-kubeconfig",
+		},
+		runner.lastArgs,
+	)
+}
+
 func TestCreateCluster_EmptyConfigPath_ReturnsError(t *testing.T) {
 	t.Parallel()
 

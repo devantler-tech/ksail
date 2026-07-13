@@ -126,12 +126,12 @@ type ResolvedClusterInfo struct {
 // default so the info path resolves the region the same way create does).
 const awsRegionEnvVarDefault = "AWS_REGION"
 
-// resolveAWSRegion determines the AWS region for read-only EKS status lookups,
+// ResolveAWSRegion determines the AWS region for EKS operations,
 // honoring the documented precedence from OptionsAWS: the environment variable
 // named by RegionEnvVar (default AWS_REGION) overrides the region declared in
 // eks.yaml. An empty result tells eksctl to fall back to its own resolution, so
 // this never regresses the previous always-empty behavior.
-func resolveAWSRegion(
+func ResolveAWSRegion(
 	awsOpts v1alpha1.OptionsAWS,
 	distCfg *clusterprovisioner.DistributionConfig,
 ) string {
@@ -266,7 +266,7 @@ func resolveFromConfig(
 
 	*omniOpts = cfg.Spec.Provider.Omni
 	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
-	*awsRegion = resolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
+	*awsRegion = ResolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
 }
 
 // commandContext returns cmd's context, falling back to context.Background()
