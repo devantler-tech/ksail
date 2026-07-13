@@ -120,13 +120,41 @@ fi
 # the cask carries THIS release: require the head file content to pin the current
 # version (a stale PR whose rewrite was skipped or failed must never be handed off).
 expected_version="${tag#v}"
+cask_content=""
 if ! jq -e --arg path "${expected_path}" \
 	'.headFile | type == "object" and .path == $path and (.content | type == "string")' \
 	"${evidence_file}" >/dev/null 2>&1; then
 	block 'cask head-content evidence is missing'
-elif ! jq -r '.headFile.content' "${evidence_file}" | base64 -d 2>/dev/null |
-	grep -Fq "version \"${expected_version}\""; then
+elif ! cask_content="$(jq -r '.headFile.content' "${evidence_file}" | base64 -d 2>/dev/null)"; then
+	cask_content=""
+	block 'cask head content is not valid base64'
+elif ! grep -Fq "version \"${expected_version}\"" <<<"${cask_content}"; then
 	block "cask at head must pin version ${expected_version}"
+fi
+
+# A version match alone is not enough on a rerun of the SAME tag: a stale evergreen PR
+# from a failed earlier attempt already pins this version while its sha256 still points
+# at the deleted draft release's artifacts. Require every sha256 the cask pins to equal
+# a digest GitHub reports for the published release's assets.
+if [[ -n "${cask_content}" ]]; then
+	if ! jq -e '.releaseAssets | type == "array" and length > 0' \
+		"${evidence_file}" >/dev/null 2>&1; then
+		block 'release-asset digest evidence is missing'
+	else
+		cask_shas="$(grep -oE 'sha256 "[[:xdigit:]]{64}"' <<<"${cask_content}" |
+			grep -oE '[[:xdigit:]]{64}' || true)"
+		if [[ -z "${cask_shas}" ]]; then
+			block 'cask at head must pin at least one sha256'
+		else
+			while IFS= read -r cask_sha; do
+				if ! jq -e --arg digest "sha256:${cask_sha}" \
+					'.releaseAssets | any(.digest == $digest)' \
+					"${evidence_file}" >/dev/null 2>&1; then
+					block "cask sha256 ${cask_sha} does not match any published release asset digest"
+				fi
+			done <<<"${cask_shas}"
+		fi
+	fi
 fi
 
 if [[ "${prepared}" == true ]]; then

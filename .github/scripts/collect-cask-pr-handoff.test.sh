@@ -21,6 +21,8 @@ run_collector() {
 		"${collector}" \
 		--tap devantler-tech/homebrew-tap \
 		--pr 42 \
+		--source-repo devantler-tech/ksail \
+		--tag v7.166.1 \
 		--output "${output}"
 }
 
@@ -30,6 +32,8 @@ jq -e '
   .pr.head.repo.full_name == "devantler-tech/homebrew-tap"
   and (.files | map(.filename)) == ["Casks/ksail.rb"]
   and (.availableLabels | map(.name)) == ["automation", "dependencies"]
+  and (.releaseAssets | map(.name)) == ["ksail_7.166.1_darwin_arm64.tar.gz"]
+  and (.releaseAssets[0].digest | startswith("sha256:"))
   and .headFile.path == "Casks/ksail.rb"
   and (.headFile.content | type == "string" and length > 0)
 ' "${valid}" >/dev/null
@@ -57,7 +61,7 @@ if "${validator}" \
 fi
 printf 'PASS: paginated extra file remains visible and blocks\n'
 
-for scenario in pr-failure files-failure labels-failure malformed-files malformed-labels contents-failure malformed-contents; do
+for scenario in pr-failure files-failure labels-failure malformed-files malformed-labels contents-failure malformed-contents release-failure malformed-release; do
 	if run_collector "${scenario}" "${tmp_dir}/${scenario}.json" >/dev/null 2>&1; then
 		printf 'FAIL: collector accepted %s\n' "${scenario}" >&2
 		exit 1

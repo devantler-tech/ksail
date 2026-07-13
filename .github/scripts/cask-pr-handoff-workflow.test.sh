@@ -54,6 +54,10 @@ assert_contains 'for label in automation dependencies' "${homebrew_block}" \
 	'release job must add available automation/dependencies labels'
 assert_contains 'headRepositoryOwner.login == $owner' "${homebrew_block}" \
 	'release job must scope branch-name matches to the tap-owned devantler PR'
+assert_contains 'headRepository.name == $repo' "${homebrew_block}" \
+	'release job must also match the head repository NAME, not just its owner'
+assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
+	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
 # validation the job marks the PR ready so the tap's checks gate its auto-merge — but ONLY after
 # the prepared validation, and never by merging or bypassing anything itself.
@@ -93,6 +97,22 @@ assert_contains 'convertPullRequestToDraft' \
 assert_contains 'headRepositoryOwner.login == $owner' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	'the checkpoint script must scope branch-name matches to the tap-owned devantler PR'
+assert_contains 'headRepository.name == $repo' \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+	'the checkpoint script must also match the head repository NAME, not just its owner'
+# The checkpoint script is release-critical: CI must both re-run this suite when it
+# changes and shellcheck it (a filter/shellcheck omission lets it break unnoticed).
+assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on checkpoint-script changes'
+if [ "$(grep -Fc -- '.github/scripts/redraft-evergreen-cask-prs.sh' "${ci_workflow}")" -lt 2 ]; then
+	fail 'CI must also shellcheck the checkpoint script, not just path-filter it'
+fi
+assert_contains 'release-asset digest evidence is missing' \
+	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+	'the validator must require release-asset digest evidence'
+assert_contains 'does not match any published release asset digest' \
+	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+	'the validator must verify cask sha256 stanzas against published asset digests'
 
 assert_contains 'if: always() && needs.publish-release.result != '\''success'\''' "${cd_workflow}" \
 	'a pending cask handoff must not delete a published release'

@@ -32,6 +32,13 @@ elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebr
 	else
 		printf '%s\n' '[[{"name":"automation"}],[{"name":"dependencies"}]]'
 	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/ksail/releases/tags/v7.166.1" ]]; then
+	[[ "${scenario}" == release-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-release ]]; then
+		printf '%s\n' '{"assets":[{}]}'
+	else
+		printf '%s\n' '{"assets":[{"name":"ksail_7.166.1_darwin_arm64.tar.gz","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","url":"ignored"}]}'
+	fi
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=1111111111111111111111111111111111111111" ]]; then
 	[[ "${scenario}" == contents-failure ]] && exit 1
 	if [[ "${scenario}" == malformed-contents ]]; then

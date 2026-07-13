@@ -32,18 +32,22 @@ if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || $# -lt 1 ]]; then
 	exit 2
 fi
 tap_owner="${tap%%/*}"
+tap_repo="${tap#*/}"
 
 for name in "$@"; do
 	branch="goreleaser/${name}"
 	if ! matches="$(gh pr list --repo "${tap}" --head "${branch}" --state open \
-		--limit 10 --json number,isDraft,id,author,headRepositoryOwner)"; then
+		--limit 10 --json number,isDraft,id,author,headRepositoryOwner,headRepository)"; then
 		printf 'ERROR: could not enumerate open cask PRs on %s for branch %s\n' "${tap}" "${branch}" >&2
 		exit 1
 	fi
-	# `--head` filters by branch NAME only, so a fork branch named goreleaser/<name>
-	# would match too — keep only the tap's own devantler-authored PR.
-	if ! ours="$(jq -ec --arg owner "${tap_owner}" '
-      [.[] | select(.headRepositoryOwner.login == $owner and .author.login == "devantler")]
+	# `--head` filters by branch NAME only, so a branch named goreleaser/<name> in a fork
+	# OR in another same-owner repository would match too — keep only the PR whose head
+	# lives in the tap itself (owner AND repo name) and is devantler-authored.
+	if ! ours="$(jq -ec --arg owner "${tap_owner}" --arg repo "${tap_repo}" '
+      [.[] | select(.headRepositoryOwner.login == $owner
+        and .headRepository.name == $repo
+        and .author.login == "devantler")]
     ' <<<"${matches}")"; then
 		printf 'ERROR: could not filter cask PR candidates for branch %s\n' "${branch}" >&2
 		exit 1

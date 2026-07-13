@@ -59,6 +59,14 @@ run_case missing-head-content 1 'cask head-content evidence is missing' 'del(.he
 run_case wrong-head-content-path 1 'cask head-content evidence is missing' '.headFile.path = "Casks/other.rb"'
 # base64 of a cask pinning 7.160.0 — a previous release the evergreen branch rewrite never replaced.
 run_case stale-head-version 1 'cask at head must pin version 7.166.1' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjAuMCIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2MC4wL2tzYWlsXzcuMTYwLjBfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="'
+run_case missing-release-assets 1 'release-asset digest evidence is missing' 'del(.releaseAssets)'
+run_case empty-release-assets 1 'release-asset digest evidence is missing' '.releaseAssets = []'
+# Same tag re-run: version already matches, but the published assets carry different
+# digests than the stale cask's sha256 — the handoff must block.
+run_case stale-cask-sha 1 'does not match any published release asset digest' '.releaseAssets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+# base64 of a cask with a version but no sha256 stanza at all.
+run_case no-cask-sha 1 'cask at head must pin at least one sha256' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKCiAgdXJsICJodHRwczovL2dpdGh1Yi5jb20vZGV2YW50bGVyLXRlY2gva3NhaWwvcmVsZWFzZXMvZG93bmxvYWQvdjcuMTY2LjEva3NhaWxfNy4xNjYuMV9kYXJ3aW5fYXJtNjQudGFyLmd6IgplbmQK"'
+run_case invalid-base64-content 1 'cask head content is not valid base64' '.headFile.content = "%%%not-base64%%%"'
 run_case missing-title 1 'title must exactly equal chore(cask): update ksail to v7.166.1' '.pr.title = "Brew cask update"' true
 run_case missing-label-inventory 1 'available-label inventory is missing' 'del(.availableLabels)' true
 run_case malformed-label-inventory 1 'available-label inventory is malformed' '.availableLabels = [{}] | .pr.labels = []' true
