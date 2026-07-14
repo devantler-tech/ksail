@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Sentinel failures the recordingRunner and failingListener inject, so the
+// tests can assert each iptables/forwarding failure surfaces via errors.Is.
 var (
 	errSteerInstallDenied  = errors.New("iptables: permission denied")
 	errSteerGuardDenied    = errors.New("iptables: guard denied")
@@ -27,10 +29,13 @@ var (
 // forwarding failure can be paired with a teardown failure in tests.
 type failingListener struct{ err error }
 
+// Accept always fails with the configured non-stop error.
 func (l *failingListener) Accept() (net.Conn, error) { return nil, l.err }
 
+// Close is a no-op — there is no underlying socket to release.
 func (l *failingListener) Close() error { return nil }
 
+// Addr returns a fixed placeholder address for error messages.
 func (l *failingListener) Addr() net.Addr {
 	return &net.UnixAddr{Name: "ksail-steer-failing", Net: "unix"}
 }
@@ -46,6 +51,8 @@ type recordingRunner struct {
 	err    error
 }
 
+// run records the command and fails when the configured failOn action
+// appears in the args, per the recordingRunner contract.
 func (r *recordingRunner) run(_ context.Context, name string, args ...string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -103,12 +110,58 @@ func (r *recordingRunner) callHas(t *testing.T, index int, tokens ...string) boo
 	return true
 }
 
+// listenerFactory wraps a pre-built listener in a SteerListenerFactory that
+// ignores the requested port and always hands back that listener.
 func listenerFactory(listener net.Listener) mirror.SteerListenerFactory {
 	return func(context.Context, int) (net.Listener, error) {
 		return listener, nil
 	}
 }
 
+// TestRunSteerAgent_ExpectKeepalivesExpiresSilentClient pins the end-to-end
+// ksail#6040 fix: with expectKeepalives set, a client that never sends a frame
+// expires the pre-armed watchdog and the agent tears its rules down and
+// returns on its own.
+func TestRunSteerAgent_ExpectKeepalivesExpiresSilentClient(t *testing.T) {
+	t.Parallel()
+
+	runner := &recordingRunner{}
+	agentTransport, ksailTransport := net.Pipe()
+
+	t.Cleanup(func() {
+		_ = ksailTransport.Close()
+		_ = agentTransport.Close()
+	})
+
+	listener := newPipeListener()
+	redirect := mirror.SteeringRedirect{ServicePort: 8080, InterceptPort: 15006}
+
+	agentDone := make(chan error, 1)
+
+	go func() {
+		agentDone <- mirror.RunSteerAgentForTest(
+			context.Background(), agentTransport, listenerFactory(listener), redirect, runner.run,
+			true, 60*time.Millisecond,
+		)
+	}()
+
+	// The client never sends a frame: expectKeepalives pre-arms the
+	// watchdog (RunSteerAgent's ArmLiveness branch), so the silent client
+	// must expire and the agent must reach its reverse teardown and return
+	// on its own — the ksail#6040 orphaned-REDIRECT scenario, end to end.
+	select {
+	case err := <-agentDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunSteerAgent did not tear down after the silent armed client expired")
+	}
+
+	assert.True(t, runner.sawAction("-D"), "expiry should remove the steering rules")
+}
+
+// TestRunSteerAgent_InstallsForwardsAndTearsDown exercises the happy path:
+// the agent installs the redirect rule, forwards a redirected connection
+// through the tunnel to the local process, and removes the rule on shutdown.
 func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	t.Parallel()
 
@@ -123,7 +176,9 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	// The ksail side: dial an echo "developer process" for each intercepted stream.
@@ -157,6 +212,9 @@ func TestRunSteerAgent_InstallsForwardsAndTearsDown(t *testing.T) {
 	assert.True(t, runner.sawAction("-D"), "the redirect rule should be torn down on exit")
 }
 
+// TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime pins the rule
+// ordering of the #6039 INPUT guard: it installs before the listener opens and
+// is removed after the listener closes, bracketing the REDIRECT rule.
 func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T) {
 	t.Parallel()
 
@@ -173,7 +231,9 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	bothInstalled := func() bool { return runner.callCount() >= 2 }
@@ -193,6 +253,9 @@ func TestRunSteerAgent_GuardsTheInterceptPortForTheSessionLifetime(t *testing.T)
 		"the guard is removed after the listener closes")
 }
 
+// TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails pins the
+// fail-closed ordering: a failed guard install surfaces its error without ever
+// opening the all-interfaces listener or attempting a teardown.
 func TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +274,7 @@ func TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails(t *testing
 		listen,
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errSteerGuardDenied)
@@ -218,6 +282,9 @@ func TestRunSteerAgent_DoesNotOpenTheListenerWhenTheGuardInstallFails(t *testing
 	assert.False(t, runner.sawAction("-D"), "a failed guard install leaves nothing to remove")
 }
 
+// TestRunSteerAgent_AbortsWhenTheRuleInstallFails verifies a failed REDIRECT
+// install aborts the agent with that error and triggers no teardown, since
+// nothing was installed.
 func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 	t.Parallel()
 
@@ -232,6 +299,7 @@ func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errSteerInstallDenied)
@@ -239,6 +307,9 @@ func TestRunSteerAgent_AbortsWhenTheRuleInstallFails(t *testing.T) {
 	assert.False(t, runner.sawAction("-D"), "nothing is installed, so nothing is torn down")
 }
 
+// TestRunSteerAgent_SurfacesTeardownFailure verifies a failed rule removal is
+// returned from RunSteerAgent even when forwarding itself ended cleanly — a
+// dangling REDIRECT must never vanish silently.
 func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	t.Parallel()
 
@@ -254,7 +325,9 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	agentDone := make(chan error, 1)
 
 	go func() {
-		agentDone <- mirror.RunSteerAgent(ctx, agentTransport, listenerFactory(listener), redirect, runner.run)
+		agentDone <- mirror.RunSteerAgent(
+			ctx, agentTransport, listenerFactory(listener), redirect, runner.run, false,
+		)
 	}()
 
 	installed := func() bool { return runner.sawAction("-I") }
@@ -266,6 +339,9 @@ func TestRunSteerAgent_SurfacesTeardownFailure(t *testing.T) {
 	assert.True(t, runner.sawAction("-D"), "teardown should have been attempted")
 }
 
+// TestRunSteerAgent_JoinsForwardingAndTeardownFailures verifies that when both
+// forwarding and teardown fail, errors.Join surfaces both instead of the
+// forwarding error swallowing the dangling-rule teardown error.
 func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
 	t.Parallel()
 
@@ -283,6 +359,7 @@ func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, errForwardBroken, "the forwarding failure must surface")
@@ -290,6 +367,8 @@ func TestRunSteerAgent_JoinsForwardingAndTeardownFailures(t *testing.T) {
 	assert.True(t, runner.sawAction("-D"), "teardown should have been attempted")
 }
 
+// TestRunSteerAgent_RejectsAnInvalidRedirect verifies a redirect with an
+// invalid port is rejected up front, before any iptables command runs.
 func TestRunSteerAgent_RejectsAnInvalidRedirect(t *testing.T) {
 	t.Parallel()
 
@@ -304,12 +383,16 @@ func TestRunSteerAgent_RejectsAnInvalidRedirect(t *testing.T) {
 		listenerFactory(listener),
 		redirect,
 		runner.run,
+		false,
 	)
 
 	require.ErrorIs(t, err, mirror.ErrSteeringPortInvalid)
 	assert.Empty(t, runner.calls, "an invalid redirect never reaches iptables")
 }
 
+// TestRunSteerAgent_RejectsNilDependencies verifies each nil dependency
+// (transport, listener factory, command runner) is rejected with its own
+// sentinel error.
 func TestRunSteerAgent_RejectsNilDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -339,6 +422,7 @@ func TestRunSteerAgent_RejectsNilDependencies(t *testing.T) {
 				testCase.listen,
 				redirect,
 				testCase.runner,
+				false,
 			)
 
 			require.ErrorIs(t, err, testCase.wantErr)

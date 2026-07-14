@@ -56,6 +56,7 @@ const steerAgentInterceptPort = 19000
 // developer's local process listens on loopback, never a routable interface.
 const loopbackHost = "127.0.0.1"
 
+// interceptCmdLong holds the long help text for `ksail workload intercept`.
 const interceptCmdLong = `Intercept a Deployment's inbound traffic to a local process (reverse dev bridge).
 
 Resolves the Deployment to a running pod, injects a steering container (an
@@ -79,6 +80,7 @@ Pass an explicit --steer-image and --steer-command to run a custom agent instead
 Ephemeral containers cannot be removed, so an already-injected steering agent on
 the target pod is reused rather than treated as an error.`
 
+// interceptCmdExample holds the usage examples for `ksail workload intercept`.
 const interceptCmdExample = `  # Intercept the traffic my-app serves on :8080 and forward it to localhost:8080
   ksail workload intercept my-app --service-port 8080 --local-port 8080
 
@@ -110,6 +112,7 @@ func defaultRunInterceptSession(
 	point *mirror.TapPoint,
 	steerCommand []string,
 	localPort int,
+	keepalive bool,
 ) error {
 	transport, err := mirror.OpenExecTransport(
 		ctx, client, restConfig, point, mirror.SteerContainerName, steerCommand,
@@ -124,12 +127,68 @@ func defaultRunInterceptSession(
 
 	defer func() { _ = session.Close() }()
 
+	// Liveness pings let the agent's watchdog distinguish an idle client
+	// from a dead one, so an uncleanly killed client cannot orphan the
+	// agent and its REDIRECT rule (ksail#6040). Only when the agent
+	// provably speaks the keepalive protocol (steerKeepaliveSupported) —
+	// an older agent's decoder tears the tunnel down on the unknown frame
+	// type. The goroutine ends with ctx / the session; both are torn down
+	// before this function returns.
+	if keepalive {
+		go mirror.SendKeepalives(ctx, session, mirror.SteerKeepaliveInterval)
+	}
+
 	err = mirror.ServeIntercepted(ctx, session, localProcessDialer(localPort))
 	if err != nil {
 		return fmt.Errorf("serve intercepted traffic: %w", err)
 	}
 
 	return nil
+}
+
+// steerKeepaliveSupported reports whether the steering agent this session
+// execs into provably speaks the keepalive protocol (ksail#6040): the steer
+// command must be the ksail-derived default (a custom --steer-command may run
+// any agent) and the pod's live steering container — which may be a reused
+// injection from an older release, since ephemeral containers cannot be
+// removed — must run exactly this build's version-pinned
+// [mirror.DefaultSteerImage] ([mirror.SteerKeepaliveImageProven]; an
+// unstamped dev build's mutable :latest default proves nothing, so it never
+// negotiates). Anything else falls back to the pre-keepalive behaviour rather
+// than risking the older decoder tearing the tunnel down on an unknown frame
+// type; a lookup failure counts as unsupported for the same reason.
+func steerKeepaliveSupported(
+	ctx context.Context,
+	client kubernetes.Interface,
+	point *mirror.TapPoint,
+	opts interceptOptions,
+) bool {
+	if !opts.steerCommandDerived {
+		return false
+	}
+
+	image, err := mirror.SteerContainerImage(ctx, client, point)
+
+	return err == nil && mirror.SteerKeepaliveImageProven(image)
+}
+
+// steerSessionCommand returns the agent command to exec for this session:
+// the resolved steer command, plus the --expect-keepalives agent flag when
+// keepalives are negotiated, so the agent arms its liveness watchdog from
+// session start instead of waiting for a first ping that an immediately-dead
+// client would never deliver (ksail#6040). The flag is only ever appended to
+// the ksail-derived default command against this build's own agent image
+// (steerKeepaliveSupported), which is guaranteed to understand it; the slice
+// is copied so the resolved options stay untouched.
+func steerSessionCommand(steerCommand []string, keepalive bool) []string {
+	if !keepalive {
+		return steerCommand
+	}
+
+	command := make([]string, 0, len(steerCommand)+1)
+	command = append(command, steerCommand...)
+
+	return append(command, "--"+mirror.SteerExpectKeepalivesFlag)
 }
 
 // localProcessDialer builds the LocalDialer intercept forwards each stream to:
@@ -160,6 +219,12 @@ type interceptOptions struct {
 	steerCommand []string
 	steerTimeout time.Duration
 	context      string
+
+	// steerCommandDerived records that resolveSteerCommand derived the
+	// default `ksail steer-agent` invocation (no explicit --steer-command).
+	// Only a derived command against this build's own steer image provably
+	// speaks the keepalive protocol (steerKeepaliveSupported).
+	steerCommandDerived bool
 }
 
 // NewInterceptCmd creates the workload intercept command (issue #4521,
@@ -233,6 +298,7 @@ func resolveSteerCommand(opts *interceptOptions) error {
 	}
 
 	opts.steerCommand = deriveSteerCommand(opts.servicePort)
+	opts.steerCommandDerived = true
 
 	return nil
 }
@@ -288,13 +354,16 @@ func runInterceptCommand(cmd *cobra.Command, deployment string, opts interceptOp
 		Writer:  cmd.ErrOrStderr(),
 	})
 
+	keepalive := steerKeepaliveSupported(ctx, client, point, opts)
+
 	err = runInterceptSession(
 		ctx,
 		client,
 		restConfig,
 		point,
-		opts.steerCommand,
+		steerSessionCommand(opts.steerCommand, keepalive),
 		opts.localPort,
+		keepalive,
 	)
 
 	return cleanInterceptCancellation(ctx, err)
