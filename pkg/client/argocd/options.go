@@ -22,8 +22,10 @@ type EnsureOptions struct {
 	Username string
 
 	// Password for OCI registry authentication (optional, for external registries).
-
 	Password string
+	// PullOnlyCredentials marks Username and Password as cluster-resident pull
+	// credentials so push auto-detection cannot reuse them.
+	PullOnlyCredentials bool
 
 	// Insecure allows HTTP connections (for local registries). Default is false.
 	Insecure bool

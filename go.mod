@@ -15,11 +15,11 @@ require (
 	github.com/docker/go-connections v0.7.0
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.1
-	github.com/fluxcd/kustomize-controller/api v1.9.1
+	github.com/fluxcd/kustomize-controller/api v1.9.2
 	github.com/fluxcd/pkg/apis/meta v1.31.0
-	github.com/fluxcd/source-controller/api v1.9.1
+	github.com/fluxcd/source-controller/api v1.9.2
 	github.com/getsops/sops/v3 v3.13.2
-	github.com/gkampitakis/go-snaps v0.5.22
+	github.com/gkampitakis/go-snaps v0.5.23
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/jinzhu/copier v0.4.0
@@ -60,10 +60,10 @@ require (
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.42.1
-	github.com/aws/aws-sdk-go-v2/config v1.32.27
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.26
-	github.com/aws/aws-sdk-go-v2/service/eks v1.88.1
-	github.com/aws/aws-sdk-go-v2/service/sts v1.43.5
+	github.com/aws/aws-sdk-go-v2/config v1.32.28
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.27
+	github.com/aws/aws-sdk-go-v2/service/eks v1.89.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -256,9 +256,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.29 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.53.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.2.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.31.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.3.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.32.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.0 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.12.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect

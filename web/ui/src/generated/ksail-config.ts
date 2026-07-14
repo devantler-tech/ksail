@@ -119,6 +119,30 @@ export interface KSailClusterConfiguration {
          * Credentials support ${ENV_VAR} placeholders for environment variable expansion.
          */
         registry?: string;
+        /**
+         * Credentials declares which environment variables hold the registry token for
+         * each execution path. When set, it takes precedence over any password embedded
+         * in the Registry spec.
+         */
+        credentials?: {
+          /**
+           * TokenEnvVar is the environment variable holding the registry token used by both
+           * push and pull paths unless a path-specific override is configured.
+           * Example: "GHCR_TOKEN".
+           */
+          tokenEnvVar?: string;
+          /**
+           * CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.
+           * Example: "GHCR_PUSH_TOKEN".
+           */
+          cliTokenEnvVar?: string;
+          /**
+           * ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token
+           * persisted into the cluster can be pull-only.
+           * Example: "GHCR_PULL_TOKEN".
+           */
+          clusterTokenEnvVar?: string;
+        };
       };
       /**
        * GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD.
