@@ -453,6 +453,7 @@ func ExportSetRunInterceptSession(
 		point *mirror.TapPoint,
 		steerCommand []string,
 		localPort int,
+		keepalive bool,
 	) error,
 ) func() {
 	original := runInterceptSession
