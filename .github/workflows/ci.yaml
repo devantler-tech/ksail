@@ -272,6 +272,7 @@ jobs:
               - '.github/scripts/cask-pr-handoff-workflow.test.sh'
               - '.github/scripts/collect-cask-pr-handoff.sh'
               - '.github/scripts/collect-cask-pr-handoff.test.sh'
+              - '.github/scripts/redraft-evergreen-cask-prs.sh'
               - '.github/scripts/validate-cask-pr-handoff.sh'
               - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
@@ -297,6 +298,7 @@ jobs:
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/collect-cask-pr-handoff.sh \
             .github/scripts/collect-cask-pr-handoff.test.sh \
+            .github/scripts/redraft-evergreen-cask-prs.sh \
             .github/scripts/validate-cask-pr-handoff.sh \
             .github/scripts/validate-cask-pr-handoff.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
