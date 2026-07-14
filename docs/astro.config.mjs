@@ -126,6 +126,7 @@ export default defineConfig({
                 { label: "Day-2 Operations", link: "/guides/day-2-operations/" },
                 { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
                 { label: "Backup & Restore", link: "/guides/backup-restore/" },
+                { label: "Unmanaged Clusters", link: "/guides/unmanaged-clusters/" },
                 { label: "Multi-Environment Workflows", link: "/guides/multi-environment/" },
               ],
             },

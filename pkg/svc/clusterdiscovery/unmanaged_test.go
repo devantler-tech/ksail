@@ -110,3 +110,37 @@ func TestDiscoverUnmanaged_UnreadableKubeconfigYieldsNoneNoError(t *testing.T) {
 
 	assert.Empty(t, got)
 }
+
+// alwaysUnmanaged is an isManaged predicate that treats every context as unmanaged.
+func alwaysUnmanaged(string) bool { return false }
+
+func TestUnmanagedContextNames_NilConfigYieldsNone(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, clusterdiscovery.UnmanagedContextNames(nil, alwaysUnmanaged))
+}
+
+func TestUnmanagedContextNames_SortedAndDeduped(t *testing.T) {
+	t.Parallel()
+
+	config := clusterdiscovery.LoadKubeconfig(
+		writeKubeconfig(t, "zeta-external", "alpha-external", "beta-external"))
+	require.NotNil(t, config)
+
+	got := clusterdiscovery.UnmanagedContextNames(config, alwaysUnmanaged)
+
+	assert.Equal(t, []string{"alpha-external", "beta-external", "zeta-external"}, got)
+}
+
+func TestUnmanagedContextNames_SkipsManagedByRawName(t *testing.T) {
+	t.Parallel()
+
+	config := clusterdiscovery.LoadKubeconfig(writeKubeconfig(t, "managed-ctx", "external-ctx"))
+	require.NotNil(t, config)
+
+	got := clusterdiscovery.UnmanagedContextNames(config, func(name string) bool {
+		return name == "managed-ctx"
+	})
+
+	assert.Equal(t, []string{"external-ctx"}, got)
+}

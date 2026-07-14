@@ -3,11 +3,13 @@ package mirror
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -47,6 +49,32 @@ func defaultSteerImage(version string) string {
 	}
 
 	return steerImageRepo + ":v" + strings.TrimPrefix(version, "v")
+}
+
+// SteerExpectKeepalivesFlag is the steer-agent flag the intercept client
+// appends to the derived agent command once keepalive support is negotiated
+// ([SteerKeepaliveImageProven]): it tells the agent to arm its liveness
+// watchdog from session start instead of waiting for the first keepalive
+// frame, so a client that dies before its first ping is delivered still
+// expires instead of leaving the REDIRECT rule orphaned (ksail#6040).
+const SteerExpectKeepalivesFlag = "expect-keepalives"
+
+// SteerKeepaliveImageProven reports whether the live steering container image
+// proves the agent binary speaks the keepalive protocol: it must equal this
+// build's [DefaultSteerImage] AND that default must be a version-pinned
+// release reference. The dev/unstamped fallback (:latest) is mutable — a
+// reused container tagged :latest may run an older binary than this build,
+// or the registry tag may lag the local binary — so tag equality proves
+// nothing there and keepalives stay off.
+func SteerKeepaliveImageProven(liveImage string) bool {
+	return steerKeepaliveImageProven(liveImage, DefaultSteerImage)
+}
+
+// steerKeepaliveImageProven is the pure core of [SteerKeepaliveImageProven],
+// split out so both branches (pinned vs mutable default) are unit-testable
+// regardless of the test binary's own build stamp.
+func steerKeepaliveImageProven(liveImage, defaultImage string) bool {
+	return liveImage == defaultImage && defaultImage != steerImageRepo+":latest"
 }
 
 // ErrSteerAlreadyInjected is returned when the tap point's pod already carries
@@ -117,6 +145,42 @@ func InjectSteer(
 // nothing else (notably NOT the tap's NET_RAW).
 func steerSecurityContext() *corev1.SecurityContext {
 	return hardenedSecurityContext("NET_ADMIN")
+}
+
+// ErrSteerNotInjected is returned by SteerContainerImage when the tap point's
+// pod carries no steering container.
+var ErrSteerNotInjected = errors.New("no steering container injected")
+
+// SteerContainerImage reports the image the pod's steering container actually
+// runs. Ephemeral containers cannot be removed, so an intercept may be
+// reusing a container injected by an older ksail release; the client compares
+// this live image against its own [DefaultSteerImage] to decide whether the
+// agent provably speaks the current tunnel protocol (keepalives — ksail#6040)
+// before sending frames an older decoder would reject as unknown.
+func SteerContainerImage(
+	ctx context.Context,
+	client kubernetes.Interface,
+	point *TapPoint,
+) (string, error) {
+	if point == nil {
+		return "", ErrTapPointNil
+	}
+
+	pod, err := client.CoreV1().Pods(point.Namespace).Get(ctx, point.Pod, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("getting pod %q in %s: %w", point.Pod, point.Namespace, err)
+	}
+
+	for _, ephemeral := range pod.Spec.EphemeralContainers {
+		if ephemeral.Name == SteerContainerName {
+			return ephemeral.Image, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"%w: pod %q in %s has no %q ephemeral container",
+		ErrSteerNotInjected, point.Pod, point.Namespace, SteerContainerName,
+	)
 }
 
 // WaitForSteer blocks until the steering container on the tap point's pod

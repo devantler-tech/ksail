@@ -65,6 +65,7 @@ func TestEnvResolver_CopilotTokenFallback(t *testing.T) {
 	// Not parallel: mutates process env via t.Setenv.
 	t.Setenv("KSAIL_COPILOT_TOKEN", "")
 	t.Setenv("COPILOT_TOKEN", "from-secondary")
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
 
 	var resolver credentials.EnvResolver
 

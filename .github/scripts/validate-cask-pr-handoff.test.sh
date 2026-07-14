@@ -48,12 +48,25 @@ run_case promoted 1 'PR must remain a draft for maintainer promotion' '.pr.draft
 run_case wrong-author 1 'PR author must be devantler' '.pr.user.login = "someone-else"'
 run_case cross-repository 1 'head repository must exactly equal devantler-tech/homebrew-tap' '.pr.head.repo.full_name = "someone-else/homebrew-tap"'
 run_case missing-head-repository 1 'head repository must exactly equal devantler-tech/homebrew-tap' 'del(.pr.head.repo)'
-run_case wrong-branch 1 'head branch must exactly equal goreleaser/ksail-v7.166.1' '.pr.head.ref = "feature/untrusted"'
+run_case wrong-branch 1 'head branch must exactly equal goreleaser/ksail' '.pr.head.ref = "feature/untrusted"'
+run_case legacy-versioned-branch 1 'head branch must exactly equal goreleaser/ksail' '.pr.head.ref = "goreleaser/ksail-v7.166.1"'
 run_case wrong-base 1 'base branch must exactly equal main' '.pr.base.ref = "release"'
 run_case invalid-head 1 'head SHA is missing or invalid' '.pr.head.sha = "short"'
 run_case missing-files 1 'changed-file evidence is missing' 'del(.files)'
 run_case extra-file 1 'only Casks/ksail.rb may change' '.files += [{"filename":"README.md"}]'
 run_case wrong-file 1 'only Casks/ksail.rb may change' '.files = [{"filename":"Casks/other.rb"}]'
+run_case missing-head-content 1 'cask head-content evidence is missing' 'del(.headFile)'
+run_case wrong-head-content-path 1 'cask head-content evidence is missing' '.headFile.path = "Casks/other.rb"'
+# base64 of a cask pinning 7.160.0 — a previous release the evergreen branch rewrite never replaced.
+run_case stale-head-version 1 'cask at head must pin version 7.166.1' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjAuMCIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2MC4wL2tzYWlsXzcuMTYwLjBfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="'
+run_case missing-release-assets 1 'release-asset digest evidence is missing' 'del(.releaseAssets)'
+run_case empty-release-assets 1 'release-asset digest evidence is missing' '.releaseAssets = []'
+# Same tag re-run: version already matches, but the published assets carry different
+# digests than the stale cask's sha256 — the handoff must block.
+run_case stale-cask-sha 1 'does not match any published release asset digest' '.releaseAssets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+# base64 of a cask with a version but no sha256 stanza at all.
+run_case no-cask-sha 1 'cask at head must pin at least one sha256' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKCiAgdXJsICJodHRwczovL2dpdGh1Yi5jb20vZGV2YW50bGVyLXRlY2gva3NhaWwvcmVsZWFzZXMvZG93bmxvYWQvdjcuMTY2LjEva3NhaWxfNy4xNjYuMV9kYXJ3aW5fYXJtNjQudGFyLmd6IgplbmQK"'
+run_case invalid-base64-content 1 'cask head content is not valid base64' '.headFile.content = "%%%not-base64%%%"'
 run_case missing-title 1 'title must exactly equal chore(cask): update ksail to v7.166.1' '.pr.title = "Brew cask update"' true
 run_case missing-label-inventory 1 'available-label inventory is missing' 'del(.availableLabels)' true
 run_case malformed-label-inventory 1 'available-label inventory is malformed' '.availableLabels = [{}] | .pr.labels = []' true
