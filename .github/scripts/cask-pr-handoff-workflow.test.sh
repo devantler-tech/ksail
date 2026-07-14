@@ -61,8 +61,13 @@ assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
 # validation the job marks the PR ready so the tap's checks gate its auto-merge — but ONLY after
 # the prepared validation, and never by merging or bypassing anything itself.
-assert_contains 'gh pr ready "$pr" --repo "$TAP"' "${homebrew_block}" \
+# The handoff drives `markPullRequestReadyForReview` directly rather than `gh pr ready`: that
+# subcommand resolves the viewer's `login`, a scope the tap token does not have, so it failed on every
+# release and stranded each cask PR as a draft (#6134). Assert the mechanism that actually promotes.
+assert_contains 'markPullRequestReadyForReview' "${homebrew_block}" \
 	'release job must hand the validated cask PR to the tap check-gated auto-merge path'
+assert_not_contains 'gh pr ready' "${homebrew_block}" \
+	'release job must not promote via `gh pr ready` (needs a login scope the tap token lacks; see #6134)'
 assert_contains 'marked ready for check-gated auto-merge' "${homebrew_block}" \
 	'release job must record the ready-for-auto-merge handoff'
 assert_not_contains 'gh pr merge' "${execution_surface}" \
@@ -76,7 +81,7 @@ validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || t
 if [ "${validator_calls}" -lt 3 ]; then
 	fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
 fi
-ready_line="$(grep -Fn -- 'gh pr ready "$pr" --repo "$TAP"' "${homebrew_block}" | head -1 | cut -d: -f1)"
+ready_line="$(grep -Fn -- 'markPullRequestReadyForReview' "${homebrew_block}" | head -1 | cut -d: -f1)"
 prepared_line="$(grep -Fn -- '"$evidence" prepared' "${homebrew_block}" | head -1 | cut -d: -f1)"
 if [ -z "${ready_line}" ] || [ -z "${prepared_line}" ] || [ "${ready_line}" -le "${prepared_line}" ]; then
 	fail 'the ready-for-auto-merge handoff must come after the prepared validation'

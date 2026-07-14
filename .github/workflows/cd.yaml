@@ -846,8 +846,8 @@ jobs:
               continue
             fi
 
-            # Use the REST/GraphQL endpoints directly rather than `gh pr edit` / `gh pr ready`: those
-            # subcommands resolve the viewer's `login` over GraphQL, which the tap token is not scoped
+            # Use the REST/GraphQL endpoints directly rather than the gh pr edit/promote subcommands:
+            # those resolve the viewer's `login` over GraphQL, which the tap token is not scoped
             # for ("The 'login' field requires one of the following scopes"). That failure landed on the
             # step right before the promote, so every release left its cask PR a draft forever and the
             # tap silently fell six versions behind. Talking to the endpoints directly needs only the
@@ -886,8 +886,8 @@ jobs:
             # current-version content, title, and labels all validated above — and the release
             # assets now public — mark it ready so the tap's own automation arms auto-merge and its
             # checks gate the merge. Fail-soft: a draft left behind is handed to the maintainer.
-            # Same reason as the title/label calls above: `gh pr ready` needs a scope the tap token does
-            # not have, so drive the mutation directly off the PR's node id.
+            # Same reason as the title/label calls above: the gh promote subcommand needs a scope the tap
+            # token does not have, so drive the mutation directly off the PR's node id.
             pr_node="$(gh api "repos/${TAP}/pulls/${pr}" --jq .node_id 2>/dev/null || true)"
             # `\$id` is escaped so the shell leaves it literal: it is a GraphQL variable, not a shell one.
             ready_mutation="mutation(\$id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: \$id }) { pullRequest { isDraft } } }"
