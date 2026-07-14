@@ -26,8 +26,8 @@ func (r LocalRegistry) Enabled() bool {
 
 // extractCredentials extracts username and password from a credential string.
 func extractCredentials(credPart string) (string, string) {
-	if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
-		return credPart[:colonIdx], credPart[colonIdx+1:]
+	if username, password, found := strings.Cut(credPart, ":"); found {
+		return username, password
 	}
 
 	return credPart, ""
@@ -41,8 +41,9 @@ const registryCredentialMask = "****"
 // RedactRegistryCredentials returns the registry spec with its password component
 // replaced by a fixed mask, so secrets such as a GHCR Personal Access Token are
 // never printed in cleartext. The username, host, port, and path are preserved so
-// diff output still shows what structurally changed. Specs without a "user:pass@"
-// credential prefix, or with an empty password, are returned unchanged.
+// diff output still shows what structurally changed. Specs without a password
+// delimiter in their credential prefix, or with an empty password, are returned
+// unchanged.
 //
 // The credential boundaries mirror [LocalRegistry.Parse]: the credentials are the
 // segment before the first "@", and the password is everything after the first
@@ -55,10 +56,10 @@ func RedactRegistryCredentials(registry string) string {
 		return registry
 	}
 
-	// Password exists only when there is a ":" within the credential segment
-	// (matching extractCredentials' colonIdx > 0 requirement).
+	// Password exists when there is a ":" within the credential segment,
+	// including an invalid password-only form with an empty username.
 	colonIdx := strings.Index(registry[:atIdx], ":")
-	if colonIdx <= 0 {
+	if colonIdx < 0 {
 		return registry
 	}
 
@@ -212,11 +213,13 @@ func (r LocalRegistry) UsesDedicatedPullCredentials() bool {
 	return registryauth.PullPassword(parsed.Host, pushPassword) != pushPassword
 }
 
-// HasCredentials returns true if the registry has non-empty username or password configured.
+// HasCredentials reports whether the registry resolves to a non-empty username.
+// Password-only forms are deliberately rejected because downstream registry
+// authentication requires an identity and must not persist ambient pull tokens.
 func (r LocalRegistry) HasCredentials() bool {
-	parsed := r.Parse()
+	username, _ := r.ResolveCredentials()
 
-	return parsed.Username != "" || parsed.Password != ""
+	return strings.TrimSpace(username) != ""
 }
 
 // IsExternal returns true if this represents an external registry (not localhost).

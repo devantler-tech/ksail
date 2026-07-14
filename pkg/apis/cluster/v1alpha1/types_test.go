@@ -302,6 +302,11 @@ func TestLocalRegistry_HasCredentials(t *testing.T) {
 			registry: "user@ghcr.io/org/repo",
 			want:     true,
 		},
+		{
+			name:     "password_only",
+			registry: ":pass@ghcr.io/org/repo",
+			want:     false,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -312,6 +317,17 @@ func TestLocalRegistry_HasCredentials(t *testing.T) {
 			assert.Equal(t, testCase.want, reg.HasCredentials())
 		})
 	}
+}
+
+func TestLocalRegistry_HasCredentialsRejectsResolvedPasswordOnlyAuth(t *testing.T) {
+	t.Setenv("GHCR_USERNAME", "")
+	t.Setenv("GHCR_TOKEN", "push-token")
+
+	reg := v1alpha1.LocalRegistry{
+		Registry: "${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io/org/private-repo",
+	}
+
+	assert.False(t, reg.HasCredentials())
 }
 
 func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
@@ -476,6 +492,21 @@ func TestLocalRegistry_ResolvePullCredentialsRejectsPasswordOnlyAuth(t *testing.
 		Registry: "${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io/org/private-repo",
 	}
 	username, password := reg.ResolvePullCredentials()
+
+	assert.Empty(t, username)
+	assert.Empty(t, password)
+}
+
+func TestLocalRegistry_ResolvePullCredentialsRejectsExpandedEmptyAuth(t *testing.T) {
+	t.Setenv("GHCR_USERNAME", "")
+	t.Setenv("GHCR_TOKEN", "")
+	t.Setenv("GHCR_PULL_TOKEN", "ambient-pull-token")
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Spec.Cluster.LocalRegistry.Registry = "${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io/org/private-repo"
+	cluster.ExpandEnvVars()
+
+	username, password := cluster.Spec.Cluster.LocalRegistry.ResolvePullCredentials()
 
 	assert.Empty(t, username)
 	assert.Empty(t, password)
