@@ -1222,7 +1222,9 @@ jobs:
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
           # Composite-action steps cannot set timeout-minutes. Upload from the
           # workflow instead so a stalled artifact service is hard-bounded.
+          # Defer cleanup until the failure diagnostics have been uploaded.
           upload-artifacts: "false"
+          cleanup: "false"
           # A reserved K3s pod sandbox can wedge every API-backed command in the
           # rich debug action. Keep its essential diagnostics on bounded calls.
           comprehensive-debug: ${{ matrix.distribution == 'K3s' && 'false' || 'true' }}
@@ -1237,6 +1239,14 @@ jobs:
           path: /tmp/system-test-diagnostics/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: 🧪 Cleanup KSail System Test
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        uses: ./.github/actions/ksail-system-test-cleanup
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          args: ${{ matrix.args }}
 
       - name: 📤 Upload system test logs
         if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}

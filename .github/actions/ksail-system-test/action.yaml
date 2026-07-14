@@ -9,7 +9,7 @@ description: |
     Phase 4 — Online tests (workload CRUD, image export/import, online gen, backup/restore, update)
     Phase 5 — Debug (on failure)
     Phase 6 — Lifecycle tests (stop, start, switch)
-    Phase 7 — Cleanup (cluster delete, always)
+    Phase 7 — Cleanup (cluster delete, always unless the caller defers it)
 
   Cloud provider credentials are read from environment variables, not action
   inputs. Set these in the calling job before invoking this action:
@@ -116,6 +116,13 @@ inputs:
       Upload diagnostics and logs from inside this composite action. Callers
       that need hard upload timeouts can disable these and upload the exposed
       paths from workflow-level steps instead.
+    required: false
+    default: "true"
+  cleanup:
+    description: |
+      Delete the cluster inside this composite action. Workflow callers that
+      must upload diagnostics before cleanup can disable this and invoke the
+      dedicated cleanup action afterward.
     required: false
     default: "true"
   comprehensive-debug:
@@ -646,30 +653,15 @@ runs:
 
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
-    - name: 🧪 ksail cluster delete
-      if: always()
-      shell: bash
-      env:
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-      run: |
-        {
-        # Extract --name value from args for reliable cleanup even when no kubeconfig exists
-        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
-        DELETE_COMMAND=(ksail cluster delete)
-        if [ -n "$CLUSTER_NAME" ]; then
-          DELETE_COMMAND+=(--provider "$PROVIDER" --name "$CLUSTER_NAME" --force)
-        fi
-        # Only the local K3s recovery path needs a short best-effort bound. Cloud
-        # teardown may wait on provider APIs/finalizers and must fail visibly.
-        if [ "$PROVIDER" = "Docker" ] && [ "$DISTRIBUTION" = "K3s" ]; then
-          timeout --kill-after=10s 2m "${DELETE_COMMAND[@]}" \
-            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
-        else
-          "${DELETE_COMMAND[@]}"
-        fi
-        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-delete.log
+    - name: 🧪 Cleanup KSail System Test
+      if: always() && inputs.cleanup == 'true'
+      uses: ./.github/actions/ksail-system-test-cleanup
+      with:
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        # Keep credentials out of the nested action input. Cleanup needs only
+        # an optional --name from the caller's original arguments.
+        args: ${{ inputs.args }}
 
     - name: 📝 Finalize test timeline
       if: always()

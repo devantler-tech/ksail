@@ -1,0 +1,48 @@
+name: KSail System Test Cleanup
+description: Deletes a KSail system-test cluster with provider-aware failure handling.
+
+inputs:
+  distribution:
+    description: Kubernetes distribution used by the system test.
+    required: true
+  provider:
+    description: Infrastructure provider used by the system test.
+    required: false
+    default: "Docker"
+  args:
+    description: Original system-test arguments, used to recover an explicit cluster name.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 ksail cluster delete
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        {
+        mkdir -p /tmp/ksail-system-test-logs
+        # Extract --name for reliable cleanup even when no kubeconfig exists.
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        DELETE_COMMAND=(ksail cluster delete)
+        if [ -n "$CLUSTER_NAME" ]; then
+          DELETE_COMMAND+=(--provider "$PROVIDER" --name "$CLUSTER_NAME" --force)
+        fi
+
+        # Only the local K3s recovery path needs a short bound. All Docker
+        # cleanup remains best-effort; cloud teardown is unbounded and visible
+        # because it may wait on provider APIs or lifecycle finalizers.
+        if [ "$PROVIDER" = "Docker" ] && [ "$DISTRIBUTION" = "K3s" ]; then
+          timeout --kill-after=10s 2m "${DELETE_COMMAND[@]}" \
+            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+        elif [ "$PROVIDER" = "Docker" ]; then
+          "${DELETE_COMMAND[@]}" \
+            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+        else
+          "${DELETE_COMMAND[@]}"
+        fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-delete.log

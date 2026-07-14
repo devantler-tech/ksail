@@ -59,6 +59,8 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Equal(t, "true", systemAction.Inputs["upload-artifacts"].Default)
 	require.Contains(t, systemAction.Inputs, "comprehensive-debug")
 	assert.Equal(t, "true", systemAction.Inputs["comprehensive-debug"].Default)
+	require.Contains(t, systemAction.Inputs, "cleanup")
+	assert.Equal(t, "true", systemAction.Inputs["cleanup"].Default)
 	require.Contains(t, systemAction.Outputs, "artifact-tag")
 	assert.Equal(
 		t,
@@ -77,8 +79,14 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	debugStep := findHarnessStep(t, systemAction.Runs.Steps, "🐞 Debug Kubernetes failure")
 	assert.Contains(t, debugStep.If, "inputs.comprehensive-debug == 'true'")
 
-	deleteStep := findHarnessStep(t, systemAction.Runs.Steps, "🧪 ksail cluster delete")
-	assert.Contains(t, deleteStep.Run, `timeout --kill-after=10s`)
+	cleanupStep := findHarnessStep(
+		t,
+		systemAction.Runs.Steps,
+		"🧪 Cleanup KSail System Test",
+	)
+	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanupStep.Uses)
+	assert.Contains(t, cleanupStep.If, "inputs.cleanup == 'true'")
+	assert.Equal(t, "${{ inputs.args }}", stringValue(cleanupStep.With["args"]))
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
 	dockerJob, ok := workflow.Jobs["system-test-docker"]
@@ -86,6 +94,7 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	runStep := findHarnessStep(t, dockerJob.Steps, "🧪 Run KSail System Test")
 	assert.Equal(t, "system-test", runStep.ID)
 	assert.Equal(t, "false", stringValue(runStep.With["upload-artifacts"]))
+	assert.Equal(t, "false", stringValue(runStep.With["cleanup"]))
 	assert.Contains(
 		t,
 		stringValue(runStep.With["comprehensive-debug"]),
@@ -99,6 +108,26 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 		"/tmp/system-test-diagnostics/",
 		"failure()",
 	)
+	workflowCleanup := findHarnessStep(
+		t,
+		dockerJob.Steps,
+		"🧪 Cleanup KSail System Test",
+	)
+	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", workflowCleanup.Uses)
+	assert.Contains(t, workflowCleanup.If, "always()")
+	assert.Equal(t, "${{ matrix.distribution }}", stringValue(workflowCleanup.With["distribution"]))
+	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
+	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
+
+	diagnosticUploadIndex := findHarnessStepIndex(
+		t,
+		dockerJob.Steps,
+		"📤 Upload system test diagnostics",
+	)
+	cleanupIndex := findHarnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
+	logUploadIndex := findHarnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
+	assert.Less(t, diagnosticUploadIndex, cleanupIndex)
+	assert.Less(t, cleanupIndex, logUploadIndex)
 	assertBoundedWorkflowUpload(
 		t,
 		dockerJob.Steps,
@@ -111,8 +140,11 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 func TestSystemTestHarnessOnlyBoundsDockerK3sCleanup(t *testing.T) {
 	t.Parallel()
 
-	systemAction := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
-	deleteStep := findHarnessStep(t, systemAction.Runs.Steps, "🧪 ksail cluster delete")
+	cleanupAction := readCompositeAction(
+		t,
+		".github/actions/ksail-system-test-cleanup/action.yaml",
+	)
+	deleteStep := findHarnessStep(t, cleanupAction.Runs.Steps, "🧪 ksail cluster delete")
 	assert.Equal(t, "${{ inputs.distribution }}", deleteStep.Env["DISTRIBUTION"])
 
 	providerGate := strings.Index(
@@ -126,20 +158,38 @@ func TestSystemTestHarnessOnlyBoundsDockerK3sCleanup(t *testing.T) {
 		"only Docker/K3s cleanup may use the short recovery bound",
 	)
 
-	cloudBranchOffset := strings.Index(deleteStep.Run[providerGate:], "\nelse\n")
+	dockerBranchOffset := strings.Index(
+		deleteStep.Run[providerGate:],
+		"\nelif [ \"$PROVIDER\" = \"Docker\" ]; then\n",
+	)
 	require.NotEqual(
 		t,
 		-1,
-		cloudBranchOffset,
-		"cluster cleanup must include a cloud-provider branch",
+		dockerBranchOffset,
+		"cluster cleanup must preserve a non-K3s Docker branch",
 	)
-	cloudBranch := deleteStep.Run[providerGate+cloudBranchOffset:]
+
+	cloudBranchOffset := strings.Index(
+		deleteStep.Run[providerGate+dockerBranchOffset:],
+		"\nelse\n",
+	)
+	require.NotEqual(t, -1, cloudBranchOffset, "cluster cleanup must include a cloud branch")
+
+	dockerBranchStart := providerGate + dockerBranchOffset
+	cloudBranchStart := dockerBranchStart + cloudBranchOffset
+	k3sBranch := deleteStep.Run[providerGate:dockerBranchStart]
+	dockerBranch := deleteStep.Run[dockerBranchStart:cloudBranchStart]
+	cloudBranch := deleteStep.Run[cloudBranchStart:]
 
 	assert.Contains(
 		t,
-		deleteStep.Run[providerGate:providerGate+cloudBranchOffset],
+		k3sBranch,
 		`timeout --kill-after=10s 2m`,
 	)
+	assert.Contains(t, k3sBranch, `|| echo`)
+	assert.NotContains(t, dockerBranch, `timeout --kill-after=10s 2m`)
+	assert.Contains(t, dockerBranch, `"${DELETE_COMMAND[@]}"`)
+	assert.Contains(t, dockerBranch, `|| echo`)
 	assert.NotContains(t, cloudBranch, `timeout --kill-after=10s 2m`)
 	assert.Contains(t, cloudBranch, `"${DELETE_COMMAND[@]}"`)
 	assert.NotContains(t, cloudBranch, `|| echo`)
@@ -189,6 +239,20 @@ func findHarnessStep(t *testing.T, steps []harnessStep, name string) harnessStep
 	t.Fatalf("step %q is missing", name)
 
 	return harnessStep{}
+}
+
+func findHarnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
+	t.Helper()
+
+	for index, step := range steps {
+		if step.Name == name {
+			return index
+		}
+	}
+
+	t.Fatalf("step %q is missing", name)
+
+	return -1
 }
 
 func assertBoundedWorkflowUpload(
