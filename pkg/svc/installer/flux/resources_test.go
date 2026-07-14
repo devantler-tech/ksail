@@ -423,6 +423,31 @@ func TestBuildRegistrySecret_UsesConfiguredClusterTokenEnvVar(t *testing.T) {
 	)
 }
 
+func TestBuildRegistrySecret_MarksCommonPullTokenWhenCLIOverrideDiffers(t *testing.T) {
+	t.Setenv("KSAIL_TEST_REGISTRY_TOKEN", "pull-token")
+	t.Setenv("KSAIL_TEST_REGISTRY_CLI_TOKEN", "push-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user@registry.example.com/example/repo",
+					//nolint:gosec // G101: these are environment variable names, not credentials.
+					Credentials: v1alpha1.RegistryCredentials{
+						TokenEnvVar:    "KSAIL_TEST_REGISTRY_TOKEN",
+						CLITokenEnvVar: "KSAIL_TEST_REGISTRY_CLI_TOKEN",
+					},
+				},
+			},
+		},
+	}
+
+	secret, err := fluxinstaller.BuildRegistrySecret(clusterCfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, "pull", secret.Annotations["ksail.io/credential-purpose"])
+}
+
 func TestIsTransientAPIError(t *testing.T) {
 	t.Parallel()
 

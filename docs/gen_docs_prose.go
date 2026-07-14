@@ -93,22 +93,22 @@ machine:
 ` + cbt + `
 
 Because patch files are expanded too, you can inject **registry credentials** into the Talos
-machine config as config-as-code — keeping the secret in the environment, never committed. A
-` + bt + `${VAR_NAME}` + bt + ` placeholder resolves to exactly that variable: no name carries hidden fallback
-behaviour, so a patch gets the token it asks for. Point it at a pull-scoped token (for GHCR, one
-scoped to ` + bt + `read:packages` + bt + `) when the credential lands on cluster nodes. This is the supported way to
-give nodes registry auth (for example, so containerd can fetch cosign signatures for **private**
-packages during image verification) without passing credentials via CLI flags:
+machine config as config-as-code — keeping the secret in the environment, never committed. When
+` + bt + `localRegistry.credentials` + bt + ` is configured, Talos maps placeholders for both ` + bt + `tokenEnvVar` + bt + ` and
+` + bt + `clusterTokenEnvVar` + bt + ` to the effective cluster pull source. Other placeholders still resolve directly.
+A configured cluster source remains authoritative even when its variable is missing or empty, so a
+default expression cannot silently substitute a broader credential:
 
 ` + cbt + `yaml
 # talos/cluster/registry-auth.yaml - Credentials are injected from the environment at load time
 machine:
   registries:
     config:
-      ghcr.io:
+      registry.example.com:
         auth:
-          username: my-user
-          password: ${GHCR_PULL_TOKEN} # expanded at load; commit the placeholder, not the token
+          username: ${REGISTRY_USER}
+          # The common placeholder maps to the effective cluster token source.
+          password: ${REGISTRY_TOKEN:-forbidden-fallback}
 ` + cbt + `
 
 ### Example: Credentials
@@ -133,11 +133,11 @@ convention, these fields hold the **name** of an environment variable, never a t
 spec:
   cluster:
     localRegistry:
-      registry: my-user@ghcr.io/myorg/myrepo
+      registry: "${REGISTRY_USER}@registry.example.com/myorg/myrepo"
       credentials:
-        tokenEnvVar: GHCR_TOKEN         # shared default for both paths
-        cliTokenEnvVar: GHCR_PUSH_TOKEN # CLI/publish (push) paths
-        clusterTokenEnvVar: GHCR_PULL_TOKEN # cluster (pull) paths
+        tokenEnvVar: REGISTRY_TOKEN
+        cliTokenEnvVar: REGISTRY_PUBLISH_TOKEN
+        clusterTokenEnvVar: REGISTRY_PULL_TOKEN
 ` + cbt + `
 
 Resolution is deterministic and registry-agnostic — no registry host is special-cased:
@@ -154,8 +154,9 @@ When ` + bt + `clusterTokenEnvVar` + bt + ` resolves to a different variable tha
 persists into the cluster is marked pull-only, so it is never reused to publish artifacts.
 
 ` + cbt + `bash
-export REGISTRY_USER="github-user"
-export REGISTRY_PASS="ghp_secrettoken123"
+export REGISTRY_USER="registry-user"
+export REGISTRY_PUBLISH_TOKEN="write-capable-token"
+export REGISTRY_PULL_TOKEN="read-only-token"
 ksail cluster create
 ` + cbt + `
 

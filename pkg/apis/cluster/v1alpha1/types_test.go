@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -511,6 +512,74 @@ func TestLocalRegistry_CredentialsOverridesApplyPerPath(t *testing.T) {
 	assert.Equal(t, "shared-token", splitPush)
 	assert.Equal(t, "pull-token", splitPull)
 	assert.True(t, split.UsesDedicatedPullCredentials())
+}
+
+func TestLocalRegistry_CLIOverrideMarksCommonPullCredentialDedicated(t *testing.T) {
+	t.Setenv("KSAIL_TEST_REGISTRY_TOKEN", "pull-token")
+	t.Setenv("KSAIL_TEST_REGISTRY_CLI_TOKEN", "push-token")
+
+	registry := v1alpha1.LocalRegistry{
+		Registry: "user@registry.example.com/org/repo",
+		//nolint:gosec // G101: these are environment variable names, not credentials.
+		Credentials: v1alpha1.RegistryCredentials{
+			TokenEnvVar:    "KSAIL_TEST_REGISTRY_TOKEN",
+			CLITokenEnvVar: "KSAIL_TEST_REGISTRY_CLI_TOKEN",
+		},
+	}
+
+	_, publishPassword := registry.ResolveCredentials()
+	_, pullPassword := registry.ResolvePullCredentials()
+
+	assert.Equal(t, "push-token", publishPassword)
+	assert.Equal(t, "pull-token", pullPassword)
+	assert.True(t, registry.UsesDedicatedPullCredentials())
+}
+
+func TestLocalRegistry_PullEnvLookupMapsCommonSourceToClusterOverride(t *testing.T) {
+	t.Parallel()
+
+	registry := v1alpha1.LocalRegistry{
+		Credentials: v1alpha1.RegistryCredentials{
+			TokenEnvVar:        "REGISTRY_TOKEN",
+			ClusterTokenEnvVar: "REGISTRY_PULL_TOKEN",
+		},
+	}
+	lookup := registry.PullEnvLookup(func(name string) (string, bool) {
+		if name == "REGISTRY_PULL_TOKEN" {
+			return "pull-token", true
+		}
+
+		return "", false
+	})
+
+	value, found := lookup("REGISTRY_TOKEN")
+
+	assert.Equal(t, "pull-token", value)
+	assert.True(t, found)
+}
+
+func TestLocalRegistry_PullEnvLookupKeepsMissingClusterOverrideAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	registry := v1alpha1.LocalRegistry{
+		Credentials: v1alpha1.RegistryCredentials{
+			TokenEnvVar:        "REGISTRY_TOKEN",
+			ClusterTokenEnvVar: "MISSING_REGISTRY_PULL_TOKEN",
+		},
+	}
+	lookup := registry.PullEnvLookup(func(name string) (string, bool) {
+		if name == "REGISTRY_TOKEN" {
+			return "broader-token", true
+		}
+
+		return "", false
+	})
+
+	value, found := lookup("REGISTRY_TOKEN")
+
+	assert.Empty(t, value)
+	assert.True(t, found)
+	assert.Empty(t, envvar.ExpandWithLookup("${REGISTRY_TOKEN:-forbidden-fallback}", lookup))
 }
 
 // A configured override stays authoritative even when its environment variable is

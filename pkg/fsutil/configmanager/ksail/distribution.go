@@ -109,6 +109,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		m.resolveTalosKubernetesVersion(),
 		"", // Use default network CIDR
 	)
+	talosManager.WithEnvLookup(m.Config.Spec.Cluster.LocalRegistry.PullEnvLookup(nil))
 
 	// Align the version contract with the pinned Talos version so that
 	// generated machine configs only use fields the target version supports.

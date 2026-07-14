@@ -198,6 +198,40 @@ func (r LocalRegistry) resolvePassword(override string) string {
 	return os.Getenv(name)
 }
 
+// PullEnvLookup returns an environment lookup that maps both the common token
+// source and the cluster-specific token source to the effective cluster pull
+// credential. This lets Talos patches keep referring to the common placeholder
+// while honoring an explicit cluster override.
+//
+// A selected source is authoritative: the returned lookup reports it as found
+// even when its environment variable is unset or empty. That prevents default
+// expressions such as ${TOKEN:-fallback} from bypassing the configured source.
+// Unrelated names are delegated to fallback; a nil fallback uses os.LookupEnv.
+func (r LocalRegistry) PullEnvLookup(
+	fallback func(string) (string, bool),
+) func(string) (string, bool) {
+	if fallback == nil {
+		fallback = os.LookupEnv
+	}
+
+	commonSource := strings.TrimSpace(r.Credentials.TokenEnvVar)
+	clusterSource := strings.TrimSpace(r.Credentials.ClusterTokenEnvVar)
+	effectiveSource := r.Credentials.tokenEnvVarFor(clusterSource)
+
+	return func(name string) (string, bool) {
+		matchesCommonSource := commonSource != "" && name == commonSource
+		matchesClusterSource := clusterSource != "" && name == clusterSource
+
+		if effectiveSource != "" && (matchesCommonSource || matchesClusterSource) {
+			value, _ := fallback(effectiveSource)
+
+			return value, true
+		}
+
+		return fallback(name)
+	}
+}
+
 // ResolveCredentials returns the credentials used by CLI and publish (push) paths.
 // The password comes from CLITokenEnvVar when configured, otherwise TokenEnvVar,
 // otherwise the password embedded in the Registry spec (where ${VAR_NAME}
@@ -228,16 +262,14 @@ func (r LocalRegistry) ResolvePullCredentials() (username, password string) {
 // from configuration alone, so the answer never changes with process-environment
 // state and a pull-only secret is marked as such even when its token is unset.
 func (r LocalRegistry) UsesDedicatedPullCredentials() bool {
-	clusterEnvVar := strings.TrimSpace(r.Credentials.ClusterTokenEnvVar)
-	if clusterEnvVar == "" {
-		return false
-	}
-
 	if strings.TrimSpace(envvar.Expand(r.Parse().Username)) == "" {
 		return false
 	}
 
-	return clusterEnvVar != r.Credentials.tokenEnvVarFor(r.Credentials.CLITokenEnvVar)
+	pullSource := r.Credentials.tokenEnvVarFor(r.Credentials.ClusterTokenEnvVar)
+	publishSource := r.Credentials.tokenEnvVarFor(r.Credentials.CLITokenEnvVar)
+
+	return pullSource != publishSource
 }
 
 // HasCredentials reports whether the registry resolves to a non-empty username.
