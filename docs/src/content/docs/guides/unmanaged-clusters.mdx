@@ -6,7 +6,7 @@ description: How KSail sees and operates on clusters that exist in your kubeconf
 KSail can **see and operate on any cluster in your kubeconfig**, even one it did not provision — a managed cloud cluster (EKS/GKE/AKS), a `kubeadm` cluster, or a colleague's cluster shared with you. These appear as **unmanaged** clusters: KSail surfaces them clearly marked, never hidden and never shown as a normal managed cluster, and refuses ksail-only lifecycle actions on them with a documented message instead of failing silently.
 
 > [!NOTE]
-> A cluster is **unmanaged** when it is present in your kubeconfig as a context that KSail did not create through one of its infrastructure providers (Docker, Hetzner, Omni, AWS-EKS, nested Kubernetes). KSail still has no provider or distribution spec for it, so anything that requires provisioning is unavailable — but everything that works over the Kubernetes API works normally.
+> A cluster is marked **unmanaged** when it is a kubeconfig context that KSail did not find among the providers it discovered. By default `ksail cluster list` discovers only **Docker, Hetzner and Omni**, so the marker means "not discovered", not "definitely not created by KSail": a KSail-created **EKS** or **nested-Kubernetes** cluster is not queried by default and therefore also shows up as `Unmanaged`. Pass `--provider` to widen discovery. In every case KSail has no provider or distribution spec to read for the context, so anything requiring provisioning is unavailable — while the Kubernetes-API surface works normally.
 
 ## Seeing unmanaged clusters
 
@@ -16,23 +16,29 @@ KSail can **see and operate on any cluster in your kubeconfig**, even one it did
 ksail cluster list
 ```
 
-Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads your **default kubeconfig** (`~/.kube/config`), so a context kept only in a non-default `KUBECONFIG` path may not be listed. The same marked model backs the CLI and the web UI / desktop app, so a cluster behaves identically wherever you look at it.
+Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads your **default kubeconfig** (`~/.kube/config`), so a context kept only in a non-default `KUBECONFIG` path may not be listed.
+
+> [!NOTE]
+> The web UI / desktop app **lists** unmanaged contexts, but selecting one for resource browsing or actions currently reports *not found*: the UI resolves a row back to a context by KSail-detected cluster name, which an arbitrary unmanaged context (an EKS/`kubeadm` context) has none of. **Operating on an unmanaged cluster is CLI-only for now** — tracked in [#6116](https://github.com/devantler-tech/ksail/issues/6116).
 
 ## Operating within limits
 
-Because most of KSail's read/operate surface is client-go-backed, it works against any selected context — managed or not. Select an unmanaged cluster and use it like any other:
+Much of KSail's read/operate surface is client-go-backed, so it works against the **selected kubeconfig context** — managed or not. Switch to the unmanaged cluster first, then use it like any other:
 
 ```sh
 ksail cluster switch my-eks-prod           # switch the active kubeconfig context
 ksail cluster connect                      # open k9s against the selected context
 ksail cluster info --name my-eks-prod      # endpoint + kubeconfig access for a named cluster
-ksail cluster diagnose --name my-eks-prod  # diagnostics for a named cluster
+ksail cluster diagnose --name my-eks-prod  # diagnoses the ACTIVE context; --name only labels the report
 ```
 
-> [!NOTE]
-> `cluster info` and `cluster diagnose` resolve a cluster identity before they run. For an arbitrary unmanaged context (a typical EKS/AKS or `kubeadm` context) pass `--name` so the command targets it; without a resolvable name they report that a name is required rather than guessing.
+> [!IMPORTANT]
+> `cluster diagnose --name <name>` does **not** select the named context — it builds its Kubernetes client from your kubeconfig's **current context** and uses `--name` only to label the report. Always `ksail cluster switch <name>` first, or you will diagnose the wrong cluster. Tracked in [#6117](https://github.com/devantler-tech/ksail/issues/6117).
 
-The `ksail workload` group also works against the selected unmanaged context: the kubectl-style wrappers (`get`, `logs`, `apply`, `exec`, `describe`, `wait`, `port-forward`, …) plus `watch`, `network`, `edit`, `images`, `push`, `validate`, `scan`, and `debug`. Helm-based `workload install` works too, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server — all resolve the kubeconfig like the other cluster commands and need no KSail metadata.
+Within the `ksail workload` group, the commands that work against any selected unmanaged context are the **API-backed** ones: the kubectl-style wrappers (`get`, `logs`, `apply`, `exec`, `describe`, `wait`, `port-forward`, …) plus `watch`, `edit`, `validate`, `scan`, and `debug`. Helm-based `workload install` works too, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server — all resolve the kubeconfig and need no KSail metadata.
+
+> [!NOTE]
+> Three `workload` commands are **not** purely kubeconfig-backed and need a local `ksail.yaml` even against an unmanaged cluster: `network` refuses unless `spec.cluster.cni` is Cilium; `images` derives its image list from the local KSail config rather than the live cluster; and `push` resolves its registry, source directory and tag from that config.
 
 ## What is refused (ksail-only actions)
 
@@ -58,9 +64,12 @@ The refusal covers the lifecycle operations KSail cannot drive without a provide
 | Capability | Managed cluster | Unmanaged (kubeconfig-only) cluster |
 | --- | --- | --- |
 | List / switch / connect | ✅ | ✅ (marked unmanaged) |
-| Info / diagnose | ✅ | ✅ with a resolvable `--name` |
-| `workload` (get, logs, exec, apply, watch, install, …) | ✅ | ✅ |
+| Info | ✅ | ✅ with a resolvable `--name` |
+| Diagnose | ✅ | ⚠️ diagnoses the **active** context — `switch` first ([#6117](https://github.com/devantler-tech/ksail/issues/6117)) |
+| `workload` API-backed (get, logs, exec, apply, watch, install, …) | ✅ | ✅ |
+| `workload network` / `images` / `push` | ✅ | ⚠️ also need a local `ksail.yaml` |
 | Backup / restore | ✅ | ✅ |
+| Web UI / desktop resource browsing | ✅ | ⛔ listed only; operations are CLI-only ([#6116](https://github.com/devantler-tech/ksail/issues/6116)) |
 | Delete / update / start / stop | ✅ | ⛔ refused with a documented message |
 | Component install (CNI, CSI, GitOps, policy) | ✅ | ⛔ requires `spec.cluster.*` |
 | GitOps reconcile | ✅ | ⛔ requires a GitOps-configured cluster |
