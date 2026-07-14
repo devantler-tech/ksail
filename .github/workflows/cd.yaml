@@ -695,9 +695,12 @@ jobs:
   # each release updates the ONE open cask PR in place instead of superseding it, tap#1172). See #6067.
   homebrew:
     name: 🍺 Prepare Homebrew cask PRs
-    runs-on: ubuntu-latest
-    # `brew style` can bootstrap rubocop on a cold Linuxbrew runner. Keep enough room for two clones
-    # and style passes; every GitHub mutation below is fail-soft because the release is already public.
+    # Homebrew is preinstalled on the macOS images and NOT on ubuntu — on ubuntu every `brew style`
+    # here failed with `brew: command not found`, so the casks were never style-cleaned. The tap audits
+    # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
+    runs-on: macos-latest
+    # `brew style` can bootstrap rubocop on a cold runner. Keep enough room for two clones and style
+    # passes; every GitHub mutation below is fail-soft because the release is already public.
     timeout-minutes: 20
     needs: [publish-release]
     permissions:
@@ -746,6 +749,13 @@ jobs:
           fi
           trap 'rm -rf "$evidence_dir"' EXIT
 
+          # A cask PR left as a draft means the tap silently stops tracking releases — which is exactly
+          # how it drifted six versions behind while every CD run stayed green. Track it and fail the
+          # step at the end so the breakage is visible. The release itself is already published and
+          # immutable, and `cleanup-failed-release` keys off `publish-release`, not this job, so failing
+          # here never deletes a good release.
+          handoff_failed=0
+
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
             # `|| true` keeps the job fail-soft: a transient API failure (5xx, rate limit,
@@ -793,6 +803,14 @@ jobs:
             if work="$(mktemp -d)"; then
               if git clone --depth 1 --branch "$branch" \
                   "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
+                # Never claim a cask is style-clean without having actually run the linter: on ubuntu
+                # `brew` was absent, `brew style --fix` failed, the diff was empty for that reason, and
+                # the job reported "already brew-style-clean" — a fail-open that hid the breakage.
+                if ! command -v brew >/dev/null 2>&1; then
+                  echo "::error::brew is not available on this runner; cannot style-check ${name}"
+                  rm -rf "$work"
+                  continue
+                fi
                 # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
                 # offenses remain. Run it fail-soft and commit whatever diff it produced regardless of
                 # exit status, so partial cleanups are never discarded (and a failure never blocks the
@@ -800,7 +818,7 @@ jobs:
                 brew style --fix "$work/Casks/${name}.rb" \
                   || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
                 if git -C "$work" diff --quiet; then
-                  echo "${name} cask already brew-style-clean; nothing to autocorrect"
+                  echo "${name} cask is brew-style-clean; nothing to autocorrect"
                 else
                   git -C "$work" \
                       -c user.name='github-actions[bot]' \
@@ -828,8 +846,15 @@ jobs:
               continue
             fi
 
+            # Use the REST/GraphQL endpoints directly rather than `gh pr edit` / `gh pr ready`: those
+            # subcommands resolve the viewer's `login` over GraphQL, which the tap token is not scoped
+            # for ("The 'login' field requires one of the following scopes"). That failure landed on the
+            # step right before the promote, so every release left its cask PR a draft forever and the
+            # tap silently fell six versions behind. Talking to the endpoints directly needs only the
+            # PR-write scope the token already has — and keeps the token least-privilege instead of
+            # widening it.
             title="chore(cask): update ${name} to ${TAG}"
-            if ! gh pr edit "$pr" --repo "$TAP" --title "$title"; then
+            if ! gh api -X PATCH "repos/${TAP}/pulls/${pr}" -f title="$title" >/dev/null; then
               echo "::warning::Could not normalize the title on ${TAP}#${pr}; leaving it draft/open"
               continue
             fi
@@ -837,7 +862,7 @@ jobs:
             for label in automation dependencies; do
               if jq -e --arg label "$label" \
                   '.availableLabels | any(.name == $label)' "$evidence" >/dev/null; then
-                if ! gh pr edit "$pr" --repo "$TAP" --add-label "$label"; then
+                if ! gh api -X POST "repos/${TAP}/issues/${pr}/labels" -f "labels[]=$label" >/dev/null; then
                   echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
                   metadata_ok=false
                 fi
@@ -861,16 +886,31 @@ jobs:
             # current-version content, title, and labels all validated above — and the release
             # assets now public — mark it ready so the tap's own automation arms auto-merge and its
             # checks gate the merge. Fail-soft: a draft left behind is handed to the maintainer.
-            if gh pr ready "$pr" --repo "$TAP"; then
+            # Same reason as the title/label calls above: `gh pr ready` needs a scope the tap token does
+            # not have, so drive the mutation directly off the PR's node id.
+            pr_node="$(gh api "repos/${TAP}/pulls/${pr}" --jq .node_id 2>/dev/null || true)"
+            # `\$id` is escaped so the shell leaves it literal: it is a GraphQL variable, not a shell one.
+            ready_mutation="mutation(\$id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: \$id }) { pullRequest { isDraft } } }"
+            if [ -n "$pr_node" ] && gh api graphql \
+                -f query="$ready_mutation" \
+                -F id="$pr_node" >/dev/null; then
               echo "::notice::${TAP}#${pr} validated and marked ready — the tap's checks gate its auto-merge"
               printf -- '- %s#%s validated and marked ready for check-gated auto-merge\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
             else
-              echo "::warning::Could not mark ${TAP}#${pr} ready; it remains draft/open for the maintainer"
+              # A cask PR that never leaves draft means the tap silently stops tracking releases, so this
+              # must be loud rather than a buried warning on an otherwise-green release.
+              echo "::error::Could not mark ${TAP}#${pr} ready; it remains draft and the tap will NOT pick up ${TAG}"
               printf -- '- %s#%s remains draft/open: could not mark it ready after validation\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
             fi
           done
+
+          if [ "$handoff_failed" -ne 0 ]; then
+            echo "::error::One or more cask PRs could not be handed off; the Homebrew tap will not pick up ${TAG}"
+            exit 1
+          fi
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
   # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
