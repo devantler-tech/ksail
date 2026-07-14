@@ -17,6 +17,8 @@ const (
 	reservedSandboxShutdownGracePeriod = 5 * time.Second
 )
 
+// reservedSandboxMonitor returns the injected monitor when present and the
+// Kubernetes-backed implementation otherwise.
 func (f *InstallerFactories) reservedSandboxMonitor() func(
 	context.Context,
 	*v1alpha1.Cluster,
@@ -28,6 +30,8 @@ func (f *InstallerFactories) reservedSandboxMonitor() func(
 	return watchRepeatedReservedPodSandboxes
 }
 
+// watchRepeatedReservedPodSandboxes resolves the target cluster and monitors
+// its warning events for the repeated nested-containerd reservation failure.
 func watchRepeatedReservedPodSandboxes(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -57,6 +61,8 @@ func watchRepeatedReservedPodSandboxes(
 	return nil
 }
 
+// runWithReservedSandboxMonitor runs eligible cluster setup alongside the
+// reservation monitor and logs monitor failures that do not require recovery.
 func runWithReservedSandboxMonitor(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -79,6 +85,9 @@ func runWithReservedSandboxMonitor(
 	)
 }
 
+// runWithReservedSandboxMonitorAndWarning coordinates setup and monitoring,
+// returning the reservation error when recovery is required and otherwise
+// preserving the setup result.
 func runWithReservedSandboxMonitorAndWarning(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -134,6 +143,8 @@ func runWithReservedSandboxMonitorAndWarning(
 	}
 }
 
+// reportReservedSandboxMonitorError reports only unexpected monitor failures,
+// excluding the recovery sentinel and cancellation caused by setup shutdown.
 func reportReservedSandboxMonitorError(
 	ctx context.Context,
 	err error,
@@ -151,6 +162,8 @@ func reportReservedSandboxMonitorError(
 	warn(ctx, err)
 }
 
+// waitForReservedSandboxResult gives a cancelled setup or monitor a bounded
+// grace period to report its terminal result.
 func waitForReservedSandboxResult(result <-chan error) (bool, error) {
 	timer := time.NewTimer(reservedSandboxShutdownGracePeriod)
 	defer timer.Stop()
@@ -163,6 +176,8 @@ func waitForReservedSandboxResult(result <-chan error) (bool, error) {
 	}
 }
 
+// needsReservedSandboxMonitor limits recovery monitoring to nested K3s on
+// Docker when a GitOps engine is installed inside the cluster.
 func needsReservedSandboxMonitor(clusterCfg *v1alpha1.Cluster) bool {
 	if clusterCfg == nil ||
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s ||

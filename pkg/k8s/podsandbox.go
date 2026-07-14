@@ -76,6 +76,8 @@ func WatchRepeatedReservedPodSandboxes(
 	)
 }
 
+// watchRepeatedReservedPodSandboxes implements the polling loop with an
+// injectable warning sink so transient list failures can be tested precisely.
 func watchRepeatedReservedPodSandboxes(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -132,6 +134,8 @@ func watchRepeatedReservedPodSandboxes(
 	}
 }
 
+// repeatedReservedPodSandboxFailure returns details for the first current
+// event that crosses the repeated reservation threshold.
 func repeatedReservedPodSandboxFailure(events []corev1.Event, started time.Time) error {
 	for idx := range events {
 		event := &events[idx]
@@ -150,6 +154,8 @@ func repeatedReservedPodSandboxFailure(events []corev1.Event, started time.Time)
 	return nil
 }
 
+// isRepeatedReservedPodSandboxEvent reports whether an event has the expected
+// pod warning signature, repetition count, and observation time.
 func isRepeatedReservedPodSandboxEvent(event *corev1.Event, started time.Time) bool {
 	if event.Type != corev1.EventTypeWarning ||
 		event.Reason != "FailedCreatePodSandBox" ||
@@ -164,6 +170,8 @@ func isRepeatedReservedPodSandboxEvent(event *corev1.Event, started time.Time) b
 	return !observedAt.IsZero() && !observedAt.Before(started)
 }
 
+// podSandboxEventCount returns the greatest repetition count reported by the
+// legacy event field or its newer series metadata.
 func podSandboxEventCount(event *corev1.Event) int32 {
 	count := event.Count
 	if event.Series != nil {
@@ -173,6 +181,8 @@ func podSandboxEventCount(event *corev1.Event) int32 {
 	return count
 }
 
+// podSandboxEventTime returns the latest observation timestamp available on
+// either the event or its series metadata.
 func podSandboxEventTime(event *corev1.Event) time.Time {
 	observedAt := event.CreationTimestamp.Time
 	if event.LastTimestamp.After(observedAt) {
