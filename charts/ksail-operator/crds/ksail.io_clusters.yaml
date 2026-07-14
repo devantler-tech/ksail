@@ -355,6 +355,30 @@ spec:
                       LocalRegistry configures the host-local OCI registry (or an external
                       registry for cloud providers) used by GitOps workflows.
                     properties:
+                      credentials:
+                        description: |-
+                          Credentials declares which environment variables hold the registry token for
+                          each execution path. When set, it takes precedence over any password embedded
+                          in the Registry spec.
+                        properties:
+                          cliTokenEnvVar:
+                            description: |-
+                              CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.
+                              Example: "GHCR_PUSH_TOKEN".
+                            type: string
+                          clusterTokenEnvVar:
+                            description: |-
+                              ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token
+                              persisted into the cluster can be pull-only.
+                              Example: "GHCR_PULL_TOKEN".
+                            type: string
+                          tokenEnvVar:
+                            description: |-
+                              TokenEnvVar is the environment variable holding the registry token used by both
+                              push and pull paths unless a path-specific override is configured.
+                              Example: "GHCR_TOKEN".
+                            type: string
+                        type: object
                       registry:
                         description: |-
                           Registry is the full registry specification in the format: [user:pass@]host[:port][/path]

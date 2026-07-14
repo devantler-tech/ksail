@@ -61,6 +61,13 @@ var (
 // LoadPatches loads all Talos patches from the configured directories.
 // Returns patches from cluster/, control-planes/, and workers/ subdirectories.
 func LoadPatches(patchesDir string) ([]Patch, error) {
+	return loadPatchesWithLookup(patchesDir, os.LookupEnv)
+}
+
+func loadPatchesWithLookup(
+	patchesDir string,
+	lookup func(string) (string, bool),
+) ([]Patch, error) {
 	var patches []Patch
 
 	clusterDir := filepath.Join(patchesDir, PatchSubdirCluster)
@@ -68,7 +75,7 @@ func LoadPatches(patchesDir string) ([]Patch, error) {
 	workersDir := filepath.Join(patchesDir, PatchSubdirWorkers)
 
 	// Load cluster-wide patches
-	clusterPatches, err := loadPatchesFromDir(clusterDir, PatchScopeCluster)
+	clusterPatches, err := loadPatchesFromDir(clusterDir, PatchScopeCluster, lookup)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load cluster patches: %w", err)
 	}
@@ -76,7 +83,7 @@ func LoadPatches(patchesDir string) ([]Patch, error) {
 	patches = append(patches, clusterPatches...)
 
 	// Load control-plane patches
-	cpPatches, err := loadPatchesFromDir(controlPlanesDir, PatchScopeControlPlane)
+	cpPatches, err := loadPatchesFromDir(controlPlanesDir, PatchScopeControlPlane, lookup)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load control-plane patches: %w", err)
 	}
@@ -84,7 +91,7 @@ func LoadPatches(patchesDir string) ([]Patch, error) {
 	patches = append(patches, cpPatches...)
 
 	// Load worker patches
-	workerPatches, err := loadPatchesFromDir(workersDir, PatchScopeWorker)
+	workerPatches, err := loadPatchesFromDir(workersDir, PatchScopeWorker, lookup)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load worker patches: %w", err)
 	}
@@ -95,7 +102,11 @@ func LoadPatches(patchesDir string) ([]Patch, error) {
 }
 
 // loadPatchesFromDir loads all YAML patches from a directory.
-func loadPatchesFromDir(dir string, scope PatchScope) ([]Patch, error) {
+func loadPatchesFromDir(
+	dir string,
+	scope PatchScope,
+	lookup func(string) (string, bool),
+) ([]Patch, error) {
 	// Check if directory exists
 	_, err := os.Stat(dir)
 	if os.IsNotExist(err) {
@@ -104,7 +115,7 @@ func loadPatchesFromDir(dir string, scope PatchScope) ([]Patch, error) {
 
 	var patches []Patch
 
-	iterErr := forEachYAMLFile(dir, func(filePath string, content []byte) error {
+	iterErr := forEachYAMLFile(dir, lookup, func(filePath string, content []byte) error {
 		patches = append(patches, Patch{
 			Path:    filePath,
 			Scope:   scope,

@@ -120,3 +120,72 @@ func TestBuildArgoCDEnsureOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildArgoCDEnsureOptions_UsesConfiguredClusterTokenEnvVar(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user:push-token@ghcr.io/example/repo",
+					//nolint:gosec // G101: this is an environment variable name, not a credential.
+					Credentials: v1alpha1.RegistryCredentials{
+						ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+					},
+				},
+			},
+		},
+	}
+
+	opts := setup.BuildArgoCDEnsureOptions(clusterCfg, "test-cluster", "")
+
+	assert.Equal(t, "user", opts.Username)
+	assert.Equal(t, "pull-token", opts.Password)
+	assert.True(t, opts.PullOnlyCredentials)
+}
+
+func TestBuildArgoCDEnsureOptions_MarksCommonPullTokenWhenCLIOverrideDiffers(t *testing.T) {
+	t.Setenv("KSAIL_TEST_REGISTRY_TOKEN", "pull-token")
+	t.Setenv("KSAIL_TEST_REGISTRY_CLI_TOKEN", "push-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user@registry.example.com/example/repo",
+					//nolint:gosec // G101: these are environment variable names, not credentials.
+					Credentials: v1alpha1.RegistryCredentials{
+						TokenEnvVar:    "KSAIL_TEST_REGISTRY_TOKEN",
+						CLITokenEnvVar: "KSAIL_TEST_REGISTRY_CLI_TOKEN",
+					},
+				},
+			},
+		},
+	}
+
+	opts := setup.BuildArgoCDEnsureOptions(clusterCfg, "test-cluster", "")
+
+	assert.Equal(t, "pull-token", opts.Password)
+	assert.True(t, opts.PullOnlyCredentials)
+}
+
+func TestBuildArgoCDEnsureOptions_IgnoresAmbientPullTokenForPublicRegistry(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "ambient-pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "ghcr.io/example/public-repo",
+				},
+			},
+		},
+	}
+
+	opts := setup.BuildArgoCDEnsureOptions(clusterCfg, "test-cluster", "")
+
+	assert.Empty(t, opts.Username)
+	assert.Empty(t, opts.Password)
+	assert.False(t, opts.PullOnlyCredentials)
+}
