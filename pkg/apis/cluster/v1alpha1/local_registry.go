@@ -1,11 +1,11 @@
 package v1alpha1
 
 import (
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
-	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 )
 
 // ParsedRegistry contains the parsed components of a registry specification.
@@ -172,44 +172,71 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 	}
 }
 
-// ResolveCredentials returns the username and password with environment variable placeholders expanded.
-// Placeholders use the format ${VAR_NAME}. If a referenced environment variable is not set,
-// the placeholder is replaced with an empty string.
+// tokenEnvVarFor returns the environment variable name a path should read its
+// token from: the path-specific override when configured, otherwise the shared
+// TokenEnvVar. An empty result means no env-var source is configured and the
+// caller falls back to the password embedded in the Registry spec.
+func (c RegistryCredentials) tokenEnvVarFor(override string) string {
+	if name := strings.TrimSpace(override); name != "" {
+		return name
+	}
+
+	return strings.TrimSpace(c.TokenEnvVar)
+}
+
+// resolvePassword returns the token held by the configured environment variable.
+// A configured name is authoritative: a missing or empty variable resolves to an
+// empty token rather than silently falling back to another credential source, so
+// resolution never depends on ambient process-environment state.
+func (r LocalRegistry) resolvePassword(override string) string {
+	name := r.Credentials.tokenEnvVarFor(override)
+	if name == "" {
+		return envvar.Expand(r.Parse().Password)
+	}
+
+	return os.Getenv(name)
+}
+
+// ResolveCredentials returns the credentials used by CLI and publish (push) paths.
+// The password comes from CLITokenEnvVar when configured, otherwise TokenEnvVar,
+// otherwise the password embedded in the Registry spec (where ${VAR_NAME}
+// placeholders are expanded, unset variables becoming empty strings).
 //
 //nolint:nonamedreturns // Named returns document the returned values for clarity
 func (r LocalRegistry) ResolveCredentials() (username, password string) {
-	parsed := r.Parse()
-
-	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
+	return envvar.Expand(r.Parse().Username), r.resolvePassword(r.Credentials.CLITokenEnvVar)
 }
 
-// ResolvePullCredentials returns credentials suitable for cluster-side image
-// and artifact pulls. GHCR uses GHCR_PULL_TOKEN when it is set and non-empty,
-// while other registries and legacy configurations keep their configured password.
+// ResolvePullCredentials returns the credentials used by cluster-side image and
+// artifact pulls. The password comes from ClusterTokenEnvVar when configured,
+// otherwise TokenEnvVar, otherwise the password embedded in the Registry spec.
+// Resolution is registry-agnostic: no host carries special meaning.
 //
 //nolint:nonamedreturns // Named returns document the returned values for clarity.
 func (r LocalRegistry) ResolvePullCredentials() (username, password string) {
-	parsed := r.Parse()
-
-	username, password = r.ResolveCredentials()
+	username = envvar.Expand(r.Parse().Username)
 	if strings.TrimSpace(username) == "" {
 		return "", ""
 	}
 
-	return username, registryauth.PullPassword(parsed.Host, password)
+	return username, r.resolvePassword(r.Credentials.ClusterTokenEnvVar)
 }
 
-// UsesDedicatedPullCredentials reports whether the registry resolves to a
-// separate pull password rather than its configured push password.
+// UsesDedicatedPullCredentials reports whether cluster pull paths read their token
+// from a different environment variable than CLI and publish paths. It is derived
+// from configuration alone, so the answer never changes with process-environment
+// state and a pull-only secret is marked as such even when its token is unset.
 func (r LocalRegistry) UsesDedicatedPullCredentials() bool {
-	parsed := r.Parse()
-
-	username, pushPassword := r.ResolveCredentials()
-	if strings.TrimSpace(username) == "" {
+	clusterEnvVar := strings.TrimSpace(r.Credentials.ClusterTokenEnvVar)
+	if clusterEnvVar == "" {
 		return false
 	}
 
-	return registryauth.PullPassword(parsed.Host, pushPassword) != pushPassword
+	if strings.TrimSpace(envvar.Expand(r.Parse().Username)) == "" {
+		return false
+	}
+
+	return clusterEnvVar != r.Credentials.tokenEnvVarFor(r.Credentials.CLITokenEnvVar)
 }
 
 // HasCredentials returns true if the registry has non-empty username or password configured.

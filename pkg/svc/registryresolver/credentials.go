@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"os"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
@@ -83,9 +82,11 @@ func tryArgoCDSecret(
 	return applyClusterSecretCredentials(secret, info, username, password)
 }
 
-// applyClusterSecretCredentials merges credentials into a push target while
-// refusing to reuse cluster-resident pull-only passwords. For marked GHCR
-// secrets, an ambient GHCR_TOKEN is the only eligible push credential.
+// applyClusterSecretCredentials merges credentials discovered in the cluster into a
+// push target, refusing to reuse a secret that is marked pull-only. A push token is
+// never recovered from ambient process environment here: when the cluster only holds
+// pull-only credentials, the push credential must come from configuration
+// (LocalRegistry.Credentials), which the config-based resolver supplies.
 func applyClusterSecretCredentials(
 	secret *corev1.Secret,
 	info *Info,
@@ -95,18 +96,8 @@ func applyClusterSecretCredentials(
 		return false
 	}
 
-	purpose := secret.Annotations[registryauth.CredentialPurposeAnnotation]
-	if purpose == registryauth.PullCredentialPurpose {
-		if !strings.EqualFold(strings.TrimSpace(info.Host), registryauth.GHCRHost) {
-			return false
-		}
-
-		pushToken, exists := os.LookupEnv(registryauth.GHCRTokenEnvVar)
-		if !exists || pushToken == "" {
-			return false
-		}
-
-		password = pushToken
+	if secret.Annotations[registryauth.CredentialPurposeAnnotation] == registryauth.PullCredentialPurpose {
+		return false
 	}
 
 	info.Username = username

@@ -338,6 +338,25 @@
                 "registry": {
                   "type": "string",
                   "description": "Registry is the full registry specification in the format: [user:pass@]host[:port][/path]\nWhen populated, enables registry integration for GitOps workflows.\nExamples:\n  - \"localhost:5050\" (local Docker registry)\n  - \"ghcr.io/myorg/myrepo\" (GitHub Container Registry with path)\n  - \"${USER}:${PASS}@ghcr.io:443/myorg\" (with credentials from env vars)\nCredentials support ${ENV_VAR} placeholders for environment variable expansion."
+                },
+                "credentials": {
+                  "properties": {
+                    "tokenEnvVar": {
+                      "type": "string",
+                      "description": "TokenEnvVar is the environment variable holding the registry token used by both\npush and pull paths unless a path-specific override is configured.\nExample: \"GHCR_TOKEN\"."
+                    },
+                    "cliTokenEnvVar": {
+                      "type": "string",
+                      "description": "CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.\nExample: \"GHCR_PUSH_TOKEN\"."
+                    },
+                    "clusterTokenEnvVar": {
+                      "type": "string",
+                      "description": "ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token\npersisted into the cluster can be pull-only.\nExample: \"GHCR_PULL_TOKEN\"."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "description": "Credentials declares which environment variables hold the registry token for\neach execution path. When set, it takes precedence over any password embedded\nin the Registry spec."
                 }
               },
               "additionalProperties": false,

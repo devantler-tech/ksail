@@ -280,7 +280,10 @@ func TestLoadPatches_ExpandsEnvVars(t *testing.T) {
 	assert.NotContains(t, string(patches[0].Content), "${TEST_HOSTNAME}")
 }
 
-func TestLoadPatches_GHCRPullTokenFallsBackToLegacyToken(t *testing.T) {
+// A placeholder resolves to exactly the variable it names: an unset ${GHCR_PULL_TOKEN}
+// does not silently borrow another variable's value. Which variable a patch reads is the
+// patch author's explicit choice, not an implicit runtime convention.
+func TestLoadPatches_PullTokenPlaceholderDoesNotBorrowAnotherVariable(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
@@ -297,7 +300,7 @@ func TestLoadPatches_GHCRPullTokenFallsBackToLegacyToken(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, patches, 1)
-	assert.Contains(t, string(patches[0].Content), "password: legacy-token")
+	assert.NotContains(t, string(patches[0].Content), "legacy-token")
 }
 
 func TestLoadPatches_GHCRPullTokenPrefersDedicatedToken(t *testing.T) {
@@ -320,7 +323,9 @@ func TestLoadPatches_GHCRPullTokenPrefersDedicatedToken(t *testing.T) {
 	assert.Contains(t, string(patches[0].Content), "password: pull-token")
 }
 
-func TestLoadPatches_LegacyGHCRTokenPlaceholderPrefersDedicatedPullToken(t *testing.T) {
+// The reverse of the rule above: a ${GHCR_TOKEN} placeholder is never hijacked by an
+// ambient GHCR_PULL_TOKEN. A patch gets the variable it asked for.
+func TestLoadPatches_TokenPlaceholderIsNotHijackedByPullToken(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
@@ -336,7 +341,7 @@ func TestLoadPatches_LegacyGHCRTokenPlaceholderPrefersDedicatedPullToken(t *test
 
 	require.NoError(t, err)
 	require.Len(t, patches, 1)
-	assert.Contains(t, string(patches[0].Content), "password: pull-token")
+	assert.Contains(t, string(patches[0].Content), "password: push-token")
 }
 
 //nolint:paralleltest // Uses t.Setenv

@@ -131,6 +131,40 @@ type LocalRegistry struct {
 	//   - "${USER}:${PASS}@ghcr.io:443/myorg" (with credentials from env vars)
 	// Credentials support ${ENV_VAR} placeholders for environment variable expansion.
 	Registry string `json:"registry,omitzero"`
+	// Credentials declares which environment variables hold the registry token for
+	// each execution path. When set, it takes precedence over any password embedded
+	// in the Registry spec.
+	Credentials RegistryCredentials `json:"credentials,omitzero"`
+}
+
+// RegistryCredentials declares the environment variables that hold the registry
+// token for each execution path. Following the KSail *EnvVar convention, each field
+// contains the *name* of an environment variable rather than a token value, so
+// credential resolution stays explicit, deterministic, and registry-agnostic.
+//
+// Resolution:
+//   - CLI and publish (push) paths read CLITokenEnvVar, falling back to TokenEnvVar
+//     only when the override is not configured.
+//   - Cluster (pull) paths read ClusterTokenEnvVar, falling back to TokenEnvVar only
+//     when the override is not configured.
+//   - A configured override stays authoritative even when its environment variable is
+//     missing or empty; resolution never falls back on process-environment state.
+//   - When no field is set, the password embedded in the Registry spec is used.
+//
+// Splitting the two paths lets a cluster receive a least-privilege pull-only token
+// while the CLI keeps a token that may also push.
+type RegistryCredentials struct {
+	// TokenEnvVar is the environment variable holding the registry token used by both
+	// push and pull paths unless a path-specific override is configured.
+	// Example: "GHCR_TOKEN".
+	TokenEnvVar string `json:"tokenEnvVar,omitzero"`
+	// CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.
+	// Example: "GHCR_PUSH_TOKEN".
+	CLITokenEnvVar string `json:"cliTokenEnvVar,omitzero"`
+	// ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token
+	// persisted into the cluster can be pull-only.
+	// Example: "GHCR_PULL_TOKEN".
+	ClusterTokenEnvVar string `json:"clusterTokenEnvVar,omitzero"`
 }
 
 // OptionsHetzner defines options specific to the Hetzner Cloud provider.

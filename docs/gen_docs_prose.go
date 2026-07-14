@@ -93,12 +93,12 @@ machine:
 ` + cbt + `
 
 Because patch files are expanded too, you can inject **registry credentials** into the Talos
-machine config as config-as-code — keeping the secret in the environment, never committed. Use a
-` + bt + `GHCR_PULL_TOKEN` + bt + ` scoped to ` + bt + `read:packages` + bt + ` for credentials that land on cluster nodes. If it is unset or
-empty, KSail falls back to the legacy ` + bt + `GHCR_TOKEN` + bt + ` variable so existing configurations keep working.
-This is the supported way to give nodes registry auth (for example, so containerd can fetch cosign
-signatures for **private** packages during image verification) without passing credentials via CLI
-flags:
+machine config as config-as-code — keeping the secret in the environment, never committed. A
+` + bt + `${VAR_NAME}` + bt + ` placeholder resolves to exactly that variable: no name carries hidden fallback
+behaviour, so a patch gets the token it asks for. Point it at a pull-scoped token (for GHCR, one
+scoped to ` + bt + `read:packages` + bt + `) when the credential lands on cluster nodes. This is the supported way to
+give nodes registry auth (for example, so containerd can fetch cosign signatures for **private**
+packages during image verification) without passing credentials via CLI flags:
 
 ` + cbt + `yaml
 # talos/cluster/registry-auth.yaml - Credentials are injected from the environment at load time
@@ -111,11 +111,10 @@ machine:
           password: ${GHCR_PULL_TOKEN} # expanded at load; commit the placeholder, not the token
 ` + cbt + `
 
-Keep ` + bt + `GHCR_TOKEN` + bt + ` as the write-capable credential referenced by ` + bt + `spec.cluster.localRegistry.registry` + bt + `
-when ` + bt + `ksail workload push` + bt + ` must publish artifacts. KSail uses ` + bt + `GHCR_PULL_TOKEN` + bt + ` instead for the
-Flux registry Secret, Argo CD repository credentials, and Talos node authentication.
-
 ### Example: Credentials
+
+Credentials may be embedded directly in the registry spec, where ` + bt + `${VAR_NAME}` + bt + ` placeholders are
+expanded at load time:
 
 ` + cbt + `yaml
 spec:
@@ -123,6 +122,36 @@ spec:
     localRegistry:
       registry: "${REGISTRY_USER}:${REGISTRY_PASS}@${REGISTRY_HOST:-ghcr.io}/myorg/myrepo"
 ` + cbt + `
+
+### Example: Separate push and pull credentials
+
+To give the cluster a **least-privilege, pull-only token** while the CLI keeps a token that can also
+push, declare which environment variable each execution path reads. Following the KSail ` + bt + `*EnvVar` + bt + `
+convention, these fields hold the **name** of an environment variable, never a token value:
+
+` + cbt + `yaml
+spec:
+  cluster:
+    localRegistry:
+      registry: my-user@ghcr.io/myorg/myrepo
+      credentials:
+        tokenEnvVar: GHCR_TOKEN         # shared default for both paths
+        cliTokenEnvVar: GHCR_PUSH_TOKEN # CLI/publish (push) paths
+        clusterTokenEnvVar: GHCR_PULL_TOKEN # cluster (pull) paths
+` + cbt + `
+
+Resolution is deterministic and registry-agnostic — no registry host is special-cased:
+
+- CLI and publish paths read ` + bt + `cliTokenEnvVar` + bt + `, falling back to ` + bt + `tokenEnvVar` + bt + ` only when the override is
+  not configured.
+- Cluster pull paths — the Flux registry Secret, Argo CD repository credentials, and Talos node
+  authentication — read ` + bt + `clusterTokenEnvVar` + bt + `, falling back to ` + bt + `tokenEnvVar` + bt + ` the same way.
+- A configured override stays **authoritative** even when its environment variable is missing or
+  empty; KSail never silently falls back based on process-environment state.
+- When no field is set, the password embedded in ` + bt + `registry` + bt + ` is used.
+
+When ` + bt + `clusterTokenEnvVar` + bt + ` resolves to a different variable than the push path, the credential KSail
+persists into the cluster is marked pull-only, so it is never reused to publish artifacts.
 
 ` + cbt + `bash
 export REGISTRY_USER="github-user"

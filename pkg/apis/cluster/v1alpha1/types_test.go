@@ -442,10 +442,18 @@ func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 	}
 }
 
+// A configured clusterTokenEnvVar sends cluster pull paths to a different environment
+// variable than CLI push paths, which keep the password embedded in the Registry spec.
 func TestLocalRegistry_ResolvePullCredentialsKeepsPushCredentialsSeparate(t *testing.T) {
 	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
 
-	reg := v1alpha1.LocalRegistry{Registry: "user:push-token@ghcr.io/org/repo"}
+	reg := v1alpha1.LocalRegistry{
+		Registry: "user:push-token@ghcr.io/org/repo",
+		//nolint:gosec // G101: these are environment variable names, not credentials.
+		Credentials: v1alpha1.RegistryCredentials{
+			ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+		},
+	}
 	pushUsername, pushPassword := reg.ResolveCredentials()
 	pullUsername, pullPassword := reg.ResolvePullCredentials()
 
@@ -453,8 +461,64 @@ func TestLocalRegistry_ResolvePullCredentialsKeepsPushCredentialsSeparate(t *tes
 	assert.Equal(t, "push-token", pushPassword)
 	assert.Equal(t, "user", pullUsername)
 	assert.Equal(t, "pull-token", pullPassword)
+	assert.True(t, reg.UsesDedicatedPullCredentials())
 }
 
+// cliTokenEnvVar and clusterTokenEnvVar each override the shared tokenEnvVar for their
+// own path only; an unset override falls back to tokenEnvVar.
+func TestLocalRegistry_CredentialsOverridesApplyPerPath(t *testing.T) {
+	t.Setenv("GHCR_TOKEN", "shared-token")
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	shared := v1alpha1.LocalRegistry{
+		Registry:    "user@ghcr.io/org/repo",
+		Credentials: v1alpha1.RegistryCredentials{TokenEnvVar: "GHCR_TOKEN"},
+	}
+	_, sharedPush := shared.ResolveCredentials()
+	_, sharedPull := shared.ResolvePullCredentials()
+
+	assert.Equal(t, "shared-token", sharedPush)
+	assert.Equal(t, "shared-token", sharedPull)
+	assert.False(t, shared.UsesDedicatedPullCredentials())
+
+	split := v1alpha1.LocalRegistry{
+		Registry: "user@ghcr.io/org/repo",
+		//nolint:gosec // G101: these are environment variable names, not credentials.
+		Credentials: v1alpha1.RegistryCredentials{
+			TokenEnvVar:        "GHCR_TOKEN",
+			ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+		},
+	}
+	_, splitPush := split.ResolveCredentials()
+	_, splitPull := split.ResolvePullCredentials()
+
+	assert.Equal(t, "shared-token", splitPush)
+	assert.Equal(t, "pull-token", splitPull)
+	assert.True(t, split.UsesDedicatedPullCredentials())
+}
+
+// A configured override stays authoritative even when its environment variable is
+// missing or empty: resolution never silently falls back on process-environment state.
+func TestLocalRegistry_ConfiguredEnvVarStaysAuthoritativeWhenUnset(t *testing.T) {
+	t.Setenv("GHCR_TOKEN", "shared-token")
+	t.Setenv("GHCR_PULL_TOKEN", "")
+
+	reg := v1alpha1.LocalRegistry{
+		Registry: "user:spec-token@ghcr.io/org/repo",
+		//nolint:gosec // G101: these are environment variable names, not credentials.
+		Credentials: v1alpha1.RegistryCredentials{
+			TokenEnvVar:        "GHCR_TOKEN",
+			ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+		},
+	}
+	_, pullPassword := reg.ResolvePullCredentials()
+
+	assert.Empty(t, pullPassword)
+	assert.True(t, reg.UsesDedicatedPullCredentials())
+}
+
+// Credential resolution is registry-agnostic: no host has special meaning, so an
+// ambient GHCR_PULL_TOKEN cannot leak into a registry that did not configure it.
 func TestLocalRegistry_ResolvePullCredentialsIgnoresAmbientTokenWithoutConfiguredAuth(
 	t *testing.T,
 ) {
@@ -465,15 +529,19 @@ func TestLocalRegistry_ResolvePullCredentialsIgnoresAmbientTokenWithoutConfigure
 
 	assert.Empty(t, username)
 	assert.Empty(t, password)
+	assert.False(t, reg.UsesDedicatedPullCredentials())
 }
 
 func TestLocalRegistry_ResolvePullCredentialsRejectsPasswordOnlyAuth(t *testing.T) {
 	t.Setenv("GHCR_USERNAME", "")
-	t.Setenv("GHCR_TOKEN", "push-token")
 	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
 
 	reg := v1alpha1.LocalRegistry{
 		Registry: "${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io/org/private-repo",
+		//nolint:gosec // G101: this is an environment variable name, not a credential.
+		Credentials: v1alpha1.RegistryCredentials{
+			ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+		},
 	}
 	username, password := reg.ResolvePullCredentials()
 

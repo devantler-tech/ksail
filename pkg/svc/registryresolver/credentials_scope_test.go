@@ -15,15 +15,22 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestTryFluxSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
-	t.Setenv(registryauth.GHCRTokenEnvVar, "")
+const (
+	testGHCRHost        = "ghcr.io"
+	testPrivateHost     = "registry.example.com"
+	testGHCRTokenEnvVar = "GHCR_TOKEN"
+	testUsername        = "user"
+)
 
-	secret := buildFluxCredentialSecret(t, "user", "pull-token")
+func TestTryFluxSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
+	t.Parallel()
+
+	secret := buildFluxCredentialSecret(t, testGHCRHost, "pull-token")
 	secret.Annotations = map[string]string{
 		registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
 	}
 	clientset := k8sfake.NewClientset(secret)
-	info := &Info{Host: registryauth.GHCRHost, IsExternal: true}
+	info := &Info{Host: testGHCRHost, IsExternal: true}
 
 	found := tryFluxSecret(context.Background(), clientset, info)
 
@@ -32,39 +39,60 @@ func TestTryFluxSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
 	assert.Empty(t, info.Password)
 }
 
-func TestTryFluxSecretUsesAmbientPushTokenForPullOnlyCredentials(t *testing.T) {
-	t.Setenv(registryauth.GHCRTokenEnvVar, "push-token")
+// A pull-only secret stays ineligible for push even when a push token happens to sit in
+// the process environment: push credentials are resolved from configuration
+// (LocalRegistry.Credentials), never recovered from ambient environment state here.
+func TestTryFluxSecretIgnoresAmbientPushTokenForPullOnlyCredentials(t *testing.T) {
+	t.Setenv(testGHCRTokenEnvVar, "push-token")
 
-	secret := buildFluxCredentialSecret(t, "user", "pull-token")
+	secret := buildFluxCredentialSecret(t, testGHCRHost, "pull-token")
 	secret.Annotations = map[string]string{
 		registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
 	}
 	clientset := k8sfake.NewClientset(secret)
-	info := &Info{Host: registryauth.GHCRHost, IsExternal: true}
+	info := &Info{Host: testGHCRHost, IsExternal: true}
+
+	found := tryFluxSecret(context.Background(), clientset, info)
+
+	assert.False(t, found)
+	assert.Empty(t, info.Username)
+	assert.Empty(t, info.Password)
+}
+
+// The pull-only refusal is registry-agnostic: no host carries special meaning.
+func TestTryFluxSecretDoesNotReusePullOnlyCredentialsOnNonGHCRHost(t *testing.T) {
+	t.Parallel()
+
+	secret := buildFluxCredentialSecret(t, testPrivateHost, "pull-token")
+	secret.Annotations = map[string]string{
+		registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
+	}
+	clientset := k8sfake.NewClientset(secret)
+	info := &Info{Host: testPrivateHost, IsExternal: true}
+
+	found := tryFluxSecret(context.Background(), clientset, info)
+
+	assert.False(t, found)
+	assert.Empty(t, info.Username)
+	assert.Empty(t, info.Password)
+}
+
+func TestTryFluxSecretRetainsUnmarkedPushCredentials(t *testing.T) {
+	t.Parallel()
+
+	secret := buildFluxCredentialSecret(t, testGHCRHost, "push-token")
+	clientset := k8sfake.NewClientset(secret)
+	info := &Info{Host: testGHCRHost, IsExternal: true}
 
 	found := tryFluxSecret(context.Background(), clientset, info)
 
 	assert.True(t, found)
-	assert.Equal(t, "user", info.Username)
+	assert.Equal(t, testUsername, info.Username)
 	assert.Equal(t, "push-token", info.Password)
 }
 
-func TestTryFluxSecretRetainsLegacyUnmarkedPushCredentials(t *testing.T) {
-	t.Setenv(registryauth.GHCRTokenEnvVar, "")
-
-	secret := buildFluxCredentialSecret(t, "user", "legacy-push-token")
-	clientset := k8sfake.NewClientset(secret)
-	info := &Info{Host: registryauth.GHCRHost, IsExternal: true}
-
-	found := tryFluxSecret(context.Background(), clientset, info)
-
-	assert.True(t, found)
-	assert.Equal(t, "user", info.Username)
-	assert.Equal(t, "legacy-push-token", info.Password)
-}
-
 func TestTryArgoCDSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
-	t.Setenv(registryauth.GHCRTokenEnvVar, "")
+	t.Parallel()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -75,12 +103,12 @@ func TestTryArgoCDSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
 			},
 		},
 		Data: map[string][]byte{
-			"username": []byte("user"),
+			"username": []byte(testUsername),
 			"password": []byte("pull-token"),
 		},
 	}
 	clientset := k8sfake.NewClientset(secret)
-	info := &Info{Host: registryauth.GHCRHost, IsExternal: true}
+	info := &Info{Host: testGHCRHost, IsExternal: true}
 
 	found := tryArgoCDSecret(context.Background(), clientset, info)
 
@@ -89,13 +117,15 @@ func TestTryArgoCDSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
 	assert.Empty(t, info.Password)
 }
 
-func buildFluxCredentialSecret(t *testing.T, username, password string) *corev1.Secret {
+// buildFluxCredentialSecret builds a Flux docker-config Secret for testUsername on the
+// given host, holding the supplied password.
+func buildFluxCredentialSecret(t *testing.T, host, password string) *corev1.Secret {
 	t.Helper()
 
-	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	auth := base64.StdEncoding.EncodeToString([]byte(testUsername + ":" + password))
 	dockerConfig, err := json.Marshal(map[string]any{
 		"auths": map[string]any{
-			registryauth.GHCRHost: map[string]string{"auth": auth},
+			host: map[string]string{"auth": auth},
 		},
 	})
 	require.NoError(t, err)
