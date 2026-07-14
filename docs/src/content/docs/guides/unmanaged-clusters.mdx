@@ -1,0 +1,63 @@
+---
+title: Unmanaged (kubeconfig-only) Clusters
+description: How KSail sees and operates on clusters that exist in your kubeconfig but were not provisioned by KSail — clearly marked unmanaged, with ksail-only lifecycle actions refused rather than silently failing.
+---
+
+KSail can **see and operate on any cluster in your kubeconfig**, even one it did not provision — a managed cloud cluster (EKS/GKE/AKS), a `kubeadm` cluster, or a colleague's cluster shared with you. These appear as **unmanaged** clusters: KSail surfaces them clearly marked, never hidden and never shown as a normal managed cluster, and refuses ksail-only lifecycle actions on them with a documented message instead of failing silently.
+
+> [!NOTE]
+> A cluster is **unmanaged** when it is present in your kubeconfig as a context that KSail did not create through one of its infrastructure providers (Docker, Hetzner, Omni, AWS-EKS, nested Kubernetes). KSail still has no provider or distribution spec for it, so anything that requires provisioning is unavailable — but everything that works over the Kubernetes API works normally.
+
+## Seeing unmanaged clusters
+
+`ksail cluster list` includes kubeconfig contexts KSail did not provision, each shown with an explicit **unmanaged** marker:
+
+```sh
+ksail cluster list
+```
+
+Unmanaged clusters report an empty distribution/provider (shown as `—`) because there is no KSail spec to read, and a `Ready=False` status with reason `Unmanaged`. The same marked model backs the CLI and the web UI / desktop app, so a cluster behaves identically wherever you look at it.
+
+## Operating within limits
+
+Because most of KSail's read/operate surface is client-go-backed, it works against any selected context — managed or not. Select an unmanaged cluster and use it like any other:
+
+```sh
+ksail cluster switch my-eks-prod       # switch the active kubeconfig context
+ksail cluster info                     # endpoint + kubeconfig access (unknown ksail-only fields shown as —)
+ksail cluster connect                  # open k9s against the context
+ksail cluster diagnose                 # run diagnostics against the selected context
+```
+
+The `ksail workload` group — `kubectl`, `watch`, `network`, `edit`, `images`, `push`, `render`, `validate`, `scan`, `debug` — also works against the selected unmanaged context, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server (they resolve the kubeconfig like the other cluster commands and need no KSail metadata).
+
+## What is refused (ksail-only actions)
+
+Anything that needs KSail-managed provisioning or a `spec.cluster.*` configuration is **clearly refused** on an unmanaged cluster — never a silent no-op or a stack trace:
+
+```sh
+ksail cluster delete --name my-eks-prod
+# Error: "my-eks-prod" is an unmanaged cluster: cluster is not managed by ksail;
+#        read-only operations (list, resource browsing, logs, exec) still work
+```
+
+The refusal covers the lifecycle operations KSail cannot drive without a provider:
+
+- **Lifecycle** — `create`, `delete`, `update`, `start`, `stop` (no provider/distribution to act on).
+- **Component installation** — CNI, CSI, metrics-server, GitOps/Flux, policy engine (all driven from `spec.cluster.*`).
+- **GitOps operations** — `workload reconcile` / `workload install` need a KSail/GitOps configuration, not just a kubeconfig.
+
+> [!NOTE]
+> The unmanaged guard **fails open on incomplete discovery**: if KSail cannot fully enumerate every provider (for example a stopped Docker daemon), it does not wrongly refuse a cluster it might actually manage — it only refuses a cluster that is confirmed unmanaged and present in the kubeconfig.
+
+## Limitations summary
+
+| Capability | Managed cluster | Unmanaged (kubeconfig-only) cluster |
+| --- | --- | --- |
+| List / switch / info / connect / diagnose | ✅ | ✅ (marked unmanaged) |
+| `workload` (kubectl, logs, exec, apply, watch, …) | ✅ | ✅ |
+| Backup / restore | ✅ | ✅ |
+| Create / delete / start / stop / update | ✅ | ⛔ refused with a documented message |
+| Component install (CNI, CSI, GitOps, policy) | ✅ | ⛔ requires `spec.cluster.*` |
+| GitOps reconcile / install | ✅ | ⛔ requires a GitOps-configured cluster |
+| Distribution / provider | reported | `—` (no KSail spec) |
