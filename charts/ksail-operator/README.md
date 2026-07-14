@@ -174,8 +174,8 @@ The UI is embedded in the operator binary and served on `api.bindPort` — it ha
 
 ### Image pull secrets
 
-| Key                | Description                                                                                                                | Default |
-|--------------------|----------------------------------------------------------------------------------------------------------------------------|---------|
+| Key                | Description                                                                                                                          | Default |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------|---------|
 | `imagePullSecrets` | Existing `kubernetes.io/dockerconfigjson` Secrets used to pull the operator image. Applied to the Deployment and the ServiceAccount. | `[]`    |
 
 The published operator image is public, so the default is empty and pulls fall back to the node's
