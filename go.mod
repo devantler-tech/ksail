@@ -974,7 +974,7 @@ require (
 	mvdan.cc/gofumpt v0.9.2 // indirect
 	mvdan.cc/sh/v3 v3.10.0 // indirect
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
-	oras.land/oras-go/v2 v2.6.1 // indirect
+	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
 	sigs.k8s.io/gateway-api v1.5.1 // indirect
