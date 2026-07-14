@@ -398,8 +398,8 @@ where genuinely per-user/remote evaluation is needed. Rules:
 - **Lifecycle (mandatory — avoid flag debt):** graduate a validated feature to stable by **deleting the
   single `Guard` call** (un-hides it, drops the opt-in). Don't let experimental scaffolding become
   permanent; only genuine kill-switch/permission gates are long-lived.
-- **Reference:** `workload intercept` (`pkg/cli/cmd/workload/intercept.go`) — gated experimental until
-  the default steering-agent image (#5882) ships.
+- **Graduated reference:** `workload intercept` (`pkg/cli/cmd/workload/intercept.go`) — shipped behind
+  `experimental.Guard`, passed its live-cluster redirect and cleanup proof, then graduated in #5971.
 - Adding/removing a gated command or the `--experimental` flag changes **three** generated surfaces —
   the `--help` snapshot, the `pkg/toolgen` tool-surface snapshot, and `docs/` — regenerate all three
   (`UPDATE_SNAPS=true go test ./pkg/...` + `make generate`).
