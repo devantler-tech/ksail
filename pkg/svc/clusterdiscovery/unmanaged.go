@@ -22,14 +22,36 @@ import (
 // unreadable kubeconfig yields none. Results are sorted by context name so the list stays stable.
 func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Cluster {
 	config := LoadKubeconfig(kubeconfigPath)
-	if config == nil {
-		return nil
-	}
 
 	isManaged := func(name string) bool {
 		_, ok := managed[name]
 
 		return ok
+	}
+
+	contextNames := UnmanagedContextNames(config, isManaged)
+
+	unmanaged := make([]Cluster, 0, len(contextNames))
+	for _, contextName := range contextNames {
+		unmanaged = append(unmanaged, Cluster{
+			Name:     contextName,
+			RunState: RunStateUnmanaged,
+		})
+	}
+
+	return unmanaged
+}
+
+// UnmanagedContextNames returns, sorted and deduped, the names of every kubeconfig context in config
+// that does NOT correspond to an already-managed cluster — the enumerate-and-dedup rule shared by the
+// CLI's DiscoverUnmanaged and the web-UI model (pkg/cli/clusterapi), so the skeleton lives in exactly
+// one place and cannot drift. isManaged reports whether a name is in the caller's managed set (each
+// surface keys its own map); a context is skipped when ContextIsManaged accepts it under isManaged. A
+// nil config (missing or unreadable kubeconfig) yields none. Results are sorted by context name so the
+// list stays stable across surfaces.
+func UnmanagedContextNames(config *clientcmdapi.Config, isManaged func(name string) bool) []string {
+	if config == nil {
+		return nil
 	}
 
 	contextNames := make([]string, 0, len(config.Contexts))
@@ -39,17 +61,14 @@ func DiscoverUnmanaged(kubeconfigPath string, managed map[string]struct{}) []Clu
 
 	sort.Strings(contextNames)
 
-	unmanaged := make([]Cluster, 0, len(contextNames))
+	unmanaged := make([]string, 0, len(contextNames))
 
 	for _, contextName := range contextNames {
 		if ContextIsManaged(contextName, isManaged) {
 			continue
 		}
 
-		unmanaged = append(unmanaged, Cluster{
-			Name:     contextName,
-			RunState: RunStateUnmanaged,
-		})
+		unmanaged = append(unmanaged, contextName)
 	}
 
 	return unmanaged
