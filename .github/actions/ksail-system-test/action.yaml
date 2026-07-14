@@ -650,19 +650,24 @@ runs:
       if: always()
       shell: bash
       env:
+        DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
         {
         # Extract --name value from args for reliable cleanup even when no kubeconfig exists
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        DELETE_COMMAND=(ksail cluster delete)
         if [ -n "$CLUSTER_NAME" ]; then
-          timeout --kill-after=10s 2m \
-            ksail cluster delete --provider "$PROVIDER" --name "$CLUSTER_NAME" --force \
+          DELETE_COMMAND+=(--provider "$PROVIDER" --name "$CLUSTER_NAME" --force)
+        fi
+        # Only the local K3s recovery path needs a short best-effort bound. Cloud
+        # teardown may wait on provider APIs/finalizers and must fail visibly.
+        if [ "$PROVIDER" = "Docker" ] && [ "$DISTRIBUTION" = "K3s" ]; then
+          timeout --kill-after=10s 2m "${DELETE_COMMAND[@]}" \
             || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
         else
-          timeout --kill-after=10s 2m ksail cluster delete \
-            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+          "${DELETE_COMMAND[@]}"
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-delete.log
 

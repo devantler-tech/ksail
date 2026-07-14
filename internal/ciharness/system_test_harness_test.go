@@ -13,14 +13,15 @@ import (
 
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type harnessStep struct {
-	Name            string         `yaml:"name"`
-	ID              string         `yaml:"id"`
-	If              string         `yaml:"if"`
-	Uses            string         `yaml:"uses"`
-	Run             string         `yaml:"run"`
-	TimeoutMinutes  int            `yaml:"timeout-minutes"`
-	ContinueOnError bool           `yaml:"continue-on-error"`
-	With            map[string]any `yaml:"with"`
+	Name            string            `yaml:"name"`
+	ID              string            `yaml:"id"`
+	If              string            `yaml:"if"`
+	Env             map[string]string `yaml:"env"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	TimeoutMinutes  int               `yaml:"timeout-minutes"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
+	With            map[string]any    `yaml:"with"`
 }
 
 type compositeAction struct {
@@ -105,6 +106,43 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 		"/tmp/ksail-system-test-logs/",
 		"always()",
 	)
+}
+
+func TestSystemTestHarnessOnlyBoundsDockerK3sCleanup(t *testing.T) {
+	t.Parallel()
+
+	systemAction := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	deleteStep := findHarnessStep(t, systemAction.Runs.Steps, "🧪 ksail cluster delete")
+	assert.Equal(t, "${{ inputs.distribution }}", deleteStep.Env["DISTRIBUTION"])
+
+	providerGate := strings.Index(
+		deleteStep.Run,
+		`if [ "$PROVIDER" = "Docker" ] && [ "$DISTRIBUTION" = "K3s" ]; then`,
+	)
+	require.NotEqual(
+		t,
+		-1,
+		providerGate,
+		"only Docker/K3s cleanup may use the short recovery bound",
+	)
+
+	cloudBranchOffset := strings.Index(deleteStep.Run[providerGate:], "\nelse\n")
+	require.NotEqual(
+		t,
+		-1,
+		cloudBranchOffset,
+		"cluster cleanup must include a cloud-provider branch",
+	)
+	cloudBranch := deleteStep.Run[providerGate+cloudBranchOffset:]
+
+	assert.Contains(
+		t,
+		deleteStep.Run[providerGate:providerGate+cloudBranchOffset],
+		`timeout --kill-after=10s 2m`,
+	)
+	assert.NotContains(t, cloudBranch, `timeout --kill-after=10s 2m`)
+	assert.Contains(t, cloudBranch, `"${DELETE_COMMAND[@]}"`)
+	assert.NotContains(t, cloudBranch, `|| echo`)
 }
 
 func readCompositeAction(t *testing.T, path string) compositeAction {
