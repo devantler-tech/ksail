@@ -1203,6 +1203,7 @@ jobs:
         uses: ./.github/actions/restore-mirror-cache
 
       - name: 🧪 Run KSail System Test
+        id: system-test
         uses: ./.github/actions/ksail-system-test
         with:
           distribution: ${{ matrix.distribution }}
@@ -1219,6 +1220,34 @@ jobs:
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
           dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Composite-action steps cannot set timeout-minutes. Upload from the
+          # workflow instead so a stalled artifact service is hard-bounded.
+          upload-artifacts: "false"
+          # A reserved K3s pod sandbox can wedge every API-backed command in the
+          # rich debug action. Keep its essential diagnostics on bounded calls.
+          comprehensive-debug: ${{ matrix.distribution == 'K3s' && 'false' || 'true' }}
+
+      - name: 📤 Upload system test diagnostics
+        if: ${{ failure() && steps.system-test.outcome == 'failure' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: system-test-diagnostics-${{ steps.system-test.outputs.artifact-tag }}
+          path: /tmp/system-test-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: 📤 Upload system test logs
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: system-test-logs-${{ steps.system-test.outputs.artifact-tag }}
+          path: /tmp/ksail-system-test-logs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   verify-desktop-tidy:
     name: 🧩 Verify Desktop Module Tidy

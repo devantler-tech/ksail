@@ -90,6 +90,11 @@ type InstallerFactories struct {
 	// pre-phase; the normal parallel infra path uses InstallLoadBalancerSilent
 	// directly.
 	CloudProviderInitInstall silentInstallFunc
+	// ReservedSandboxMonitor watches K3s-on-Docker Kubernetes events while
+	// GitOps setup runs and returns k8s.ErrRepeatedReservedPodSandbox when
+	// nested containerd repeatedly reserves a pod sandbox name. Set to nil to
+	// use the default typed-event monitor.
+	ReservedSandboxMonitor func(ctx context.Context, clusterCfg *v1alpha1.Cluster) error
 }
 
 // policyEngineFactory creates the policy engine factory function.

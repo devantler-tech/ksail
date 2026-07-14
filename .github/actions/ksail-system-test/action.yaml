@@ -111,6 +111,25 @@ inputs:
       Leave empty to skip.
     required: false
     default: ""
+  upload-artifacts:
+    description: |
+      Upload diagnostics and logs from inside this composite action. Callers
+      that need hard upload timeouts can disable these and upload the exposed
+      paths from workflow-level steps instead.
+    required: false
+    default: "true"
+  comprehensive-debug:
+    description: |
+      Run the comprehensive Kubernetes debug action after a failure. Disable
+      for failure modes where the Kubernetes API itself may be wedged; the
+      bounded core diagnostics still run.
+    required: false
+    default: "true"
+
+outputs:
+  artifact-tag:
+    description: Unique suffix for this matrix entry's diagnostic artifacts
+    value: ${{ steps.generate-tag.outputs.tag }}
 
 runs:
   using: composite
@@ -544,7 +563,18 @@ runs:
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-mirror-tests.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
+      if: >-
+        inputs.comprehensive-debug == 'true'
+        && failure()
+        && (steps.cluster-create.outcome == 'failure'
+        || steps.workload-mirror-tests.outcome == 'failure'
+        || steps.image-export-import-tests.outcome == 'failure'
+        || steps.workload-watch-tests.outcome == 'failure'
+        || steps.online-gen.outcome == 'failure'
+        || steps.cluster-update-dry-run.outcome == 'failure'
+        || steps.cluster-update.outcome == 'failure'
+        || steps.cluster-update-rolling-resize.outcome == 'failure'
+        || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -589,23 +619,24 @@ runs:
           echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo ""
           echo "=== Docker Containers ==="
-          docker ps -a 2>&1 || true
+          timeout --kill-after=10s 30s docker ps -a 2>&1 || true
           echo ""
           echo "=== Cluster Info ==="
-          ksail cluster info 2>&1 || true
+          timeout --kill-after=10s 1m ksail cluster info 2>&1 || true
           echo ""
           echo "=== Pod Status (all namespaces) ==="
-          ksail workload get pods -A 2>&1 || true
+          timeout --kill-after=10s 1m ksail workload get pods -A 2>&1 || true
           echo ""
           echo "=== Recent Events ==="
-          ksail workload get events -A --sort-by=.lastTimestamp 2>&1 || true
+          timeout --kill-after=10s 1m \
+            ksail workload get events -A --sort-by=.lastTimestamp 2>&1 || true
           echo ""
           echo "=== Node Status ==="
-          ksail workload get nodes -o wide 2>&1 || true
+          timeout --kill-after=10s 1m ksail workload get nodes -o wide 2>&1 || true
         } > /tmp/system-test-diagnostics/diagnostics.log 2>&1
 
     - name: 📤 Upload system test diagnostics
-      if: failure()
+      if: failure() && inputs.upload-artifacts == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: system-test-diagnostics-${{ steps.generate-tag.outputs.tag }}
@@ -626,10 +657,11 @@ runs:
         # Extract --name value from args for reliable cleanup even when no kubeconfig exists
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         if [ -n "$CLUSTER_NAME" ]; then
-          ksail cluster delete --provider "$PROVIDER" --name "$CLUSTER_NAME" --force \
+          timeout --kill-after=10s 2m \
+            ksail cluster delete --provider "$PROVIDER" --name "$CLUSTER_NAME" --force \
             || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
         else
-          ksail cluster delete \
+          timeout --kill-after=10s 2m ksail cluster delete \
             || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-delete.log
@@ -641,7 +673,7 @@ runs:
         echo "System test completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/ksail-system-test-logs/test-timeline.log
 
     - name: 📤 Upload system test logs
-      if: always()
+      if: always() && inputs.upload-artifacts == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: system-test-logs-${{ steps.generate-tag.outputs.tag }}
