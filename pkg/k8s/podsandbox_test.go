@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 //nolint:funlen // The table documents every event field that guards recovery.
@@ -115,6 +117,44 @@ func TestWatchRepeatedReservedPodSandboxesStopsOnCancellation(t *testing.T) {
 
 	err := WatchRepeatedReservedPodSandboxes(ctx, fake.NewSimpleClientset(), time.Millisecond)
 	require.NoError(t, err)
+}
+
+func TestWatchRepeatedReservedPodSandboxesReportsListErrorsWithoutSpamming(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientset := fake.NewSimpleClientset()
+	attempts := 0
+
+	clientset.PrependReactor(
+		"list",
+		"events",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			attempts++
+			if attempts == 3 {
+				cancel()
+			}
+
+			return true, nil, assert.AnError
+		},
+	)
+
+	reported := make([]error, 0, 1)
+	err := watchRepeatedReservedPodSandboxes(
+		ctx,
+		clientset,
+		time.Millisecond,
+		func(_ context.Context, err error) {
+			reported = append(reported, err)
+		},
+	)
+
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, attempts, 3)
+	require.Len(t, reported, 1)
+	assert.ErrorIs(t, reported[0], assert.AnError)
 }
 
 func TestWatchRepeatedReservedPodSandboxesReturnsTypedCurrentEvent(t *testing.T) {

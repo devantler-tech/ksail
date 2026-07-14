@@ -122,6 +122,44 @@ func TestRunWithReservedSandboxMonitorPrioritizesConcurrentDetectorError(t *test
 	require.ErrorIs(t, err, k8s.ErrRepeatedReservedPodSandbox)
 }
 
+func TestRunWithReservedSandboxMonitorReportsNonSentinelErrorAndContinuesSetup(t *testing.T) {
+	t.Parallel()
+
+	setupStarted := make(chan struct{})
+	releaseSetup := make(chan struct{})
+	reported := make(chan error, 1)
+	monitorErr := fmt.Errorf("monitor unavailable: %w", assert.AnError)
+	setupErr := fmt.Errorf("setup failed independently: %w", assert.AnError)
+	factories := &InstallerFactories{
+		ReservedSandboxMonitor: func(context.Context, *v1alpha1.Cluster) error {
+			<-setupStarted
+
+			return monitorErr
+		},
+	}
+
+	err := runWithReservedSandboxMonitorAndWarning(
+		context.Background(),
+		k3sDockerGitOpsCluster(),
+		factories,
+		func(context.Context) error {
+			close(setupStarted)
+			<-releaseSetup
+
+			return setupErr
+		},
+		func(_ context.Context, err error) {
+			reported <- err
+
+			close(releaseSetup)
+		},
+	)
+
+	require.ErrorIs(t, err, setupErr)
+	require.NotErrorIs(t, err, monitorErr)
+	assert.ErrorIs(t, <-reported, monitorErr)
+}
+
 //nolint:funlen // The table documents every cluster-shape guard in one place.
 func TestRunWithReservedSandboxMonitorSkipsOtherClusterShapes(t *testing.T) {
 	t.Parallel()

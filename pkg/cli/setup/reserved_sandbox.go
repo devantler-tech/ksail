@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -62,6 +63,29 @@ func runWithReservedSandboxMonitor(
 	factories *InstallerFactories,
 	setup func(context.Context) error,
 ) error {
+	return runWithReservedSandboxMonitorAndWarning(
+		ctx,
+		clusterCfg,
+		factories,
+		setup,
+		func(ctx context.Context, err error) {
+			slog.WarnContext(
+				ctx,
+				"reserved pod sandbox monitor stopped; cluster setup will continue",
+				"error",
+				err,
+			)
+		},
+	)
+}
+
+func runWithReservedSandboxMonitorAndWarning(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	setup func(context.Context) error,
+	warn func(context.Context, error),
+) error {
 	if !needsReservedSandboxMonitor(clusterCfg) {
 		return setup(ctx)
 	}
@@ -88,6 +112,10 @@ func runWithReservedSandboxMonitor(
 			return monitorErr
 		}
 
+		if stopped {
+			reportReservedSandboxMonitorError(runCtx, monitorErr, warn)
+		}
+
 		return setupErr
 	case monitorErr := <-monitorResult:
 		if errors.Is(monitorErr, k8s.ErrRepeatedReservedPodSandbox) {
@@ -100,8 +128,27 @@ func runWithReservedSandboxMonitor(
 		}
 
 		// Losing the diagnostic event stream must not abort healthy setup.
+		reportReservedSandboxMonitorError(runCtx, monitorErr, warn)
+
 		return <-setupResult
 	}
+}
+
+func reportReservedSandboxMonitorError(
+	ctx context.Context,
+	err error,
+	warn func(context.Context, error),
+) {
+	if err == nil || errors.Is(err, k8s.ErrRepeatedReservedPodSandbox) {
+		return
+	}
+
+	ctxErr := ctx.Err()
+	if ctxErr != nil && errors.Is(err, ctxErr) {
+		return
+	}
+
+	warn(ctx, err)
 }
 
 func waitForReservedSandboxResult(result <-chan error) (bool, error) {

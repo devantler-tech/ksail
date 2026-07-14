@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ const (
 	reservedPodSandboxMessage             = "failed to reserve sandbox name"
 	reservedPodSandboxThreshold           = int32(3)
 	defaultReservedPodSandboxPollInterval = 5 * time.Second
+	reservedPodSandboxListWarningInterval = 30 * time.Second
 )
 
 // ErrRepeatedReservedPodSandbox identifies a nested-containerd pod sandbox
@@ -52,12 +54,33 @@ func (e *RepeatedReservedPodSandboxError) Unwrap() error {
 
 // WatchRepeatedReservedPodSandboxes polls Kubernetes warning events until the
 // context is cancelled or a current pod reports the reserved-sandbox signature
-// at least three times. Transient list failures are ignored so loss of the
-// diagnostic surface cannot abort an otherwise healthy cluster setup.
+// at least three times. Transient list failures are reported at a bounded
+// cadence but cannot abort an otherwise healthy cluster setup.
 func WatchRepeatedReservedPodSandboxes(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	pollInterval time.Duration,
+) error {
+	return watchRepeatedReservedPodSandboxes(
+		ctx,
+		clientset,
+		pollInterval,
+		func(ctx context.Context, err error) {
+			slog.WarnContext(
+				ctx,
+				"reserved pod sandbox monitor could not list Kubernetes events",
+				"error",
+				err,
+			)
+		},
+	)
+}
+
+func watchRepeatedReservedPodSandboxes(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	pollInterval time.Duration,
+	warn func(context.Context, error),
 ) error {
 	if pollInterval <= 0 {
 		pollInterval = defaultReservedPodSandboxPollInterval
@@ -65,6 +88,8 @@ func WatchRepeatedReservedPodSandboxes(
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+
+	var lastListWarning time.Time
 
 	started := time.Now()
 
@@ -83,8 +108,20 @@ func WatchRepeatedReservedPodSandboxes(
 			if reservationErr != nil {
 				return reservationErr
 			}
-		} else if ctx.Err() != nil {
-			return nil
+		} else {
+			if ctx.Err() != nil {
+				return nil
+			}
+
+			now := time.Now()
+
+			shouldWarn := lastListWarning.IsZero() ||
+				now.Sub(lastListWarning) >= reservedPodSandboxListWarningInterval
+			if shouldWarn {
+				lastListWarning = now
+
+				warn(ctx, fmt.Errorf("list Kubernetes warning events: %w", err))
+			}
 		}
 
 		select {
