@@ -172,6 +172,25 @@ The UI is embedded in the operator binary and served on `api.bindPort` — it ha
 | `rbac.create`                | Create RBAC resources.                                                                                                                                                              | `true`  |
 | `rbac.clusterAdmin`          | Grant a full wildcard ClusterRole (cluster-admin) instead of the least-privilege default. Opt in only when a distribution/component set needs resources the default does not cover. | `false` |
 
+### Image pull secrets
+
+| Key                | Description                                                                                                                | Default |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------|---------|
+| `imagePullSecrets` | Existing `kubernetes.io/dockerconfigjson` Secrets used to pull the operator image. Applied to the Deployment and the ServiceAccount. | `[]`    |
+
+The published operator image is public, so the default is empty and pulls fall back to the node's
+registry credentials. Set this when the image lives in a private registry — or when you would rather
+the pull not depend on node-level auth at all, since a stale node credential leaves new pods unable to
+pull and silently blocks upgrades:
+
+```yaml
+imagePullSecrets:
+  - name: ghcr-auth
+```
+
+The secrets are attached to the operator Deployment's pod spec **and** to the chart's ServiceAccount,
+so pods that run under that ServiceAccount inherit them.
+
 ### Scheduling
 
 | Key              | Description                | Default |

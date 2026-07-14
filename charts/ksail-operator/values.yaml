@@ -4,6 +4,17 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# imagePullSecrets are references to existing Secrets (type kubernetes.io/dockerconfigjson) used to
+# pull the operator image. Leave empty to rely on the node's registry credentials (the default: the
+# published image is public). Set it when the image lives in a private registry, or when you would
+# rather not depend on node-level auth — a stale node credential otherwise leaves new pods unable to
+# pull, which blocks upgrades. The secrets are attached to both the operator Deployment's pod spec
+# and the chart's ServiceAccount, so pods that use the ServiceAccount inherit them too.
+#
+#   imagePullSecrets:
+#     - name: ghcr-auth
+imagePullSecrets: []
+
 operator:
   enabled: true
   image:

@@ -933,6 +933,22 @@ jobs:
             --set auth.oidc.clientID=ksail \
             --set auth.oidc.clientSecret=dummy \
             --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback >/dev/null
+          echo "=== imagePullSecrets unset (default) -> nothing rendered ==="
+          if helm template ksail-operator charts/ksail-operator | grep -q 'imagePullSecrets'; then
+            echo "::error::imagePullSecrets rendered even though the value is empty"
+            exit 1
+          fi
+          echo "=== imagePullSecrets set -> on the Deployment and the ServiceAccount ==="
+          rendered=$(helm template ksail-operator charts/ksail-operator \
+            --set 'imagePullSecrets[0].name=ghcr-auth')
+          deployment=$(echo "$rendered" \
+            | yq 'select(.kind == "Deployment") | .spec.template.spec.imagePullSecrets[0].name')
+          serviceaccount=$(echo "$rendered" \
+            | yq 'select(.kind == "ServiceAccount") | .imagePullSecrets[0].name')
+          if [ "$deployment" != "ghcr-auth" ] || [ "$serviceaccount" != "ghcr-auth" ]; then
+            echo "::error::imagePullSecrets not applied (deployment=$deployment serviceaccount=$serviceaccount)"
+            exit 1
+          fi
           echo "✅ All chart template permutations rendered"
 
   operator-chart-e2e:
