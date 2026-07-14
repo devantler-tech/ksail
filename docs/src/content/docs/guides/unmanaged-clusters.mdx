@@ -30,15 +30,20 @@ ksail cluster switch my-eks-prod           # switch the active kubeconfig contex
 ksail cluster connect                      # open k9s against the selected context
 ksail cluster info --name my-eks-prod      # endpoint + kubeconfig access for a named cluster
 ksail cluster diagnose --name my-eks-prod  # diagnoses the ACTIVE context; --name only labels the report
+ksail cluster backup ./snapshot            # snapshot Kubernetes resources over the API server
+ksail cluster restore ./snapshot           # restore them
 ```
+
+> [!IMPORTANT]
+> **The context must live in the kubeconfig KSail reads.** Only `cluster switch` consults the `KUBECONFIG` environment variable — `cluster connect` and the `ksail workload` wrappers resolve their kubeconfig from `spec.cluster.connection.kubeconfig` in `ksail.yaml`, falling back to the **default** `~/.kube/config`, and never read `KUBECONFIG`. So if your unmanaged context exists only in a non-default `KUBECONFIG` file, `cluster switch` will select it while `apply`, `logs` or `connect` quietly target a *different* kubeconfig. Merge the context into `~/.kube/config`, or point `spec.cluster.connection.kubeconfig` at the file, before operating.
 
 > [!IMPORTANT]
 > `cluster diagnose --name <name>` does **not** select the named context — it builds its Kubernetes client from your kubeconfig's **current context** and uses `--name` only to label the report. Always `ksail cluster switch <name>` first, or you will diagnose the wrong cluster. Tracked in [#6117](https://github.com/devantler-tech/ksail/issues/6117).
 
-Within the `ksail workload` group, the commands that work against any selected unmanaged context are the **API-backed** ones: the kubectl-style wrappers (`get`, `logs`, `apply`, `exec`, `describe`, `wait`, `port-forward`, …) plus `watch`, `edit`, `validate`, `scan`, and `debug`. Helm-based `workload install` works too, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server — all resolve the kubeconfig and need no KSail metadata.
+Within the `ksail workload` group, the commands that work against any selected unmanaged context are the **API-backed** ones: the kubectl-style wrappers (`get`, `logs`, `apply`, `exec`, `describe`, `wait`, `forward`, …) plus `watch`, `edit`, `validate`, `scan`, and `debug`. Helm-based `workload install` works too — all resolve the kubeconfig and need no KSail metadata. (Backup and restore are **`ksail cluster`** subcommands, shown above, not `workload` ones.)
 
 > [!NOTE]
-> Three `workload` commands are **not** purely kubeconfig-backed and need a local `ksail.yaml` even against an unmanaged cluster: `network` refuses unless `spec.cluster.cni` is Cilium; `images` derives its image list from the local KSail config rather than the live cluster; and `push` resolves its registry, source directory and tag from that config.
+> Some `workload` commands are **not** purely kubeconfig-backed and do not work on an arbitrary unmanaged context. Three need a local `ksail.yaml`: `network` refuses unless `spec.cluster.cni` is Cilium; `images` derives its image list from the local KSail config rather than the live cluster; and `push` resolves its registry, source directory and tag from that config. Two more are **Docker-only**: `export` and `import` detect the cluster's distribution/provider and operate on Docker node containers, so they reject a non-Docker provider — an unmanaged EKS/GKE/`kubeadm` context is out of scope for them.
 
 ## What is refused (ksail-only actions)
 
@@ -66,9 +71,10 @@ The refusal covers the lifecycle operations KSail cannot drive without a provide
 | List / switch / connect | ✅ | ✅ (marked unmanaged) |
 | Info | ✅ | ✅ with a resolvable `--name` |
 | Diagnose | ✅ | ⚠️ diagnoses the **active** context — `switch` first ([#6117](https://github.com/devantler-tech/ksail/issues/6117)) |
-| `workload` API-backed (get, logs, exec, apply, watch, install, …) | ✅ | ✅ |
+| `workload` API-backed (get, logs, exec, apply, watch, forward, install, …) | ✅ | ✅ |
 | `workload network` / `images` / `push` | ✅ | ⚠️ also need a local `ksail.yaml` |
-| Backup / restore | ✅ | ✅ |
+| `workload export` / `import` | ✅ (Docker) | ⛔ Docker-backed nodes only |
+| `cluster backup` / `cluster restore` | ✅ | ✅ |
 | Web UI / desktop resource browsing | ✅ | ⛔ listed only; operations are CLI-only ([#6116](https://github.com/devantler-tech/ksail/issues/6116)) |
 | Delete / update / start / stop | ✅ | ⛔ refused with a documented message |
 | Component install (CNI, CSI, GitOps, policy) | ✅ | ⛔ requires `spec.cluster.*` |
