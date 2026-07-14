@@ -860,13 +860,25 @@ jobs:
             fi
             metadata_ok=true
             for label in automation dependencies; do
-              if jq -e --arg label "$label" \
-                  '.availableLabels | any(.name == $label)' "$evidence" >/dev/null; then
-                if ! gh api -X POST "repos/${TAP}/issues/${pr}/labels" -f "labels[]=$label" >/dev/null; then
-                  echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
+              # Capture jq's result instead of testing it inside `if`: an external command in an `if`
+              # condition is exempt from `set -e`, so a jq crash would read as "label not available" and
+              # silently skip the label while leaving metadata_ok=true — a fail-open on the very check
+              # that gates the promote. Treat a non-boolean answer as a hard failure.
+              label_available="$(jq -r --arg label "$label" \
+                '.availableLabels | any(.name == $label)' "$evidence" 2>/dev/null || true)"
+              case "$label_available" in
+                true)
+                  if ! gh api -X POST "repos/${TAP}/issues/${pr}/labels" -f "labels[]=$label" >/dev/null; then
+                    echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
+                    metadata_ok=false
+                  fi
+                  ;;
+                false) : ;; # the tap does not define this label — nothing to add
+                *)
+                  echo "::warning::Could not determine whether ${TAP} defines the ${label} label"
                   metadata_ok=false
-                fi
-              fi
+                  ;;
+              esac
             done
             if [ "$metadata_ok" != true ]; then
               echo "::warning::${TAP}#${pr} metadata is incomplete; leaving it draft/open"
