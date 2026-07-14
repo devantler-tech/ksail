@@ -16,20 +16,23 @@ KSail can **see and operate on any cluster in your kubeconfig**, even one it did
 ksail cluster list
 ```
 
-Unmanaged clusters report an empty distribution/provider (shown as `—`) because there is no KSail spec to read, and a `Ready=False` status with reason `Unmanaged`. The same marked model backs the CLI and the web UI / desktop app, so a cluster behaves identically wherever you look at it.
+Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads your **default kubeconfig** (`~/.kube/config`), so a context kept only in a non-default `KUBECONFIG` path may not be listed. The same marked model backs the CLI and the web UI / desktop app, so a cluster behaves identically wherever you look at it.
 
 ## Operating within limits
 
 Because most of KSail's read/operate surface is client-go-backed, it works against any selected context — managed or not. Select an unmanaged cluster and use it like any other:
 
 ```sh
-ksail cluster switch my-eks-prod       # switch the active kubeconfig context
-ksail cluster info                     # endpoint + kubeconfig access (unknown ksail-only fields shown as —)
-ksail cluster connect                  # open k9s against the context
-ksail cluster diagnose                 # run diagnostics against the selected context
+ksail cluster switch my-eks-prod           # switch the active kubeconfig context
+ksail cluster connect                      # open k9s against the selected context
+ksail cluster info --name my-eks-prod      # endpoint + kubeconfig access for a named cluster
+ksail cluster diagnose --name my-eks-prod  # diagnostics for a named cluster
 ```
 
-The `ksail workload` group — `kubectl`, `watch`, `network`, `edit`, `images`, `push`, `render`, `validate`, `scan`, `debug` — also works against the selected unmanaged context, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server (they resolve the kubeconfig like the other cluster commands and need no KSail metadata).
+> [!NOTE]
+> `cluster info` and `cluster diagnose` resolve a cluster identity before they run. For an arbitrary unmanaged context (a typical EKS/AKS or `kubeadm` context) pass `--name` so the command targets it; without a resolvable name they report that a name is required rather than guessing.
+
+The `ksail workload` group also works against the selected unmanaged context: the kubectl-style wrappers (`get`, `logs`, `apply`, `exec`, `describe`, `wait`, `port-forward`, …) plus `watch`, `network`, `edit`, `images`, `push`, `validate`, `scan`, and `debug`. Helm-based `workload install` works too, as do **`backup` and `restore`**, which snapshot and restore Kubernetes resources over the API server — all resolve the kubeconfig like the other cluster commands and need no KSail metadata.
 
 ## What is refused (ksail-only actions)
 
@@ -43,9 +46,9 @@ ksail cluster delete --name my-eks-prod
 
 The refusal covers the lifecycle operations KSail cannot drive without a provider:
 
-- **Lifecycle** — `create`, `delete`, `update`, `start`, `stop` (no provider/distribution to act on).
+- **Lifecycle** — `delete`, `update`, `start`, `stop` are refused with the unmanaged message (no provider/distribution to act on). `create` is not a selected-context action — it provisions from `ksail.yaml`, so it is unaffected by this guard.
 - **Component installation** — CNI, CSI, metrics-server, GitOps/Flux, policy engine (all driven from `spec.cluster.*`).
-- **GitOps operations** — `workload reconcile` / `workload install` need a KSail/GitOps configuration, not just a kubeconfig.
+- **GitOps reconciliation** — `workload reconcile` targets GitOps-managed workloads and needs a Flux/GitOps-configured cluster, not just a kubeconfig.
 
 > [!NOTE]
 > The unmanaged guard **fails open on incomplete discovery**: if KSail cannot fully enumerate every provider (for example a stopped Docker daemon), it does not wrongly refuse a cluster it might actually manage — it only refuses a cluster that is confirmed unmanaged and present in the kubeconfig.
@@ -54,10 +57,11 @@ The refusal covers the lifecycle operations KSail cannot drive without a provide
 
 | Capability | Managed cluster | Unmanaged (kubeconfig-only) cluster |
 | --- | --- | --- |
-| List / switch / info / connect / diagnose | ✅ | ✅ (marked unmanaged) |
-| `workload` (kubectl, logs, exec, apply, watch, …) | ✅ | ✅ |
+| List / switch / connect | ✅ | ✅ (marked unmanaged) |
+| Info / diagnose | ✅ | ✅ with a resolvable `--name` |
+| `workload` (get, logs, exec, apply, watch, install, …) | ✅ | ✅ |
 | Backup / restore | ✅ | ✅ |
-| Create / delete / start / stop / update | ✅ | ⛔ refused with a documented message |
+| Delete / update / start / stop | ✅ | ⛔ refused with a documented message |
 | Component install (CNI, CSI, GitOps, policy) | ✅ | ⛔ requires `spec.cluster.*` |
-| GitOps reconcile / install | ✅ | ⛔ requires a GitOps-configured cluster |
-| Distribution / provider | reported | `—` (no KSail spec) |
+| GitOps reconcile | ✅ | ⛔ requires a GitOps-configured cluster |
+| Distribution / provider | reported | blank (no KSail spec) |
