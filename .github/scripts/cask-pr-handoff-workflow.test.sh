@@ -56,6 +56,11 @@ assert_contains 'pulls?state=open&head=' "${homebrew_block}" \
 	'release job must enumerate cask PRs with the server-side head filter (no client-side page cap)'
 assert_contains 'head.repo.full_name == $full' "${homebrew_block}" \
 	'release job must scope matches to the tap-owned devantler PR (full head-repo name)'
+# A partial two-cask release leaves the job red with the first cask already promoted; a rerun must be
+# idempotent — an already-ready, correctly-titled cask PR for this tag is treated as done, not
+# re-validated against the draft requirement (which would fail the rerun forever). See #6134.
+assert_contains 'already handed off for ${TAG} (ready and titled)' "${homebrew_block}" \
+	'release job must treat an already-promoted cask PR for this tag as an idempotent retry, not a failure'
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full

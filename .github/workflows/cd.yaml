@@ -785,6 +785,26 @@ jobs:
             fi
             pr="$(jq -r '.[0].number' <<<"$matches")"
 
+            # Idempotent retry after a PARTIAL success. A two-cask release can promote the first cask
+            # and then fail on the second (transient API/label/style hiccup) — leaving the job red. On
+            # a normal rerun the loop re-enters, but the first cask is now READY (non-draft) and the
+            # draft-requiring validation below would reject it, re-setting handoff_failed and failing
+            # the job forever: the rerun could never go green. So before validating, treat a cask PR
+            # that is ALREADY non-draft AND already carries this tag's handoff title as completed —
+            # the handoff finished on the earlier run; record it and move on. Capture the state into a
+            # variable (an external command inside `if` is exempt from `set -e`, so a crash there would
+            # read as "not handed off" and re-drive it); a non-draft PR with a DIFFERENT title is NOT
+            # ours — it falls through to the draft-requiring validation, preserving race detection.
+            pr_state="$(gh api "repos/${TAP}/pulls/${pr}" --jq '[(.draft|tostring), .title] | @tsv' 2>/dev/null || true)"
+            pr_is_draft="${pr_state%%$'\t'*}"
+            pr_title="${pr_state#*$'\t'}"
+            if [ "$pr_is_draft" = "false" ] && [ "$pr_title" = "chore(cask): update ${name} to ${TAG}" ]; then
+              echo "${TAP}#${pr} already handed off for ${TAG} (ready and titled); nothing to do"
+              printf -- '- %s#%s already handed off for %s (idempotent retry)\n' \
+                "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
             # The cask-checkpoint job re-drafted any reused promoted PR before GoReleaser rewrote
             # the branch, so a non-draft here means someone raced this run — validation below
             # requires draft state and fails soft, leaving the PR untouched.
