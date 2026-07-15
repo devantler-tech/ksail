@@ -190,12 +190,8 @@ func hiddenCommandPaths(c *cobra.Command, parents []string) []string {
 	var paths []string
 
 	for _, sub := range c.Commands() {
-		if sub.Name() == helpName || sub.Name() == completionName {
-			continue
-		}
-
 		names := append(append([]string{}, parents...), sub.Name())
-		if sub.Hidden {
+		if docs.HiddenFromDocs(sub) {
 			paths = append(paths, strings.Join(names, "-"))
 
 			continue
@@ -207,11 +203,7 @@ func hiddenCommandPaths(c *cobra.Command, parents []string) []string {
 	return paths
 }
 
-const (
-	helpName       = "help"
-	completionName = "completion"
-	cliFlagsDir    = "src/content/docs/cli-flags"
-)
+const cliFlagsDir = "src/content/docs/cli-flags"
 
 // checkFrontmatter validates that a single MDX file contains the expected frontmatter.
 func checkFrontmatter(t *testing.T, path string, content []byte) {
