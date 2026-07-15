@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -319,10 +320,16 @@ func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
 	assert.Equal(t, "/tmp/env-kubeconfig", provisioner.KubeConfigForTest())
 }
 
-// TestCreateProvisioner_KubeconfigEnvPreservesLiteralPath verifies that an
-// environment-derived target is not expanded like an explicit user path.
-func TestCreateProvisioner_KubeconfigEnvPreservesLiteralPath(t *testing.T) {
+// TestCreateProvisioner_KubeconfigEnvKeepsLiteralPhysicalTarget verifies that
+// an environment-derived target names the same physical file Kind sees while
+// avoiding later reinterpretation of a leading tilde as the user's home.
+func TestCreateProvisioner_KubeconfigEnvKeepsLiteralPhysicalTarget(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
 	t.Setenv("KUBECONFIG", "~/literal-kubeconfig")
+
+	workingDir, err := os.Getwd()
+	require.NoError(t, err)
 
 	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
 	infraProvider := provider.NewMockProvider()
@@ -330,7 +337,37 @@ func TestCreateProvisioner_KubeconfigEnvPreservesLiteralPath(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, provisioner)
-	assert.Equal(t, "~/literal-kubeconfig", provisioner.KubeConfigForTest())
+
+	expectedPath := filepath.Join(workingDir, "~", "literal-kubeconfig")
+	assert.Equal(
+		t,
+		expectedPath,
+		provisioner.KubeConfigForTest(),
+	)
+	assert.NotEqual(
+		t,
+		filepath.Join(homeDir, "literal-kubeconfig"),
+		provisioner.KubeConfigForTest(),
+	)
+
+	infraProvider.On("StartNodes", mock.Anything, "test-cluster").Return(nil)
+
+	var readinessPath string
+
+	provisioner.WithWaitForReadyForTest(
+		func(_ context.Context, kubeconfigPath, _ string) error {
+			readinessPath = kubeconfigPath
+
+			return nil
+		},
+	)
+
+	require.NoError(t, provisioner.Start(context.Background(), ""))
+	assert.Equal(t, expectedPath, readinessPath)
+
+	resolvedReadinessPath, err := k8s.ResolveKubeconfigPath(readinessPath)
+	require.NoError(t, err)
+	assert.Equal(t, expectedPath, resolvedReadinessPath)
 }
 
 // TestCreateProvisioner_ExplicitKubeconfigExpandsHome keeps expansion at the

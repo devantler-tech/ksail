@@ -15,9 +15,11 @@ import (
 // kind. An explicit configured path wins (expanded). Otherwise it mirrors
 // kind's own KUBECONFIG handling for the write side (kind v0.32.0: with a
 // path list, write to the first EXISTING file, or the last entry when none
-// exist) — the resolved path is later passed as --kubeconfig, which disables
-// kind's own selection, so this must not diverge from what kind would have
-// chosen. With no KUBECONFIG either, it falls back to ~/.kube/config.
+// exist). The selected entry is made absolute without home expansion before it
+// is passed as --kubeconfig: this keeps the same physical target Kind selected
+// for literal relative entries such as ~/kind-config while preventing later
+// KSail readers from reinterpreting the tilde as the user's home. With no
+// KUBECONFIG either, it falls back to ~/.kube/config.
 func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
 	if kubeconfigPath != "" {
 		resolved, err := k8s.ResolveKubeconfigPath(kubeconfigPath)
@@ -29,7 +31,12 @@ func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
 	}
 
 	if target := kindKubeconfigEnvWriteTarget(); target != "" {
-		return target, nil
+		absoluteTarget, err := filepath.Abs(target)
+		if err != nil {
+			return "", fmt.Errorf("resolve KUBECONFIG write target: %w", err)
+		}
+
+		return absoluteTarget, nil
 	}
 
 	return k8s.DefaultKubeconfigPath(), nil
