@@ -619,7 +619,7 @@ workload_write
         "type": "boolean"
       },
       "args": {
-        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, cipher_decrypt, cipher_edit, cipher_encrypt, cipher_import, cipher_rotate, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, exec, expose, import, install, mirror, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
+        "description": "Positional arguments for the command (applies to: apply, apply_edit-last-applied, apply_set-last-applied, apply_view-last-applied, cipher_decrypt, cipher_edit, cipher_encrypt, cipher_import, cipher_rotate, create, create_clusterrole, create_clusterrolebinding, create_configmap, create_cronjob, create_deployment, create_helmrelease, create_ingress, create_job, create_kustomization, create_namespace, create_poddisruptionbudget, create_priorityclass, create_quota, create_role, create_rolebinding, create_secret, create_secret_docker-registry, create_secret_generic, create_secret_tls, create_service, create_service_clusterip, create_service_externalname, create_service_loadbalancer, create_service_nodeport, create_serviceaccount, create_source_git, create_source_helm, create_source_oci, create_token, debug, delete, exec, expose, import, install, intercept, mirror, push, reconcile, rollout, rollout_history, rollout_pause, rollout_restart, rollout_resume, rollout_status, rollout_undo, scale)",
         "items": {
           "type": "string"
         },
@@ -702,11 +702,11 @@ workload_write
         "type": "string"
       },
       "container": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec, mirror)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec, intercept, mirror)",
         "type": "string"
       },
       "context": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, import, mirror, rollout, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, import, intercept, mirror, rollout, scale)",
         "type": "string"
       },
       "copy-to": {
@@ -985,6 +985,11 @@ workload_write
         "description": "IP to assign to the LoadBalancer. If empty, an ephemeral IP will be created and used (cloud-provider specific). (applies to: expose)",
         "type": "string"
       },
+      "local-port": {
+        "default": 0,
+        "description": "Local port the intercepted inbound traffic is forwarded to (required) (applies to: intercept)",
+        "type": "integer"
+      },
       "max-unavailable": {
         "description": "The maximum number or percentage of unavailable pods this budget requires. (applies to: create_poddisruptionbudget)",
         "type": "string"
@@ -998,7 +1003,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, mirror, rollout, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
         "type": "string"
       },
       "node-port": {
@@ -1188,6 +1193,11 @@ workload_write
         "description": "If true, apply runs in the server instead of the client. (applies to: apply)",
         "type": "boolean"
       },
+      "service-port": {
+        "default": 0,
+        "description": "Workload port to intercept; KSail derives the default steering command from it (alternative to an explicit --steer-command) (applies to: intercept)",
+        "type": "integer"
+      },
       "serviceaccount": {
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_clusterrolebinding, create_rolebinding)",
         "items": {
@@ -1235,6 +1245,18 @@ workload_write
       "stdin": {
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: debug, exec)",
         "type": "boolean"
+      },
+      "steer-command": {
+        "description": "Command the in-cluster steering agent container runs, exec'd over the tunnel (default: derived from --service-port for the KSail steering image) (applies to: intercept)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "steer-image": {
+        "default": "ghcr.io/devantler-tech/ksail-steer:latest",
+        "description": "Image the injected steering container runs (must carry the agent binary and iptables) (applies to: intercept)",
+        "type": "string"
       },
       "subresource": {
         "description": "If specified, apply will operate on the subresource of the requested object.  Only allowed when using --server-side. (applies to: apply)",
@@ -1332,6 +1354,11 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create_kustomization, delete, install)",
         "type": "boolean"
       },
+      "wait-timeout": {
+        "default": "1m0s",
+        "description": "How long to wait for the steering container to reach Running (applies to: intercept)",
+        "type": "string"
+      },
       "watch": {
         "default": true,
         "description": "Watch the status of the rollout until it's done. (applies to: rollout_status)",
@@ -1342,7 +1369,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncipher_decrypt: Decrypt a file with SOPS\ncipher_edit: Edit an encrypted file with SOPS\ncipher_encrypt: Encrypt a file with SOPS\ncipher_import: Import an age key to the system's SOPS key location\ncipher_rotate: Rotate data keys for SOPS-encrypted files\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\nmirror: Mirror a Deployment's inbound traffic locally (read-only...\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
+        "description": "The subcommand to execute. Options:\napply: Apply manifests\napply_edit-last-applied: Edit latest last-applied-configuration annotations of a...\napply_set-last-applied: Set the last-applied-configuration annotation on a live...\napply_view-last-applied: View the latest last-applied-configuration annotations...\ncipher_decrypt: Decrypt a file with SOPS\ncipher_edit: Edit an encrypted file with SOPS\ncipher_encrypt: Encrypt a file with SOPS\ncipher_import: Import an age key to the system's SOPS key location\ncipher_rotate: Rotate data keys for SOPS-encrypted files\ncreate: Create resources\ncreate_clusterrole: Create a cluster role\ncreate_clusterrolebinding: Create a cluster role binding for a particular cluster role\ncreate_configmap: Create a config map from a local file...\ncreate_cronjob: Create a cron job with the specified name\ncreate_deployment: Create a deployment with the specified name\ncreate_helmrelease: Create or update a HelmRelease resource\ncreate_ingress: Create an ingress with the specified name\ncreate_job: Create a job with the specified name\ncreate_kustomization: Create or update a Kustomization resource\ncreate_namespace: Create a namespace with the specified name\ncreate_poddisruptionbudget: Create a pod disruption budget with the specified name\ncreate_priorityclass: Create a priority class with the specified name\ncreate_quota: Create a quota with the specified name\ncreate_role: Create a role with single rule\ncreate_rolebinding: Create a role binding for a particular role or cluster role\ncreate_secret: Create a secret using a specified subcommand\ncreate_secret_docker-registry: Create a secret for use with a Docker registry\ncreate_secret_generic: Create a secret from a local file, directory...\ncreate_secret_tls: Create a TLS secret\ncreate_service: Create a service using a specified subcommand\ncreate_service_clusterip: Create a ClusterIP service\ncreate_service_externalname: Create an ExternalName service\ncreate_service_loadbalancer: Create a LoadBalancer service\ncreate_service_nodeport: Create a NodePort service\ncreate_serviceaccount: Create a service account with the specified name\ncreate_source_git: Create or update a GitRepository source\ncreate_source_helm: Create or update a HelmRepository source\ncreate_source_oci: Create or update an OCIRepository source\ncreate_token: Request a service account token\ndebug: Create debugging sessions for troubleshooting workloads...\ndelete: Delete resources\nexec: Execute a command in a container\nexpose: Expose a resource as a service\nimport: Import container images to the cluster\ninstall: Install Helm charts\nintercept: Intercept a Deployment's inbound traffic to a local...\nmirror: Mirror a Deployment's inbound traffic locally (read-only...\npush: Package and push an OCI artifact to a registry\nreconcile: Trigger reconciliation for GitOps workloads\nrollout: Manage the rollout of a resource\nrollout_history: View rollout history\nrollout_pause: Mark the provided resource as paused\nrollout_restart: Restart a resource\nrollout_resume: Resume a paused resource\nrollout_status: Show the status of the rollout\nrollout_undo: Undo a previous rollout\nscale: Scale resources\nwatch: Watch for file changes and auto-apply workloads",
         "enum": [
           "apply",
           "apply_edit-last-applied",
@@ -1389,6 +1416,7 @@ workload_write
           "expose",
           "import",
           "install",
+          "intercept",
           "mirror",
           "push",
           "reconcile",
