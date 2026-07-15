@@ -716,10 +716,16 @@ func reconcileArgoCD(
 
 	writer := cmd.OutOrStdout()
 
+	// Gate the control-plane readiness on the command's own context, self-bounded
+	// by the gate's internal budget, BEFORE opening the reconcile deadline. If the
+	// gate shared the reconcile deadline, a slow control-plane could consume the
+	// whole timeout budget, leaving TriggerRefresh and the app poll to run on an
+	// already-expired context. Opening deadlineCtx afterwards reserves the full
+	// timeout for the reconcile itself.
+	gateArgoCDControlPlaneReady(cmd.Context(), argoReconciler, timeout, writer)
+
 	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
 	defer deadlineCancel()
-
-	gateArgoCDControlPlaneReady(deadlineCtx, argoReconciler, timeout, writer)
 
 	writeActivityNotification("triggering argocd refresh...", writer)
 
