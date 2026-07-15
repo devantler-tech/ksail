@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/docs"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/spf13/cobra"
@@ -18,7 +19,7 @@ func countCommands(c *cobra.Command) int {
 	subs := make([]*cobra.Command, 0, len(c.Commands()))
 
 	for _, sub := range c.Commands() {
-		if sub.Name() == "help" || sub.Name() == "completion" {
+		if docs.HiddenFromDocs(sub) {
 			continue
 		}
 
@@ -100,6 +101,116 @@ func TestCLIFlagsDocsExist(t *testing.T) {
 		t.Errorf("expected %d CLI flags pages, got %d", expected, actual)
 	}
 }
+
+// TestCLIFlagsDocsExcludeHiddenCommands verifies gen_docs skips Hidden commands
+// so the generated tree never advertises deprecated flat delegates,
+// experimental-gated commands, or internal entrypoints (operator / steer-agent).
+// Regression guard for #6063: the walker previously only filtered help/completion.
+func TestCLIFlagsDocsExcludeHiddenCommands(t *testing.T) {
+	t.Parallel()
+
+	dir := "src/content/docs/cli-flags"
+	skipIfDirMissing(t, dir)
+
+	// Every command HiddenFromDocs excludes must have no generated page. Match on
+	// the command's full dash-joined path (e.g. "cluster-add-environment") — the
+	// exact page-slug gen_docs writes — so a hidden "cluster-init" never
+	// false-matches a visible "project-init" page that shares a leaf name.
+	hidden := hiddenCommandPaths(cmd.NewRootCmd("test", "", ""), nil)
+	if len(hidden) == 0 {
+		t.Skip("no hidden commands in the tree to assert on")
+	}
+
+	offenders := findHiddenCommandPages(t, dir, hidden)
+	if len(offenders) > 0 {
+		t.Errorf("generated docs contain pages for hidden commands (should be skipped):\n%s",
+			strings.Join(offenders, "\n"))
+	}
+}
+
+// findHiddenCommandPages walks the generated cli-flags tree and returns any page
+// whose slug belongs to a HiddenFromDocs command.
+func findHiddenCommandPages(t *testing.T, dir string, hidden []string) []string {
+	t.Helper()
+
+	var offenders []string
+
+	walkErr := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !isGeneratedCommandPage(path, info) {
+			return nil
+		}
+
+		if slug := matchHiddenSlug(filepath.Base(path), hidden); slug != "" {
+			offenders = append(offenders, path+" (hidden command "+slug+")")
+		}
+
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walking %s: %v", dir, walkErr)
+	}
+
+	return offenders
+}
+
+// isGeneratedCommandPage reports whether path is a per-command MDX page (not a
+// directory and not the group index).
+func isGeneratedCommandPage(path string, info os.FileInfo) bool {
+	if info.IsDir() || !strings.HasSuffix(path, ".mdx") {
+		return false
+	}
+
+	return !strings.HasSuffix(path, "index.mdx")
+}
+
+// matchHiddenSlug returns the hidden slug a page basename belongs to, or "".
+// A hidden leaf writes "<slug>.mdx"; a hidden group writes "<slug>-root.mdx" and
+// "<slug>-<child>.mdx" — all prefixed "<slug>-".
+func matchHiddenSlug(base string, hidden []string) string {
+	base = strings.TrimSuffix(base, ".mdx")
+
+	for _, slug := range hidden {
+		if base == slug || strings.HasPrefix(base, slug+"-") {
+			return slug
+		}
+	}
+
+	return ""
+}
+
+// hiddenCommandPaths returns the dash-joined page slug of every command
+// HiddenFromDocs excludes (e.g. "cluster-add-environment", "operator"), tracking
+// the live command tree rather than a hard-coded list. A hidden command's whole
+// subtree is skipped, mirroring gen_docs.
+func hiddenCommandPaths(c *cobra.Command, parents []string) []string {
+	var paths []string
+
+	for _, sub := range c.Commands() {
+		if sub.Name() == helpName || sub.Name() == completionName {
+			continue
+		}
+
+		names := append(append([]string{}, parents...), sub.Name())
+		if sub.Hidden {
+			paths = append(paths, strings.Join(names, "-"))
+
+			continue
+		}
+
+		paths = append(paths, hiddenCommandPaths(sub, names)...)
+	}
+
+	return paths
+}
+
+const (
+	helpName       = "help"
+	completionName = "completion"
+)
 
 // checkFrontmatter validates that a single MDX file contains the expected frontmatter.
 func checkFrontmatter(t *testing.T, path string, content []byte) {

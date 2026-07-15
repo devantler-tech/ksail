@@ -85,13 +85,23 @@ func RenderCLIIndexPage(root *cobra.Command) string {
 	return builder.String()
 }
 
+// HiddenFromDocs reports whether c must be excluded from the generated
+// documentation surface: Hidden commands (deprecated flat delegates,
+// experimental-gated commands, and internal entrypoints such as steer-agent /
+// operator) plus the cobra help and completion helpers — none of which get a
+// generated page. Shared by the index/MCP renderers and the gen_docs walker so
+// the two can never drift.
+func HiddenFromDocs(c *cobra.Command) bool {
+	return c.Hidden || c.Name() == helpCommandName || c.Name() == completionCommandName
+}
+
 // visibleCommandGroups returns root's visible top-level commands, excluding
 // the help and completion helpers (which have no generated pages).
 func visibleCommandGroups(root *cobra.Command) []*cobra.Command {
 	var groups []*cobra.Command
 
 	for _, sub := range root.Commands() {
-		if sub.Hidden || sub.Name() == helpCommandName || sub.Name() == completionCommandName {
+		if HiddenFromDocs(sub) {
 			continue
 		}
 
