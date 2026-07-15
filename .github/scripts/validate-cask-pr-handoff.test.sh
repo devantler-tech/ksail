@@ -12,13 +12,16 @@ pass_count=0
 
 run_case() {
 	local name="$1" expected_status="$2" expected_output="$3"
-	local filter="${4:-.}" prepared="${5:-false}"
+	local filter="${4:-.}" prepared="${5:-false}" ready="${6:-false}"
 	local evidence="${tmp_dir}/${name}.json" output status
 	local args=(--evidence "${evidence}" --tap devantler-tech/homebrew-tap --cask-name ksail --tag v7.166.1)
 
 	jq "${filter}" "${fixture}" >"${evidence}"
 	if [[ "${prepared}" == true ]]; then
 		args+=(--prepared)
+	fi
+	if [[ "${ready}" == true ]]; then
+		args+=(--ready)
 	fi
 
 	set +e
@@ -72,5 +75,10 @@ run_case missing-label-inventory 1 'available-label inventory is missing' 'del(.
 run_case malformed-label-inventory 1 'available-label inventory is malformed' '.availableLabels = [{}] | .pr.labels = []' true
 run_case missing-label 1 'available label is missing from PR: dependencies' '.pr.labels = [{"name":"automation"}]' true
 run_case unavailable-label 0 'PASS: generated cask PR identity, scope, and metadata are valid' '.availableLabels = [{"name":"automation"}] | .pr.labels = [{"name":"automation"}]' true
+
+# --ready revalidates an already-handed-off (promoted, non-draft) PR on an idempotent rerun: it must
+# pass on a non-draft PR and fail on one still in draft, the inverse of the default draft requirement.
+run_case ready-nondraft 0 'PASS: generated cask PR identity, scope, and metadata are valid' '.pr.draft = false' true true
+run_case ready-still-draft 1 'already-handed-off PR must be marked ready for review' '.' true true
 
 printf 'All %d cask PR handoff cases passed.\n' "${pass_count}"

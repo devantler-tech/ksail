@@ -736,16 +736,22 @@ jobs:
               --cask-name "$name"
               --tag "$TAG"
             )
-            if [ "$mode" = prepared ]; then
-              args+=(--prepared)
-            fi
+            case "$mode" in
+              prepared) args+=(--prepared) ;;
+              # An already-handed-off PR revalidated on an idempotent rerun has been promoted, so it is
+              # no longer a draft: check it against the ready state, not the draft one.
+              prepared-ready) args+=(--prepared --ready) ;;
+            esac
             collect_handoff_evidence "$pr" "$evidence" \
               && .github/scripts/validate-cask-pr-handoff.sh "${args[@]}"
           }
 
           if ! evidence_dir="$(mktemp -d)"; then
-            echo "::warning::Could not create cask handoff evidence directory; leaving generated PRs untouched"
-            exit 0
+            # A missing evidence dir means no cask can be validated or handed off. Exiting 0 here would
+            # leave both cask PRs untouched behind a green release — the exact silent drift this job
+            # exists to surface — so fail loudly instead.
+            echo "::error::Could not create cask handoff evidence directory; failing so the un-handed-off cask is not hidden behind a green release"
+            exit 1
           fi
           trap 'rm -rf "$evidence_dir"' EXIT
 
@@ -827,7 +833,7 @@ jobs:
               # before skipping — it re-verifies identity, scope, base, current-version content, and
               # title. Only a validated ready PR is treated as done; otherwise it is left for the
               # maintainer and the rerun stays red.
-              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared 2>&1)"; then
+              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)"; then
                 echo "${TAP}#${pr} already handed off for ${TAG} (ready, titled, and revalidated); nothing to do"
                 printf -- '- %s#%s already handed off for %s (idempotent retry, revalidated)\n' \
                   "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
@@ -887,18 +893,29 @@ jobs:
                 # release).
                 brew style --fix "$work/Casks/${name}.rb" \
                   || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
+                pushed_ok=true
                 if git -C "$work" diff --quiet; then
-                  echo "${name} cask is brew-style-clean; nothing to autocorrect"
-                  style_clean=1
+                  echo "${name} cask has no autocorrectable diff to push"
                 elif git -C "$work" \
                       -c user.name='github-actions[bot]' \
                       -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
                       commit -am 'style: brew style --fix generated cask' \
                     && git -C "$work" push; then
                   echo "Pushed brew style --fix autocorrections to ${branch}"
-                  style_clean=1
                 else
                   echo "::warning::Could not push brew style --fix autocorrections to ${branch}; the tap's style gate would block auto-merge"
+                  pushed_ok=false
+                fi
+                # A successful push (or an empty diff) does not prove the cask is style-clean:
+                # `brew style --fix` exits non-zero when offenses remain after only partial
+                # autocorrection, and an unpushed fix leaves the tap's branch still dirty. Only mark
+                # clean when the pushed state passes a read-only `brew style`, so a cask the tap's
+                # style gate would reject is never promoted (recreating the stranded-cask failure).
+                if [ "$pushed_ok" = true ] && brew style "$work/Casks/${name}.rb"; then
+                  echo "${name} cask is brew-style-clean"
+                  style_clean=1
+                else
+                  echo "::warning::${name} cask is not confirmed brew-style-clean (unpushed autocorrections or remaining offenses); leaving it for the maintainer lane"
                 fi
               else
                 echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix"
