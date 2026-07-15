@@ -59,11 +59,65 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # GoReleaser cross-compiles every OS/arch and builds+signs the images in one job. That outgrew the
+      # runner's root filesystem: v7.169.3 died 32 minutes in with `mkdir /tmp/go-build…: no space left
+      # on device`, which surfaces as a compiler error and silently dropped the release (#6137).
+      # So: reclaim more of the preinstalled toolchains, keep Go's scratch off the root filesystem, and
+      # PRINT the headroom — a disk failure must never again look like a build failure.
       - name: 🧹 Cleanup node
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          set -euo pipefail
+          echo "::group::Disk before cleanup"
+          df -h / /mnt 2>/dev/null || df -h /
+          echo "::endgroup::"
+
+          # Do NOT add /usr/local/lib/node_modules here: that directory *is* npm, and GoReleaser's
+          # `before` hook runs scripts/stage-webui.sh, which builds the web UI with `npm ci`. This job
+          # has no setup-node step, so removing it would break the release at the hook — the very
+          # failure this change exists to prevent.
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/boost \
+            /usr/local/share/powershell
           sudo docker image prune --all --force
           sudo docker builder prune -a
+
+          echo "::group::Disk after cleanup"
+          df -h / /mnt 2>/dev/null || df -h /
+          echo "::endgroup::"
+
+      # Go's build scratch and cache are the bulk of the release build's disk usage and default to the
+      # root filesystem. Move them to whichever volume actually has the most room — verified at runtime
+      # rather than assumed, so this stays correct if the runner image changes.
+      - name: 💽 Put Go build scratch on the roomiest volume
+        run: |
+          set -euo pipefail
+          root_free=$(df -Pk / | awk 'NR==2 {print $4}')
+          scratch_root=""
+          if mountpoint -q /mnt; then
+            mnt_free=$(df -Pk /mnt | awk 'NR==2 {print $4}')
+            if [ "$mnt_free" -gt "$root_free" ]; then
+              scratch_root=/mnt
+            fi
+          fi
+
+          if [ -z "$scratch_root" ]; then
+            echo "Root filesystem has the most free space; leaving Go scratch at its default."
+            exit 0
+          fi
+
+          sudo mkdir -p "$scratch_root/go-tmp" "$scratch_root/go-cache"
+          sudo chown -R "$(id -u):$(id -g)" "$scratch_root/go-tmp" "$scratch_root/go-cache"
+          {
+            echo "GOTMPDIR=$scratch_root/go-tmp"
+            echo "GOCACHE=$scratch_root/go-cache"
+          } >>"$GITHUB_ENV"
+          echo "Go build scratch and cache moved to $scratch_root ($(df -h "$scratch_root" | awk 'NR==2 {print $4}') free)."
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
