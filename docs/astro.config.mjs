@@ -134,6 +134,7 @@ export default defineConfig({
               label: "Workloads & GitOps",
               items: [
                 { label: "Workload Management", link: "/guides/workload-management/" },
+                { label: "Local Service Intercepts", link: "/guides/local-service-intercepts/" },
                 { label: "GitOps Workflows", link: "/guides/gitops-workflows/" },
                 { label: "Registry Management", link: "/guides/registry-management/" },
                 { label: "Secret Management", link: "/guides/secret-management/" },

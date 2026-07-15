@@ -15,6 +15,7 @@ on:
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
       - ".github/actions/setup-desktop-build/**"
+      - ".github/actions/free-disk-space/**"
       - "scripts/stage-webui.sh"
   push:
     branches: [main]
@@ -28,6 +29,7 @@ on:
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
       - ".github/actions/setup-desktop-build/**"
+      - ".github/actions/free-disk-space/**"
       - "scripts/stage-webui.sh"
 
 permissions:
