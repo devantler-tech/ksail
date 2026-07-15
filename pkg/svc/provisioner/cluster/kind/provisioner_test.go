@@ -85,6 +85,39 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 	require.ErrorIs(t, err, errCreateClusterFailed, "Create()")
 }
 
+// TestCreatePreservesLiteralKubeconfigFlag verifies a Kind environment target
+// is not expanded a second time by the lower-level provisioner lifecycle.
+func TestCreatePreservesLiteralKubeconfigFlag(t *testing.T) {
+	t.Parallel()
+
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "~/literal-kubeconfig")
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
+
+	err := provisioner.Create(context.Background(), "")
+
+	require.NoError(t, err, "Create()")
+	assertFlagValue(
+		t,
+		runner.lastArgs,
+		"--kubeconfig",
+		"~/literal-kubeconfig",
+	)
+}
+
+// TestCreateOmitsKubeconfigFlagWhenPathEmpty covers direct provisioner callers
+// that deliberately leave kubeconfig ownership to Kind.
+func TestCreateOmitsKubeconfigFlagWhenPathEmpty(t *testing.T) {
+	t.Parallel()
+
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "")
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
+
+	err := provisioner.Create(context.Background(), "")
+
+	require.NoError(t, err, "Create()")
+	assert.NotContains(t, runner.lastArgs, "--kubeconfig")
+}
+
 func TestDeleteSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -123,10 +156,12 @@ func TestDeleteSuccess(t *testing.T) {
 	}
 }
 
-func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
+// TestDeletePreservesLiteralKubeconfigFlag pins the same Kind-compatible path
+// semantics for cluster deletion.
+func TestDeletePreservesLiteralKubeconfigFlag(t *testing.T) {
 	t.Parallel()
 
-	provisioner, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerWithKubeconfigForTest(t, "~/literal-kubeconfig")
 	// First call: List (via Exists) - return cluster name so cluster exists
 	runner.On("Run").Return(cmdrunner.CommandResult{
 		Stdout: "cfg-name\n",
@@ -137,7 +172,7 @@ func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
 	err := provisioner.Delete(context.Background(), "")
 
 	require.NoError(t, err, "Delete()")
-	require.Contains(t, runner.lastArgs, "--kubeconfig", "Delete() should pass kubeconfig flag")
+	assertFlagValue(t, runner.lastArgs, "--kubeconfig", "~/literal-kubeconfig")
 }
 
 func TestCreateUsesProvidedName(t *testing.T) {
@@ -451,8 +486,25 @@ func TestStopSuccess(t *testing.T) {
 
 // --- internals ---
 
+// newProvisionerForTest builds the shared provisioner fixture with the
+// historical default kubeconfig path used by existing tests.
 func newProvisionerForTest(
 	t *testing.T,
+) (
+	*kindprovisioner.Provisioner,
+	*provider.MockProvider,
+	*mockCommandRunner,
+) {
+	t.Helper()
+
+	return newProvisionerWithKubeconfigForTest(t, "~/.kube/config")
+}
+
+// newProvisionerWithKubeconfigForTest builds the shared provisioner fixture
+// while allowing kubeconfig-specific tests to select the stored path.
+func newProvisionerWithKubeconfigForTest(
+	t *testing.T,
+	kubeconfigPath string,
 ) (
 	*kindprovisioner.Provisioner,
 	*provider.MockProvider,
@@ -472,7 +524,7 @@ func newProvisionerForTest(
 	}
 	provisioner := kindprovisioner.NewProvisionerWithRunner(
 		cfg,
-		"~/.kube/config",
+		kubeconfigPath,
 		kindProvider,
 		infraProvider,
 		runner,
