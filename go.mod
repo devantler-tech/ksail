@@ -35,7 +35,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/yannh/kubeconform v0.8.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/term v0.44.0
+	golang.org/x/term v0.45.0
 	helm.sh/helm/v4 v4.2.2
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2
@@ -932,7 +932,7 @@ require (
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260625142307-59b4966ccb57 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
