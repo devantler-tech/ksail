@@ -719,6 +719,8 @@ func reconcileArgoCD(
 	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
 	defer deadlineCancel()
 
+	gateArgoCDControlPlaneReady(deadlineCtx, argoReconciler, timeout, writer)
+
 	writeActivityNotification("triggering argocd refresh...", writer)
 
 	err = argoReconciler.TriggerRefresh(deadlineCtx, true)
@@ -737,16 +739,7 @@ func reconcileArgoCD(
 		return nil
 	}
 
-	tasks := make([]notify.ProgressTask, 0, len(apps))
-	for _, app := range apps {
-		name := app.Name
-		tasks = append(tasks, notify.ProgressTask{
-			Name: name,
-			Fn: func(ctx context.Context) error {
-				return pollUntilApplicationReady(ctx, argoReconciler, name)
-			},
-		})
-	}
+	tasks := buildArgoCDApplicationTasks(apps, argoReconciler)
 
 	appGroup := notify.NewProgressGroup(
 		"", "", writer,
@@ -764,6 +757,52 @@ func reconcileArgoCD(
 	}
 
 	return nil
+}
+
+// gateArgoCDControlPlaneReady waits for the ArgoCD control-plane (repo-server /
+// redis / server) to be Ready before the first app-sync poll (issue #5948), so a
+// just-starting control-plane's transient errors ("connection refused", "unable to
+// resolve") are not misclassified as a permanent source-unavailable failure.
+//
+// It is best-effort (fail-open): a control-plane that never becomes ready is not
+// terminal here — reconcile proceeds and any genuine problem surfaces through the
+// unchanged poll path — so the gate can only reduce the cold-start race, never add
+// a failure mode.
+func gateArgoCDControlPlaneReady(
+	ctx context.Context,
+	argoReconciler *argocd.Reconciler,
+	timeout time.Duration,
+	writer io.Writer,
+) {
+	writeActivityNotification("waiting for argocd control-plane...", writer)
+
+	err := argoReconciler.WaitForControlPlaneReady(ctx, timeout)
+	if err != nil {
+		writeActivityNotification(
+			fmt.Sprintf("warning: argocd control-plane not fully ready, proceeding: %v", err),
+			writer,
+		)
+	}
+}
+
+// buildArgoCDApplicationTasks builds one progress task per ArgoCD Application,
+// capturing the name per iteration to avoid the loop-variable closure bug.
+func buildArgoCDApplicationTasks(
+	apps []argocd.ApplicationInfo,
+	argoReconciler *argocd.Reconciler,
+) []notify.ProgressTask {
+	tasks := make([]notify.ProgressTask, 0, len(apps))
+	for _, app := range apps {
+		name := app.Name
+		tasks = append(tasks, notify.ProgressTask{
+			Name: name,
+			Fn: func(ctx context.Context) error {
+				return pollUntilApplicationReady(ctx, argoReconciler, name)
+			},
+		})
+	}
+
+	return tasks
 }
 
 // pollUntilApplicationReady polls a named ArgoCD Application until it is
