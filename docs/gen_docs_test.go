@@ -69,7 +69,7 @@ func readOrSkip(t *testing.T, path string) string {
 func TestCLIFlagsDocsExist(t *testing.T) {
 	t.Parallel()
 
-	dir := "src/content/docs/cli-flags"
+	dir := cliFlagsDir
 	skipIfDirMissing(t, dir)
 
 	rootCmd := cmd.NewRootCmd("test", "", "")
@@ -109,7 +109,7 @@ func TestCLIFlagsDocsExist(t *testing.T) {
 func TestCLIFlagsDocsExcludeHiddenCommands(t *testing.T) {
 	t.Parallel()
 
-	dir := "src/content/docs/cli-flags"
+	dir := cliFlagsDir
 	skipIfDirMissing(t, dir)
 
 	// Every command HiddenFromDocs excludes must have no generated page. Match on
@@ -210,6 +210,7 @@ func hiddenCommandPaths(c *cobra.Command, parents []string) []string {
 const (
 	helpName       = "help"
 	completionName = "completion"
+	cliFlagsDir    = "src/content/docs/cli-flags"
 )
 
 // checkFrontmatter validates that a single MDX file contains the expected frontmatter.
@@ -234,7 +235,7 @@ func checkFrontmatter(t *testing.T, path string, content []byte) {
 func TestCLIFlagsPagesHaveFrontmatter(t *testing.T) {
 	t.Parallel()
 
-	dir := "src/content/docs/cli-flags"
+	dir := cliFlagsDir
 	skipIfDirMissing(t, dir)
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
