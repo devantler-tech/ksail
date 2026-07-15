@@ -6,12 +6,14 @@ usage() {
 	cat <<'EOF'
 Usage:
   validate-cask-pr-handoff.sh --evidence FILE --tap OWNER/REPO
-                              --cask-name NAME --tag TAG [--prepared]
+                              --cask-name NAME --tag TAG [--prepared] [--ready]
 
 Fail closed unless a GoReleaser cask PR is the expected trusted draft, from the
 tap itself, into main, with exactly its matching cask file. With --prepared,
 also require the normalized title and every requested label that exists in the
-repository's available-label inventory.
+repository's available-label inventory. With --ready, require the PR to already
+be marked ready for review instead of a draft — used to revalidate an
+already-handed-off PR on an idempotent rerun.
 EOF
 }
 
@@ -20,6 +22,7 @@ tap=""
 cask_name=""
 tag=""
 prepared=false
+ready=false
 
 while (($# > 0)); do
 	case "$1" in
@@ -41,6 +44,10 @@ while (($# > 0)); do
 		;;
 	--prepared)
 		prepared=true
+		shift
+		;;
+	--ready)
+		ready=true
 		shift
 		;;
 	--help | -h)
@@ -88,8 +95,15 @@ json_string() {
 if [[ "$(json_string '.pr.state | ascii_downcase')" != "open" ]]; then
 	block 'PR state must be open'
 fi
-if ! jq -e '.pr.draft == true' "${evidence_file}" >/dev/null 2>&1; then
-	block 'PR must remain a draft for maintainer promotion'
+if [[ "${ready}" == true ]]; then
+	# Revalidating an already-handed-off PR: it has been promoted, so it must NOT be a draft.
+	if ! jq -e '.pr.draft == false' "${evidence_file}" >/dev/null 2>&1; then
+		block 'already-handed-off PR must be marked ready for review'
+	fi
+else
+	if ! jq -e '.pr.draft == true' "${evidence_file}" >/dev/null 2>&1; then
+		block 'PR must remain a draft for maintainer promotion'
+	fi
 fi
 if [[ "$(json_string '.pr.user.login')" != "devantler" ]]; then
 	block 'PR author must be devantler'

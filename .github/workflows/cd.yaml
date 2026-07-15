@@ -749,9 +749,12 @@ jobs:
   # each release updates the ONE open cask PR in place instead of superseding it, tap#1172). See #6067.
   homebrew:
     name: 🍺 Prepare Homebrew cask PRs
-    runs-on: ubuntu-latest
-    # `brew style` can bootstrap rubocop on a cold Linuxbrew runner. Keep enough room for two clones
-    # and style passes; every GitHub mutation below is fail-soft because the release is already public.
+    # Homebrew is preinstalled on the macOS images and NOT on ubuntu — on ubuntu every `brew style`
+    # here failed with `brew: command not found`, so the casks were never style-cleaned. The tap audits
+    # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
+    runs-on: macos-latest
+    # `brew style` can bootstrap rubocop on a cold runner. Keep enough room for two clones and style
+    # passes; every GitHub mutation below is fail-soft because the release is already public.
     timeout-minutes: 20
     needs: [publish-release]
     permissions:
@@ -787,18 +790,34 @@ jobs:
               --cask-name "$name"
               --tag "$TAG"
             )
-            if [ "$mode" = prepared ]; then
-              args+=(--prepared)
-            fi
+            case "$mode" in
+              prepared) args+=(--prepared) ;;
+              # An already-handed-off PR revalidated on an idempotent rerun has been promoted, so it is
+              # no longer a draft: check it against the ready state, not the draft one.
+              prepared-ready) args+=(--prepared --ready) ;;
+            esac
             collect_handoff_evidence "$pr" "$evidence" \
               && .github/scripts/validate-cask-pr-handoff.sh "${args[@]}"
           }
 
           if ! evidence_dir="$(mktemp -d)"; then
-            echo "::warning::Could not create cask handoff evidence directory; leaving generated PRs untouched"
-            exit 0
+            # A missing evidence dir means no cask can be validated or handed off. Exiting 0 here would
+            # leave both cask PRs untouched behind a green release — the exact silent drift this job
+            # exists to surface — so fail loudly instead.
+            echo "::error::Could not create cask handoff evidence directory; failing so the un-handed-off cask is not hidden behind a green release"
+            exit 1
           fi
           trap 'rm -rf "$evidence_dir"' EXIT
+
+          # A cask PR left as a draft means the tap silently stops tracking releases — which is exactly
+          # how it drifted six versions behind while every CD run stayed green. So EVERY path that
+          # leaves a cask unpromoted sets this, not just the final mutation: an enumeration failure, a
+          # validation failure, a missing `brew`, a title/label failure — in all of them the tap does not
+          # pick up the published release, and a green run would preserve the silent drift this job now
+          # exists to surface. The release itself is already published and immutable, and
+          # `cleanup-failed-release` keys off `publish-release` rather than this job, so failing here
+          # never deletes a good release.
+          handoff_failed=0
 
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
@@ -816,22 +835,80 @@ jobs:
               2>/dev/null || true)"
             if ! count="$(jq -er 'length' <<<"$matches" 2>/dev/null)"; then
               echo "::warning::Could not enumerate cask PRs on $TAP for branch ${branch}; leaving it pending"
+              handoff_failed=1
+              continue
+            fi
+            if [ "$count" -eq 0 ]; then
+              # A partial rerun may already have MERGED this cask: the tap's auto-merge can land the
+              # first cask before this job is rerun. A merged PR is no longer `open`, so the open-only
+              # query returns nothing — treat a merged, this-tag-titled, tap-owned cask as done rather
+              # than failing the rerun red. `state=closed` returns merged AND closed-unmerged, so filter
+              # on `merged_at != null`. Fail-soft: an enumeration hiccup falls through to the pending path.
+              merged="$(gh api \
+                "repos/$TAP/pulls?state=closed&head=${TAP%%/*}:${branch}&per_page=100" 2>/dev/null \
+                | jq -er --arg full "$TAP" --arg title "chore(cask): update ${name} to ${TAG}" \
+                    '[.[] | select(.merged_at != null and .head.repo.full_name == $full and .user.login == "devantler" and .title == $title)] | length' \
+                2>/dev/null || echo 0)"
+              if [ "${merged:-0}" -ge 1 ]; then
+                echo "${TAP} cask ${name} already merged for ${TAG}; nothing to do"
+                printf -- '- %s cask %s already merged for %s (idempotent retry)\n' \
+                  "$TAP" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+                continue
+              fi
+              echo "::warning::No open or merged tap-owned cask PR on $TAP for branch ${branch}; leaving it pending"
+              handoff_failed=1
               continue
             fi
             if [ "$count" -ne 1 ]; then
               echo "::warning::Expected exactly one open tap-owned cask PR on $TAP for branch ${branch}, found ${count}; leaving it pending"
+              handoff_failed=1
               continue
             fi
             pr="$(jq -r '.[0].number' <<<"$matches")"
 
+            # Idempotent retry after a PARTIAL success. A two-cask release can promote the first cask
+            # and then fail on the second (transient API/label/style hiccup) — leaving the job red. On
+            # a normal rerun the loop re-enters, but the first cask is now READY (non-draft) and the
+            # draft-requiring validation below would reject it, re-setting handoff_failed and failing
+            # the job forever: the rerun could never go green. So before validating, treat a cask PR
+            # that is ALREADY non-draft AND already carries this tag's handoff title as completed —
+            # the handoff finished on the earlier run; record it and move on. Capture the state into a
+            # variable (an external command inside `if` is exempt from `set -e`, so a crash there would
+            # read as "not handed off" and re-drive it); a non-draft PR with a DIFFERENT title is NOT
+            # ours — it falls through to the draft-requiring validation, preserving race detection.
+            pr_state="$(gh api "repos/${TAP}/pulls/${pr}" --jq '[(.draft|tostring), .title] | @tsv' 2>/dev/null || true)"
+            pr_is_draft="${pr_state%%$'\t'*}"
+            pr_title="${pr_state#*$'\t'}"
+            evidence="${evidence_dir}/${pr}.json"
+            if [ "$pr_is_draft" = "false" ] && [ "$pr_title" = "chore(cask): update ${name} to ${TAG}" ]; then
+              # Ready + right title is not by itself proof the tap will merge the CORRECT cask: after
+              # the failed run the PR could have been retargeted off `main`, had its evidence file or
+              # head branch changed, or lost its metadata. Re-run the non-draft (`prepared`) validator
+              # before skipping — it re-verifies identity, scope, base, current-version content, and
+              # title. Only a validated ready PR is treated as done; otherwise it is left for the
+              # maintainer and the rerun stays red.
+              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)"; then
+                echo "${TAP}#${pr} already handed off for ${TAG} (ready, titled, and revalidated); nothing to do"
+                printf -- '- %s#%s already handed off for %s (idempotent retry, revalidated)\n' \
+                  "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+                continue
+              fi
+              validation="${validation//$'\n'/; }"
+              echo "::warning::${TAP}#${pr} is ready and titled but failed prepared revalidation: ${validation}"
+              printf -- '- %s#%s ready but revalidation failed: %s\n' \
+                "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
+              continue
+            fi
+
             # The cask-checkpoint job re-drafted any reused promoted PR before GoReleaser rewrote
             # the branch, so a non-draft here means someone raced this run — validation below
-            # requires draft state and fails soft, leaving the PR untouched.
-            evidence="${evidence_dir}/${pr}.json"
+            # requires draft state and fails soft, leaving the PR untouched. (`evidence` was set above.)
             if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
               validation="${validation//$'\n'/; }"
               echo "::warning::Refusing to mutate ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s left untouched: %s\n' "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
               continue
             fi
             echo "Preparing ${TAP}#${pr} (${branch})"
@@ -844,32 +921,69 @@ jobs:
             # the draft remains open for the maintainer lane to correct.
             # `mktemp -d` under `set -e` would abort the job on a tempdir failure; guard it so a
             # hiccup just skips the (best-effort) autocorrect and continues to the draft handoff.
+            # Ensure the generated cask is brew-style-clean BEFORE promotion. GoReleaser's template
+            # emits a few `brew style` offenses no config knob can reach, and the tap enforces a
+            # `brew style` gate — so an uncorrected cask silently blocks the tap's auto-merge, exactly
+            # the "green release, stranded cask" drift this job exists to surface. `style_clean` stays
+            # 0 until we have either confirmed no offenses remain or PUSHED the autocorrections to the
+            # branch; if we cannot reach that state (clone, tempdir, or push failure), promotion is
+            # skipped and the job goes red rather than marking a cask the tap will refuse to merge.
+            style_clean=0
             if work="$(mktemp -d)"; then
               if git clone --depth 1 --branch "$branch" \
                   "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
+                # Never claim a cask is style-clean without having actually run the linter: on ubuntu
+                # `brew` was absent, `brew style --fix` failed, the diff was empty for that reason, and
+                # the job reported "already brew-style-clean" — a fail-open that hid the breakage.
+                if ! command -v brew >/dev/null 2>&1; then
+                  echo "::error::brew is not available on this runner; cannot style-check ${name}"
+                  rm -rf "$work"
+                  handoff_failed=1
+                  continue
+                fi
                 # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
                 # offenses remain. Run it fail-soft and commit whatever diff it produced regardless of
                 # exit status, so partial cleanups are never discarded (and a failure never blocks the
                 # release).
                 brew style --fix "$work/Casks/${name}.rb" \
                   || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
+                pushed_ok=true
                 if git -C "$work" diff --quiet; then
-                  echo "${name} cask already brew-style-clean; nothing to autocorrect"
-                else
-                  git -C "$work" \
+                  echo "${name} cask has no autocorrectable diff to push"
+                elif git -C "$work" \
                       -c user.name='github-actions[bot]' \
                       -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
                       commit -am 'style: brew style --fix generated cask' \
-                    && git -C "$work" push \
-                    && echo "Pushed brew style --fix autocorrections to ${branch}" \
-                    || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; leaving the draft as-is"
+                    && git -C "$work" push; then
+                  echo "Pushed brew style --fix autocorrections to ${branch}"
+                else
+                  echo "::warning::Could not push brew style --fix autocorrections to ${branch}; the tap's style gate would block auto-merge"
+                  pushed_ok=false
+                fi
+                # A successful push (or an empty diff) does not prove the cask is style-clean:
+                # `brew style --fix` exits non-zero when offenses remain after only partial
+                # autocorrection, and an unpushed fix leaves the tap's branch still dirty. Only mark
+                # clean when the pushed state passes a read-only `brew style`, so a cask the tap's
+                # style gate would reject is never promoted (recreating the stranded-cask failure).
+                if [ "$pushed_ok" = true ] && brew style "$work/Casks/${name}.rb"; then
+                  echo "${name} cask is brew-style-clean"
+                  style_clean=1
+                else
+                  echo "::warning::${name} cask is not confirmed brew-style-clean (unpushed autocorrections or remaining offenses); leaving it for the maintainer lane"
                 fi
               else
-                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix; leaving the draft as-is"
+                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix"
               fi
               rm -rf "$work"
             else
-              echo "::warning::Could not create tempdir for brew style --fix; leaving ${name} draft as-is"
+              echo "::warning::Could not create tempdir for brew style --fix"
+            fi
+            if [ "$style_clean" -ne 1 ]; then
+              echo "::error::Could not ensure ${name} cask is brew-style-clean; the tap's style gate would block auto-merge for ${TAG}"
+              printf -- '- %s cask %s left draft/open: could not ensure it is brew-style-clean\n' \
+                "$TAP" "$name" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
+              continue
             fi
 
             # Recollect after the possible style push. A concurrent promotion, cross-repository head,
@@ -879,26 +993,48 @@ jobs:
               echo "::warning::Post-style validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open after style validation failed: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
               continue
             fi
 
+            # Use the REST/GraphQL endpoints directly rather than the gh pr edit/promote subcommands:
+            # those resolve the viewer's `login` over GraphQL, which the tap token is not scoped
+            # for ("The 'login' field requires one of the following scopes"). That failure landed on the
+            # step right before the promote, so every release left its cask PR a draft forever and the
+            # tap silently fell six versions behind. Talking to the endpoints directly needs only the
+            # PR-write scope the token already has — and keeps the token least-privilege instead of
+            # widening it.
             title="chore(cask): update ${name} to ${TAG}"
-            if ! gh pr edit "$pr" --repo "$TAP" --title "$title"; then
+            if ! gh api -X PATCH "repos/${TAP}/pulls/${pr}" -f title="$title" >/dev/null; then
               echo "::warning::Could not normalize the title on ${TAP}#${pr}; leaving it draft/open"
+              handoff_failed=1
               continue
             fi
             metadata_ok=true
             for label in automation dependencies; do
-              if jq -e --arg label "$label" \
-                  '.availableLabels | any(.name == $label)' "$evidence" >/dev/null; then
-                if ! gh pr edit "$pr" --repo "$TAP" --add-label "$label"; then
-                  echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
+              # Capture jq's result instead of testing it inside `if`: an external command in an `if`
+              # condition is exempt from `set -e`, so a jq crash would read as "label not available" and
+              # silently skip the label while leaving metadata_ok=true — a fail-open on the very check
+              # that gates the promote. Treat a non-boolean answer as a hard failure.
+              label_available="$(jq -r --arg label "$label" \
+                '.availableLabels | any(.name == $label)' "$evidence" 2>/dev/null || true)"
+              case "$label_available" in
+                true)
+                  if ! gh api -X POST "repos/${TAP}/issues/${pr}/labels" -f "labels[]=$label" >/dev/null; then
+                    echo "::warning::Could not add available label ${label} to ${TAP}#${pr}"
+                    metadata_ok=false
+                  fi
+                  ;;
+                false) : ;; # the tap does not define this label — nothing to add
+                *)
+                  echo "::warning::Could not determine whether ${TAP} defines the ${label} label"
                   metadata_ok=false
-                fi
-              fi
+                  ;;
+              esac
             done
             if [ "$metadata_ok" != true ]; then
               echo "::warning::${TAP}#${pr} metadata is incomplete; leaving it draft/open"
+              handoff_failed=1
               continue
             fi
 
@@ -907,6 +1043,7 @@ jobs:
               echo "::warning::Prepared handoff validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open with incomplete handoff metadata: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
               continue
             fi
 
@@ -915,16 +1052,31 @@ jobs:
             # current-version content, title, and labels all validated above — and the release
             # assets now public — mark it ready so the tap's own automation arms auto-merge and its
             # checks gate the merge. Fail-soft: a draft left behind is handed to the maintainer.
-            if gh pr ready "$pr" --repo "$TAP"; then
+            # Same reason as the title/label calls above: the gh promote subcommand needs a scope the tap
+            # token does not have, so drive the mutation directly off the PR's node id.
+            pr_node="$(gh api "repos/${TAP}/pulls/${pr}" --jq .node_id 2>/dev/null || true)"
+            # `\$id` is escaped so the shell leaves it literal: it is a GraphQL variable, not a shell one.
+            ready_mutation="mutation(\$id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: \$id }) { pullRequest { isDraft } } }"
+            if [ -n "$pr_node" ] && gh api graphql \
+                -f query="$ready_mutation" \
+                -F id="$pr_node" >/dev/null; then
               echo "::notice::${TAP}#${pr} validated and marked ready — the tap's checks gate its auto-merge"
               printf -- '- %s#%s validated and marked ready for check-gated auto-merge\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
             else
-              echo "::warning::Could not mark ${TAP}#${pr} ready; it remains draft/open for the maintainer"
+              # A cask PR that never leaves draft means the tap silently stops tracking releases, so this
+              # must be loud rather than a buried warning on an otherwise-green release.
+              echo "::error::Could not mark ${TAP}#${pr} ready; it remains draft and the tap will NOT pick up ${TAG}"
               printf -- '- %s#%s remains draft/open: could not mark it ready after validation\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
+              handoff_failed=1
             fi
           done
+
+          if [ "$handoff_failed" -ne 0 ]; then
+            echo "::error::One or more cask PRs could not be handed off; the Homebrew tap will not pick up ${TAG}"
+            exit 1
+          fi
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
   # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
