@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -270,12 +269,7 @@ func NewInterceptCmd() *cobra.Command {
 		return runInterceptCommand(cmd, args[0], opts)
 	}
 
-	// intercept is a reverse dev-bridge (#4521) whose default steering image and
-	// derived agent command are now wired (#5945), but the full in-cluster path
-	// is only exercisable against a live cluster, so it stays gated experimental
-	// until that end-to-end validation graduates it (#5882 AC#3). Graduate by
-	// dropping this Guard call.
-	return experimental.Guard(cmd)
+	return cmd
 }
 
 // resolveSteerCommand fills opts.steerCommand when the caller did not pass one
