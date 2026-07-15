@@ -78,6 +78,11 @@ func (l AutoscalerExpanderList) String() string {
 	return strings.Join(parts, ",")
 }
 
+// AcceptsScalarOrList marks AutoscalerExpanderList as a scalar-or-array union so
+// the docs field-table generator documents both the single-value and
+// priority-list shapes. See [ScalarOrList].
+func (AutoscalerExpanderList) AcceptsScalarOrList() bool { return true }
+
 // SplitAutoscalerExpanders splits a scalar expander value into its individual
 // entries, trimming surrounding whitespace from each. A comma-separated scalar
 // ("LeastNodes,LeastWaste") yields one entry per element, mirroring the upstream
