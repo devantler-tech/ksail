@@ -132,7 +132,7 @@ require (
 	github.com/aquasecurity/go-version v0.0.1 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2 // indirect
-	github.com/armosec/armoapi-go v0.0.562 // indirect
+	github.com/armosec/armoapi-go v0.0.730 // indirect
 	github.com/armosec/gojay v1.2.17 // indirect
 	github.com/armosec/utils-go v0.0.58 // indirect
 	github.com/armosec/utils-k8s-go v0.0.30 // indirect
@@ -463,7 +463,7 @@ require (
 	github.com/kubescape/go-logger v0.0.25 // indirect
 	github.com/kubescape/k8s-interface v0.0.195 // indirect
 	github.com/kubescape/kubescape/v3 v3.0.48 // indirect
-	github.com/kubescape/opa-utils v0.0.300 // indirect
+	github.com/kubescape/opa-utils v0.0.301 // indirect
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 // indirect
 	github.com/kubescape/regolibrary/v2 v2.0.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
