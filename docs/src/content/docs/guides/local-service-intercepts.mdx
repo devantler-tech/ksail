@@ -184,8 +184,26 @@ using the in-cluster application.
 
    ```bash
    ksail workload exec -n ksail-intercept-demo traffic-client -- \
-     wget -qO- http://intercept-demo
+     sh -c '
+       attempt=0
+       while [ "$attempt" -lt 20 ]; do
+         response=$(wget -T 1 -qO- http://intercept-demo 2>/dev/null || true)
+         case "$response" in
+           *"served by the local process"*)
+             printf "%s\n" "$response"
+             exit 0
+             ;;
+         esac
+         attempt=$((attempt + 1))
+         sleep 2
+       done
+       echo "timed out waiting for local intercept" >&2
+       exit 1
+     '
    ```
+
+   This bounded poll distinguishes intercept readiness from the command's startup message and fails
+   instead of silently accepting the original cluster response.
 
    The same Service now returns:
 
