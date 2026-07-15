@@ -87,6 +87,16 @@ from scratch:
 ksail workload gen deployment my-app --image=nginx --port=80 > k8s/my-app.yaml
 ```
 
+## Run one service locally
+
+Use `ksail workload intercept` when you want a process on your machine to serve one Deployment's
+live inbound traffic while its cluster dependencies stay in place. The command redirects one pod's
+TCP port for the duration of the session and restores the pod's remote traffic handling on Ctrl-C.
+
+Follow the [Local Service Intercepts guide](/guides/local-service-intercepts/) for a complete example,
+including an in-cluster traffic client, the local process, port selection, and cleanup. Use
+[`workload mirror`](/cli-flags/workload/workload-mirror/) instead when you only need a read-only copy.
+
 ## Check before you ship
 
 `ksail workload validate` and `ksail workload scan` inspect your manifests **fully offline, without a
@@ -126,6 +136,7 @@ See the [Multi-Environment guide](/guides/multi-environment/) for the full patte
 
 ## Related
 
+- [Local Service Intercepts](/guides/local-service-intercepts/) — serve a selected Deployment's live traffic from a local process
 - [Deliver with GitOps](/start/deliver-with-gitops/) — the recommended `push` + `reconcile` workflow, end to end
 - [GitOps Workflows](/guides/gitops-workflows/) — Flux and ArgoCD setup, artifacts, and reconciliation in depth
 - [Registry Management](/guides/registry-management/) — where `push` artifacts and your images live
