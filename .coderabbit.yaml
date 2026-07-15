@@ -2,6 +2,13 @@
 #
 # CodeRabbit configuration. Only the settings that differ from CodeRabbit's defaults
 # are listed here; everything else stays at the default.
+#
+# inheritance: without this, a repository .coderabbit.yaml is the sole config source and
+# REPLACES any organization/UI settings (the docstring ERROR gate itself lives in the UI,
+# since the YAML default is `warning`). Enabling inheritance keeps every UI/org setting —
+# path filters, request_changes_workflow, custom checks — and only overrides the one value
+# defined below, so this change stays scoped to docstrings.
+inheritance: true
 reviews:
   pre_merge_checks:
     # Docstring Coverage counts every function in a PR's changed files against a single
