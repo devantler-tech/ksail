@@ -762,6 +762,17 @@
               "additionalProperties": false,
               "type": "object",
               "description": "Talos holds options specific to the Talos distribution."
+            },
+            "eks": {
+              "properties": {
+                "experimentalInPlaceUpdates": {
+                  "type": "boolean",
+                  "description": "Experimental: apply managed node-group scaling changes in-place via 'eksctl scale nodegroup' during 'cluster update' instead of recreating the cluster. Default false."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "EKS holds options specific to the EKS distribution."
             }
           },
           "additionalProperties": false,

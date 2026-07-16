@@ -125,6 +125,51 @@ func TestCreateEKSProvisionerWithConfig(t *testing.T) {
 	assert.Equal(t, "test-eks", eksConfig.GetClusterName())
 }
 
+// TestCreateEKSProvisionerUpdaterGate asserts the experimental in-place
+// update capability is opt-in: the default returns the plain provisioner
+// (no Updater), and the spec flag switches to the updatable wrapper.
+func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		inPlaceUpdates bool
+		wantUpdater    bool
+	}{
+		{name: "default is recreate flow", inPlaceUpdates: false, wantUpdater: false},
+		{name: "opt-in enables Updater", inPlaceUpdates: true, wantUpdater: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: &clusterprovisioner.DistributionConfig{
+					EKS: &clusterprovisioner.EKSConfig{
+						Name:       "test-eks",
+						Region:     "eu-west-1",
+						ConfigPath: "eks.yaml",
+					},
+				},
+			}
+
+			cluster := eksTestCluster()
+			cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates = testCase.inPlaceUpdates
+
+			provisioner, _, err := factory.Create(context.Background(), cluster)
+			require.NoError(t, err)
+
+			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
+			assert.Equal(t, testCase.wantUpdater, hasUpdater)
+
+			if testCase.wantUpdater {
+				assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
+			}
+		})
+	}
+}
+
 // TestCreateEKSProvisionerWithoutConfig asserts that selecting the EKS
 // distribution without a pre-loaded EKSConfig surfaces
 // ErrMissingDistributionConfig rather than a nil-pointer panic.

@@ -308,6 +308,19 @@ spec:
                       When empty, KSail uses the distribution's default configuration path.
                       CLI-only (a local file path on the CLI host); ignored by the operator.
                     type: string
+                  eks:
+                    description: EKS holds options specific to the EKS distribution.
+                    properties:
+                      experimentalInPlaceUpdates:
+                        description: |-
+                          ExperimentalInPlaceUpdates enables the experimental in-place update path for
+                          `cluster update` on EKS: managed node-group scaling changes (desiredCapacity,
+                          minSize, maxSize in eksctl.yaml) are applied via `eksctl scale nodegroup`
+                          instead of the delete-and-recreate flow. Default false (recreate flow), as the
+                          path has not yet been validated against a live EKS cluster. Non-scaling changes
+                          still report as requiring recreation.
+                        type: boolean
+                    type: object
                   gitOpsEngine:
                     description: 'GitOpsEngine selects the GitOps engine KSail bootstraps:
                       None, Flux, or ArgoCD.'

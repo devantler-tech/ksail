@@ -50,6 +50,13 @@ func (f DefaultFactory) createEKSProvisioner(
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
 	}
 
+	// The Updater capability is discovered by type assertion, so the
+	// experimental in-place update path is gated at construction: without the
+	// opt-in the orchestrator sees no Updater and keeps today's recreate flow.
+	if cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates {
+		return eksprovisioner.NewUpdatableProvisioner(provisioner), eksConfig, nil
+	}
+
 	return provisioner, eksConfig, nil
 }
 

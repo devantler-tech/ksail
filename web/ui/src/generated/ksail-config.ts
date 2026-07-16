@@ -482,6 +482,15 @@ export interface KSailClusterConfiguration {
          */
         storageHealthTimeout?: string;
       };
+      /**
+       * EKS holds options specific to the EKS distribution.
+       */
+      eks?: {
+        /**
+         * Experimental: apply managed node-group scaling changes in-place via 'eksctl scale nodegroup' during 'cluster update' instead of recreating the cluster. Default false.
+         */
+        experimentalInPlaceUpdates?: boolean;
+      };
     };
     /**
      * Provider holds infrastructure-provider-specific options
