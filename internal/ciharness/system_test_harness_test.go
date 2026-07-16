@@ -2,6 +2,7 @@ package ciharness_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +10,42 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	eksSmokeBoundaryFixture = "arn:aws-us-gov:iam::123456789012:policy/eks-ci-smoke-boundary"
+	eksSmokeConfigFixture   = `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: fixture
+  region: us-east-1
+  tags:
+    owner: keep
+iam:
+  withOIDC: true
+managedNodeGroups:
+  - name: primary
+    desiredCapacity: 3
+    minSize: 2
+    maxSize: 4
+    labels:
+      workload: keep
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+  - name: secondary
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 3
+addons:
+  - name: vpc-cni
+    version: latest
+  - name: aws-ebs-csi-driver
+    attachPolicyARNs:
+      - arn:aws-us-gov:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+  - name: kube-proxy
+    version: v1.31.0-eksbuild.1
+`
 )
 
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
@@ -193,6 +230,245 @@ func TestSystemTestHarnessOnlyBoundsDockerK3sCleanup(t *testing.T) {
 	assert.NotContains(t, cloudBranch, `timeout --kill-after=10s 2m`)
 	assert.Contains(t, cloudBranch, `"${DELETE_COMMAND[@]}"`)
 	assert.NotContains(t, cloudBranch, `|| echo`)
+}
+
+func TestEKSSmokeConfigBoundsEveryCreatedIAMRole(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	boundaryStep := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Resolve EKS permissions boundary",
+	)
+	assert.Equal(t, "permissions-boundary", boundaryStep.ID)
+	assert.Contains(t, boundaryStep.Run, `aws sts get-caller-identity`)
+	assert.Contains(t, boundaryStep.Run, `--query Arn`)
+	assert.Contains(t, boundaryStep.Run, `^[0-9]{12}$`)
+	assert.Contains(t, boundaryStep.Run, `^aws(-[a-z0-9-]+)?$`)
+	assert.Contains(t, boundaryStep.Run, `"$arn_account_id" != "$account_id"`)
+	assert.Contains(t, boundaryStep.Run, `policy/eks-ci-smoke-boundary`)
+	assert.Contains(t, boundaryStep.Run, `arn=arn:%s:iam::%s:policy`)
+	assert.Contains(t, boundaryStep.Run, `>> "$GITHUB_OUTPUT"`)
+
+	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	assert.Equal(
+		t,
+		"${{ steps.permissions-boundary.outputs.arn }}",
+		initStep.Env["AWS_PERMISSIONS_BOUNDARY_ARN"],
+	)
+	assert.Contains(
+		t,
+		initStep.Run,
+		`boundary = ENV.fetch("AWS_PERMISSIONS_BOUNDARY_ARN")`,
+	)
+	assert.Contains(
+		t,
+		initStep.Run,
+		`data.fetch("iam")["serviceRolePermissionsBoundary"] = boundary`,
+	)
+	assert.Contains(t, initStep.Run, `nodegroup["iam"] ||= {}`)
+	assert.Contains(
+		t,
+		initStep.Run,
+		`nodegroup["iam"]["instanceRolePermissionsBoundary"] = boundary`,
+	)
+	assert.Contains(t, initStep.Run, `%w[vpc-cni aws-ebs-csi-driver]`)
+	assert.Contains(t, initStep.Run, `addon["permissionsBoundary"] = boundary`)
+}
+
+func TestEKSSmokeConfigBoundaryMutationSemantics(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+	requireTestExecutable(t, "ruby")
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	boundaryStep := findHarnessStep(t, smokeJob.Steps, "🔐 Resolve EKS permissions boundary")
+	assert.Equal(
+		t,
+		"arn="+eksSmokeBoundaryFixture+"\n",
+		runPermissionsBoundaryStep(t, boundaryStep.Run),
+	)
+
+	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	config := runEmbeddedEKSSmokeMutation(t, initStep.Run)
+	assertEKSSmokeMutation(t, config)
+}
+
+func requireTestExecutable(t *testing.T, name string) {
+	t.Helper()
+
+	_, err := exec.LookPath(name)
+	if err != nil {
+		t.Skipf("%s is unavailable: %v", name, err)
+	}
+}
+
+func runPermissionsBoundaryStep(t *testing.T, workflowRun string) string {
+	t.Helper()
+
+	const awsStub = `#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *"--query Account"*)
+    printf '123456789012\n'
+    ;;
+  *"--query Arn"*)
+    printf 'arn:aws-us-gov:sts::123456789012:assumed-role/eks-ci/smoke-test\n'
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+`
+
+	tempDir := t.TempDir()
+	awsPath := filepath.Join(tempDir, "aws")
+	outputPath := filepath.Join(tempDir, "github-output")
+
+	require.NoError(
+		t,
+		os.WriteFile(awsPath, []byte(awsStub), 0o700), //nolint:gosec // Test-owned path.
+	)
+
+	// The executable and shell source are both repository-owned test inputs.
+	command := exec.CommandContext(t.Context(), "bash", "-c", workflowRun) //nolint:gosec
+
+	command.Env = append(
+		os.Environ(),
+		"PATH="+tempDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GITHUB_OUTPUT="+outputPath,
+	)
+	output, err := command.CombinedOutput()
+	require.NoErrorf(t, err, "permissions-boundary step failed:\n%s", output)
+
+	boundaryOutput, err := os.ReadFile(outputPath) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+
+	return string(boundaryOutput)
+}
+
+func assertEKSSmokeMutation(t *testing.T, config map[string]any) {
+	t.Helper()
+
+	metadata := requireStringMap(t, config["metadata"])
+	assert.Equal(t, "fixture", metadata["name"])
+	assert.Equal(t, "us-gov-west-1", metadata["region"])
+	assert.Equal(t, "keep", requireStringMap(t, metadata["tags"])["owner"])
+
+	iam := requireStringMap(t, config["iam"])
+	assert.Equal(t, true, iam["withOIDC"])
+	assert.Equal(t, eksSmokeBoundaryFixture, iam["serviceRolePermissionsBoundary"])
+
+	assertEKSSmokeNodegroups(t, config["managedNodeGroups"])
+	assertEKSSmokeAddons(t, config["addons"])
+}
+
+func assertEKSSmokeNodegroups(t *testing.T, rawNodegroups any) {
+	t.Helper()
+
+	nodegroups := requireAnySlice(t, rawNodegroups)
+	require.Len(t, nodegroups, 2)
+
+	for _, rawNodegroup := range nodegroups {
+		nodegroup := requireStringMap(t, rawNodegroup)
+		assert.Equal(t, 1, nodegroup["desiredCapacity"])
+		assert.Equal(t, 1, nodegroup["minSize"])
+		assert.Equal(t, 1, nodegroup["maxSize"])
+		assert.Equal(
+			t,
+			eksSmokeBoundaryFixture,
+			requireStringMap(t, nodegroup["iam"])["instanceRolePermissionsBoundary"],
+		)
+	}
+
+	primary := requireStringMap(t, nodegroups[0])
+	assert.Equal(t, "keep", requireStringMap(t, primary["labels"])["workload"])
+	addonPolicies := requireStringMap(
+		t,
+		requireStringMap(t, primary["iam"])["withAddonPolicies"],
+	)
+	assert.Equal(t, true, addonPolicies["autoScaler"])
+}
+
+func assertEKSSmokeAddons(t *testing.T, rawAddons any) {
+	t.Helper()
+
+	addons := requireAnySlice(t, rawAddons)
+	require.Len(t, addons, 3)
+
+	for _, rawAddon := range addons[:2] {
+		addon := requireStringMap(t, rawAddon)
+		assert.Equal(t, eksSmokeBoundaryFixture, addon["permissionsBoundary"])
+	}
+
+	kubeProxy := requireStringMap(t, addons[2])
+	assert.Equal(t, "kube-proxy", kubeProxy["name"])
+	assert.Equal(t, "v1.31.0-eksbuild.1", kubeProxy["version"])
+	assert.NotContains(t, kubeProxy, "permissionsBoundary")
+}
+
+func runEmbeddedEKSSmokeMutation(t *testing.T, workflowRun string) map[string]any {
+	t.Helper()
+
+	const rubyPrefix = "ruby -ryaml -e '\n"
+
+	start := strings.Index(workflowRun, rubyPrefix)
+	require.NotEqual(t, -1, start, "embedded Ruby mutation is missing")
+	remainder := workflowRun[start+len(rubyPrefix):]
+	end := strings.Index(remainder, "\n'")
+	require.NotEqual(t, -1, end, "embedded Ruby mutation is unterminated")
+	rubyScript := remainder[:end]
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "eks.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(eksSmokeConfigFixture), 0o600))
+
+	// The command and script both come from this repository's owned workflow.
+	command := exec.CommandContext( //nolint:gosec
+		t.Context(), "ruby", "-ryaml", "-e", rubyScript,
+	)
+	command.Dir = tempDir
+
+	command.Env = append(
+		os.Environ(),
+		"AWS_REGION=us-gov-west-1",
+		"AWS_PERMISSIONS_BOUNDARY_ARN="+eksSmokeBoundaryFixture,
+	)
+	output, err := command.CombinedOutput()
+	require.NoErrorf(t, err, "embedded Ruby mutation failed:\n%s", output)
+
+	mutated, err := os.ReadFile(configPath) //nolint:gosec // Test-owned temporary path.
+	require.NoError(t, err)
+
+	var config map[string]any
+	require.NoError(t, yaml.Unmarshal(mutated, &config))
+
+	return config
+}
+
+func requireStringMap(t *testing.T, value any) map[string]any {
+	t.Helper()
+
+	result, ok := value.(map[string]any)
+	require.True(t, ok, "expected map, got %T", value)
+
+	return result
+}
+
+func requireAnySlice(t *testing.T, value any) []any {
+	t.Helper()
+
+	result, ok := value.([]any)
+	require.True(t, ok, "expected slice, got %T", value)
+
+	return result
 }
 
 func readCompositeAction(t *testing.T, path string) compositeAction {
