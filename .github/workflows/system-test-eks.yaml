@@ -16,7 +16,9 @@ name: "System Test - EKS"
 #   3. Attach a least-privilege permission policy: only what `eksctl create/delete
 #      cluster` needs (CloudFormation, EC2, EKS, and the scoped IAM actions from
 #      eksctl's documented minimum policies —
-#      https://eksctl.io/usage/minimum-iam-policies/). Never AdministratorAccess.
+#      https://eksctl.io/usage/minimum-iam-policies/). Require every role created
+#      by that identity to carry the `eks-ci-smoke-boundary` permissions boundary.
+#      Never grant AdministratorAccess.
 #   4. Set the role's MaxSessionDuration to 7200 seconds — the smoke test job
 #      may run up to 120 minutes and must keep credentials through cleanup.
 #   5. Store the role ARN as the `AWS_OIDC_ROLE_ARN` secret on the `ci`
@@ -132,6 +134,29 @@ jobs:
           # clusters. Requires MaxSessionDuration=7200 on the role.
           role-duration-seconds: 7200
 
+      - name: 🔐 Resolve EKS permissions boundary
+        id: permissions-boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          IFS=: read -r arn_prefix partition service arn_region arn_account_id arn_resource \
+            <<< "$caller_arn"
+          if [[ ! "$account_id" =~ ^[0-9]{12}$ ]] ||
+             [[ "$arn_prefix" != "arn" ]] ||
+             [[ ! "$partition" =~ ^aws(-[a-z0-9-]+)?$ ]] ||
+             [[ "$service" != "sts" ]] ||
+             [[ -n "$arn_region" ]] ||
+             [[ "$arn_account_id" != "$account_id" ]] ||
+             [[ ! "$arn_resource" =~ ^assumed-role/[A-Za-z0-9+=,.@_-]+/[A-Za-z0-9+=,.@_-]+$ ]]; then
+            echo "::error::AWS identity returned an invalid account ID or caller ARN."
+            exit 1
+          fi
+
+          printf 'arn=arn:%s:iam::%s:policy/eks-ci-smoke-boundary\n' \
+            "$partition" "$account_id" >> "$GITHUB_OUTPUT"
+
       - name: ⚙️ Setup Go
         id: setup-go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -171,6 +196,7 @@ jobs:
         id: init
         shell: bash
         env:
+          AWS_PERMISSIONS_BOUNDARY_ARN: ${{ steps.permissions-boundary.outputs.arn }}
           GITOPS_ENGINE: ${{ inputs.gitops_engine }}
         run: |
           set -euo pipefail
@@ -192,11 +218,24 @@ jobs:
           ruby -ryaml -e '
             path = "eks.yaml"
             data = YAML.load_file(path)
+            boundary = ENV.fetch("AWS_PERMISSIONS_BOUNDARY_ARN")
+            raise "AWS permissions boundary ARN is empty" if boundary.empty?
+
             data.fetch("metadata")["region"] = ENV.fetch("AWS_REGION")
+            data.fetch("iam")["serviceRolePermissionsBoundary"] = boundary
             Array(data["managedNodeGroups"]).each do |nodegroup|
               nodegroup["desiredCapacity"] = 1
               nodegroup["minSize"] = 1
               nodegroup["maxSize"] = 1
+              nodegroup["iam"] ||= {}
+              nodegroup["iam"]["instanceRolePermissionsBoundary"] = boundary
+            end
+
+            role_addons = %w[vpc-cni aws-ebs-csi-driver]
+            Array(data["addons"]).each do |addon|
+              next unless role_addons.include?(addon["name"])
+
+              addon["permissionsBoundary"] = boundary
             end
             File.write(path, data.to_yaml)
           '
