@@ -290,7 +290,7 @@ require (
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.1 // indirect
-	github.com/fluxcd/helm-controller/api v1.6.1 // indirect
+	github.com/fluxcd/helm-controller/api v1.6.2 // indirect
 	github.com/fluxcd/kustomize-controller/api v1.9.2 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
