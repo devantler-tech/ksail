@@ -147,6 +147,12 @@ func migrateKubernetesPatchesForContract(
 	migrated := make([]Patch, len(patches))
 	copy(migrated, patches)
 
+	// Legacy patches may split a value across files — most notably an OIDC CA whose
+	// machine.files entry lives in a different patch than the kube-apiserver args that
+	// reference it. Decode the whole set up front so per-patch migration can resolve
+	// against every patch, not just the one being migrated.
+	patchSetDocuments := decodePatchSetDocuments(patches)
+
 	for idx := range migrated {
 		content := strings.TrimSpace(string(migrated[idx].Content))
 
@@ -156,7 +162,10 @@ func migrateKubernetesPatchesForContract(
 		case strings.TrimSpace(legacyAPIServerFeatureGatesPatchYAML):
 			migrated[idx].Content = []byte(multiDocumentAPIServerFeatureGatesPatchYAML)
 		default:
-			content, found, migrationErr := migrateLegacyKubernetesPatch(migrated[idx])
+			content, found, migrationErr := migrateLegacyKubernetesPatch(
+				migrated[idx],
+				patchSetDocuments,
+			)
 			if migrationErr != nil {
 				return nil, migrationErr
 			}
@@ -171,14 +180,37 @@ func migrateKubernetesPatchesForContract(
 }
 
 type legacyAPIServerPatchValues struct {
-	documents       []map[string]any
-	clusterDocument map[string]any
-	cluster         map[string]any
-	apiServer       map[string]any
-	extraArgs       map[string]any
+	documents         []map[string]any
+	patchSetDocuments []map[string]any
+	clusterDocument   map[string]any
+	cluster           map[string]any
+	apiServer         map[string]any
+	extraArgs         map[string]any
 }
 
-func migrateLegacyKubernetesPatch(patch Patch) ([]byte, bool, error) {
+// decodePatchSetDocuments decodes every patch in the set into a flat document list,
+// used to resolve references that span patches. Patches that fail to decode, or that
+// are not map documents, are skipped: migrating each patch reports its own decode
+// error, and this lookup must not turn an unrelated malformed patch into a failure.
+func decodePatchSetDocuments(patches []Patch) []map[string]any {
+	documents := []map[string]any{}
+
+	for _, patch := range patches {
+		patchDocuments, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
+		if err != nil || !mapDocuments {
+			continue
+		}
+
+		documents = append(documents, patchDocuments...)
+	}
+
+	return documents
+}
+
+func migrateLegacyKubernetesPatch(
+	patch Patch,
+	patchSetDocuments []map[string]any,
+) ([]byte, bool, error) {
 	documents, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
 	if err != nil {
 		return nil, false, err
@@ -197,6 +229,10 @@ func migrateLegacyKubernetesPatch(patch Patch) ([]byte, bool, error) {
 			patch.Path,
 			err,
 		)
+	}
+
+	if values != nil {
+		values.patchSetDocuments = patchSetDocuments
 	}
 
 	if !found && !cniMigrated {
@@ -424,7 +460,13 @@ func (values *legacyAPIServerPatchValues) oidcConfig(patchPath string) (OIDCPatc
 	}
 
 	if caPath != "" {
+		// Prefer the patch being migrated, then fall back to the rest of the set: the
+		// machine.files entry backing oidc-ca-file may live in a different patch.
 		config.CertificateAuthority = machineFileContent(values.documents, caPath)
+		if config.CertificateAuthority == "" {
+			config.CertificateAuthority = machineFileContent(values.patchSetDocuments, caPath)
+		}
+
 		if config.CertificateAuthority == "" {
 			return OIDCPatchConfig{}, fmt.Errorf(
 				"migrate legacy OIDC patch %q for %q: %w",

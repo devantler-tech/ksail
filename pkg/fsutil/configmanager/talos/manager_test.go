@@ -556,6 +556,101 @@ cluster:
 	assert.Empty(t, controlPlane.K8sAPIServerConfig().ExtraArgs())
 }
 
+func TestConfigManager_Load_MigratesLegacyOIDCPatchWithCertificateAuthorityInSeparatePatch(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// The kube-apiserver patch references the OIDC CA by path, but the machine.files
+	// entry providing it lives in a separate patch. This is valid pre-1.14, because
+	// every patch is applied before kube-apiserver reads the file. The CA patch is
+	// named so it sorts *after* the API-server patch, proving the lookup spans the
+	// whole patch set rather than only the patches seen so far.
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-ca-file: "/etc/kubernetes/oidc/ca.crt"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	legacyOIDCCA := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/ca.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        split-ca
+        -----END CERTIFICATE-----
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "zz-oidc-ca.yaml"), legacyOIDCCA, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	authConfig := controlPlane.K8sAuthenticationConfig().Configuration()
+	jwt, found := authConfig["jwt"].([]any)
+	require.True(t, found)
+	require.Len(t, jwt, 1)
+	authenticator, found := jwt[0].(map[string]any)
+	require.True(t, found)
+	issuer, found := authenticator["issuer"].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, "https://dex.example.com", issuer["url"])
+	assert.Contains(t, issuer["certificateAuthority"], "split-ca")
+}
+
+func TestConfigManager_Load_RejectsLegacyOIDCPatchWithMissingCertificateAuthority(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// oidc-ca-file references a path no patch in the set provides. Resolving the CA
+	// across the whole patch set must not turn this into a silent pass.
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-ca-file: "/etc/kubernetes/oidc/absent.crt"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	unrelatedCA := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/other.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        other-ca
+        -----END CERTIFICATE-----
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "zz-other-ca.yaml"), unrelatedCA, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CA content is missing")
+}
+
 func TestConfigManager_Load_RejectsUnsupportedLegacyOIDCExtraArg(t *testing.T) {
 	t.Parallel()
 
