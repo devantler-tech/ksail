@@ -141,12 +141,15 @@ jobs:
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
           caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
-          IFS=: read -r arn_prefix partition service _ arn_account_id _ <<< "$caller_arn"
+          IFS=: read -r arn_prefix partition service arn_region arn_account_id arn_resource \
+            <<< "$caller_arn"
           if [[ ! "$account_id" =~ ^[0-9]{12}$ ]] ||
              [[ "$arn_prefix" != "arn" ]] ||
              [[ ! "$partition" =~ ^aws(-[a-z0-9-]+)?$ ]] ||
              [[ "$service" != "sts" ]] ||
-             [[ "$arn_account_id" != "$account_id" ]]; then
+             [[ -n "$arn_region" ]] ||
+             [[ "$arn_account_id" != "$account_id" ]] ||
+             [[ ! "$arn_resource" =~ ^assumed-role/[A-Za-z0-9+=,.@_-]+/[A-Za-z0-9+=,.@_-]+$ ]]; then
             echo "::error::AWS identity returned an invalid account ID or caller ARN."
             exit 1
           fi

@@ -249,6 +249,12 @@ func TestEKSSmokeConfigBoundsEveryCreatedIAMRole(t *testing.T) {
 	assert.Contains(t, boundaryStep.Run, `--query Arn`)
 	assert.Contains(t, boundaryStep.Run, `^[0-9]{12}$`)
 	assert.Contains(t, boundaryStep.Run, `^aws(-[a-z0-9-]+)?$`)
+	assert.Contains(t, boundaryStep.Run, `[[ -n "$arn_region" ]]`)
+	assert.Contains(
+		t,
+		boundaryStep.Run,
+		`^assumed-role/[A-Za-z0-9+=,.@_-]+/[A-Za-z0-9+=,.@_-]+$`,
+	)
 	assert.Contains(t, boundaryStep.Run, `"$arn_account_id" != "$account_id"`)
 	assert.Contains(t, boundaryStep.Run, `policy/eks-ci-smoke-boundary`)
 	assert.Contains(t, boundaryStep.Run, `arn=arn:%s:iam::%s:policy`)
@@ -316,11 +322,19 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 	}{
 		"invalid account ID": {
 			accountID: "not-an-account",
-			callerARN: "arn:aws:sts::123456789012:assumed-role/eks-ci/smoke-test",
+			callerARN: "arn:aws:sts::not-an-account:assumed-role/eks-ci/smoke-test",
 		},
 		"malformed caller ARN": {
 			accountID: "123456789012",
 			callerARN: "not-an-arn",
+		},
+		"truncated caller ARN": {
+			accountID: "123456789012",
+			callerARN: "arn:aws:sts::123456789012:",
+		},
+		"regional caller ARN": {
+			accountID: "123456789012",
+			callerARN: "arn:aws:sts:us-east-1:123456789012:assumed-role/eks-ci/smoke-test",
 		},
 		"foreign ARN partition": {
 			accountID: "123456789012",
