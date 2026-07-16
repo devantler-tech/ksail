@@ -791,19 +791,17 @@ func gateArgoCDControlPlaneReady(
 	}
 }
 
-// buildArgoCDApplicationTasks builds one progress task per ArgoCD Application,
-// capturing the name per iteration to avoid the loop-variable closure bug.
+// buildArgoCDApplicationTasks builds one progress task per ArgoCD Application.
 func buildArgoCDApplicationTasks(
 	apps []argocd.ApplicationInfo,
 	argoReconciler *argocd.Reconciler,
 ) []notify.ProgressTask {
 	tasks := make([]notify.ProgressTask, 0, len(apps))
 	for _, app := range apps {
-		name := app.Name
 		tasks = append(tasks, notify.ProgressTask{
-			Name: name,
+			Name: app.Name,
 			Fn: func(ctx context.Context) error {
-				return pollUntilApplicationReady(ctx, argoReconciler, name)
+				return pollUntilApplicationReady(ctx, argoReconciler, app.Name)
 			},
 		})
 	}
