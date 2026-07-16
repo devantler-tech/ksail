@@ -116,6 +116,21 @@ func ExportResolveCreatedContextName(
 	return resolveCreatedContextName(distribution, provider, clusterName)
 }
 
+// ExportResolvePostCreateContext exports resolvePostCreateContext for testing.
+func ExportResolvePostCreateContext(ctx *localregistry.Context) error {
+	return resolvePostCreateContext(ctx)
+}
+
+// ExportPrepareEKSCreateConfig exports prepareEKSCreateConfig for testing.
+func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
+	return prepareEKSCreateConfig(ctx)
+}
+
+// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
+	return applyClusterNameOverride(ctx, name)
+}
+
 // ExportResolveConsent exports resolveConsent for testing.
 func ExportResolveConsent(viperForce bool, yesFlag *pflag.Flag) bool {
 	return resolveConsent(viperForce, yesFlag)
@@ -167,6 +182,22 @@ func ExportApplyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
+}
+
+// ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
+func ExportComputeUpdateDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.computeUpdateDiff(updater)
 }
 
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.

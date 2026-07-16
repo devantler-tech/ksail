@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
@@ -171,8 +172,9 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 // fakeUpdater is a test clusterprovisioner.Updater whose Update returns a preset
 // result and error, letting tests drive applyInPlaceChanges deterministically.
 type fakeUpdater struct {
-	result *clusterupdate.UpdateResult
-	err    error
+	result  *clusterupdate.UpdateResult
+	err     error
+	diffErr error
 }
 
 func (f *fakeUpdater) Update(
@@ -189,7 +191,7 @@ func (f *fakeUpdater) DiffConfig(
 	_ string,
 	_, _ *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
-	return clusterupdate.NewEmptyUpdateResult(), nil
+	return clusterupdate.NewEmptyUpdateResult(), f.diffErr
 }
 
 func (f *fakeUpdater) GetCurrentConfig(
@@ -197,6 +199,25 @@ func (f *fakeUpdater) GetCurrentConfig(
 	_ string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	return nil, nil, nil
+}
+
+// TestComputeUpdateDiff_PropagatesProvisionerError verifies live provisioner
+// detection failures abort the update preview instead of becoming a false
+// no-change result.
+func TestComputeUpdateDiff_PropagatesProvisionerError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := assert.AnError
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+
+	ctx := &localregistry.Context{ClusterCfg: &v1alpha1.Cluster{}}
+
+	_, _, err := cluster.ExportComputeUpdateDiff(
+		cmd, ctx, "test", &fakeUpdater{diffErr: wantErr},
+	)
+
+	require.ErrorIs(t, err, wantErr)
 }
 
 func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test

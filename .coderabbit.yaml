@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration. Only the settings that differ from CodeRabbit's defaults
+# are listed here; everything else stays at the default.
+#
+# inheritance: without this, a repository .coderabbit.yaml is the sole config source and
+# REPLACES any organization/UI settings (the docstring ERROR gate itself lives in the UI,
+# since the YAML default is `warning`). Enabling inheritance keeps every UI/org setting —
+# path filters, request_changes_workflow, custom checks — and only overrides the one value
+# defined below, so this change stays scoped to docstrings.
+inheritance: true
+reviews:
+  pre_merge_checks:
+    # Docstring Coverage counts every function in a PR's changed files against a single
+    # coverage threshold, and it cannot be scoped per-path (the only path mechanism,
+    # reviews.path_filters, would drop the files from the whole review, not just this
+    # metric). Go test functions and export_test.go accessors idiomatically carry no doc
+    # comments, so a test-heavy PR is dragged well below the threshold and blocked on a
+    # metric that is measuring against a Go convention rather than a real documentation
+    # gap (e.g. ksail#6045: 75% driven almost entirely by ~150 undocumented test funcs).
+    # Keep the check as an advisory WARNING — CodeRabbit still reports coverage — instead
+    # of a hard merge ERROR, until it can be scoped to production code.
+    docstrings:
+      mode: warning

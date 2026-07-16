@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,7 +84,14 @@ func newCoreV1Client(restConfig *rest.Config) (client.Client, error) {
 func buildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	parsed := localRegistry.Parse()
-	username, password := localRegistry.ResolveCredentials()
+	username, password := localRegistry.ResolvePullCredentials()
+
+	annotations := map[string]string(nil)
+	if localRegistry.UsesDedicatedPullCredentials() {
+		annotations = map[string]string{
+			registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
+		}
+	}
 
 	dockerConfig, err := buildDockerConfigJSON(parsed.Host, username, password)
 	if err != nil {
@@ -92,8 +100,9 @@ func buildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ExternalRegistrySecretName,
-			Namespace: fluxclient.DefaultNamespace,
+			Name:        ExternalRegistrySecretName,
+			Namespace:   fluxclient.DefaultNamespace,
+			Annotations: annotations,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "ksail",
 			},

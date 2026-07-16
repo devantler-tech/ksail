@@ -22,10 +22,10 @@ repointed; re-encrypt them to the new environment's recipients afterwards with
 
 Examples:
   # Clone the "prod" environment into a new "staging" environment
-  ksail project add-environment staging --from prod
+  ksail project env add staging --from prod
 
   # Clone "prod" into "dev" on a different provider, overwriting any existing files
-  ksail project add-environment dev --from prod --provider Docker --force
+  ksail project env add dev --from prod --provider Docker --force
 
 Usage:
   ksail project add-environment <name> [flags]

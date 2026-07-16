@@ -1,0 +1,292 @@
+---
+title: Run a Service Locally Against Cluster Traffic
+description: Redirect a Deployment's inbound TCP traffic to a process on your machine with ksail workload intercept, then restore the workload cleanly.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+`ksail workload intercept` lets you change one service locally while the rest of the application
+keeps running in Kubernetes. KSail selects a running pod for a Deployment, injects a narrowly
+privileged steering container, and redirects one inbound TCP port through a tunnel to a process on
+your machine. The local process returns the response to the original in-cluster caller.
+
+Use this when the local process should **replace** the selected pod for the intercepted port. If you
+only want to observe traffic while the workload continues serving it, use
+[`ksail workload mirror`](/cli-flags/workload/workload-mirror/) instead.
+
+| Mode | Cluster workload | Local process |
+|------|------------------|---------------|
+| `intercept` | Stops serving the intercepted traffic while the session is active | Receives the request and returns the response |
+| `mirror` | Keeps serving normally | Receives a copy for inspection or replay |
+
+## Before you start
+
+You need:
+
+- a running Kubernetes cluster and a kubeconfig context KSail can use;
+- a Deployment with at least one Running pod;
+- credentials allowed to read the target Deployment and its pods, update the
+  `pods/ephemeralcontainers` subresource, and create `pods/exec` sessions;
+- an admission policy that permits the injected ephemeral container's single added Linux capability,
+  `NET_ADMIN`;
+- the local process listening on `127.0.0.1` before the intercept starts; and
+- Python 3 for the local demo server below (replace it with your own application in real use).
+
+:::caution[Intercept mutates the selected live pod]
+KSail adds an ephemeral container and a temporary iptables redirect inside one running pod. Use it
+only where debug-level access is appropriate, and coordinate before intercepting shared traffic. The
+steering container drops every Linux capability except `NET_ADMIN`, which it needs to manage that
+redirect.
+:::
+
+The walkthrough uses one Deployment replica so every request has a single destination. With several
+replicas, KSail intercepts only the concrete pod it selects; requests routed to other replicas keep
+using the in-cluster application.
+
+## Walk through an intercept
+
+<Steps>
+
+1. **Create a target and an in-cluster traffic client.** Save this as
+   `/tmp/ksail-intercept-demo.yaml`:
+
+   ```yaml
+   apiVersion: v1
+   kind: Namespace
+   metadata:
+     name: ksail-intercept-demo
+   ---
+   apiVersion: v1
+   kind: ConfigMap
+   metadata:
+     name: intercept-demo-index
+     namespace: ksail-intercept-demo
+   data:
+     index.html: |
+       served by the cluster
+   ---
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: intercept-demo
+     namespace: ksail-intercept-demo
+   spec:
+     replicas: 1
+     selector:
+       matchLabels:
+         app: intercept-demo
+     template:
+       metadata:
+         labels:
+           app: intercept-demo
+       spec:
+         containers:
+           - name: web
+             image: nginx:1.27-alpine
+             ports:
+               - name: http
+                 containerPort: 80
+             volumeMounts:
+               - name: index
+                 mountPath: /usr/share/nginx/html/index.html
+                 subPath: index.html
+         volumes:
+           - name: index
+             configMap:
+               name: intercept-demo-index
+   ---
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: intercept-demo
+     namespace: ksail-intercept-demo
+   spec:
+     selector:
+       app: intercept-demo
+     ports:
+       - name: http
+         port: 80
+         targetPort: http
+   ---
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: traffic-client
+     namespace: ksail-intercept-demo
+   spec:
+     containers:
+       - name: client
+         image: busybox:1.36.1
+         command: ["sh", "-c", "sleep 3600"]
+   ```
+
+   Apply it and wait for both pods:
+
+   ```bash
+   ksail workload apply -f /tmp/ksail-intercept-demo.yaml
+   ksail workload exec --namespace ksail-intercept-demo \
+     --pod-running-timeout=2m deployment/intercept-demo -- true
+   ksail workload exec --namespace ksail-intercept-demo \
+     --pod-running-timeout=2m traffic-client -- true
+   ```
+
+   The two no-op `exec` calls wait for a running target pod and traffic-client pod. The baseline
+   request in the next step then verifies that the Service and nginx container are ready together.
+
+2. **Confirm the remote baseline.** Send a request from the traffic client to the Service:
+
+   ```bash
+   ksail workload exec -n ksail-intercept-demo traffic-client -- \
+     sh -c '
+       attempt=0
+       until wget -T 1 -qO- http://intercept-demo; do
+         attempt=$((attempt + 1))
+         if [ "$attempt" -ge 20 ]; then
+           echo "timed out waiting for intercept-demo" >&2
+           exit 1
+         fi
+         sleep 2
+       done
+     '
+   ```
+
+   This retries for about one minute so a Running pod cannot race nginx starting to listen.
+
+   The response is:
+
+   ```text
+   served by the cluster
+   ```
+
+3. **Start the local process.** In a second terminal, serve a different response on loopback:
+
+   ```bash
+   mkdir -p /tmp/ksail-intercept-local
+   printf 'served by the local process\n' > /tmp/ksail-intercept-local/index.html
+   python3 -m http.server 8080 --bind 127.0.0.1 \
+     --directory /tmp/ksail-intercept-local
+   ```
+
+4. **Start the intercept.** In a third terminal, redirect the pod's port `80` to local port `8080`:
+
+   ```bash
+   ksail workload intercept intercept-demo \
+     --namespace ksail-intercept-demo \
+     --service-port 80 \
+     --local-port 8080
+   ```
+
+   `--service-port` is the port the container receives after any Service `targetPort` mapping. It is
+   not necessarily the Service's public `port`. `--local-port` is the loopback port where your local
+   process listens.
+
+5. **Verify the local response.** Repeat the in-cluster request:
+
+   ```bash
+   ksail workload exec -n ksail-intercept-demo traffic-client -- \
+     sh -c '
+       attempt=0
+       while [ "$attempt" -lt 20 ]; do
+         response=$(wget -T 1 -qO- http://intercept-demo 2>/dev/null || true)
+         case "$response" in
+           *"served by the local process"*)
+             printf "%s\n" "$response"
+             exit 0
+             ;;
+         esac
+         attempt=$((attempt + 1))
+         sleep 2
+       done
+       echo "timed out waiting for local intercept" >&2
+       exit 1
+     '
+   ```
+
+   This bounded poll distinguishes intercept readiness from the command's startup message and fails
+   instead of silently accepting the original cluster response.
+
+   The same Service now returns:
+
+   ```text
+   served by the local process
+   ```
+
+6. **Stop and verify restoration.** Press Ctrl-C in the intercept terminal. KSail closes the tunnel,
+   the steering agent removes its redirect rule, and the command exits successfully. Repeating the
+   request returns `served by the cluster` again.
+
+   Stop the Python server, then remove the demo resources:
+
+   ```bash
+   ksail workload delete -f /tmp/ksail-intercept-demo.yaml --wait
+   rm -rf /tmp/ksail-intercept-local /tmp/ksail-intercept-demo.yaml
+   ```
+
+</Steps>
+
+## Target the right workload
+
+The example uses the current context, a dedicated namespace, and a single-container Deployment.
+For another environment, make the selection explicit:
+
+```bash
+ksail workload intercept checkout \
+  --context dev-cluster \
+  --namespace shop \
+  --container api \
+  --service-port 8080 \
+  --local-port 3000
+```
+
+- Pass `--container` when the Deployment has several containers.
+- Use the same context and namespace for verification commands such as `workload exec`.
+- Keep the local process running for the whole session. Intercept does not silently fall back to the
+  cluster workload when the local listener is unavailable.
+
+## Cleanup and recovery
+
+Ctrl-C is the deterministic cleanup path: it removes the redirect before returning. A released KSail
+client using its derived default command and exact version-matched steering image also negotiates a
+keepalive watchdog so an unexpectedly lost client can remove the redirect. KSail deliberately does
+not claim that guarantee for a development `:latest` image, a custom steering image or command, or a
+steering container reused from another version because those agents may not understand the watchdog
+protocol.
+
+If graceful Ctrl-C was impossible and traffic remains redirected, replace the selected pod. For a
+Deployment, deleting that pod lets its controller create a clean replacement. Copy the selected pod
+name from the intercept command's output and use the same context, namespace, and Deployment as the
+intercept; for example:
+
+```bash
+context=dev-cluster
+namespace=shop
+deployment=checkout
+selected_pod=checkout-7c8d9f-example
+
+ksail workload delete --context "$context" --namespace "$namespace" \
+  "pod/$selected_pod" --wait
+ksail workload exec --context "$context" --namespace "$namespace" \
+  --pod-running-timeout=2m "deployment/$deployment" -- true
+```
+
+This recovery interrupts traffic when no other replica is Ready, so use it deliberately.
+
+Kubernetes does not allow an injected ephemeral-container record to be removed from a live pod.
+After a session ends cleanly, the dormant container has no redirect rule or active steering process;
+a later intercept can reuse it. The recovery above replaces the pod, which removes the container
+record with it; a later intercept injects a new steering container into the replacement pod.
+
+If requests fail during a session:
+
+1. verify the local process still listens on `127.0.0.1:<local-port>`;
+2. confirm `--service-port` matches the target container port, including any Service `targetPort`;
+3. confirm the selected pod is Running and the requested container name is correct; and
+4. press Ctrl-C to restore remote handling before changing the command, or replace the selected pod
+   if the client is already gone and traffic remains redirected.
+
+## Related
+
+- [`ksail workload intercept` reference](/cli-flags/workload/workload-intercept/) — every flag and custom steering-agent options
+- [`ksail workload mirror` reference](/cli-flags/workload/workload-mirror/) — read-only capture and replay
+- [Workload Management](/guides/workload-management/) — deploy, inspect, and operate workloads
+- [Unmanaged Clusters](/guides/unmanaged-clusters/) — point KSail at a cluster it did not create

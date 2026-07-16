@@ -2,13 +2,17 @@ package kindprovisioner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -277,7 +281,7 @@ func TestCreateProvisioner_WithConfig(t *testing.T) {
 }
 
 func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
-	t.Parallel()
+	t.Setenv("KUBECONFIG", "")
 
 	cfg := &v1alpha4.Cluster{
 		TypeMeta: v1alpha4.TypeMeta{
@@ -292,5 +296,195 @@ func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, provisioner)
-	assert.Equal(t, "~/.kube/config", provisioner.KubeConfigForTest())
+	assert.Equal(t, k8s.DefaultKubeconfigPath(), provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvFallback pins a single KUBECONFIG entry
+// as Kind's write target when no kubeconfig path is configured explicitly.
+func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/tmp/env-kubeconfig")
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "/tmp/env-kubeconfig", provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvKeepsLiteralPhysicalTarget verifies that
+// an environment-derived target names the same physical file Kind sees while
+// avoiding later reinterpretation of a leading tilde as the user's home.
+func TestCreateProvisioner_KubeconfigEnvKeepsLiteralPhysicalTarget(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("KUBECONFIG", "~/literal-kubeconfig")
+
+	workingDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+
+	expectedPath := filepath.Join(workingDir, "~", "literal-kubeconfig")
+	assert.Equal(
+		t,
+		expectedPath,
+		provisioner.KubeConfigForTest(),
+	)
+	assert.NotEqual(
+		t,
+		filepath.Join(homeDir, "literal-kubeconfig"),
+		provisioner.KubeConfigForTest(),
+	)
+
+	infraProvider.On("StartNodes", mock.Anything, "test-cluster").Return(nil)
+
+	var readinessPath string
+
+	provisioner.WithWaitForReadyForTest(
+		func(_ context.Context, kubeconfigPath, _ string) error {
+			readinessPath = kubeconfigPath
+
+			return nil
+		},
+	)
+
+	require.NoError(t, provisioner.Start(context.Background(), ""))
+	assert.Equal(t, expectedPath, readinessPath)
+
+	resolvedReadinessPath, err := k8s.ResolveKubeconfigPath(readinessPath)
+	require.NoError(t, err)
+	assert.Equal(t, expectedPath, resolvedReadinessPath)
+}
+
+// TestCreateProvisioner_ExplicitKubeconfigExpandsHome keeps expansion at the
+// factory boundary for explicitly configured paths.
+func TestCreateProvisioner_ExplicitKubeconfigExpandsHome(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("KUBECONFIG", "~/ignored-environment-target")
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(
+		cfg,
+		"~/.kube/config",
+		infraProvider,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, filepath.Join(homeDir, ".kube", "config"), provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile pins kind's
+// write-target rule for KUBECONFIG path lists: the first entry naming an
+// existing file wins, even when it is not the list's first entry.
+func TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile(t *testing.T) {
+	existing := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(existing, []byte("{}"), 0o600))
+	t.Setenv("KUBECONFIG", "/tmp/nosuch-kubeconfig"+string(os.PathListSeparator)+existing)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, existing, provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListProbesEntriesLiterally verifies that
+// a trailing separator is not cleaned before Kind's existence check. A regular
+// file with a trailing slash is not a usable path, so the fallback must win.
+func TestCreateProvisioner_KubeconfigEnvListProbesEntriesLiterally(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "config")
+	fallback := filepath.Join(root, "fallback")
+
+	require.NoError(t, os.WriteFile(existing, []byte("{}"), 0o600))
+	t.Setenv(
+		"KUBECONFIG",
+		existing+string(os.PathSeparator)+string(os.PathListSeparator)+fallback,
+	)
+
+	cfg := &v1alpha4.Cluster{Name: "test-cluster"}
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, fallback, provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry pins the other
+// half of kind's rule: when no listed file exists, the LAST entry is the
+// write target.
+func TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry(t *testing.T) {
+	t.Setenv(
+		"KUBECONFIG",
+		"/tmp/nosuch-one"+string(os.PathListSeparator)+"/tmp/nosuch-two",
+	)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "/tmp/nosuch-two", provisioner.KubeConfigForTest())
+}
+
+// TestCreateProvisioner_KubeconfigEnvListDeduplicates pins Kind's ordered
+// de-duplication before the last-entry fallback is selected.
+func TestCreateProvisioner_KubeconfigEnvListDeduplicates(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "nosuch-one")
+	second := filepath.Join(root, "nosuch-two")
+	t.Setenv(
+		"KUBECONFIG",
+		first+string(os.PathListSeparator)+second+string(os.PathListSeparator)+first,
+	)
+
+	cfg := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: "test-cluster",
+	}
+
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, second, provisioner.KubeConfigForTest())
 }

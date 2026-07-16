@@ -126,6 +126,7 @@ export default defineConfig({
                 { label: "Day-2 Operations", link: "/guides/day-2-operations/" },
                 { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
                 { label: "Backup & Restore", link: "/guides/backup-restore/" },
+                { label: "Unmanaged Clusters", link: "/guides/unmanaged-clusters/" },
                 { label: "Multi-Environment Workflows", link: "/guides/multi-environment/" },
               ],
             },
@@ -133,6 +134,7 @@ export default defineConfig({
               label: "Workloads & GitOps",
               items: [
                 { label: "Workload Management", link: "/guides/workload-management/" },
+                { label: "Local Service Intercepts", link: "/guides/local-service-intercepts/" },
                 { label: "GitOps Workflows", link: "/guides/gitops-workflows/" },
                 { label: "Registry Management", link: "/guides/registry-management/" },
                 { label: "Secret Management", link: "/guides/secret-management/" },

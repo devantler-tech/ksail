@@ -453,6 +453,7 @@ func ExportSetRunInterceptSession(
 		point *mirror.TapPoint,
 		steerCommand []string,
 		localPort int,
+		keepalive bool,
 	) error,
 ) func() {
 	original := runInterceptSession
@@ -461,21 +462,54 @@ func ExportSetRunInterceptSession(
 	return func() { runInterceptSession = original }
 }
 
-// ExportSetEphemeralProvisioner swaps the --ephemeral cluster provisioner
-// factory so tests can substitute a fake without a live Docker/KWOK
-// dependency. It returns a restore function that reinstates the original.
-func ExportSetEphemeralProvisioner(
-	factory func(name string) clusterprovisioner.Provisioner,
-) func() {
-	original := newEphemeralProvisioner
-	newEphemeralProvisioner = factory
-
-	return func() { newEphemeralProvisioner = original }
-}
-
 // EphemeralCluster re-exports the internal --ephemeral connection handle so
 // external-package tests can assert on what runFn receives.
 type EphemeralCluster = ephemeralCluster
+
+// ExportEphemeralBackend is the test-visible form of the backend lifecycle
+// bundle. Production keeps the fields private so only withEphemeralCluster can
+// order cluster deletion before local workspace cleanup.
+type ExportEphemeralBackend struct {
+	Provisioner clusterprovisioner.Provisioner
+	Cluster     EphemeralCluster
+	Cleanup     func() error
+}
+
+// ExportSetEphemeralBackendFactory swaps the complete --ephemeral backend so
+// tests can control provisioner, connection, and local-cleanup behavior without
+// Docker. It returns a restore function that reinstates the original.
+func ExportSetEphemeralBackendFactory(
+	factory func(name string) (ExportEphemeralBackend, error),
+) func() {
+	original := newEphemeralBackend
+	newEphemeralBackend = func(name string) (ephemeralBackend, error) {
+		backend, err := factory(name)
+
+		return ephemeralBackend{
+			provisioner: backend.Provisioner,
+			cluster:     backend.Cluster,
+			cleanup:     backend.Cleanup,
+		}, err
+	}
+
+	return func() { newEphemeralBackend = original }
+}
+
+// ExportCreateEphemeralBackend exposes the concrete production factory for a
+// unit test that verifies Kind selection and isolated kubeconfig ownership.
+// It only constructs dependencies; it does not provision a cluster.
+func ExportCreateEphemeralBackend(name string) (ExportEphemeralBackend, error) {
+	backend, err := createEphemeralBackend(name)
+	if err != nil {
+		return ExportEphemeralBackend{}, err
+	}
+
+	return ExportEphemeralBackend{
+		Provisioner: backend.provisioner,
+		Cluster:     backend.cluster,
+		Cleanup:     backend.cleanup,
+	}, nil
+}
 
 // ExportSetEphemeralClusterWaiter swaps the --ephemeral cluster readiness
 // waiter so tests can substitute a fake without a live cluster to poll. It

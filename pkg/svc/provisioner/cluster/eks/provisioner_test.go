@@ -101,7 +101,7 @@ func newProvisioner(
 
 	prov, err := eksprovisioner.NewProvisioner(
 		"ksail-test", "us-east-1", "/tmp/eksctl.yaml",
-		client, infra,
+		client, infra, eksprovisioner.WithKubeconfigPath("/tmp/kubeconfig"),
 	)
 	require.NoError(t, err)
 
@@ -127,7 +127,12 @@ func TestCreate_ShellsOutWithConfig(t *testing.T) {
 	require.Len(t, runner.calls, 1)
 	assert.Equal(
 		t,
-		[]string{"create", "cluster", "--config-file", "/tmp/eksctl.yaml", "--region", "us-east-1"},
+		[]string{
+			"create", "cluster",
+			"--config-file", "/tmp/eksctl.yaml",
+			"--region", "us-east-1",
+			"--kubeconfig", "/tmp/kubeconfig",
+		},
 		runner.calls[0],
 	)
 }

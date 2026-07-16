@@ -98,6 +98,7 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
+  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -196,7 +197,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
-      --ephemeral                      EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Scanning their rendered children against the cluster is not wired yet — off by default.
+      --ephemeral                      EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Applying rendered manifests and scanning operator-rendered children is the next slice — off by default.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
@@ -241,7 +242,7 @@ Usage:
   validate [PATH] [flags]
 
 Flags:
-      --ephemeral                 EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Validating their rendered children against the cluster is not wired yet — off by default.
+      --ephemeral                 EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Applying rendered manifests and validating operator-rendered children is the next slice — off by default.
   -h, --help                      help for validate
       --ignore-missing-schemas    Ignore resources with missing schemas (default true)
       --include-crd-schemas       Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default; a CRD that cannot be converted is warned and skipped)
@@ -3258,7 +3259,7 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
-      --ephemeral                      EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Scanning their rendered children against the cluster is not wired yet — off by default.
+      --ephemeral                      EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Applying rendered manifests and scanning operator-rendered children is the next slice — off by default.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
@@ -3308,7 +3309,7 @@ Usage:
   ksail workload validate [PATH] [flags]
 
 Flags:
-      --ephemeral                 EXPERIMENTAL (ksail#5919): provision a throwaway KWOK cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Validating their rendered children against the cluster is not wired yet — off by default.
+      --ephemeral                 EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of this command (guaranteed teardown) and install the workload's declared Helm charts into it, so declared operators' CRDs are registered. Applying rendered manifests and validating operator-rendered children is the next slice — off by default.
   -h, --help                      help for validate
       --ignore-missing-schemas    Ignore resources with missing schemas (default true)
       --include-crd-schemas       Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that custom resources whose CRD ships in the repo are validated instead of skipped (off by default; a CRD that cannot be converted is warned and skipped)
@@ -3497,6 +3498,7 @@ Dev loop:
   debug       Create debugging sessions for troubleshooting workloads and nodes
   exec        Execute a command in a container
   forward     Forward one or more local ports to a pod
+  intercept   Intercept a Deployment's inbound traffic to a local process (reverse dev bridge)
   logs        Print container logs
   mirror      Mirror a Deployment's inbound traffic locally (read-only pcap capture)
   network     Inspect live network traffic flows via Cilium Hubble
@@ -3883,22 +3885,22 @@ Global Flags:
 Intercept a Deployment's inbound traffic to a local process (reverse dev bridge).
 
 Resolves the Deployment to a running pod, injects a steering container (an
-ephemeral container holding only CAP_NET_ADMIN), and runs the operator-supplied
-steering agent in it over the Kubernetes exec channel. The agent installs an
-iptables REDIRECT rule that captures the workload's inbound TCP and forwards it,
-over a multiplexed tunnel, to a process running on your machine — so the copy on
-your laptop serves the cluster's live requests.
+ephemeral container holding only CAP_NET_ADMIN), and runs the steering agent in
+it over the Kubernetes exec channel. The agent installs an iptables REDIRECT rule
+that captures the workload's inbound TCP and forwards it, over a multiplexed
+tunnel, to a process running on your machine — so the copy on your laptop serves
+the cluster's live requests.
 
 Unlike `workload mirror` (read-only pcap, traffic keeps flowing to the
 workload), intercept steers the traffic away from the workload to your local
 process; the agent removes its rule again on exit, restoring the pod.
 
-The intercept runs until interrupted (Ctrl-C), which tears the tunnel down and
-lets the in-cluster agent reverse its redirect.
+The intercept runs until interrupted. Ctrl-C stops it cleanly with exit status 0,
+tearing the tunnel down and letting the in-cluster agent reverse its redirect.
 
---steer-command is required and --steer-image must carry the agent binary plus
-iptables: KSail does not yet ship a default steering-agent image (tracked as a
-follow-up), so the agent is operator-supplied for now.
+By default intercept runs the KSail-shipped steering image and derives the agent
+command from --service-port, so only --service-port and --local-port are needed.
+Pass an explicit --steer-image and --steer-command to run a custom agent instead.
 
 Ephemeral containers cannot be removed, so an already-injected steering agent on
 the target pod is reused rather than treated as an error.
@@ -3907,14 +3909,16 @@ Usage:
   ksail workload intercept <deployment> [flags]
 
 Examples:
-  # Intercept the traffic my-app receives and forward it to localhost:8080
+  # Intercept the traffic my-app serves on :8080 and forward it to localhost:8080
+  ksail workload intercept my-app --service-port 8080 --local-port 8080
+
+  # Intercept a specific container of a multi-container Deployment in a namespace
+  ksail workload intercept my-app -n prod -c api --service-port 8080 --local-port 8080
+
+  # Run a custom steering agent image and command instead of the KSail default
   ksail workload intercept my-app --local-port 8080 \
     --steer-image ghcr.io/acme/ksail-steer:latest \
     --steer-command ksail-steer --steer-command --port=8080
-
-  # Intercept a specific container of a multi-container Deployment in a namespace
-  ksail workload intercept my-app -n prod -c api --local-port 8080 \
-    --steer-image ghcr.io/acme/ksail-steer:latest --steer-command ksail-steer
 
 Flags:
   -c, --container string            Container whose traffic is intercepted (required when the Deployment has several)
@@ -3922,12 +3926,14 @@ Flags:
   -h, --help                        help for intercept
   -l, --local-port int              Local port the intercepted inbound traffic is forwarded to (required)
   -n, --namespace string            Namespace of the target Deployment (default "default")
-      --steer-command stringArray   Command the in-cluster steering agent container runs, exec'd over the tunnel (required)
-      --steer-image string          Image the injected steering container runs (must carry the agent binary and iptables) (default "docker.io/nicolaka/netshoot:v0.16")
+      --service-port int            Workload port to intercept; KSail derives the default steering command from it (alternative to an explicit --steer-command)
+      --steer-command stringArray   Command the in-cluster steering agent container runs, exec'd over the tunnel (default: derived from --service-port for the KSail steering image)
+      --steer-image string          Image the injected steering container runs (must carry the agent binary and iptables) (default "ghcr.io/devantler-tech/ksail-steer:latest")
       --wait-timeout duration       How long to wait for the steering container to reach Running (default 1m0s)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---

@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const registryTokenPatchWithDefault = `machine:
+  registries:
+    config:
+      registry.example.com:
+        auth:
+          username: user
+          password: ${REGISTRY_CLUSTER_TOKEN:-forbidden-fallback}
+`
+
 func TestNewConfigManager_WithAllParameters(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +80,34 @@ func TestNewConfigManager_WithDefaults(t *testing.T) {
 			require.NotNil(t, manager)
 		})
 	}
+}
+
+func TestConfigManager_WithEnvLookupKeepsEmptySourceAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(clusterDir, "registry-auth.yaml"),
+			[]byte(registryTokenPatchWithDefault),
+			0o600,
+		),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "test-cluster", "", "").
+		WithEnvLookup(func(name string) (string, bool) {
+			return "", name == "REGISTRY_CLUSTER_TOKEN"
+		})
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	auth := configs.ControlPlane().RegistryAuthConfigs()["registry.example.com"]
+	require.NotNil(t, auth)
+	assert.Empty(t, auth.Password())
 }
 
 func TestConfigManager_WithAdditionalPatches(t *testing.T) {

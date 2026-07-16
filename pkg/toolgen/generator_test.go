@@ -8,6 +8,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestGenerateTools pins that generating tools from the real root command
+// yields the expected consolidated read/write tools and never emits the
+// excluded chat/completion/mcp commands.
 func TestGenerateTools(t *testing.T) {
 	t.Parallel()
 
@@ -62,6 +65,9 @@ func TestGenerateTools(t *testing.T) {
 	}
 }
 
+// TestToolDefinitionStructure pins that every generated tool carries a name,
+// description, command path/parts, and an object parameter schema with a
+// properties field.
 func TestToolDefinitionStructure(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +110,8 @@ func TestToolDefinitionStructure(t *testing.T) {
 	}
 }
 
+// TestFormatToolName pins that FormatToolName drops the root command from a
+// command path and joins the remaining segments with underscores.
 func TestFormatToolName(t *testing.T) {
 	t.Parallel()
 
@@ -141,6 +149,8 @@ func TestFormatToolName(t *testing.T) {
 	}
 }
 
+// truncate shortens s to maxLen characters, appending "..." when it was cut —
+// a log-output helper for the tool listings above.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -149,6 +159,9 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
+// TestConsolidatedToolGeneration pins that a parent command carrying the
+// consolidate annotation folds its subcommands into a single tool that records
+// the subcommand parameter name and every captured subcommand.
 func TestConsolidatedToolGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -384,6 +397,8 @@ func TestConsolidatedToolSchema(t *testing.T) {
 	// (since it's not in restart)
 }
 
+// TestToolCountReduction pins the point of consolidation: 17 subcommands
+// collapse into 1 tool with the annotation and expand back to 17 without it.
 func TestToolCountReduction(t *testing.T) {
 	t.Parallel()
 
@@ -437,6 +452,9 @@ func TestToolCountReduction(t *testing.T) {
 	}
 }
 
+// TestArrayParametersHaveItems pins that every array parameter in the
+// generated schemas carries a typed items definition, as JSON Schema consumers
+// require.
 func TestArrayParametersHaveItems(t *testing.T) {
 	t.Parallel()
 
@@ -505,6 +523,9 @@ func validateArrayItems(t *testing.T, toolName, paramName string, propMap map[st
 	}
 }
 
+// TestExcludedCommandsAndChildren pins that excluding a command also excludes
+// its children — no tool is generated for completion/chat/mcp/help or any of
+// their subcommands.
 func TestExcludedCommandsAndChildren(t *testing.T) {
 	t.Parallel()
 
@@ -532,6 +553,10 @@ func TestExcludedCommandsAndChildren(t *testing.T) {
 	}
 }
 
+// TestWriteToolSubcommandCoverage pins the subcommand coverage of the
+// consolidated write tools (cluster/project/workload), including the nested
+// env_/cipher_ prefixes, the omission of hidden experimental commands, and
+// that nested groups never surface as standalone tools.
 func TestWriteToolSubcommandCoverage(t *testing.T) {
 	t.Parallel()
 
@@ -557,12 +582,17 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 	t.Run("project_write", func(t *testing.T) {
 		t.Parallel()
 
-		// init and add-environment moved from cluster to project (issue #5626);
-		// they are surfaced via project_write, not cluster_write. The hidden
-		// deprecated aliases under cluster are skipped by toolgen.
+		// init moved from cluster to project (issue #5626), and the environment
+		// verbs are nested under the `env` group (issue #6057) so they fold into
+		// project_write with an "env_" prefix, mirroring workload's cipher group.
+		// The hidden deprecated aliases (cluster and flat project names) are
+		// skipped by toolgen — as is `env rm`, which ships experimental-gated
+		// (hidden until graduation), so it must NOT appear on the tool surface.
 		assertToolContainsSubcommands(t, toolMap, "project_write",
-			"init", "add-environment",
+			"init", "env_add",
 		)
+
+		assertToolOmitsSubcommand(t, toolMap, "project_write", "env_rm")
 	})
 
 	t.Run("workload_write", func(t *testing.T) {
@@ -590,6 +620,28 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 	})
 }
 
+// assertToolOmitsSubcommand asserts the named tool does NOT advertise the given
+// subcommand — used to pin that experimental-gated (hidden) commands stay off
+// the generated tool surface until they graduate.
+func assertToolOmitsSubcommand(
+	t *testing.T,
+	toolMap map[string]toolgen.ToolDefinition,
+	toolName, sub string,
+) {
+	t.Helper()
+
+	tool, ok := toolMap[toolName]
+	if !ok {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	if _, exists := tool.Subcommands[sub]; exists {
+		t.Errorf("%s should not contain experimental-gated subcommand %q", toolName, sub)
+	}
+}
+
+// assertToolContainsSubcommands asserts the named tool exists and advertises
+// every one of the expected subcommands.
 func assertToolContainsSubcommands(
 	t *testing.T,
 	toolMap map[string]toolgen.ToolDefinition,

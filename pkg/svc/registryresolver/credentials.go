@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -54,14 +55,8 @@ func tryFluxSecret(ctx context.Context, clientset kubernetes.Interface, info *In
 	}
 
 	username, password := parseDockerConfigCredentials(dockerConfigData, info.Host)
-	if username != "" {
-		info.Username = username
-		info.Password = password
 
-		return true
-	}
-
-	return false
+	return applyClusterSecretCredentials(secret, info, username, password)
 }
 
 // tryArgoCDSecret attempts to retrieve credentials from the ArgoCD repository secret.
@@ -84,14 +79,31 @@ func tryArgoCDSecret(
 	username := string(secret.Data["username"])
 	password := string(secret.Data["password"])
 
-	if username != "" {
-		info.Username = username
-		info.Password = password
+	return applyClusterSecretCredentials(secret, info, username, password)
+}
 
-		return true
+// applyClusterSecretCredentials merges credentials discovered in the cluster into a
+// push target, refusing to reuse a secret that is marked pull-only. A push token is
+// never recovered from ambient process environment here: when the cluster only holds
+// pull-only credentials, the push credential must come from configuration
+// (LocalRegistry.Credentials), which the config-based resolver supplies.
+func applyClusterSecretCredentials(
+	secret *corev1.Secret,
+	info *Info,
+	username, password string,
+) bool {
+	if username == "" {
+		return false
 	}
 
-	return false
+	if secret.Annotations[registryauth.CredentialPurposeAnnotation] == registryauth.PullCredentialPurpose {
+		return false
+	}
+
+	info.Username = username
+	info.Password = password
+
+	return true
 }
 
 // dockerConfig represents the Docker config.json structure.

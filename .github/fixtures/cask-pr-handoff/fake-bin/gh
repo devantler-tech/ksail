@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+scenario="${FAKE_GH_SCENARIO:-valid}"
+command_line="$*"
+
+if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
+	[[ "${scenario}" == pr-failure ]] && exit 1
+	printf '%s\n' '{
+    "state":"open",
+    "draft":true,
+    "user":{"login":"devantler"},
+    "head":{"ref":"goreleaser/ksail","sha":"1111111111111111111111111111111111111111","repo":{"full_name":"devantler-tech/homebrew-tap"}},
+    "base":{"ref":"main"},
+    "title":"chore(cask): update ksail to v7.166.1",
+    "labels":[{"name":"automation"},{"name":"dependencies"}]
+  }'
+elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100" ]]; then
+	[[ "${scenario}" == files-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-files ]]; then
+		printf '%s\n' '{}'
+	elif [[ "${scenario}" == paginated-files ]]; then
+		printf '%s\n' '[[{"filename":"Casks/ksail.rb"}],[{"filename":"README.md"}]]'
+	else
+		printf '%s\n' '[[{"filename":"Casks/ksail.rb"}]]'
+	fi
+elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/labels?per_page=100" ]]; then
+	[[ "${scenario}" == labels-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-labels ]]; then
+		printf '%s\n' '[[{}]]'
+	else
+		printf '%s\n' '[[{"name":"automation"}],[{"name":"dependencies"}]]'
+	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/ksail/releases/tags/v7.166.1" ]]; then
+	[[ "${scenario}" == release-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-release ]]; then
+		printf '%s\n' '{"assets":[{}]}'
+	else
+		printf '%s\n' '{"assets":[{"name":"ksail_7.166.1_darwin_arm64.tar.gz","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","url":"ignored"}]}'
+	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=1111111111111111111111111111111111111111" ]]; then
+	[[ "${scenario}" == contents-failure ]] && exit 1
+	if [[ "${scenario}" == malformed-contents ]]; then
+		printf '%s\n' '{"path":"Casks/ksail.rb"}'
+	else
+		printf '%s\n' '{"path":"Casks/ksail.rb","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+	fi
+else
+	printf 'unexpected fake gh invocation: %s\n' "${command_line}" >&2
+	exit 2
+fi

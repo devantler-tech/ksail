@@ -1,4 +1,4 @@
-package project
+package env
 
 import (
 	"encoding/json"
@@ -31,10 +31,12 @@ const (
 // ErrInvalidOutputFormat is returned when --output is neither text nor json.
 var ErrInvalidOutputFormat = errors.New("invalid output format")
 
+// listEnvironmentsLongDesc is the long help text for `project env list`,
+// shared with the deprecated `project list-environments` delegate.
 const listEnvironmentsLongDesc = `List the cluster environments declared in the workspace.
 
 An environment is a ksail.<name>.yaml root config in the workspace root (the same
-convention cluster add-environment's --from resolves against); the base ksail.yaml
+convention "project env add"'s --from resolves against); the base ksail.yaml
 is not an environment. Each declared environment is reported with its distribution
 and provider, read from its config. A config that fails to load is skipped so a
 single malformed file never hides the environments that do load.
@@ -51,27 +53,29 @@ Use --output json for machine-readable output. The JSON is an array of objects:
 
 Examples:
   # List the declared environments
-  ksail project list-environments
+  ksail project env list
 
   # Machine-readable JSON
-  ksail project list-environments --output json`
+  ksail project env list --output json`
 
-// NewListEnvironmentsCmd creates and returns the list-environments command.
+// NewListCmd creates and returns the `project env list` command (formerly
+// `project list-environments`; the deprecated alias delegates here).
 //
 // It is a read-only enumeration of already-declared workspace state with no side
 // effects, so it ships visible rather than behind a feature flag — the
 // low-risk-additive carve-out to the feature-flag-first default, matching its
-// sibling add-environment and the analogous cluster list, both of which are
+// sibling `env add` and the analogous cluster list, both of which are
 // unflagged.
-func NewListEnvironmentsCmd() *cobra.Command {
+func NewListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "list-environments",
+		Use:          "list",
+		Aliases:      []string{"ls"},
 		Short:        "List the cluster environments declared in the workspace",
 		Long:         listEnvironmentsLongDesc,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return HandleListEnvironmentsRunE(cmd)
+			return HandleListRunE(cmd)
 		},
 	}
 
@@ -94,12 +98,12 @@ type environmentResult struct {
 	Config       string `json:"config"`
 }
 
-// HandleListEnvironmentsRunE handles the list-environments command. It resolves the
+// HandleListRunE handles the `project env list` command. It resolves the
 // workspace root, enumerates the declared environments via
 // environment.DeriveEnvironments (loading each config the same silent,
-// validation-skipping way add-environment does), and renders them as a table or
+// validation-skipping way `env add` does), and renders them as a table or
 // JSON. Exported for testing.
-func HandleListEnvironmentsRunE(cmd *cobra.Command) error {
+func HandleListRunE(cmd *cobra.Command) error {
 	output, _ := cmd.Flags().GetString("output")
 	if output != listEnvOutputText && output != listEnvOutputJSON {
 		return fmt.Errorf(
@@ -114,7 +118,7 @@ func HandleListEnvironmentsRunE(cmd *cobra.Command) error {
 	}
 
 	// Canonicalise so the workspace root matches the symlink-resolved paths the
-	// config loader derives, mirroring add-environment.
+	// config loader derives, mirroring `env add`.
 	repoRoot, err := fsutil.EvalCanonicalPath(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve current directory: %w", err)
@@ -169,7 +173,7 @@ func displayEnvironments(out io.Writer, envs []environment.Environment) {
 		notify.Infof(
 			out,
 			"no environments declared; scaffold one with "+
-				"`ksail project add-environment <name> --from <env>`",
+				"`ksail project env add <name> --from <env>`",
 		)
 
 		return

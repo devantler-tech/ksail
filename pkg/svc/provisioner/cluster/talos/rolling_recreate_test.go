@@ -3,8 +3,13 @@ package talosprovisioner_test
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -24,6 +29,8 @@ const (
 	testFieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
 )
 
+// TestRolesFromRollingChanges verifies that the rolling-change field names map
+// independently to control-plane and worker replacement requests.
 func TestRolesFromRollingChanges(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +78,8 @@ func TestRolesFromRollingChanges(t *testing.T) {
 	}
 }
 
+// TestServersNeedingReplacement verifies that matching servers are retained,
+// while wrong or unknown server types are selected and nil entries are ignored.
 func TestServersNeedingReplacement(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +110,8 @@ func TestServersNeedingReplacement(t *testing.T) {
 	assert.ElementsMatch(t, []string{testRollingNodeCP1, "cp-3"}, names)
 }
 
+// TestServersNeedingReplacement_CaseInsensitive verifies that provider type
+// names differing only by case do not trigger destructive replacement.
 func TestServersNeedingReplacement_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +123,8 @@ func TestServersNeedingReplacement_CaseInsensitive(t *testing.T) {
 	assert.Empty(t, out, "matching type (case-insensitive) should not need replacement")
 }
 
+// TestAppendServerTypeChange verifies that server-type drift enters the
+// requested update category and that unchanged or unknown baselines are skipped.
 func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
@@ -178,6 +191,8 @@ func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven 
 	}
 }
 
+// TestCountServerNodesByRole verifies that only recognized control-plane and
+// worker nodes contribute to the quorum and scaling counts.
 func TestCountServerNodesByRole(t *testing.T) {
 	t.Parallel()
 
@@ -198,6 +213,8 @@ func TestCountServerNodesByRole(t *testing.T) {
 	assert.Equal(t, 0, workerEmpty)
 }
 
+// TestApplyRollingRecreateChanges_NoOp verifies that an empty diff or a
+// non-Hetzner provisioner cannot start replacement work.
 func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
 	t.Parallel()
 
@@ -227,6 +244,185 @@ func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
 	})
 }
 
+// TestApplyRollingRecreateChanges_BlocksAbsentFloatingIP verifies that endpoint
+// enablement or drift is reconciled in a separate update before any destructive
+// control-plane replacement begins.
+func TestApplyRollingRecreateChanges_BlocksAbsentFloatingIP(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{FloatingIPEnabled: true}).
+		WithInfraProvider(newFipUpdateProvider("http://127.0.0.1")).
+		WithLogWriter(io.Discard)
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field: testFieldHetznerCPServerType,
+	})
+	result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
+		Field: floatingIPEnabledField,
+	})
+
+	err := provisioner.ApplyRollingRecreateChangesForTest(t.Context(), "fip-cluster", result)
+	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
+}
+
+// TestValidateUpdatePlan_BlocksFloatingIPReconcileBeforeMutation verifies the
+// incompatible endpoint-repair/control-plane-roll combination is rejected by
+// the first apply step, before endpoint reconciliation can mutate cloud state.
+func TestValidateUpdatePlan_BlocksFloatingIPReconcileBeforeMutation(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+		Field: testFieldHetznerCPServerType,
+	})
+	result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
+		Field: floatingIPEnabledField,
+	})
+
+	err := provisioner.ValidateUpdatePlanForTest(result)
+
+	require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPReconcileBeforeControlPlaneRoll)
+	assert.Equal(t, "validate update plan", provisioner.UpdateApplyStepNamesForTest()[0])
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned verifies that
+// deleting the control plane that owned the endpoint cannot leave its floating
+// IP detached from the replacement server during a rolling recreate.
+func TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned(t *testing.T) {
+	t.Parallel()
+
+	var assignCalls atomic.Int32
+
+	server := floatingIPEndpointTestServer(t, &assignCalls)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), assignCalls.Load())
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_DoesNotCreate verifies
+// that rolling replacement only preserves an existing endpoint; enablement
+// drift remains the later reconciliation step's responsibility.
+func TestReattachFloatingIPAfterControlPlaneReplacement_DoesNotCreate(t *testing.T) {
+	t.Parallel()
+
+	calls := new(fipUpdateCalls)
+	server := fipUpdateTestServer(t, false, calls)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), calls.create.Load())
+	assert.Equal(t, int32(0), calls.assign.Load())
+}
+
+// TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor verifies
+// that a surviving control plane which already claimed the endpoint keeps it;
+// rolling replacement must not cause a needless second assignment.
+func TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor(t *testing.T) {
+	t.Parallel()
+
+	var assignCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			switch request.URL.Path {
+			case "/floating_ips":
+				ownedBySurvivor := strings.Replace(
+					fipUpdateOwnedFloatingIPJSON, `"server":null`, `"server":13`, 1,
+				)
+				_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + ownedBySurvivor + `]}`))
+			case "/floating_ips/7/actions/assign":
+				assignCalls.Add(1)
+				fipUpdateAssignActionResponse(responseWriter)
+			default:
+				http.NotFound(responseWriter, request)
+			}
+		},
+	))
+	t.Cleanup(server.Close)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			FloatingIPEnabled:  true,
+			FloatingIPLocation: "fsn1",
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+		t.Context(),
+		newFipUpdateProvider(server.URL),
+		"fip-cluster",
+		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
+		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), assignCalls.Load())
+}
+
+// TestFinishControlPlaneReplacement_WaitsAfterReattachError verifies that a
+// failed endpoint operation is retried before the endpoint-dependent Kubernetes
+// Ready gate, which must still run after the retry.
+func TestFinishControlPlaneReplacement_WaitsAfterReattachError(t *testing.T) {
+	t.Parallel()
+
+	events := make([]string, 0, 3)
+	attachAttempts := 0
+
+	err := talosprovisioner.FinishControlPlaneReplacementForTest(
+		func() error {
+			attachAttempts++
+
+			events = append(events, "attach")
+
+			if attachAttempts == 1 {
+				return context.DeadlineExceeded
+			}
+
+			return nil
+		},
+		func() error {
+			events = append(events, "ready")
+
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"attach", "attach", "ready"}, events)
+}
+
+// TestNodeMatchesServer verifies replacement readiness can associate a
+// Kubernetes node with its server by case-insensitive name or external address.
 func TestNodeMatchesServer(t *testing.T) {
 	t.Parallel()
 
@@ -253,6 +449,8 @@ func TestNodeMatchesServer(t *testing.T) {
 		"should not match unrelated node")
 }
 
+// TestNodeIsReady verifies that only an explicit Ready=True node condition
+// satisfies the replacement readiness gate.
 func TestNodeIsReady(t *testing.T) {
 	t.Parallel()
 

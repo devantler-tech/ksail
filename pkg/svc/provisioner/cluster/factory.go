@@ -66,6 +66,8 @@ type EKSConfig struct {
 	Region string
 	// ConfigPath is the path to the declarative eksctl.yaml.
 	ConfigPath string
+	// KubeconfigPath is the path where eksctl writes the created cluster context.
+	KubeconfigPath string
 }
 
 // GetClusterName returns the EKS cluster name.

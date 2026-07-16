@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -27,6 +28,8 @@ type Provisioner struct {
 	// Required for Create; preferred over --name/--region for Delete and
 	// Upgrade because it keeps CloudFormation stack naming consistent.
 	configPath string
+	// kubeconfigPath is the exact file eksctl writes and KSail reads after create.
+	kubeconfigPath string
 	// client is the eksctl binary wrapper.
 	client *eksctl.Client
 	// infraProvider is the AWS provider used for Start/Stop semantics
@@ -36,6 +39,11 @@ type Provisioner struct {
 	// minting via the AWS SDK). Injected in tests; lazily resolved from the
 	// operator's AWS credentials otherwise.
 	awsClient AWSClusterAPI
+	// eksClientOptions pins the credential selection used when awsClient is
+	// resolved lazily for the Connector capability.
+	eksClientOptions []eksclient.Option
+	// requireCredentialValues prevents ambient fallback when custom sources are unset.
+	requireCredentialValues bool
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -48,6 +56,31 @@ type Option func(*Provisioner)
 func WithAWSClusterAPI(api AWSClusterAPI) Option {
 	return func(p *Provisioner) {
 		p.awsClient = api
+	}
+}
+
+// WithCredentialValues pins the credentials used by the provisioner's lazy
+// AWS-SDK DescribeCluster/STS client without mutating process environment.
+func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
+	return func(p *Provisioner) {
+		p.eksClientOptions = []eksclient.Option{
+			eksclient.WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken),
+		}
+	}
+}
+
+// RequireCredentialValues prevents the lazy connector SDK client from falling
+// back to ambient canonical credentials when custom sources resolved no values.
+func RequireCredentialValues() Option {
+	return func(p *Provisioner) {
+		p.requireCredentialValues = true
+	}
+}
+
+// WithKubeconfigPath pins where eksctl writes the created cluster context.
+func WithKubeconfigPath(path string) Option {
+	return func(p *Provisioner) {
+		p.kubeconfigPath = path
 	}
 }
 
@@ -64,13 +97,15 @@ func NewProvisioner(
 	}
 
 	provisioner := &Provisioner{
-		name:          name,
-		region:        region,
-		configPath:    configPath,
-		client:        client,
-		infraProvider: infraProvider,
-		awsClient:     nil,
-		awsMu:         sync.Mutex{},
+		name:                    name,
+		region:                  region,
+		configPath:              configPath,
+		client:                  client,
+		infraProvider:           infraProvider,
+		awsClient:               nil,
+		eksClientOptions:        nil,
+		requireCredentialValues: false,
+		awsMu:                   sync.Mutex{},
 	}
 
 	for _, opt := range opts {
@@ -99,7 +134,12 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
-	err = p.client.CreateCluster(ctx, p.configPath, p.region)
+	err = p.client.CreateClusterWithKubeconfig(
+		ctx,
+		p.configPath,
+		p.region,
+		p.kubeconfigPath,
+	)
 	if err != nil {
 		return fmt.Errorf("eksctl create cluster: %w", err)
 	}

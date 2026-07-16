@@ -27,9 +27,11 @@ type clusterDescriber interface {
 
 // Provider implements provider.Provider for Amazon EKS via eksctl.
 type Provider struct {
-	client    *eksctlclient.Client
-	region    string
-	describer clusterDescriber
+	client                  *eksctlclient.Client
+	region                  string
+	describer               clusterDescriber
+	eksClientOptions        []eksclient.Option
+	requireCredentialValues bool
 }
 
 // Option customises a Provider.
@@ -44,6 +46,25 @@ func WithClusterDescriber(describer clusterDescriber) Option {
 	}
 }
 
+// WithCredentialValues pins the credentials used by the provider's lazy
+// AWS-SDK EKS client without mutating process environment. The eksctl client
+// is configured separately with the matching canonical child environment.
+func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
+	return func(p *Provider) {
+		p.eksClientOptions = []eksclient.Option{
+			eksclient.WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken),
+		}
+	}
+}
+
+// RequireCredentialValues prevents the lazy SDK client from falling back to
+// ambient canonical credentials when custom sources resolved no values.
+func RequireCredentialValues() Option {
+	return func(p *Provider) {
+		p.requireCredentialValues = true
+	}
+}
+
 // NewProvider returns a Provider using the given eksctl client and AWS region.
 // Pass region="" to defer to eksctl's own region resolution (AWS_REGION env,
 // active AWS profile, etc.). A nil client returns ErrClientRequired so callers
@@ -53,7 +74,13 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 		return nil, ErrClientRequired
 	}
 
-	prov := &Provider{client: client, region: region, describer: nil}
+	prov := &Provider{
+		client:                  client,
+		region:                  region,
+		describer:               nil,
+		eksClientOptions:        nil,
+		requireCredentialValues: false,
+	}
 
 	for _, opt := range opts {
 		opt(prov)
@@ -265,7 +292,12 @@ func (p *Provider) resolveDescriber(ctx context.Context) (clusterDescriber, erro
 		return p.describer, nil
 	}
 
-	client, err := eksclient.NewClient(ctx, p.region)
+	client, err := eksclient.NewClientWithCredentialRequirement(
+		ctx,
+		p.region,
+		p.requireCredentialValues,
+		p.eksClientOptions...,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("creating aws eks client: %w", err)
 	}

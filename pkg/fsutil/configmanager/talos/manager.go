@@ -58,6 +58,8 @@ type ConfigManager struct {
 	// extensions is the list of Talos Image Factory official extension names.
 	// When non-empty, machine.install.image is patched to use a factory installer.
 	extensions []string
+	// envLookup expands environment placeholders in machine config patches.
+	envLookup func(string) (string, bool)
 }
 
 // NewConfigManager creates a new configuration manager for Talos patches.
@@ -88,6 +90,7 @@ func NewConfigManager(
 		networkCIDR:       networkCIDR,
 		configLoaded:      false,
 		versionContract:   talosconfig.TalosVersion1_12,
+		envLookup:         os.LookupEnv,
 	}
 }
 
@@ -127,6 +130,21 @@ func (m *ConfigManager) WithExtensions(extensions []string) *ConfigManager {
 	return m
 }
 
+// WithEnvLookup sets the environment lookup used to expand Talos patch
+// placeholders. A nil lookup restores the process environment. Changing the
+// lookup invalidates any cached configuration.
+func (m *ConfigManager) WithEnvLookup(lookup func(string) (string, bool)) *ConfigManager {
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
+
+	m.envLookup = lookup
+	m.config = nil
+	m.configLoaded = false
+
+	return m
+}
+
 // Load loads Talos patches from directories and creates the config bundle.
 // Returns the loaded Configs, either freshly loaded or previously cached.
 // Timer, Silent, IgnoreConfigFile, and SkipValidation options are not currently used.
@@ -137,7 +155,7 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	}
 
 	// Load patches from directories
-	patches, err := LoadPatches(m.patchesDir)
+	patches, err := loadPatchesWithLookup(m.patchesDir, m.envLookup)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load patches: %w", err)
 	}
@@ -193,7 +211,7 @@ func (m *ConfigManager) ValidatePatchDirectory() (string, error) {
 			continue // Subdirectory doesn't exist, skip
 		}
 
-		validateErr := validateYAMLFilesInDir(dir)
+		validateErr := validateYAMLFilesInDir(dir, m.envLookup)
 		if validateErr != nil {
 			return "", validateErr
 		}
@@ -230,20 +248,26 @@ func (m *ConfigManager) ValidateConfigs() (*Configs, error) {
 // for each, with environment variables expanded in the file content. It delegates
 // directory walking and path-safe reads to fsutil.ForEachYAMLFile so the traversal
 // logic is shared across the codebase.
-func forEachYAMLFile(dir string, callback func(filePath string, content []byte) error) error {
+func forEachYAMLFile(
+	dir string,
+	lookup func(string) (string, bool),
+	callback func(filePath string, content []byte) error,
+) error {
 	// Thin adapter: fsutil.ForEachYAMLFile wraps its own traversal errors and the
 	// callbacks supplied by talos callers wrap theirs, so this pass-through does
 	// not re-wrap.
 	//nolint:wrapcheck // pass-through adapter; fsutil and callbacks wrap their own errors
 	return fsutil.ForEachYAMLFile(dir, func(filePath string, content []byte) error {
 		// Expand environment variables in file content before handing to the caller.
-		return callback(filePath, envvar.ExpandBytes(content))
+		expanded := envvar.ExpandWithLookup(string(content), lookup)
+
+		return callback(filePath, []byte(expanded))
 	})
 }
 
 // validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
-func validateYAMLFilesInDir(dir string) error {
-	return forEachYAMLFile(dir, func(filePath string, content []byte) error {
+func validateYAMLFilesInDir(dir string, lookup func(string) (string, bool)) error {
+	return forEachYAMLFile(dir, lookup, func(filePath string, content []byte) error {
 		var parsed any
 
 		yamlErr := yaml.Unmarshal(content, &parsed)

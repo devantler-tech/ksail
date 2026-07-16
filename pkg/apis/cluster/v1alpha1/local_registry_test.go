@@ -302,6 +302,7 @@ func TestRedactRegistryCredentials(t *testing.T) {
 		{"no_credentials_with_path", "ghcr.io/org/repo", "ghcr.io/org/repo"},
 		{"username_only_no_password", "user@ghcr.io", "user@ghcr.io"},
 		{"empty_password", "user:@ghcr.io", "user:@ghcr.io"},
+		{"empty_username_masks_password", ":ghp_secret@ghcr.io", ":****@ghcr.io"},
 		{"masks_pat", "user:ghp_secret@ghcr.io/org", "user:****@ghcr.io/org"},
 		{
 			"masks_pat_keeps_port_and_path",

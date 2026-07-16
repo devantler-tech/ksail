@@ -1,0 +1,54 @@
+{
+  "pr": {
+    "state": "open",
+    "draft": true,
+    "user": {
+      "login": "devantler"
+    },
+    "head": {
+      "ref": "goreleaser/ksail",
+      "sha": "1111111111111111111111111111111111111111",
+      "repo": {
+        "full_name": "devantler-tech/homebrew-tap"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "title": "chore(cask): update ksail to v7.166.1",
+    "labels": [
+      {
+        "name": "automation"
+      },
+      {
+        "name": "dependencies"
+      }
+    ]
+  },
+  "files": [
+    {
+      "filename": "Casks/ksail.rb"
+    }
+  ],
+  "availableLabels": [
+    {
+      "name": "automation"
+    },
+    {
+      "name": "dependencies"
+    },
+    {
+      "name": "documentation"
+    }
+  ],
+  "releaseAssets": [
+    {
+      "name": "ksail_7.166.1_darwin_arm64.tar.gz",
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "headFile": {
+    "path": "Casks/ksail.rb",
+    "content": "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="
+  }
+}
