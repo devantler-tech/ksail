@@ -144,6 +144,13 @@ var ErrAutoscalerExceedsServerLimit = errors.New(
 	"autoscaler configuration exceeds Hetzner server limit",
 )
 
+// ErrAutoscalerLeavesNoSnapshotSlot is returned when a Talos + Hetzner cluster can grow to
+// occupy every server the account allows, leaving no slot for the temporary server KSail
+// boots to build the Talos snapshot the autoscaler needs.
+var ErrAutoscalerLeavesNoSnapshotSlot = errors.New(
+	"autoscaler configuration leaves no Hetzner server slot for the Talos snapshot build",
+)
+
 // ErrExpanderNotSupportedForProvider is returned when the selected autoscaler
 // expander strategy is not supported by the infrastructure provider's cloud
 // provider implementation (e.g., Hetzner does not implement the pricing API
