@@ -307,7 +307,7 @@ require (
 	github.com/getsops/gopgagent v0.0.0-20241224165529-7044f28e491e // indirect
 	github.com/getsops/sops/v3 v3.13.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
-	github.com/github/copilot-sdk/go v1.0.5 // indirect
+	github.com/github/copilot-sdk/go v1.0.6 // indirect
 	github.com/github/go-spdx/v2 v2.4.0 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/glebarez/sqlite v1.11.0 // indirect
