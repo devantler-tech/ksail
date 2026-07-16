@@ -24,6 +24,14 @@ var (
 	errLegacyUnsupportedAPIServerField = errors.New(
 		"API server field has no Talos 1.14 KubeAPIServerConfig equivalent",
 	)
+	errLegacyAPIServerDeniedExtraArg = errors.New(
+		"kube-apiserver extra argument is rejected by Talos 1.14",
+	)
+)
+
+const (
+	kubeAuthenticationConfigKind = "KubeAuthenticationConfig"
+	kubeAuthorizationConfigKind  = "KubeAuthorizationConfig"
 )
 
 const (
@@ -285,6 +293,11 @@ func migrateAPIServerDocuments(
 		return nil, nil, nil, err
 	}
 
+	err = values.rejectDeniedAPIServerExtraArgs(patchPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	structuredDocuments, err := values.migrateStructuredAPIServerDocuments(patchPath)
 	if err != nil {
 		return nil, nil, nil, err
@@ -478,6 +491,65 @@ func (values *legacyAPIServerPatchValues) oidcConfig(patchPath string) (OIDCPatc
 	}
 
 	return config, nil
+}
+
+// rejectDeniedAPIServerExtraArgs fails the migration when extraArgs still carries an
+// argument Talos 1.14 denies. It runs after the OIDC migration has popped the arguments it
+// understands, so only arguments with no migration path reach it.
+func (values *legacyAPIServerPatchValues) rejectDeniedAPIServerExtraArgs(
+	patchPath string,
+) error {
+	extraArg, replacement := deniedAPIServerExtraArg(values.extraArgs)
+	if extraArg == "" {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"migrate legacy API server patch %q: %w: %q, use %s instead",
+		patchPath,
+		errLegacyAPIServerDeniedExtraArg,
+		extraArg,
+		replacement,
+	)
+}
+
+// deniedAPIServerExtraArg returns the lexicographically smallest denied extra argument and
+// the document replacing it, or empty strings when there is none. Picking the smallest keeps
+// the reported argument stable when a patch carries several, since map order is random.
+//
+// The prefixes mirror KubeAPIServerConfigV1Alpha1.validateArgs in Talos 1.14.
+// migrateAPIServerDocument copies extraArgs into KubeAPIServerConfig verbatim, so without
+// this check a legacy patch carrying one of them migrates cleanly and is only rejected
+// later, by Talos, at apply time. Translating them automatically would be lossy — the
+// authorization family in particular has no faithful field-for-field mapping — so the
+// migration fails with an actionable error instead. See ksail#6167.
+func deniedAPIServerExtraArg(extraArgs map[string]any) (string, string) {
+	deniedPrefixes := map[string]string{
+		"anonymous-auth":         kubeAuthenticationConfigKind,
+		"oidc-":                  kubeAuthenticationConfigKind,
+		"authentication-config":  kubeAuthenticationConfigKind,
+		"authorization-config":   kubeAuthorizationConfigKind,
+		"authorization-mode":     kubeAuthorizationConfigKind,
+		"authorization-webhook-": kubeAuthorizationConfigKind,
+	}
+
+	denied, replacement := "", ""
+
+	for extraArg := range extraArgs {
+		for prefix, document := range deniedPrefixes {
+			if !strings.HasPrefix(extraArg, prefix) {
+				continue
+			}
+
+			if denied == "" || extraArg < denied {
+				denied, replacement = extraArg, document
+			}
+
+			break
+		}
+	}
+
+	return denied, replacement
 }
 
 func unsupportedLegacyOIDCExtraArg(extraArgs map[string]any) string {

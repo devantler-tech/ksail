@@ -675,6 +675,109 @@ func TestConfigManager_Load_RejectsUnsupportedLegacyOIDCExtraArg(t *testing.T) {
 	assert.ErrorContains(t, err, `unsupported legacy OIDC extra argument "oidc-required-claim"`)
 }
 
+// Talos 1.14 rejects these prefixes in KubeAPIServerConfigV1Alpha1.validateArgs. ksail
+// migrated them into extraArgs verbatim, so the failure only surfaced at apply time, from
+// Talos, against a config ksail had already reported as migrated. See ksail#6167.
+func TestConfigManager_Load_RejectsDeniedLegacyAPIServerExtraArgs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		extraArg    string
+		replacement string
+	}{
+		{
+			name:        "anonymous auth",
+			extraArg:    "anonymous-auth",
+			replacement: "KubeAuthenticationConfig",
+		},
+		{
+			name:        "authentication config",
+			extraArg:    "authentication-config",
+			replacement: "KubeAuthenticationConfig",
+		},
+		{
+			name:        "authorization config",
+			extraArg:    "authorization-config",
+			replacement: "KubeAuthorizationConfig",
+		},
+		{
+			name:        "authorization mode",
+			extraArg:    "authorization-mode",
+			replacement: "KubeAuthorizationConfig",
+		},
+		{
+			name:        "authorization webhook prefix",
+			extraArg:    "authorization-webhook-cache-authorized-ttl",
+			replacement: "KubeAuthorizationConfig",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			manager := legacyAPIServerExtraArgManager(t, testCase.extraArg)
+
+			_, err := manager.Load(configmanager.LoadOptions{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "kube-apiserver extra argument is rejected by Talos 1.14")
+			require.ErrorContains(t, err, `"`+testCase.extraArg+`"`)
+			require.ErrorContains(t, err, "use "+testCase.replacement+" instead")
+		})
+	}
+}
+
+// legacyAPIServerExtraArgManager builds a 1.14-contract manager over a legacy patch carrying
+// a single kube-apiserver extra argument.
+func legacyAPIServerExtraArgManager(t *testing.T, extraArg string) *talos.ConfigManager {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyPatch := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      ` + extraArg + `: "value"
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "apiserver.yaml"), legacyPatch, 0o600),
+	)
+
+	return talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+}
+
+// The denied-prefix check must not reject an argument Talos still accepts.
+func TestConfigManager_Load_MigratesBenignLegacyAPIServerExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyPatch := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      authorization-something-else: "value"
+      anonymous: "value"
+      feature-gates: MutatingAdmissionPolicy=true
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "apiserver.yaml"), legacyPatch, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+}
+
 func TestConfigManager_Load_RejectsOrphanedLegacyOIDCExtraArg(t *testing.T) {
 	t.Parallel()
 
