@@ -342,6 +342,36 @@ func TestConfigManager_Load_MigratesLegacyCNIPatchForMultiDocumentConfig(t *test
 	assert.Nil(t, controlPlane.K8sFlannelCNIConfig())
 }
 
+func TestConfigManager_Load_MigratesVariantLegacyCNIPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	// A hand-written variant: a leading comment means the patch is not byte-for-byte the
+	// canonical disable-CNI patch, so it must be detected structurally (ksail#6167).
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "disable-default-cni.yaml"),
+		[]byte(
+			"# disable the built-in Flannel CNI\ncluster:\n  network:\n    cni:\n      name: none\n",
+		),
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	require.NotNil(t, controlPlane.K8sNetworkConfig())
+	assert.Nil(t, controlPlane.K8sFlannelCNIConfig(),
+		"a variant disable-CNI patch must still drop the Flannel document under Talos 1.14")
+	assert.True(t, configs.IsCNIDisabled())
+}
+
 func TestConfigManager_Load_MigratesLegacyAPIServerPatchWithoutOIDC(t *testing.T) {
 	t.Parallel()
 

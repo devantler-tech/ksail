@@ -156,7 +156,7 @@ func migrateKubernetesPatchesForContract(
 		case strings.TrimSpace(legacyAPIServerFeatureGatesPatchYAML):
 			migrated[idx].Content = []byte(multiDocumentAPIServerFeatureGatesPatchYAML)
 		default:
-			content, found, migrationErr := migrateLegacyAPIServerPatch(migrated[idx])
+			content, found, migrationErr := migrateLegacyKubernetesPatch(migrated[idx])
 			if migrationErr != nil {
 				return nil, migrationErr
 			}
@@ -178,7 +178,7 @@ type legacyAPIServerPatchValues struct {
 	extraArgs       map[string]any
 }
 
-func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
+func migrateLegacyKubernetesPatch(patch Patch) ([]byte, bool, error) {
 	documents, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
 	if err != nil {
 		return nil, false, err
@@ -188,35 +188,34 @@ func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
 		return patch.Content, false, nil
 	}
 
+	cniMigrated := migrateDisableDefaultCNIDocuments(documents)
+
 	values, found, err := findLegacyAPIServerValues(documents)
 	if err != nil {
 		return nil, false, fmt.Errorf(
-			"migrate legacy API server patch %q: %w",
+			"migrate legacy Kubernetes patch %q: %w",
 			patch.Path,
 			err,
 		)
 	}
 
-	if !found {
+	if !found && !cniMigrated {
 		return patch.Content, false, nil
 	}
 
-	authenticationDocument, err := values.migrateOIDCAuthenticationDocument(patch.Path)
+	apiServerDocument, structuredDocuments, authenticationDocument, err := migrateAPIServerDocuments(
+		values,
+		found,
+		patch.Path,
+	)
 	if err != nil {
 		return nil, false, err
 	}
 
-	structuredDocuments, err := values.migrateStructuredAPIServerDocuments(patch.Path)
-	if err != nil {
-		return nil, false, err
+	var cniDeleteDocument []byte
+	if cniMigrated {
+		cniDeleteDocument = []byte(multiDocumentDisableDefaultCNIPatchYAML)
 	}
-
-	apiServerDocument, err := values.migrateAPIServerDocument(patch.Path)
-	if err != nil {
-		return nil, false, err
-	}
-
-	values.removeMigratedValues()
 
 	content, err := marshalMigratedKubernetesDocuments(
 		patch.Path,
@@ -224,12 +223,88 @@ func migrateLegacyAPIServerPatch(patch Patch) ([]byte, bool, error) {
 		apiServerDocument,
 		structuredDocuments,
 		authenticationDocument,
+		cniDeleteDocument,
 	)
 	if err != nil {
 		return nil, false, err
 	}
 
 	return content, true, nil
+}
+
+// migrateAPIServerDocuments migrates the OIDC/authentication, structured, and API-server
+// documents for a legacy kube-apiserver patch, returning them for marshaling. It is a no-op
+// (all-nil) when the patch carries no legacy API-server values.
+func migrateAPIServerDocuments(
+	values *legacyAPIServerPatchValues,
+	found bool,
+	patchPath string,
+) (map[string]any, []map[string]any, []byte, error) {
+	if !found {
+		return nil, nil, nil, nil
+	}
+
+	authenticationDocument, err := values.migrateOIDCAuthenticationDocument(patchPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	structuredDocuments, err := values.migrateStructuredAPIServerDocuments(patchPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	apiServerDocument, err := values.migrateAPIServerDocument(patchPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	values.removeMigratedValues()
+
+	return apiServerDocument, structuredDocuments, authenticationDocument, nil
+}
+
+// migrateDisableDefaultCNIDocuments structurally detects a disable-default-CNI edit
+// (cluster.network.cni.name: none) across the patch documents and removes it so the caller
+// can emit the Talos 1.14 KubeFlannelCNIConfig delete document instead. Any other
+// cluster/network edits in the document are preserved. It returns true when such an edit was
+// found. Without this, a variant disable-CNI patch (carrying comments, extra cluster.network
+// edits, or a non-canonical layout) falls through to the API-server path, is left as the
+// legacy cluster.network.cni.name: none, and the generated 1.14 config still emits a
+// KubeFlannelCNIConfig document — bringing up both Flannel and the requested CNI. See
+// ksail#6167.
+func migrateDisableDefaultCNIDocuments(documents []map[string]any) bool {
+	migrated := false
+
+	for _, document := range documents {
+		cluster, found := mapValue(document, "cluster")
+		if !found {
+			continue
+		}
+
+		network, found := mapValue(cluster, "network")
+		if !found {
+			continue
+		}
+
+		cni, found := mapValue(network, "cni")
+		if !found {
+			continue
+		}
+
+		if name, _ := cni["name"].(string); name != "none" {
+			continue
+		}
+
+		delete(cni, "name")
+		removeEmptyMap(network, "cni", cni)
+		removeEmptyMap(cluster, "network", network)
+		removeEmptyMap(document, "cluster", cluster)
+
+		migrated = true
+	}
+
+	return migrated
 }
 
 func decodeLegacyKubernetesDocuments(patch Patch) ([]map[string]any, bool, error) {
@@ -587,6 +662,7 @@ func marshalMigratedKubernetesDocuments(
 	apiServerDocument map[string]any,
 	structuredDocuments []map[string]any,
 	authenticationDocument []byte,
+	cniDeleteDocument []byte,
 ) ([]byte, error) {
 	documents := make(
 		[][]byte,
@@ -605,6 +681,10 @@ func marshalMigratedKubernetesDocuments(
 		}
 
 		documents = append(documents, bytes.TrimSpace(encoded))
+	}
+
+	if len(cniDeleteDocument) > 0 {
+		documents = append(documents, bytes.TrimSpace(cniDeleteDocument))
 	}
 
 	if len(apiServerDocument) > 0 {
