@@ -476,7 +476,73 @@ func validateHetznerCapacity(
 		)
 	}
 
-	return nil
+	return validateSnapshotBuildSlot(
+		cluster,
+		autoscaler,
+		snapshotSlotInput{
+			reachableTotal: reachableTotal,
+			serverLimit:    serverLimit,
+			poolCapacity:   poolCapacity,
+		},
+	)
+}
+
+// snapshotSlotInput carries the capacity figures validateHetznerCapacity has already
+// computed, so the snapshot-slot check reports them without recomputing.
+type snapshotSlotInput struct {
+	reachableTotal int32
+	serverLimit    int32
+	poolCapacity   int32
+}
+
+// snapshotBuildServerReserve is the number of Hetzner servers KSail must be able to create
+// for its OWN work, on top of the cluster's own nodes.
+//
+// On the Talos + Hetzner path KSail builds the Talos snapshot the autoscaler boots its nodes
+// from, and hcloud-upload-image does that by booting ONE temporary server. The deploy path
+// ensures the autoscaler config secret on every deploy and builds the snapshot whenever one
+// is absent, so a cluster whose reachable total can occupy every slot the account allows has
+// nowhere to put that server.
+//
+// It fails late and confusingly: while the pinned Talos version's snapshot exists the lookup
+// hits and nothing needs building, so the config looks fine for weeks. The next Talos version
+// bump invalidates the lookup, every deploy must build, and each one dies mid-apply with
+// hcloud's resource_limit_exceeded — recovery deploys included. Reserving the slot up front
+// turns that runtime deadlock into a config error. See ksail#6171.
+const snapshotBuildServerReserve int32 = 1
+
+// validateSnapshotBuildSlot rejects a Talos + Hetzner autoscaler config that can grow into
+// every available server slot, leaving none for the snapshot build's temporary server.
+//
+// Scoped to Talos deliberately: EnsureTalosSnapshot is called only from the Talos Hetzner
+// provisioner, so the k3s and kubeadm Hetzner paths never build a snapshot and are entitled
+// to the full limit.
+func validateSnapshotBuildSlot(
+	cluster *ClusterSpec,
+	autoscaler *NodeAutoscalerConfig,
+	capacity snapshotSlotInput,
+) error {
+	if cluster.Distribution != DistributionTalos {
+		return nil
+	}
+
+	usableLimit := capacity.serverLimit - snapshotBuildServerReserve
+	if capacity.reachableTotal <= usableLimit {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: reachableTotal(%d) leaves no slot free of serverLimit(%d); keep it at or below %d (serverLimit minus %d reserved for the snapshot build's temporary server), or raise serverLimit: controlPlanes(%d)+workers(%d)+poolCapacity(%d), maxNodesTotal(%d)", //nolint:lll
+		ErrAutoscalerLeavesNoSnapshotSlot,
+		capacity.reachableTotal,
+		capacity.serverLimit,
+		usableLimit,
+		snapshotBuildServerReserve,
+		cluster.ControlPlanes,
+		cluster.Workers,
+		capacity.poolCapacity,
+		autoscaler.MaxNodesTotal,
+	)
 }
 
 // resolveServerLimit validates and normalises the configured Hetzner server limit.
