@@ -29,6 +29,13 @@ func deploymentReadyCheck(
 			return false, fmt.Errorf("failed to get deployment %s/%s: %w", namespace, name, err)
 		}
 
+		// The controller must have observed the current spec before its status
+		// replica counters can be trusted: right after a spec change or upgrade the
+		// Status still reflects the previous generation's (possibly ready) counts.
+		if deployment.Status.ObservedGeneration < deployment.Generation {
+			return false, nil
+		}
+
 		if deployment.Status.Replicas == 0 {
 			return false, nil
 		}
