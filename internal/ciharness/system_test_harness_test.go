@@ -301,6 +301,59 @@ func TestEKSSmokeConfigBoundaryMutationSemantics(t *testing.T) {
 	assertEKSSmokeMutation(t, config)
 }
 
+func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+	boundaryStep := findHarnessStep(t, smokeJob.Steps, "🔐 Resolve EKS permissions boundary")
+
+	testCases := map[string]struct {
+		accountID string
+		callerARN string
+	}{
+		"invalid account ID": {
+			accountID: "not-an-account",
+			callerARN: "arn:aws:sts::123456789012:assumed-role/eks-ci/smoke-test",
+		},
+		"malformed caller ARN": {
+			accountID: "123456789012",
+			callerARN: "not-an-arn",
+		},
+		"foreign ARN partition": {
+			accountID: "123456789012",
+			callerARN: "arn:azure:sts::123456789012:assumed-role/eks-ci/smoke-test",
+		},
+		"mismatched ARN account": {
+			accountID: "123456789012",
+			callerARN: "arn:aws:sts::210987654321:assumed-role/eks-ci/smoke-test",
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			boundaryOutput, diagnostics, err := executePermissionsBoundaryStep(
+				t,
+				boundaryStep.Run,
+				testCase.accountID,
+				testCase.callerARN,
+			)
+
+			require.Error(t, err)
+			assert.Empty(t, boundaryOutput)
+			assert.Contains(
+				t,
+				diagnostics,
+				"AWS identity returned an invalid account ID or caller ARN",
+			)
+		})
+	}
+}
+
 func requireTestExecutable(t *testing.T, name string) {
 	t.Helper()
 
@@ -313,14 +366,33 @@ func requireTestExecutable(t *testing.T, name string) {
 func runPermissionsBoundaryStep(t *testing.T, workflowRun string) string {
 	t.Helper()
 
+	boundaryOutput, diagnostics, err := executePermissionsBoundaryStep(
+		t,
+		workflowRun,
+		"123456789012",
+		"arn:aws-us-gov:sts::123456789012:assumed-role/eks-ci/smoke-test",
+	)
+	require.NoErrorf(t, err, "permissions-boundary step failed:\n%s", diagnostics)
+
+	return boundaryOutput
+}
+
+func executePermissionsBoundaryStep(
+	t *testing.T,
+	workflowRun string,
+	accountID string,
+	callerARN string,
+) (string, string, error) {
+	t.Helper()
+
 	const awsStub = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   *"--query Account"*)
-    printf '123456789012\n'
+    printf '%s\n' "$STUB_ACCOUNT_ID"
     ;;
   *"--query Arn"*)
-    printf 'arn:aws-us-gov:sts::123456789012:assumed-role/eks-ci/smoke-test\n'
+    printf '%s\n' "$STUB_CALLER_ARN"
     ;;
   *)
     exit 64
@@ -336,6 +408,10 @@ esac
 		t,
 		os.WriteFile(awsPath, []byte(awsStub), 0o700), //nolint:gosec // Test-owned path.
 	)
+	require.NoError(
+		t,
+		os.WriteFile(outputPath, nil, 0o600),
+	)
 
 	// The executable and shell source are both repository-owned test inputs.
 	command := exec.CommandContext(t.Context(), "bash", "-c", workflowRun) //nolint:gosec
@@ -344,14 +420,15 @@ esac
 		os.Environ(),
 		"PATH="+tempDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_OUTPUT="+outputPath,
+		"STUB_ACCOUNT_ID="+accountID,
+		"STUB_CALLER_ARN="+callerARN,
 	)
-	output, err := command.CombinedOutput()
-	require.NoErrorf(t, err, "permissions-boundary step failed:\n%s", output)
+	diagnostics, commandErr := command.CombinedOutput()
 
 	boundaryOutput, err := os.ReadFile(outputPath) //nolint:gosec // Test-owned path.
 	require.NoError(t, err)
 
-	return string(boundaryOutput)
+	return string(boundaryOutput), string(diagnostics), commandErr
 }
 
 func assertEKSSmokeMutation(t *testing.T, config map[string]any) {
