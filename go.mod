@@ -100,7 +100,7 @@ require (
 	github.com/sigstore/sigstore v1.10.8
 	github.com/sigstore/sigstore-go v1.2.2
 	github.com/zalando/go-keyring v0.2.8
-	golang.org/x/crypto v0.53.0
+	golang.org/x/crypto v0.54.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.40.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7
