@@ -721,18 +721,29 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("failed to read EKS config file: %w", err)
 	}
 
-	var meta struct {
-		APIVersion string `json:"apiVersion"`
-		Kind       string `json:"kind"`
-		Metadata   struct {
-			Name   string `json:"name"`
-			Region string `json:"region"`
-		} `json:"metadata"`
+	name, region, err := parseEKSConfigMetadata(data)
+	if err != nil {
+		return "", "", "", err
 	}
 
-	err = yaml.Unmarshal(data, &meta)
+	return canonical, name, region, nil
+}
+
+type eksConfigMetadata struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name   string `json:"name"`
+		Region string `json:"region"`
+	} `json:"metadata"`
+}
+
+func parseEKSConfigMetadata(data []byte) (string, string, error) {
+	var meta eksConfigMetadata
+
+	err := yaml.Unmarshal(data, &meta)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
+		return "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
 	}
 
 	const (
@@ -741,7 +752,7 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 	)
 
 	if meta.APIVersion != eksConfigAPIVersion || meta.Kind != eksConfigKind {
-		return "", "", "", fmt.Errorf(
+		return "", "", fmt.Errorf(
 			"%w: expected apiVersion %q and kind %q, got %q and %q",
 			errInvalidEKSConfig,
 			eksConfigAPIVersion,
@@ -754,7 +765,7 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 	name := meta.Metadata.Name
 	if name != "" {
 		if name != strings.TrimSpace(name) {
-			return "", "", "", fmt.Errorf(
+			return "", "", fmt.Errorf(
 				"%w: metadata.name %q has leading or trailing whitespace",
 				errInvalidEKSConfig,
 				name,
@@ -763,7 +774,7 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 
 		err = v1alpha1.ValidateClusterName(name)
 		if err != nil {
-			return "", "", "", fmt.Errorf(
+			return "", "", fmt.Errorf(
 				"%w: metadata.name: %w",
 				errInvalidEKSConfig,
 				err,
@@ -771,7 +782,7 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 		}
 	}
 
-	return canonical, name, meta.Metadata.Region, nil
+	return name, meta.Metadata.Region, nil
 }
 
 // resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig

@@ -247,8 +247,7 @@ func TestIngressFirewallPatchesSuccess(t *testing.T) {
 	})
 }
 
-// TestReadEKSConfigMetadata verifies the eksctl config metadata reader across
-// missing-file, populated, metadata-less, and malformed-YAML cases.
+// TestReadEKSConfigMetadata verifies the supported absent and valid eksctl config shapes.
 func TestReadEKSConfigMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -293,45 +292,12 @@ func TestReadEKSConfigMetadata(t *testing.T) {
 		assert.Empty(t, name)
 		assert.Empty(t, region)
 	})
+}
 
-	for _, testCase := range []struct {
-		name    string
-		content string
-	}{
-		{
-			name: "wrong API version is rejected",
-			content: "apiVersion: v1\n" +
-				"kind: ClusterConfig\n" +
-				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
-		},
-		{
-			name: "wrong kind is rejected",
-			content: "apiVersion: eksctl.io/v1alpha5\n" +
-				"kind: ConfigMap\n" +
-				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
-		},
-		{
-			name:    "missing API version is rejected",
-			content: "kind: ClusterConfig\nmetadata:\n  name: my-eks\n  region: eu-west-1\n",
-		},
-		{
-			name: "missing kind is rejected",
-			content: "apiVersion: eksctl.io/v1alpha5\n" +
-				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
-		},
-		{
-			name: "padded metadata name is rejected",
-			content: "apiVersion: eksctl.io/v1alpha5\n" +
-				"kind: ClusterConfig\n" +
-				"metadata:\n  name: 'my-eks '\n  region: eu-west-1\n",
-		},
-		{
-			name: "invalid metadata name is rejected",
-			content: "apiVersion: eksctl.io/v1alpha5\n" +
-				"kind: ClusterConfig\n" +
-				"metadata:\n  name: Invalid_EKS\n  region: eu-west-1\n",
-		},
-	} {
+func TestReadEKSConfigMetadataRejectsInvalidFiles(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range invalidEKSConfigMetadataCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -340,20 +306,64 @@ func TestReadEKSConfigMetadata(t *testing.T) {
 
 			_, _, _, err := configmanager.ReadEKSConfigMetadataForTest(configPath)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid EKS config file")
+			assert.Contains(t, err.Error(), testCase.wantError)
 		})
 	}
+}
 
-	t.Run("malformed YAML returns an error", func(t *testing.T) {
-		t.Parallel()
+type invalidEKSConfigMetadataCase struct {
+	name      string
+	content   string
+	wantError string
+}
 
-		configPath := filepath.Join(t.TempDir(), "eks.yaml")
-		// A tab in the indentation is invalid YAML.
-		writeFileWithParents(t, configPath, "metadata:\n\tname: my-eks\n")
-
-		_, _, _, err := configmanager.ReadEKSConfigMetadataForTest(configPath)
-		require.Error(t, err)
-	})
+func invalidEKSConfigMetadataCases() []invalidEKSConfigMetadataCase {
+	return []invalidEKSConfigMetadataCase{
+		{
+			name:      "wrong API version is rejected",
+			wantError: "invalid EKS config file",
+			content: "apiVersion: v1\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name:      "wrong kind is rejected",
+			wantError: "invalid EKS config file",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ConfigMap\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name:      "missing API version is rejected",
+			content:   "kind: ClusterConfig\nmetadata:\n  name: my-eks\n  region: eu-west-1\n",
+			wantError: "invalid EKS config file",
+		},
+		{
+			name:      "missing kind is rejected",
+			wantError: "invalid EKS config file",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name:      "padded metadata name is rejected",
+			wantError: "invalid EKS config file",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: 'my-eks '\n  region: eu-west-1\n",
+		},
+		{
+			name:      "invalid metadata name is rejected",
+			wantError: "invalid EKS config file",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: Invalid_EKS\n  region: eu-west-1\n",
+		},
+		{
+			name:      "malformed YAML is rejected",
+			content:   "metadata:\n\tname: my-eks\n",
+			wantError: "failed to parse EKS config file",
+		},
+	}
 }
 
 // TestResolveKWOKName verifies KWOK cluster-name resolution from the kubeconfig
