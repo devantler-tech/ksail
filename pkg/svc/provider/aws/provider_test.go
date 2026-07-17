@@ -23,6 +23,7 @@ import (
 // credentials.
 const (
 	testEndpoint        = "https://ABCDEF0123456789.gr7.us-east-1.eks.amazonaws.com"
+	scaleSubcommand     = "scale"
 	nodegroupSubcommand = "nodegroup"
 )
 
@@ -219,7 +220,7 @@ func TestStopNodes_ScalesAllToZero(t *testing.T) {
 	var scales [][]string
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
+		if len(call) >= 2 && call[0] == scaleSubcommand && call[1] == nodegroupSubcommand {
 			scales = append(scales, call)
 		}
 	}
@@ -272,7 +273,7 @@ func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
 	scales := 0
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
+		if len(call) >= 2 && call[0] == scaleSubcommand && call[1] == nodegroupSubcommand {
 			scales++
 
 			joined := strings.Join(call, " ")
@@ -310,7 +311,7 @@ func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
 	var scales []string
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
+		if len(call) >= 2 && call[0] == scaleSubcommand && call[1] == nodegroupSubcommand {
 			scales = append(scales, strings.Join(call, " "))
 		}
 	}
@@ -478,7 +479,7 @@ func scaleCalls(calls [][]string) []string {
 	scales := make([]string, 0)
 
 	for _, call := range calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
+		if len(call) >= 2 && call[0] == scaleSubcommand && call[1] == nodegroupSubcommand {
 			scales = append(scales, strings.Join(call, " "))
 		}
 	}
