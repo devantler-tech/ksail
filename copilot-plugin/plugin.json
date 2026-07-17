@@ -1,7 +1,7 @@
 {
   "name": "ksail",
   "description": "KSail MCP server + expertise skill for Copilot CLI — spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster) and GitOps workloads declaratively.",
-  "version": "7.172.2",
+  "version": "7.172.3",
   "author": {
     "name": "devantler-tech",
     "url": "https://github.com/devantler-tech"
