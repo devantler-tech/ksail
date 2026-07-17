@@ -327,27 +327,30 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 				render.Options{Resolver: resolver},
 			)
 			require.NoError(t, err)
-
-			// The chart renders regardless of values coverage.
-			_, hasDeployment := findDoc(result.Documents, "Deployment")
-			require.True(t, hasDeployment, "chart should render regardless of values coverage")
-
-			if !testCase.wantDegraded {
-				assert.Empty(t, result.Degradations)
-
-				return
-			}
-
-			require.Len(t, result.Degradations, 1)
-			degradation := result.Degradations[0]
-			assert.Equal(t, "flux-system/podinfo", degradation.HelmRelease)
-			assert.Equal(t, render.DegradationPartialValues, degradation.Kind)
-			assert.False(
-				t,
-				degradation.Silent,
-				"an unresolvable non-optional valuesFrom should warn",
-			)
-			assert.Contains(t, degradation.Reason, "app-config")
+			assertValuesFromDegradation(t, result, testCase.wantDegraded)
 		})
 	}
+}
+
+// assertValuesFromDegradation checks that the chart rendered and that a partial-
+// values degradation is present exactly when wantDegraded is true.
+func assertValuesFromDegradation(t *testing.T, result render.Result, wantDegraded bool) {
+	t.Helper()
+
+	// The chart renders regardless of values coverage.
+	_, hasDeployment := findDoc(result.Documents, "Deployment")
+	require.True(t, hasDeployment, "chart should render regardless of values coverage")
+
+	if !wantDegraded {
+		assert.Empty(t, result.Degradations)
+
+		return
+	}
+
+	require.Len(t, result.Degradations, 1)
+	degradation := result.Degradations[0]
+	assert.Equal(t, "flux-system/podinfo", degradation.HelmRelease)
+	assert.Equal(t, render.DegradationPartialValues, degradation.Kind)
+	assert.False(t, degradation.Silent, "an unresolvable non-optional valuesFrom should warn")
+	assert.Contains(t, degradation.Reason, "app-config")
 }
