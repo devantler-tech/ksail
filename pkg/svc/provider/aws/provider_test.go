@@ -21,7 +21,10 @@ import (
 // testEndpoint is the control-plane endpoint the default fake describer
 // returns so GetClusterStatus success paths never resolve real AWS
 // credentials.
-const testEndpoint = "https://ABCDEF0123456789.gr7.us-east-1.eks.amazonaws.com"
+const (
+	testEndpoint        = "https://ABCDEF0123456789.gr7.us-east-1.eks.amazonaws.com"
+	nodegroupSubcommand = "nodegroup"
+)
 
 // fakeDescriber is a credential-free stand-in for the AWS-SDK EKS
 // DescribeCluster seam. It records the requested name and returns the
@@ -216,7 +219,7 @@ func TestStopNodes_ScalesAllToZero(t *testing.T) {
 	var scales [][]string
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
 			scales = append(scales, call)
 		}
 	}
@@ -269,7 +272,7 @@ func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
 	scales := 0
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
 			scales++
 
 			joined := strings.Join(call, " ")
@@ -307,7 +310,7 @@ func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
 	var scales []string
 
 	for _, call := range runner.calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
 			scales = append(scales, strings.Join(call, " "))
 		}
 	}
@@ -475,7 +478,7 @@ func scaleCalls(calls [][]string) []string {
 	scales := make([]string, 0)
 
 	for _, call := range calls {
-		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == nodegroupSubcommand {
 			scales = append(scales, strings.Join(call, " "))
 		}
 	}
