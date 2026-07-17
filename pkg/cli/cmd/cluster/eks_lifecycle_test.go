@@ -80,8 +80,15 @@ if [ "$1 $2" = "get cluster" ]; then
   printf '[{"Name":"%s","Region":"%s",' "$discovered_cluster" "$discovered_region"
   printf '"EksctlCreated":"%s"}]\n' "$eksctl_created"
 elif [ "$1 $2" = "get nodegroup" ]; then
-  printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
-  printf '"DesiredCapacity":0,"MinSize":2,"MaxSize":4,"NodeGroupType":"managed"}]\n'
+	current_desired="${KSAIL_EKS_NODEGROUP_DESIRED:-0}"
+	current_min="${KSAIL_EKS_NODEGROUP_MIN:-2}"
+	if grep -q -- '--nodes 2 --nodes-min 2' "$KSAIL_EKSCTL_MARKER"; then
+		current_desired=2
+		current_min=2
+	fi
+	printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
+	printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"NodeGroupType":"managed"}]\n' \
+		"$current_desired" "$current_min"
 fi
 `
 
@@ -163,6 +170,7 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-routing-test-6087"
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			configureStandaloneEKSNodegroupAction(t, testCase.name)
 
 			if testCase.name == "start" {
 				// EksctlCreated is normalized explicitly: case and surrounding whitespace are benign.
@@ -190,6 +198,51 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 			assertParentAWSEnvironmentUnchanged(t)
 		})
 	}
+}
+
+// TestStandaloneEKSStopStartRestoresExactCapacity exercises the user-facing commands across the
+// persisted boundary and proves start verifies the restored tuple before clearing its snapshot.
+func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {
+	const clusterName = "ksail-eks-stop-start-roundtrip-6087"
+
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_EKS_NODEGROUP_DESIRED", "2")
+	t.Setenv("KSAIL_EKS_NODEGROUP_MIN", "2")
+	runStandaloneEKSCommand(t, cluster.NewStopCmd, "--name", clusterName, "--provider", "AWS")
+
+	t.Setenv("KSAIL_EKS_NODEGROUP_DESIRED", "0")
+	t.Setenv("KSAIL_EKS_NODEGROUP_MIN", "0")
+	runStandaloneEKSCommand(t, cluster.NewStartCmd, "--name", clusterName, "--provider", "AWS")
+
+	assert.Equal(t, []string{
+		fmt.Sprintf("get cluster --name %s --output json --region ap-southeast-2", clusterName),
+		fmt.Sprintf(
+			"get nodegroup --cluster %s --output json --region ap-southeast-2",
+			clusterName,
+		),
+		fmt.Sprintf(
+			"scale nodegroup --cluster %s --name workers "+
+				"--nodes 0 --nodes-min 0 --nodes-max 4 --region ap-southeast-2",
+			clusterName,
+		),
+		fmt.Sprintf("get cluster --name %s --output json --region ap-southeast-2", clusterName),
+		fmt.Sprintf(
+			"get nodegroup --cluster %s --output json --region ap-southeast-2",
+			clusterName,
+		),
+		fmt.Sprintf(
+			"scale nodegroup --cluster %s --name workers "+
+				"--nodes 2 --nodes-min 2 --nodes-max 4 --region ap-southeast-2",
+			clusterName,
+		),
+		fmt.Sprintf(
+			"get nodegroup --cluster %s --output json --region ap-southeast-2",
+			clusterName,
+		),
+	}, readStandaloneEKSCalls(t, markerPath))
+
+	_, err := state.LoadEKSNodegroupState(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
 // TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors covers each command's
@@ -227,6 +280,7 @@ func TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-error-test-6087"
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			t.Setenv("KSAIL_EKSCTL_FAIL", testCase.failOn)
 
 			cmd := testCase.newCommand()
@@ -523,6 +577,7 @@ func TestStandaloneEKSLifecycleCommandsIgnoreRegionFromNamelessConfig(t *testing
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-nameless-region-test-6087"
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("KSAIL_REGION", "")
 
@@ -726,6 +781,7 @@ func TestStandaloneEKSLifecycleCommandsUseEKSConfigNameWhenMetadataDrifts(t *tes
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "eks-source-name-6087"
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			require.NoError(
 				t,
 				os.WriteFile(
@@ -1377,6 +1433,7 @@ func setupStandaloneEKSLifecycleFixture(
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
 	t.Setenv("KSAIL_EKS_CLUSTER", clusterName)
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KSAIL_PROFILE", "selected-profile")
 	t.Setenv("KSAIL_REGION", "ap-southeast-2")
 	t.Setenv("KSAIL_ACCESS", "fixture-access")
@@ -1389,6 +1446,30 @@ func setupStandaloneEKSLifecycleFixture(
 	t.Setenv("AWS_SESSION_TOKEN", "stale-session")
 
 	return markerPath
+}
+
+func configureStandaloneEKSNodegroupAction(t *testing.T, action string) {
+	t.Helper()
+
+	if action == "stop" {
+		t.Setenv("KSAIL_EKS_NODEGROUP_DESIRED", "2")
+		t.Setenv("KSAIL_EKS_NODEGROUP_MIN", "2")
+	}
+}
+
+func runStandaloneEKSCommand(
+	t *testing.T,
+	newCommand func() *cobra.Command,
+	args ...string,
+) {
+	t.Helper()
+
+	cmd := newCommand()
+	cmd.SetArgs(args)
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	require.NoError(t, cmd.Execute())
 }
 
 func assertParentAWSEnvironmentUnchanged(t *testing.T) {

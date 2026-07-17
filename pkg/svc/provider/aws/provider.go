@@ -11,6 +11,7 @@ import (
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
 // NodegroupStatusActive is the EKS nodegroup status that indicates the
@@ -89,65 +90,83 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 	return prov, nil
 }
 
-// StartNodes scales all managed nodegroups for the cluster back to their
-// configured desired capacity if it is currently zero. Nodegroups already at
-// non-zero desired capacity are left alone.
-//
-// When a nodegroup's desired capacity is zero, this method does not know the
-// "correct" target size to scale up to, so it defers to the max(MinSize, 1)
-// that eksctl returned. The provisioner — which has the ksail.yaml spec — is
-// responsible for restoring the exact DesiredCapacity when needed.
+// StartNodes restores every managed nodegroup to the exact desired/minimum/maximum values captured
+// before StopNodes zeroed it. The snapshot survives partial failures and is removed only after a
+// readback confirms that every group is restored.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	for _, nodegroup := range nodegroups {
-		if nodegroup.DesiredCap > 0 {
-			continue
-		}
-
-		target := max(nodegroup.MinSize, 1)
-
-		err = p.client.ScaleNodegroup(
-			ctx,
-			clusterName,
-			nodegroup.Name,
-			p.region,
-			target,
-			nodegroup.MinSize,
-			nodegroup.MaxSize,
-		)
-		if err != nil {
-			return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
-		}
+	snapshot, found, err := p.loadNodegroupState(clusterName)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	if !found {
+		return p.startNodegroupsWithoutSnapshot(ctx, clusterName, nodegroups)
+	}
+
+	liveByName, err := validateNodegroupTransition(clusterName, p.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	err = p.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
+	if err != nil {
+		return err
+	}
+
+	return p.verifyAndClearNodegroupState(ctx, clusterName, snapshot)
 }
 
-// StopNodes scales all managed nodegroups to zero desired capacity. The
-// cluster control plane remains running (EKS bills $0.10/hour for it) but
-// all node-hour costs stop.
+// StopNodes atomically snapshots every managed nodegroup before scaling it to zero. Repeated calls
+// preserve the first snapshot and skip already-stopped groups, so a partial stop remains retryable.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	for _, nodegroup := range nodegroups {
+	snapshot, found, err := p.loadNodegroupState(clusterName)
+	if err != nil {
+		return err
+	}
+
+	if !found {
+		snapshot, err = newNodegroupState(clusterName, p.region, nodegroups)
+		if err != nil {
+			return err
+		}
+
+		err = state.SaveEKSNodegroupState(clusterName, snapshot)
+		if err != nil {
+			return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
+		}
+	}
+
+	liveByName, err := validateNodegroupTransition(clusterName, p.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	for _, capacity := range snapshot.Nodegroups {
+		if nodegroupIsStopped(liveByName[capacity.Name], capacity) {
+			continue
+		}
+
 		err = p.client.ScaleNodegroup(
 			ctx,
 			clusterName,
-			nodegroup.Name,
+			capacity.Name,
 			p.region,
 			0,
 			0,
-			nodegroup.MaxSize,
+			capacity.MaxSize,
 		)
 		if err != nil {
-			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", nodegroup.Name, err)
+			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", capacity.Name, err)
 		}
 	}
 

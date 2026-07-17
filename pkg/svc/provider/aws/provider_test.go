@@ -3,6 +3,7 @@ package aws_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +48,8 @@ var errScriptedRunnerEmptyArgs = errors.New("scripted runner: empty args")
 // errDescribeDenied is a static describer error used to assert that
 // GetClusterStatus surfaces a DescribeCluster failure.
 var errDescribeDenied = errors.New("access denied")
+
+var errScaleDenied = errors.New("scale denied")
 
 // scriptedRunner replays canned responses keyed by the first argument
 // (`create`, `delete`, `get`, `scale`, `upgrade`). It records every call for
@@ -196,7 +200,7 @@ func TestDeleteNodes_Noop(t *testing.T) {
 }
 
 func TestStopNodes_ScalesAllToZero(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	prov, runner := newProvider(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(`[
@@ -234,13 +238,28 @@ func TestStopNodes_NoNodegroups(t *testing.T) {
 }
 
 func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+		Version:     state.EKSNodegroupStateVersion,
+		ClusterName: "demo",
+		Region:      "us-east-1",
+		Nodegroups: []state.EKSNodegroupCapacity{
+			{Name: "ng-1", DesiredCapacity: 2, MinSize: 2, MaxSize: 5},
+			{Name: "ng-2", DesiredCapacity: 3, MinSize: 1, MaxSize: 5},
+		},
+	}))
 
 	prov, runner := newProvider(t, map[string][]response{
-		"get nodegroup": {{stdout: []byte(`[
-			{"Cluster":"demo","Name":"ng-1","DesiredCapacity":0,"MinSize":2,"MaxSize":5},
-			{"Cluster":"demo","Name":"ng-2","DesiredCapacity":3,"MinSize":1,"MaxSize":5}
-		]`)}},
+		"get nodegroup": {
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"ng-1","DesiredCapacity":0,"MinSize":0,"MaxSize":5},
+				{"Cluster":"demo","Name":"ng-2","DesiredCapacity":3,"MinSize":1,"MaxSize":5}
+			]`)},
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"ng-1","DesiredCapacity":2,"MinSize":2,"MaxSize":5},
+				{"Cluster":"demo","Name":"ng-2","DesiredCapacity":3,"MinSize":1,"MaxSize":5}
+			]`)},
+		},
 		"scale nodegroup": {{}},
 	})
 
@@ -260,6 +279,208 @@ func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, scales, "should scale only nodegroups with desiredCapacity=0")
+}
+
+// TestStopThenStartRestoresNodegroupCapacities proves the lifecycle round trip does not lose the
+// desired/minimum sizes when stop must temporarily set both values to zero.
+func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"ng-1","DesiredCapacity":3,"MinSize":2,"MaxSize":5}
+			]`)},
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"ng-1","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
+			]`)},
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"ng-1","DesiredCapacity":3,"MinSize":2,"MaxSize":5}
+			]`)},
+		},
+		"scale nodegroup": {{}, {}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+
+	var scales []string
+
+	for _, call := range runner.calls {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+			scales = append(scales, strings.Join(call, " "))
+		}
+	}
+
+	require.Equal(t, []string{
+		"scale nodegroup --cluster demo --name ng-1 --nodes 0 --nodes-min 0 --nodes-max 5 --region us-east-1",
+		"scale nodegroup --cluster demo --name ng-1 --nodes 3 --nodes-min 2 --nodes-max 5 --region us-east-1",
+	}, scales)
+
+	_, err := state.LoadEKSNodegroupState("demo")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestRepeatedStopPreservesOriginalNodegroupCapacities(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: nodegroupJSON(3, 2)},
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(3, 2)},
+		},
+		"scale nodegroup": {{}, {}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+
+	assert.Equal(t, []string{
+		"scale nodegroup --cluster demo --name ng-1 --nodes 0 --nodes-min 0 --nodes-max 5 --region us-east-1",
+		"scale nodegroup --cluster demo --name ng-1 --nodes 3 --nodes-min 2 --nodes-max 5 --region us-east-1",
+	}, scaleCalls(runner.calls))
+}
+
+func TestStopNodesRejectsInvalidCapacityBeforePersisting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: nodegroupJSON(1, 2)}},
+	})
+
+	err := prov.StopNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Empty(t, scaleCalls(runner.calls))
+
+	_, loadErr := state.LoadEKSNodegroupState("demo")
+	require.ErrorIs(t, loadErr, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestStartNodesRejectsMismatchedCapacityStateBeforeScaling(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	saveNodegroupState(t, "demo", "eu-north-1", 3, 2, 5)
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: nodegroupJSON(0, 0)}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "region")
+	assert.Empty(t, scaleCalls(runner.calls))
+}
+
+func TestStartNodesRetainsCapacityStateWhenScalingFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	saveNodegroupState(t, "demo", "us-east-1", 3, 2, 5)
+
+	prov, _ := newProvider(t, map[string][]response{
+		"get nodegroup":   {{stdout: nodegroupJSON(0, 0)}},
+		"scale nodegroup": {{err: errScaleDenied}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.ErrorIs(t, err, errScaleDenied)
+
+	saved, loadErr := state.LoadEKSNodegroupState("demo")
+	require.NoError(t, loadErr)
+	assert.Equal(t, 3, saved.Nodegroups[0].DesiredCapacity)
+	assert.Equal(t, 2, saved.Nodegroups[0].MinSize)
+}
+
+func TestStartNodesRequiresSnapshotWhenMinimumIsZero(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: nodegroupJSON(0, 0)}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-stop snapshot")
+	assert.Empty(t, scaleCalls(runner.calls))
+}
+
+func TestStartNodesWithoutSnapshotPreflightsEveryNodegroup(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(`[
+			{"Cluster":"demo","Name":"a-recoverable","DesiredCapacity":0,"MinSize":2,"MaxSize":5},
+			{"Cluster":"demo","Name":"z-missing-state","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
+		]`)}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "z-missing-state")
+	assert.Empty(t, scaleCalls(runner.calls))
+}
+
+func TestStartNodesRetainsCapacityStateUntilReadbackMatches(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	saveNodegroupState(t, "demo", "us-east-1", 3, 2, 5)
+
+	prov, _ := newProvider(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(0, 0)},
+		},
+		"scale nodegroup": {{}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not restored")
+
+	_, loadErr := state.LoadEKSNodegroupState("demo")
+	require.NoError(t, loadErr)
+}
+
+func nodegroupJSON(desiredCapacity, minSize int) []byte {
+	return fmt.Appendf(
+		nil,
+		`[{"Cluster":"demo","Name":"ng-1","DesiredCapacity":%d,"MinSize":%d,"MaxSize":5}]`,
+		desiredCapacity,
+		minSize,
+	)
+}
+
+func saveNodegroupState(
+	t *testing.T,
+	clusterName, region string,
+	desiredCapacity, minSize, maxSize int,
+) {
+	t.Helper()
+
+	require.NoError(t, state.SaveEKSNodegroupState(clusterName, &state.EKSNodegroupState{
+		Version:     state.EKSNodegroupStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		Nodegroups: []state.EKSNodegroupCapacity{
+			{
+				Name:            "ng-1",
+				DesiredCapacity: desiredCapacity,
+				MinSize:         minSize,
+				MaxSize:         maxSize,
+			},
+		},
+	}))
+}
+
+func scaleCalls(calls [][]string) []string {
+	scales := make([]string, 0)
+
+	for _, call := range calls {
+		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
+			scales = append(scales, strings.Join(call, " "))
+		}
+	}
+
+	return scales
 }
 
 func TestStartNodes_NoNodegroups(t *testing.T) {
