@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"maps"
 	"sort"
 	"strings"
@@ -51,12 +52,32 @@ type Document struct {
 	Provenance Provenance
 }
 
-// Degradation records a HelmRelease that could not be rendered offline. The
-// caller falls back to validating/scanning the HelmRelease CR itself. Silent
-// degradations are expected in normal repos (e.g. a source object that lives in
-// a different Flux Kustomization) and should not be surfaced as warnings.
+// DegradationKind classifies why a HelmRelease's offline render is less than
+// full-fidelity, so callers can phrase an accurate warning.
+type DegradationKind int
+
+const (
+	// DegradationSkippedRender marks a HelmRelease whose chart could not be
+	// rendered offline at all; the caller falls back to validating/scanning the
+	// HelmRelease CR itself. This is the zero value, so a Degradation left
+	// without an explicit Kind keeps this meaning.
+	DegradationSkippedRender DegradationKind = iota
+	// DegradationPartialValues marks a HelmRelease that DID render, but with a
+	// non-optional valuesFrom reference that could not be resolved from the
+	// offline stream — so the rendered children may differ from what Flux applies
+	// with the real value present.
+	DegradationPartialValues
+)
+
+// Degradation records a way a HelmRelease's offline render fell short of what
+// Flux would apply. For DegradationSkippedRender the caller falls back to
+// validating/scanning the HelmRelease CR itself; for DegradationPartialValues
+// the children were rendered but with incomplete values. Silent degradations
+// are expected in normal repos (e.g. a source object that lives in a different
+// Flux Kustomization) and should not be surfaced as warnings.
 type Degradation struct {
 	HelmRelease string // "namespace/name"
+	Kind        DegradationKind
 	Reason      string
 	Err         error
 	Silent      bool
@@ -192,6 +213,43 @@ func expandHelmRelease(
 			newDocument(child, parseObjectMeta(child), provenance),
 		)
 	}
+
+	// The chart rendered, but a non-optional valuesFrom that could not be resolved
+	// offline means the children were produced with incomplete values — surface
+	// that so the shift-left gate is honest about its coverage.
+	result.Degradations = append(result.Degradations, unresolvedValueRefs(&helmRelease, index)...)
+}
+
+// unresolvedValueRefs returns a DegradationPartialValues for each non-optional
+// valuesFrom reference on the HelmRelease that cannot be resolved from the
+// offline stream. Such a reference (typically a cluster-managed ConfigMap or
+// Secret, or one defined in another Flux Kustomization) is dropped from the
+// offline render, so the rendered output can diverge from what Flux applies with
+// the real value present. Optional references are Flux-tolerated (helm-controller
+// ignores a not-found optional ref) and produce no degradation.
+func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) []Degradation {
+	key := helmRelease.Namespace + "/" + helmRelease.Name
+
+	var degradations []Degradation
+
+	for index := range helmRelease.Spec.ValuesFrom {
+		ref := helmRelease.Spec.ValuesFrom[index]
+		if ref.Optional {
+			continue
+		}
+
+		if _, ok := lookupValuesRef(ref, helmRelease.Namespace, sources); ok {
+			continue
+		}
+
+		degradations = append(degradations, Degradation{
+			HelmRelease: key,
+			Kind:        DegradationPartialValues,
+			Reason:      fmt.Sprintf("%s %q (key %q)", ref.Kind, ref.Name, ref.GetValuesKey()),
+		})
+	}
+
+	return degradations
 }
 
 // isSilentDegradation reports whether a degradation is expected in normal repos

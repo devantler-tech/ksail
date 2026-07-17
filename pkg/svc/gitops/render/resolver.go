@@ -302,6 +302,32 @@ func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, 
 	return string(raw), nil
 }
 
+// lookupValuesRef resolves a valuesFrom reference's raw value from the in-stream
+// ConfigMap/Secret index, returning it and whether it was found. It is the single
+// source of truth for "can this reference be resolved offline?", shared by
+// applyValuesFrom (which merges the value) and unresolvedValueRefs (which reports
+// when it cannot be resolved).
+func lookupValuesRef(
+	ref meta.ValuesReference,
+	namespace string,
+	sources SourceIndex,
+) (string, bool) {
+	var data map[string]string
+
+	switch ref.Kind {
+	case "ConfigMap":
+		data = sources.ConfigMaps[namespace+"/"+ref.Name]
+	case "Secret":
+		data = sources.Secrets[namespace+"/"+ref.Name]
+	default:
+		return "", false
+	}
+
+	raw, ok := data[ref.GetValuesKey()]
+
+	return raw, ok
+}
+
 // applyValuesFrom merges one valuesFrom reference into values, resolving it from
 // the in-repo ConfigMap/Secret index. References to objects not present in the
 // stream (typically cluster-managed) are skipped. A reference with a targetPath
@@ -313,18 +339,7 @@ func applyValuesFrom(
 	namespace string,
 	sources SourceIndex,
 ) {
-	var data map[string]string
-
-	switch ref.Kind {
-	case "ConfigMap":
-		data = sources.ConfigMaps[namespace+"/"+ref.Name]
-	case "Secret":
-		data = sources.Secrets[namespace+"/"+ref.Name]
-	default:
-		return
-	}
-
-	raw, ok := data[ref.GetValuesKey()]
+	raw, ok := lookupValuesRef(ref, namespace, sources)
 	if !ok {
 		return
 	}

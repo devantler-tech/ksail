@@ -250,3 +250,104 @@ metadata:
 func joinDocsString(docs ...string) string {
 	return strings.Join(docs, "\n---\n")
 }
+
+// helmReleaseValuesFromYAML references a ConfigMap "app-config" via valuesFrom.
+// Whether that ConfigMap is in the stream determines if the offline render is
+// full-fidelity.
+const (
+	helmReleaseValuesFromYAML = `apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: podinfo
+  valuesFrom:
+    - kind: ConfigMap
+      name: app-config`
+
+	helmReleaseValuesFromOptionalYAML = helmReleaseValuesFromYAML + `
+      optional: true`
+
+	appConfigYAML = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: flux-system
+data:
+  values.yaml: |
+    replicaCount: 3`
+)
+
+// TestExpandDegradesOnUnresolvableValuesFrom pins the render-fidelity honesty
+// contract: a HelmRelease whose non-optional valuesFrom ConfigMap/Secret is
+// absent from the offline stream still renders, but records a
+// DegradationPartialValues so the shift-left gate does not silently under-report
+// its coverage. An optional reference, or a resolvable one, degrades nothing.
+func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
+	t.Parallel()
+
+	resolver := fakeResolver{
+		render: func(_ *helmv2.HelmRelease, _ render.SourceIndex) (string, error) {
+			return renderedDeployment, nil
+		},
+	}
+
+	tests := []struct {
+		name         string
+		stream       []byte
+		wantDegraded bool
+	}{
+		{
+			name:         "non-optional valuesFrom absent from the stream degrades",
+			stream:       joinDocs(helmReleaseValuesFromYAML),
+			wantDegraded: true,
+		},
+		{
+			name:         "optional valuesFrom absent from the stream is tolerated",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML),
+			wantDegraded: false,
+		},
+		{
+			name:         "resolvable valuesFrom does not degrade",
+			stream:       joinDocs(helmReleaseValuesFromYAML, appConfigYAML),
+			wantDegraded: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := render.Expand(
+				context.Background(),
+				testCase.stream,
+				render.Options{Resolver: resolver},
+			)
+			require.NoError(t, err)
+
+			// The chart renders regardless of values coverage.
+			_, hasDeployment := findDoc(result.Documents, "Deployment")
+			require.True(t, hasDeployment, "chart should render regardless of values coverage")
+
+			if !testCase.wantDegraded {
+				assert.Empty(t, result.Degradations)
+
+				return
+			}
+
+			require.Len(t, result.Degradations, 1)
+			degradation := result.Degradations[0]
+			assert.Equal(t, "flux-system/podinfo", degradation.HelmRelease)
+			assert.Equal(t, render.DegradationPartialValues, degradation.Kind)
+			assert.False(
+				t,
+				degradation.Silent,
+				"an unresolvable non-optional valuesFrom should warn",
+			)
+			assert.Contains(t, degradation.Reason, "app-config")
+		})
+	}
+}

@@ -143,9 +143,16 @@ func warnDegradations(cmd *cobra.Command, degradations []render.Degradation) {
 			continue
 		}
 
+		content := "skipped Helm render for HelmRelease %s (validating the resource as-is): %s"
+		if degradation.Kind == render.DegradationPartialValues {
+			content = "rendered HelmRelease %s with incomplete values — valuesFrom %s " +
+				"could not be resolved offline (cluster-managed or in another kustomization); " +
+				"validation/scan may differ from the cluster"
+		}
+
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "skipped Helm render for HelmRelease %s (validating the resource as-is): %s",
+			Content: content,
 			Args:    []any{degradation.HelmRelease, degradation.Reason},
 			Writer:  cmd.ErrOrStderr(),
 		})
