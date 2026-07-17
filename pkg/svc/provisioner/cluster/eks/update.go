@@ -55,25 +55,11 @@ func (u *UpdatableProvisioner) Update(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	opts clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
-	if oldSpec == nil || newSpec == nil {
-		return clusterupdate.NewEmptyUpdateResult(), nil
-	}
-
-	diff, diffErr := u.DiffConfig(ctx, name, oldSpec, newSpec)
-
-	result, proceed, prepErr := clusterupdate.PrepareUpdate(
-		diff, diffErr, opts, clustererr.ErrRecreationRequired,
+	//nolint:wrapcheck // error context added inside RunUpdate.
+	return clusterupdate.RunUpdate(
+		ctx, name, oldSpec, newSpec, opts, clustererr.ErrRecreationRequired,
+		u.DiffConfig, u.applyNodegroupScaling, "failed to scale nodegroups",
 	)
-	if !proceed {
-		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
-	}
-
-	err := u.applyNodegroupScaling(ctx, u.resolveName(name), result)
-	if err != nil {
-		return result, fmt.Errorf("failed to scale nodegroups: %w", err)
-	}
-
-	return result, nil
 }
 
 // DiffConfig computes the differences between the declared eksctl.yaml
@@ -160,9 +146,11 @@ func (u *UpdatableProvisioner) GetCurrentConfig(
 // recording applied and failed changes on the result.
 func (u *UpdatableProvisioner) applyNodegroupScaling(
 	ctx context.Context,
-	clusterName string,
+	name string,
 	result *clusterupdate.UpdateResult,
 ) error {
+	clusterName := u.resolveName(name)
+
 	desired, err := u.desiredNodegroups()
 	if err != nil {
 		return err
