@@ -108,7 +108,7 @@ func handleCreateRunE(
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
-	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg)
+	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
@@ -738,6 +738,7 @@ func maybeWaitForTTL(
 	cmd *cobra.Command,
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
 	ttlStr, _ := cmd.Flags().GetString("ttl")
 	if ttlStr == "" {
@@ -764,5 +765,5 @@ func maybeWaitForTTL(
 	}
 
 	// Block and wait for TTL, then auto-destroy.
-	return waitForTTLAndDelete(cmd, clusterName, clusterCfg, ttl)
+	return waitForTTLAndDelete(cmd, clusterName, clusterCfg, eksConfig, ttl)
 }

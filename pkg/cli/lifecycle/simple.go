@@ -351,10 +351,14 @@ func provisionAndAct(
 	}
 
 	provisioner, err := CreateMinimalProvisionerForProvider(
+		cmd.Context(),
 		clusterInfo,
-		resolved.OmniOpts,
-		resolved.KubernetesOpts,
-		false,
+		MinimalProvisionerOptions{
+			OmniOpts:       resolved.OmniOpts,
+			KubernetesOpts: resolved.KubernetesOpts,
+			AWSOpts:        resolved.AWSOpts,
+			AWSRegion:      resolved.AWSRegion,
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
@@ -394,14 +398,23 @@ func CreateMinimalProvisioner(
 	return provisioner, nil
 }
 
+// MinimalProvisionerOptions contains the provider-specific context needed to
+// construct a standalone lifecycle provisioner from only a resolved target.
+type MinimalProvisionerOptions struct {
+	OmniOpts       v1alpha1.OptionsOmni
+	KubernetesOpts v1alpha1.OptionsKubernetes
+	AWSOpts        v1alpha1.OptionsAWS
+	AWSRegion      string
+	DeleteStorage  bool
+}
+
 // CreateMinimalProvisionerForProvider creates provisioners for all distributions
 // that support the given provider, and returns the first one that can operate on the cluster.
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
+	ctx context.Context,
 	info *clusterdetector.Info,
-	omniOpts v1alpha1.OptionsOmni,
-	kubernetesOpts v1alpha1.OptionsKubernetes,
-	deleteStorage bool,
+	options MinimalProvisionerOptions,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
@@ -415,7 +428,7 @@ func CreateMinimalProvisionerForProvider(
 		// Pass info.KubeconfigPath as the nested cluster's kubeconfig for context cleanup.
 		return newKubernetesCleanupProvisioner(
 			info.ClusterName,
-			kubernetesOpts,
+			options.KubernetesOpts,
 			info.KubeconfigPath,
 		)
 
@@ -436,21 +449,23 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
-			omniOpts,
+			options.OmniOpts,
 			false,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
 		}
 
-		provisioner.WithDeleteStorage(deleteStorage)
+		provisioner.WithDeleteStorage(options.DeleteStorage)
 
 		return provisioner, nil
 
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
-		// AWS, GCP, and Azure only support their managed distributions
-		// (EKS/GKE/AKS), which are not docker-based and cannot be produced by
-		// the minimal multi-provisioner path; their lifecycle goes through the factory.
+	case v1alpha1.ProviderAWS:
+		return createMinimalEKSProvisioner(ctx, info, options)
+
+	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
+		// GCP and Azure only support their managed distributions (GKE/AKS),
+		// which are not yet wired into this standalone lifecycle path.
 		return nil, fmt.Errorf(
 			"%w: %s provider is only supported via its managed distribution",
 			clusterprovisioner.ErrUnsupportedProvider,
@@ -464,6 +479,40 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 		)
 	}
+}
+
+// createMinimalEKSProvisioner builds the name-and-region-only EKS configuration
+// needed by standalone delete/start/stop commands, while reusing the default
+// factory's credential-isolated eksctl and AWS provider wiring. ConfigPath is
+// deliberately empty: an explicit/resolved cluster name must never be replaced
+// by a possibly unrelated local eks.yaml during a destructive delete.
+func createMinimalEKSProvisioner(
+	ctx context.Context,
+	info *clusterdetector.Info,
+	options MinimalProvisionerOptions,
+) (clusterprovisioner.Provisioner, error) {
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Name = info.ClusterName
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Provider.AWS = options.AWSOpts
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Name:           info.ClusterName,
+				Region:         options.AWSRegion,
+				KubeconfigPath: info.KubeconfigPath,
+			},
+		},
+	}
+
+	provisioner, _, err := factory.Create(ctx, clusterCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
+	}
+
+	return provisioner, nil
 }
 
 // kubernetesCleanupProvisioner deletes nested clusters on a Kubernetes provider

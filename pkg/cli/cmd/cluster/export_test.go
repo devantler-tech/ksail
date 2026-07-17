@@ -299,7 +299,7 @@ func ExportMaybeWaitForTTL(
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
+	return maybeWaitForTTL(cmd, clusterName, clusterCfg, nil)
 }
 
 // ExportNormalizeVersionTag exposes normalizeVersionTag for testing.

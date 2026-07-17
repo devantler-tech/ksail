@@ -8,8 +8,10 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +27,7 @@ func waitForTTLAndDelete(
 	cmd *cobra.Command,
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
 	ttl time.Duration,
 ) error {
 	notify.Infof(cmd.OutOrStdout(),
@@ -39,7 +42,7 @@ func waitForTTLAndDelete(
 
 	select {
 	case <-timer.C:
-		return autoDeleteCluster(cmd, clusterName, clusterCfg)
+		return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
 	case <-ctx.Done():
 		notify.Infof(cmd.OutOrStdout(),
 			"TTL wait cancelled; cluster %q will remain running", clusterName)
@@ -55,6 +58,7 @@ func autoDeleteCluster(
 	cmd *cobra.Command,
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
 	notify.Infof(cmd.OutOrStdout(),
 		"TTL expired; auto-destroying cluster %q...", clusterName)
@@ -66,7 +70,17 @@ func autoDeleteCluster(
 	}
 
 	provisioner, err := createDeleteProvisioner(
-		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
+		cmd.Context(),
+		info,
+		lifecycle.MinimalProvisionerOptions{
+			OmniOpts:       clusterCfg.Spec.Provider.Omni,
+			KubernetesOpts: clusterCfg.Spec.Provider.Kubernetes,
+			AWSOpts:        clusterCfg.Spec.Provider.AWS,
+			AWSRegion: lifecycle.ResolveAWSRegion(
+				clusterCfg.Spec.Provider.AWS,
+				&clusterprovisioner.DistributionConfig{EKS: eksConfig},
+			),
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
