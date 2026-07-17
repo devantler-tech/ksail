@@ -107,6 +107,11 @@ func ExportEnsureClusterManaged(
 	)
 }
 
+// ExportParseEksctlContextTarget exports parseEksctlContextTarget for testing.
+func ExportParseEksctlContextTarget(contextName string) (string, string, bool) {
+	return parseEksctlContextTarget(contextName)
+}
+
 // ExportResolveCreatedContextName exports resolveCreatedContextName for testing.
 func ExportResolveCreatedContextName(
 	distribution v1alpha1.Distribution,
@@ -300,6 +305,16 @@ func ExportMaybeWaitForTTL(
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	return maybeWaitForTTL(cmd, clusterName, clusterCfg, nil)
+}
+
+// ExportAutoDeleteCluster exports autoDeleteCluster for offline TTL safety tests.
+func ExportAutoDeleteCluster(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
 }
 
 // ExportNormalizeVersionTag exposes normalizeVersionTag for testing.
@@ -621,6 +636,7 @@ func ExportGuardUpdateTargetManaged(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
-	return guardUpdateTargetManaged(ctx, clusterCfg, clusterName)
+	return guardUpdateTargetManaged(ctx, clusterCfg, clusterName, eksConfig)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -60,28 +61,22 @@ func autoDeleteCluster(
 	clusterCfg *v1alpha1.Cluster,
 	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
+	clusterName, err := ttlAutoDeleteTargetName(clusterName, clusterCfg, eksConfig)
+	if err != nil {
+		return fmt.Errorf("TTL auto-delete: resolve target: %w", err)
+	}
+
 	notify.Infof(cmd.OutOrStdout(),
 		"TTL expired; auto-destroying cluster %q...", clusterName)
 
-	info := &clusterdetector.Info{
-		ClusterName:  clusterName,
-		Distribution: clusterCfg.Spec.Cluster.Distribution,
-		Provider:     clusterCfg.Spec.Cluster.Provider,
+	info, options, err := ttlDeleteProvisionerInputs(
+		cmd.Context(), clusterName, clusterCfg, eksConfig,
+	)
+	if err != nil {
+		return err
 	}
 
-	provisioner, err := createDeleteProvisioner(
-		cmd.Context(),
-		info,
-		lifecycle.MinimalProvisionerOptions{
-			OmniOpts:       clusterCfg.Spec.Provider.Omni,
-			KubernetesOpts: clusterCfg.Spec.Provider.Kubernetes,
-			AWSOpts:        clusterCfg.Spec.Provider.AWS,
-			AWSRegion: lifecycle.ResolveAWSRegion(
-				clusterCfg.Spec.Provider.AWS,
-				&clusterprovisioner.DistributionConfig{EKS: eksConfig},
-			),
-		},
-	)
+	provisioner, err := createDeleteProvisioner(cmd.Context(), info, options)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
@@ -106,4 +101,79 @@ func autoDeleteCluster(
 		"cluster %q auto-destroyed after TTL expiry", clusterName)
 
 	return nil
+}
+
+func ttlDeleteProvisionerInputs(
+	ctx context.Context,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) (*clusterdetector.Info, lifecycle.MinimalProvisionerOptions, error) {
+	info := &clusterdetector.Info{
+		ClusterName:    clusterName,
+		Distribution:   clusterCfg.Spec.Cluster.Distribution,
+		Provider:       clusterCfg.Spec.Cluster.Provider,
+		KubeconfigPath: clusterCfg.Spec.Cluster.Connection.Kubeconfig,
+	}
+	options := lifecycle.MinimalProvisionerOptions{
+		OmniOpts:       clusterCfg.Spec.Provider.Omni,
+		KubernetesOpts: clusterCfg.Spec.Provider.Kubernetes,
+		AWSOpts:        clusterCfg.Spec.Provider.AWS,
+	}
+
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if strings.TrimSpace(eksConfig.KubeconfigPath) != "" {
+			info.KubeconfigPath = strings.TrimSpace(eksConfig.KubeconfigPath)
+		}
+
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: clusterName,
+			EKSConfigSource: eksConfig.NameFromConfig &&
+				strings.TrimSpace(eksConfig.ConfigPath) != "",
+			Provider:       v1alpha1.ProviderAWS,
+			KubeconfigPath: info.KubeconfigPath,
+			AWSOpts:        clusterCfg.Spec.Provider.AWS,
+			// EKSConfig.Region was pinned before creation. Do not re-read a mutable region
+			// environment variable after the TTL wait.
+			AWSRegion: strings.TrimSpace(eksConfig.Region),
+		}
+
+		err := ensureAWSClusterManaged(ctx, resolved)
+		if err != nil {
+			return nil, lifecycle.MinimalProvisionerOptions{}, fmt.Errorf(
+				"TTL auto-delete: verify EKS ownership: %w",
+				err,
+			)
+		}
+
+		eksConfig.Region = resolved.AWSRegion
+		options.AWSRegion = resolved.AWSRegion
+	}
+
+	return info, options, nil
+}
+
+// ttlAutoDeleteTargetName returns the exact target the provisioner created. EKS creation consumes
+// EKSConfig.Name rather than the lifecycle action's name argument, so TTL cleanup must use that same
+// immutable identity and fail closed when it is unavailable.
+func ttlAutoDeleteTargetName(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) (string, error) {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return clusterName, nil
+	}
+
+	if eksConfig == nil {
+		return "", errEKSConfigurationUnavailable
+	}
+
+	actualName := strings.TrimSpace(eksConfig.Name)
+	if actualName == "" {
+		return "", errEKSClusterNameRequired
+	}
+
+	return actualName, nil
 }

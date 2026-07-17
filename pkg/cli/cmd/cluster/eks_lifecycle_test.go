@@ -1,6 +1,8 @@
 package cluster_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -8,7 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,7 +66,19 @@ if [ "${KSAIL_EKSCTL_FAIL-}" = "$1" ]; then
 fi
 
 if [ "$1 $2" = "get cluster" ]; then
-  printf '[{"Name":"%s","Region":"ap-southeast-2","EksctlCreated":"True"}]\n' "$KSAIL_EKS_CLUSTER"
+  if [ "${KSAIL_EKSCTL_CLUSTER_ABSENT-}" = "1" ]; then
+    printf '[]\n'
+    exit 0
+  fi
+  discovered_cluster="${KSAIL_EKS_DISCOVERED_CLUSTER:-$KSAIL_EKS_CLUSTER}"
+  if [ "${KSAIL_EKS_DISCOVERED_REGION+x}" = "x" ]; then
+    discovered_region="$KSAIL_EKS_DISCOVERED_REGION"
+  else
+    discovered_region="ap-southeast-2"
+  fi
+  eksctl_created="${KSAIL_EKSCTL_CREATED-True}"
+  printf '[{"Name":"%s","Region":"%s",' "$discovered_cluster" "$discovered_region"
+  printf '"EksctlCreated":"%s"}]\n' "$eksctl_created"
 elif [ "$1 $2" = "get nodegroup" ]; then
   printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
   printf '"DesiredCapacity":0,"MinSize":2,"MaxSize":4,"NodeGroupType":"managed"}]\n'
@@ -81,6 +100,10 @@ func standaloneEKSLifecycleCases() []standaloneEKSLifecycleCase {
 			extraArgs:  []string{"--force"},
 			expectedCalls: func(clusterName string) []string {
 				return []string{
+					fmt.Sprintf(
+						"get cluster --name %s --output json --region ap-southeast-2",
+						clusterName,
+					),
 					"get cluster --output json --region ap-southeast-2",
 					fmt.Sprintf(
 						"delete cluster --name %s --region ap-southeast-2 --wait",
@@ -94,6 +117,10 @@ func standaloneEKSLifecycleCases() []standaloneEKSLifecycleCase {
 			newCommand: cluster.NewStartCmd,
 			expectedCalls: func(clusterName string) []string {
 				return []string{
+					fmt.Sprintf(
+						"get cluster --name %s --output json --region ap-southeast-2",
+						clusterName,
+					),
 					fmt.Sprintf(
 						"get nodegroup --cluster %s --output json --region ap-southeast-2",
 						clusterName,
@@ -111,6 +138,10 @@ func standaloneEKSLifecycleCases() []standaloneEKSLifecycleCase {
 			expectedCalls: func(clusterName string) []string {
 				return []string{
 					fmt.Sprintf(
+						"get cluster --name %s --output json --region ap-southeast-2",
+						clusterName,
+					),
+					fmt.Sprintf(
 						"get nodegroup --cluster %s --output json --region ap-southeast-2",
 						clusterName,
 					),
@@ -127,14 +158,16 @@ func standaloneEKSLifecycleCases() []standaloneEKSLifecycleCase {
 // TestStandaloneEKSLifecycleCommandsRouteToEksctl proves the three standalone
 // command surfaces reach the existing EKS provisioner, honor the custom AWS
 // credential mapping, and prefer the configured region environment variable.
-//
-//nolint:paralleltest // each case changes process environment and working directory
 func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 	for _, testCase := range standaloneEKSLifecycleCases() {
-		//nolint:paralleltest // setup changes process environment and working directory
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-routing-test-6087"
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+
+			if testCase.name == "start" {
+				// EksctlCreated is normalized explicitly: case and surrounding whitespace are benign.
+				t.Setenv("KSAIL_EKSCTL_CREATED", " true ")
+			}
 
 			cmd := testCase.newCommand()
 			args := make([]string, 0, 4+len(testCase.extraArgs))
@@ -217,6 +250,1096 @@ func TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors(t *testing.T) {
 	}
 }
 
+// TestStandaloneEKSLifecycleCommandsRejectUnmanagedEKSContext verifies a real
+// eksctl kubeconfig context is not mistaken for a same-named cluster managed by
+// another provider. EKS ownership must be checked with an exact query using the
+// resolved AWS credentials and region, and a target absent from that query is refused
+// before delete or nodegroup scaling can mutate it.
+func TestStandaloneEKSLifecycleCommandsRejectUnmanagedEKSContext(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-unmanaged-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			writeStandaloneEKSKubeconfig(t, clusterName, "ap-southeast-2")
+			t.Setenv("KSAIL_EKSCTL_CLUSTER_ABSENT", "1")
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+
+			calls := readStandaloneEKSCalls(t, markerPath)
+			assert.Equal(
+				t,
+				[]string{fmt.Sprintf(
+					"get cluster --name %s --output json --region ap-southeast-2",
+					clusterName,
+				)},
+				calls,
+			)
+
+			for _, call := range calls {
+				assert.NotContains(t, call, "delete cluster")
+				assert.NotContains(t, call, "scale nodegroup")
+			}
+
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSLifecycleCommandsRejectConfigRegionForDifferentExplicitName
+// verifies an explicit target cannot silently inherit the region from an
+// unrelated local eks.yaml. Without an explicit region, every mutating EKS
+// lifecycle command must fail before invoking eksctl.
+func TestStandaloneEKSLifecycleCommandsRejectConfigRegionForDifferentExplicitName(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-region-mismatch-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			require.NoError(
+				t,
+				os.WriteFile(
+					"eks.yaml",
+					[]byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: different-config-cluster-6087
+  region: eu-west-1
+`),
+					0o600,
+				),
+			)
+			t.Setenv("KSAIL_REGION", "")
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "does not match EKS config cluster")
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSLifecycleCommandsRequireLocalOwnershipEvidence verifies that an explicit AWS
+// region and eksctl's generic creation marker are not enough to mutate a colleague's cluster. The
+// target must also match a loaded KSail EKS config or have persisted KSail creation state.
+func TestStandaloneEKSLifecycleCommandsRequireLocalOwnershipEvidence(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-no-local-owner-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			t.Setenv("HOME", t.TempDir())
+			writeStandaloneEKSEksConfig(t, "unrelated-local-cluster-6087")
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+			assert.Contains(t, err.Error(), "no local KSail ownership evidence")
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSRejectsSameNamedNonEKSConfig verifies that another distribution's local config
+// cannot authorize an AWS mutation merely because it carries the same cluster name.
+func TestStandaloneEKSRejectsSameNamedNonEKSConfig(t *testing.T) {
+	const clusterName = "same-name-kind-and-eks-6087"
+
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(
+		t,
+		os.WriteFile(
+			"ksail.yaml",
+			fmt.Appendf(nil, `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: %s
+spec:
+  cluster:
+    distribution: Vanilla
+    provider: Docker
+    distributionConfig: kind.yaml
+    connection:
+      kubeconfig: kubeconfig
+`, clusterName),
+			0o600,
+		),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			"kind.yaml",
+			fmt.Appendf(nil, `kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: %s
+`, clusterName),
+			0o600,
+		),
+	)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	assert.Contains(t, err.Error(), "no local KSail ownership evidence")
+	assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+}
+
+// TestStandaloneEKSRejectsSyntheticNameFromNamelessConfig verifies ConfigManager's fallback
+// `eks-default` name is not mistaken for a name explicitly authorized by an actual eks.yaml source.
+func TestStandaloneEKSRejectsSyntheticNameFromNamelessConfig(t *testing.T) {
+	markerPath := setupStandaloneEKSLifecycleFixture(t, "eks-default")
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(
+		t,
+		os.WriteFile(
+			"eks.yaml",
+			[]byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  region: ap-southeast-2
+`),
+			0o600,
+		),
+	)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	assert.Contains(t, err.Error(), "no local KSail ownership evidence")
+	assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+}
+
+// TestStandaloneEKSRejectsMetadataFromWrongConfigKind verifies arbitrary YAML cannot grant local
+// EKS ownership merely by carrying matching metadata. The actual distribution source must be an
+// eksctl ClusterConfig before its name or region can reach a lifecycle guard.
+//
+//nolint:paralleltest // setup mutates process environment and the working directory
+func TestStandaloneEKSRejectsMetadataFromWrongConfigKind(t *testing.T) {
+	testStandaloneEKSLifecycleCommandsRejectConfig(
+		t,
+		"wrong-kind-provenance",
+		func(clusterName string) []byte {
+			return fmt.Appendf(nil, `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s
+  region: ap-southeast-2
+`, clusterName)
+		},
+	)
+}
+
+// TestStandaloneEKSRejectsNonCanonicalConfigName verifies a padded raw source name cannot be
+// normalized into local ownership evidence for delete, start, or stop.
+//
+//nolint:paralleltest // setup mutates process environment and the working directory
+func TestStandaloneEKSRejectsNonCanonicalConfigName(t *testing.T) {
+	testStandaloneEKSLifecycleCommandsRejectConfig(
+		t,
+		"noncanonical-name",
+		func(clusterName string) []byte {
+			return fmt.Appendf(nil, `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: "%s "
+  region: ap-southeast-2
+`, clusterName)
+		},
+	)
+}
+
+func testStandaloneEKSLifecycleCommandsRejectConfig(
+	t *testing.T,
+	testSuffix string,
+	configContent func(string) []byte,
+) {
+	t.Helper()
+
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-" + testSuffix + "-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			require.NoError(t, os.WriteFile("eks.yaml", configContent(clusterName), 0o600))
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid EKS config file")
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+		})
+	}
+}
+
+// TestStandaloneEKSLifecycleCommandsIgnoreRegionFromNamelessConfig verifies a local eks.yaml may
+// only contribute a region when it also names the target it describes. Persisted state authorizes
+// the explicit cluster, while its exact eksctl kubeconfig context supplies that cluster's region;
+// borrowing the unrelated nameless file's region would redirect the mutation.
+func TestStandaloneEKSLifecycleCommandsIgnoreRegionFromNamelessConfig(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-nameless-region-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("KSAIL_REGION", "")
+
+			require.NoError(
+				t,
+				os.WriteFile(
+					"eks.yaml",
+					[]byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  region: eu-west-1
+`),
+					0o600,
+				),
+			)
+			writeStandaloneEKSKubeconfig(t, clusterName, "ap-southeast-2")
+			require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionEKS,
+				Provider:     v1alpha1.ProviderAWS,
+			}))
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			require.NoError(t, cmd.Execute())
+			assert.Equal(
+				t,
+				testCase.expectedCalls(clusterName),
+				readStandaloneEKSCalls(t, markerPath),
+			)
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig preserves the flag-only standalone
+// workflow: when no project files exist, persisted creation state is sufficient local evidence and
+// the exact cloud query still corroborates the name, region, and eksctl provenance before scaling.
+func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) {
+	const clusterName = "ksail-eks-start-state-owned-6087"
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	t.Setenv("HOME", t.TempDir())
+
+	binDir := t.TempDir()
+	markerPath := filepath.Join(t.TempDir(), "eksctl-calls")
+	writeExecutableFixture(t, filepath.Join(binDir, "eksctl"), standaloneEKSEksctlFixture)
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
+	t.Setenv("KSAIL_EKS_CLUSTER", clusterName)
+	t.Setenv("AWS_PROFILE", "selected-profile")
+	t.Setenv("AWS_REGION", "ap-southeast-2")
+	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(
+		t,
+		[]string{
+			fmt.Sprintf("get cluster --name %s --output json", clusterName),
+			fmt.Sprintf(
+				"get nodegroup --cluster %s --output json --region ap-southeast-2",
+				clusterName,
+			),
+			fmt.Sprintf(
+				"scale nodegroup --cluster %s --name workers --nodes 2 --nodes-min 2 --nodes-max 4 --region ap-southeast-2",
+				clusterName,
+			),
+		},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+}
+
+// TestEKSMutationCommandsRejectNameOverrideMismatch proves create and update cannot claim a name
+// that eksctl will ignore because the actual create/delete source is eks.yaml.
+//
+//nolint:paralleltest // each case changes process environment and working directory
+func TestEKSMutationCommandsRejectNameOverrideMismatch(t *testing.T) {
+	testCases := []struct {
+		name       string
+		newCommand func() *cobra.Command
+	}{
+		{name: "create", newCommand: cluster.NewCreateCmd},
+		{name: "update", newCommand: cluster.NewUpdateCmd},
+	}
+
+	//nolint:paralleltest // each case changes process environment and working directory
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			const sourceName = "eks-source-mutation-6087"
+
+			markerPath := setupStandaloneEKSLifecycleFixture(t, sourceName)
+
+			cmd := testCase.newCommand()
+			cmd.SetArgs([]string{"--name", "different-eks-mutation-6087"})
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "cannot override EKS config cluster")
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+		})
+	}
+}
+
+// TestEKSMutationCommandsRequireNamedConfig verifies create and update reject a valid-shaped but
+// nameless eks.yaml before any provisioner or exact ownership call. Eksctl consumes only that file,
+// so KSail cannot safely bind creation, recreation, state, or TTL to a synthetic fallback name.
+//
+//nolint:paralleltest // setup mutates process environment and the working directory
+func TestEKSMutationCommandsRequireNamedConfig(t *testing.T) {
+	testEKSMutationCommandsRejectConfigSource(
+		t,
+		`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  region: ap-southeast-2
+`,
+		"EKS config metadata.name is required",
+	)
+}
+
+// TestEKSMutationCommandsRejectNonCanonicalConfigName verifies create/update cannot normalize an
+// EKS source name for ownership and state while submitting a different raw name to eksctl. That
+// split is especially destructive during recreation, where the normalized old target is deleted
+// before eksctl consumes the unchanged source.
+//
+//nolint:paralleltest // setup mutates process environment and the working directory
+func TestEKSMutationCommandsRejectNonCanonicalConfigName(t *testing.T) {
+	testEKSMutationCommandsRejectConfigSource(
+		t,
+		`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: "config-file-name "
+  region: ap-southeast-2
+`,
+		"invalid EKS config file",
+	)
+}
+
+func testEKSMutationCommandsRejectConfigSource(t *testing.T, eksConfig, wantError string) {
+	t.Helper()
+
+	testCases := []struct {
+		name       string
+		newCommand func() *cobra.Command
+	}{
+		{name: "create", newCommand: cluster.NewCreateCmd},
+		{name: "update", newCommand: cluster.NewUpdateCmd},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			markerPath := setupStandaloneEKSLifecycleFixture(t, "config-file-name")
+			require.NoError(t, os.WriteFile("eks.yaml", []byte(eksConfig), 0o600))
+
+			cmd := testCase.newCommand()
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), wantError)
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+		})
+	}
+}
+
+// TestStandaloneEKSLifecycleCommandsUseEKSConfigNameWhenMetadataDrifts verifies the actual source
+// eks.yaml name wins over top-level metadata when no --name flag is given, even when region comes
+// from its configured environment variable.
+//
+//nolint:paralleltest // each case changes process environment and working directory
+func TestStandaloneEKSLifecycleCommandsUseEKSConfigNameWhenMetadataDrifts(t *testing.T) {
+	//nolint:paralleltest // each case changes process environment and working directory
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "eks-source-name-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			require.NoError(
+				t,
+				os.WriteFile(
+					"eks.yaml",
+					[]byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: eks-source-name-6087
+  region: eu-west-1
+`),
+					0o600,
+				),
+			)
+
+			cmd := testCase.newCommand()
+			cmd.SetArgs(testCase.extraArgs)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			require.NoError(t, cmd.Execute())
+			assert.Equal(
+				t,
+				testCase.expectedCalls(clusterName),
+				readStandaloneEKSCalls(t, markerPath),
+			)
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSLifecycleCommandsRejectMalformedPresentConfig verifies a present config load
+// error cannot discard custom AWS aliases and fall back to ambient credentials for a destructive
+// command. A genuinely absent config remains supported by the standalone flag-only path.
+//
+//nolint:paralleltest // setup changes process environment and working directory
+func TestStandaloneEKSLifecycleCommandsRejectMalformedPresentConfig(t *testing.T) {
+	//nolint:paralleltest // each case changes process environment and working directory
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-malformed-config-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			require.NoError(t, os.WriteFile("ksail.yaml", []byte("spec: [\n"), 0o600))
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "load cluster config")
+			assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestEKSUpdateRoutesThroughExactAWSOwnershipContext exercises the real update command through its
+// pre-mutation guard. It proves the loaded EKS config, credential aliases, and region reach the AWS
+// branch instead of the legacy generic discovery path.
+func TestEKSUpdateRoutesThroughExactAWSOwnershipContext(t *testing.T) {
+	const clusterName = "source-config-eks-update-6087"
+
+	setupStandaloneEKSLifecycleFixture(t, "config-file-name")
+	t.Setenv("KSAIL_REGION", "ap-southeast-2")
+	require.NoError(
+		t,
+		os.WriteFile(
+			"eks.yaml",
+			[]byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: source-config-eks-update-6087
+  region: eu-west-1
+`),
+			0o600,
+		),
+	)
+
+	var captured *lifecycle.ResolvedClusterInfo
+
+	restore := cluster.ExportSetUpdateUnmanagedGuard(
+		func(_ context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			captured = resolved
+
+			return cluster.ErrUnmanagedCluster
+		},
+	)
+	defer restore()
+
+	cmd := cluster.NewUpdateCmd()
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	require.NotNil(t, captured)
+	assert.Equal(t, clusterName, captured.ClusterName)
+	assert.Equal(t, clusterName, captured.ConfigClusterName)
+	assert.Equal(t, v1alpha1.ProviderAWS, captured.Provider)
+	assert.Equal(t, "ap-southeast-2", captured.AWSRegion)
+	assert.Equal(t, "KSAIL_PROFILE", captured.AWSOpts.ProfileEnvVar)
+	assert.Equal(t, "KSAIL_ACCESS", captured.AWSOpts.AccessKeyIDEnvVar)
+	assert.Equal(t, "KSAIL_SECRET", captured.AWSOpts.SecretAccessKeyEnvVar)
+	assert.Equal(t, "KSAIL_SESSION", captured.AWSOpts.SessionTokenEnvVar)
+
+	expectedKubeconfig, pathErr := fsutil.EvalCanonicalPath("kubeconfig")
+	require.NoError(t, pathErr)
+	assert.Equal(t, expectedKubeconfig, captured.KubeconfigPath)
+}
+
+// TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion verifies TTL cleanup deletes the target
+// actually created from eks.yaml, retains its creation-time region even if the environment changes,
+// and cleans state for that exact target only.
+func TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion(t *testing.T) {
+	const (
+		actualName = "ttl-actual-eks-6087"
+		staleAlias = "ttl-stale-alias-6087"
+	)
+
+	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_REGION", "us-east-1")
+	require.NoError(t, state.SaveClusterSpec(staleAlias, &v1alpha1.ClusterSpec{}))
+
+	clusterCfg := standaloneEKSTTLClusterConfig()
+	eksConfig := &clusterprovisioner.EKSConfig{
+		Name:           actualName,
+		NameFromConfig: true,
+		Region:         "ap-southeast-2",
+		ConfigPath:     "eks.yaml",
+		KubeconfigPath: "kubeconfig",
+	}
+	cmd := &cobra.Command{Use: "ttl-delete"}
+
+	var output bytes.Buffer
+
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	require.NoError(
+		t,
+		cluster.ExportAutoDeleteCluster(cmd, staleAlias, clusterCfg, eksConfig),
+	)
+	assert.Equal(
+		t,
+		[]string{
+			fmt.Sprintf(
+				"get cluster --name %s --output json --region ap-southeast-2",
+				actualName,
+			),
+			fmt.Sprintf(
+				"delete cluster --name %s --region ap-southeast-2 --wait",
+				actualName,
+			),
+		},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	_, err := state.LoadClusterSpec(actualName)
+	require.ErrorIs(t, err, state.ErrStateNotFound)
+	_, err = state.LoadClusterSpec(staleAlias)
+	require.NoError(t, err)
+	assert.Contains(t, output.String(), actualName)
+	assert.NotContains(t, output.String(), staleAlias)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+// TestAutoDeleteEKSFailsClosedWithoutOwnership verifies TTL never constructs a destructive
+// provisioner when ownership provenance is absent or the actual EKS target is unavailable.
+//
+//nolint:paralleltest // subtests mutate process environment and working directory
+func TestAutoDeleteEKSFailsClosedWithoutOwnership(t *testing.T) {
+	//nolint:paralleltest // subtest mutates process environment and working directory
+	t.Run("unmanaged provenance", testAutoDeleteEKSRejectsUnmanagedProvenance)
+	//nolint:paralleltest // subtest mutates process environment and working directory
+	t.Run("missing EKS config", testAutoDeleteEKSRejectsMissingConfig)
+}
+
+func testAutoDeleteEKSRejectsUnmanagedProvenance(t *testing.T) {
+	const actualName = "ttl-unmanaged-eks-6087"
+
+	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_EKSCTL_CREATED", "False")
+	require.NoError(t, state.SaveClusterSpec(actualName, &v1alpha1.ClusterSpec{}))
+
+	cmd := &cobra.Command{Use: "ttl-delete"}
+
+	var output bytes.Buffer
+
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cluster.ExportAutoDeleteCluster(
+		cmd,
+		"stale-alias",
+		standaloneEKSTTLClusterConfig(),
+		&clusterprovisioner.EKSConfig{
+			Name:           actualName,
+			NameFromConfig: true,
+			Region:         "ap-southeast-2",
+			ConfigPath:     "eks.yaml",
+			KubeconfigPath: "kubeconfig",
+		},
+	)
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	assert.Equal(
+		t,
+		[]string{fmt.Sprintf(
+			"get cluster --name %s --output json --region ap-southeast-2",
+			actualName,
+		)},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+
+	_, stateErr := state.LoadClusterSpec(actualName)
+	require.NoError(t, stateErr)
+	assert.NotContains(t, output.String(), "auto-destroyed")
+}
+
+func testAutoDeleteEKSRejectsMissingConfig(t *testing.T) {
+	const actualName = "ttl-missing-config-eks-6087"
+
+	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, state.SaveClusterSpec(actualName, &v1alpha1.ClusterSpec{}))
+
+	cmd := &cobra.Command{Use: "ttl-delete"}
+
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cluster.ExportAutoDeleteCluster(
+		cmd,
+		actualName,
+		standaloneEKSTTLClusterConfig(),
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EKS configuration")
+	assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+
+	_, stateErr := state.LoadClusterSpec(actualName)
+	require.NoError(t, stateErr)
+}
+
+func standaloneEKSTTLClusterConfig() *v1alpha1.Cluster {
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.Connection.Kubeconfig = "kubeconfig"
+	clusterCfg.Spec.Provider.AWS = v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "KSAIL_SECRET",
+		SessionTokenEnvVar:    "KSAIL_SESSION",
+	}
+
+	return clusterCfg
+}
+
+// TestStandaloneEKSLifecycleCommandsFailClosedWhenAWSOwnershipCheckFails
+// verifies a failed exact AWS ownership query cannot fall through to a mutating eksctl
+// command. The ownership lookup itself is read-only and uses the same resolved
+// credential aliases and region as the later lifecycle operation.
+func TestStandaloneEKSLifecycleCommandsFailClosedWhenAWSOwnershipCheckFails(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-ownership-error-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			t.Setenv("KSAIL_EKSCTL_FAIL", "get")
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "verify AWS cluster ownership")
+			assert.Equal(
+				t,
+				[]string{fmt.Sprintf(
+					"get cluster --name %s --output json --region ap-southeast-2",
+					clusterName,
+				)},
+				readStandaloneEKSCalls(t, markerPath),
+			)
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
+// TestStandaloneEKSStartRejectsOwnershipRegionMismatch verifies an exact AWS
+// lookup that returns the requested name in a different region is a hard stop;
+// the command must not continue to nodegroup discovery or scaling.
+func TestStandaloneEKSStartRejectsOwnershipRegionMismatch(t *testing.T) {
+	clusterName := "ksail-eks-start-region-query-mismatch-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "us-east-1")
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(
+		t,
+		err.Error(),
+		`exact AWS ownership query returned a different region: got "us-east-1", want "ap-southeast-2"`,
+	)
+	assert.Equal(
+		t,
+		[]string{fmt.Sprintf(
+			"get cluster --name %s --output json --region ap-southeast-2",
+			clusterName,
+		)},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestStandaloneEKSStartRejectsOwnershipNameMismatch(t *testing.T) {
+	clusterName := "ksail-eks-start-name-query-mismatch-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_EKS_DISCOVERED_CLUSTER", "different-visible-cluster")
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(
+		t,
+		err.Error(),
+		`exact AWS ownership query returned a different cluster: got "different-visible-cluster"`,
+	)
+	assert.Equal(
+		t,
+		[]string{fmt.Sprintf(
+			"get cluster --name %s --output json --region ap-southeast-2",
+			clusterName,
+		)},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestStandaloneEKSStartUsesUniqueBareContextRegionFallback(t *testing.T) {
+	clusterName := "ksail-eks-start-context-region-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_REGION", "")
+	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "us-west-2")
+	writeStandaloneEKSEksConfig(t, clusterName)
+	writeStandaloneEKSKubeconfigContexts(
+		t,
+		clusterName,
+		[]string{clusterName + ".us-west-2.eksctl.io"},
+	)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(
+		t,
+		[]string{
+			fmt.Sprintf(
+				"get cluster --name %s --output json --region us-west-2",
+				clusterName,
+			),
+			fmt.Sprintf(
+				"get nodegroup --cluster %s --output json --region us-west-2",
+				clusterName,
+			),
+			fmt.Sprintf(
+				"scale nodegroup --cluster %s --name workers --nodes 2 --nodes-min 2 --nodes-max 4 --region us-west-2",
+				clusterName,
+			),
+		},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestStandaloneEKSStartRejectsAmbiguousContextRegions(t *testing.T) {
+	clusterName := "ksail-eks-start-ambiguous-context-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_REGION", "")
+	writeStandaloneEKSEksConfig(t, clusterName)
+	writeStandaloneEKSKubeconfigContexts(
+		t,
+		clusterName,
+		[]string{
+			"arn:aws:iam::123456789012:role/first@" + clusterName + ".us-east-1.eksctl.io",
+			clusterName + ".us-west-2.eksctl.io",
+		},
+	)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple kubeconfig regions")
+	assert.Empty(t, readStandaloneEKSCalls(t, markerPath))
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestStandaloneEKSStartBindsRegionFromExactQueryWithoutContext(t *testing.T) {
+	clusterName := "ksail-eks-start-query-region-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_REGION", "")
+	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "eu-north-1")
+	writeStandaloneEKSEksConfig(t, clusterName)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(
+		t,
+		[]string{
+			fmt.Sprintf("get cluster --name %s --output json", clusterName),
+			fmt.Sprintf(
+				"get nodegroup --cluster %s --output json --region eu-north-1",
+				clusterName,
+			),
+			fmt.Sprintf(
+				"scale nodegroup --cluster %s --name workers --nodes 2 --nodes-min 2 --nodes-max 4 --region eu-north-1",
+				clusterName,
+			),
+		},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestStandaloneEKSStartRejectsEmptyRegionFromExactQuery(t *testing.T) {
+	clusterName := "ksail-eks-start-empty-query-region-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Setenv("KSAIL_REGION", "")
+	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "")
+	writeStandaloneEKSEksConfig(t, clusterName)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not report a region")
+	assert.Equal(
+		t,
+		[]string{fmt.Sprintf("get cluster --name %s --output json", clusterName)},
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+//nolint:paralleltest // setup mutates process environment and the working directory
+func TestStandaloneEKSExplicitRegionWinsContextFallback(t *testing.T) {
+	clusterName := "ksail-eks-start-explicit-region-test-6087"
+	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	writeStandaloneEKSKubeconfigContexts(
+		t,
+		clusterName,
+		[]string{clusterName + ".us-west-2.eksctl.io"},
+	)
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+
+	for _, call := range readStandaloneEKSCalls(t, markerPath) {
+		assert.Contains(t, call, "--region ap-southeast-2")
+		assert.NotContains(t, call, "us-west-2")
+	}
+
+	assertParentAWSEnvironmentUnchanged(t)
+}
+
+func TestEksctlContextTargetParsing(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		contextName string
+		wantName    string
+		wantRegion  string
+		wantOK      bool
+	}{
+		{
+			name:        "role ARN identity",
+			contextName: "arn:aws:iam::123456789012:role/operator@demo.eu-west-1.eksctl.io",
+			wantName:    "demo",
+			wantRegion:  "eu-west-1",
+			wantOK:      true,
+		},
+		{
+			name:        "identity containing at signs",
+			contextName: "user@example.com@demo.us-east-2.eksctl.io",
+			wantName:    "demo",
+			wantRegion:  "us-east-2",
+			wantOK:      true,
+		},
+		{
+			name:        "bare eksctl context",
+			contextName: "demo.ap-southeast-1.eksctl.io",
+			wantName:    "demo",
+			wantRegion:  "ap-southeast-1",
+			wantOK:      true,
+		},
+		{
+			name:        "similar cluster name remains exact",
+			contextName: "demo-extra.ap-southeast-1.eksctl.io",
+			wantName:    "demo-extra",
+			wantRegion:  "ap-southeast-1",
+			wantOK:      true,
+		},
+		{name: "missing suffix", contextName: "demo.eu-west-1", wantOK: false},
+		{name: "missing region", contextName: "demo.eksctl.io", wantOK: false},
+		{name: "malformed dotted region", contextName: "demo.us.east.eksctl.io", wantOK: false},
+		{name: "empty target", contextName: ".eksctl.io", wantOK: false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			name, region, ok := cluster.ExportParseEksctlContextTarget(testCase.contextName)
+			assert.Equal(t, testCase.wantOK, ok)
+			assert.Equal(t, testCase.wantName, name)
+			assert.Equal(t, testCase.wantRegion, region)
+		})
+	}
+}
+
+// TestStandaloneEKSStartRejectsMissingEksctlOwnership verifies the exact AWS
+// target is still unmanaged unless eksctl explicitly reports that it created
+// the cluster. False, empty, and unknown provenance all stop before scaling.
+func TestStandaloneEKSStartRejectsMissingEksctlOwnership(t *testing.T) {
+	testCases := []struct {
+		name    string
+		created string
+	}{
+		{name: "false", created: "False"},
+		{name: "empty", created: ""},
+		{name: "unknown", created: "unknown"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-start-" + testCase.name + "-ownership-test-6087"
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			t.Setenv("KSAIL_EKSCTL_CREATED", testCase.created)
+
+			cmd := cluster.NewStartCmd()
+			cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			err := cmd.Execute()
+			require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+			assert.Contains(t, err.Error(), "did not report an eksctl-created cluster")
+			assert.Equal(
+				t,
+				[]string{fmt.Sprintf(
+					"get cluster --name %s --output json --region ap-southeast-2",
+					clusterName,
+				)},
+				readStandaloneEKSCalls(t, markerPath),
+			)
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
 func setupStandaloneEKSLifecycleFixture(
 	t *testing.T,
 	clusterName string,
@@ -240,7 +1363,8 @@ func setupStandaloneEKSLifecycleFixture(
 		),
 	)
 	eksConfigPath := filepath.Join(workingDir, "eks.yaml")
-	require.NoError(t, os.WriteFile(eksConfigPath, []byte(standaloneEKSEksConfigFixture), 0o600))
+	eksConfig := strings.ReplaceAll(standaloneEKSEksConfigFixture, "config-file-name", clusterName)
+	require.NoError(t, os.WriteFile(eksConfigPath, []byte(eksConfig), 0o600))
 	require.NoError(
 		t,
 		os.WriteFile(
@@ -275,4 +1399,84 @@ func assertParentAWSEnvironmentUnchanged(t *testing.T) {
 	assert.Equal(t, "stale-access", os.Getenv("AWS_ACCESS_KEY_ID"))
 	assert.Equal(t, "stale-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
 	assert.Equal(t, "stale-session", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
+func writeStandaloneEKSKubeconfig(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	contextName := fmt.Sprintf(
+		"arn:aws:iam::123456789012:role/ksail-test@%s.%s.eksctl.io",
+		clusterName,
+		region,
+	)
+	writeStandaloneEKSKubeconfigContexts(t, clusterName, []string{contextName})
+}
+
+func writeStandaloneEKSKubeconfigContexts(
+	t *testing.T,
+	clusterName string,
+	contextNames []string,
+) {
+	t.Helper()
+
+	var contexts strings.Builder
+	for _, contextName := range contextNames {
+		fmt.Fprintf(
+			&contexts,
+			"- name: %s\n  context:\n    cluster: %s\n    user: eksctl-user\n",
+			contextName,
+			clusterName,
+		)
+	}
+
+	currentContext := ""
+	if len(contextNames) > 0 {
+		currentContext = contextNames[0]
+	}
+
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: %s
+  cluster:
+    server: https://example.invalid
+contexts:
+%s
+current-context: %s
+users:
+- name: eksctl-user
+  user: {}
+`, clusterName, contexts.String(), currentContext)
+
+	require.NoError(t, os.WriteFile("kubeconfig", []byte(kubeconfig), 0o600))
+}
+
+func writeStandaloneEKSEksConfig(t *testing.T, clusterName string) {
+	t.Helper()
+
+	config := fmt.Sprintf(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: %s
+`, clusterName)
+
+	require.NoError(t, os.WriteFile("eks.yaml", []byte(config), 0o600))
+}
+
+func readStandaloneEKSCalls(t *testing.T, markerPath string) []string {
+	t.Helper()
+
+	calls, err := os.ReadFile(markerPath) //nolint:gosec // test-private path
+	if os.IsNotExist(err) {
+		return nil
+	}
+
+	require.NoError(t, err)
+
+	trimmed := strings.TrimSpace(string(calls))
+	if trimmed == "" {
+		return nil
+	}
+
+	return strings.Split(trimmed, "\n")
 }

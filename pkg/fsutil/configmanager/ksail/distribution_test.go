@@ -294,6 +294,56 @@ func TestReadEKSConfigMetadata(t *testing.T) {
 		assert.Empty(t, region)
 	})
 
+	for _, testCase := range []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "wrong API version is rejected",
+			content: "apiVersion: v1\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name: "wrong kind is rejected",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ConfigMap\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name:    "missing API version is rejected",
+			content: "kind: ClusterConfig\nmetadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name: "missing kind is rejected",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"metadata:\n  name: my-eks\n  region: eu-west-1\n",
+		},
+		{
+			name: "padded metadata name is rejected",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: 'my-eks '\n  region: eu-west-1\n",
+		},
+		{
+			name: "invalid metadata name is rejected",
+			content: "apiVersion: eksctl.io/v1alpha5\n" +
+				"kind: ClusterConfig\n" +
+				"metadata:\n  name: Invalid_EKS\n  region: eu-west-1\n",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(t.TempDir(), "eks.yaml")
+			writeFileWithParents(t, configPath, testCase.content)
+
+			_, _, _, err := configmanager.ReadEKSConfigMetadataForTest(configPath)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid EKS config file")
+		})
+	}
+
 	t.Run("malformed YAML returns an error", func(t *testing.T) {
 		t.Parallel()
 

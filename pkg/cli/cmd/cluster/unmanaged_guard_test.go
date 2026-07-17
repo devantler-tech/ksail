@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -153,7 +154,9 @@ func TestGuardUpdateTargetManaged_UnmanagedRejected(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 	clusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
 
-	err := cluster.ExportGuardUpdateTargetManaged(context.Background(), clusterCfg, "my-cluster")
+	err := cluster.ExportGuardUpdateTargetManaged(
+		context.Background(), clusterCfg, "my-cluster", nil,
+	)
 
 	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
 	require.Contains(t, err.Error(), "my-cluster")
@@ -180,6 +183,91 @@ func TestGuardUpdateTargetManaged_ManagedAllows(t *testing.T) {
 
 	require.NoError(
 		t,
-		cluster.ExportGuardUpdateTargetManaged(context.Background(), clusterCfg, "my-cluster"),
+		cluster.ExportGuardUpdateTargetManaged(
+			context.Background(), clusterCfg, "my-cluster", nil,
+		),
 	)
+}
+
+// TestGuardUpdateTargetManaged_EKSPreservesAWSOwnershipContext verifies update reaches the exact
+// fail-closed AWS guard rather than the legacy cross-provider discovery path. The credential aliases
+// and explicit region used by the later EKS update must be identical at the ownership boundary.
+func TestGuardUpdateTargetManaged_EKSPreservesAWSOwnershipContext(t *testing.T) {
+	t.Setenv("KSAIL_UPDATE_REGION", "")
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.Connection.Kubeconfig = writeKubeconfigWithContext(
+		t,
+		t.TempDir(),
+		"update-eks.eu-north-1.eksctl.io",
+	)
+	//nolint:gosec // these strings name test-only environment variables, not credentials
+	clusterCfg.Spec.Provider.AWS = v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_UPDATE_PROFILE",
+		RegionEnvVar:          "KSAIL_UPDATE_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_UPDATE_ACCESS",
+		SecretAccessKeyEnvVar: "KSAIL_UPDATE_SECRET",
+		SessionTokenEnvVar:    "KSAIL_UPDATE_SESSION",
+	}
+	eksConfig := &clusterprovisioner.EKSConfig{
+		Name:           "update-eks",
+		NameFromConfig: true,
+		Region:         "eu-north-1",
+	}
+
+	var captured *lifecycle.ResolvedClusterInfo
+
+	restore := cluster.ExportSetUpdateUnmanagedGuard(
+		func(_ context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			captured = resolved
+
+			return nil
+		},
+	)
+	defer restore()
+
+	require.NoError(
+		t,
+		cluster.ExportGuardUpdateTargetManaged(
+			context.Background(), clusterCfg, "update-eks", eksConfig,
+		),
+	)
+	require.NotNil(t, captured)
+	assert.Equal(t, v1alpha1.ProviderAWS, captured.Provider)
+	assert.Equal(t, "eu-north-1", captured.AWSRegion)
+	assert.Equal(t, clusterCfg.Spec.Provider.AWS, captured.AWSOpts)
+}
+
+// TestGuardUpdateTargetManaged_EKSPinsRegionBoundByOwnershipGuard verifies a region discovered by
+// the exact guard is copied into the distribution config consumed by the later update/recreate
+// provisioner. Validation must never bind a region and then discard it before mutation.
+func TestGuardUpdateTargetManaged_EKSPinsRegionBoundByOwnershipGuard(t *testing.T) {
+	t.Setenv("KSAIL_UPDATE_REGION", "")
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.Connection.Kubeconfig = filepath.Join(t.TempDir(), "missing-kubeconfig")
+	clusterCfg.Spec.Provider.AWS.RegionEnvVar = "KSAIL_UPDATE_REGION"
+	eksConfig := &clusterprovisioner.EKSConfig{Name: "update-eks"}
+
+	restore := cluster.ExportSetUpdateUnmanagedGuard(
+		func(_ context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+			assert.Empty(t, resolved.AWSRegion)
+			resolved.AWSRegion = "eu-north-1"
+
+			return nil
+		},
+	)
+	defer restore()
+
+	require.NoError(
+		t,
+		cluster.ExportGuardUpdateTargetManaged(
+			context.Background(), clusterCfg, "update-eks", eksConfig,
+		),
+	)
+	assert.Equal(t, "eu-north-1", eksConfig.Region)
 }

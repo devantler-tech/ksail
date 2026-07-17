@@ -102,6 +102,11 @@ func runDeleteAction(
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
 
+	err = lifecycle.ValidateStandaloneAWSTarget(resolved)
+	if err != nil {
+		return fmt.Errorf("validate standalone AWS target: %w", err)
+	}
+
 	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
 	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
 	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally

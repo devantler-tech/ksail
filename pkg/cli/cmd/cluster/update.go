@@ -142,11 +142,16 @@ func handleUpdateRunE(
 		return err
 	}
 
+	err = validateEKSMutationConfigSource(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Refuse to reconcile configuration to a cluster ksail did not provision. When the target is an
 	// unmanaged cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard
 	// rejects here — before any change is computed or applied — so `cluster update` never mutates a
 	// cluster ksail does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = guardUpdateTargetManaged(cmd.Context(), ctx.ClusterCfg, clusterName)
+	err = guardUpdateTargetManaged(cmd.Context(), ctx.ClusterCfg, clusterName, ctx.EKSConfig)
 	if err != nil {
 		return err
 	}

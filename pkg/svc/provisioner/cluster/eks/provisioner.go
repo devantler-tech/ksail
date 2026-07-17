@@ -15,18 +15,17 @@ import (
 //
 // All operations delegate to pkg/client/eksctl.Client, which in turn shells
 // out to the eksctl binary. The provisioner holds the declarative
-// eksctl.yaml path so Create/Delete can be driven from the same source of
-// truth scaffolded by ksail project init.
+// eksctl.yaml path so Create can be driven from the source of truth
+// scaffolded by ksail project init.
 type Provisioner struct {
 	// name is the cluster name derived from the ksail.yaml / eksctl.yaml.
 	name string
 	// region is the AWS region. Cached here so operations that accept
-	// --region without a --config-file (e.g. GetCluster on a deleted
+	// --region without a --config-file (e.g. Delete or GetCluster on a deleted
 	// cluster) still work.
 	region string
 	// configPath is the path to the declarative eksctl ClusterConfig.
-	// Required for Create; preferred over --name/--region for Delete and
-	// Upgrade because it keeps CloudFormation stack naming consistent.
+	// Required for Create.
 	configPath string
 	// kubeconfigPath is the exact file eksctl writes and KSail reads after create.
 	kubeconfigPath string
@@ -147,9 +146,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	return nil
 }
 
-// Delete tears down the EKS cluster. Prefers --config-file when available so
-// eksctl can unwind the same CloudFormation stacks it created; falls back to
-// --name/--region for clusters imported without a local config.
+// Delete tears down the exact EKS cluster identified by name and region.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -158,10 +155,11 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
-	// DeleteCluster prefers configPath over name when configPath is set.
+	// Keep configPath empty so DeleteCluster cannot replace the validated exact
+	// target with a name or region from the declarative create configuration.
 	// Wait=true because cluster deletion must complete before ksail
 	// considers the workspace clean.
-	err = p.client.DeleteCluster(ctx, target, p.region, p.configPath, true)
+	err = p.client.DeleteCluster(ctx, target, p.region, "", true)
 	if err != nil {
 		return fmt.Errorf("eksctl delete cluster: %w", err)
 	}

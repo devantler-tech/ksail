@@ -89,6 +89,11 @@ func handleCreateRunE(
 		return err
 	}
 
+	err = validateEKSMutationConfigSource(ctx)
+	if err != nil {
+		return err
+	}
+
 	clusterflags.ApplyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
 	err = validatePostMutationFlags(ctx)
@@ -577,15 +582,7 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		return nil
 	}
 
-	// Update Kind config
-	if ctx.KindConfig != nil {
-		ctx.KindConfig.Name = name
-	}
-
-	// Update K3d config
-	if ctx.K3dConfig != nil {
-		ctx.K3dConfig.Name = name
-	}
+	applyDirectClusterNameOverrides(ctx, name)
 
 	// Update Talos config - must regenerate bundle for new cluster name
 	// because cluster name is embedded in PKI and kubeconfig context
@@ -596,16 +593,6 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		}
 
 		ctx.TalosConfig = newConfig
-	}
-
-	// Update VCluster config
-	if ctx.VClusterConfig != nil {
-		ctx.VClusterConfig.Name = name
-	}
-
-	// Update KWOK config
-	if ctx.KWOKConfig != nil {
-		ctx.KWOKConfig.Name = name
 	}
 
 	// Update the ksail.yaml context to match the pattern the created cluster uses.
@@ -623,6 +610,28 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	}
 
 	return nil
+}
+
+// applyDirectClusterNameOverrides updates in-memory distribution configs whose names directly drive
+// creation. Talos is handled separately because renaming it must regenerate its PKI-bearing bundle.
+// EKS is deliberately excluded: eksctl creates from the unchanged on-disk eks.yaml, so changing only
+// EKSConfig.Name would make later state and deletion target a cluster that was never created.
+func applyDirectClusterNameOverrides(ctx *localregistry.Context, name string) {
+	if ctx.KindConfig != nil {
+		ctx.KindConfig.Name = name
+	}
+
+	if ctx.K3dConfig != nil {
+		ctx.K3dConfig.Name = name
+	}
+
+	if ctx.VClusterConfig != nil {
+		ctx.VClusterConfig.Name = name
+	}
+
+	if ctx.KWOKConfig != nil {
+		ctx.KWOKConfig.Name = name
+	}
 }
 
 // importCachedImages imports container images from a tar archive to the cluster.
@@ -690,14 +699,23 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return resolveVClusterName(ctx)
 	case v1alpha1.DistributionKWOK:
 		return resolveKWOKName(ctx)
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
-		// EKS/GKE/AKS configs are owned by their cloud tooling (eks.yaml/
-		// gke.yaml/aks.yaml) and not cached on the local registry context;
-		// fall back to the cluster-level name.
+	case v1alpha1.DistributionEKS:
+		return resolveEKSName(ctx)
+	case v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
+		// GKE/AKS configs are owned by their cloud tooling and not cached on the local registry
+		// context; fall back to the cluster-level name.
 		return resolveFallbackName(ctx)
 	default:
 		return resolveFallbackName(ctx)
 	}
+}
+
+func resolveEKSName(ctx *localregistry.Context) string {
+	if ctx.EKSConfig != nil && strings.TrimSpace(ctx.EKSConfig.Name) != "" {
+		return strings.TrimSpace(ctx.EKSConfig.Name)
+	}
+
+	return resolveFallbackName(ctx)
 }
 
 func resolveVClusterName(ctx *localregistry.Context) string {
@@ -755,6 +773,11 @@ func maybeWaitForTTL(
 
 	if ttl <= 0 {
 		return nil
+	}
+
+	clusterName, err = ttlAutoDeleteTargetName(clusterName, clusterCfg, eksConfig)
+	if err != nil {
+		return fmt.Errorf("resolve TTL auto-delete target: %w", err)
 	}
 
 	// Persist TTL for informational display (ksail cluster list / info).

@@ -28,9 +28,15 @@ import (
 // disableTraefikArg is the K3s argument to disable the built-in Traefik ingress controller.
 const disableTraefikArg = "--disable=traefik"
 
-type fakeProvisioner struct{}
+type fakeProvisioner struct{ createName *string }
 
-func (*fakeProvisioner) Create(context.Context, string) error { return nil }
+func (p *fakeProvisioner) Create(_ context.Context, name string) error {
+	if p.createName != nil {
+		*p.createName = name
+	}
+
+	return nil
+}
 
 func (*fakeProvisioner) Delete(context.Context, string) error { return nil }
 
@@ -44,15 +50,15 @@ func (*fakeProvisioner) List(context.Context) ([]string, error) {
 
 func (*fakeProvisioner) Exists(context.Context, string) (bool, error) { return true, nil }
 
-type fakeFactory struct{}
+type fakeFactory struct{ createName *string }
 
-func (fakeFactory) Create(
+func (f fakeFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
-	return &fakeProvisioner{}, cfg, nil
+	return &fakeProvisioner{createName: f.createName}, cfg, nil
 }
 
 type fakeInstaller struct{ called bool }

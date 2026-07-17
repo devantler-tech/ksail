@@ -153,12 +153,16 @@ func TestResolvePostCreateContext_EKSMissingConfigFailsClosed(t *testing.T) {
 func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 	t.Parallel()
 
-	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+	const (
+		eksctlContext      = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+		otherRegionContext = "arn:aws:iam::123456789012:role/ci@st-eks.us-east-1.eksctl.io"
+	)
 
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = eksctlContext
 	config.Contexts[eksctlContext] = &clientcmdapi.Context{}
+	config.Contexts[otherRegionContext] = &clientcmdapi.Context{}
 	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
 
 	ctx := &localregistry.Context{
@@ -177,9 +181,34 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 
 	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
 	assert.Equal(t, eksctlContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	assert.Equal(t, "eu-west-1", ctx.EKSConfig.Region)
 }
 
-func TestApplyClusterNameOverride_EKSDefersContextResolution(t *testing.T) {
+func TestResolvePostCreateContext_EKSExplicitContextDoesNotPinUnobservedRegion(t *testing.T) {
+	t.Parallel()
+
+	const explicitContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionEKS,
+					Connection: v1alpha1.Connection{
+						Context: explicitContext,
+					},
+				},
+			},
+		},
+		EKSConfig: &clusterprovisioner.EKSConfig{Name: "st-eks"},
+	}
+
+	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
+	assert.Equal(t, explicitContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	assert.Empty(t, ctx.EKSConfig.Region)
+}
+
+func TestApplyClusterNameOverride_EKSPreservesSourceConfigAndDefersContextResolution(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -205,9 +234,11 @@ func TestApplyClusterNameOverride_EKSDefersContextResolution(t *testing.T) {
 						},
 					},
 				},
+				EKSConfig: &clusterprovisioner.EKSConfig{Name: "old-eks-name"},
 			}
 
 			require.NoError(t, cluster.ExportApplyClusterNameOverride(ctx, "st-eks"))
+			assert.Equal(t, "old-eks-name", ctx.EKSConfig.Name)
 			assert.Equal(
 				t,
 				testCase.originalContext,

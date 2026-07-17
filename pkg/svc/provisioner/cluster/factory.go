@@ -62,6 +62,9 @@ type DistributionConfig struct {
 type EKSConfig struct {
 	// Name is the cluster name (mirrors eksctl.yaml metadata.name).
 	Name string
+	// NameFromConfig reports that Name was parsed from metadata.name in the actual eksctl config,
+	// rather than synthesized from a kubeconfig context or default.
+	NameFromConfig bool
 	// Region is the AWS region.
 	Region string
 	// ConfigPath is the path to the declarative eksctl.yaml.

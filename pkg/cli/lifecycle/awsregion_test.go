@@ -18,7 +18,11 @@ import (
 // so it must not run in parallel.
 func TestResolveAWSRegion(t *testing.T) {
 	eksDistCfg := &clusterprovisioner.DistributionConfig{
-		EKS: &clusterprovisioner.EKSConfig{Region: "eu-west-1"},
+		EKS: &clusterprovisioner.EKSConfig{
+			Name:           "configured-eks",
+			NameFromConfig: true,
+			Region:         "eu-west-1",
+		},
 	}
 
 	t.Run("env var overrides eks.yaml", func(t *testing.T) {
@@ -48,6 +52,16 @@ func TestResolveAWSRegion(t *testing.T) {
 		t.Setenv("AWS_REGION", "")
 
 		got := lifecycle.ResolveAWSRegion(v1alpha1.OptionsAWS{}, nil)
+		assert.Empty(t, got)
+	})
+
+	t.Run("ignores region from nameless eks config", func(t *testing.T) {
+		t.Setenv("AWS_REGION", "")
+
+		namelessConfig := &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{Region: "eu-west-1"},
+		}
+		got := lifecycle.ResolveAWSRegion(v1alpha1.OptionsAWS{}, namelessConfig)
 		assert.Empty(t, got)
 	})
 }

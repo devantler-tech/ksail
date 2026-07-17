@@ -151,7 +151,7 @@ func TestCreate_NoConfigPath_ReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, eksprovisioner.ErrConfigPathRequired)
 }
 
-func TestDelete_PrefersConfigFile(t *testing.T) {
+func TestDelete_UsesExactNameAndRegion(t *testing.T) {
 	t.Parallel()
 
 	prov, runner := newProvisioner(t, map[string][]response{
@@ -161,9 +161,17 @@ func TestDelete_PrefersConfigFile(t *testing.T) {
 	require.NoError(t, prov.Delete(context.Background(), ""))
 
 	require.Len(t, runner.calls, 1)
-	// DeleteCluster prefers --config-file over --name when configPath set.
-	assert.Contains(t, runner.calls[0], "--config-file")
-	assert.Contains(t, runner.calls[0], "--wait")
+	assert.Equal(
+		t,
+		[]string{
+			"delete", "cluster",
+			"--name", "ksail-test",
+			"--region", "us-east-1",
+			"--wait",
+		},
+		runner.calls[0],
+	)
+	assert.NotContains(t, runner.calls[0], "--config-file")
 }
 
 func TestStart_DelegatesToProvider(t *testing.T) {

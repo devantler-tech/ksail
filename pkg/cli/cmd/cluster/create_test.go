@@ -515,6 +515,79 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	require.Contains(t, output, "Create cluster", "output should contain cluster lifecycle text")
 }
 
+// TestCreate_NonEKSNameOverrideReachesProvisioner guards the shared mutation path: rejecting EKS
+// source-name drift must not suppress explicit --name overrides for other distributions.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_NonEKSNameOverrideReachesProvisioner(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: source-kind-name\nnodes: []\n",
+	)
+	writeFile(t, workingDir, "kubeconfig", "apiVersion: v1\nkind: Config\n")
+	setupMockRegistryBackend(t)
+
+	var createdName string
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(t.Context())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "explicit-kind-name",
+		"--kubeconfig", "./kubeconfig",
+	})
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "explicit-kind-name", createdName)
+}
+
+// TestCreateRejectsWhitespaceOnlyName preserves explicit-flag validation: whitespace is not an
+// absent override and must not silently fall back to the distribution config target.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreateRejectsWhitespaceOnlyName(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: source-kind-name\nnodes: []\n",
+	)
+	writeFile(t, workingDir, "kubeconfig", "apiVersion: v1\nkind: Config\n")
+	setupMockRegistryBackend(t)
+
+	var createdName string
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(t.Context())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "   ",
+		"--kubeconfig", "./kubeconfig",
+	})
+
+	err := cmd.Execute()
+	require.ErrorContains(t, err, "invalid cluster name")
+	assert.Empty(t, createdName)
+}
+
 // TestCreate_NoConfigFile_WithComponentFlags verifies that component flags
 // (e.g. --metrics-server Disabled) are respected when no ksail.yaml exists.
 //
