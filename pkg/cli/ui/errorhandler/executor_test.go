@@ -1,8 +1,11 @@
 package errorhandler_test
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
@@ -37,6 +40,38 @@ func TestExecutorExecuteSuccess(t *testing.T) {
 	err := executor.Execute(cmd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+// TestExecutorExecuteFlushesWarningsOnSuccess guards against silently swallowing
+// warnings: the executor captures stderr to normalize a failing command's error,
+// but a command that SUCCEEDS while writing a warning to stderr must still have
+// that warning reach the real stderr — a regression guard for warnings being
+// discarded on the success path.
+func TestExecutorExecuteFlushesWarningsOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use: "test",
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: incomplete values")
+
+			return nil
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if got := stderr.String(); !strings.Contains(got, "heads up: incomplete values") {
+		t.Fatalf("expected the success-path warning to reach stderr, got %q", got)
 	}
 }
 

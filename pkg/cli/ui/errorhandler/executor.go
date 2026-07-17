@@ -37,6 +37,15 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 
 	err := cmd.Execute()
 	if err == nil {
+		// Warnings/notices the command wrote to stderr during a successful run must
+		// still reach the user. The capture above exists to normalize a failing
+		// command's stderr into the returned error; on success it would otherwise
+		// silently discard legitimate warnings (e.g. Helm-render degradations). An
+		// empty buffer is a no-op, so commands that write nothing are unaffected.
+		if errBuf.Len() > 0 {
+			_, _ = originalErrWriter.Write(errBuf.Bytes())
+		}
+
 		return nil
 	}
 
