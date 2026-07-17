@@ -3,8 +3,10 @@ package eksprovisioner
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -126,7 +128,9 @@ func (u *UpdatableProvisioner) DiffConfig(
 		delete(liveByName, group.Name)
 	}
 
-	for liveName := range liveByName {
+	// Sort the leftover live names so the emitted diff is deterministic
+	// (map iteration order would otherwise destabilise machine-read output).
+	for _, liveName := range slices.Sorted(maps.Keys(liveByName)) {
 		result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 			Field:    nodegroupField(liveName),
 			OldValue: liveName,

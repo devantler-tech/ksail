@@ -134,10 +134,24 @@ func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
 	testCases := []struct {
 		name           string
 		inPlaceUpdates bool
+		configPath     string
 		wantUpdater    bool
 	}{
-		{name: "default is recreate flow", inPlaceUpdates: false, wantUpdater: false},
-		{name: "opt-in enables Updater", inPlaceUpdates: true, wantUpdater: true},
+		{
+			name: "default is recreate flow", inPlaceUpdates: false,
+			configPath: "eks.yaml", wantUpdater: false,
+		},
+		{
+			name: "opt-in enables Updater", inPlaceUpdates: true,
+			configPath: "eks.yaml", wantUpdater: true,
+		},
+		{
+			// No declared config (e.g. the operator's name/region-only
+			// construction): the updater would have no source of truth and
+			// silently report zero changes, so the capability stays off.
+			name: "opt-in without a config path stays recreate flow", inPlaceUpdates: true,
+			configPath: "", wantUpdater: false,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -149,7 +163,7 @@ func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
 					EKS: &clusterprovisioner.EKSConfig{
 						Name:       "test-eks",
 						Region:     "eu-west-1",
-						ConfigPath: "eks.yaml",
+						ConfigPath: testCase.configPath,
 					},
 				},
 			}

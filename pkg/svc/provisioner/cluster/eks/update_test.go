@@ -398,6 +398,29 @@ managedNodeGroups:
 	}, scaleCall)
 }
 
+func TestDiffConfig_RemovalsAreEmittedInSortedOrder(t *testing.T) {
+	t.Parallel()
+
+	liveThreeGroups := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
+		`"InstanceType":"t3.medium","NodeGroupType":"managed"},` +
+		`{"Name":"zeta","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"NodeGroupType":"managed"},` +
+		`{"Name":"alpha","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"NodeGroupType":"managed"}]`
+
+	configPath := writeUpdateTestConfig(t, updateTestConfig)
+	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(liveThreeGroups)}},
+	}, configPath)
+
+	diff, err := prov.DiffConfig(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, diff.RecreateRequired, 2)
+	assert.Equal(t, "eks.managedNodeGroups[alpha]", diff.RecreateRequired[0].Field)
+	assert.Equal(t, "eks.managedNodeGroups[zeta]", diff.RecreateRequired[1].Field)
+}
+
 func TestUpdatableProvisionerIsComponentDetectorAware(t *testing.T) {
 	t.Parallel()
 

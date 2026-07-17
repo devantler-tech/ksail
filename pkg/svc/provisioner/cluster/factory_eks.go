@@ -53,7 +53,11 @@ func (f DefaultFactory) createEKSProvisioner(
 	// The Updater capability is discovered by type assertion, so the
 	// experimental in-place update path is gated at construction: without the
 	// opt-in the orchestrator sees no Updater and keeps today's recreate flow.
-	if cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates {
+	// A config path is required too — with no declared eksctl.yaml (e.g. the
+	// operator's name/region-only construction) the updater would have no
+	// source of truth and silently report zero changes, which is worse than
+	// falling back to the existing flow.
+	if cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates && eksConfig.ConfigPath != "" {
 		return eksprovisioner.NewUpdatableProvisioner(provisioner), eksConfig, nil
 	}
 
