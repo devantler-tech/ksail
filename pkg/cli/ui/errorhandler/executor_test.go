@@ -75,6 +75,54 @@ func TestExecutorExecuteFlushesWarningsOnSuccess(t *testing.T) {
 	}
 }
 
+// exitCodeError is a test error carrying a custom KSail exit code, mirroring
+// DriftExitError: a valid, non-failing outcome rather than a command failure.
+type exitCodeError struct{ code int }
+
+func (e *exitCodeError) Error() string { return fmt.Sprintf("exit code %d", e.code) }
+
+func (e *exitCodeError) KSailExitCode() int { return e.code }
+
+// TestExecutorExecuteFlushesWarningsOnExitCodeResult guards the custom-exit-code path
+// (e.g. `cluster diff --exit-code` detecting drift): main.go surfaces such results as a
+// process exit code and prints no error, so a warning the run wrote to stderr must still
+// reach the real stderr rather than being swallowed with the captured buffer. It also
+// asserts the custom exit code stays detectable via errors.As so main.go keeps propagating
+// it.
+func TestExecutorExecuteFlushesWarningsOnExitCodeResult(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use:           "test",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: drift detected")
+
+			return &exitCodeError{code: 2}
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err == nil {
+		t.Fatal("expected the exit-code error to propagate, got nil")
+	}
+
+	var coder interface{ KSailExitCode() int }
+	if !errors.As(err, &coder) {
+		t.Fatalf("expected the custom exit code to remain detectable via errors.As, got %T", err)
+	}
+
+	if got := stderr.String(); !strings.Contains(got, "heads up: drift detected") {
+		t.Fatalf("expected the exit-code-path warning to reach stderr, got %q", got)
+	}
+}
+
 func TestExecutorExecuteNilCommand(t *testing.T) {
 	t.Parallel()
 
