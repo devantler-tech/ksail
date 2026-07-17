@@ -103,6 +103,16 @@ func (s *scriptedRunner) Run(
 func newProvider(t *testing.T, responses map[string][]response) (*aws.Provider, *scriptedRunner) {
 	t.Helper()
 
+	return newProviderWithRegion(t, responses, "us-east-1")
+}
+
+func newProviderWithRegion(
+	t *testing.T,
+	responses map[string][]response,
+	region string,
+) (*aws.Provider, *scriptedRunner) {
+	t.Helper()
+
 	runner := &scriptedRunner{t: t, responses: responses}
 
 	client := eksctlclient.NewClient(
@@ -113,7 +123,7 @@ func newProvider(t *testing.T, responses map[string][]response) (*aws.Provider, 
 	// Inject a happy describer so GetClusterStatus success paths populate the
 	// endpoint without resolving real AWS credentials. Tests that exercise the
 	// endpoint itself construct the provider with their own describer inline.
-	prov, err := aws.NewProvider(client, "us-east-1", aws.WithClusterDescriber(
+	prov, err := aws.NewProvider(client, region, aws.WithClusterDescriber(
 		&fakeDescriber{cluster: &ekstypes.Cluster{Endpoint: awssdk.String(testEndpoint)}},
 	))
 	require.NoError(t, err)
@@ -230,6 +240,130 @@ func TestStopNodes_ScalesAllToZero(t *testing.T) {
 	assert.Contains(t, strings.Join(scales[1], " "), "--nodes 0")
 }
 
+func TestStopNodesPinsProfileResolvedRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProviderWithRegion(t, map[string][]response{
+		"get cluster": {{
+			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","EksctlCreated":"True"}]`),
+		}},
+		"get nodegroup":   {{stdout: nodegroupJSON(3, 2)}},
+		"scale nodegroup": {{}},
+	}, "")
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+
+	snapshot, err := state.LoadEKSNodegroupState("demo")
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", snapshot.Region)
+	assert.Equal(t, [][]string{
+		{"get", "cluster", "--name", "demo", "--output", "json"},
+		{"get", "nodegroup", "--cluster", "demo", "--output", "json", "--region", "eu-north-1"},
+		{
+			"scale", "nodegroup", "--cluster", "demo", "--name", "ng-1", "--nodes", "0",
+			"--nodes-min", "0", "--nodes-max", "5", "--region", "eu-north-1",
+		},
+	}, runner.calls)
+}
+
+func TestStartNodesPinsProfileResolvedRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+		Version:     state.EKSNodegroupStateVersion,
+		ClusterName: "demo",
+		Region:      "eu-north-1",
+		Nodegroups: []state.EKSNodegroupCapacity{
+			{Name: "ng-1", DesiredCapacity: 3, MinSize: 2, MaxSize: 5},
+		},
+	}))
+
+	prov, runner := newProviderWithRegion(t, map[string][]response{
+		"get cluster": {{
+			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","EksctlCreated":"True"}]`),
+		}},
+		"get nodegroup": {
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(3, 2)},
+		},
+		"scale nodegroup": {{}},
+	}, "")
+
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+
+	for _, call := range runner.calls {
+		if call[0] == "get" && call[1] == "cluster" {
+			continue
+		}
+
+		assert.Contains(t, call, "eu-north-1")
+	}
+
+	_, err := state.LoadEKSNodegroupState("demo")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestStopNodesRejectsProfileResolvedClusterWithoutExactIdentity(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	//nolint:paralleltest // The subtests share the process HOME set by their parent.
+	for name, summary := range map[string]string{
+		"different name": `[{"Name":"other","Region":"eu-north-1","EksctlCreated":"True"}]`,
+		"missing region": `[{"Name":"demo","Region":"","EksctlCreated":"True"}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			prov, runner := newProviderWithRegion(t, map[string][]response{
+				"get cluster": {{stdout: []byte(summary)}},
+			}, "")
+
+			err := prov.StopNodes(t.Context(), "demo")
+			require.ErrorContains(t, err, "did not prove its exact name and region")
+			assert.Len(t, runner.calls, 1)
+		})
+	}
+}
+
+func TestProfileResolvedLifecycleRegionDoesNotMutateSharedProvider(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProviderWithRegion(t, map[string][]response{
+		"get cluster": {
+			{stdout: []byte(`[{"Name":"first","Region":"eu-north-1","EksctlCreated":"True"}]`)},
+			{stdout: []byte(`[{"Name":"second","Region":"us-west-2","EksctlCreated":"True"}]`)},
+		},
+		"get nodegroup": {
+			{
+				stdout: []byte(
+					`[{"Cluster":"first","Name":"workers","DesiredCapacity":2,"MinSize":1,"MaxSize":3}]`,
+				),
+			},
+			{
+				stdout: []byte(
+					`[{"Cluster":"second","Name":"workers","DesiredCapacity":2,"MinSize":1,"MaxSize":3}]`,
+				),
+			},
+		},
+		"scale nodegroup": {{}, {}},
+	}, "")
+
+	require.NoError(t, prov.StopNodes(t.Context(), "first"))
+	require.NoError(t, prov.StopNodes(t.Context(), "second"))
+	assert.Empty(t, prov.Region())
+	assert.Equal(t, [][]string{
+		{"get", "cluster", "--name", "first", "--output", "json"},
+		{"get", "nodegroup", "--cluster", "first", "--output", "json", "--region", "eu-north-1"},
+		{
+			"scale", "nodegroup", "--cluster", "first", "--name", "workers", "--nodes", "0",
+			"--nodes-min", "0", "--nodes-max", "3", "--region", "eu-north-1",
+		},
+		{"get", "cluster", "--name", "second", "--output", "json"},
+		{"get", "nodegroup", "--cluster", "second", "--output", "json", "--region", "us-west-2"},
+		{
+			"scale", "nodegroup", "--cluster", "second", "--name", "workers", "--nodes", "0",
+			"--nodes-min", "0", "--nodes-max", "3", "--region", "us-west-2",
+		},
+	}, runner.calls)
+}
+
 func TestStopNodes_NoNodegroups(t *testing.T) {
 	t.Parallel()
 
@@ -323,6 +457,59 @@ func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
 
 	_, err := state.LoadEKSNodegroupState("demo")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestStopThenStartPreservesZeroCapacityNodegroup(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"a-idle","DesiredCapacity":0,"MinSize":0,"MaxSize":5},
+				{"Cluster":"demo","Name":"b-active","DesiredCapacity":3,"MinSize":2,"MaxSize":5}
+			]`)},
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"a-idle","DesiredCapacity":0,"MinSize":0,"MaxSize":5},
+				{"Cluster":"demo","Name":"b-active","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
+			]`)},
+			{stdout: []byte(`[
+				{"Cluster":"demo","Name":"a-idle","DesiredCapacity":0,"MinSize":0,"MaxSize":5},
+				{"Cluster":"demo","Name":"b-active","DesiredCapacity":3,"MinSize":2,"MaxSize":5}
+			]`)},
+		},
+		"scale nodegroup": {{}, {}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+	assert.Equal(t, []string{
+		"scale nodegroup --cluster demo --name b-active --nodes 0 --nodes-min 0 --nodes-max 5 --region us-east-1",
+		"scale nodegroup --cluster demo --name b-active --nodes 3 --nodes-min 2 --nodes-max 5 --region us-east-1",
+	}, scaleCalls(runner.calls))
+
+	_, err := state.LoadEKSNodegroupState("demo")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestStartNodesRejectsZeroMaximumCapacitySnapshot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+		Version:     state.EKSNodegroupStateVersion,
+		ClusterName: "demo",
+		Region:      "us-east-1",
+		Nodegroups: []state.EKSNodegroupCapacity{
+			{Name: "idle", DesiredCapacity: 0, MinSize: 0, MaxSize: 0},
+		},
+	}))
+
+	prov, _ := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(`[
+			{"Cluster":"demo","Name":"idle","DesiredCapacity":0,"MinSize":0,"MaxSize":0}
+		]`)}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.ErrorContains(t, err, "invalid saved nodegroup capacity")
 }
 
 func TestRepeatedStopPreservesOriginalNodegroupCapacities(t *testing.T) {

@@ -94,38 +94,38 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 // before StopNodes zeroed it. The snapshot survives partial failures and is removed only after a
 // readback confirms that every group is restored.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	nodegroups, snapshot, found, err := p.loadNodegroupsAndState(ctx, clusterName)
+	target, nodegroups, snapshot, found, err := p.loadLifecycleNodegroupsAndState(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
 	if !found {
-		return p.startNodegroupsWithoutSnapshot(ctx, clusterName, nodegroups)
+		return target.startNodegroupsWithoutSnapshot(ctx, clusterName, nodegroups)
 	}
 
-	liveByName, err := validateNodegroupTransition(clusterName, p.region, snapshot, nodegroups)
+	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
 	if err != nil {
 		return err
 	}
 
-	err = p.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
+	err = target.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
 	if err != nil {
 		return err
 	}
 
-	return p.verifyAndClearNodegroupState(ctx, clusterName, snapshot)
+	return target.verifyAndClearNodegroupState(ctx, clusterName, snapshot)
 }
 
 // StopNodes atomically snapshots every managed nodegroup before scaling it to zero. Repeated calls
 // preserve the first snapshot and skip already-stopped groups, so a partial stop remains retryable.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	nodegroups, snapshot, found, err := p.loadNodegroupsAndState(ctx, clusterName)
+	target, nodegroups, snapshot, found, err := p.loadLifecycleNodegroupsAndState(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
 	if !found {
-		snapshot, err = newNodegroupState(clusterName, p.region, nodegroups)
+		snapshot, err = newNodegroupState(clusterName, target.region, nodegroups)
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		}
 	}
 
-	liveByName, err := validateNodegroupTransition(clusterName, p.region, snapshot, nodegroups)
+	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
 	if err != nil {
 		return err
 	}
@@ -146,11 +146,11 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 			continue
 		}
 
-		err = p.client.ScaleNodegroup(
+		err = target.client.ScaleNodegroup(
 			ctx,
 			clusterName,
 			capacity.Name,
-			p.region,
+			target.region,
 			0,
 			0,
 			capacity.MaxSize,
@@ -270,6 +270,75 @@ func (p *Provider) GetClusterStatus(
 // Region returns the AWS region this provider was configured with.
 func (p *Provider) Region() string {
 	return p.region
+}
+
+// loadLifecycleNodegroupsAndState gives both nodegroup lifecycle paths one exact-region preflight.
+func (p *Provider) loadLifecycleNodegroupsAndState(
+	ctx context.Context,
+	clusterName string,
+) (
+	*Provider,
+	[]eksctlclient.NodegroupSummary,
+	*state.EKSNodegroupState,
+	bool,
+	error,
+) {
+	target, err := p.withResolvedLifecycleRegion(ctx, clusterName)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	nodegroups, snapshot, found, err := target.loadNodegroupsAndState(ctx, clusterName)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	return target, nodegroups, snapshot, found, nil
+}
+
+// withResolvedLifecycleRegion returns a request-local provider pinned to the exact region eksctl
+// observed for clusterName. When configuration delegates region selection to an AWS profile, every
+// read, mutation, and persisted snapshot in this lifecycle operation must use that same resolved
+// identity; mutating the shared Provider would race concurrent requests.
+func (p *Provider) withResolvedLifecycleRegion(
+	ctx context.Context,
+	clusterName string,
+) (*Provider, error) {
+	configuredRegion := strings.TrimSpace(p.region)
+	if configuredRegion != "" {
+		if configuredRegion == p.region {
+			return p, nil
+		}
+
+		resolved := *p
+		resolved.region = configuredRegion
+
+		return &resolved, nil
+	}
+
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	summary, err := p.client.GetCluster(ctx, clusterName, "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve EKS lifecycle region: %w", translateClientErr(err))
+	}
+
+	targetName := strings.TrimSpace(clusterName)
+	if summary == nil || targetName == "" || strings.TrimSpace(summary.Name) != targetName ||
+		strings.TrimSpace(summary.Region) == "" {
+		return nil, fmt.Errorf(
+			"profile-resolved EKS cluster %q did not prove its exact name and region: %w",
+			clusterName,
+			errNodegroupStateTarget,
+		)
+	}
+
+	resolved := *p
+	resolved.region = strings.TrimSpace(summary.Region)
+
+	return &resolved, nil
 }
 
 // clusterEndpoint reads the cluster's control-plane endpoint from the AWS SDK,

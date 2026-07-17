@@ -39,14 +39,6 @@ func newNodegroupState(
 			return nil, err
 		}
 
-		if nodegroup.DesiredCap == 0 {
-			return nil, fmt.Errorf(
-				"nodegroup %q is already stopped without a saved capacity: %w",
-				nodegroup.Name,
-				errNodegroupStateMissing,
-			)
-		}
-
 		if _, duplicate := seen[nodegroup.Name]; duplicate {
 			return nil, fmt.Errorf(
 				"duplicate nodegroup %q: %w",
@@ -178,8 +170,9 @@ func validateSavedCapacities(
 
 	for _, capacity := range capacities {
 		if strings.TrimSpace(capacity.Name) == "" || capacity.MinSize < 0 ||
-			capacity.DesiredCapacity <= 0 ||
-			capacity.DesiredCapacity < capacity.MinSize || capacity.MaxSize < capacity.DesiredCapacity {
+			capacity.DesiredCapacity < 0 ||
+			capacity.DesiredCapacity < capacity.MinSize || capacity.MaxSize <= 0 ||
+			capacity.MaxSize < capacity.DesiredCapacity {
 			return nil, fmt.Errorf(
 				"invalid saved nodegroup capacity for %q: %w",
 				capacity.Name,

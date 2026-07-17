@@ -30,6 +30,9 @@ var (
 	errEKSNameOverrideMismatch      = errors.New("cannot override EKS config cluster name")
 	errNoMatchingEKSContext         = errors.New("no kubeconfig context matches EKS cluster")
 	errAmbiguousEKSContext          = errors.New("multiple kubeconfig contexts match EKS cluster")
+	errExplicitEKSContextUnobserved = errors.New(
+		"explicit EKS context was not observed after creation",
+	)
 )
 
 const explicitEKSContextHint = "set spec.cluster.connection.context explicitly"
@@ -426,6 +429,10 @@ func resolvePostCreateContext(ctx *localregistry.Context) error {
 	distribution := ctx.ClusterCfg.Spec.Cluster.Distribution
 
 	if connection.Context != "" {
+		if distribution == v1alpha1.DistributionEKS {
+			return pinObservedExplicitEKSRegion(ctx, connection.Context)
+		}
+
 		return nil
 	}
 
@@ -440,6 +447,45 @@ func resolvePostCreateContext(ctx *localregistry.Context) error {
 	}
 
 	return resolveEKSPostCreateContext(ctx)
+}
+
+// pinObservedExplicitEKSRegion derives a profile-selected region only from the kubeconfig output
+// eksctl just made current. Parsing configured text alone could bind TTL cleanup to a stale
+// same-named context in another region.
+func pinObservedExplicitEKSRegion(ctx *localregistry.Context, contextName string) error {
+	if ctx.EKSConfig != nil && strings.TrimSpace(ctx.EKSConfig.Region) != "" {
+		return nil
+	}
+
+	clusterName, _, config, err := loadEKSContextConfig(ctx)
+	if err != nil {
+		return err
+	}
+
+	observedContext, found := config.Contexts[contextName]
+
+	contextCluster, _, validTarget := parseEksctlContextTarget(contextName)
+	if !found || observedContext == nil || config.CurrentContext != contextName ||
+		!validTarget || contextCluster != clusterName {
+		return fmt.Errorf(
+			"%w: %q for cluster %q",
+			errExplicitEKSContextUnobserved,
+			contextName,
+			clusterName,
+		)
+	}
+
+	pinEKSRegionFromContext(ctx, contextName)
+
+	if strings.TrimSpace(ctx.EKSConfig.Region) == "" {
+		return fmt.Errorf(
+			"%w: %q did not supply a region",
+			errExplicitEKSContextUnobserved,
+			contextName,
+		)
+	}
+
+	return nil
 }
 
 // resolveEKSPostCreateContext selects the identity-qualified context that
