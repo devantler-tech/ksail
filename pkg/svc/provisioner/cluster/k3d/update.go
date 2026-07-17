@@ -18,6 +18,13 @@ import (
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
 
+const (
+	// fieldK3dAgents is the diff field path for K3d agent (worker) node changes.
+	fieldK3dAgents = "k3d.agents"
+	// roleAgent is the k3d node role for worker (agent) nodes.
+	roleAgent = "agent"
+)
+
 // Update applies configuration changes to a running K3d cluster.
 // K3d supports:
 //   - Adding/removing worker (agent) nodes via k3d node commands
@@ -30,14 +37,9 @@ func (k *Provisioner) Update(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	opts clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
-	if oldSpec == nil || newSpec == nil {
-		return clusterupdate.NewEmptyUpdateResult(), nil
-	}
-
-	diff, diffErr := k.DiffConfig(ctx, name, oldSpec, newSpec)
-
-	result, proceed, prepErr := clusterupdate.PrepareUpdate(
-		diff, diffErr, opts, clustererr.ErrRecreationRequired,
+	result, proceed, prepErr := clusterupdate.BeginUpdate(
+		ctx, name, oldSpec, newSpec, opts,
+		clustererr.ErrRecreationRequired, k.DiffConfig,
 	)
 	if !proceed {
 		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
@@ -97,7 +99,7 @@ func (k *Provisioner) DiffConfig(
 	// Agent (worker) changes are in-place — K3d supports scaling agents
 	if runningAgents != desiredAgents {
 		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
-			Field:    "k3d.agents",
+			Field:    fieldK3dAgents,
 			OldValue: strconv.Itoa(runningAgents),
 			NewValue: strconv.Itoa(desiredAgents),
 			Category: clusterupdate.ChangeCategoryInPlace,
@@ -159,7 +161,7 @@ func (k *Provisioner) addAgentNodes(
 		args := []string{
 			nodeName,
 			"--cluster", clusterName,
-			"--role", "agent",
+			"--role", roleAgent,
 			"--wait",
 		}
 
@@ -177,7 +179,7 @@ func (k *Provisioner) addAgentNodes(
 		})
 		if runErr != nil {
 			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-				Field:  "k3d.agents",
+				Field:  fieldK3dAgents,
 				Reason: fmt.Sprintf("failed to create agent node %s: %v", nodeName, runErr),
 			})
 
@@ -185,7 +187,7 @@ func (k *Provisioner) addAgentNodes(
 		}
 
 		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-			Field:    "k3d.agents",
+			Field:    fieldK3dAgents,
 			NewValue: nodeName,
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "added agent node",
@@ -225,7 +227,7 @@ func (k *Provisioner) removeAgentNodes(
 		})
 		if err != nil {
 			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-				Field:  "k3d.agents",
+				Field:  fieldK3dAgents,
 				Reason: fmt.Sprintf("failed to delete agent node %s: %v", nodeName, err),
 			})
 
@@ -233,7 +235,7 @@ func (k *Provisioner) removeAgentNodes(
 		}
 
 		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-			Field:    "k3d.agents",
+			Field:    fieldK3dAgents,
 			OldValue: nodeName,
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "removed agent node",
@@ -257,7 +259,7 @@ func (k *Provisioner) countRunningNodes(
 
 	for _, n := range nodes {
 		switch n.Role {
-		case "agent":
+		case roleAgent:
 			agentCount++
 		case "server":
 			serverCount++
@@ -388,7 +390,7 @@ func (k *Provisioner) listAgentNodes(
 	var agents []string
 
 	for _, n := range nodes {
-		if n.Role == "agent" {
+		if n.Role == roleAgent {
 			agents = append(agents, n.Name)
 		}
 	}

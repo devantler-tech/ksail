@@ -367,6 +367,63 @@ type UpdateOptions struct {
 	AllowRollingRecreate bool
 }
 
+// BeginUpdate runs the shared Update entry sequence: nil-guard the specs,
+// compute the provisioner diff, and prepare the mutable result via
+// PrepareUpdate. Returns (result, true, nil) when the caller should proceed
+// to apply in-place changes.
+func BeginUpdate(
+	ctx context.Context,
+	name string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	opts UpdateOptions,
+	recreateErr error,
+	diffConfig DiffConfigFunc,
+) (*UpdateResult, bool, error) {
+	if oldSpec == nil || newSpec == nil {
+		return NewEmptyUpdateResult(), false, nil
+	}
+
+	diff, diffErr := diffConfig(ctx, name, oldSpec, newSpec)
+
+	return PrepareUpdate(diff, diffErr, opts, recreateErr)
+}
+
+// DiffConfigFunc computes a provisioner's configuration diff for an update.
+type DiffConfigFunc func(
+	ctx context.Context,
+	name string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+) (*UpdateResult, error)
+
+// RunUpdate executes a provisioner's whole Update flow: BeginUpdate, then —
+// when the preamble says to proceed — the provisioner's apply step, wrapping
+// its error with applyWrapMsg. Provisioners whose Update needs no extra
+// steps can delegate to this in a single return.
+func RunUpdate(
+	ctx context.Context,
+	name string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	opts UpdateOptions,
+	recreateErr error,
+	diffConfig DiffConfigFunc,
+	apply func(ctx context.Context, name string, result *UpdateResult) error,
+	applyWrapMsg string,
+) (*UpdateResult, error) {
+	result, proceed, prepErr := BeginUpdate(
+		ctx, name, oldSpec, newSpec, opts, recreateErr, diffConfig,
+	)
+	if !proceed {
+		return result, prepErr
+	}
+
+	err := apply(ctx, name, result)
+	if err != nil {
+		return result, fmt.Errorf("%s: %w", applyWrapMsg, err)
+	}
+
+	return result, nil
+}
+
 // PrepareUpdate handles the common update preamble shared by provisioners:
 //   - If diffErr is non-nil, return it immediately.
 //   - If dry-run, return the diff immediately.

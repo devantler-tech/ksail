@@ -12,6 +12,21 @@ type OptionsVanilla struct {
 	MirrorsDir string `json:"mirrorsDir,omitzero"`
 }
 
+// OptionsEKS defines options specific to the EKS distribution.
+type OptionsEKS struct {
+	// ExperimentalInPlaceUpdates enables the experimental in-place update path for
+	// `cluster update` on EKS: managed node-group scaling changes (desiredCapacity,
+	// minSize, maxSize in eksctl.yaml) are applied via `eksctl scale nodegroup`
+	// instead of the delete-and-recreate flow. Default false (recreate flow), as the
+	// path has not yet been validated against a live EKS cluster.
+	// Diff coverage: node-group scaling and instanceType (recreate-required) are
+	// detected; other managed-node-group fields (amiFamily, volumes, labels, taints,
+	// subnets, IAM, ...) are not reported by `eksctl get nodegroup` and are NOT
+	// diffed — changes to them are not detected by `cluster update` while this
+	// experimental path is enabled.
+	ExperimentalInPlaceUpdates bool `json:"experimentalInPlaceUpdates,omitzero" jsonschema_description:"Experimental: apply managed node-group scaling changes in-place via 'eksctl scale nodegroup' during 'cluster update' instead of recreating the cluster. Default false. Diff coverage is limited to node-group scaling and instanceType; other managed-node-group fields are not diffed."` //nolint:lll
+}
+
 // OptionsTalos defines options specific to the Talos distribution.
 type OptionsTalos struct {
 	// Version pins the Talos OS (distribution) version used for cluster creation and

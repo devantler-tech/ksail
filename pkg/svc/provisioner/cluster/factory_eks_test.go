@@ -125,6 +125,65 @@ func TestCreateEKSProvisionerWithConfig(t *testing.T) {
 	assert.Equal(t, "test-eks", eksConfig.GetClusterName())
 }
 
+// TestCreateEKSProvisionerUpdaterGate asserts the experimental in-place
+// update capability is opt-in: the default returns the plain provisioner
+// (no Updater), and the spec flag switches to the updatable wrapper.
+func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		inPlaceUpdates bool
+		configPath     string
+		wantUpdater    bool
+	}{
+		{
+			name: "default is recreate flow", inPlaceUpdates: false,
+			configPath: "eks.yaml", wantUpdater: false,
+		},
+		{
+			name: "opt-in enables Updater", inPlaceUpdates: true,
+			configPath: "eks.yaml", wantUpdater: true,
+		},
+		{
+			// No declared config (e.g. the operator's name/region-only
+			// construction): the updater would have no source of truth and
+			// silently report zero changes, so the capability stays off.
+			name: "opt-in without a config path stays recreate flow", inPlaceUpdates: true,
+			configPath: "", wantUpdater: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: &clusterprovisioner.DistributionConfig{
+					EKS: &clusterprovisioner.EKSConfig{
+						Name:       "test-eks",
+						Region:     "eu-west-1",
+						ConfigPath: testCase.configPath,
+					},
+				},
+			}
+
+			cluster := eksTestCluster()
+			cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates = testCase.inPlaceUpdates
+
+			provisioner, _, err := factory.Create(context.Background(), cluster)
+			require.NoError(t, err)
+
+			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
+			assert.Equal(t, testCase.wantUpdater, hasUpdater)
+
+			if testCase.wantUpdater {
+				assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
+			}
+		})
+	}
+}
+
 // TestCreateEKSProvisionerWithoutConfig asserts that selecting the EKS
 // distribution without a pre-loaded EKSConfig surfaces
 // ErrMissingDistributionConfig rather than a nil-pointer panic.
