@@ -94,12 +94,7 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 // before StopNodes zeroed it. The snapshot survives partial failures and is removed only after a
 // readback confirms that every group is restored.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	snapshot, found, err := p.loadNodegroupState(clusterName)
+	nodegroups, snapshot, found, err := p.loadNodegroupsAndState(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -124,12 +119,7 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 // StopNodes atomically snapshots every managed nodegroup before scaling it to zero. Repeated calls
 // preserve the first snapshot and skip already-stopped groups, so a partial stop remains retryable.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	snapshot, found, err := p.loadNodegroupState(clusterName)
+	nodegroups, snapshot, found, err := p.loadNodegroupsAndState(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -343,6 +333,25 @@ func (p *Provider) fetchNodegroups(
 	}
 
 	return nodegroups, nil
+}
+
+// loadNodegroupsAndState gives StartNodes and StopNodes one shared, ordered preflight: first prove
+// that the target has managed nodegroups, then load any capacity snapshot before either path mutates it.
+func (p *Provider) loadNodegroupsAndState(
+	ctx context.Context,
+	clusterName string,
+) ([]eksctlclient.NodegroupSummary, *state.EKSNodegroupState, bool, error) {
+	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	snapshot, found, err := p.loadNodegroupState(clusterName)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	return nodegroups, snapshot, found, nil
 }
 
 // listNodegroupsForScale is a shared prelude for StartNodes and StopNodes
