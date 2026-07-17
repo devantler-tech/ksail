@@ -44,7 +44,8 @@ managedNodeGroups:
 `
 
 const liveNodegroupsJSON = `[{"Cluster":"ksail-test","Name":"ng-1","Status":"ACTIVE",` +
-	`"DesiredCapacity":2,"MinSize":1,"MaxSize":3,"NodeGroupType":"managed"}]`
+	`"DesiredCapacity":2,"MinSize":1,"MaxSize":3,"InstanceType":"t3.medium",` +
+	`"NodeGroupType":"managed"}]`
 
 // writeUpdateTestConfig writes an eksctl.yaml into a temp dir and returns its path.
 func writeUpdateTestConfig(t *testing.T, content string) string {
@@ -302,6 +303,121 @@ func TestUpdate_NoChangesIsANoOp(t *testing.T) {
 	for _, call := range runner.calls {
 		assert.NotEqual(t, "scale", call[0], "no-op update must not scale")
 	}
+}
+
+func TestDiffConfig_InstanceTypeChangeRequiresRecreate(t *testing.T) {
+	t.Parallel()
+
+	liveOtherType := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
+		`"InstanceType":"t3.large","NodeGroupType":"managed"}]`
+
+	configPath := writeUpdateTestConfig(t, updateTestConfig)
+	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(liveOtherType)}},
+	}, configPath)
+
+	diff, err := prov.DiffConfig(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, diff.RecreateRequired, 1)
+	assert.Equal(t, "eks.managedNodeGroups[ng-1].instanceType", diff.RecreateRequired[0].Field)
+	assert.Equal(t, "t3.large", diff.RecreateRequired[0].OldValue)
+	assert.Equal(t, "t3.medium", diff.RecreateRequired[0].NewValue)
+}
+
+func TestDiffConfig_EmptyDeclaredListFlagsLiveGroupsAsRemovals(t *testing.T) {
+	t.Parallel()
+
+	noGroupsConfig := `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: ksail-test
+  region: us-east-1
+`
+
+	configPath := writeUpdateTestConfig(t, noGroupsConfig)
+	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
+	}, configPath)
+
+	diff, err := prov.DiffConfig(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, diff.RecreateRequired, 1)
+	assert.Equal(t, "eks.managedNodeGroups[ng-1]", diff.RecreateRequired[0].Field)
+}
+
+func TestUpdate_AutoscalerOwnedDesiredIsClampedIntoNewBounds(t *testing.T) {
+	t.Parallel()
+
+	// desiredCapacity deliberately undeclared: the autoscaler owns the size.
+	// Raising minSize above the live desired count must clamp --nodes up to
+	// the new minimum rather than replaying a now-invalid live value.
+	minOnlyConfig := `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: ksail-test
+  region: us-east-1
+managedNodeGroups:
+  - name: ng-1
+    minSize: 4
+    maxSize: 6
+`
+
+	liveBelowNewMin := `[{"Name":"ng-1","DesiredCapacity":2,"MinSize":1,"MaxSize":3,` +
+		`"NodeGroupType":"managed"}]`
+
+	configPath := writeUpdateTestConfig(t, minOnlyConfig)
+	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: []byte(liveBelowNewMin)},
+			{stdout: []byte(liveBelowNewMin)},
+		},
+		"scale nodegroup": {{}},
+	}, configPath)
+
+	_, err := prov.Update(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+		clusterupdateOptions(false),
+	)
+	require.NoError(t, err)
+
+	scaleCall := lastCallWithPrefix(t, runner, "scale")
+	assert.Equal(t, []string{
+		"scale", "nodegroup",
+		"--cluster", "ksail-test",
+		"--name", "ng-1",
+		"--nodes", "4",
+		"--nodes-min", "4",
+		"--nodes-max", "6",
+		"--region", "us-east-1",
+	}, scaleCall)
+}
+
+func TestUpdatableProvisionerIsComponentDetectorAware(t *testing.T) {
+	t.Parallel()
+
+	var prov any = &eksprovisioner.UpdatableProvisioner{}
+
+	_, ok := prov.(clusterprovisioner.ComponentDetectorAware)
+	assert.True(t, ok, "the orchestrator injects the detector via ComponentDetectorAware")
+}
+
+func TestGetCurrentConfig_MarksComponentsUnknownWithoutDetector(t *testing.T) {
+	t.Parallel()
+
+	prov, _ := newUpdatableProvisioner(t, map[string][]response{},
+		filepath.Join(t.TempDir(), "absent.yaml"))
+
+	spec, _, err := prov.GetCurrentConfig(t.Context(), "update-test-no-state")
+	require.NoError(t, err)
+
+	assert.Equal(t, v1alpha1.CNI(clusterupdate.UnknownBaselineValue), spec.CNI)
+	assert.Equal(t, v1alpha1.GitOpsEngine(clusterupdate.UnknownBaselineValue), spec.GitOpsEngine)
 }
 
 func TestGetCurrentConfig_ReturnsEKSDefaults(t *testing.T) {

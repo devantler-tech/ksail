@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"sigs.k8s.io/yaml"
@@ -28,6 +29,10 @@ import (
 // methods onto Provisioner and deleting the wrapper and the spec field.
 type UpdatableProvisioner struct {
 	*Provisioner
+
+	// componentDetector probes the running cluster's components for the
+	// update baseline; injected by the orchestrator via SetComponentDetector.
+	componentDetector *detector.ComponentDetector
 }
 
 // NewUpdatableProvisioner wraps an EKS provisioner with in-place update support.
@@ -35,11 +40,18 @@ func NewUpdatableProvisioner(provisioner *Provisioner) *UpdatableProvisioner {
 	return &UpdatableProvisioner{Provisioner: provisioner}
 }
 
+// SetComponentDetector implements the ComponentDetectorAware capability so
+// the orchestrator can inject the live-cluster component detector.
+func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetector) {
+	u.componentDetector = d
+}
+
 // managedNodeGroupConfig is the subset of an eksctl.yaml managedNodeGroups
 // entry the updater diffs. Pointer fields distinguish "not declared" (nil,
 // dimension is skipped) from an explicit zero.
 type managedNodeGroupConfig struct {
 	Name            string `json:"name"`
+	InstanceType    string `json:"instanceType,omitempty"`
 	DesiredCapacity *int   `json:"desiredCapacity,omitempty"`
 	MinSize         *int   `json:"minSize,omitempty"`
 	MaxSize         *int   `json:"maxSize,omitempty"`
@@ -73,12 +85,14 @@ func (u *UpdatableProvisioner) DiffConfig(
 ) (*clusterupdate.UpdateResult, error) {
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	desired, err := u.desiredNodegroups()
+	desired, declared, err := u.desiredNodegroups()
 	if err != nil {
 		return result, err
 	}
 
-	if len(desired) == 0 {
+	// No config file at all: there is no declared source of truth to diff
+	// against, so report nothing rather than flagging live groups as removals.
+	if !declared {
 		return result, nil
 	}
 
@@ -102,6 +116,9 @@ func (u *UpdatableProvisioner) DiffConfig(
 			continue
 		}
 
+		result.RecreateRequired = append(
+			result.RecreateRequired, immutableChanges(group, liveGroup)...,
+		)
 		result.InPlaceChanges = append(
 			result.InPlaceChanges, scalingChanges(group, liveGroup)...,
 		)
@@ -121,17 +138,33 @@ func (u *UpdatableProvisioner) DiffConfig(
 	return result, nil
 }
 
-// GetCurrentConfig retrieves the current cluster configuration, merging
-// persisted non-introspectable state so configured values do not read as
-// false diffs on every update.
+// GetCurrentConfig retrieves the current cluster configuration: component
+// state via the injected detector when available (marked Unknown otherwise,
+// so the diff engine never fabricates confident component diffs from
+// defaults), merged with persisted non-introspectable state.
 func (u *UpdatableProvisioner) GetCurrentConfig(
-	_ context.Context,
+	ctx context.Context,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	spec := clusterupdate.DefaultCurrentSpec(
 		v1alpha1.DistributionEKS,
 		v1alpha1.ProviderAWS,
 	)
+
+	if u.componentDetector != nil {
+		detected, err := u.componentDetector.DetectComponents(
+			ctx,
+			v1alpha1.DistributionEKS,
+			v1alpha1.ProviderAWS,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("detect components: %w", err)
+		}
+
+		spec = detected
+	} else {
+		clusterupdate.MarkComponentsUnknown(spec)
+	}
 
 	err := clusterupdate.MergePersistedState(spec, clusterName)
 	if err != nil {
@@ -151,12 +184,12 @@ func (u *UpdatableProvisioner) applyNodegroupScaling(
 ) error {
 	clusterName := u.resolveName(name)
 
-	desired, err := u.desiredNodegroups()
+	desired, declared, err := u.desiredNodegroups()
 	if err != nil {
 		return err
 	}
 
-	if len(desired) == 0 {
+	if !declared || len(desired) == 0 {
 		return nil
 	}
 
@@ -195,20 +228,20 @@ func (u *UpdatableProvisioner) applyNodegroupScaling(
 }
 
 // scaleNodegroup issues one `eksctl scale nodegroup` call converging the
-// live group toward the declared sizes. `--nodes` is always required, so an
-// undeclared desiredCapacity falls back to the live value; min/max are only
-// passed when declared and different (negative skips the flag).
+// live group toward the declared sizes. eksctl requires `--nodes` on every
+// scale (its ValidateNumberOfNodes rejects a nil desired capacity), so when
+// desiredCapacity is deliberately undeclared — the cluster autoscaler owns
+// the current size — the freshly-listed live value is passed, clamped into
+// the new min/max bounds. The list-to-scale window is a small inherent race
+// against a concurrent autoscaler decision; the experimental flag gates this
+// path until it is validated against a live cluster (see the graduation
+// issue referenced by the flag's docs).
 func (u *UpdatableProvisioner) scaleNodegroup(
 	ctx context.Context,
 	clusterName string,
 	group managedNodeGroupConfig,
 	live eksctl.NodegroupSummary,
 ) error {
-	desiredCapacity := live.DesiredCap
-	if group.DesiredCapacity != nil {
-		desiredCapacity = *group.DesiredCapacity
-	}
-
 	minSize := -1
 	if group.MinSize != nil && *group.MinSize != live.MinSize {
 		minSize = *group.MinSize
@@ -219,6 +252,19 @@ func (u *UpdatableProvisioner) scaleNodegroup(
 		maxSize = *group.MaxSize
 	}
 
+	desiredCapacity := live.DesiredCap
+	if group.DesiredCapacity != nil {
+		desiredCapacity = *group.DesiredCapacity
+	} else {
+		if group.MinSize != nil && desiredCapacity < *group.MinSize {
+			desiredCapacity = *group.MinSize
+		}
+
+		if group.MaxSize != nil && desiredCapacity > *group.MaxSize {
+			desiredCapacity = *group.MaxSize
+		}
+	}
+
 	//nolint:wrapcheck // wrapped by the caller with the nodegroup name.
 	return u.client.ScaleNodegroup(
 		ctx, clusterName, group.Name, u.region, desiredCapacity, minSize, maxSize,
@@ -226,30 +272,32 @@ func (u *UpdatableProvisioner) scaleNodegroup(
 }
 
 // desiredNodegroups parses the managedNodeGroups block of the declarative
-// eksctl.yaml. A missing file or an empty block yields no groups (nothing
-// to diff) rather than an error.
-func (u *UpdatableProvisioner) desiredNodegroups() ([]managedNodeGroupConfig, error) {
+// eksctl.yaml. The second return reports whether a config file was present
+// at all: a present file with no (remaining) managed node groups is a real
+// declaration — live managed groups then diff as removals — while a missing
+// file means there is nothing declared to diff against.
+func (u *UpdatableProvisioner) desiredNodegroups() ([]managedNodeGroupConfig, bool, error) {
 	if strings.TrimSpace(u.configPath) == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	_, err := os.Stat(u.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, false, nil
 		}
 
-		return nil, fmt.Errorf("failed to stat EKS config file: %w", err)
+		return nil, false, fmt.Errorf("failed to stat EKS config file: %w", err)
 	}
 
 	canonical, err := fsutil.EvalCanonicalPath(u.configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to canonicalize EKS config path: %w", err)
+		return nil, false, fmt.Errorf("failed to canonicalize EKS config path: %w", err)
 	}
 
 	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read EKS config file: %w", err)
+		return nil, false, fmt.Errorf("failed to read EKS config file: %w", err)
 	}
 
 	var config struct {
@@ -258,10 +306,10 @@ func (u *UpdatableProvisioner) desiredNodegroups() ([]managedNodeGroupConfig, er
 
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse EKS config file: %w", err)
+		return nil, false, fmt.Errorf("failed to parse EKS config file: %w", err)
 	}
 
-	return config.ManagedNodeGroups, nil
+	return config.ManagedNodeGroups, true, nil
 }
 
 // liveManagedNodegroups indexes the live summaries by name, keeping only
@@ -281,6 +329,28 @@ func liveManagedNodegroups(
 	}
 
 	return byName
+}
+
+// immutableChanges returns recreate-required changes for declared node-group
+// fields that cannot change in place. An empty live instance type means the
+// summary did not report one — unknown is not drift, so the comparison only
+// runs when both sides are known.
+func immutableChanges(
+	group managedNodeGroupConfig,
+	live eksctl.NodegroupSummary,
+) []clusterupdate.Change {
+	if group.InstanceType == "" || live.InstanceType == "" ||
+		strings.EqualFold(group.InstanceType, live.InstanceType) {
+		return nil
+	}
+
+	return []clusterupdate.Change{{
+		Field:    nodegroupField(group.Name) + ".instanceType",
+		OldValue: live.InstanceType,
+		NewValue: group.InstanceType,
+		Category: clusterupdate.ChangeCategoryRecreateRequired,
+		Reason:   "changing a managed node group's instance type requires replacing the node group",
+	}}
 }
 
 // scalingChanges returns one in-place change per declared scaling dimension
