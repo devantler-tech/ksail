@@ -215,7 +215,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 	endpoint := configs.ControlPlane().Cluster().Endpoint()
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "203.0.113.5", endpoint.Hostname())
-	assert.NotContains(t, configs.ControlPlane().Cluster().CertSANs(), "192.0.2.10")
+	assert.NotContains(t, configs.ControlPlane().K8sAPIServerConfig().CertSANs(), "192.0.2.10")
 	assert.Empty(t, configs.ControlPlane().Machine().Network().Devices(),
 		"disabled floating IP must render no VIP interface block")
 	assert.Equal(t, "https://203.0.113.5:6443",
@@ -254,7 +254,7 @@ func assertFloatingIPRenderedConfigs(t *testing.T, configs *talos.Configs) {
 	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
 		"endpoint must be the floating IP")
 
-	sans := configs.ControlPlane().Cluster().CertSANs()
+	sans := configs.ControlPlane().K8sAPIServerConfig().CertSANs()
 	assert.Contains(t, sans, "192.0.2.10")
 	assert.Contains(t, sans, "203.0.113.5")
 	assert.Contains(t, sans, "203.0.113.6")

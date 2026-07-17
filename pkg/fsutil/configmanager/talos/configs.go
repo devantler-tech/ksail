@@ -32,8 +32,8 @@ import (
 //	cpConfig := configs.ControlPlane()
 //	workerConfig := configs.Worker()
 //
-//	// Access specific config sections
-//	cniName := cpConfig.Cluster().Network().CNI().Name()
+//	// Access specific config sections (Talos alpha.2 multi-document accessors)
+//	flannelEnabled := cpConfig.K8sFlannelCNIConfig() != nil
 //	kubeletImage := cpConfig.Machine().Kubelet().Image()
 type Configs struct {
 	// Name is the cluster name.
@@ -104,6 +104,22 @@ func NewDefaultConfigsWithVersionAndPatches(
 	kubernetesVersion string,
 	additionalPatches []Patch,
 ) (*Configs, error) {
+	return NewDefaultConfigsWithVersionContractAndPatches(
+		kubernetesVersion,
+		nil,
+		additionalPatches,
+	)
+}
+
+// NewDefaultConfigsWithVersionContractAndPatches builds the no-scaffold
+// default bundle for a specific Talos version contract. Version-gated patches
+// are migrated before bundle generation so their shape matches the generated
+// configuration documents.
+func NewDefaultConfigsWithVersionContractAndPatches(
+	kubernetesVersion string,
+	versionContract *talosconfig.VersionContract,
+	additionalPatches []Patch,
+) (*Configs, error) {
 	if kubernetesVersion == "" {
 		kubernetesVersion = DefaultKubernetesVersion
 	}
@@ -120,22 +136,33 @@ func NewDefaultConfigsWithVersionAndPatches(
 	patches = append(patches, allowSchedulingPatch)
 	patches = append(patches, additionalPatches...)
 
+	patches, err := migrateKubernetesPatchesForContract(patches, versionContract)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate Kubernetes patches: %w", err)
+	}
+
 	return newConfigs(
 		DefaultClusterName,
 		kubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
-		nil,
+		versionContract,
 	)
 }
 
-// NewDefaultConfigsWithVersionAndName builds a default Talos config bundle at the
-// given Kubernetes version and names it after the cluster (the name is baked into
-// the PKI, so it must be set via WithName, which regenerates the bundle). It is
-// the shared "default Talos config for cluster <name> at version <v>" used by both
-// the operator backend and the local ksail provisioner factory.
-func NewDefaultConfigsWithVersionAndName(kubernetesVersion, name string) (*Configs, error) {
-	configs, err := NewDefaultConfigsWithVersionAndPatches(kubernetesVersion, nil)
+// NewDefaultConfigsWithVersionContractAndName builds the named default Talos
+// bundle used by the operator and local provisioner. Its generated document
+// shape matches the target Talos contract.
+func NewDefaultConfigsWithVersionContractAndName(
+	kubernetesVersion string,
+	name string,
+	versionContract *talosconfig.VersionContract,
+) (*Configs, error) {
+	configs, err := NewDefaultConfigsWithVersionContractAndPatches(
+		kubernetesVersion,
+		versionContract,
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build talos config: %w", err)
 	}
@@ -259,28 +286,37 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 	return c.regenerate(func(params *regenParams) error {
 		patches := make([]Patch, 0, len(c.patches)+1)
 		patches = append(patches, c.patches...)
-		patches = append(patches, buildCertSANsPatch(sans))
+		patches = append(patches, buildCertSANsPatch(sans, c.versionContract))
 		params.patches = patches
 
 		return c.preserveSecrets(params)
 	})
 }
 
-// buildCertSANsPatch builds a cluster-scope patch that sets the API server and machine certificate
-// SANs. Talos applies these as strategic-merge replacements, so the patch carries the full set.
-func buildCertSANsPatch(sans []string) Patch {
+// buildCertSANsPatch builds a cluster-scope patch that sets the API server and
+// machine certificate SANs. Talos 1.14 uses KubeAPIServerConfig for the API
+// server values; older contracts use cluster.apiServer. The machine SANs remain
+// in MachineConfig for both forms.
+func buildCertSANsPatch(
+	sans []string,
+	versionContract *talosconfig.VersionContract,
+) Patch {
 	var sansList strings.Builder
 	for _, san := range sans {
-		fmt.Fprintf(&sansList, "    - %q\n", san)
+		_, _ = fmt.Fprintf(&sansList, "    - %q\n", san)
 	}
 
 	var machineSANs strings.Builder
 	for _, san := range sans {
-		fmt.Fprintf(&machineSANs, "  - %q\n", san)
+		_, _ = fmt.Fprintf(&machineSANs, "  - %q\n", san)
 	}
 
 	content := "cluster:\n  apiServer:\n    certSANs:\n" + sansList.String() +
 		"machine:\n  certSANs:\n" + machineSANs.String()
+	if versionContract != nil && versionContract.MultidocKubernetesConfigSupported() {
+		content = "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\ncertExtraSANs:\n" +
+			sansList.String() + "---\nmachine:\n  certSANs:\n" + machineSANs.String()
+	}
 
 	return Patch{
 		Path:    "ksail-exposure-cert-sans",
@@ -353,9 +389,9 @@ func buildHetznerVIPPatch(vip, hcloudAPIToken string) Patch {
 // APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
 // API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
-// its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
-// string→string map, so values carry no leading dashes. Apply it only for clusters
-// using the Calico CNI.
+// its CRD chart that require this API. Values carry no leading dashes. The config
+// manager translates the legacy cluster.apiServer patch to KubeAPIServerConfig
+// for Talos 1.14 contracts. Apply it only for clusters using the Calico CNI.
 func APIServerFeatureGatesPatch() Patch {
 	content := "cluster:\n" +
 		"  apiServer:\n" +
@@ -534,18 +570,22 @@ func installImageFromPatch(content []byte) (string, bool) {
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
 // This is used to determine whether to skip CNI-dependent checks during bootstrap.
+//
+// In the Talos alpha.2 multi-document config model the top-level CNI accessor was
+// removed: Flannel is the only built-in CNI, exposed as a K8sFlannelCNIConfig
+// document, and the machinery bridge returns a nil K8sFlannelCNIConfig whenever the
+// CNI name is not "flannel" (i.e. it is "none"). ksail only ever generates the
+// default Flannel or, via its disable-default-cni patch, "none", so a nil
+// K8sFlannelCNIConfig is exactly the "CNI disabled" case. The K8sNetworkConfig guard
+// preserves the previous behaviour of returning false when the config carries no
+// cluster-network section at all (undeterminable rather than disabled).
 func (c *Configs) IsCNIDisabled() bool {
 	cp := c.ControlPlane()
-	if cp == nil || cp.Cluster() == nil || cp.Cluster().Network() == nil {
+	if cp == nil || cp.K8sNetworkConfig() == nil {
 		return false
 	}
 
-	cni := cp.Cluster().Network().CNI()
-	if cni == nil {
-		return false
-	}
-
-	return cni.Name() == "none"
+	return cp.K8sFlannelCNIConfig() == nil
 }
 
 // IsKubeletCertRotationEnabled returns true if kubelet serving certificate rotation is enabled.
@@ -603,15 +643,20 @@ func (c *Configs) ExtractMirrorHosts() []string {
 
 // NetworkCIDR returns the network CIDR from the cluster configuration.
 // This is extracted from the pod CIDRs in the cluster network settings.
+//
+// In the Talos alpha.2 multi-document config model the pod CIDRs live on the
+// K8sNetworkConfig document and are typed as netip.Prefix rather than string, so the
+// first entry is rendered back with String() to preserve the previous "10.244.0.0/16"
+// form.
 func (c *Configs) NetworkCIDR() string {
 	cp := c.ControlPlane()
-	if cp == nil || cp.Cluster() == nil || cp.Cluster().Network() == nil {
+	if cp == nil || cp.K8sNetworkConfig() == nil {
 		return DefaultNetworkCIDR
 	}
 
-	podCIDRs := cp.Cluster().Network().PodCIDRs()
+	podCIDRs := cp.K8sNetworkConfig().PodCIDRs()
 	if len(podCIDRs) > 0 {
-		return podCIDRs[0]
+		return podCIDRs[0].String()
 	}
 
 	return DefaultNetworkCIDR

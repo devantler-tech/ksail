@@ -47,19 +47,6 @@ const (
 	oidcFileName = "oidc.yaml"
 )
 
-// DisableDefaultCNIPatchYAML is the Talos machine config patch YAML that disables the
-// default CNI (Flannel). This is the single source of truth for the patch content,
-// shared between the generator (file-based scaffolding) and the runtime config manager
-// (in-memory patch injection when no scaffolded project exists).
-// Required when using an alternative CNI like Cilium or Calico.
-//
-// See: https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
-const DisableDefaultCNIPatchYAML = `cluster:
-  network:
-    cni:
-      name: none
-`
-
 // ExternalCloudProviderPatchYAML is the Talos machine config patch YAML that enables
 // the external cloud provider. This is the single source of truth for the patch content,
 // shared between the generator (file-based scaffolding) and the runtime config manager
@@ -127,7 +114,7 @@ type Config struct {
 	// When 0 (default), generates allow-scheduling-on-control-planes.yaml.
 	WorkerNodes int
 	// DisableDefaultCNI indicates whether to disable Talos's default CNI (Flannel).
-	// When true, generates a disable-default-cni.yaml patch to set cluster.network.cni.name to "none".
+	// When true, generates a version-appropriate disable-default-cni.yaml patch.
 	// This is required when using an alternative CNI like Cilium.
 	DisableDefaultCNI bool
 	// EnableKubeletCertRotation indicates whether to enable kubelet serving certificate rotation.
@@ -171,7 +158,7 @@ type Config struct {
 	// always restricted to the private network CIDR.
 	AllowedCIDRs []string
 	// EnableOIDC indicates whether to generate an OIDC API server configuration patch.
-	// When true, generates an oidc.yaml patch with cluster.apiServer.extraArgs for OIDC.
+	// Talos 1.14 uses KubeAuthenticationConfig; older releases use API-server flags.
 	EnableOIDC bool
 	// OIDCIssuerURL is the OIDC provider's issuer URL.
 	OIDCIssuerURL string
@@ -187,6 +174,10 @@ type Config struct {
 	OIDCGroupsPrefix string
 	// OIDCCAFile is the path to the CA certificate for self-signed OIDC providers.
 	OIDCCAFile string
+	// MultiDocumentKubernetesConfig generates the Talos 1.14 Kubernetes
+	// configuration resources instead of the legacy cluster fields. Enable this
+	// only when the config manager uses a matching Talos version contract.
+	MultiDocumentKubernetesConfig bool
 }
 
 // Generator generates the Talos directory structure.
@@ -559,14 +550,9 @@ func writeOIDCAPIServerArgs(builder *strings.Builder, model *Config) {
 // writeOIDCCAMachineFiles embeds the OIDC CA certificate content into a Talos
 // machine.files block, making it available at OIDCCAContainerPath on the node.
 func writeOIDCCAMachineFiles(builder *strings.Builder, caFilePath string) error {
-	canonicalCAPath, err := fsutil.EvalCanonicalPath(caFilePath)
+	caContent, err := readOIDCCAFile(caFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve OIDC CA file path %q: %w", caFilePath, err)
-	}
-
-	caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
-	if err != nil {
-		return fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
+		return err
 	}
 
 	_, _ = fmt.Fprintf(builder, "machine:\n")
@@ -583,4 +569,18 @@ func writeOIDCCAMachineFiles(builder *strings.Builder, caFilePath string) error 
 	_, _ = fmt.Fprintf(builder, "---\n")
 
 	return nil
+}
+
+func readOIDCCAFile(caFilePath string) ([]byte, error) {
+	canonicalCAPath, err := fsutil.EvalCanonicalPath(caFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve OIDC CA file path %q: %w", caFilePath, err)
+	}
+
+	caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
+	if err != nil {
+		return nil, fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
+	}
+
+	return caContent, nil
 }

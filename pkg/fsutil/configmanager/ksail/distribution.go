@@ -23,7 +23,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"google.golang.org/protobuf/encoding/protojson"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
@@ -450,8 +449,15 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		// no scaffolded talos/ dir, this fallback must still honor a pin or cap the
 		// default to the pinned Talos version — otherwise a pinned older Talos would
 		// be paired with an incompatible default Kubernetes version.
-		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
-			m.resolveTalosKubernetesVersion(), patches,
+		versionContract, contractErr := talosconfigmanager.ParseVersionContract(
+			m.Config.Spec.Cluster.Talos.Version,
+		)
+		if contractErr != nil {
+			return fmt.Errorf("resolve pinned Talos version contract: %w", contractErr)
+		}
+
+		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+			m.resolveTalosKubernetesVersion(), versionContract, patches,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create default Talos config: %w", err)
@@ -509,7 +515,7 @@ func disableDefaultCNIPatch() talosconfigmanager.Patch {
 	return talosconfigmanager.Patch{
 		Path:    "disable-default-cni",
 		Scope:   talosconfigmanager.PatchScopeCluster,
-		Content: []byte(talosgenerator.DisableDefaultCNIPatchYAML),
+		Content: []byte(talosconfigmanager.DisableDefaultCNIPatchYAML(false)),
 	}
 }
 
@@ -1034,30 +1040,19 @@ func ingressFirewallPatches(
 
 // applyPinnedVersionContract sets the version contract on the Talos config manager
 // when a pinned Talos version is specified. Returns an error if the version cannot
-// be parsed. Does nothing when pinnedVersion is empty.
+// be parsed. An empty pin retains the conservative Talos 1.12 default contract.
 func applyPinnedVersionContract(
 	pinnedVersion string,
 	talosManager *talosconfigmanager.ConfigManager,
 ) error {
-	pinnedVersion = strings.TrimSpace(pinnedVersion)
-	if pinnedVersion == "" {
-		return nil
-	}
-
-	if !strings.HasPrefix(pinnedVersion, "v") {
-		pinnedVersion = "v" + pinnedVersion
-	}
-
-	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
+	contract, err := talosconfigmanager.ParseVersionContract(pinnedVersion)
 	if err != nil {
-		return fmt.Errorf(
-			"parse Talos version contract for pinned version %q: %w",
-			pinnedVersion,
-			err,
-		)
+		return fmt.Errorf("resolve pinned Talos version contract: %w", err)
 	}
 
-	talosManager.WithVersionContract(contract)
+	if contract != nil {
+		talosManager.WithVersionContract(contract)
+	}
 
 	return nil
 }

@@ -251,7 +251,33 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			expectedFields: []string{"cluster.network.cni.name"},
 		},
 		{
-			name: "detect CNI changed from none to custom",
+			name: "detect CNI changed from none to flannel",
+			running: &v1alpha1.Config{
+				ClusterConfig: &v1alpha1.ClusterConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
+					},
+				},
+				MachineConfig: &v1alpha1.MachineConfig{},
+			},
+			desired: &v1alpha1.Config{
+				ClusterConfig: &v1alpha1.ClusterConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
+					},
+				},
+				MachineConfig: &v1alpha1.MachineConfig{},
+			},
+			expectedCount:  1,
+			expectedFields: []string{"cluster.network.cni.name"},
+		},
+		{
+			// Talos alpha.2 collapsed the CNI to a single K8sFlannelCNIConfig
+			// document, so the config interface only distinguishes Flannel from
+			// not-Flannel ("none"). Two distinct non-Flannel names are therefore
+			// indistinguishable and produce no change. ksail only ever generates
+			// "flannel" or "none", so this narrowing does not affect real configs.
+			name: "no change between two non-flannel CNI names (alpha.2 collapses to none)",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
 					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
@@ -268,8 +294,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 				},
 				MachineConfig: &v1alpha1.MachineConfig{},
 			},
-			expectedCount:  1,
-			expectedFields: []string{"cluster.network.cni.name"},
+			expectedCount: 0,
 		},
 		{
 			name: "no changes when both have nil CNI",

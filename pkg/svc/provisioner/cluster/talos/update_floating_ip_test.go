@@ -128,7 +128,8 @@ func fipUpdateTestServerWithServers(
 				calls.create.Add(1)
 
 				_, _ = responseWriter.Write([]byte(
-					`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`))
+					`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`,
+				))
 
 				return
 			}
@@ -578,7 +579,8 @@ func TestMergeFloatingIPChanges_DisabledIgnoresUnownedCollision(t *testing.T) {
 		func(responseWriter http.ResponseWriter, _ *http.Request) {
 			responseWriter.Header().Set("Content-Type", "application/json")
 			_, _ = responseWriter.Write(
-				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`))
+				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`),
+			)
 		},
 	)
 
@@ -633,7 +635,8 @@ func TestMergeFloatingIPChanges_UnownedCollisionFailsUpdate(t *testing.T) {
 		func(responseWriter http.ResponseWriter, _ *http.Request) {
 			responseWriter.Header().Set("Content-Type", "application/json")
 			_, _ = responseWriter.Write(
-				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`))
+				[]byte(`{"floating_ips":[` + fipUpdateUnownedFloatingIPJSON + `]}`),
+			)
 		},
 	)
 
@@ -813,7 +816,7 @@ func TestRefreshFloatingIPEndpointAfterNodeChanges_RefreshesControlPlaneInventor
 	require.NoError(t, err)
 
 	config := provisioner.TalosConfigsForTest().ControlPlane()
-	certSANs := config.Cluster().CertSANs()
+	certSANs := config.K8sAPIServerConfig().CertSANs()
 	assert.Contains(t, certSANs, "192.0.2.10")
 	assert.Contains(t, certSANs, "203.0.113.5")
 	assert.Contains(t, certSANs, "203.0.113.6",
@@ -1042,8 +1045,9 @@ func TestPrepareFloatingIPConfigForNewControlPlane_RefreshesSANsWithoutReassigni
 		t.Context(), hzProvider, "fip-cluster",
 		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
 	))
-	assert.NotContains(t,
-		provisioner.TalosConfigsForTest().ControlPlane().Cluster().CertSANs(),
+	assert.NotContains(
+		t,
+		provisioner.TalosConfigsForTest().ControlPlane().K8sAPIServerConfig().CertSANs(),
 		"203.0.113.6",
 	)
 	calls.create.Store(0)
@@ -1055,7 +1059,7 @@ func TestPrepareFloatingIPConfigForNewControlPlane_RefreshesSANsWithoutReassigni
 
 	controlPlane := provisioner.TalosConfigsForTest().ControlPlane()
 	assert.Equal(t, "192.0.2.10", controlPlane.Cluster().Endpoint().Hostname())
-	assert.Contains(t, controlPlane.Cluster().CertSANs(), "203.0.113.6")
+	assert.Contains(t, controlPlane.K8sAPIServerConfig().CertSANs(), "203.0.113.6")
 	assert.Contains(t, controlPlane.RawV1Alpha1().MachineConfig.MachineCertSANs, "203.0.113.6")
 	assert.Zero(t, calls.create.Load(), "the read-only refresh must not create a floating IP")
 	assert.Zero(t, calls.assign.Load(), "the read-only refresh must not reassign a floating IP")
@@ -1305,7 +1309,7 @@ func TestReconcileFloatingIPEndpoint_AppliesDetectedChange(t *testing.T) {
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
 		"the regenerated endpoint must be the floating IP")
-	assert.Contains(t, configs.ControlPlane().Cluster().CertSANs(), "203.0.113.5",
+	assert.Contains(t, configs.ControlPlane().K8sAPIServerConfig().CertSANs(), "203.0.113.5",
 		"control-plane node IPs must stay in the SAN set")
 
 	devices := configs.ControlPlane().Machine().Network().Devices()

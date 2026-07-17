@@ -6,6 +6,7 @@ import (
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -505,7 +506,7 @@ func TestConfigs_WithKubernetesVersion(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "1.33.0", rebuilt.KubernetesVersion())
-		assert.Contains(t, rebuilt.ControlPlane().Cluster().APIServer().Image(), ":v1.33.0")
+		assert.Contains(t, rebuilt.ControlPlane().K8sAPIServerConfig().Image(), ":v1.33.0")
 
 		// PKI is preserved so the regenerated config still matches the cluster.
 		assert.Equal(t,
@@ -559,7 +560,7 @@ func TestConfigs_WithCertSANs(t *testing.T) {
 		updated, err := configs.WithCertSANs([]string{"127.0.0.1", "localhost", "5.6.7.8"})
 		require.NoError(t, err)
 
-		sans := updated.ControlPlane().Cluster().CertSANs()
+		sans := updated.ControlPlane().K8sAPIServerConfig().CertSANs()
 		assert.Contains(t, sans, "5.6.7.8")
 		assert.Contains(t, sans, "127.0.0.1")
 
@@ -581,6 +582,24 @@ func TestConfigs_WithCertSANs(t *testing.T) {
 		same, err := configs.WithCertSANs(nil)
 		require.NoError(t, err)
 		assert.Same(t, configs, same)
+	})
+
+	t.Run("adds API server SANs to Talos 1.14 multi-document config", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager(
+			t.TempDir(),
+			"cluster-114",
+			"1.36.0",
+			"10.5.0.0/24",
+		).WithVersionContract(talosconfig.TalosVersion1_14)
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		updated, err := configs.WithCertSANs([]string{"127.0.0.1", "203.0.113.10"})
+		require.NoError(t, err)
+
+		assert.Contains(t, updated.ControlPlane().K8sAPIServerConfig().CertSANs(), "203.0.113.10")
 	})
 }
 

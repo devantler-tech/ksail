@@ -22,12 +22,15 @@ const (
 )
 
 // machineClusterConfig is a minimal interface covering the Machine() and Cluster()
-// accessors shared by config/config.Config and config.Provider. Using this instead
-// of the full Config interface allows unit tests to construct lightweight v1alpha1
-// structs without satisfying the entire interface.
+// accessors, plus the Talos alpha.2 multi-document CNI/network accessors, shared by
+// config/config.Config and config.Provider. Using this instead of the full Config
+// interface allows unit tests to construct lightweight v1alpha1 structs (whose
+// machinery bridge implements these) without satisfying the entire interface.
 type machineClusterConfig interface {
 	Machine() talosconfigtypes.MachineConfig
 	Cluster() talosconfigtypes.ClusterConfig
+	K8sNetworkConfig() talosconfigtypes.K8sNetworkConfig
+	K8sFlannelCNIConfig() talosconfigtypes.K8sFlannelCNIConfig
 }
 
 // detectDisruptiveConfigChanges compares the desired machine config against the
@@ -181,35 +184,35 @@ func detectCNIChanges(
 // defaultTalosCNI is the Talos default CNI name when no CNI config is specified.
 const defaultTalosCNI = "flannel"
 
+// cniNone is the CNI name Talos reports when the built-in CNI is disabled. In the
+// alpha.2 multi-document model this corresponds to a nil K8sFlannelCNIConfig.
+const cniNone = "none"
+
 // cniName extracts the CNI name from a Talos config.
 // Returns "flannel" (Talos default) when the config has no CNI section,
 // preventing false-positive diffs when one side omits the CNI stanza.
+//
+// Talos alpha.2 removed the top-level CNI accessor: Flannel is the only built-in CNI,
+// exposed as a K8sFlannelCNIConfig document, and the machinery bridge returns a nil
+// K8sFlannelCNIConfig whenever the CNI is not "flannel" (i.e. "none"). A nil
+// K8sNetworkConfig means the config carries no cluster-network section at all, which
+// keeps the previous "default to flannel" behaviour so an omitted stanza does not
+// read as a disruptive change. ksail only ever generates the default Flannel or, via
+// its disable-default-cni patch, "none", so this flannel/none distinction is exact.
 func cniName(cfg machineClusterConfig) string {
 	if cfg == nil {
 		return defaultTalosCNI
 	}
 
-	cluster := cfg.Cluster()
-	if cluster == nil {
+	if cfg.K8sNetworkConfig() == nil {
 		return defaultTalosCNI
 	}
 
-	network := cluster.Network()
-	if network == nil {
-		return defaultTalosCNI
+	if cfg.K8sFlannelCNIConfig() == nil {
+		return cniNone
 	}
 
-	cni := network.CNI()
-	if cni == nil {
-		return defaultTalosCNI
-	}
-
-	name := cni.Name()
-	if name == "" {
-		return defaultTalosCNI
-	}
-
-	return name
+	return defaultTalosCNI
 }
 
 // detectDiskQuotaChanges compares disk quota support configuration.

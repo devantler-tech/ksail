@@ -354,3 +354,652 @@ func TestConfigManager_WithVersionContract_InvalidatesCachedConfig(t *testing.T)
 	assert.NotSame(t, configs1, configs2,
 		"WithVersionContract should invalidate the cached config so Load regenerates it")
 }
+
+func TestConfigManager_Load_MigratesLegacyCNIPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "disable-default-cni.yaml"),
+		[]byte("cluster:\n  network:\n    cni:\n      name: none\n"),
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	require.NotNil(t, controlPlane.K8sNetworkConfig())
+	assert.Nil(t, controlPlane.K8sFlannelCNIConfig())
+}
+
+func TestConfigManager_Load_MigratesVariantLegacyCNIPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	// A hand-written variant: a leading comment means the patch is not byte-for-byte the
+	// canonical disable-CNI patch, so it must be detected structurally (ksail#6167).
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "disable-default-cni.yaml"),
+		[]byte(
+			"# disable the built-in Flannel CNI\ncluster:\n  network:\n    cni:\n      name: none\n",
+		),
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	require.NotNil(t, controlPlane.K8sNetworkConfig())
+	assert.Nil(t, controlPlane.K8sFlannelCNIConfig(),
+		"a variant disable-CNI patch must still drop the Flannel document under Talos 1.14")
+	assert.True(t, configs.IsCNIDisabled())
+}
+
+func TestConfigManager_Load_MigratesLegacyAPIServerPatchWithoutOIDC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{"audit-log-maxage": {"30"}}, apiServer.ExtraArgs())
+}
+
+func TestConfigManager_Load_RejectsDuplicateLegacyAPIServerDocuments(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+---
+cluster:
+  apiServer:
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "multiple legacy cluster.apiServer documents are not supported")
+}
+
+func TestConfigManager_Load_PreservesLegacyAPIServerPatchBeforeMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      audit-log-maxage: "30"
+`)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(clusterDir, "api-server.yaml"),
+		legacyAPIServer,
+		0o600,
+	))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-113", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_13)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	patches := configs.Patches()
+	require.Len(t, patches, 1)
+	assert.Equal(t, legacyAPIServer, patches[0].Content)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{"audit-log-maxage": {"30"}}, apiServer.ExtraArgs())
+}
+
+func TestConfigManager_Load_MigratesLegacyOIDCPatchForMultiDocumentConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/ca.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        test-ca
+        -----END CERTIFICATE-----
+---
+cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-username-claim: "email"
+      oidc-username-prefix: "oidc:"
+      oidc-groups-claim: "groups"
+      oidc-groups-prefix: "oidc:"
+      oidc-ca-file: "/etc/kubernetes/oidc/ca.crt"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	authConfig := controlPlane.K8sAuthenticationConfig().Configuration()
+	jwt, found := authConfig["jwt"].([]any)
+	require.True(t, found)
+	require.Len(t, jwt, 1)
+	authenticator, found := jwt[0].(map[string]any)
+	require.True(t, found)
+	issuer, found := authenticator["issuer"].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, "https://dex.example.com", issuer["url"])
+	assert.Equal(t, []any{"ksail"}, issuer["audiences"])
+	assert.Contains(t, issuer["certificateAuthority"], "test-ca")
+	assert.Empty(t, controlPlane.K8sAPIServerConfig().ExtraArgs())
+}
+
+func TestConfigManager_Load_MigratesLegacyOIDCPatchWithCertificateAuthorityInSeparatePatch(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// The kube-apiserver patch references the OIDC CA by path, but the machine.files
+	// entry providing it lives in a separate patch. This is valid pre-1.14, because
+	// every patch is applied before kube-apiserver reads the file. The CA patch is
+	// named so it sorts *after* the API-server patch, proving the lookup spans the
+	// whole patch set rather than only the patches seen so far.
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-ca-file: "/etc/kubernetes/oidc/ca.crt"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	legacyOIDCCA := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/ca.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        split-ca
+        -----END CERTIFICATE-----
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "zz-oidc-ca.yaml"), legacyOIDCCA, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	authConfig := controlPlane.K8sAuthenticationConfig().Configuration()
+	jwt, found := authConfig["jwt"].([]any)
+	require.True(t, found)
+	require.Len(t, jwt, 1)
+	authenticator, found := jwt[0].(map[string]any)
+	require.True(t, found)
+	issuer, found := authenticator["issuer"].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, "https://dex.example.com", issuer["url"])
+	assert.Contains(t, issuer["certificateAuthority"], "split-ca")
+}
+
+func TestConfigManager_Load_RejectsLegacyOIDCPatchWithMissingCertificateAuthority(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// oidc-ca-file references a path no patch in the set provides. Resolving the CA
+	// across the whole patch set must not turn this into a silent pass.
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-ca-file: "/etc/kubernetes/oidc/absent.crt"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	unrelatedCA := []byte(`machine:
+  files:
+    - path: "/etc/kubernetes/oidc/other.crt"
+      content: |
+        -----BEGIN CERTIFICATE-----
+        other-ca
+        -----END CERTIFICATE-----
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "zz-other-ca.yaml"), unrelatedCA, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CA content is missing")
+}
+
+func TestConfigManager_Load_RejectsUnsupportedLegacyOIDCExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+      oidc-required-claim: "tenant=engineering"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unsupported legacy OIDC extra argument "oidc-required-claim"`)
+}
+
+// Talos 1.14 rejects these prefixes in KubeAPIServerConfigV1Alpha1.validateArgs. ksail
+// migrated them into extraArgs verbatim, so the failure only surfaced at apply time, from
+// Talos, against a config ksail had already reported as migrated. See ksail#6167.
+func TestConfigManager_Load_RejectsDeniedLegacyAPIServerExtraArgs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		extraArg    string
+		replacement string
+	}{
+		{
+			name:        "anonymous auth",
+			extraArg:    "anonymous-auth",
+			replacement: "KubeAuthenticationConfig",
+		},
+		{
+			name:        "authentication config",
+			extraArg:    "authentication-config",
+			replacement: "KubeAuthenticationConfig",
+		},
+		{
+			name:        "authorization config",
+			extraArg:    "authorization-config",
+			replacement: "KubeAuthorizationConfig",
+		},
+		{
+			name:        "authorization mode",
+			extraArg:    "authorization-mode",
+			replacement: "KubeAuthorizationConfig",
+		},
+		{
+			name:        "authorization webhook prefix",
+			extraArg:    "authorization-webhook-cache-authorized-ttl",
+			replacement: "KubeAuthorizationConfig",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			manager := legacyAPIServerExtraArgManager(t, testCase.extraArg)
+
+			_, err := manager.Load(configmanager.LoadOptions{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "kube-apiserver extra argument is rejected by Talos 1.14")
+			require.ErrorContains(t, err, `"`+testCase.extraArg+`"`)
+			require.ErrorContains(t, err, "use "+testCase.replacement+" instead")
+		})
+	}
+}
+
+// legacyAPIServerExtraArgManager builds a 1.14-contract manager over a legacy patch carrying
+// a single kube-apiserver extra argument.
+func legacyAPIServerExtraArgManager(t *testing.T, extraArg string) *talos.ConfigManager {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyPatch := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      ` + extraArg + `: "value"
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "apiserver.yaml"), legacyPatch, 0o600),
+	)
+
+	return talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+}
+
+// The denied-prefix check must not reject an argument Talos still accepts.
+func TestConfigManager_Load_MigratesBenignLegacyAPIServerExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyPatch := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      authorization-something-else: "value"
+      anonymous: "value"
+      feature-gates: MutatingAdmissionPolicy=true
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "apiserver.yaml"), legacyPatch, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+}
+
+func TestConfigManager_Load_RejectsOrphanedLegacyOIDCExtraArg(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    extraArgs:
+      oidc-required-claim: "tenant=engineering"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unsupported legacy OIDC extra argument "oidc-required-claim"`)
+}
+
+func TestConfigManager_Load_MigratesLegacyOIDCAndAPIServerFields(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyOIDC := []byte(`cluster:
+  apiServer:
+    certSANs:
+      - api.example.com
+    extraArgs:
+      feature-gates: MutatingAdmissionPolicy=true
+      oidc-issuer-url: "https://dex.example.com"
+      oidc-client-id: "ksail"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "oidc.yaml"), legacyOIDC, 0o600))
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	apiServer := configs.ControlPlane().K8sAPIServerConfig()
+	assert.Contains(t, apiServer.CertSANs(), "api.example.com")
+	assert.Equal(t, map[string][]string{
+		"feature-gates": {"MutatingAdmissionPolicy=true"},
+	}, apiServer.ExtraArgs())
+}
+
+const legacyStructuredAPIServerPatch = `cluster:
+  apiServer:
+    admissionControl:
+      - name: EventRateLimit
+        configuration:
+          apiVersion: eventratelimit.admission.k8s.io/v1alpha1
+          kind: Configuration
+          limits:
+            - type: Server
+              qps: 100
+              burst: 200
+    auditPolicy:
+      apiVersion: audit.k8s.io/v1
+      kind: Policy
+      rules:
+        - level: RequestResponse
+    authorizationConfig:
+      - name: custom-webhook
+        type: Webhook
+        webhook:
+          timeout: 3s
+          subjectAccessReviewVersion: v1
+          matchConditionSubjectAccessReviewVersion: v1
+          failurePolicy: Deny
+          connectionInfo:
+            type: InClusterConfig
+`
+
+func TestConfigManager_Load_MigratesLegacyStructuredAPIServerFields(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(clusterDir, "structured-api-server.yaml"),
+			[]byte(legacyStructuredAPIServerPatch),
+			0o600,
+		),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
+	assertMigratedStructuredAPIServerFields(t, controlPlane)
+}
+
+func assertMigratedStructuredAPIServerFields(
+	t *testing.T,
+	controlPlane talosconfig.Provider,
+) {
+	t.Helper()
+
+	admissionConfigs := make(map[string]map[string]any)
+	for _, config := range controlPlane.K8sAdmissionControlPluginConfigs() {
+		admissionConfigs[config.Name()] = config.Configuration()
+	}
+
+	assert.Equal(t, map[string]any{
+		"apiVersion": "eventratelimit.admission.k8s.io/v1alpha1",
+		"kind":       "Configuration",
+		"limits": []any{
+			map[string]any{"type": "Server", "qps": 100, "burst": 200},
+		},
+	}, admissionConfigs["EventRateLimit"])
+	assert.Equal(t, map[string]any{
+		"apiVersion": "audit.k8s.io/v1",
+		"kind":       "Policy",
+		"rules": []any{
+			map[string]any{"level": "RequestResponse"},
+		},
+	}, controlPlane.K8sAuditPolicyConfig().Configuration())
+
+	authorizers := make(map[string]struct {
+		kind    string
+		webhook map[string]any
+	})
+	for _, config := range controlPlane.K8sAuthorizerConfigs() {
+		authorizers[config.Name()] = struct {
+			kind    string
+			webhook map[string]any
+		}{kind: config.Type(), webhook: config.Webhook()}
+	}
+
+	require.Len(t, authorizers, 3)
+	assert.Equal(t, "Node", authorizers["node"].kind)
+	assert.Equal(t, "RBAC", authorizers["rbac"].kind)
+	assert.Equal(t, "Webhook", authorizers["custom-webhook"].kind)
+	assert.Equal(t, map[string]any{
+		"timeout":                    "3s",
+		"subjectAccessReviewVersion": "v1",
+		"matchConditionSubjectAccessReviewVersion": "v1",
+		"failurePolicy": "Deny",
+		"connectionInfo": map[string]any{
+			"type": "InClusterConfig",
+		},
+	}, authorizers["custom-webhook"].webhook)
+}
+
+func TestConfigManager_Load_RejectsLegacyAPIServerExtraVolumesForMultiDocumentConfig(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAPIServer := []byte(`cluster:
+  apiServer:
+    extraVolumes:
+      - hostPath: /var/lib/example
+        mountPath: /var/lib/example
+        readonly: true
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "extra-volumes.yaml"), legacyAPIServer, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	_, err := manager.Load(configmanager.LoadOptions{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, `field "extraVolumes"`)
+	require.ErrorContains(t, err, "has no Talos 1.14 KubeAPIServerConfig equivalent")
+}
+
+func TestConfigManager_Load_MigratesCustomNamedDefaultAuthorizers(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	legacyAuthorizers := []byte(`cluster:
+  apiServer:
+    authorizationConfig:
+      - type: Node
+        name: custom-node
+      - type: RBAC
+        name: custom-rbac
+`)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(clusterDir, "authorizers.yaml"), legacyAuthorizers, 0o600),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	authorizers := make(map[string]string)
+	for _, config := range configs.ControlPlane().K8sAuthorizerConfigs() {
+		authorizers[config.Name()] = config.Type()
+	}
+
+	assert.Equal(t, map[string]string{
+		"custom-node": "Node",
+		"custom-rbac": "RBAC",
+	}, authorizers)
+}

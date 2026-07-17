@@ -6,10 +6,15 @@ import (
 	"strings"
 
 	"github.com/siderolabs/image-factory/pkg/schematic"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
 
-// factoryInstallerRepository is the OCI repository for Talos Image Factory installer images.
-const factoryInstallerRepository = "factory.talos.dev/installer"
+const (
+	// factoryInstallerRepository is the legacy Image Factory installer repository.
+	factoryInstallerRepository = "factory.talos.dev/installer"
+	// factoryMetalInstallerRepository is the Talos 1.14+ metal installer repository.
+	factoryMetalInstallerRepository = "factory.talos.dev/metal-installer"
+)
 
 // Schematic is the upstream Image Factory schematic type.
 // Re-exported so callers don't need to import the image-factory package directly.
@@ -87,8 +92,22 @@ func NormalizeKernelArgs(extraKernelArgs []string) []string {
 }
 
 // SchematicInstallerImage returns the Image Factory installer image reference
-// for the given schematic ID and Talos version.
-// Format: factory.talos.dev/installer/{schematicID}:{version}.
+// for the given schematic ID and Talos version. Talos 1.14 moved installer
+// images to platform-specific repositories, so metal targets use
+// factory.talos.dev/metal-installer/{schematicID}:{version}; older versions
+// retain factory.talos.dev/installer/{schematicID}:{version}.
 func SchematicInstallerImage(schematicID, talosVersion string) string {
-	return fmt.Sprintf("%s/%s:%s", factoryInstallerRepository, schematicID, talosVersion)
+	repository := factoryInstallerRepository
+
+	contractVersion := strings.TrimSpace(talosVersion)
+	if contractVersion != "" && !strings.HasPrefix(contractVersion, "v") {
+		contractVersion = "v" + contractVersion
+	}
+
+	contract, err := talosconfig.ParseContractFromVersion(contractVersion)
+	if err == nil && contract.MultidocKubernetesConfigSupported() {
+		repository = factoryMetalInstallerRepository
+	}
+
+	return fmt.Sprintf("%s/%s:%s", repository, schematicID, talosVersion)
 }

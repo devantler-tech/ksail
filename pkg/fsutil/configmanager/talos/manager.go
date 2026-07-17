@@ -163,6 +163,11 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Append additional runtime patches
 	patches = append(patches, m.additionalPatches...)
 
+	patches, err = migrateKubernetesPatchesForContract(patches, m.versionContract)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate Kubernetes patches: %w", err)
+	}
+
 	// Create Configs from patches (with extensions if configured)
 	configs, err := newConfigsWithExtensions(
 		m.clusterName,

@@ -9,15 +9,20 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
-// vclusterNetworkPrefix is the Docker network name prefix used by VCluster.
-const vclusterNetworkPrefix = "vcluster."
+const (
+	// vclusterNetworkPrefix is the Docker network name prefix used by VCluster.
+	vclusterNetworkPrefix = "vcluster."
+	// defaultTalosNetworkName is Talos's default Docker network name.
+	defaultTalosNetworkName = "talos-default"
+)
 
 // resolveRegistryHost determines the registry host to use in ArgoCD repository URLs.
 //
-// For VCluster distributions, pods use CoreDNS which cannot resolve Docker container
-// names. This function inspects the registry container to get its Docker IP address
-// on the VCluster network. For all other distributions, it returns an empty string
-// to indicate the default container name should be used.
+// Some Docker-backed distributions run workload pods behind Kubernetes DNS that
+// cannot resolve Docker container names. This function inspects the registry
+// container to get its Docker IP address on that distribution's Docker network.
+// For all other distributions, it returns an empty string to indicate the
+// default container name should be used.
 func resolveRegistryHost(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -28,7 +33,7 @@ func resolveRegistryHost(
 	}
 
 	containerName := registry.BuildLocalRegistryName(clusterName)
-	networkName := vclusterNetworkPrefix + clusterName
+	networkName := registryHostNetworkName(clusterCfg, clusterName)
 
 	dockerClient, err := dockerclient.GetDockerClient()
 	if err != nil {
@@ -47,14 +52,20 @@ func resolveRegistryHost(
 	return registryIP, nil
 }
 
-// needsRegistryIPResolution returns true when the distribution requires resolving
-// the registry container's Docker IP instead of using its container name.
+// needsRegistryIPResolution returns true when the distribution requires
+// resolving the registry container's Docker IP instead of using its container
+// name.
 func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 	if clusterCfg == nil {
 		return false
 	}
 
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionVCluster {
+	provider := clusterCfg.Spec.Cluster.Provider
+	if provider == "" {
+		provider = v1alpha1.DefaultProviderForDistribution(clusterCfg.Spec.Cluster.Distribution)
+	}
+
+	if !provider.NeedsLocalDocker() {
 		return false
 	}
 
@@ -63,7 +74,52 @@ func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 		return false
 	}
 
-	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
+		return false
+	}
+
+	return supportsRegistryNetworkOverride(clusterCfg.Spec.Cluster.Distribution)
+}
+
+func supportsRegistryNetworkOverride(distribution v1alpha1.Distribution) bool {
+	switch distribution {
+	case v1alpha1.DistributionTalos, v1alpha1.DistributionVCluster:
+		return true
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS,
+		v1alpha1.DistributionGKE,
+		v1alpha1.DistributionAKS:
+		return false
+	default:
+		return false
+	}
+}
+
+func registryHostNetworkName(clusterCfg *v1alpha1.Cluster, clusterName string) string {
+	if clusterCfg == nil {
+		return ""
+	}
+
+	distribution := clusterCfg.Spec.Cluster.Distribution
+	if !supportsRegistryNetworkOverride(distribution) {
+		return ""
+	}
+
+	if distribution == v1alpha1.DistributionTalos {
+		if clusterName == "" {
+			return defaultTalosNetworkName
+		}
+
+		return clusterName
+	}
+
+	if distribution == v1alpha1.DistributionVCluster {
+		return vclusterNetworkPrefix + clusterName
+	}
+
+	return ""
 }
 
 // ResolveRegistryHostForCluster is the exported variant of resolveRegistryHost.

@@ -73,6 +73,24 @@ func TestBuildDistributionConfigTalosHonorsVersionPin(t *testing.T) {
 	assert.Equal(t, buildClusterName, config.Talos.Name, "the bundle is named after the cluster")
 }
 
+// TestBuildDistributionConfigTalosUsesPinnedVersionContract verifies the shared
+// web/local builder emits Talos 1.14's multi-document configuration shape.
+func TestBuildDistributionConfigTalosUsesPinnedVersionContract(t *testing.T) {
+	t.Parallel()
+
+	pinned := clusterWith(v1alpha1.DistributionTalos)
+	pinned.Spec.Cluster.Talos.Version = "v1.14.0-alpha.2"
+
+	config, err := clusterprovisioner.BuildDistributionConfig(pinned, buildClusterName, false)
+	require.NoError(t, err)
+	require.NotNil(t, config.Talos)
+
+	apiServer := config.Talos.ControlPlane().K8sAPIServerConfig()
+	require.NotNil(t, apiServer)
+	assert.False(t, apiServer.InjectDefaultAuthorizers(),
+		"Talos 1.14 must use the multi-document API server config")
+}
+
 // TestBuildDistributionConfigSimpleDistributions covers the name-only distributions delegated to
 // SimpleDistributionConfig.
 func TestBuildDistributionConfigSimpleDistributions(t *testing.T) {

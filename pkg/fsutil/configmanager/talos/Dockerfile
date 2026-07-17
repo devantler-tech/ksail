@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/siderolabs/talos → DefaultTalosImage in this package
 
-FROM ghcr.io/siderolabs/talos:v1.13.6@sha256:f2e2b7e5812b2b59c1acfe6af7516231aeeef79fb1ffff6b57ad987f8dd47a6e
+FROM ghcr.io/siderolabs/talos:v1.14.0-alpha.2@sha256:cb52d0cf8c5852deb26e51925503f0d59602573ccdf53cb602cdeb9a084d6955

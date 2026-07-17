@@ -59,6 +59,11 @@ const (
 // kubernetes/autoscaler#8492, closed as working-as-intended).
 const LabelAutoscaled = "ksail.io/autoscaled"
 
+// labelValueTrue is the string value stamped for boolean marker node/container
+// labels (LabelAutoscaled, LabelTalosOwned) — extracted so the repeated literal
+// stays a single source of truth.
+const labelValueTrue = "true"
+
 // GenerateAutoscalerWorkerConfig generates a stripped Talos worker config
 // suitable for autoscaler-provisioned compute-only nodes. It sets
 // machine.install.wipe to true, removes machine.disks (autoscaler nodes have
@@ -101,7 +106,7 @@ func GenerateAutoscalerWorkerConfig(
 		}
 
 		delete(cfg.MachineConfig.MachineNodeLabels, "node.longhorn.io/create-default-disk")
-		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = "true"
+		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = labelValueTrue
 
 		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
 
