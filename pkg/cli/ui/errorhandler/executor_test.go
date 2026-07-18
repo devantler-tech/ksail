@@ -123,6 +123,46 @@ func TestExecutorExecuteFlushesWarningsOnExitCodeResult(t *testing.T) {
 	}
 }
 
+// TestExecutorExecuteDropsCobraErrorOnExitCodeResult guards that the exit-code path does
+// NOT replay Cobra's automatic "Error: <err>" line. A command that leaves SilenceErrors
+// unset (like `cluster diff`, which sets only SilenceUsage) has Cobra append that line to
+// the captured stderr; main.go prints no error for an exit-code result, so surfacing
+// Cobra's line would be spurious noise. The command's own warning must still reach stderr.
+func TestExecutorExecuteDropsCobraErrorOnExitCodeResult(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use: "test",
+		// Mirror `cluster diff`: SilenceUsage set, SilenceErrors UNSET, so Cobra
+		// appends its own "Error: <err>" line to the captured stderr.
+		SilenceUsage: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: drift detected")
+
+			return &exitCodeError{code: 2}
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err == nil {
+		t.Fatal("expected the exit-code error to propagate, got nil")
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "heads up: drift detected") {
+		t.Fatalf("expected the exit-code-path warning to reach stderr, got %q", got)
+	}
+
+	if strings.Contains(got, "Error: exit code 2") {
+		t.Fatalf("Cobra's auto error line must not be replayed for exit-code results, got %q", got)
+	}
+}
+
 func TestExecutorExecuteNilCommand(t *testing.T) {
 	t.Parallel()
 

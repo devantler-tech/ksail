@@ -50,7 +50,7 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 	// them like the success path. Genuine failures instead surface their stderr via the
 	// normalized message that main.go prints, so they are not flushed here.
 	if isExitCodeResult(err) {
-		flushWarnings(originalErrWriter, &errBuf)
+		flushExitCodeWarnings(originalErrWriter, &errBuf, err)
 	}
 
 	message := normalize(errBuf.String())
@@ -68,6 +68,27 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 func flushWarnings(w io.Writer, buf *bytes.Buffer) {
 	if buf.Len() > 0 {
 		_, _ = w.Write(buf.Bytes())
+	}
+}
+
+// flushExitCodeWarnings forwards the stderr an exit-code result captured, minus the
+// automatic "Error: <err>" line Cobra appends when a command leaves SilenceErrors unset
+// (e.g. `cluster diff`, which sets only SilenceUsage). main.go surfaces an exit-code
+// result as a process exit code and prints no error of its own, so replaying Cobra's
+// error line here would be spurious noise; the command's real warnings still reach the
+// user. Cobra writes the error last (SilenceUsage suppresses the trailing usage) as
+// `fmt.Fprintln(w, "Error:", err.Error())`, i.e. exactly "Error: <msg>\n".
+func flushExitCodeWarnings(writer io.Writer, buf *bytes.Buffer, err error) {
+	out := buf.Bytes()
+
+	if err != nil {
+		cobraError := "Error: " + err.Error()
+		out = bytes.TrimSuffix(out, []byte(cobraError+"\n"))
+		out = bytes.TrimSuffix(out, []byte(cobraError))
+	}
+
+	if len(out) > 0 {
+		_, _ = writer.Write(out)
 	}
 }
 
