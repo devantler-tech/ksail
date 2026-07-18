@@ -344,6 +344,45 @@ func TestBuildInstance(t *testing.T) {
 	}
 }
 
+func TestBuildInstanceAddsFluxVerifyKustomizePatch(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "ghcr.io/example/repo",
+				},
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "k8s",
+				Flux: v1alpha1.FluxConfig{
+					Verify: v1alpha1.FluxVerifySpec{
+						Provider: providerCosign,
+						MatchOIDCIdentity: []v1alpha1.FluxVerifyOIDCIdentity{
+							{Issuer: "issuer", Subject: "subject"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	instance, err := fluxinstaller.BuildInstance(clusterCfg, "test-cluster", "")
+	require.NoError(t, err)
+	require.NotNil(t, instance.Spec.Sync)
+	require.NotNil(t, instance.Spec.Sync.Kustomize)
+	require.Len(t, instance.Spec.Sync.Kustomize.Patches, 1)
+
+	patch := instance.Spec.Sync.Kustomize.Patches[0]
+	assert.Equal(t, "OCIRepository", patch.Target.Kind)
+	assert.Equal(t, "flux-system", patch.Target.Name)
+	assert.Contains(t, patch.Patch, "path: /spec/verify")
+	assert.Contains(t, patch.Patch, "provider: cosign")
+	assert.Contains(t, patch.Patch, "issuer: issuer")
+	assert.Contains(t, patch.Patch, "subject: subject")
+}
+
 func TestBuildRegistrySecret(t *testing.T) {
 	t.Parallel()
 

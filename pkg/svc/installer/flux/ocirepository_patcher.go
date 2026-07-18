@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -239,4 +240,39 @@ func (p *ociRepositoryPatcher) tryPatch(
 		"failed to update OCIRepository %s/%s: %w",
 		fluxclient.DefaultNamespace, defaultOCIRepositoryName, updateErr,
 	)
+}
+
+// buildSyncKustomize returns FluxInstance sync kustomize patches that must be
+// applied by the Flux Operator before the generated sync resources can
+// reconcile. Signature verification is seeded here instead of patched only
+// after creation to avoid an initial unverified OCIRepository reconcile window.
+func buildSyncKustomize(clusterCfg *v1alpha1.Cluster) (*SyncKustomize, error) {
+	verify := clusterCfg.Spec.Workload.Flux.Verify
+	if !verify.Enabled() {
+		return nil, nil
+	}
+
+	verifyYAML, err := yaml.Marshal(buildVerifyPatch(verify))
+	if err != nil {
+		return nil, fmt.Errorf("marshal OCIRepository verify patch: %w", err)
+	}
+
+	return &SyncKustomize{Patches: []SyncKustomizePatch{{
+		Target: SyncKustomizePatchTarget{
+			Kind: fluxOCIRepositoryKind,
+			Name: defaultOCIRepositoryName,
+		},
+		Patch: "- op: add\n  path: /spec/verify\n  value:\n" + indentYAML(string(verifyYAML), "    "),
+	}}}, nil
+}
+
+func indentYAML(value string, indent string) string {
+	lines := strings.Split(value, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = indent + line
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
