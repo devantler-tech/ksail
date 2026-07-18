@@ -27,6 +27,7 @@ func LoadNeutral(
 	}
 
 	path := file.Name()
+
 	defer func() { _ = os.Remove(path) }()
 
 	_, writeErr := fmt.Fprintf(file, "[profile %s]\n", frozenProfile)
