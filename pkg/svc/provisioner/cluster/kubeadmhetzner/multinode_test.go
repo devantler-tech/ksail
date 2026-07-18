@@ -78,6 +78,7 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 	} {
 		assert.NotContains(t, spec.UserData, privatePath)
 	}
+
 	assert.NotContains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
 }
 
