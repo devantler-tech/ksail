@@ -283,13 +283,10 @@ func TestCreateAlreadyExists(t *testing.T) {
 	assert.Equal(t, 0, infra.ensureNetworkCalls)
 }
 
-// TestCreateHATopologyRoutesToMultiNodeBringUp pins that a multi-control-plane
-// kubeadm topology is no longer rejected wholesale: the strategy implements
-// [hetznerbase.HAControlPlaneComposer], so Create routes it to the shared
-// two-phase multi-node engine. The engine is exercised up to the first server
-// creation (the init control plane), whose composed spec proves the HA compose
-// ran; the erroring seam then surfaces, keeping the test hermetic.
-func TestCreateHATopologyRoutesToMultiNodeBringUp(t *testing.T) {
+// TestCreateHATopologyIsRejected pins that kubeadm Hetzner does not enable
+// multi-control-plane creation until additional control-plane private PKI can
+// be transferred without exposing it through provider user-data.
+func TestCreateHATopologyIsRejected(t *testing.T) {
 	t.Parallel()
 
 	infra := &fakeInfra{}
@@ -298,16 +295,11 @@ func TestCreateHATopologyRoutesToMultiNodeBringUp(t *testing.T) {
 	prov.Servers = servers
 
 	err := prov.Create(context.Background(), "")
-	require.ErrorIs(t, err, errBoom)
-	require.NotErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
+	require.NotErrorIs(t, err, errBoom)
 
-	// The guard no longer fires before the shared preamble: the infrastructure
-	// was ensured and the init control plane's fully-composed spec reached the
-	// server-creation seam carrying the stable controlPlaneEndpoint.
-	assert.Equal(t, 1, infra.ensureNetworkCalls)
-	assert.Equal(t, 1, servers.calls)
-	assert.Equal(t, "test-cluster-controlplane-0", servers.lastOpts.Name)
-	assert.Contains(t, servers.lastOpts.UserData, "controlPlaneEndpoint: "+testJoinName+":6443")
+	assert.Equal(t, 0, infra.ensureNetworkCalls)
+	assert.Equal(t, 0, servers.calls)
 }
 
 // The provisioner now satisfies hetznerbase.MultiNodeComposer (multinode.go's
