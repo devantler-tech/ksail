@@ -1,8 +1,11 @@
 package errorhandler_test
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
@@ -37,6 +40,126 @@ func TestExecutorExecuteSuccess(t *testing.T) {
 	err := executor.Execute(cmd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+// TestExecutorExecuteFlushesWarningsOnSuccess guards against silently swallowing
+// warnings: the executor captures stderr to normalize a failing command's error,
+// but a command that SUCCEEDS while writing a warning to stderr must still have
+// that warning reach the real stderr — a regression guard for warnings being
+// discarded on the success path.
+func TestExecutorExecuteFlushesWarningsOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use: "test",
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: incomplete values")
+
+			return nil
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if got := stderr.String(); !strings.Contains(got, "heads up: incomplete values") {
+		t.Fatalf("expected the success-path warning to reach stderr, got %q", got)
+	}
+}
+
+// exitCodeError is a test error carrying a custom KSail exit code, mirroring
+// DriftExitError: a valid, non-failing outcome rather than a command failure.
+type exitCodeError struct{ code int }
+
+func (e *exitCodeError) Error() string { return fmt.Sprintf("exit code %d", e.code) }
+
+func (e *exitCodeError) KSailExitCode() int { return e.code }
+
+// TestExecutorExecuteFlushesWarningsOnExitCodeResult guards the custom-exit-code path
+// (e.g. `cluster diff --exit-code` detecting drift): main.go surfaces such results as a
+// process exit code and prints no error, so a warning the run wrote to stderr must still
+// reach the real stderr rather than being swallowed with the captured buffer. It also
+// asserts the custom exit code stays detectable via errors.As so main.go keeps propagating
+// it.
+func TestExecutorExecuteFlushesWarningsOnExitCodeResult(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use:           "test",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: drift detected")
+
+			return &exitCodeError{code: 2}
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err == nil {
+		t.Fatal("expected the exit-code error to propagate, got nil")
+	}
+
+	var coder interface{ KSailExitCode() int }
+	if !errors.As(err, &coder) {
+		t.Fatalf("expected the custom exit code to remain detectable via errors.As, got %T", err)
+	}
+
+	if got := stderr.String(); !strings.Contains(got, "heads up: drift detected") {
+		t.Fatalf("expected the exit-code-path warning to reach stderr, got %q", got)
+	}
+}
+
+// TestExecutorExecuteDropsCobraErrorOnExitCodeResult guards that the exit-code path does
+// NOT replay Cobra's automatic "Error: <err>" line. A command that leaves SilenceErrors
+// unset (like `cluster diff`, which sets only SilenceUsage) has Cobra append that line to
+// the captured stderr; main.go prints no error for an exit-code result, so surfacing
+// Cobra's line would be spurious noise. The command's own warning must still reach stderr.
+func TestExecutorExecuteDropsCobraErrorOnExitCodeResult(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use: "test",
+		// Mirror `cluster diff`: SilenceUsage set, SilenceErrors UNSET, so Cobra
+		// appends its own "Error: <err>" line to the captured stderr.
+		SilenceUsage: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: drift detected")
+
+			return &exitCodeError{code: 2}
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	executor := errorhandler.NewExecutor()
+
+	err := executor.Execute(cmd)
+	if err == nil {
+		t.Fatal("expected the exit-code error to propagate, got nil")
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "heads up: drift detected") {
+		t.Fatalf("expected the exit-code-path warning to reach stderr, got %q", got)
+	}
+
+	if strings.Contains(got, "Error: exit code 2") {
+		t.Fatalf("Cobra's auto error line must not be replayed for exit-code results, got %q", got)
 	}
 }
 
