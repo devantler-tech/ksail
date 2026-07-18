@@ -317,9 +317,9 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 // clustererr.ErrKubeconfigNotReady while the k3k-<name>-kubeconfig Secret has not been published
 // yet.
 func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
-	clusterName := p.clusterName
+	clusterName := name
 	if clusterName == "" {
-		clusterName = name
+		clusterName = p.clusterName
 	}
 
 	conn := ConnectionFor(clusterName)

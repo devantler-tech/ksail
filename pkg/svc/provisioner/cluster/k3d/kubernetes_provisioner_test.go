@@ -207,6 +207,38 @@ func TestKubeconfig_RewritesServerToInClusterServiceEndpoint(t *testing.T) {
 	}
 }
 
+func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
+	t.Parallel()
+
+	safeConn := k3dprovisioner.ConnectionFor("safe-namespace-qualified")
+	configuredConn := k3dprovisioner.ConnectionFor("configured-from-cli-context")
+	clientset := k8sfake.NewClientset(
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: safeConn.SecretName, Namespace: safeConn.Namespace},
+			Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: configuredConn.SecretName, Namespace: configuredConn.Namespace},
+			Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+		},
+	)
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "configured-from-cli-context",
+	})
+	require.NoError(t, err)
+
+	out, err := provisioner.Kubeconfig(context.Background(), "safe-namespace-qualified")
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(out)
+	require.NoError(t, err)
+
+	for _, cluster := range config.Clusters {
+		assert.Equal(t, safeConn.Endpoint, cluster.Server)
+	}
+}
+
 func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {
 	t.Parallel()
 
