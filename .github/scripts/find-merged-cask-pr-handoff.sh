@@ -26,6 +26,10 @@ output_dir=""
 
 while (($# > 0)); do
 	case "$1" in
+	--help | -h)
+		usage
+		exit 0
+		;;
 	--tap)
 		tap="${2:-}"
 		shift 2
@@ -45,10 +49,6 @@ while (($# > 0)); do
 	--output-dir)
 		output_dir="${2:-}"
 		shift 2
-		;;
-	--help | -h)
-		usage
-		exit 0
 		;;
 	*)
 		printf 'ERROR: unknown argument: %s\n' "$1" >&2
