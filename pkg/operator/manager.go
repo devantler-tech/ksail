@@ -99,14 +99,20 @@ func managerOptions(scheme *runtime.Scheme, opts Options) ctrl.Options {
 
 // setupManager registers the reconciler, health probes, and (optionally) the REST API server.
 func setupManager(mgr ctrl.Manager, opts Options) error {
+	hostNamespace := ""
+	if opts.HostCluster {
+		hostNamespace = HostClusterNamespace()
+	}
+
 	reconciler := &controller.ClusterReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		NewProvisioner:    BuildProvisioner,
-		ObserveStatus:     ObserveVClusterStatus,
-		ObserveHostStatus: NewHostStatusObserver(mgr.GetConfig()),
-		InstallComponents: InstallComponents,
-		APIReader:         mgr.GetAPIReader(),
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		NewProvisioner:       BuildProvisioner,
+		ObserveStatus:        ObserveVClusterStatus,
+		ObserveHostStatus:    NewHostStatusObserver(mgr.GetConfig()),
+		HostClusterNamespace: hostNamespace,
+		InstallComponents:    InstallComponents,
+		APIReader:            mgr.GetAPIReader(),
 	}
 
 	reconcilerErr := reconciler.SetupWithManager(mgr)
@@ -115,7 +121,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	}
 
 	if opts.HostCluster {
-		hostErr := AddHostClusterRegistration(mgr, HostClusterNamespace())
+		hostErr := AddHostClusterRegistration(mgr, hostNamespace)
 		if hostErr != nil {
 			return hostErr
 		}
@@ -132,21 +138,21 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	}
 
 	if opts.APIBindAddress != "" {
-		return setupAPIServer(mgr, opts)
+		return setupAPIServer(mgr, opts, hostNamespace)
 	}
 
 	return nil
 }
 
 // setupAPIServer registers the REST API server (and embedded dashboard) with the manager.
-func setupAPIServer(mgr ctrl.Manager, opts Options) error {
+func setupAPIServer(mgr ctrl.Manager, opts Options, hostNamespace string) error {
 	hub := mgr.GetClient()
 	// Resolve a dynamic client for a cluster's managed (vcluster) child cluster, so the dashboard's
 	// resource browser works against the operator backend too — not just the local `ksail open web`. The
 	// self-registered host cluster is browsed through the operator's own credentials instead of a
 	// published kubeconfig Secret.
 	newChildClient := func(ctx context.Context, cluster *v1alpha1.Cluster) (dynamic.Interface, error) {
-		if cluster.IsHostCluster() {
+		if opts.HostCluster && cluster.IsHostClusterRegistration(hostNamespace) {
 			dyn, err := dynamic.NewForConfig(mgr.GetConfig())
 			if err != nil {
 				return nil, fmt.Errorf("build host cluster dynamic client: %w", err)

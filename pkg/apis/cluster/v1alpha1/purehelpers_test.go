@@ -3,6 +3,8 @@ package v1alpha1_test
 import (
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -255,7 +257,7 @@ func TestClusterSpecTotalNodeCount(t *testing.T) {
 	}
 }
 
-func TestClusterIsHostCluster(t *testing.T) {
+func TestClusterIsHostClusterLabel(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -284,6 +286,66 @@ func TestClusterIsHostCluster(t *testing.T) {
 			cluster := &v1alpha1.Cluster{}
 			cluster.Labels = testCase.labels
 			assert.Equal(t, testCase.want, cluster.IsHostCluster())
+		})
+	}
+}
+
+func TestClusterIsHostClusterRegistration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		cluster   v1alpha1.Cluster
+		namespace string
+		want      bool
+	}{
+		{
+			name: "well known host registration",
+			cluster: v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      v1alpha1.HostClusterName,
+					Namespace: "ksail-system",
+					Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
+				},
+			},
+			namespace: "ksail-system",
+			want:      true,
+		},
+		{
+			name: "forged label with wrong name",
+			cluster: v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "evil-alias",
+					Namespace: "ksail-system",
+					Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
+				},
+			},
+			namespace: "ksail-system",
+			want:      false,
+		},
+		{
+			name: "forged label with wrong namespace",
+			cluster: v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      v1alpha1.HostClusterName,
+					Namespace: "attacker",
+					Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
+				},
+			},
+			namespace: "ksail-system",
+			want:      false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(
+				t,
+				testCase.want,
+				testCase.cluster.IsHostClusterRegistration(testCase.namespace),
+			)
 		})
 	}
 }

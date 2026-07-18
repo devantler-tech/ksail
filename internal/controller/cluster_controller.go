@@ -138,6 +138,10 @@ type ClusterReconciler struct {
 	// reporting for the host cluster.
 	ObserveHostStatus StatusObserver
 
+	// HostClusterNamespace is the only namespace in which a host-labelled Cluster is trusted as the
+	// operator's self-registration. Empty disables the host-cluster fast path.
+	HostClusterNamespace string
+
 	// InstallComponents installs the cluster's components into the provisioned child cluster.
 	// Optional; nil disables component installation.
 	InstallComponents ComponentInstaller
@@ -178,7 +182,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// The host cluster (the operator's self-registration of the cluster it runs on) is never
 	// provisioned or torn down, so it gets no finalizer and a status-only reconcile.
-	if cluster.IsHostCluster() {
+	if cluster.IsHostClusterRegistration(r.HostClusterNamespace) {
 		log.Info("reconciling host cluster")
 
 		return r.reconcileHost(ctx, &cluster)
@@ -449,11 +453,10 @@ func (r *ClusterReconciler) reconcileDelete(
 		return ctrl.Result{}, nil
 	}
 
-	// Deleting the host registration must never destroy anything: the underlying cluster is the one
-	// the operator runs on. The host path adds no finalizer, but a user may have labelled a cluster
-	// that already carried one — remove it without invoking the provisioner (conservative: the
-	// underlying cluster is orphaned, not destroyed).
-	if cluster.IsHostCluster() {
+	// Deleting the well-known host registration must never destroy anything: the underlying cluster is
+	// the one the operator runs on. If the registration somehow carries a finalizer, remove it without
+	// invoking the provisioner.
+	if cluster.IsHostClusterRegistration(r.HostClusterNamespace) {
 		controllerutil.RemoveFinalizer(cluster, FinalizerName)
 
 		err := r.Update(ctx, cluster)
