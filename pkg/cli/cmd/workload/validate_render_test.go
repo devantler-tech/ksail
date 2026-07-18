@@ -151,6 +151,69 @@ func TestValidateDegradesWhenChartUnreachable(t *testing.T) {
 	assert.Contains(t, output, "skipped Helm render", "degradation should warn the user")
 }
 
+// TestValidateWarnsOnUnresolvableValuesFrom verifies the render-fidelity honesty
+// contract end-to-end: a HelmRelease whose non-optional valuesFrom references a
+// ConfigMap absent from the offline stream (typically cluster-managed) still
+// renders and passes, but the user is warned that values were incomplete — not
+// the misleading "skipped Helm render" message, since the chart DID render.
+func TestValidateWarnsOnUnresolvableValuesFrom(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	chartURL := localChartURL(t, "validchart")
+	files := map[string]string{
+		"kustomization.yaml": `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ocirepository.yaml
+  - helmrelease.yaml
+`,
+		"ocirepository.yaml": `apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: chart
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: ` + chartURL + `
+`,
+		"helmrelease.yaml": `apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: app
+  namespace: flux-system
+spec:
+  interval: 5m
+  chartRef:
+    kind: OCIRepository
+    name: chart
+  valuesFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+`,
+	}
+
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	output, err := runValidate(t, dir, "--skip-kinds", "OCIRepository")
+	require.NoError(t, err, "an unresolvable valuesFrom must warn, not fail the run")
+	assert.Contains(t, output, "incomplete values", "the user should be warned values were partial")
+	assert.Contains(
+		t,
+		output,
+		"cluster-settings",
+		"the warning should name the unresolved reference",
+	)
+	assert.NotContains(
+		t,
+		output,
+		"skipped Helm render",
+		"the chart did render, so the skipped-render message must not appear",
+	)
+}
+
 // TestValidateSingleHelmReleaseFileStaysGreen guards the ksail-test-gen-smoke CI
 // canary: validating a single HelmRelease file (whose source is not present)
 // must not attempt rendering and must pass as a CR-schema check.
