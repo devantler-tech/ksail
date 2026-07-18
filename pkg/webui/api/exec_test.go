@@ -96,6 +96,7 @@ func TestExecRejectsCrossOriginWebSocket(t *testing.T) {
 	_, response, err := websocket.DefaultDialer.Dial(url, header)
 	require.Error(t, err)
 	require.NotNil(t, response)
+
 	defer func() { _ = response.Body.Close() }()
 
 	assert.Equal(t, http.StatusForbidden, response.StatusCode)
