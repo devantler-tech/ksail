@@ -308,11 +308,13 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 		name         string
 		stream       []byte
 		wantDegraded bool
+		wantKind     render.DegradationKind
 	}{
 		{
 			name:         "non-optional valuesFrom absent from the stream degrades",
 			stream:       joinDocs(helmReleaseValuesFromYAML),
 			wantDegraded: true,
+			wantKind:     render.DegradationPartialValues,
 		},
 		{
 			name:         "optional valuesFrom absent from the stream is tolerated",
@@ -323,9 +325,12 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 			// Flux forgives only a not-found optional referent; a present one
 			// missing the requested valuesKey still fails reconciliation, so a
 			// valuesKey typo must not be silently swallowed by `optional: true`.
+			// It reports as its own kind so the warning can name the real cause
+			// instead of blaming a cluster-managed source.
 			name:         "optional valuesFrom present but missing its valuesKey degrades",
 			stream:       joinDocs(helmReleaseValuesFromOptionalMissingKeyYAML, appConfigYAML),
 			wantDegraded: true,
+			wantKind:     render.DegradationMissingValuesKey,
 		},
 		{
 			name:         "optional valuesFrom resolvable from the stream does not degrade",
@@ -349,14 +354,19 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 				render.Options{Resolver: resolver},
 			)
 			require.NoError(t, err)
-			assertValuesFromDegradation(t, result, testCase.wantDegraded)
+			assertValuesFromDegradation(t, result, testCase.wantDegraded, testCase.wantKind)
 		})
 	}
 }
 
 // assertValuesFromDegradation checks that the chart rendered and that a partial-
 // values degradation is present exactly when wantDegraded is true.
-func assertValuesFromDegradation(t *testing.T, result render.Result, wantDegraded bool) {
+func assertValuesFromDegradation(
+	t *testing.T,
+	result render.Result,
+	wantDegraded bool,
+	wantKind render.DegradationKind,
+) {
 	t.Helper()
 
 	// The chart renders regardless of values coverage.
@@ -372,7 +382,7 @@ func assertValuesFromDegradation(t *testing.T, result render.Result, wantDegrade
 	require.Len(t, result.Degradations, 1)
 	degradation := result.Degradations[0]
 	assert.Equal(t, "flux-system/podinfo", degradation.HelmRelease)
-	assert.Equal(t, render.DegradationPartialValues, degradation.Kind)
-	assert.False(t, degradation.Silent, "an unresolvable non-optional valuesFrom should warn")
+	assert.Equal(t, wantKind, degradation.Kind)
+	assert.False(t, degradation.Silent, "an unresolvable valuesFrom should warn")
 	assert.Contains(t, degradation.Reason, "app-config")
 }

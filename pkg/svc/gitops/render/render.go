@@ -68,6 +68,13 @@ const (
 	// offline stream — so the rendered children may differ from what Flux applies
 	// with the real value present.
 	DegradationPartialValues
+	// DegradationMissingValuesKey marks a HelmRelease that DID render, but whose
+	// valuesFrom referent IS present in the stream while lacking the requested
+	// valuesKey — typically a valuesKey typo. It is a distinct kind because the
+	// remedy differs: the resource is in the repo, so the caller must not suggest
+	// the value is cluster-managed. Flux fails reconciliation on a missing
+	// valuesKey even when the reference is marked optional.
+	DegradationMissingValuesKey
 )
 
 // Degradation records a way a HelmRelease's offline render fell short of what
@@ -247,7 +254,10 @@ func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) [
 				continue
 			}
 
-			degradations = append(degradations, partialValuesDegradation(key, ref))
+			degradations = append(
+				degradations,
+				valuesDegradation(key, ref, DegradationPartialValues),
+			)
 
 			continue
 		}
@@ -255,19 +265,22 @@ func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) [
 		// The referent is in the stream, so a missing valuesKey is a hard
 		// reconciliation failure in Flux regardless of `optional`.
 		if _, ok := data[ref.GetValuesKey()]; !ok {
-			degradations = append(degradations, partialValuesDegradation(key, ref))
+			degradations = append(
+				degradations,
+				valuesDegradation(key, ref, DegradationMissingValuesKey),
+			)
 		}
 	}
 
 	return degradations
 }
 
-// partialValuesDegradation builds the DegradationPartialValues entry naming the
-// valuesFrom reference whose value could not be obtained offline.
-func partialValuesDegradation(key string, ref meta.ValuesReference) Degradation {
+// valuesDegradation builds the degradation entry naming the valuesFrom reference
+// whose value could not be obtained offline, under the given kind.
+func valuesDegradation(key string, ref meta.ValuesReference, kind DegradationKind) Degradation {
 	return Degradation{
 		HelmRelease: key,
-		Kind:        DegradationPartialValues,
+		Kind:        kind,
 		Reason:      fmt.Sprintf("%s %q (key %q)", ref.Kind, ref.Name, ref.GetValuesKey()),
 	}
 }
