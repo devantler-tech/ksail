@@ -142,14 +142,30 @@ func TestBuildDistributionConfig_EKS(t *testing.T) {
 	assert.Equal(t, "eu-west-1", config.EKS.Region)
 }
 
+func TestBuildDistributionConfig_GKEIgnoresCustomEnvVarNames(t *testing.T) {
+	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionGKE)
+	cluster.Spec.Provider.GCP.ProjectEnvVar = "KSAIL_TEST_GCP_SECRET_PROJECT"
+	cluster.Spec.Provider.GCP.LocationEnvVar = "KSAIL_TEST_GCP_SECRET_LOCATION"
+
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "safe-project")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "safe-location")
+	t.Setenv("KSAIL_TEST_GCP_SECRET_PROJECT", "secret-project")
+	t.Setenv("KSAIL_TEST_GCP_SECRET_LOCATION", "secret-location")
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.GKE)
+	assert.Equal(t, "safe-project", config.GKE.Project)
+	assert.Equal(t, "safe-location", config.GKE.Location)
+}
+
 func TestBuildDistributionConfig_GKE(t *testing.T) {
 	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
 	cluster := clusterWithDistribution("c1", v1alpha1.DistributionGKE)
-	cluster.Spec.Provider.GCP.ProjectEnvVar = "KSAIL_TEST_GCP_PROJECT"
-	cluster.Spec.Provider.GCP.LocationEnvVar = "KSAIL_TEST_GCP_LOCATION"
 
-	t.Setenv("KSAIL_TEST_GCP_PROJECT", "my-project")
-	t.Setenv("KSAIL_TEST_GCP_LOCATION", "europe-north1")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "my-project")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "europe-north1")
 
 	config, err := operator.BuildDistributionConfig(cluster)
 	require.NoError(t, err)
