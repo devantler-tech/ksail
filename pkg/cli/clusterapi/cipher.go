@@ -140,6 +140,10 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 
 	return runCipherOp(encrypted, format, getDecryptStores, "decrypt secret",
 		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
+			if err := validateAgeOnlySOPSMetadata(path, inputStore); err != nil {
+				return nil, err
+			}
+
 			return sopsclient.Decrypt(sopsclient.DecryptOpts{
 				Cipher:      aes.NewCipher(),
 				InputStore:  inputStore,
@@ -148,6 +152,38 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 				KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 			})
 		})
+}
+
+// validateAgeOnlySOPSMetadata enforces the local UI secret boundary before invoking SOPS'
+// local keyservice. NewLocalClient supports every SOPS master-key backend described in the
+// document metadata (KMS, Vault, PGP, etc.); the UI intentionally supports local age keys only.
+func validateAgeOnlySOPSMetadata(path string, inputStore sops.Store) error {
+	content, err := os.ReadFile(path) //nolint:gosec // G304: path is our 0600 temp file.
+	if err != nil {
+		return fmt.Errorf("read staged sops file: %w", err)
+	}
+
+	tree, err := inputStore.LoadEncryptedFile(content)
+	if err != nil {
+		return fmt.Errorf("parse sops metadata: %w", err)
+	}
+
+	ageKeys := 0
+	for _, group := range tree.Metadata.KeyGroups {
+		for _, key := range group {
+			if _, ok := key.(*sopsage.MasterKey); !ok {
+				return fmt.Errorf("%w: SOPS decrypt supports only age recipients", api.ErrInvalid)
+			}
+
+			ageKeys++
+		}
+	}
+
+	if ageKeys == 0 {
+		return fmt.Errorf("%w: SOPS metadata must include at least one age recipient", api.ErrInvalid)
+	}
+
+	return nil
 }
 
 // runCipherOp shares the prepareSecretFile setup/cleanup + result-formatting boilerplate common to
