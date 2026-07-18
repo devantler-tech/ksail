@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +17,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
@@ -314,14 +317,14 @@ func runClusterCreationWorkflow(
 		return err
 	}
 
-	err = prepareEKSCreateConfig(ctx)
+	err = prepareEKSCreateIdentity(cmd.Context(), ctx)
 	if err != nil {
 		return err
 	}
 
 	configureProvisionerFactory(&deps, ctx)
 
-	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
+	err = executeClusterCreationAndCapture(cmd, ctx, deps)
 	if err != nil {
 		return err
 	}
@@ -378,6 +381,31 @@ func runClusterCreationWorkflow(
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
 }
 
+func prepareEKSCreateIdentity(
+	ctx context.Context,
+	clusterCtx *localregistry.Context,
+) error {
+	err := prepareEKSCreateConfig(clusterCtx)
+	if err != nil {
+		return err
+	}
+
+	return freezeEKSCreateCredentials(ctx, clusterCtx)
+}
+
+func executeClusterCreationAndCapture(
+	cmd *cobra.Command,
+	clusterCtx *localregistry.Context,
+	deps lifecycle.Deps,
+) error {
+	err := executeClusterLifecycle(cmd, clusterCtx.ClusterCfg, deps)
+	if err != nil {
+		return err
+	}
+
+	return captureCreatedEKSIdentity(cmd.Context(), clusterCtx)
+}
+
 // prepareEKSCreateConfig resolves the effective AWS region and pins the
 // kubeconfig path shared by eksctl creation and post-create setup.
 func prepareEKSCreateConfig(ctx *localregistry.Context) error {
@@ -401,6 +429,91 @@ func prepareEKSCreateConfig(ctx *localregistry.Context) error {
 		ctx.ClusterCfg.Spec.Provider.AWS,
 		&clusterprovisioner.DistributionConfig{EKS: ctx.EKSConfig},
 	)
+
+	return nil
+}
+
+func freezeEKSCreateCredentials(
+	ctx context.Context,
+	clusterCtx *localregistry.Context,
+) error {
+	if clusterCtx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if clusterCtx.EKSConfig == nil {
+		return fmt.Errorf(
+			"freeze AWS credentials for EKS creation: %w",
+			errEKSConfigurationUnavailable,
+		)
+	}
+
+	if clusterCtx.AWSResolution != nil && clusterCtx.AWSResolution.IsFrozen() {
+		if region := strings.TrimSpace(clusterCtx.AWSResolution.Region); region != "" {
+			clusterCtx.EKSConfig.Region = region
+		}
+
+		return nil
+	}
+
+	selection := credentials.ResolveAWS(
+		credentials.NewAWSOptionsResolver(clusterCtx.ClusterCfg.Spec.Provider.AWS),
+	)
+	if clusterCtx.AWSResolution != nil {
+		selection = *clusterCtx.AWSResolution
+	}
+
+	resolution, err := credentials.FreezeAWS(ctx, selection, clusterCtx.EKSConfig.Region)
+	if err != nil {
+		return fmt.Errorf("freeze AWS credentials for EKS creation: %w", err)
+	}
+
+	clusterCtx.AWSResolution = &resolution
+	if region := strings.TrimSpace(resolution.Region); region != "" {
+		clusterCtx.EKSConfig.Region = region
+	}
+
+	return nil
+}
+
+// captureCreatedEKSIdentity makes immutable ownership persistence part of EKS create success. It
+// runs immediately after eksctl returns, before later setup or TTL can report success. The SDK
+// client uses the same credential snapshot the provisioner factory received.
+func captureCreatedEKSIdentity(
+	ctx context.Context,
+	clusterCtx *localregistry.Context,
+) error {
+	if clusterCtx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if clusterCtx.EKSConfig == nil || clusterCtx.AWSResolution == nil {
+		return fmt.Errorf(
+			"capture immutable EKS ownership identity: %w",
+			errEKSConfigurationUnavailable,
+		)
+	}
+
+	eksIdentityClientFactoryState.RLock()
+	factory := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.RUnlock()
+
+	identityClient, err := factory(ctx, clusterCtx.EKSConfig.Region, *clusterCtx.AWSResolution)
+	if err != nil {
+		return fmt.Errorf("capture immutable EKS ownership identity: create AWS client: %w", err)
+	}
+
+	ownership, err := eksidentity.Capture(
+		ctx,
+		identityClient,
+		strings.TrimSpace(clusterCtx.EKSConfig.Name),
+		strings.TrimSpace(clusterCtx.EKSConfig.Region),
+	)
+	if err != nil {
+		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
+	}
+
+	clusterCtx.EKSConfig.Region = ownership.Region
 
 	return nil
 }

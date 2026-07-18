@@ -10,6 +10,7 @@ import (
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
@@ -33,6 +34,7 @@ type Provider struct {
 	describer               clusterDescriber
 	eksClientOptions        []eksclient.Option
 	requireCredentialValues bool
+	ownershipVerifier       eksidentity.Verifier
 }
 
 // Option customises a Provider.
@@ -58,11 +60,27 @@ func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken st
 	}
 }
 
+// WithAWSConfig pins the complete frozen SDK configuration used by the provider's lazy EKS
+// client, retaining non-credential endpoint and transport settings from the ownership guard.
+func WithAWSConfig(config awssdk.Config) Option {
+	return func(p *Provider) {
+		p.eksClientOptions = []eksclient.Option{eksclient.WithAWSConfig(config)}
+	}
+}
+
 // RequireCredentialValues prevents the lazy SDK client from falling back to
 // ambient canonical credentials when custom sources resolved no values.
 func RequireCredentialValues() Option {
 	return func(p *Provider) {
 		p.requireCredentialValues = true
+	}
+}
+
+// WithOwnershipVerifier injects the immutable EKS identity boundary used immediately before each
+// nodegroup scaling mutation.
+func WithOwnershipVerifier(verifier eksidentity.Verifier) Option {
+	return func(p *Provider) {
+		p.ownershipVerifier = verifier
 	}
 }
 
@@ -81,6 +99,7 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 		describer:               nil,
 		eksClientOptions:        nil,
 		requireCredentialValues: false,
+		ownershipVerifier:       nil,
 	}
 
 	for _, opt := range opts {
@@ -153,17 +172,9 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 			continue
 		}
 
-		err = target.client.ScaleNodegroup(
-			ctx,
-			clusterName,
-			capacity.Name,
-			target.region,
-			0,
-			0,
-			capacity.MaxSize,
-		)
+		err = target.stopNodegroup(ctx, clusterName, capacity)
 		if err != nil {
-			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", capacity.Name, err)
+			return err
 		}
 	}
 
@@ -277,6 +288,36 @@ func (p *Provider) GetClusterStatus(
 // Region returns the AWS region this provider was configured with.
 func (p *Provider) Region() string {
 	return p.region
+}
+
+func (p *Provider) stopNodegroup(
+	ctx context.Context,
+	clusterName string,
+	capacity state.EKSNodegroupCapacity,
+) error {
+	err := eksidentity.VerifyBeforeMutation(ctx, p.ownershipVerifier)
+	if err != nil {
+		return fmt.Errorf(
+			"reverify immutable EKS ownership before stopping nodegroup %q: %w",
+			capacity.Name,
+			err,
+		)
+	}
+
+	err = p.client.ScaleNodegroup(
+		ctx,
+		clusterName,
+		capacity.Name,
+		p.region,
+		0,
+		0,
+		capacity.MaxSize,
+	)
+	if err != nil {
+		return fmt.Errorf("stop nodes: scale nodegroup %s: %w", capacity.Name, err)
+	}
+
+	return nil
 }
 
 // loadLifecycleNodegroupsAndState gives both nodegroup lifecycle paths one exact-region preflight.

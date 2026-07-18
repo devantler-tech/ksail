@@ -139,6 +139,8 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 // be populated here — omitting one breaks provisioner creation for that distribution.
 func defaultProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.DefaultFactory {
 	return clusterprovisioner.DefaultFactory{
+		AWSResolution:        ctx.AWSResolution,
+		AWSOwnershipVerifier: ctx.AWSOwnershipVerifier,
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
 			Kind:        ctx.KindConfig,
 			K3d:         ctx.K3dConfig,

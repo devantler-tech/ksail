@@ -151,10 +151,15 @@ func handleUpdateRunE(
 	// unmanaged cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard
 	// rejects here — before any change is computed or applied — so `cluster update` never mutates a
 	// cluster ksail does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = guardUpdateTargetManaged(cmd.Context(), ctx.ClusterCfg, clusterName, ctx.EKSConfig)
+	awsResolution, awsOwnershipVerifier, err := guardUpdateTargetManaged(
+		cmd.Context(), ctx.ClusterCfg, clusterName, ctx.EKSConfig,
+	)
 	if err != nil {
 		return err
 	}
+
+	ctx.AWSResolution = awsResolution
+	ctx.AWSOwnershipVerifier = awsOwnershipVerifier
 
 	clusterflags.ApplyClusterMutationFlags(cmd, ctx.ClusterCfg)
 

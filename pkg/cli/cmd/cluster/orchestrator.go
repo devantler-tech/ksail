@@ -1230,6 +1230,14 @@ func applyInPlaceChanges(
 	forceDrain bool,
 	allowRolling bool,
 ) error {
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before update apply: %w", err)
+	}
+
 	updateOpts := clusterupdate.UpdateOptions{
 		DryRun:               false,
 		RollingReboot:        true,
@@ -1249,6 +1257,14 @@ func applyInPlaceChanges(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to apply updates: %w", err)
+	}
+
+	err = lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before component reconciliation: %w", err)
 	}
 
 	// Apply component-level changes (CNI, CSI, cert-manager, etc.)
@@ -1310,6 +1326,14 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 
 	if !confirmRecreate(o.cmd, o.clusterName, o.consent) {
 		return nil
+	}
+
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		o.cmd.Context(),
+		o.ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before cluster recreation: %w", err)
 	}
 
 	// Create provisioner for delete

@@ -13,7 +13,9 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -25,6 +27,26 @@ import (
 	"github.com/spf13/pflag"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// ExportSetEKSIdentityClientFactory replaces SDK client construction for offline lifecycle tests.
+func ExportSetEKSIdentityClientFactory(
+	factory func(
+		context.Context,
+		string,
+		credentials.AWSResolution,
+	) (eksidentity.Client, error),
+) func() {
+	eksIdentityClientFactoryState.Lock()
+	previous := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.factory = factory
+	eksIdentityClientFactoryState.Unlock()
+
+	return func() {
+		eksIdentityClientFactoryState.Lock()
+		eksIdentityClientFactoryState.factory = previous
+		eksIdentityClientFactoryState.Unlock()
+	}
+}
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
 func ExportShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
@@ -187,6 +209,22 @@ func ExportApplyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
+}
+
+// ExportExecuteRecreateFlow exposes the post-consent recreate boundary for fail-closed tests.
+func ExportExecuteRecreateFlow(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+		consent:     true,
+	}
+
+	return orchestrator.executeRecreateFlow()
 }
 
 // ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
@@ -638,5 +676,7 @@ func ExportGuardUpdateTargetManaged(
 	clusterName string,
 	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
-	return guardUpdateTargetManaged(ctx, clusterCfg, clusterName, eksConfig)
+	_, _, err := guardUpdateTargetManaged(ctx, clusterCfg, clusterName, eksConfig)
+
+	return err
 }

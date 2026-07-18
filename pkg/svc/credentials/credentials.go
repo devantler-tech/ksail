@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
@@ -174,17 +175,22 @@ func (r AWSOptionsResolver) Value(key Key) string {
 	return resolveEnvValue(key, r.EnvVar(key))
 }
 
-// AWSResolution is an immutable snapshot of the credential selection for one
-// AWS operation. Source variable names are retained privately so child process
-// environments can remove both stale canonical values and custom aliases.
+// AWSResolution is an immutable snapshot of an AWS credential selection. ResolveFrozenAWS upgrades
+// it to one concrete credential tuple for identity-sensitive operations. Source variable names are
+// retained privately so child process environments can remove both stale canonical values and
+// custom aliases.
 type AWSResolution struct {
+	Region          string
 	Profile         string
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
 
 	sourceEnvVars          [4]string
+	sourceRegionEnvVar     string
 	hasCustomCredentialEnv bool
+	frozen                 bool
+	sdkConfig              *aws.Config
 }
 
 // ResolveAWS snapshots all AWS credential values and their configured source
@@ -197,11 +203,13 @@ func ResolveAWS(resolver Resolver) AWSResolution {
 	// Resolve every value before constructing the child environment. No parent
 	// environment mutation is needed, so concurrent invocations remain isolated.
 	resolution := AWSResolution{
+		Region:          resolver.Value(AWSRegion),
 		Profile:         resolver.Value(AWSProfile),
 		AccessKeyID:     resolver.Value(AWSAccessKeyID),
 		SecretAccessKey: resolver.Value(AWSSecretAccessKey),
 		SessionToken:    resolver.Value(AWSSessionToken),
 	}
+	resolution.sourceRegionEnvVar = resolver.EnvVar(AWSRegion)
 
 	credentialSources := [...]struct {
 		key           Key
@@ -232,6 +240,11 @@ func (r AWSResolution) HasCustomCredentialSources() bool {
 	return r.hasCustomCredentialEnv
 }
 
+// IsFrozen reports whether the selection was resolved to one concrete static credential tuple.
+func (r AWSResolution) IsFrozen() bool {
+	return r.frozen
+}
+
 // OptionsForAWSResolution maps a resolved AWS identity into a consumer's
 // option type. Custom source names add the consumer's fail-closed option so an
 // unset alias cannot silently fall back to an unrelated ambient identity.
@@ -249,7 +262,33 @@ func OptionsForAWSResolution[T any](
 
 	return optionsWithCredentialRequirement(
 		option,
-		resolution.HasCustomCredentialSources(),
+		resolution.requiresCredentialValues(),
+		requireCredentialValues,
+	)
+}
+
+// OptionsForFrozenAWSConfig maps a frozen resolution's complete SDK configuration snapshot when
+// available, preserving resolved non-credential settings while pinning the concrete credentials.
+// Mutable/non-frozen resolutions retain the value-based compatibility path.
+func OptionsForFrozenAWSConfig[T any](
+	resolution AWSResolution,
+	withAWSConfig func(config aws.Config) T,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) T,
+	requireCredentialValues func() T,
+) []T {
+	if resolution.sdkConfig == nil {
+		return OptionsForAWSResolution(
+			resolution,
+			withCredentialValues,
+			requireCredentialValues,
+		)
+	}
+
+	option := withAWSConfig(cloneAWSConfig(*resolution.sdkConfig))
+
+	return optionsWithCredentialRequirement(
+		option,
+		resolution.requiresCredentialValues(),
 		requireCredentialValues,
 	)
 }
@@ -265,7 +304,7 @@ func OptionsForAWSChildEnvironment[T any](
 ) []T {
 	return optionsWithCredentialRequirement(
 		withEnvironment(resolution.ChildEnvironment(parent)),
-		resolution.HasCustomCredentialSources(),
+		resolution.requiresCredentialValues(),
 		requireCredentialValues,
 	)
 }
@@ -314,6 +353,13 @@ func optionsWithCredentialRequirement[T any](
 	return options
 }
 
+func cloneAWSConfig(config aws.Config) aws.Config {
+	config.ConfigSources = append(config.ConfigSources[:0:0], config.ConfigSources...)
+	config.APIOptions = append(config.APIOptions[:0:0], config.APIOptions...)
+
+	return config
+}
+
 // ChildEnvironment returns a copy of parent with AWS credential aliases and
 // stale canonical values removed, followed by the non-empty resolved values
 // under the canonical names eksctl understands. When a custom credential source
@@ -339,7 +385,15 @@ func (r AWSResolution) ChildEnvironment(parent []string) []string {
 		}
 	}
 
+	if r.frozen && r.Region != "" {
+		child = append(child, defaultAWSRegionEnvVar+"="+r.Region)
+	}
+
 	return child
+}
+
+func (r AWSResolution) requiresCredentialValues() bool {
+	return r.HasCustomCredentialSources() || r.IsFrozen()
 }
 
 // strippedEnvironmentNames returns normalized aliases and competing provider
@@ -361,7 +415,7 @@ func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string
 		}
 	}
 
-	if r.hasCustomCredentialEnv {
+	if r.hasCustomCredentialEnv || r.frozen {
 		for _, name := range []string{
 			"AWS_DEFAULT_PROFILE",
 			"AWS_ACCESS_KEY",
@@ -369,8 +423,24 @@ func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string
 			"AWS_WEB_IDENTITY_TOKEN_FILE",
 			"AWS_ROLE_ARN",
 			"AWS_ROLE_SESSION_NAME",
+			"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+			"AWS_CONTAINER_CREDENTIALS_FULL_URI",
+			"AWS_CONTAINER_AUTHORIZATION_TOKEN",
+			"AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
 		} {
 			strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+		}
+	}
+
+	if r.frozen {
+		for _, name := range []string{
+			defaultAWSRegionEnvVar,
+			"AWS_DEFAULT_REGION",
+			r.sourceRegionEnvVar,
+		} {
+			if name != "" {
+				strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+			}
 		}
 	}
 

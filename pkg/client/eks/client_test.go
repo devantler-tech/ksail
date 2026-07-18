@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awseks "github.com/aws/aws-sdk-go-v2/service/eks"
@@ -42,12 +46,50 @@ type fakePresigner struct {
 	err     error
 }
 
+// fakeIdentityGetter scripts the read-only STS identity query used by EKS ownership checks.
+type fakeIdentityGetter struct {
+	out *sts.GetCallerIdentityOutput
+	err error
+}
+
+func (f fakeIdentityGetter) GetCallerIdentity(
+	_ context.Context,
+	_ *sts.GetCallerIdentityInput,
+	_ ...func(*sts.Options),
+) (*sts.GetCallerIdentityOutput, error) {
+	return f.out, f.err
+}
+
 func (f fakePresigner) PresignGetCallerIdentity(
 	_ context.Context,
 	_ *sts.GetCallerIdentityInput,
 	_ ...func(*sts.PresignOptions),
 ) (*v4.PresignedHTTPRequest, error) {
 	return f.request, f.err
+}
+
+func newCallerIdentityServer(
+	t *testing.T,
+	authorization chan<- string,
+) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
+		authorization <- request.Header.Get("Authorization")
+
+		writer.Header().Set("Content-Type", "text/xml")
+		_, _ = writer.Write([]byte(
+			`<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">` +
+				`<GetCallerIdentityResult><Account>123456789012</Account>` +
+				`<Arn>arn:aws:iam::123456789012:user/ksail-test</Arn>` +
+				`<UserId>KSailTest</UserId></GetCallerIdentityResult>` +
+				`<ResponseMetadata><RequestId>test-request</RequestId></ResponseMetadata>` +
+				`</GetCallerIdentityResponse>`,
+		))
+	}))
 }
 
 // newTestClient wires a Client from injected seams so no AWS configuration
@@ -64,10 +106,76 @@ func newTestClient(
 		"eu-central-1",
 		eksclient.WithClusterDescriber(describer),
 		eksclient.WithCallerIdentityPresigner(presigner),
+		eksclient.WithCallerIdentityGetter(fakeIdentityGetter{
+			out: &sts.GetCallerIdentityOutput{Account: aws.String("123456789012")},
+		}),
 	)
 	require.NoError(t, err)
 
 	return client
+}
+
+func TestCallerAccountIDReturnsCurrentAccount(t *testing.T) {
+	t.Parallel()
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+		eksclient.WithCallerIdentityGetter(fakeIdentityGetter{
+			out: &sts.GetCallerIdentityOutput{Account: aws.String("123456789012")},
+		}),
+	)
+	require.NoError(t, err)
+
+	accountID, err := client.CallerAccountID(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "123456789012", accountID)
+}
+
+func TestCallerAccountIDRejectsMissingAccount(t *testing.T) {
+	t.Parallel()
+
+	for name, output := range map[string]*sts.GetCallerIdentityOutput{
+		"nil response":  nil,
+		"nil account":   {},
+		"empty account": {Account: aws.String("")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			client, err := eksclient.NewClient(
+				t.Context(),
+				"eu-central-1",
+				eksclient.WithClusterDescriber(fakeDescriber{}),
+				eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+				eksclient.WithCallerIdentityGetter(fakeIdentityGetter{out: output}),
+			)
+			require.NoError(t, err)
+
+			_, err = client.CallerAccountID(t.Context())
+			require.Error(t, err)
+			assert.ErrorContains(t, err, "account ID")
+		})
+	}
+}
+
+func TestCallerAccountIDWrapsSTSFailure(t *testing.T) {
+	t.Parallel()
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+		eksclient.WithCallerIdentityGetter(fakeIdentityGetter{err: errBoom}),
+	)
+	require.NoError(t, err)
+
+	_, err = client.CallerAccountID(t.Context())
+	require.ErrorIs(t, err, errBoom)
+	assert.ErrorContains(t, err, "getting AWS caller identity")
 }
 
 func TestDescribeClusterReturnsPayload(t *testing.T) {
@@ -182,6 +290,10 @@ func TestMintTokenSignsClusterBindingHeaders(t *testing.T) {
 // explicit static credentials win over ambient identity.
 func TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity(t *testing.T) {
 	// Not parallel: t.Setenv changes the process environment.
+	missingConfigDir := t.TempDir()
+	t.Setenv("AWS_PROFILE", "stale-profile")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(missingConfigDir, "missing-config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(missingConfigDir, "missing-credentials"))
 	t.Setenv("AWS_ACCESS_KEY_ID", "STALEAMBIENT")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-ambient-secret")
 
@@ -201,6 +313,96 @@ func TestWithCredentialValues_StaticCredentialsOverrideAmbientIdentity(t *testin
 	token, err := client.MintToken(t.Context(), "eks-default")
 	require.NoError(t, err)
 	assertTokenCredentialPrefix(t, token, "SELECTEDACCESS/")
+}
+
+// TestWithCredentialValues_StaticCredentialsPreserveEndpointConfig verifies explicit static
+// credentials replace only AWS identity configuration. Non-credential settings loaded from the
+// environment must still reach the real SDK clients, even when an unrelated ambient profile is
+// stale, and construction must not mutate the process environment.
+func TestWithCredentialValues_StaticCredentialsPreserveEndpointConfig(t *testing.T) {
+	// Not parallel: t.Setenv changes the process environment.
+	authorization := make(chan string, 1)
+	server := newCallerIdentityServer(t, authorization)
+
+	defer server.Close()
+
+	missingConfigDir := t.TempDir()
+	t.Setenv("AWS_PROFILE", "stale-profile")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(missingConfigDir, "missing-config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(missingConfigDir, "missing-credentials"))
+	t.Setenv("AWS_ACCESS_KEY_ID", "STALEAMBIENT")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-ambient-secret")
+	t.Setenv("AWS_ENDPOINT_URL", server.URL)
+	t.Setenv("AWS_ENDPOINT_URL_STS", server.URL)
+	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "false")
+
+	environmentBefore := append([]string(nil), os.Environ()...)
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithCredentialValues(
+			"ignored-profile",
+			"SELECTEDACCESS",
+			"selected-secret",
+			"selected-session",
+		),
+	)
+	require.NoError(t, err)
+
+	queryCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	accountID, err := client.CallerAccountID(queryCtx)
+	require.NoError(t, err)
+	assert.Equal(t, "123456789012", accountID)
+	assert.Equal(t, environmentBefore, os.Environ())
+
+	select {
+	case header := <-authorization:
+		assert.Contains(t, header, "Credential=SELECTEDACCESS/")
+	case <-queryCtx.Done():
+		require.Fail(t, "STS endpoint did not receive a request")
+	}
+}
+
+func TestWithAWSConfigPreservesFrozenEndpointAndCredentials(t *testing.T) {
+	t.Parallel()
+
+	authorization := make(chan string, 1)
+	server := newCallerIdentityServer(t, authorization)
+
+	defer server.Close()
+
+	client, err := eksclient.NewClient(
+		t.Context(),
+		"eu-central-1",
+		eksclient.WithClusterDescriber(fakeDescriber{}),
+		eksclient.WithAWSConfig(aws.Config{
+			Region: "stale-region",
+			Credentials: credentials.NewStaticCredentialsProvider(
+				"FROZENACCESS",
+				"frozen-secret",
+				"",
+			),
+			HTTPClient:   server.Client(),
+			BaseEndpoint: aws.String(server.URL),
+		}),
+	)
+	require.NoError(t, err)
+
+	accountID, err := client.CallerAccountID(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "123456789012", accountID)
+
+	select {
+	case header := <-authorization:
+		assert.Contains(t, header, "Credential=FROZENACCESS/")
+		assert.Contains(t, header, "/eu-central-1/sts/aws4_request")
+	case <-t.Context().Done():
+		require.Fail(t, "STS endpoint did not receive a request")
+	}
 }
 
 // TestWithCredentialValues_ProfileOverridesAmbientStaticCredentials verifies an
