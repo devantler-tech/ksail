@@ -94,7 +94,7 @@ chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
 	RECONCILE_RACE_STATE="${race_root}/calls"
 	export TAP GITHUB_REPOSITORY TAG evidence_dir GITHUB_STEP_SUMMARY RECONCILE_RACE_STATE
 	handoff_failed=0
-	# shellcheck disable=SC2329 # Invoked by the sourced workflow function.
+	# shellcheck disable=SC2317,SC2329 # Invoked by the sourced workflow function.
 	sleep() { :; }
 	# shellcheck source=/dev/null
 	source "${reconcile_function}"
