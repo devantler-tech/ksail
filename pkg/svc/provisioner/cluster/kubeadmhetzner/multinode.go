@@ -144,7 +144,7 @@ func (p *Provisioner) ComposeInitNode(
 		},
 		SSHAuthorizedKeys: []string{material.AuthorizedKey},
 		HostKeys:          material.HostKeys,
-		ServerInitFiles:   pkiSeedFiles(clusterPKI),
+		ServerInitFiles:   pkiSeedPublicFiles(clusterPKI),
 		ServerInitPrelude: serverInitPrelude,
 	})
 	if err != nil {
@@ -152,6 +152,31 @@ func (p *Provisioner) ComposeInitNode(
 	}
 
 	return nodeSpecsFrom(nodes)[0], nil
+}
+
+// pkiSeedPublicFiles maps only public pre-generated PKI material onto the
+// cluster-initialising control plane. Private keys must not travel through
+// cloud-init user_data because cloud providers persist that payload outside the
+// destination file mode controls.
+func pkiSeedPublicFiles(clusterPKI ClusterPKI) []cloudinitbootstrap.File {
+	return []cloudinitbootstrap.File{
+		{Path: caCertPath, Permissions: caCertPermissions, Content: string(clusterPKI.CA.CertPEM)},
+		{
+			Path:        frontProxyCACertPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.FrontProxyCA.CertPEM),
+		},
+		{
+			Path:        etcdCACertPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.EtcdCA.CertPEM),
+		},
+		{
+			Path:        serviceAccountPubPath,
+			Permissions: caCertPermissions,
+			Content:     string(clusterPKI.ServiceAccount.PubPEM),
+		},
+	}
 }
 
 // pkiSeedFiles maps the pre-generated shared PKI onto the cloud-init files the

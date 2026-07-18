@@ -61,18 +61,24 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 		pemHeader   string
 	}{
 		{"/etc/kubernetes/pki/ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
 		{"/etc/kubernetes/pki/front-proxy-ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/front-proxy-ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
 		{"/etc/kubernetes/pki/etcd/ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/etcd/ca.key", "0600", "BEGIN RSA PRIVATE KEY"},
-		{"/etc/kubernetes/pki/sa.key", "0600", "BEGIN RSA PRIVATE KEY"},
 		{"/etc/kubernetes/pki/sa.pub", "0644", "BEGIN PUBLIC KEY"},
 	} {
 		entry := writeFilesEntry(t, spec.UserData, seeded.path)
 		assert.Contains(t, entry, seeded.permissions, seeded.path)
 		assert.Contains(t, entry, seeded.pemHeader, seeded.path)
 	}
+
+	for _, privatePath := range []string{
+		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.key",
+		"/etc/kubernetes/pki/sa.key",
+	} {
+		assert.NotContains(t, spec.UserData, privatePath)
+	}
+	assert.NotContains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
 }
 
 // writeFilesEntry extracts the single write_files entry for path from the
