@@ -2,6 +2,8 @@ package errorhandler
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,7 +39,18 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 
 	err := cmd.Execute()
 	if err == nil {
+		flushWarnings(originalErrWriter, &errBuf)
+
 		return nil
+	}
+
+	// A custom exit-code result (e.g. DriftExitError from `cluster diff --exit-code`)
+	// is a valid, non-failing outcome: main.go surfaces it as a process exit code and
+	// prints no error, so any warnings the run captured would otherwise be lost. Flush
+	// them like the success path. Genuine failures instead surface their stderr via the
+	// normalized message that main.go prints, so they are not flushed here.
+	if isExitCodeResult(err) {
+		flushExitCodeWarnings(originalErrWriter, &errBuf, err)
 	}
 
 	message := normalize(errBuf.String())
@@ -46,6 +59,47 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 		message: message,
 		cause:   err,
 	}
+}
+
+// flushWarnings forwards any stderr a non-failing run captured to the real writer, so
+// warnings and notices reach the user. The capture exists only to normalize a failing
+// command's stderr into the returned error; an empty buffer is a no-op, so commands
+// that write nothing are unaffected.
+func flushWarnings(w io.Writer, buf *bytes.Buffer) {
+	if buf.Len() > 0 {
+		_, _ = w.Write(buf.Bytes())
+	}
+}
+
+// flushExitCodeWarnings forwards the stderr an exit-code result captured, minus the
+// automatic "Error: <err>" line Cobra appends when a command leaves SilenceErrors unset
+// (e.g. `cluster diff`, which sets only SilenceUsage). main.go surfaces an exit-code
+// result as a process exit code and prints no error of its own, so replaying Cobra's
+// error line here would be spurious noise; the command's real warnings still reach the
+// user. Cobra writes the error last (SilenceUsage suppresses the trailing usage) as
+// `fmt.Fprintln(w, "Error:", err.Error())`, i.e. exactly "Error: <msg>\n".
+func flushExitCodeWarnings(writer io.Writer, buf *bytes.Buffer, err error) {
+	out := buf.Bytes()
+
+	if err != nil {
+		cobraError := "Error: " + err.Error()
+		out = bytes.TrimSuffix(out, []byte(cobraError+"\n"))
+		out = bytes.TrimSuffix(out, []byte(cobraError))
+	}
+
+	if len(out) > 0 {
+		_, _ = writer.Write(out)
+	}
+}
+
+// isExitCodeResult reports whether err carries a custom KSail exit code — a valid,
+// non-failing outcome (e.g. drift detected) rather than a command failure. It mirrors
+// the structural interface main.go uses to translate such errors into process exit
+// codes, without coupling this package to specific command types.
+func isExitCodeResult(err error) bool {
+	var exitCoder interface{ KSailExitCode() int }
+
+	return errors.As(err, &exitCoder)
 }
 
 // CommandError type.
