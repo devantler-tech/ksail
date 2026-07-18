@@ -785,14 +785,18 @@ func parseEKSConfigMetadata(data []byte) (string, string, error) {
 	return name, meta.Metadata.Region, nil
 }
 
-// ResolveEKSClusterMetadata resolves the EKS cluster name and region the same
-// way the config manager does when caching the distribution config: from the
-// eksctl config file named by spec.cluster.distributionConfig (defaulting to
-// eks.yaml), falling back to the kubeconfig context for the name. It exists
-// for callers that hold only the cluster config (e.g. the post-creation
-// component setup) and need the chart-facing cluster identity without a
-// ConfigManager.
-func ResolveEKSClusterMetadata(cluster *v1alpha1.Cluster) (string, string, error) {
+// ResolveEKSClusterMetadata resolves the EKS cluster name and file-declared
+// region the same way the config manager does when caching the distribution
+// config: from the eksctl config file named by spec.cluster.distributionConfig
+// (defaulting to eks.yaml), falling back to the kubeconfig context for the
+// name. nameFromConfig reports whether the name came from the file itself —
+// callers that reuse the file's region (lifecycle.ResolveAWSRegion) need it to
+// decide whether that region is target-bound. It exists for callers that hold
+// only the cluster config (e.g. the post-creation component setup) and need
+// the chart-facing cluster identity without a ConfigManager.
+func ResolveEKSClusterMetadata(
+	cluster *v1alpha1.Cluster,
+) (string, string, bool, error) {
 	configPath := strings.TrimSpace(cluster.Spec.Cluster.DistributionConfig)
 	if configPath == "" {
 		configPath = v1alpha1.DefaultEKSDistributionConfig
@@ -800,14 +804,15 @@ func ResolveEKSClusterMetadata(cluster *v1alpha1.Cluster) (string, string, error
 
 	_, name, region, err := readEKSConfigMetadata(configPath)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 
+	nameFromConfig := strings.TrimSpace(name) != ""
 	if name == "" {
 		name = eksNameFromContext(cluster.Spec.Cluster.Connection.Context)
 	}
 
-	return name, region, nil
+	return name, region, nameFromConfig, nil
 }
 
 // resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig

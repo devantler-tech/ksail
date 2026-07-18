@@ -86,8 +86,16 @@ func NewInstaller(
 // the chart's one required value; region is included only when known; a second
 // replica is configured only for HA clusters (single-node clusters cannot
 // schedule two replicas past the chart's default anti-affinity).
+//
+// The chart's Service mutator webhook (default-on, failurePolicy: Fail) is
+// disabled: it makes this controller the default for every new LoadBalancer
+// Service, and during install its admitted-but-not-ready window rejects
+// Services created by concurrently-installing components.
 func buildValuesYaml(clusterName, region string, haEnabled bool) string {
-	parts := []string{"clusterName: " + clusterName}
+	parts := []string{
+		"clusterName: " + clusterName,
+		"enableServiceMutatorWebhook: false",
+	}
 
 	if region != "" {
 		parts = append(parts, "region: "+region)

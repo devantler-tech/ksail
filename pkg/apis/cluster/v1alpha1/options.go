@@ -36,7 +36,7 @@ type OptionsEKS struct {
 	// by the operator's reconcile; enabling it on an existing cluster is not
 	// yet detected by `cluster update`'s diff (#6231). Not yet validated
 	// against a live EKS cluster.
-	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll
+	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll,tagliatelle // AWS keeps its conventional casing, like the sibling issuerURL/floatingIP fields
 }
 
 // OptionsTalos defines options specific to the Talos distribution.

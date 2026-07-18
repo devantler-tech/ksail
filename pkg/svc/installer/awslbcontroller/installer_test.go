@@ -86,20 +86,24 @@ func TestBuildValuesYaml(t *testing.T) {
 	}{
 		{
 			name: "cluster name only", clusterName: "prod-eks",
-			want: "clusterName: prod-eks\nreplicaCount: 1",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
 		},
 		{
-			name: "cluster name and region", clusterName: "prod-eks", region: "eu-north-1",
-			want: "clusterName: prod-eks\nregion: eu-north-1\nreplicaCount: 1",
+			name:        "cluster name and region",
+			clusterName: "prod-eks",
+			region:      "eu-north-1",
+			want:        "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\nreplicaCount: 1",
 		},
 		{
 			name: "ha enabled", clusterName: "prod-eks", haEnabled: true,
-			want: "clusterName: prod-eks\nreplicaCount: 2",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 2",
 		},
 		{
-			name: "ha enabled with region", clusterName: "prod-eks", region: "eu-north-1",
-			haEnabled: true,
-			want:      "clusterName: prod-eks\nregion: eu-north-1\nreplicaCount: 2",
+			name:        "ha enabled with region",
+			clusterName: "prod-eks",
+			region:      "eu-north-1",
+			haEnabled:   true,
+			want:        "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\nreplicaCount: 2",
 		},
 	}
 

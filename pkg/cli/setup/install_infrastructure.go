@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -18,6 +19,7 @@ import (
 	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
@@ -232,10 +234,26 @@ func installEKSLoadBalancer(
 		return nil
 	}
 
-	clusterName, region, err := ksailconfigmanager.ResolveEKSClusterMetadata(clusterCfg)
+	clusterName, fileRegion, nameFromConfig, err := ksailconfigmanager.ResolveEKSClusterMetadata(
+		clusterCfg,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
 	}
+
+	// Honor the same region precedence as the create path: the environment
+	// variable named by spec.provider.aws.regionEnvVar (default AWS_REGION)
+	// overrides eks.yaml, whose region is target-bound only when the file also
+	// named the cluster.
+	region := lifecycle.ResolveAWSRegion(
+		clusterCfg.Spec.Provider.AWS,
+		&clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Region:         fileRegion,
+				NameFromConfig: nameFromConfig,
+			},
+		},
+	)
 
 	helmClient, _, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
