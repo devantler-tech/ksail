@@ -57,7 +57,10 @@ func TestExecWebSocketBridge(t *testing.T) {
 
 	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
 
-	conn, response, err := websocket.DefaultDialer.Dial(url, nil)
+	header := http.Header{}
+	header.Set("Origin", server.URL)
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
 	require.NoError(t, err)
 
 	if response != nil {
@@ -78,6 +81,24 @@ func TestExecWebSocketBridge(t *testing.T) {
 	require.NoError(t, conn.ReadJSON(&msg))
 	assert.Equal(t, "stdout", msg.Op)
 	assert.Equal(t, "hello", msg.Data)
+}
+
+func TestExecRejectsCrossOriginWebSocket(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	header := http.Header{}
+	header.Set("Origin", "https://attacker.example")
+
+	_, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.Error(t, err)
+	require.NotNil(t, response)
+	defer func() { _ = response.Body.Close() }()
+
+	assert.Equal(t, http.StatusForbidden, response.StatusCode)
 }
 
 func TestExecBlockedWhenReadOnly(t *testing.T) {
