@@ -12,6 +12,7 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 homebrew_block="${tmp_dir}/homebrew.yaml"
 execution_surface="${tmp_dir}/execution-surface.sh"
 selected_open_block="${tmp_dir}/selected-open-block.sh"
+reconcile_function="${tmp_dir}/reconcile-merged-handoff.sh"
 
 awk '
   /^  homebrew:/ { in_homebrew = 1 }
@@ -35,6 +36,19 @@ awk '
   in_selected_open { print }
 ' "${homebrew_block}" >"${selected_open_block}"
 
+# Exercise the workflow's real reconciliation function, not a copied test helper. A selected open
+# PR can merge after the finder's first closed-PR enumeration, so the function must retry within a
+# fixed bound before it records a failed handoff.
+awk '
+  /^[[:space:]]+reconcile_merged_handoff\(\) \{/ { in_function = 1 }
+  in_function {
+    line = $0
+    sub(/^          /, "", line)
+    print line
+  }
+  in_function && /^          }[[:space:]]*$/ { exit }
+' "${homebrew_block}" >"${reconcile_function}"
+
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
 	exit 1
@@ -51,6 +65,43 @@ assert_not_contains() {
 		fail "${message}"
 	fi
 }
+
+race_root="${tmp_dir}/merged-race"
+mkdir -p "${race_root}/.github/scripts" "${race_root}/evidence"
+cat >"${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+calls=0
+if [[ -f "${RECONCILE_RACE_STATE}" ]]; then
+	calls="$(<"${RECONCILE_RACE_STATE}")"
+fi
+calls=$((calls + 1))
+printf '%s\n' "${calls}" >"${RECONCILE_RACE_STATE}"
+if [[ "${calls}" -eq 1 ]]; then
+	printf 'simulated just-merged list lag\n' >&2
+	exit 1
+fi
+printf '42\n'
+EOF
+chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
+(
+	cd "${race_root}"
+	TAP="devantler-tech/homebrew-tap"
+	GITHUB_REPOSITORY="devantler-tech/ksail"
+	TAG="v7.175.1"
+	evidence_dir="${race_root}/evidence"
+	GITHUB_STEP_SUMMARY="${race_root}/summary.md"
+	RECONCILE_RACE_STATE="${race_root}/calls"
+	export TAP GITHUB_REPOSITORY TAG evidence_dir GITHUB_STEP_SUMMARY RECONCILE_RACE_STATE
+	handoff_failed=0
+	# shellcheck disable=SC2329 # Invoked by the sourced workflow function.
+	sleep() { :; }
+	# shellcheck source=/dev/null
+	source "${reconcile_function}"
+	reconcile_merged_handoff ksail 'simulated open-to-merged race'
+	[[ "${handoff_failed}" -eq 0 ]] || exit 1
+	[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
+) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
 
 assert_contains 'name: 🍺 Prepare Homebrew cask PRs' "${homebrew_block}" \
 	'release job must be a prepare-and-handoff step'

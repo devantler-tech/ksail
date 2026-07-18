@@ -821,23 +821,28 @@ jobs:
 
           reconcile_merged_handoff() {
             local name="$1" context="$2" branch="goreleaser/$1"
-            local merged_pr merged_reason
+            local attempt merged_pr merged_reason
 
             # An initially-open evergreen PR can auto-merge at any point in this step. Every failure
             # after selecting that PR comes through here: only immutable merge evidence plus an
             # unchanged pinned-main cask can turn the race into success. If it is still open, or any
             # proof is unavailable, preserve the original fail-closed outcome.
-            if merged_pr="$(.github/scripts/find-merged-cask-pr-handoff.sh \
-              --tap "$TAP" \
-              --cask-name "$name" \
-              --source-repo "$GITHUB_REPOSITORY" \
-              --tag "$TAG" \
-              --output-dir "$evidence_dir" 2>&1)"; then
-              echo "::notice::${TAP}#${merged_pr} cask ${name} is merged and current for ${TAG}; ${context}"
-              printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
-                "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
-              return 0
-            fi
+            for attempt in 1 2; do
+              if merged_pr="$(.github/scripts/find-merged-cask-pr-handoff.sh \
+                --tap "$TAP" \
+                --cask-name "$name" \
+                --source-repo "$GITHUB_REPOSITORY" \
+                --tag "$TAG" \
+                --output-dir "$evidence_dir" 2>&1)"; then
+                echo "::notice::${TAP}#${merged_pr} cask ${name} is merged and current for ${TAG}; ${context}"
+                printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
+                  "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+                return 0
+              fi
+              if [[ "$attempt" -eq 1 ]]; then
+                sleep 1
+              fi
+            done
 
             merged_reason="${merged_pr//$'\n'/; }"
             echo "::warning::${context}; no fully validated merged handoff for ${branch}: ${merged_reason:-no merged evidence}"
