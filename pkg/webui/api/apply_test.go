@@ -3,6 +3,8 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
@@ -43,8 +45,9 @@ func TestApplyEndpoint(t *testing.T) {
 	stub := &applyStub{}
 	server := &api.Server{Service: stub}
 
-	recorder := doRequest(
+	recorder := doApplyRequest(
 		server.Handler(),
+		"application/yaml",
 		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply",
 		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
@@ -63,8 +66,9 @@ func TestApplyEndpointDryRun(t *testing.T) {
 	stub := &applyStub{}
 	server := &api.Server{Service: stub}
 
-	recorder := doRequest(
+	recorder := doApplyRequest(
 		server.Handler(),
+		"application/yaml",
 		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply?dryRun=true",
 		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
@@ -80,8 +84,9 @@ func TestApplyBlockedWhenReadOnly(t *testing.T) {
 	stub := &applyStub{}
 	server := &api.Server{Service: stub, ReadOnly: true}
 
-	recorder := doRequest(
+	recorder := doApplyRequest(
 		server.Handler(),
+		"application/yaml",
 		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply",
 		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
@@ -89,4 +94,43 @@ func TestApplyBlockedWhenReadOnly(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.Empty(t, stub.gotManifests)
+}
+
+func TestApplyRejectsCORSSafelistedContentType(t *testing.T) {
+	t.Parallel()
+
+	stub := &applyStub{}
+	server := &api.Server{Service: stub}
+
+	recorder := doApplyRequest(
+		server.Handler(),
+		"text/plain",
+		http.MethodPost,
+		"/api/v1/clusters/default/c1/apply",
+		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
+	)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
+	assert.Empty(t, stub.gotManifests)
+	assert.Contains(t, recorder.Body.String(), "application/yaml")
+}
+
+func doApplyRequest(
+	handler http.Handler,
+	contentType string,
+	method string,
+	target string,
+	body string,
+) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		method,
+		target,
+		strings.NewReader(body),
+	)
+	request.Header.Set("Content-Type", contentType)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	return recorder
 }

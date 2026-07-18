@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"path"
@@ -39,6 +40,12 @@ const (
 // errorJSONKey is the JSON object key carrying a human-readable error message in API and SSE error
 // responses. The SPA parses both with the same logic, so the key is shared.
 const errorJSONKey = "error"
+
+var applyManifestContentTypes = map[string]struct{}{
+	"application/yaml":   {},
+	"application/x-yaml": {},
+	"text/yaml":          {},
+}
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
 //
@@ -985,6 +992,16 @@ func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 
+	if !isApplyManifestContentType(request.Header.Get("Content-Type")) {
+		writeError(
+			writer,
+			http.StatusUnsupportedMediaType,
+			fmt.Errorf("manifest apply requires Content-Type application/yaml"),
+		)
+
+		return
+	}
+
 	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
 
 	manifests, err := io.ReadAll(limited)
@@ -1010,6 +1027,17 @@ func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) 
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{"results": results, "dryRun": dryRun})
+}
+
+func isApplyManifestContentType(header string) bool {
+	mediaType, _, err := mime.ParseMediaType(header)
+	if err != nil {
+		return false
+	}
+
+	_, ok := applyManifestContentTypes[strings.ToLower(mediaType)]
+
+	return ok
 }
 
 func (s *Server) handleCipherRecipients(writer http.ResponseWriter, request *http.Request) {
