@@ -52,6 +52,9 @@ func doRequest(handler http.Handler, method, target, body string) *httptest.Resp
 		target,
 		strings.NewReader(body),
 	)
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
@@ -185,6 +188,34 @@ func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+}
+
+func TestCreateClusterRejectsSimpleCrossOriginContentType(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newClient(t)
+	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
+	body := `{"metadata":{"name":"evil-eks","namespace":"default"},"spec":{"cluster":{"distribution":"EKS","provider":"AWS"}}}`
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/clusters",
+		strings.NewReader(body),
+	)
+	request.Header.Set("Content-Type", "text/plain")
+	request.Header.Set("Origin", "https://attacker.example")
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
+
+	err := fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: defaultNS, Name: "evil-eks"},
+		&v1alpha1.Cluster{},
+	)
+	assert.Error(t, err, "cluster should not be created from a simple cross-origin content type")
 }
 
 func TestCreateClusterWhenWritable(t *testing.T) {
