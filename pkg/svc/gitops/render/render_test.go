@@ -250,3 +250,160 @@ metadata:
 func joinDocsString(docs ...string) string {
 	return strings.Join(docs, "\n---\n")
 }
+
+// helmReleaseValuesFromYAML references a ConfigMap "app-config" via valuesFrom.
+// Whether that ConfigMap is in the stream determines if the offline render is
+// full-fidelity.
+const (
+	helmReleaseValuesFromYAML = `apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: podinfo
+  valuesFrom:
+    - kind: ConfigMap
+      name: app-config`
+
+	helmReleaseValuesFromOptionalYAML = helmReleaseValuesFromYAML + `
+      optional: true`
+
+	// helmReleaseValuesFromOptionalMissingKeyYAML marks the reference optional but
+	// requests a valuesKey the referenced ConfigMap does not carry (a typo of
+	// "values.yaml"). helm-controller forgives only a NOT-FOUND optional referent —
+	// "any ValuesKey, TargetPath or transient error will still result in a
+	// reconciliation failure" — so this must still be reported.
+	helmReleaseValuesFromOptionalMissingKeyYAML = helmReleaseValuesFromYAML + `
+      optional: true
+      valuesKey: valuse.yaml`
+
+	appConfigYAML = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: flux-system
+data:
+  values.yaml: |
+    replicaCount: 3`
+
+	// appConfigEmptyYAML is present in the stream but carries no data at all. It
+	// must still count as a PRESENT referent: Flux forgives only a missing object,
+	// so an optional reference to this one still fails reconciliation on the
+	// absent valuesKey.
+	appConfigEmptyYAML = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: flux-system`
+)
+
+// valuesFromDegradationCase is one valuesFrom resolution scenario for
+// TestExpandDegradesOnUnresolvableValuesFrom.
+type valuesFromDegradationCase struct {
+	name         string
+	stream       []byte
+	wantDegraded bool
+	wantKind     render.DegradationKind
+}
+
+// valuesFromDegradationCases enumerates how each valuesFrom resolution outcome
+// must be reported. It mirrors helm-controller's tolerance rule: `optional`
+// forgives only a NOT-FOUND referent, so a referent that is present — whether it
+// lacks the requested key or carries no data at all — still fails reconciliation
+// and must be reported, under its own kind so the warning names the real cause.
+func valuesFromDegradationCases() []valuesFromDegradationCase {
+	return []valuesFromDegradationCase{
+		{
+			name:         "non-optional valuesFrom absent from the stream degrades",
+			stream:       joinDocs(helmReleaseValuesFromYAML),
+			wantDegraded: true,
+			wantKind:     render.DegradationPartialValues,
+		},
+		{
+			name:         "optional valuesFrom absent from the stream is tolerated",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML),
+			wantDegraded: false,
+		},
+		{
+			name:         "optional valuesFrom present but missing its valuesKey degrades",
+			stream:       joinDocs(helmReleaseValuesFromOptionalMissingKeyYAML, appConfigYAML),
+			wantDegraded: true,
+			wantKind:     render.DegradationMissingValuesKey,
+		},
+		{
+			name:         "optional valuesFrom present but empty degrades",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML, appConfigEmptyYAML),
+			wantDegraded: true,
+			wantKind:     render.DegradationMissingValuesKey,
+		},
+		{
+			name:         "optional valuesFrom resolvable from the stream does not degrade",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML, appConfigYAML),
+			wantDegraded: false,
+		},
+		{
+			name:         "resolvable valuesFrom does not degrade",
+			stream:       joinDocs(helmReleaseValuesFromYAML, appConfigYAML),
+			wantDegraded: false,
+		},
+	}
+}
+
+// TestExpandDegradesOnUnresolvableValuesFrom pins the render-fidelity honesty
+// contract: a HelmRelease whose valuesFrom ConfigMap/Secret cannot supply its
+// value offline still renders, but records a degradation so the shift-left gate
+// does not silently under-report its coverage.
+func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
+	t.Parallel()
+
+	resolver := fakeResolver{
+		render: func(_ *helmv2.HelmRelease, _ render.SourceIndex) (string, error) {
+			return renderedDeployment, nil
+		},
+	}
+
+	for _, testCase := range valuesFromDegradationCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := render.Expand(
+				context.Background(),
+				testCase.stream,
+				render.Options{Resolver: resolver},
+			)
+			require.NoError(t, err)
+			assertValuesFromDegradation(t, result, testCase.wantDegraded, testCase.wantKind)
+		})
+	}
+}
+
+// assertValuesFromDegradation checks that the chart rendered and that a partial-
+// values degradation is present exactly when wantDegraded is true.
+func assertValuesFromDegradation(
+	t *testing.T,
+	result render.Result,
+	wantDegraded bool,
+	wantKind render.DegradationKind,
+) {
+	t.Helper()
+
+	// The chart renders regardless of values coverage.
+	_, hasDeployment := findDoc(result.Documents, "Deployment")
+	require.True(t, hasDeployment, "chart should render regardless of values coverage")
+
+	if !wantDegraded {
+		assert.Empty(t, result.Degradations)
+
+		return
+	}
+
+	require.Len(t, result.Degradations, 1)
+	degradation := result.Degradations[0]
+	assert.Equal(t, "flux-system/podinfo", degradation.HelmRelease)
+	assert.Equal(t, wantKind, degradation.Kind)
+	assert.False(t, degradation.Silent, "an unresolvable valuesFrom should warn")
+	assert.Contains(t, degradation.Reason, "app-config")
+}
