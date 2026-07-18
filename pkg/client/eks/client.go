@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,6 +15,7 @@ import (
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+	awsconfigutil "github.com/devantler-tech/ksail/v7/pkg/awsconfig"
 )
 
 const (
@@ -310,7 +310,12 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 			cfg.Region = strings.TrimSpace(region)
 		}
 	case c.staticCredentialProvider != nil:
-		cfg, err = loadNeutralStaticAWSConfig(ctx, region, c.staticCredentialProvider)
+		cfg, err = awsconfigutil.LoadNeutral(
+			ctx,
+			config.LoadDefaultConfig,
+			region,
+			c.staticCredentialProvider,
+		)
 		if err != nil {
 			return fmt.Errorf("loading aws configuration: %w", err)
 		}
@@ -333,47 +338,6 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 	c.configureMissingSTSClients(cfg)
 
 	return nil
-}
-
-func loadNeutralStaticAWSConfig(
-	ctx context.Context,
-	region string,
-	provider aws.CredentialsProvider,
-) (aws.Config, error) {
-	file, err := os.CreateTemp("", "ksail-frozen-aws-config-*")
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("create neutral AWS config: %w", err)
-	}
-
-	path := file.Name()
-	defer func() { _ = os.Remove(path) }()
-
-	const profile = "__ksail_frozen__"
-
-	_, writeErr := fmt.Fprintf(file, "[profile %s]\n", profile)
-	closeErr := file.Close()
-
-	if writeErr != nil {
-		return aws.Config{}, fmt.Errorf("write neutral AWS config: %w", writeErr)
-	}
-
-	if closeErr != nil {
-		return aws.Config{}, fmt.Errorf("close neutral AWS config: %w", closeErr)
-	}
-
-	configSnapshot, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithRegion(region),
-		config.WithCredentialsProvider(provider),
-		config.WithSharedConfigProfile(profile),
-		config.WithSharedConfigFiles([]string{path}),
-		config.WithSharedCredentialsFiles([]string{}),
-	)
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("load neutral AWS configuration: %w", err)
-	}
-
-	return configSnapshot, nil
 }
 
 func (c *Client) configureMissingSTSClients(cfg aws.Config) {

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	awscredentials "github.com/aws/aws-sdk-go-v2/credentials"
+	awsconfigutil "github.com/devantler-tech/ksail/v7/pkg/awsconfig"
 )
 
 var (
@@ -28,8 +28,6 @@ type awsConfigLoader func(
 	context.Context,
 	...func(*config.LoadOptions) error,
 ) (aws.Config, error)
-
-const frozenAWSProfile = "__ksail_frozen__"
 
 // ResolveFrozenAWS resolves the selected AWS provider exactly once and returns a concrete static
 // credential tuple. The tuple can be reused by SDK clients and eksctl child processes without
@@ -192,39 +190,18 @@ func loadNeutralAWSConfig(
 	region string,
 	selection AWSResolution,
 ) (aws.Config, error) {
-	file, err := os.CreateTemp("", "ksail-frozen-aws-config-*")
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("create neutral AWS config: %w", err)
-	}
-
-	path := file.Name()
-	defer func() { _ = os.Remove(path) }()
-
-	_, writeErr := fmt.Fprintf(file, "[profile %s]\n", frozenAWSProfile)
-	closeErr := file.Close()
-
-	if writeErr != nil {
-		return aws.Config{}, fmt.Errorf("write neutral AWS config: %w", writeErr)
-	}
-
-	if closeErr != nil {
-		return aws.Config{}, fmt.Errorf("close neutral AWS config: %w", closeErr)
-	}
-
 	provider := awscredentials.NewStaticCredentialsProvider(
 		selection.AccessKeyID,
 		selection.SecretAccessKey,
 		selection.SessionToken,
 	)
-	options := []func(*config.LoadOptions) error{
-		config.WithRegion(region),
-		config.WithCredentialsProvider(provider),
-		config.WithSharedConfigProfile(frozenAWSProfile),
-		config.WithSharedConfigFiles([]string{path}),
-		config.WithSharedCredentialsFiles([]string{}),
+
+	cfg, err := awsconfigutil.LoadNeutral(ctx, loader, region, provider)
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("load neutral AWS configuration: %w", err)
 	}
 
-	return loader(ctx, options...)
+	return cfg, nil
 }
 
 func isMissingSharedConfigProfile(err error) bool {
