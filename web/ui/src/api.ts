@@ -132,8 +132,8 @@ export interface Capabilities {
   // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
   // delete). The SPA combines it with !readOnly before showing the action affordances.
   workloadWrite: boolean;
-  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
-  // local backend). The SPA shows the Download-kubeconfig action only then.
+  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster.
+  // The SPA shows the Download-kubeconfig action only then.
   kubeconfigDownload: boolean;
   // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
   // with !readOnly before showing the Apply YAML action.
