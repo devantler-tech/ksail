@@ -192,7 +192,7 @@ func (c *Client) ListClusters(
 
 	response, err := c.manager.ListClusters(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("listing GKE clusters in %q: %w", location, err)
+		return nil, fmt.Errorf("listing GKE clusters: %w", err)
 	}
 
 	return response.GetClusters(), nil

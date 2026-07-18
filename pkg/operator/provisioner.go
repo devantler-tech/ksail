@@ -194,18 +194,18 @@ func awsRegion(cluster *v1alpha1.Cluster) string {
 	return resolveEnvVar(cluster.Spec.Provider.AWS.RegionEnvVar, defaultAWSRegionEnvVar)
 }
 
-// gcpProject resolves the GKE project from the environment variable named by the cluster's GCP
-// options (default GOOGLE_CLOUD_PROJECT). An empty result lets the GKE provisioner surface a
-// clear ErrProjectRequired.
-func gcpProject(cluster *v1alpha1.Cluster) string {
-	return resolveEnvVar(cluster.Spec.Provider.GCP.ProjectEnvVar, defaultGCPProjectEnvVar)
+// gcpProject resolves the GKE project from the operator's fixed GOOGLE_CLOUD_PROJECT environment
+// variable. Cluster resources cannot select arbitrary operator environment variables because
+// reconciliation failures are reflected in public Cluster status conditions.
+func gcpProject(_ *v1alpha1.Cluster) string {
+	return resolveEnvVar("", defaultGCPProjectEnvVar)
 }
 
-// gcpLocation resolves the GKE location from the environment variable named by the cluster's GCP
-// options (default GOOGLE_CLOUD_LOCATION). An empty result leaves the location unpinned: reads
-// resolve the cluster's own location, while create fails with a clear ErrLocationRequired.
-func gcpLocation(cluster *v1alpha1.Cluster) string {
-	return resolveEnvVar(cluster.Spec.Provider.GCP.LocationEnvVar, defaultGCPLocationEnvVar)
+// gcpLocation resolves the GKE location from the operator's fixed GOOGLE_CLOUD_LOCATION environment
+// variable. An empty result leaves the location unpinned: reads resolve the cluster's own location,
+// while create fails with a clear ErrLocationRequired.
+func gcpLocation(_ *v1alpha1.Cluster) string {
+	return resolveEnvVar("", defaultGCPLocationEnvVar)
 }
 
 // azureSubscriptionID resolves the AKS subscription from the environment variable named by the
