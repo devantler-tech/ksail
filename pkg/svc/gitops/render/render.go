@@ -461,9 +461,10 @@ func extractStringData(doc []byte, secret bool) map[string]string {
 
 	maps.Copy(out, obj.StringData)
 
-	if len(out) == 0 {
-		return nil
-	}
-
+	// An EMPTY (but non-nil) map is returned deliberately for a referent that
+	// carries no data: the object still exists in the stream, and callers must be
+	// able to tell "present but has no such key" (a Flux reconciliation failure,
+	// even for an optional reference) from "absent" (which optional forgives).
+	// Only a parse failure yields nil, meaning "not a usable referent at all".
 	return out
 }

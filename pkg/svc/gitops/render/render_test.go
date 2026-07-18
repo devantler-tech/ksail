@@ -288,28 +288,34 @@ metadata:
 data:
   values.yaml: |
     replicaCount: 3`
+
+	// appConfigEmptyYAML is present in the stream but carries no data at all. It
+	// must still count as a PRESENT referent: Flux forgives only a missing object,
+	// so an optional reference to this one still fails reconciliation on the
+	// absent valuesKey.
+	appConfigEmptyYAML = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: flux-system`
 )
 
-// TestExpandDegradesOnUnresolvableValuesFrom pins the render-fidelity honesty
-// contract: a HelmRelease whose non-optional valuesFrom ConfigMap/Secret is
-// absent from the offline stream still renders, but records a
-// DegradationPartialValues so the shift-left gate does not silently under-report
-// its coverage. An optional reference, or a resolvable one, degrades nothing.
-func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
-	t.Parallel()
+// valuesFromDegradationCase is one valuesFrom resolution scenario for
+// TestExpandDegradesOnUnresolvableValuesFrom.
+type valuesFromDegradationCase struct {
+	name         string
+	stream       []byte
+	wantDegraded bool
+	wantKind     render.DegradationKind
+}
 
-	resolver := fakeResolver{
-		render: func(_ *helmv2.HelmRelease, _ render.SourceIndex) (string, error) {
-			return renderedDeployment, nil
-		},
-	}
-
-	tests := []struct {
-		name         string
-		stream       []byte
-		wantDegraded bool
-		wantKind     render.DegradationKind
-	}{
+// valuesFromDegradationCases enumerates how each valuesFrom resolution outcome
+// must be reported. It mirrors helm-controller's tolerance rule: `optional`
+// forgives only a NOT-FOUND referent, so a referent that is present — whether it
+// lacks the requested key or carries no data at all — still fails reconciliation
+// and must be reported, under its own kind so the warning names the real cause.
+func valuesFromDegradationCases() []valuesFromDegradationCase {
+	return []valuesFromDegradationCase{
 		{
 			name:         "non-optional valuesFrom absent from the stream degrades",
 			stream:       joinDocs(helmReleaseValuesFromYAML),
@@ -322,13 +328,14 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 			wantDegraded: false,
 		},
 		{
-			// Flux forgives only a not-found optional referent; a present one
-			// missing the requested valuesKey still fails reconciliation, so a
-			// valuesKey typo must not be silently swallowed by `optional: true`.
-			// It reports as its own kind so the warning can name the real cause
-			// instead of blaming a cluster-managed source.
 			name:         "optional valuesFrom present but missing its valuesKey degrades",
 			stream:       joinDocs(helmReleaseValuesFromOptionalMissingKeyYAML, appConfigYAML),
+			wantDegraded: true,
+			wantKind:     render.DegradationMissingValuesKey,
+		},
+		{
+			name:         "optional valuesFrom present but empty degrades",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML, appConfigEmptyYAML),
 			wantDegraded: true,
 			wantKind:     render.DegradationMissingValuesKey,
 		},
@@ -343,8 +350,22 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 			wantDegraded: false,
 		},
 	}
+}
 
-	for _, testCase := range tests {
+// TestExpandDegradesOnUnresolvableValuesFrom pins the render-fidelity honesty
+// contract: a HelmRelease whose valuesFrom ConfigMap/Secret cannot supply its
+// value offline still renders, but records a degradation so the shift-left gate
+// does not silently under-report its coverage.
+func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
+	t.Parallel()
+
+	resolver := fakeResolver{
+		render: func(_ *helmv2.HelmRelease, _ render.SourceIndex) (string, error) {
+			return renderedDeployment, nil
+		},
+	}
+
+	for _, testCase := range valuesFromDegradationCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
