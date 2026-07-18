@@ -11,6 +11,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 homebrew_block="${tmp_dir}/homebrew.yaml"
 execution_surface="${tmp_dir}/execution-surface.sh"
+selected_open_block="${tmp_dir}/selected-open-block.sh"
 
 awk '
   /^  homebrew:/ { in_homebrew = 1 }
@@ -21,9 +22,18 @@ awk '
 awk '1' \
 	"${homebrew_block}" \
 	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
+	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	>"${execution_surface}"
+
+# Once an open PR is selected it can auto-merge between any API call. No later failure may set the
+# global failure bit directly: it must first pass through the immutable merged-current-main proof.
+awk '
+  /pr="\$\(jq -r '\''\.\[0\]\.number'\''/ { in_selected_open = 1 }
+  /if \[ "\$handoff_failed" -ne 0 \]/ { in_selected_open = 0 }
+  in_selected_open { print }
+' "${homebrew_block}" >"${selected_open_block}"
 
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
@@ -67,10 +77,41 @@ assert_contains 'failed prepared revalidation' "${homebrew_block}" \
 	'release job must fail the rerun red when an already-ready cask PR no longer passes prepared revalidation'
 # A partial rerun may find the first cask ALREADY MERGED by the tap auto-merge; the open-only query
 # then returns zero, so the job must check for a merged, this-tag cask before failing red (#6134).
-assert_contains 'pulls?state=closed&head=' "${homebrew_block}" \
+assert_contains 'find-merged-cask-pr-handoff.sh' "${homebrew_block}" \
+	'release job must route every zero-open-PR result through the fully validated merged finder'
+assert_contains 'reconcile_merged_handoff "$name"' "${selected_open_block}" \
+	'open-PR failures must retry through the merged-current-main proof after an auto-merge race'
+assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
+	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
+reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
+	"${selected_open_block}" || true)"
+if [[ "${reconciliation_calls}" -ne 9 ]]; then
+	fail "every selected-open failure must reconcile an auto-merge race; expected 9 call sites, found ${reconciliation_calls}"
+fi
+for context in \
+	'failed ready-PR revalidation' \
+	'failed draft validation after open enumeration' \
+	'brew became unavailable while preparing' \
+	'could not be confirmed brew-style-clean' \
+	'failed post-style validation' \
+	'could not receive normalized metadata' \
+	'metadata could not be completed' \
+	'failed prepared validation' \
+	'could not be marked ready'; do
+	assert_contains "${context}" "${selected_open_block}" \
+		"selected-open failure is missing merged reconciliation context: ${context}"
+done
+assert_not_contains 'and .title == $title' "${homebrew_block}" \
+	'release job must not trust an exact merged PR title without immutable cask evidence'
+assert_contains 'pulls?state=closed&head=' \
+	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
 	'release job must check for an already-merged cask PR on a rerun (open-only query misses it)'
-assert_contains 'merged_at != null' "${homebrew_block}" \
-	'release job must count only MERGED closed cask PRs when treating a rerun as already handed off'
+assert_contains '--include-main' \
+	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+	'merged finder must collect pinned-main and immutable merge evidence before accepting a handoff'
+assert_contains '--merged' \
+	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+	'merged finder must apply the fail-closed merged validator to every candidate'
 # A generated cask the runner could not style-clean (clone/tempdir/push failure) would be rejected by
 # the tap's brew-style gate, silently blocking auto-merge — the job must go red, not promote it (#6134).
 assert_contains 'could not ensure it is brew-style-clean' "${homebrew_block}" \
@@ -149,6 +190,22 @@ assert_contains '.github/scripts/validate-cask-pr-handoff.test.sh' "${ci_workflo
 	'CI must execute the handoff fixture suite'
 assert_contains '.github/scripts/collect-cask-pr-handoff.test.sh' "${ci_workflow}" \
 	'CI must execute the handoff collector suite'
+assert_contains '.github/scripts/find-merged-cask-pr-handoff.test.sh' "${ci_workflow}" \
+	'CI must include the paginated merged-handoff finder suite'
+assert_contains "- '.github/scripts/find-merged-cask-pr-handoff.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on merged-finder changes'
+assert_contains "- '.github/scripts/find-merged-cask-pr-handoff.test.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on merged-finder test changes'
+if [[ "$(grep -Fc -- '.github/scripts/find-merged-cask-pr-handoff.sh' "${ci_workflow}" || true)" -lt 2 ]]; then
+	fail 'CI must shellcheck the merged finder in addition to path-filtering it'
+fi
+if [[ "$(grep -Fc -- '.github/scripts/find-merged-cask-pr-handoff.test.sh' "${ci_workflow}" || true)" -lt 3 ]]; then
+	fail 'CI must path-filter, shellcheck, and execute the merged-finder test'
+fi
+if ! grep -Eq '^[[:space:]]+\.github/scripts/find-merged-cask-pr-handoff\.test\.sh[[:space:]]*$' \
+	"${ci_workflow}"; then
+	fail 'CI must execute the paginated merged-handoff finder suite as a standalone command'
+fi
 assert_contains '.github/scripts/cask-pr-handoff-workflow.test.sh' "${ci_workflow}" \
 	'CI must execute the handoff workflow contract suite'
 
