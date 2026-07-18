@@ -30,9 +30,12 @@ type OptionsEKS struct {
 	// Balancer Controller as the cluster's LoadBalancer component when
 	// spec.cluster.loadBalancer is Enabled. Default false: EKS keeps its
 	// default in-tree Classic Load Balancer path and KSail installs nothing.
-	// The controller's IAM permissions (IRSA or node role) and subnet tags are
-	// prerequisites KSail does not create — see the awslbcontroller installer
-	// package docs. Not yet validated against a live EKS cluster.
+	// The controller's IAM permissions (node-role credentials; IRSA is #6232)
+	// and subnet tags are prerequisites KSail does not create — see the
+	// awslbcontroller installer package docs. Installed at cluster create and
+	// by the operator's reconcile; enabling it on an existing cluster is not
+	// yet detected by `cluster update`'s diff (#6231). Not yet validated
+	// against a live EKS cluster.
 	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll
 }
 

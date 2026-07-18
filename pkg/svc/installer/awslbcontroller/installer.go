@@ -71,8 +71,12 @@ func NewInstaller(
 				Atomic:          true,
 				Wait:            true,
 				WaitForJobs:     true,
-				Timeout:         timeout,
-				ValuesYaml:      buildValuesYaml(clusterName, region, haEnabled),
+				// The chart owns the TargetGroupBinding CRDs; without this,
+				// upgrades leave them at the previously-installed version
+				// (helm v4 maps !UpgradeCRDs to SkipCRDs).
+				UpgradeCRDs: true,
+				Timeout:     timeout,
+				ValuesYaml:  buildValuesYaml(clusterName, region, haEnabled),
 			},
 		),
 	}, nil

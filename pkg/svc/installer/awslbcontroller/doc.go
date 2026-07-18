@@ -7,16 +7,19 @@
 //
 // Prerequisites the installer does NOT create (documented, not automated —
 // these are account-level IAM/VPC concerns outside a chart install):
-//   - IAM permissions for the controller: either an IRSA-backed service
-//     account (eksctl `iamserviceaccount` with the controller's IAM policy)
-//     or the node instance role carrying that policy. With the chart's
-//     default values the controller runs under a chart-created service
-//     account with no role annotation and relies on the node role.
+//   - IAM permissions for the controller: the node instance role must carry
+//     the controller's IAM policy. The chart installs its own service
+//     account with no role annotation (node-role credentials); a
+//     PRE-created IRSA service account is not yet supported — the chart
+//     would try to create the ServiceAccount that eksctl already created
+//     and fail (#6232 tracks IRSA support).
 //   - Subnet tags for load balancer discovery (kubernetes.io/role/elb and
 //     kubernetes.io/role/internal-elb); eksctl-created VPCs tag these
 //     automatically.
 //
 // Installation is an experimental opt-in gated by
 // spec.cluster.eks.experimentalAWSLoadBalancerController together with
-// spec.cluster.loadBalancer: Enabled.
+// spec.cluster.loadBalancer: Enabled. It runs at cluster create and on the
+// operator's reconcile; enabling the opt-in on an EXISTING cluster via
+// `cluster update` is not yet detected by the diff engine (#6231).
 package awslbcontrollerinstaller
