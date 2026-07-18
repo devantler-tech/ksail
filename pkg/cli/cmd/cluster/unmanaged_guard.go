@@ -7,14 +7,17 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
@@ -42,6 +45,34 @@ var (
 		"exact AWS ownership query did not report an eksctl-created cluster",
 	)
 )
+
+type eksIdentityClientFactory func(
+	ctx context.Context,
+	region string,
+	resolution credentials.AWSResolution,
+) (eksidentity.Client, error)
+
+//nolint:gochecknoglobals // synchronized injectable construction seam for offline lifecycle tests.
+var eksIdentityClientFactoryState = struct {
+	sync.RWMutex
+
+	factory eksIdentityClientFactory
+}{
+	factory: func(
+		ctx context.Context,
+		region string,
+		resolution credentials.AWSResolution,
+	) (eksidentity.Client, error) {
+		options := credentials.OptionsForFrozenAWSConfig(
+			resolution,
+			eksclient.WithAWSConfig,
+			eksclient.WithCredentialValues,
+			eksclient.RequireCredentialValues,
+		)
+
+		return eksclient.NewClient(ctx, region, options...)
+	},
+}
 
 // managedClusterLister enumerates the names of clusters ksail manages across every provider and
 // reports whether discovery was complete (no provider failed). The guard fails open when discovery
@@ -243,8 +274,39 @@ func ensureAWSClusterManaged(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) error {
+	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved)
+	if err != nil {
+		return err
+	}
+
+	clusterName := resolved.ClusterName
+	region := resolved.AWSRegion
+
+	verifier, err := eksidentity.NewVerifier(identityClient, clusterName, region)
+	if err != nil {
+		return fmt.Errorf("load immutable EKS ownership identity: %w", err)
+	}
+
+	err = verifier(ctx)
+	if err != nil {
+		return fmt.Errorf("verify immutable EKS ownership identity: %w", err)
+	}
+
+	resolved.AWSOwnershipVerifier = verifier
+
+	return nil
+}
+
+// resolveAWSOwnershipTarget performs the legacy local-intent plus exact eksctl provenance check and
+// returns an SDK client pinned to the same one-time credential snapshot. Normal mutations follow it
+// with immutable identity verification; the explicit rebind flow deliberately uses only this
+// read-only prerequisite before capturing a new identity.
+func resolveAWSOwnershipTarget(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (eksidentity.Client, error) {
 	if !hasLocalKSailEKSTargetEvidence(resolved) {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"no local KSail ownership evidence for EKS target %q: %w",
 			resolved.ClusterName,
 			unmanagedClusterError(resolved.ClusterName),
@@ -253,10 +315,48 @@ func ensureAWSClusterManaged(
 
 	err := bindAWSRegionFromKubeconfig(resolved)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	auth := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(resolved.AWSOpts))
+	auth, err := queryFrozenAWSOwnership(ctx, resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved.AWSResolution = &auth
+
+	eksIdentityClientFactoryState.RLock()
+	factory := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.RUnlock()
+
+	identityClient, err := factory(ctx, resolved.AWSRegion, auth)
+	if err != nil {
+		return nil, fmt.Errorf("create immutable EKS identity client: %w", err)
+	}
+
+	return identityClient, nil
+}
+
+func queryFrozenAWSOwnership(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (credentials.AWSResolution, error) {
+	auth, err := credentials.ResolveFrozenAWS(
+		ctx,
+		credentials.NewAWSOptionsResolver(resolved.AWSOpts),
+		resolved.AWSRegion,
+	)
+	if err != nil {
+		return credentials.AWSResolution{}, fmt.Errorf(
+			"freeze AWS credentials for EKS ownership verification: %w",
+			err,
+		)
+	}
+
+	if resolved.AWSRegion == "" {
+		resolved.AWSRegion = strings.TrimSpace(auth.Region)
+	}
+
 	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
 		auth,
 		os.Environ(),
@@ -271,13 +371,22 @@ func ensureAWSClusterManaged(
 	)
 	if err != nil {
 		if errors.Is(err, eksctlclient.ErrClusterNotFound) {
-			return awsOwnershipMismatchError(resolved, err)
+			return credentials.AWSResolution{}, awsOwnershipMismatchError(resolved, err)
 		}
 
-		return awsOwnershipQueryError(resolved, err)
+		return credentials.AWSResolution{}, awsOwnershipQueryError(resolved, err)
 	}
 
-	return validateAWSOwnershipSummary(resolved, summary)
+	err = validateAWSOwnershipSummary(resolved, summary)
+	if err != nil {
+		return credentials.AWSResolution{}, err
+	}
+
+	if auth.Region == "" {
+		auth.Region = resolved.AWSRegion
+	}
+
+	return auth, nil
 }
 
 // hasLocalKSailEKSTargetEvidence requires local KSail intent before the cloud-side eksctl marker is
@@ -415,12 +524,12 @@ func guardUpdateTargetManaged(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 	eksConfig *clusterprovisioner.EKSConfig,
-) error {
+) (*credentials.AWSResolution, lifecycle.AWSOwnershipVerifier, error) {
 	kubeconfigPath, err := clusterdetector.ResolveKubeconfigPath(
 		clusterCfg.Spec.Cluster.Connection.Kubeconfig,
 	)
 	if err != nil {
-		return fmt.Errorf("resolve kubeconfig path: %w", err)
+		return nil, nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
 	// Canonicalize the user-supplied path before the guard reads the kubeconfig (repo path-safety
@@ -428,19 +537,19 @@ func guardUpdateTargetManaged(
 	// missing kubeconfig still falls through to the guard's fail-open path).
 	canonical, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
+		return nil, nil, fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
 	}
 
 	resolved := resolveUpdateTarget(clusterCfg, clusterName, canonical, eksConfig)
 
 	err = lifecycle.ValidateStandaloneAWSTarget(resolved)
 	if err != nil {
-		return fmt.Errorf("validate AWS update target: %w", err)
+		return nil, nil, fmt.Errorf("validate AWS update target: %w", err)
 	}
 
 	err = updateUnmanagedGuardFunc(ctx, resolved)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// A regionless eks.yaml may be safely bound by an exact kubeconfig context or the exact eksctl
@@ -450,7 +559,7 @@ func guardUpdateTargetManaged(
 		eksConfig.Region = strings.TrimSpace(resolved.AWSRegion)
 	}
 
-	return nil
+	return resolved.AWSResolution, resolved.AWSOwnershipVerifier, nil
 }
 
 func resolveUpdateTarget(

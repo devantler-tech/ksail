@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"sigs.k8s.io/yaml"
@@ -246,6 +247,23 @@ func (u *UpdatableProvisioner) scaleNodegroup(
 	group managedNodeGroupConfig,
 	live eksctl.NodegroupSummary,
 ) error {
+	err := eksidentity.VerifyBeforeMutation(ctx, u.ownershipVerifier)
+	if err != nil {
+		return fmt.Errorf("verify EKS ownership before scaling nodegroup: %w", err)
+	}
+
+	desiredCapacity, minSize, maxSize := nodegroupScaleTargets(group, live)
+
+	//nolint:wrapcheck // wrapped by the caller with the nodegroup name.
+	return u.client.ScaleNodegroup(
+		ctx, clusterName, group.Name, u.region, desiredCapacity, minSize, maxSize,
+	)
+}
+
+func nodegroupScaleTargets(
+	group managedNodeGroupConfig,
+	live eksctl.NodegroupSummary,
+) (int, int, int) {
 	minSize := -1
 	if group.MinSize != nil && *group.MinSize != live.MinSize {
 		minSize = *group.MinSize
@@ -269,10 +287,7 @@ func (u *UpdatableProvisioner) scaleNodegroup(
 		}
 	}
 
-	//nolint:wrapcheck // wrapped by the caller with the nodegroup name.
-	return u.client.ScaleNodegroup(
-		ctx, clusterName, group.Name, u.region, desiredCapacity, minSize, maxSize,
-	)
+	return desiredCapacity, minSize, maxSize
 }
 
 // desiredNodegroups parses the managedNodeGroups block of the declarative

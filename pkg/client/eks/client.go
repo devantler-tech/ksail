@@ -3,7 +3,9 @@ package eks
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -13,6 +15,7 @@ import (
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+	awsconfigutil "github.com/devantler-tech/ksail/v7/pkg/awsconfig"
 )
 
 const (
@@ -31,6 +34,15 @@ const (
 	// the operator consumes the token immediately, so the shortest standard
 	// window is enough.
 	presignExpirySeconds = "60"
+)
+
+var (
+	errCallerIdentityUnavailable = errors.New(
+		"getting AWS caller identity: identity client is unavailable",
+	)
+	errCallerAccountMissing = errors.New(
+		"getting AWS caller identity: response did not include an account ID",
+	)
 )
 
 // clusterDescriber is the narrow seam over the EKS SDK operation this
@@ -54,15 +66,28 @@ type callerIdentityPresigner interface {
 	) (*v4.PresignedHTTPRequest, error)
 }
 
+// callerIdentityGetter is the seam over the read-only STS identity query used to bind lifecycle
+// state to the currently selected AWS account. *sts.Client satisfies it.
+type callerIdentityGetter interface {
+	GetCallerIdentity(
+		ctx context.Context,
+		params *sts.GetCallerIdentityInput,
+		optFns ...func(*sts.Options),
+	) (*sts.GetCallerIdentityOutput, error)
+}
+
 // Client reads EKS cluster connection details and mints bearer tokens for
 // them, hiding the SDK's request shapes and the token encoding scheme.
 type Client struct {
 	describer                 clusterDescriber
 	presigner                 callerIdentityPresigner
+	identityGetter            callerIdentityGetter
 	loadOptions               []func(*config.LoadOptions) error
+	staticCredentialProvider  aws.CredentialsProvider
 	credentialValuesAvailable bool
 	requireCredentialValues   bool
 	optionErr                 error
+	awsConfig                 *aws.Config
 }
 
 // Option customises a Client.
@@ -84,6 +109,13 @@ func WithCallerIdentityPresigner(presigner callerIdentityPresigner) Option {
 	}
 }
 
+// WithCallerIdentityGetter injects the read-only STS identity query used by ownership checks.
+func WithCallerIdentityGetter(getter callerIdentityGetter) Option {
+	return func(client *Client) {
+		client.identityGetter = getter
+	}
+}
+
 // WithCredentialValues pins the AWS identity used by the SDK-backed EKS and
 // STS clients without mutating process environment. A complete static pair
 // takes precedence over profile, matching the canonical AWS credential chain.
@@ -91,6 +123,7 @@ func WithCallerIdentityPresigner(presigner callerIdentityPresigner) Option {
 // unrelated ambient identity.
 func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
 	return func(client *Client) {
+		client.awsConfig = nil
 		hasAccessKey := accessKeyID != ""
 		hasSecretKey := secretAccessKey != ""
 
@@ -102,13 +135,10 @@ func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken st
 
 		if hasAccessKey {
 			client.credentialValuesAvailable = true
-			client.loadOptions = append(
-				client.loadOptions,
-				config.WithCredentialsProvider(awscredentials.NewStaticCredentialsProvider(
-					accessKeyID,
-					secretAccessKey,
-					sessionToken,
-				)),
+			client.staticCredentialProvider = awscredentials.NewStaticCredentialsProvider(
+				accessKeyID,
+				secretAccessKey,
+				sessionToken,
 			)
 
 			return
@@ -118,6 +148,26 @@ func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken st
 			client.credentialValuesAvailable = true
 			client.loadOptions = append(client.loadOptions, config.WithSharedConfigProfile(profile))
 		}
+	}
+}
+
+// WithAWSConfig pins a complete AWS SDK configuration snapshot. Callers can replace credentials
+// while retaining resolved endpoint, HTTP, retry, and middleware settings without re-reading
+// mutable process configuration.
+func WithAWSConfig(config aws.Config) Option {
+	return func(client *Client) {
+		if config.Credentials == nil {
+			client.optionErr = ErrExplicitCredentialsUnavailable
+
+			return
+		}
+
+		config.ConfigSources = append(config.ConfigSources[:0:0], config.ConfigSources...)
+		config.APIOptions = append(config.APIOptions[:0:0], config.APIOptions...)
+		client.awsConfig = &config
+		client.staticCredentialProvider = nil
+		client.loadOptions = nil
+		client.credentialValuesAvailable = true
 	}
 }
 
@@ -147,17 +197,22 @@ func NewClientWithCredentialRequirement(
 	return NewClient(ctx, region, result...)
 }
 
-// NewClient constructs a Client. Unless both seams are injected, it resolves
-// the AWS default configuration (env, shared config, IRSA / instance
-// role) once and builds the real SDK clients from it.
+// NewClient constructs a Client. Unless the existing DescribeCluster and token-presigning seams are
+// both injected, it resolves the AWS configuration once and builds the missing SDK clients. A
+// deliberately partial injected client must also provide WithCallerIdentityGetter before using
+// CallerAccountID; preserving that test seam avoids an unexpected config dependency for older
+// consumers that only need DescribeCluster and MintToken.
 func NewClient(ctx context.Context, region string, opts ...Option) (*Client, error) {
 	client := &Client{
 		describer:                 nil,
 		presigner:                 nil,
+		identityGetter:            nil,
 		loadOptions:               nil,
+		staticCredentialProvider:  nil,
 		credentialValuesAvailable: false,
 		requireCredentialValues:   false,
 		optionErr:                 nil,
+		awsConfig:                 nil,
 	}
 
 	for _, opt := range opts {
@@ -172,27 +227,31 @@ func NewClient(ctx context.Context, region string, opts ...Option) (*Client, err
 		return nil, ErrExplicitCredentialsUnavailable
 	}
 
-	if client.describer == nil || client.presigner == nil {
-		loadOptions := append(
-			[]func(*config.LoadOptions) error{config.WithRegion(region)},
-			client.loadOptions...,
-		)
-
-		cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
-		if err != nil {
-			return nil, fmt.Errorf("loading aws configuration: %w", err)
-		}
-
-		if client.describer == nil {
-			client.describer = awseks.NewFromConfig(cfg)
-		}
-
-		if client.presigner == nil {
-			client.presigner = sts.NewPresignClient(sts.NewFromConfig(cfg))
-		}
+	err := client.configureMissingSDKClients(ctx, region)
+	if err != nil {
+		return nil, err
 	}
 
 	return client, nil
+}
+
+// CallerAccountID returns the 12-digit AWS account selected by this client's immutable credential
+// configuration. The query never exposes or persists credentials.
+func (c *Client) CallerAccountID(ctx context.Context) (string, error) {
+	if c.identityGetter == nil {
+		return "", errCallerIdentityUnavailable
+	}
+
+	out, err := c.identityGetter.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", fmt.Errorf("getting AWS caller identity: %w", err)
+	}
+
+	if out == nil || strings.TrimSpace(aws.ToString(out.Account)) == "" {
+		return "", errCallerAccountMissing
+	}
+
+	return strings.TrimSpace(aws.ToString(out.Account)), nil
 }
 
 // DescribeCluster returns the named EKS cluster's control-plane details.
@@ -229,6 +288,71 @@ func (c *Client) MintToken(ctx context.Context, clusterName string) (string, err
 	}
 
 	return v1SchemePrefix + base64.RawURLEncoding.EncodeToString([]byte(request.URL)), nil
+}
+
+func (c *Client) configureMissingSDKClients(ctx context.Context, region string) error {
+	if c.describer != nil && c.presigner != nil {
+		return nil
+	}
+
+	var (
+		cfg aws.Config
+		err error
+	)
+
+	switch {
+	case c.awsConfig != nil:
+		cfg = *c.awsConfig
+		cfg.ConfigSources = append(cfg.ConfigSources[:0:0], cfg.ConfigSources...)
+
+		cfg.APIOptions = append(cfg.APIOptions[:0:0], cfg.APIOptions...)
+		if strings.TrimSpace(region) != "" {
+			cfg.Region = strings.TrimSpace(region)
+		}
+	case c.staticCredentialProvider != nil:
+		cfg, err = awsconfigutil.LoadNeutral(
+			ctx,
+			config.LoadDefaultConfig,
+			region,
+			c.staticCredentialProvider,
+		)
+		if err != nil {
+			return fmt.Errorf("loading aws configuration: %w", err)
+		}
+	default:
+		loadOptions := append(
+			[]func(*config.LoadOptions) error{config.WithRegion(region)},
+			c.loadOptions...,
+		)
+
+		cfg, err = config.LoadDefaultConfig(ctx, loadOptions...)
+		if err != nil {
+			return fmt.Errorf("loading aws configuration: %w", err)
+		}
+	}
+
+	if c.describer == nil {
+		c.describer = awseks.NewFromConfig(cfg)
+	}
+
+	c.configureMissingSTSClients(cfg)
+
+	return nil
+}
+
+func (c *Client) configureMissingSTSClients(cfg aws.Config) {
+	if c.presigner != nil && c.identityGetter != nil {
+		return
+	}
+
+	stsClient := sts.NewFromConfig(cfg)
+	if c.presigner == nil {
+		c.presigner = sts.NewPresignClient(stsClient)
+	}
+
+	if c.identityGetter == nil {
+		c.identityGetter = stsClient
+	}
 }
 
 // withTokenHeaders adds the signed headers that turn a plain presigned

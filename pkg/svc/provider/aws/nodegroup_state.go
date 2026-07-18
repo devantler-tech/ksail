@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
@@ -319,30 +320,52 @@ func (p *Provider) startNodegroupsWithoutSnapshot(
 			continue
 		}
 
-		// Without a snapshot the pre-stop desired size is unknowable, so fall back to the smallest
-		// running capacity that honours the group's own minimum — the behaviour every release before
-		// capacity snapshots used.
-		target := max(nodegroup.MinSize, 1)
-
-		slog.Warn(
-			"restoring EKS nodegroup without a capacity snapshot; pre-stop desired size is unknown",
-			"cluster", clusterName,
-			"nodegroup", nodegroup.Name,
-			"target", target,
-		)
-
-		err := p.client.ScaleNodegroup(
-			ctx,
-			clusterName,
-			nodegroup.Name,
-			p.region,
-			target,
-			nodegroup.MinSize,
-			nodegroup.MaxSize,
-		)
+		err := p.startNodegroupWithoutSnapshot(ctx, clusterName, nodegroup)
 		if err != nil {
-			return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
+			return err
 		}
+	}
+
+	return nil
+}
+
+func (p *Provider) startNodegroupWithoutSnapshot(
+	ctx context.Context,
+	clusterName string,
+	nodegroup eksctlclient.NodegroupSummary,
+) error {
+	// Without a snapshot the pre-stop desired size is unknowable, so fall back to the smallest
+	// running capacity that honours the group's own minimum — the behaviour every release before
+	// capacity snapshots used.
+	target := max(nodegroup.MinSize, 1)
+
+	slog.Warn(
+		"restoring EKS nodegroup without a capacity snapshot; pre-stop desired size is unknown",
+		"cluster", clusterName,
+		"nodegroup", nodegroup.Name,
+		"target", target,
+	)
+
+	err := eksidentity.VerifyBeforeMutation(ctx, p.ownershipVerifier)
+	if err != nil {
+		return fmt.Errorf(
+			"reverify immutable EKS ownership before starting nodegroup %q: %w",
+			nodegroup.Name,
+			err,
+		)
+	}
+
+	err = p.client.ScaleNodegroup(
+		ctx,
+		clusterName,
+		nodegroup.Name,
+		p.region,
+		target,
+		nodegroup.MinSize,
+		nodegroup.MaxSize,
+	)
+	if err != nil {
+		return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
 	}
 
 	return nil
@@ -359,7 +382,16 @@ func (p *Provider) restoreSavedNodegroups(
 			continue
 		}
 
-		err := p.client.ScaleNodegroup(
+		err := eksidentity.VerifyBeforeMutation(ctx, p.ownershipVerifier)
+		if err != nil {
+			return fmt.Errorf(
+				"reverify immutable EKS ownership before restoring nodegroup %q: %w",
+				capacity.Name,
+				err,
+			)
+		}
+
+		err = p.client.ScaleNodegroup(
 			ctx,
 			clusterName,
 			capacity.Name,

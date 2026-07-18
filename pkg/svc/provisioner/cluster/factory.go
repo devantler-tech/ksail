@@ -9,7 +9,9 @@ import (
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -175,6 +177,15 @@ type DefaultFactory struct {
 	// for installed components. When non-nil it is injected into provisioners
 	// so that GetCurrentConfig returns accurate live state instead of defaults.
 	ComponentDetector *detector.ComponentDetector
+
+	// AWSResolution optionally pins one concrete credential snapshot across an EKS ownership guard
+	// and the provisioner it authorizes. Non-nil values must be frozen; nil preserves normal factory
+	// resolution for consumers outside the guarded CLI mutation path.
+	AWSResolution *credentials.AWSResolution
+
+	// AWSOwnershipVerifier rechecks the exact EKS incarnation inside the provisioner immediately
+	// before each AWS mutation. It is nil for creates and non-EKS consumers.
+	AWSOwnershipVerifier eksidentity.Verifier
 }
 
 // Create selects the correct distribution provisioner for the KSail cluster configuration.

@@ -133,12 +133,9 @@ func runDeleteAction(
 	// Pre-discover registries before deletion for Docker provider
 	preDiscovered := prepareDockerDeletion(cmd, resolved, clusterInfo)
 
-	// Show confirmation prompt unless force flag is set or non-TTY
-	if !confirm.ShouldSkipPrompt(flags.force) {
-		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
-		if err != nil {
-			return err
-		}
+	err = confirmAndReverifyDeleteTarget(cmd, flags, resolved, preDiscovered, isKindCluster)
+	if err != nil {
+		return err
 	}
 
 	// Delete the cluster
@@ -161,16 +158,44 @@ func runDeleteAction(
 	return nil
 }
 
+func confirmAndReverifyDeleteTarget(
+	cmd *cobra.Command,
+	flags *deleteFlags,
+	resolved *lifecycle.ResolvedClusterInfo,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
+) error {
+	// Show confirmation prompt unless force flag is set or non-TTY.
+	if !confirm.ShouldSkipPrompt(flags.force) {
+		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		resolved.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership after delete confirmation: %w", err)
+	}
+
+	return nil
+}
+
 func minimalProvisionerOptions(
 	resolved *lifecycle.ResolvedClusterInfo,
 	deleteStorage bool,
 ) lifecycle.MinimalProvisionerOptions {
 	return lifecycle.MinimalProvisionerOptions{
-		OmniOpts:       resolved.OmniOpts,
-		KubernetesOpts: resolved.KubernetesOpts,
-		AWSOpts:        resolved.AWSOpts,
-		AWSRegion:      resolved.AWSRegion,
-		DeleteStorage:  deleteStorage,
+		OmniOpts:             resolved.OmniOpts,
+		KubernetesOpts:       resolved.KubernetesOpts,
+		AWSOpts:              resolved.AWSOpts,
+		AWSRegion:            resolved.AWSRegion,
+		AWSResolution:        resolved.AWSResolution,
+		AWSOwnershipVerifier: resolved.AWSOwnershipVerifier,
+		DeleteStorage:        deleteStorage,
 	}
 }
 

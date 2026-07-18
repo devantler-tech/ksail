@@ -84,6 +84,14 @@ func autoDeleteCluster(
 	deleteCtx, cancel := context.WithTimeout(cmd.Context(), deleteTimeout)
 	defer cancel()
 
+	err = lifecycle.VerifyAWSOwnershipBeforeMutation(
+		deleteCtx,
+		options.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("TTL auto-delete: %w", err)
+	}
+
 	err = provisioner.Delete(deleteCtx, clusterName)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete failed: %w", err)
@@ -149,6 +157,8 @@ func ttlDeleteProvisionerInputs(
 
 		eksConfig.Region = resolved.AWSRegion
 		options.AWSRegion = resolved.AWSRegion
+		options.AWSResolution = resolved.AWSResolution
+		options.AWSOwnershipVerifier = resolved.AWSOwnershipVerifier
 	}
 
 	return info, options, nil

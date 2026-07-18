@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 )
@@ -43,6 +45,8 @@ type Provisioner struct {
 	eksClientOptions []eksclient.Option
 	// requireCredentialValues prevents ambient fallback when custom sources are unset.
 	requireCredentialValues bool
+	// ownershipVerifier rechecks immutable identity immediately before EKS mutations.
+	ownershipVerifier eksidentity.Verifier
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -68,11 +72,27 @@ func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken st
 	}
 }
 
+// WithAWSConfig pins the complete frozen SDK configuration used by the provisioner's lazy EKS/STS
+// client, retaining non-credential endpoint and transport settings from the ownership guard.
+func WithAWSConfig(config aws.Config) Option {
+	return func(p *Provisioner) {
+		p.eksClientOptions = []eksclient.Option{eksclient.WithAWSConfig(config)}
+	}
+}
+
 // RequireCredentialValues prevents the lazy connector SDK client from falling
 // back to ambient canonical credentials when custom sources resolved no values.
 func RequireCredentialValues() Option {
 	return func(p *Provisioner) {
 		p.requireCredentialValues = true
+	}
+}
+
+// WithOwnershipVerifier injects the immutable EKS identity boundary used immediately before
+// delete. Nodegroup mutations receive the same verifier through the AWS provider.
+func WithOwnershipVerifier(verifier eksidentity.Verifier) Option {
+	return func(p *Provisioner) {
+		p.ownershipVerifier = verifier
 	}
 }
 
@@ -104,6 +124,7 @@ func NewProvisioner(
 		awsClient:               nil,
 		eksClientOptions:        nil,
 		requireCredentialValues: false,
+		ownershipVerifier:       nil,
 		awsMu:                   sync.Mutex{},
 	}
 
@@ -153,6 +174,11 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	err := p.client.CheckAvailable()
 	if err != nil {
 		return fmt.Errorf("eksctl unavailable: %w", err)
+	}
+
+	err = eksidentity.VerifyBeforeMutation(ctx, p.ownershipVerifier)
+	if err != nil {
+		return fmt.Errorf("verify EKS ownership before delete: %w", err)
 	}
 
 	// Keep configPath empty so DeleteCluster cannot replace the validated exact

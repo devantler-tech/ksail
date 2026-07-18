@@ -49,7 +49,7 @@ metadata:
 `
 
 const standaloneEKSEksctlFixture = `#!/bin/sh
-[ "${AWS_PROFILE-}" = "selected-profile" ] || exit 41
+[ -z "${AWS_PROFILE+x}" ] || exit 41
 [ "${AWS_ACCESS_KEY_ID-}" = "fixture-access" ] || exit 42
 [ "${AWS_SECRET_ACCESS_KEY-}" = "fixture-secret" ] || exit 43
 [ "${AWS_SESSION_TOKEN-}" = "fixture-session" ] || exit 44
@@ -598,6 +598,11 @@ metadata:
 				Distribution: v1alpha1.DistributionEKS,
 				Provider:     v1alpha1.ProviderAWS,
 			}))
+			persistStandaloneEKSIdentity(
+				t,
+				clusterName,
+				immutableIdentityTime(),
+			)
 
 			cmd := testCase.newCommand()
 			args := make([]string, 0, 4+len(testCase.extraArgs))
@@ -646,6 +651,7 @@ func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) 
 		Distribution: v1alpha1.DistributionEKS,
 		Provider:     v1alpha1.ProviderAWS,
 	}))
+	configureStandaloneEKSIdentityInRegion(t, clusterName, "ap-southeast-2")
 
 	cmd := cluster.NewStartCmd()
 	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
@@ -657,7 +663,10 @@ func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) 
 	assert.Equal(
 		t,
 		[]string{
-			fmt.Sprintf("get cluster --name %s --output json", clusterName),
+			fmt.Sprintf(
+				"get cluster --name %s --output json --region ap-southeast-2",
+				clusterName,
+			),
 			fmt.Sprintf(
 				"get nodegroup --cluster %s --output json --region ap-southeast-2",
 				clusterName,
@@ -911,6 +920,7 @@ func TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion(t *testing.T) {
 	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KSAIL_REGION", "us-east-1")
+	configureStandaloneEKSIdentityInRegion(t, actualName, "ap-southeast-2")
 	require.NoError(t, state.SaveClusterSpec(staleAlias, &v1alpha1.ClusterSpec{}))
 
 	clusterCfg := standaloneEKSTTLClusterConfig()
@@ -1161,6 +1171,7 @@ func TestStandaloneEKSStartUsesUniqueBareContextRegionFallback(t *testing.T) {
 		clusterName,
 		[]string{clusterName + ".us-west-2.eksctl.io"},
 	)
+	configureStandaloneEKSIdentityInRegion(t, clusterName, "us-west-2")
 
 	cmd := cluster.NewStartCmd()
 	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
@@ -1223,6 +1234,7 @@ func TestStandaloneEKSStartBindsRegionFromExactQueryWithoutContext(t *testing.T)
 	t.Setenv("KSAIL_REGION", "")
 	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "eu-north-1")
 	writeStandaloneEKSEksConfig(t, clusterName)
+	configureStandaloneEKSIdentityInRegion(t, clusterName, "eu-north-1")
 
 	cmd := cluster.NewStartCmd()
 	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
@@ -1444,6 +1456,15 @@ func setupStandaloneEKSLifecycleFixture(
 	t.Setenv("AWS_ACCESS_KEY_ID", "stale-access")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "stale-secret")
 	t.Setenv("AWS_SESSION_TOKEN", "stale-session")
+
+	persistStandaloneEKSIdentity(t, clusterName, immutableIdentityTime())
+	setEKSIdentityClient(t, &fakeEKSIdentityClient{
+		accountID: "123456789012",
+		cluster: immutableEKSCluster(
+			clusterName,
+			immutableIdentityTime(),
+		),
+	})
 
 	return markerPath
 }

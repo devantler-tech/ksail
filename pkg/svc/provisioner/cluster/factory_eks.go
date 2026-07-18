@@ -1,6 +1,7 @@
 package clusterprovisioner
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,6 +11,10 @@ import (
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 )
+
+// ErrUnfrozenAWSResolution reports an identity-sensitive EKS factory call that supplied a mutable
+// profile/default-chain selector instead of the concrete credential tuple verified by the guard.
+var ErrUnfrozenAWSResolution = errors.New("EKS mutation credentials are not frozen")
 
 func (f DefaultFactory) createEKSProvisioner(
 	cluster *v1alpha1.Cluster,
@@ -22,12 +27,27 @@ func (f DefaultFactory) createEKSProvisioner(
 	}
 
 	eksConfig := f.DistributionConfig.EKS
-	client, providerOptions, provisionerOptions := resolveEKSCredentialOptions(
+
+	client, providerOptions, provisionerOptions, err := f.resolveEKSCredentialOptions(
 		cluster.Spec.Provider.AWS,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	provisionerOptions = append(provisionerOptions,
 		eksprovisioner.WithKubeconfigPath(eksConfig.KubeconfigPath),
 	)
+	if f.AWSOwnershipVerifier != nil {
+		providerOptions = append(
+			providerOptions,
+			awsprovider.WithOwnershipVerifier(f.AWSOwnershipVerifier),
+		)
+		provisionerOptions = append(
+			provisionerOptions,
+			eksprovisioner.WithOwnershipVerifier(f.AWSOwnershipVerifier),
+		)
+	}
 
 	infraProvider, err := awsprovider.NewProvider(
 		client,
@@ -66,20 +86,41 @@ func (f DefaultFactory) createEKSProvisioner(
 
 // resolveEKSCredentialOptions snapshots one AWS resolution and derives aligned
 // eksctl, provider, and provisioner options.
-func resolveEKSCredentialOptions(
+func (f DefaultFactory) resolveEKSCredentialOptions(
 	awsOptions v1alpha1.OptionsAWS,
-) (*eksctlclient.Client, []awsprovider.Option, []eksprovisioner.Option) {
-	auth, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
-		credentials.NewAWSOptionsResolver(awsOptions),
+) (*eksctlclient.Client, []awsprovider.Option, []eksprovisioner.Option, error) {
+	if f.AWSOwnershipVerifier != nil && f.AWSResolution == nil {
+		return nil, nil, nil, ErrUnfrozenAWSResolution
+	}
+
+	auth := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOptions))
+
+	if f.AWSResolution != nil {
+		if !f.AWSResolution.IsFrozen() {
+			return nil, nil, nil, ErrUnfrozenAWSResolution
+		}
+
+		auth = *f.AWSResolution
+	}
+
+	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
+		auth,
 		os.Environ(),
 		eksctlclient.WithEnvironment,
 		eksctlclient.RequireCredentialValues,
+	)
+	providerOptions := credentials.OptionsForFrozenAWSConfig(
+		auth,
+		awsprovider.WithAWSConfig,
 		awsprovider.WithCredentialValues,
 		awsprovider.RequireCredentialValues,
 	)
-	provisionerOptions := credentials.OptionsForAWSResolution(
-		auth, eksprovisioner.WithCredentialValues, eksprovisioner.RequireCredentialValues,
+	provisionerOptions := credentials.OptionsForFrozenAWSConfig(
+		auth,
+		eksprovisioner.WithAWSConfig,
+		eksprovisioner.WithCredentialValues,
+		eksprovisioner.RequireCredentialValues,
 	)
 
-	return eksctlclient.NewClient(eksctlOptions...), providerOptions, provisionerOptions
+	return eksctlclient.NewClient(eksctlOptions...), providerOptions, provisionerOptions, nil
 }

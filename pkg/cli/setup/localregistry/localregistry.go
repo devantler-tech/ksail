@@ -15,6 +15,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -107,6 +108,10 @@ type Context struct {
 	EKSConfig      *clusterprovisioner.EKSConfig
 	GKEConfig      *clusterprovisioner.GKEConfig
 	AKSConfig      *clusterprovisioner.AKSConfig
+	// AWSResolution pins one credential snapshot across EKS verification and mutation.
+	AWSResolution *credentials.AWSResolution
+	// AWSOwnershipVerifier rechecks the exact EKS incarnation at each mutation boundary.
+	AWSOwnershipVerifier lifecycle.AWSOwnershipVerifier
 	// MirrorSpecs holds resolved registry mirror specifications for the Kubernetes
 	// provider. The nested provisioner sets these up inside the DinD environment so
 	// nested clusters pull through authenticated, caching mirrors. Nil for other

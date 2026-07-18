@@ -174,16 +174,16 @@ func TestAWSResolution_CustomSourcesRemoveCompetingAmbientCredentialProviders(t 
 		"AWS_WEB_IDENTITY_TOKEN_FILE",
 		"AWS_ROLE_ARN",
 		"AWS_ROLE_SESSION_NAME",
+		"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+		"AWS_CONTAINER_CREDENTIALS_FULL_URI",
+		"AWS_CONTAINER_AUTHORIZATION_TOKEN",
+		"AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
 		"KSAIL_PROFILE",
 	} {
 		assertEnvKeyCount(t, child, key, 0)
 	}
 
 	assertEnvEntry(t, child, "PATH", "usr/bin")
-	assertEnvEntry(t, child, "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "credentials/selected")
-	assertEnvEntry(t, child, "AWS_CONTAINER_CREDENTIALS_FULL_URI", "127.0.0.1/selected")
-	assertEnvEntry(t, child, "AWS_CONTAINER_AUTHORIZATION_TOKEN", "selected-token")
-	assertEnvEntry(t, child, "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", "selected-auth-token")
 }
 
 // TestAWSResolution_ReportsCustomCredentialSourcesEvenWhenUnset verifies

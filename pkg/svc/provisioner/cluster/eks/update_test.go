@@ -1,6 +1,7 @@
 package eksprovisioner_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -61,6 +63,7 @@ func newUpdatableProvisioner(
 	t *testing.T,
 	responses map[string][]response,
 	configPath string,
+	opts ...eksprovisioner.Option,
 ) (*eksprovisioner.UpdatableProvisioner, *scriptedRunner) {
 	t.Helper()
 
@@ -72,7 +75,7 @@ func newUpdatableProvisioner(
 	)
 
 	prov, err := eksprovisioner.NewProvisioner(
-		"ksail-test", "us-east-1", configPath, client, nil,
+		"ksail-test", "us-east-1", configPath, client, nil, opts...,
 	)
 	require.NoError(t, err)
 
@@ -215,6 +218,34 @@ func TestUpdate_AppliesNodegroupScaling(t *testing.T) {
 		"--nodes", "3",
 		"--region", "us-east-1",
 	}, scaleCall)
+}
+
+func TestUpdate_RechecksImmutableIdentityAfterReadsBeforeScaling(t *testing.T) {
+	t.Parallel()
+
+	configPath := writeUpdateTestConfig(t, updateTestConfig)
+	verifierCalls := 0
+	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: []byte(liveNodegroupsJSON)},
+			{stdout: []byte(liveNodegroupsJSON)},
+		},
+	}, configPath, eksprovisioner.WithOwnershipVerifier(func(_ context.Context) error {
+		verifierCalls++
+
+		return eksidentity.ErrIdentityMismatch
+	}))
+
+	_, err := prov.Update(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+		clusterupdateOptions(false),
+	)
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Equal(t, 1, verifierCalls)
+
+	for _, call := range runner.calls {
+		assert.NotEqual(t, "scale", call[0], "identity mismatch must abort before scaling")
+	}
 }
 
 func TestUpdate_DryRunDoesNotScale(t *testing.T) {

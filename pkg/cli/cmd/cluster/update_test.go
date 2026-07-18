@@ -12,6 +12,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -175,6 +177,18 @@ type fakeUpdater struct {
 	result  *clusterupdate.UpdateResult
 	err     error
 	diffErr error
+	calls   int
+}
+
+type countingFactory struct{ calls int }
+
+func (f *countingFactory) Create(
+	context.Context,
+	*v1alpha1.Cluster,
+) (clusterprovisioner.Provisioner, any, error) {
+	f.calls++
+
+	return &fakeProvisioner{}, nil, nil
 }
 
 func (f *fakeUpdater) Update(
@@ -183,6 +197,8 @@ func (f *fakeUpdater) Update(
 	_, _ *v1alpha1.ClusterSpec,
 	_ clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
+	f.calls++
+
 	return f.result, f.err
 }
 
@@ -218,6 +234,64 @@ func TestComputeUpdateDiff_PropagatesProvisionerError(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, wantErr)
+}
+
+func TestApplyInPlaceChangesRechecksEKSIdentityBeforeUpdaterMutation(t *testing.T) {
+	t.Parallel()
+
+	updater := &fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()}
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		AWSOwnershipVerifier: func(context.Context) error {
+			return eksidentity.ErrIdentityMismatch
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cluster.ExportApplyInPlaceChanges(
+		cmd,
+		updater,
+		"replaced-eks-cluster",
+		&v1alpha1.ClusterSpec{},
+		ctx,
+		clusterupdate.NewEmptyUpdateResult(),
+		nil,
+		false,
+		false,
+	)
+
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Zero(t, updater.calls, "identity mismatch must abort before the updater mutates AWS")
+}
+
+//nolint:paralleltest // overrides the process-global provisioner factory seam.
+func TestRecreateRechecksEKSIdentityAfterConsentBeforeDeleteFactory(t *testing.T) {
+	factory := &countingFactory{}
+	restore := cluster.SetProvisionerFactoryForTests(factory)
+	t.Cleanup(restore)
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		AWSOwnershipVerifier: func(context.Context) error {
+			return eksidentity.ErrIdentityMismatch
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cluster.ExportExecuteRecreateFlow(cmd, ctx, "replaced-eks-cluster")
+
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Zero(
+		t,
+		factory.calls,
+		"identity mismatch must abort before constructing a delete provisioner",
+	)
 }
 
 func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test

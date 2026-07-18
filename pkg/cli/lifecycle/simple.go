@@ -17,7 +17,9 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -133,7 +135,15 @@ type ResolvedClusterInfo struct {
 	AWSRegionFromConfig bool
 	// AWSOpts retains the credential environment-variable mappings from the loaded cluster config.
 	AWSOpts v1alpha1.OptionsAWS
+	// AWSResolution pins the concrete credentials selected by the EKS ownership guard for the
+	// provisioner that performs the authorized mutation. It is never persisted.
+	AWSResolution *credentials.AWSResolution
+	// AWSOwnershipVerifier rechecks the persisted/live EKS incarnation immediately before mutation.
+	AWSOwnershipVerifier AWSOwnershipVerifier
 }
+
+// AWSOwnershipVerifier is a read-only immutable EKS identity check captured by the initial guard.
+type AWSOwnershipVerifier = eksidentity.Verifier
 
 // awsRegionEnvVarDefault is the fallback environment variable name for the AWS
 // region when spec.provider.aws.regionEnvVar is unset (mirrors the OptionsAWS
@@ -539,14 +549,21 @@ func provisionAndAct(
 		cmd.Context(),
 		clusterInfo,
 		MinimalProvisionerOptions{
-			OmniOpts:       resolved.OmniOpts,
-			KubernetesOpts: resolved.KubernetesOpts,
-			AWSOpts:        resolved.AWSOpts,
-			AWSRegion:      resolved.AWSRegion,
+			OmniOpts:             resolved.OmniOpts,
+			KubernetesOpts:       resolved.KubernetesOpts,
+			AWSOpts:              resolved.AWSOpts,
+			AWSRegion:            resolved.AWSRegion,
+			AWSResolution:        resolved.AWSResolution,
+			AWSOwnershipVerifier: resolved.AWSOwnershipVerifier,
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
+	err = VerifyAWSOwnershipBeforeMutation(cmd.Context(), resolved.AWSOwnershipVerifier)
+	if err != nil {
+		return err
 	}
 
 	err = config.Action(cmd.Context(), provisioner, resolved.ClusterName)
@@ -586,11 +603,27 @@ func CreateMinimalProvisioner(
 // MinimalProvisionerOptions contains the provider-specific context needed to
 // construct a standalone lifecycle provisioner from only a resolved target.
 type MinimalProvisionerOptions struct {
-	OmniOpts       v1alpha1.OptionsOmni
-	KubernetesOpts v1alpha1.OptionsKubernetes
-	AWSOpts        v1alpha1.OptionsAWS
-	AWSRegion      string
-	DeleteStorage  bool
+	OmniOpts             v1alpha1.OptionsOmni
+	KubernetesOpts       v1alpha1.OptionsKubernetes
+	AWSOpts              v1alpha1.OptionsAWS
+	AWSRegion            string
+	AWSResolution        *credentials.AWSResolution
+	AWSOwnershipVerifier AWSOwnershipVerifier
+	DeleteStorage        bool
+}
+
+// VerifyAWSOwnershipBeforeMutation invokes the EKS identity boundary when present. Non-EKS
+// lifecycle operations carry a nil verifier and remain unchanged.
+func VerifyAWSOwnershipBeforeMutation(
+	ctx context.Context,
+	verifier AWSOwnershipVerifier,
+) error {
+	err := eksidentity.VerifyBeforeMutation(ctx, verifier)
+	if err != nil {
+		return fmt.Errorf("verify AWS ownership before lifecycle mutation: %w", err)
+	}
+
+	return nil
 }
 
 // CreateMinimalProvisionerForProvider creates provisioners for all distributions
@@ -683,6 +716,8 @@ func createMinimalEKSProvisioner(
 	clusterCfg.Spec.Provider.AWS = options.AWSOpts
 
 	factory := clusterprovisioner.DefaultFactory{
+		AWSResolution:        options.AWSResolution,
+		AWSOwnershipVerifier: options.AWSOwnershipVerifier,
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
 			EKS: &clusterprovisioner.EKSConfig{
 				Name:           info.ClusterName,

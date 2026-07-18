@@ -198,3 +198,24 @@ func TestCreateEKSProvisionerWithoutConfig(t *testing.T) {
 	require.ErrorIs(t, err, clusterprovisioner.ErrMissingDistributionConfig)
 	assert.Nil(t, provisioner)
 }
+
+// TestCreateEKSProvisionerRejectsOwnershipVerifierWithoutResolution verifies an immutable
+// ownership verifier can never authorize a factory that would independently re-resolve mutable
+// ambient credentials for the ensuing EKS mutation.
+func TestCreateEKSProvisionerRejectsOwnershipVerifierWithoutResolution(t *testing.T) {
+	t.Parallel()
+
+	factory := clusterprovisioner.DefaultFactory{
+		AWSOwnershipVerifier: func(context.Context) error { return nil },
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Name:   "test-eks",
+				Region: "eu-west-1",
+			},
+		},
+	}
+
+	provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
+	require.ErrorIs(t, err, clusterprovisioner.ErrUnfrozenAWSResolution)
+	assert.Nil(t, provisioner)
+}

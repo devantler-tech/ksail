@@ -104,6 +104,7 @@ func NewClusterCmd() *cobra.Command {
 	cmd.AddCommand(NewRestoreCmd())
 	cmd.AddCommand(NewSwitchCmd())
 	cmd.AddCommand(NewRepairCmd(nil))
+	cmd.AddCommand(NewRebindEKSOwnershipCmd())
 	cmd.AddCommand(oidc.NewOIDCCmd())
 
 	return cmd
