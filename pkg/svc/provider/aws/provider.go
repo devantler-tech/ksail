@@ -11,6 +11,7 @@ import (
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
 // NodegroupStatusActive is the EKS nodegroup status that indicates the
@@ -89,65 +90,80 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 	return prov, nil
 }
 
-// StartNodes scales all managed nodegroups for the cluster back to their
-// configured desired capacity if it is currently zero. Nodegroups already at
-// non-zero desired capacity are left alone.
-//
-// When a nodegroup's desired capacity is zero, this method does not know the
-// "correct" target size to scale up to, so it defers to the max(MinSize, 1)
-// that eksctl returned. The provisioner — which has the ksail.yaml spec — is
-// responsible for restoring the exact DesiredCapacity when needed.
+// StartNodes restores every managed nodegroup to the exact desired/minimum/maximum values captured
+// before StopNodes zeroed it. The snapshot survives partial failures and is removed only after a
+// readback confirms that every group is restored.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
+	target, nodegroups, snapshot, found, err := p.loadLifecycleNodegroupsAndState(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	for _, nodegroup := range nodegroups {
-		if nodegroup.DesiredCap > 0 {
+	if !found {
+		return target.startNodegroupsWithoutSnapshot(ctx, clusterName, nodegroups)
+	}
+
+	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	err = target.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
+	if err != nil {
+		return err
+	}
+
+	return target.verifyAndClearNodegroupState(ctx, clusterName, snapshot)
+}
+
+// StopNodes atomically snapshots every managed nodegroup before scaling it to zero. Repeated calls
+// preserve the first snapshot and skip already-stopped groups, so a partial stop remains retryable.
+func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
+	target, nodegroups, snapshot, found, err := p.loadLifecycleNodegroupsAndState(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if !found {
+		snapshot, err = newNodegroupState(clusterName, target.region, nodegroups)
+		if err != nil {
+			return err
+		}
+
+		// Never persist an all-stopped snapshot. A cluster already at zero (stopped by an older
+		// release, or scaled down manually) would otherwise record 0/0 as its "restore to" state:
+		// the next start finds live already matching the snapshot, skips every scale, clears the
+		// file, and reports success while leaving the cluster at zero. Withholding the snapshot
+		// keeps the no-snapshot fallback — which restores max(MinSize, 1) — reachable instead.
+		if !snapshotIsAllStopped(snapshot) {
+			err = state.SaveEKSNodegroupState(clusterName, target.region, snapshot)
+			if err != nil {
+				return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
+			}
+		}
+	}
+
+	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	for _, capacity := range snapshot.Nodegroups {
+		if nodegroupIsStopped(liveByName[capacity.Name], capacity) {
 			continue
 		}
 
-		target := max(nodegroup.MinSize, 1)
-
-		err = p.client.ScaleNodegroup(
+		err = target.client.ScaleNodegroup(
 			ctx,
 			clusterName,
-			nodegroup.Name,
-			p.region,
-			target,
-			nodegroup.MinSize,
-			nodegroup.MaxSize,
-		)
-		if err != nil {
-			return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
-		}
-	}
-
-	return nil
-}
-
-// StopNodes scales all managed nodegroups to zero desired capacity. The
-// cluster control plane remains running (EKS bills $0.10/hour for it) but
-// all node-hour costs stop.
-func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	for _, nodegroup := range nodegroups {
-		err = p.client.ScaleNodegroup(
-			ctx,
-			clusterName,
-			nodegroup.Name,
-			p.region,
+			capacity.Name,
+			target.region,
 			0,
 			0,
-			nodegroup.MaxSize,
+			capacity.MaxSize,
 		)
 		if err != nil {
-			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", nodegroup.Name, err)
+			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", capacity.Name, err)
 		}
 	}
 
@@ -263,6 +279,75 @@ func (p *Provider) Region() string {
 	return p.region
 }
 
+// loadLifecycleNodegroupsAndState gives both nodegroup lifecycle paths one exact-region preflight.
+func (p *Provider) loadLifecycleNodegroupsAndState(
+	ctx context.Context,
+	clusterName string,
+) (
+	*Provider,
+	[]eksctlclient.NodegroupSummary,
+	*state.EKSNodegroupState,
+	bool,
+	error,
+) {
+	target, err := p.withResolvedLifecycleRegion(ctx, clusterName)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	nodegroups, snapshot, found, err := target.loadNodegroupsAndState(ctx, clusterName)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	return target, nodegroups, snapshot, found, nil
+}
+
+// withResolvedLifecycleRegion returns a request-local provider pinned to the exact region eksctl
+// observed for clusterName. When configuration delegates region selection to an AWS profile, every
+// read, mutation, and persisted snapshot in this lifecycle operation must use that same resolved
+// identity; mutating the shared Provider would race concurrent requests.
+func (p *Provider) withResolvedLifecycleRegion(
+	ctx context.Context,
+	clusterName string,
+) (*Provider, error) {
+	configuredRegion := strings.TrimSpace(p.region)
+	if configuredRegion != "" {
+		if configuredRegion == p.region {
+			return p, nil
+		}
+
+		resolved := *p
+		resolved.region = configuredRegion
+
+		return &resolved, nil
+	}
+
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	summary, err := p.client.GetCluster(ctx, clusterName, "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve EKS lifecycle region: %w", translateClientErr(err))
+	}
+
+	targetName := strings.TrimSpace(clusterName)
+	if summary == nil || targetName == "" || strings.TrimSpace(summary.Name) != targetName ||
+		strings.TrimSpace(summary.Region) == "" {
+		return nil, fmt.Errorf(
+			"profile-resolved EKS cluster %q did not prove its exact name and region: %w",
+			clusterName,
+			errNodegroupStateTarget,
+		)
+	}
+
+	resolved := *p
+	resolved.region = strings.TrimSpace(summary.Region)
+
+	return &resolved, nil
+}
+
 // clusterEndpoint reads the cluster's control-plane endpoint from the AWS SDK,
 // which eksctl's cluster summary omits — bringing EKS to parity with the GKE
 // and Azure providers, which both surface the endpoint on their status. The
@@ -324,6 +409,27 @@ func (p *Provider) fetchNodegroups(
 	}
 
 	return nodegroups, nil
+}
+
+// loadNodegroupsAndState gives StartNodes and StopNodes one shared, ordered preflight: first prove
+// that the target has managed nodegroups, then load any capacity snapshot before either path mutates it.
+func (p *Provider) loadNodegroupsAndState(
+	ctx context.Context,
+	clusterName string,
+) ([]eksctlclient.NodegroupSummary, *state.EKSNodegroupState, bool, error) {
+	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// p is the request-local target pinned by withResolvedLifecycleRegion, so p.region is the exact
+	// region the snapshot was keyed by at stop time.
+	snapshot, found, err := p.loadNodegroupState(clusterName, p.region)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	return nodegroups, snapshot, found, nil
 }
 
 // listNodegroupsForScale is a shared prelude for StartNodes and StopNodes

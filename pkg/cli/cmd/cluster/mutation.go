@@ -23,10 +23,16 @@ import (
 )
 
 var (
-	errEKSConfigurationUnavailable = errors.New("EKS configuration is unavailable")
-	errEKSClusterNameRequired      = errors.New("cluster name is required")
-	errNoMatchingEKSContext        = errors.New("no kubeconfig context matches EKS cluster")
-	errAmbiguousEKSContext         = errors.New("multiple kubeconfig contexts match EKS cluster")
+	errEKSConfigurationUnavailable  = errors.New("EKS configuration is unavailable")
+	errEKSClusterNameRequired       = errors.New("cluster name is required")
+	errEKSMutationConfigNameNeeded  = errors.New("EKS config metadata.name is required")
+	errEKSMutationConfigNameInvalid = errors.New("EKS config metadata.name is invalid")
+	errEKSNameOverrideMismatch      = errors.New("cannot override EKS config cluster name")
+	errNoMatchingEKSContext         = errors.New("no kubeconfig context matches EKS cluster")
+	errAmbiguousEKSContext          = errors.New("multiple kubeconfig contexts match EKS cluster")
+	errExplicitEKSContextUnobserved = errors.New(
+		"explicit EKS context was not observed after creation",
+	)
 )
 
 const explicitEKSContextHint = "set spec.cluster.connection.context explicitly"
@@ -134,18 +140,12 @@ func loadAndValidateClusterConfig(
 		return nil, "", err
 	}
 
-	// Apply cluster name override: --name flag takes priority, then metadata.name
-	nameOverride := cfgManager.Viper.GetString("name")
-	if nameOverride == "" {
-		nameOverride = ctx.ClusterCfg.Name
+	nameOverride, err := resolveMutationNameOverride(cfgManager, ctx)
+	if err != nil {
+		return nil, "", err
 	}
 
 	if nameOverride != "" {
-		validationErr := v1alpha1.ValidateClusterName(nameOverride)
-		if validationErr != nil {
-			return nil, "", fmt.Errorf("invalid cluster name %q: %w", nameOverride, validationErr)
-		}
-
 		err = applyClusterNameOverride(ctx, nameOverride)
 		if err != nil {
 			return nil, "", err
@@ -178,6 +178,105 @@ func loadAndValidateClusterConfig(
 	clusterName := resolveClusterNameFromContext(ctx)
 
 	return ctx, clusterName, nil
+}
+
+// resolveMutationNameOverride validates the flag/metadata name priority before any distribution
+// config is mutated. EKS is the special case: eksctl consumes the name in the on-disk eks.yaml, so
+// an explicit contradiction must fail rather than be silently ignored in memory.
+func resolveMutationNameOverride(
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) (string, error) {
+	explicitName := cfgManager.Viper.GetString("name")
+	if explicitName != "" {
+		err := validateMutationClusterName(explicitName)
+		if err != nil {
+			return "", err
+		}
+
+		err = validateEKSNameOverride(ctx, explicitName)
+		if err != nil {
+			return "", err
+		}
+
+		return explicitName, nil
+	}
+
+	metadataName := ctx.ClusterCfg.Name
+	if metadataName == "" {
+		return "", nil
+	}
+
+	return metadataName, validateMutationClusterName(metadataName)
+}
+
+func validateMutationClusterName(name string) error {
+	err := v1alpha1.ValidateClusterName(name)
+	if err != nil {
+		return fmt.Errorf("invalid cluster name %q: %w", name, err)
+	}
+
+	return nil
+}
+
+// validateEKSMutationConfigSource requires create/update to bind the target to the actual name in
+// the eksctl source. Standalone lifecycle commands may instead use persisted KSail state, but an EKS
+// create or recreation cannot safely infer the target because the provisioner passes only this file
+// to eksctl and deliberately ignores the action's in-memory name argument.
+func validateEKSMutationConfigSource(ctx *localregistry.Context) error {
+	if ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if ctx.EKSConfig == nil || strings.TrimSpace(ctx.EKSConfig.ConfigPath) == "" {
+		return fmt.Errorf(
+			"%w: provide a named eksctl ClusterConfig source",
+			errEKSConfigurationUnavailable,
+		)
+	}
+
+	sourceName := ctx.EKSConfig.Name
+
+	canonicalName := strings.TrimSpace(sourceName)
+	if !ctx.EKSConfig.NameFromConfig || canonicalName == "" {
+		return fmt.Errorf(
+			"%w in %s",
+			errEKSMutationConfigNameNeeded,
+			ctx.EKSConfig.ConfigPath,
+		)
+	}
+
+	if sourceName != canonicalName {
+		return fmt.Errorf(
+			"%w: %q in %s has leading or trailing whitespace",
+			errEKSMutationConfigNameInvalid,
+			sourceName,
+			ctx.EKSConfig.ConfigPath,
+		)
+	}
+
+	err := v1alpha1.ValidateClusterName(sourceName)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errEKSMutationConfigNameInvalid, err)
+	}
+
+	return nil
+}
+
+func validateEKSNameOverride(ctx *localregistry.Context, explicitName string) error {
+	if ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS ||
+		ctx.EKSConfig == nil || strings.TrimSpace(ctx.EKSConfig.ConfigPath) == "" ||
+		explicitName == strings.TrimSpace(ctx.EKSConfig.Name) {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: --name %q differs from %q in %s",
+		errEKSNameOverrideMismatch,
+		explicitName,
+		strings.TrimSpace(ctx.EKSConfig.Name),
+		ctx.EKSConfig.ConfigPath,
+	)
 }
 
 // runClusterCreationWorkflow performs the full cluster creation workflow.
@@ -327,11 +426,16 @@ func prepareEKSOutputKubeconfigPath(kubeconfigPath string) (string, error) {
 // prefixes EKS contexts with the AWS identity that created the cluster.
 func resolvePostCreateContext(ctx *localregistry.Context) error {
 	connection := &ctx.ClusterCfg.Spec.Cluster.Connection
+	distribution := ctx.ClusterCfg.Spec.Cluster.Distribution
+
 	if connection.Context != "" {
+		if distribution == v1alpha1.DistributionEKS {
+			return pinObservedExplicitEKSRegion(ctx, connection.Context)
+		}
+
 		return nil
 	}
 
-	distribution := ctx.ClusterCfg.Spec.Cluster.Distribution
 	if distribution != v1alpha1.DistributionEKS {
 		connection.Context = resolveCreatedContextName(
 			distribution,
@@ -343,6 +447,45 @@ func resolvePostCreateContext(ctx *localregistry.Context) error {
 	}
 
 	return resolveEKSPostCreateContext(ctx)
+}
+
+// pinObservedExplicitEKSRegion derives a profile-selected region only from the kubeconfig output
+// eksctl just made current. Parsing configured text alone could bind TTL cleanup to a stale
+// same-named context in another region.
+func pinObservedExplicitEKSRegion(ctx *localregistry.Context, contextName string) error {
+	if ctx.EKSConfig != nil && strings.TrimSpace(ctx.EKSConfig.Region) != "" {
+		return nil
+	}
+
+	clusterName, _, config, err := loadEKSContextConfig(ctx)
+	if err != nil {
+		return err
+	}
+
+	observedContext, found := config.Contexts[contextName]
+
+	contextCluster, _, validTarget := parseEksctlContextTarget(contextName)
+	if !found || observedContext == nil || config.CurrentContext != contextName ||
+		!validTarget || contextCluster != clusterName {
+		return fmt.Errorf(
+			"%w: %q for cluster %q",
+			errExplicitEKSContextUnobserved,
+			contextName,
+			clusterName,
+		)
+	}
+
+	pinEKSRegionFromContext(ctx, contextName)
+
+	if strings.TrimSpace(ctx.EKSConfig.Region) == "" {
+		return fmt.Errorf(
+			"%w: %q did not supply a region",
+			errExplicitEKSContextUnobserved,
+			contextName,
+		)
+	}
+
+	return nil
 }
 
 // resolveEKSPostCreateContext selects the identity-qualified context that
@@ -369,8 +512,25 @@ func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
 	}
 
 	ctx.ClusterCfg.Spec.Cluster.Connection.Context = selected
+	pinEKSRegionFromContext(ctx, selected)
 
 	return nil
+}
+
+// pinEKSRegionFromContext preserves the exact region eksctl selected after a create whose region was
+// delegated to the AWS profile. TTL and later lifecycle calls can then target that created region
+// directly even when the kubeconfig also contains a same-named cluster elsewhere.
+func pinEKSRegionFromContext(ctx *localregistry.Context, contextName string) {
+	if ctx.EKSConfig == nil || strings.TrimSpace(ctx.EKSConfig.Region) != "" {
+		return
+	}
+
+	clusterName, region, ok := parseEksctlContextTarget(contextName)
+	if !ok || clusterName != strings.TrimSpace(ctx.EKSConfig.Name) {
+		return
+	}
+
+	ctx.EKSConfig.Region = region
 }
 
 // loadEKSContextConfig loads the kubeconfig plus the cluster and effective

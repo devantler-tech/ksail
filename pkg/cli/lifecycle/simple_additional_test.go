@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -65,6 +66,82 @@ func TestResolveClusterInfo(t *testing.T) {
 		require.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
 		assert.Nil(t, resolved)
 	})
+}
+
+// TestResolveClusterInfoToleratesUnreadableConfigForReadOnlyCallers pins the split between
+// read-only and mutating resolution. A broken ksail.yaml must not lock the user out of read-only
+// commands (cluster info, diagnose, connect) when they have supplied an explicit --name, but it must
+// still abort a mutating command before anything is changed.
+//
+//nolint:paralleltest // changes the process working directory
+func TestResolveClusterInfoToleratesUnreadableConfigForReadOnlyCallers(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	require.NoError(
+		t,
+		os.WriteFile("ksail.yaml", []byte("this: is: not: valid: yaml:\n\t- broken\n"), 0o600),
+	)
+
+	// Read-only path: resolution falls back to the explicit flags.
+	resolved, err := lifecycle.ResolveClusterInfo(
+		nil,
+		"explicit-name",
+		v1alpha1.ProviderDocker,
+		"/non-existent-kubeconfig",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "explicit-name", resolved.ClusterName)
+
+	// Mutating path: the same broken config fails closed.
+	_, strictErr := lifecycle.ResolveClusterInfoStrict(
+		nil,
+		"explicit-name",
+		v1alpha1.ProviderDocker,
+		"/non-existent-kubeconfig",
+	)
+	require.Error(t, strictErr)
+}
+
+// TestResolveClusterInfoFallsBackToDistributionName verifies an intentionally empty metadata.name
+// does not suppress the name carried by the distribution config.
+//
+//nolint:paralleltest // changes the process working directory
+func TestResolveClusterInfoFallsBackToDistributionName(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	require.NoError(
+		t,
+		os.WriteFile(
+			"ksail.yaml",
+			[]byte(`apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    provider: Docker
+    distributionConfig: kind.yaml
+`),
+			0o600,
+		),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			"kind.yaml",
+			[]byte(`kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: distribution-only-name
+`),
+			0o600,
+		),
+	)
+
+	resolved, err := lifecycle.ResolveClusterInfo(nil, "", "", "/non-existent-kubeconfig")
+	require.NoError(t, err)
+	assert.Equal(t, "distribution-only-name", resolved.ClusterName)
 }
 
 // TestNewSimpleLifecycleCmd tests the NewSimpleLifecycleCmd function.

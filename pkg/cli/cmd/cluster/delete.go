@@ -96,10 +96,17 @@ func runDeleteAction(
 	tmr := timer.New()
 	tmr.Start()
 
-	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.Name, flags.Provider, flags.Kubeconfig)
+	// Strict: delete is destructive, so an unreadable config aborts before anything is removed.
+	resolved, err := lifecycle.ResolveClusterInfoStrict(
+		cmd, flags.Name, flags.Provider, flags.Kubeconfig,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
+	}
+
+	err = lifecycle.ValidateStandaloneAWSTarget(resolved)
+	if err != nil {
+		return fmt.Errorf("validate standalone AWS target: %w", err)
 	}
 
 	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
@@ -116,12 +123,9 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(
-		clusterInfo,
-		resolved.OmniOpts,
-		resolved.KubernetesOpts,
-		flags.storage,
-	)
+	options := minimalProvisionerOptions(resolved, flags.storage)
+
+	provisioner, err := createDeleteProvisioner(cmd.Context(), clusterInfo, options)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -155,6 +159,19 @@ func runDeleteAction(
 	)
 
 	return nil
+}
+
+func minimalProvisionerOptions(
+	resolved *lifecycle.ResolvedClusterInfo,
+	deleteStorage bool,
+) lifecycle.MinimalProvisionerOptions {
+	return lifecycle.MinimalProvisionerOptions{
+		OmniOpts:       resolved.OmniOpts,
+		KubernetesOpts: resolved.KubernetesOpts,
+		AWSOpts:        resolved.AWSOpts,
+		AWSRegion:      resolved.AWSRegion,
+		DeleteStorage:  deleteStorage,
+	}
 }
 
 // detectClusterDistribution detects the distribution and other cluster info.
@@ -306,10 +323,9 @@ func promptForDeletion(
 // createDeleteProvisioner creates the appropriate provisioner for cluster deletion.
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
 func createDeleteProvisioner(
+	ctx context.Context,
 	clusterInfo *clusterdetector.Info,
-	omniOpts v1alpha1.OptionsOmni,
-	kubernetesOpts v1alpha1.OptionsKubernetes,
-	deleteStorage bool,
+	options lifecycle.MinimalProvisionerOptions,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
@@ -319,7 +335,7 @@ func createDeleteProvisioner(
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
-		provisioner, _, err := factoryOverride.Create(context.Background(), nil)
+		provisioner, _, err := factoryOverride.Create(ctx, nil)
 		if err != nil {
 			return nil, fmt.Errorf("factory override failed: %w", err)
 		}
@@ -328,7 +344,7 @@ func createDeleteProvisioner(
 	}
 
 	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		clusterInfo, omniOpts, kubernetesOpts, deleteStorage,
+		ctx, clusterInfo, options,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)

@@ -6,10 +6,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -53,6 +55,23 @@ func TestResolveClusterNameFromContext_K3s(t *testing.T) {
 
 	name := cluster.ExportResolveClusterNameFromContext(ctx)
 	require.Equal(t, "k3s-cluster", name)
+}
+
+func TestResolveClusterNameFromContext_EKS(t *testing.T) {
+	t.Parallel()
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "stale-top-level-name"},
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionEKS},
+			},
+		},
+		EKSConfig: &clusterprovisioner.EKSConfig{Name: "actual-eks-name"},
+	}
+
+	name := cluster.ExportResolveClusterNameFromContext(ctx)
+	require.Equal(t, "actual-eks-name", name)
 }
 
 func TestResolveClusterNameFromContext_FallbackToContext(t *testing.T) {

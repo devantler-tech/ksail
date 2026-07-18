@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,9 @@ const (
 
 	// devClusterName is the discovered-cluster name shared by the List tests.
 	devClusterName = "dev"
+
+	// testEKSRegion is the region the EKS capacity-snapshot tests save and load under.
+	testEKSRegion = "eu-north-1"
 )
 
 // Static sentinel errors used to drive provisioner failures in tests (err113 forbids inline
@@ -44,6 +48,8 @@ type fakeProvisioner struct {
 	clusters   []string
 	createGate chan struct{}
 	deleteGate chan struct{}
+	startGate  chan struct{}
+	stopGate   chan struct{}
 	createErr  error
 	deleteErr  error
 	startErr   error
@@ -108,6 +114,10 @@ func (f *fakeProvisioner) List(_ context.Context) ([]string, error) {
 }
 
 func (f *fakeProvisioner) Start(_ context.Context, name string) error {
+	if f.startGate != nil {
+		<-f.startGate
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -117,6 +127,10 @@ func (f *fakeProvisioner) Start(_ context.Context, name string) error {
 }
 
 func (f *fakeProvisioner) Stop(_ context.Context, name string) error {
+	if f.stopGate != nil {
+		<-f.stopGate
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -408,6 +422,203 @@ func TestDeleteIsAsyncAndRemovesCluster(t *testing.T) {
 	}, eventuallyTimeout, eventuallyTick)
 
 	assert.Equal(t, []string{"old"}, provisioner.deletedNames())
+}
+
+func TestDeleteEKSClearsPersistedOwnershipAndCapacityState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "old-eks"
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+	saveEKSCapacitySnapshot(t, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		_, specErr := state.LoadClusterSpec(clusterName)
+		_, capacityErr := state.LoadEKSNodegroupState(clusterName, testEKSRegion)
+
+		return errors.Is(specErr, state.ErrStateNotFound) &&
+			errors.Is(capacityErr, state.ErrEKSNodegroupStateNotFound)
+	}, eventuallyTimeout, eventuallyTick)
+}
+
+func TestDeleteEKSRejectsOverlappingCreate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "creating-eks"
+
+	createGate := make(chan struct{})
+	provisioner := &fakeProvisioner{createGate: createGate}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+
+	err = service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrAlreadyExists)
+	assert.Empty(t, provisioner.deletedNames())
+
+	close(createGate)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	persisted, loadErr := state.LoadClusterSpec(clusterName)
+	require.NoError(t, loadErr)
+	assert.Equal(t, v1alpha1.DistributionEKS, persisted.Distribution)
+	assert.Equal(t, v1alpha1.ProviderAWS, persisted.Provider)
+}
+
+func TestLifecycleRejectsOverlappingOperation(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "busy"
+
+	stopGate := make(chan struct{})
+	provisioner := &fakeProvisioner{clusters: []string{clusterName}, stopGate: stopGate}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVCluster: provisioner,
+	})
+
+	require.NoError(t, service.Stop(context.Background(), "default", clusterName))
+	err := service.Start(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrAlreadyExists)
+	assert.Empty(t, provisioner.startedNames())
+
+	close(stopGate)
+	require.Eventually(t, func() bool {
+		return slices.Equal(provisioner.stoppedNames(), []string{clusterName})
+	}, eventuallyTimeout, eventuallyTick)
+}
+
+func TestDeleteEKSFailurePreservesPersistedOwnershipAndCapacityState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "stuck-eks"
+
+	provisioner := &fakeProvisioner{deleteErr: errSimulatedDeleteFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+	saveEKSCapacitySnapshot(t, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	_, specErr := state.LoadClusterSpec(clusterName)
+	require.NoError(t, specErr)
+
+	_, capacityErr := state.LoadEKSNodegroupState(clusterName, testEKSRegion)
+	require.NoError(t, capacityErr)
+}
+
+// saveEKSCapacitySnapshot writes a stop-time capacity snapshot for the cluster in the region the
+// EKS delete tests use, so a test can assert whether deletion cleaned it up.
+func saveEKSCapacitySnapshot(t *testing.T, clusterName string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveEKSNodegroupState(clusterName, testEKSRegion,
+		&state.EKSNodegroupState{
+			Version:     state.EKSNodegroupStateVersion,
+			ClusterName: clusterName,
+			Region:      testEKSRegion,
+			Nodegroups: []state.EKSNodegroupCapacity{
+				{Name: "workers", DesiredCapacity: 2, MinSize: 1, MaxSize: 3},
+			},
+		}))
+}
+
+// TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails covers the split between the cloud
+// operation and local bookkeeping: once the EKS cluster is actually gone, a failure to remove the
+// local state directory (read-only home, permissions) must not pin the job Failed. That would leave
+// an undismissable row in the web UI for a cluster that no longer exists — the very trap the
+// idempotent-delete behaviour exists to avoid. The cleanup failure is a warning, not a job failure.
+func TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "cleanup-fails"
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Force local state cleanup to fail deterministically: with no resolvable home directory the
+	// state layer cannot locate — and therefore cannot remove — the cluster's state directory. The
+	// provisioner still reports a clean deletion.
+	t.Setenv("HOME", "")
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, found := phaseOf(list, clusterName)
+
+		return !found
+	}, eventuallyTimeout, eventuallyTick)
 }
 
 // TestDeleteClearsFailedClusterWithNoUnderlyingCluster reproduces the bug where a cluster left in
@@ -856,6 +1067,79 @@ func TestCreateDefaultsEKSProviderToAWS(t *testing.T) {
 	case <-time.After(eventuallyTimeout):
 		t.Fatal("factory was never asked to build the EKS cluster with a defaulted AWS provider")
 	}
+
+	var persisted *v1alpha1.ClusterSpec
+
+	require.Eventually(t, func() bool {
+		var loadErr error
+
+		persisted, loadErr = state.LoadClusterSpec("prod-eks")
+
+		return loadErr == nil
+	}, eventuallyTimeout, eventuallyTick)
+	require.NotNil(t, persisted)
+	assert.Equal(t, v1alpha1.DistributionEKS, persisted.Distribution)
+	assert.Equal(t, v1alpha1.ProviderAWS, persisted.Provider)
+}
+
+func TestCreateEKSFailureDoesNotPersistOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "failed-eks"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	_, loadErr := state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
+}
+
+func TestCreateEKSOwnershipPersistenceFailureMarksJobFailed(t *testing.T) {
+	homeFile := filepath.Join(t.TempDir(), "home-file")
+	require.NoError(t, os.WriteFile(homeFile, []byte("not a directory"), 0o600))
+	t.Setenv("HOME", homeFile)
+
+	const clusterName = "untracked-eks"
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		cluster := clusterNamed(list, clusterName)
+
+		return cluster != nil && cluster.Status.Phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	list, listErr := service.List(context.Background())
+	require.NoError(t, listErr)
+
+	conditions := conditionsOf(list, clusterName)
+	require.Len(t, conditions, 1)
+	assert.Contains(t, conditions[0].Message, "persist local EKS cluster ownership state")
 }
 
 // clusterNamed returns a pointer to the cluster with the given name in the list, or nil if absent.

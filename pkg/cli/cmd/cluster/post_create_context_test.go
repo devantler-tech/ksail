@@ -153,12 +153,16 @@ func TestResolvePostCreateContext_EKSMissingConfigFailsClosed(t *testing.T) {
 func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 	t.Parallel()
 
-	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+	const (
+		eksctlContext      = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+		otherRegionContext = "arn:aws:iam::123456789012:role/ci@st-eks.us-east-1.eksctl.io"
+	)
 
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = eksctlContext
 	config.Contexts[eksctlContext] = &clientcmdapi.Context{}
+	config.Contexts[otherRegionContext] = &clientcmdapi.Context{}
 	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
 
 	ctx := &localregistry.Context{
@@ -177,9 +181,134 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 
 	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
 	assert.Equal(t, eksctlContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	assert.Equal(t, "eu-west-1", ctx.EKSConfig.Region)
 }
 
-func TestApplyClusterNameOverride_EKSDefersContextResolution(t *testing.T) {
+func TestResolvePostCreateContext_EKSExplicitContextPinsObservedRegion(t *testing.T) {
+	t.Parallel()
+
+	const explicitContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+
+	ctx := newExplicitEKSPostCreateContext(
+		t,
+		"st-eks",
+		explicitContext,
+		explicitContext,
+		explicitContext,
+	)
+
+	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
+	assert.Equal(t, explicitContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	assert.Equal(t, "eu-west-1", ctx.EKSConfig.Region)
+}
+
+func TestResolvePostCreateContext_EKSRejectsUnobservedExplicitContext(t *testing.T) {
+	t.Parallel()
+
+	const (
+		targetContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+		otherContext  = "arn:aws:iam::123456789012:role/ci@st-eks.us-east-1.eksctl.io"
+		wrongTarget   = "arn:aws:iam::123456789012:role/ci@other.eu-west-1.eksctl.io"
+	)
+
+	testCases := []struct {
+		name     string
+		explicit string
+		current  string
+		contexts []string
+	}{
+		{
+			name:     "missing from output",
+			explicit: targetContext,
+			current:  otherContext,
+			contexts: []string{otherContext},
+		},
+		{
+			name:     "stale non-current context",
+			explicit: targetContext,
+			current:  otherContext,
+			contexts: []string{targetContext, otherContext},
+		},
+		{
+			name:     "wrong cluster",
+			explicit: wrongTarget,
+			current:  wrongTarget,
+			contexts: []string{wrongTarget},
+		},
+		{
+			name:     "malformed context",
+			explicit: "st-eks.eu.west.eksctl.io",
+			current:  "st-eks.eu.west.eksctl.io",
+			contexts: []string{"st-eks.eu.west.eksctl.io"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := newExplicitEKSPostCreateContext(
+				t,
+				"st-eks",
+				testCase.explicit,
+				testCase.current,
+				testCase.contexts...,
+			)
+
+			err := cluster.ExportResolvePostCreateContext(ctx)
+			require.ErrorContains(t, err, "explicit EKS context was not observed after creation")
+			assert.Empty(t, ctx.EKSConfig.Region)
+		})
+	}
+}
+
+func TestResolvePostCreateContext_EKSExplicitContextPreservesConfiguredRegion(t *testing.T) {
+	t.Parallel()
+
+	const explicitContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+			Distribution: v1alpha1.DistributionEKS,
+			Connection:   v1alpha1.Connection{Context: explicitContext},
+		}}},
+		EKSConfig: &clusterprovisioner.EKSConfig{Name: "st-eks", Region: "us-east-1"},
+	}
+
+	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
+	assert.Equal(t, "us-east-1", ctx.EKSConfig.Region)
+}
+
+func newExplicitEKSPostCreateContext(
+	t *testing.T,
+	clusterName, explicitContext, currentContext string,
+	contexts ...string,
+) *localregistry.Context {
+	t.Helper()
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	config := clientcmdapi.NewConfig()
+	config.CurrentContext = currentContext
+
+	for _, contextName := range contexts {
+		config.Contexts[contextName] = &clientcmdapi.Context{}
+	}
+
+	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
+
+	return &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+			Distribution: v1alpha1.DistributionEKS,
+			Connection: v1alpha1.Connection{
+				Context:    explicitContext,
+				Kubeconfig: kubeconfigPath,
+			},
+		}}},
+		EKSConfig: &clusterprovisioner.EKSConfig{Name: clusterName},
+	}
+}
+
+func TestApplyClusterNameOverride_EKSPreservesSourceConfigAndDefersContextResolution(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -205,9 +334,11 @@ func TestApplyClusterNameOverride_EKSDefersContextResolution(t *testing.T) {
 						},
 					},
 				},
+				EKSConfig: &clusterprovisioner.EKSConfig{Name: "old-eks-name"},
 			}
 
 			require.NoError(t, cluster.ExportApplyClusterNameOverride(ctx, "st-eks"))
+			assert.Equal(t, "old-eks-name", ctx.EKSConfig.Name)
 			assert.Equal(
 				t,
 				testCase.originalContext,
