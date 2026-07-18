@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -15,7 +16,6 @@ var (
 	errNodegroupStateVersion = errors.New("unsupported EKS nodegroup state version")
 	errNodegroupStateTarget  = errors.New("EKS nodegroup state target mismatch")
 	errNodegroupStateDrift   = errors.New("EKS nodegroup capacity state drift")
-	errNodegroupStateMissing = errors.New("EKS nodegroup capacity state is required")
 )
 
 func newNodegroupState(
@@ -250,9 +250,9 @@ func nodegroupIsStopped(
 }
 
 func (p *Provider) loadNodegroupState(
-	clusterName string,
+	clusterName, region string,
 ) (*state.EKSNodegroupState, bool, error) {
-	snapshot, err := state.LoadEKSNodegroupState(clusterName)
+	snapshot, err := state.LoadEKSNodegroupState(clusterName, region)
 	if errors.Is(err, state.ErrEKSNodegroupStateNotFound) {
 		return nil, false, nil
 	}
@@ -264,9 +264,13 @@ func (p *Provider) loadNodegroupState(
 	return snapshot, true, nil
 }
 
-// startNodegroupsWithoutSnapshot preserves the pre-existing lifecycle for groups stopped outside
-// KSail while failing closed when both desired and minimum are zero. A KSail stop always records the
-// exact desired size first, so its own round trip never reaches this compatibility path.
+// startNodegroupsWithoutSnapshot preserves the pre-existing lifecycle for groups stopped without a
+// capacity snapshot. A KSail stop from this release records the exact desired size first, so its own
+// round trip never reaches this compatibility path — but a cluster stopped by an earlier release (or
+// scaled to zero outside KSail) has no snapshot, and earlier releases scaled both desired and minimum
+// to zero. Those clusters must stay startable after an upgrade, so this path keeps the historical
+// max(MinSize, 1) fallback rather than failing closed. Starting nodes is non-destructive and
+// reversible; the exact pre-stop size is simply unknown, which the caller is warned about.
 func (p *Provider) startNodegroupsWithoutSnapshot(
 	ctx context.Context,
 	clusterName string,
@@ -289,14 +293,6 @@ func (p *Provider) startNodegroupsWithoutSnapshot(
 		}
 
 		seen[nodegroup.Name] = struct{}{}
-
-		if nodegroup.DesiredCap == 0 && nodegroup.MinSize <= 0 {
-			return fmt.Errorf(
-				"cannot restore stopped EKS nodegroup %q without the pre-stop snapshot: %w",
-				nodegroup.Name,
-				errNodegroupStateMissing,
-			)
-		}
 	}
 
 	sort.Slice(nodegroups, func(i, j int) bool { return nodegroups[i].Name < nodegroups[j].Name })
@@ -306,12 +302,24 @@ func (p *Provider) startNodegroupsWithoutSnapshot(
 			continue
 		}
 
+		// Without a snapshot the pre-stop desired size is unknowable, so fall back to the smallest
+		// running capacity that honours the group's own minimum — the behaviour every release before
+		// capacity snapshots used.
+		target := max(nodegroup.MinSize, 1)
+
+		slog.Warn(
+			"restoring EKS nodegroup without a capacity snapshot; pre-stop desired size is unknown",
+			"cluster", clusterName,
+			"nodegroup", nodegroup.Name,
+			"target", target,
+		)
+
 		err := p.client.ScaleNodegroup(
 			ctx,
 			clusterName,
 			nodegroup.Name,
 			p.region,
-			nodegroup.MinSize,
+			target,
 			nodegroup.MinSize,
 			nodegroup.MaxSize,
 		)
@@ -366,7 +374,7 @@ func (p *Provider) verifyAndClearNodegroupState(
 		return err
 	}
 
-	err = state.DeleteEKSNodegroupState(clusterName)
+	err = state.DeleteEKSNodegroupState(clusterName, p.region)
 	if err != nil {
 		return fmt.Errorf("clear restored EKS nodegroup state: %w", err)
 	}

@@ -253,7 +253,7 @@ func TestStopNodesPinsProfileResolvedRegion(t *testing.T) {
 
 	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
 
-	snapshot, err := state.LoadEKSNodegroupState("demo")
+	snapshot, err := state.LoadEKSNodegroupState("demo", "eu-north-1")
 	require.NoError(t, err)
 	assert.Equal(t, "eu-north-1", snapshot.Region)
 	assert.Equal(t, [][]string{
@@ -268,7 +268,7 @@ func TestStopNodesPinsProfileResolvedRegion(t *testing.T) {
 
 func TestStartNodesPinsProfileResolvedRegion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+	require.NoError(t, state.SaveEKSNodegroupState("demo", "eu-north-1", &state.EKSNodegroupState{
 		Version:     state.EKSNodegroupStateVersion,
 		ClusterName: "demo",
 		Region:      "eu-north-1",
@@ -298,7 +298,7 @@ func TestStartNodesPinsProfileResolvedRegion(t *testing.T) {
 		assert.Contains(t, call, "eu-north-1")
 	}
 
-	_, err := state.LoadEKSNodegroupState("demo")
+	_, err := state.LoadEKSNodegroupState("demo", "eu-north-1")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
@@ -377,7 +377,7 @@ func TestStopNodes_NoNodegroups(t *testing.T) {
 
 func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+	require.NoError(t, state.SaveEKSNodegroupState("demo", "us-east-1", &state.EKSNodegroupState{
 		Version:     state.EKSNodegroupStateVersion,
 		ClusterName: "demo",
 		Region:      "us-east-1",
@@ -455,7 +455,7 @@ func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
 		"scale nodegroup --cluster demo --name ng-1 --nodes 3 --nodes-min 2 --nodes-max 5 --region us-east-1",
 	}, scales)
 
-	_, err := state.LoadEKSNodegroupState("demo")
+	_, err := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
@@ -487,13 +487,13 @@ func TestStopThenStartPreservesZeroCapacityNodegroup(t *testing.T) {
 		"scale nodegroup --cluster demo --name b-active --nodes 3 --nodes-min 2 --nodes-max 5 --region us-east-1",
 	}, scaleCalls(runner.calls))
 
-	_, err := state.LoadEKSNodegroupState("demo")
+	_, err := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
 func TestStartNodesRejectsZeroMaximumCapacitySnapshot(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	require.NoError(t, state.SaveEKSNodegroupState("demo", &state.EKSNodegroupState{
+	require.NoError(t, state.SaveEKSNodegroupState("demo", "us-east-1", &state.EKSNodegroupState{
 		Version:     state.EKSNodegroupStateVersion,
 		ClusterName: "demo",
 		Region:      "us-east-1",
@@ -546,13 +546,17 @@ func TestStopNodesRejectsInvalidCapacityBeforePersisting(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, scaleCalls(runner.calls))
 
-	_, loadErr := state.LoadEKSNodegroupState("demo")
+	_, loadErr := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.ErrorIs(t, loadErr, state.ErrEKSNodegroupStateNotFound)
 }
 
+// TestStartNodesRejectsMismatchedCapacityStateBeforeScaling exercises the snapshot's own region
+// identity check as defence in depth. The path is now region-scoped, so a wrong-region snapshot can
+// no longer be reached by accident — this covers a corrupted or hand-edited file whose recorded
+// region contradicts the target it was loaded for.
 func TestStartNodesRejectsMismatchedCapacityStateBeforeScaling(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	saveNodegroupState(t, "demo", "eu-north-1", 3, 2, 5)
+	saveNodegroupStateAt(t, "demo", "us-east-1", "eu-north-1", 3, 2, 5)
 
 	prov, runner := newProvider(t, map[string][]response{
 		"get nodegroup": {{stdout: nodegroupJSON(0, 0)}},
@@ -576,38 +580,70 @@ func TestStartNodesRetainsCapacityStateWhenScalingFails(t *testing.T) {
 	err := prov.StartNodes(t.Context(), "demo")
 	require.ErrorIs(t, err, errScaleDenied)
 
-	saved, loadErr := state.LoadEKSNodegroupState("demo")
+	saved, loadErr := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.NoError(t, loadErr)
 	assert.Equal(t, 3, saved.Nodegroups[0].DesiredCapacity)
 	assert.Equal(t, 2, saved.Nodegroups[0].MinSize)
 }
 
-func TestStartNodesRequiresSnapshotWhenMinimumIsZero(t *testing.T) {
+// TestStartNodesWithoutSnapshotFallsBackToMinimumOne pins upgrade compatibility: releases before
+// capacity snapshots stopped a cluster by scaling desired AND minimum to zero without recording
+// anything. Such a cluster must still start after an upgrade, using the historical max(MinSize, 1)
+// fallback rather than failing closed and stranding the user outside KSail.
+func TestStartNodesWithoutSnapshotFallsBackToMinimumOne(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	prov, runner := newProvider(t, map[string][]response{
-		"get nodegroup": {{stdout: nodegroupJSON(0, 0)}},
+		"get nodegroup":   {{stdout: nodegroupJSON(0, 0)}},
+		"scale nodegroup": {{}},
 	})
 
 	err := prov.StartNodes(t.Context(), "demo")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pre-stop snapshot")
-	assert.Empty(t, scaleCalls(runner.calls))
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"scale nodegroup --cluster demo --name ng-1 --nodes 1 --nodes-min 0 --nodes-max 5 " +
+			"--region us-east-1",
+	}, scaleCalls(runner.calls))
 }
 
+// TestStartNodesWithoutSnapshotHonoursEachGroupMinimum covers the mixed case: a group with its own
+// non-zero minimum returns to that minimum, while a fully zeroed legacy group returns to one node.
+func TestStartNodesWithoutSnapshotHonoursEachGroupMinimum(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(`[
+			{"Cluster":"demo","Name":"a-recoverable","DesiredCapacity":0,"MinSize":2,"MaxSize":5},
+			{"Cluster":"demo","Name":"z-legacy-zeroed","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
+		]`)}},
+		"scale nodegroup": {{}, {}},
+	})
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"scale nodegroup --cluster demo --name a-recoverable --nodes 2 --nodes-min 2 " +
+			"--nodes-max 5 --region us-east-1",
+		"scale nodegroup --cluster demo --name z-legacy-zeroed --nodes 1 --nodes-min 0 " +
+			"--nodes-max 5 --region us-east-1",
+	}, scaleCalls(runner.calls))
+}
+
+// TestStartNodesWithoutSnapshotPreflightsEveryNodegroup keeps the preflight guarantee: the whole
+// live set is validated before any group is scaled, so a drifted listing mutates nothing.
 func TestStartNodesWithoutSnapshotPreflightsEveryNodegroup(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	prov, runner := newProvider(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(`[
 			{"Cluster":"demo","Name":"a-recoverable","DesiredCapacity":0,"MinSize":2,"MaxSize":5},
-			{"Cluster":"demo","Name":"z-missing-state","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
+			{"Cluster":"demo","Name":"a-recoverable","DesiredCapacity":0,"MinSize":0,"MaxSize":5}
 		]`)}},
 	})
 
 	err := prov.StartNodes(t.Context(), "demo")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "z-missing-state")
+	assert.Contains(t, err.Error(), "duplicate live nodegroup")
 	assert.Empty(t, scaleCalls(runner.calls))
 }
 
@@ -627,7 +663,7 @@ func TestStartNodesRetainsCapacityStateUntilReadbackMatches(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not restored")
 
-	_, loadErr := state.LoadEKSNodegroupState("demo")
+	_, loadErr := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.NoError(t, loadErr)
 }
 
@@ -647,10 +683,22 @@ func saveNodegroupState(
 ) {
 	t.Helper()
 
-	require.NoError(t, state.SaveEKSNodegroupState(clusterName, &state.EKSNodegroupState{
+	saveNodegroupStateAt(t, clusterName, region, region, desiredCapacity, minSize, maxSize)
+}
+
+// saveNodegroupStateAt writes a snapshot under pathRegion while recording bodyRegion inside it, so
+// tests can construct the contradiction the in-file region identity check exists to catch.
+func saveNodegroupStateAt(
+	t *testing.T,
+	clusterName, pathRegion, bodyRegion string,
+	desiredCapacity, minSize, maxSize int,
+) {
+	t.Helper()
+
+	snapshot := &state.EKSNodegroupState{
 		Version:     state.EKSNodegroupStateVersion,
 		ClusterName: clusterName,
-		Region:      region,
+		Region:      bodyRegion,
 		Nodegroups: []state.EKSNodegroupCapacity{
 			{
 				Name:            "ng-1",
@@ -659,7 +707,9 @@ func saveNodegroupState(
 				MaxSize:         maxSize,
 			},
 		},
-	}))
+	}
+
+	require.NoError(t, state.SaveEKSNodegroupState(clusterName, pathRegion, snapshot))
 }
 
 func scaleCalls(calls [][]string) []string {

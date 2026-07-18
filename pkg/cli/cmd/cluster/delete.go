@@ -96,8 +96,10 @@ func runDeleteAction(
 	tmr := timer.New()
 	tmr.Start()
 
-	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.Name, flags.Provider, flags.Kubeconfig)
+	// Strict: delete is destructive, so an unreadable config aborts before anything is removed.
+	resolved, err := lifecycle.ResolveClusterInfoStrict(
+		cmd, flags.Name, flags.Provider, flags.Kubeconfig,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}

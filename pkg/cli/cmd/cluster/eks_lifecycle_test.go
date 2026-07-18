@@ -241,7 +241,7 @@ func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {
 		),
 	}, readStandaloneEKSCalls(t, markerPath))
 
-	_, err := state.LoadEKSNodegroupState(clusterName)
+	_, err := state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 

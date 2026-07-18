@@ -646,7 +646,12 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 		(err == nil || errors.Is(err, clustererr.ErrClusterNotFound)) {
 		cleanupErr := state.DeleteClusterState(name)
 		if cleanupErr != nil {
-			err = fmt.Errorf("clean up local EKS cluster state after deletion: %w", cleanupErr)
+			// The cloud cluster is already gone, so the deletion itself succeeded. Turning a
+			// local-state cleanup failure (read-only home, permissions) into a job failure would
+			// pin an undismissable Failed row for a cluster that no longer exists — exactly the
+			// trap the idempotency note below describes. Warn, but still clear the job.
+			slog.Warn("failed to clean up local EKS cluster state after deletion",
+				"cluster", name, "error", cleanupErr)
 		}
 	}
 

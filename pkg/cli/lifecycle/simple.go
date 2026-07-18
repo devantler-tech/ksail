@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -183,11 +184,40 @@ func resolveAWSRegion(
 // Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
 //
 // When cmd is non-nil, the --config persistent flag is honored for config loading.
+//
+// A config that is present but unreadable is tolerated: resolution falls back to flags and the
+// kubeconfig context so read-only commands (cluster info, diagnose, connect) keep working while
+// local project configuration is broken. Callers that are about to MUTATE a cluster must use
+// ResolveClusterInfoStrict instead, so a malformed config can never silently drop credential
+// aliases or region bindings ahead of a destructive operation.
 func ResolveClusterInfo(
 	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
 	kubeconfigFlag string,
+) (*ResolvedClusterInfo, error) {
+	return resolveClusterInfo(cmd, nameFlag, providerFlag, kubeconfigFlag, false)
+}
+
+// ResolveClusterInfoStrict resolves cluster info like ResolveClusterInfo but fails closed when a
+// present config cannot be loaded. Mutating lifecycle commands use it so a malformed ksail.yaml or
+// distribution config aborts before any cluster is changed, rather than proceeding on partially
+// resolved identity.
+func ResolveClusterInfoStrict(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
+) (*ResolvedClusterInfo, error) {
+	return resolveClusterInfo(cmd, nameFlag, providerFlag, kubeconfigFlag, true)
+}
+
+func resolveClusterInfo(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
+	strict bool,
 ) (*ResolvedClusterInfo, error) {
 	resolved := ResolvedClusterInfo{
 		ClusterName:    nameFlag,
@@ -195,12 +225,18 @@ func ResolveClusterInfo(
 		KubeconfigPath: kubeconfigFlag,
 	}
 
-	// Always load config to fill missing fields and extract provider options.
-	// Even when --name is provided, provider-specific settings are still needed. A present config
-	// that cannot be loaded must fail closed rather than silently dropping credential aliases.
+	// Always load config to fill missing fields and extract provider options: even when --name is
+	// provided, provider-specific settings are still needed.
 	err := resolveFromConfig(cmd, &resolved)
 	if err != nil {
-		return nil, err
+		if strict {
+			return nil, err
+		}
+
+		slog.Warn(
+			"ignoring unreadable configuration; resolving from flags and kubeconfig instead",
+			"error", err,
+		)
 	}
 
 	// Fall back to kubeconfig context detection
@@ -444,9 +480,10 @@ func runSimpleLifecycleAction(
 	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 	cmd.SetOut(stageWriter)
 
-	// Resolve cluster info from flags, config, or kubeconfig
+	// Resolve cluster info from flags, config, or kubeconfig. These commands mutate the cluster, so a
+	// present-but-unreadable config must abort before any change.
 	// Empty kubeconfig flag - simple lifecycle commands don't need kubeconfig cleanup
-	resolved, err := ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
+	resolved, err := ResolveClusterInfoStrict(cmd, nameFlag, providerFlag, "")
 	if err != nil {
 		return err
 	}

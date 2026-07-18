@@ -28,6 +28,9 @@ const (
 
 	// devClusterName is the discovered-cluster name shared by the List tests.
 	devClusterName = "dev"
+
+	// testEKSRegion is the region the EKS capacity-snapshot tests save and load under.
+	testEKSRegion = "eu-north-1"
 )
 
 // Static sentinel errors used to drive provisioner failures in tests (err113 forbids inline
@@ -448,19 +451,12 @@ func TestDeleteEKSClearsPersistedOwnershipAndCapacityState(t *testing.T) {
 		Distribution: v1alpha1.DistributionEKS,
 		Provider:     v1alpha1.ProviderAWS,
 	}))
-	require.NoError(t, state.SaveEKSNodegroupState(clusterName, &state.EKSNodegroupState{
-		Version:     state.EKSNodegroupStateVersion,
-		ClusterName: clusterName,
-		Region:      "eu-north-1",
-		Nodegroups: []state.EKSNodegroupCapacity{
-			{Name: "workers", DesiredCapacity: 2, MinSize: 1, MaxSize: 3},
-		},
-	}))
+	saveEKSCapacitySnapshot(t, clusterName)
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
 	require.Eventually(t, func() bool {
 		_, specErr := state.LoadClusterSpec(clusterName)
-		_, capacityErr := state.LoadEKSNodegroupState(clusterName)
+		_, capacityErr := state.LoadEKSNodegroupState(clusterName, testEKSRegion)
 
 		return errors.Is(specErr, state.ErrStateNotFound) &&
 			errors.Is(capacityErr, state.ErrEKSNodegroupStateNotFound)
@@ -547,14 +543,7 @@ func TestDeleteEKSFailurePreservesPersistedOwnershipAndCapacityState(t *testing.
 
 		return found && phase == v1alpha1.ClusterPhaseReady
 	}, eventuallyTimeout, eventuallyTick)
-	require.NoError(t, state.SaveEKSNodegroupState(clusterName, &state.EKSNodegroupState{
-		Version:     state.EKSNodegroupStateVersion,
-		ClusterName: clusterName,
-		Region:      "eu-north-1",
-		Nodegroups: []state.EKSNodegroupCapacity{
-			{Name: "workers", DesiredCapacity: 2, MinSize: 1, MaxSize: 3},
-		},
-	}))
+	saveEKSCapacitySnapshot(t, clusterName)
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
 	require.Eventually(t, func() bool {
@@ -569,8 +558,67 @@ func TestDeleteEKSFailurePreservesPersistedOwnershipAndCapacityState(t *testing.
 	_, specErr := state.LoadClusterSpec(clusterName)
 	require.NoError(t, specErr)
 
-	_, capacityErr := state.LoadEKSNodegroupState(clusterName)
+	_, capacityErr := state.LoadEKSNodegroupState(clusterName, testEKSRegion)
 	require.NoError(t, capacityErr)
+}
+
+// saveEKSCapacitySnapshot writes a stop-time capacity snapshot for the cluster in the region the
+// EKS delete tests use, so a test can assert whether deletion cleaned it up.
+func saveEKSCapacitySnapshot(t *testing.T, clusterName string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveEKSNodegroupState(clusterName, testEKSRegion,
+		&state.EKSNodegroupState{
+			Version:     state.EKSNodegroupStateVersion,
+			ClusterName: clusterName,
+			Region:      testEKSRegion,
+			Nodegroups: []state.EKSNodegroupCapacity{
+				{Name: "workers", DesiredCapacity: 2, MinSize: 1, MaxSize: 3},
+			},
+		}))
+}
+
+// TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails covers the split between the cloud
+// operation and local bookkeeping: once the EKS cluster is actually gone, a failure to remove the
+// local state directory (read-only home, permissions) must not pin the job Failed. That would leave
+// an undismissable row in the web UI for a cluster that no longer exists — the very trap the
+// idempotent-delete behaviour exists to avoid. The cleanup failure is a warning, not a job failure.
+func TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "cleanup-fails"
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Force local state cleanup to fail deterministically: with no resolvable home directory the
+	// state layer cannot locate — and therefore cannot remove — the cluster's state directory. The
+	// provisioner still reports a clean deletion.
+	t.Setenv("HOME", "")
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, found := phaseOf(list, clusterName)
+
+		return !found
+	}, eventuallyTimeout, eventuallyTick)
 }
 
 // TestDeleteClearsFailedClusterWithNoUnderlyingCluster reproduces the bug where a cluster left in

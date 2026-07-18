@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
@@ -13,15 +14,20 @@ import (
 const (
 	// EKSNodegroupStateVersion is the on-disk schema version for EKS capacity snapshots.
 	EKSNodegroupStateVersion = 1
-	// eksNodegroupStateFileName is kept separate from spec and TTL state so a successful start can
-	// clear only the transient capacity snapshot.
-	eksNodegroupStateFileName = "eks-nodegroups.json"
+	// eksNodegroupStateFileNameFormat is kept separate from spec and TTL state so a successful start
+	// can clear only the transient capacity snapshot. The region is part of the file name because a
+	// cluster name is unique only within a region.
+	eksNodegroupStateFileNameFormat = "eks-nodegroups-%s.json"
 )
 
 var (
 	// ErrEKSNodegroupStateNotFound reports that no stop-time EKS capacity snapshot exists.
 	ErrEKSNodegroupStateNotFound = errors.New("EKS nodegroup state not found")
-	errEKSNodegroupStateNil      = errors.New("EKS nodegroup state is nil")
+	// ErrInvalidRegion reports a missing region or one containing path separators or '..'.
+	ErrInvalidRegion = errors.New(
+		"invalid AWS region: must be non-empty and must not contain path separators or '..'",
+	)
+	errEKSNodegroupStateNil = errors.New("EKS nodegroup state is nil")
 )
 
 // EKSNodegroupCapacity records the exact scaling values a stopped managed nodegroup must regain.
@@ -41,14 +47,14 @@ type EKSNodegroupState struct {
 }
 
 // SaveEKSNodegroupState atomically persists the capacity snapshot before stop mutates AWS.
-func SaveEKSNodegroupState(clusterName string, snapshot *EKSNodegroupState) error {
-	statePath, err := eksNodegroupStatePath(clusterName)
-	if err != nil {
-		return err
-	}
-
+func SaveEKSNodegroupState(clusterName, region string, snapshot *EKSNodegroupState) error {
 	if snapshot == nil {
 		return errEKSNodegroupStateNil
+	}
+
+	statePath, err := eksNodegroupStatePath(clusterName, region)
+	if err != nil {
+		return err
 	}
 
 	err = os.MkdirAll(filepath.Dir(statePath), dirPermissions)
@@ -70,8 +76,8 @@ func SaveEKSNodegroupState(clusterName string, snapshot *EKSNodegroupState) erro
 }
 
 // LoadEKSNodegroupState reads the stop-time EKS capacity snapshot.
-func LoadEKSNodegroupState(clusterName string) (*EKSNodegroupState, error) {
-	statePath, err := eksNodegroupStatePath(clusterName)
+func LoadEKSNodegroupState(clusterName, region string) (*EKSNodegroupState, error) {
+	statePath, err := eksNodegroupStatePath(clusterName, region)
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +103,8 @@ func LoadEKSNodegroupState(clusterName string) (*EKSNodegroupState, error) {
 }
 
 // DeleteEKSNodegroupState removes only the transient EKS capacity snapshot.
-func DeleteEKSNodegroupState(clusterName string) error {
-	statePath, err := eksNodegroupStatePath(clusterName)
+func DeleteEKSNodegroupState(clusterName, region string) error {
+	statePath, err := eksNodegroupStatePath(clusterName, region)
 	if err != nil {
 		return err
 	}
@@ -111,11 +117,26 @@ func DeleteEKSNodegroupState(clusterName string) error {
 	return nil
 }
 
-func eksNodegroupStatePath(clusterName string) (string, error) {
+// eksNodegroupStatePath scopes the snapshot to one cluster *and* one region. Cluster names are only
+// unique within a region, so keying the file by name alone lets same-named clusters in two regions
+// share — and clobber — a single snapshot: a stop in one region would be restored from the other's
+// capacities, or rejected outright by the snapshot's own region identity check.
+func eksNodegroupStatePath(clusterName, region string) (string, error) {
 	dir, err := clusterStateDir(clusterName)
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(dir, eksNodegroupStateFileName), nil
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return "", ErrInvalidRegion
+	}
+
+	if strings.Contains(region, "/") ||
+		strings.Contains(region, "\\") ||
+		strings.Contains(region, "..") {
+		return "", ErrInvalidRegion
+	}
+
+	return filepath.Join(dir, fmt.Sprintf(eksNodegroupStateFileNameFormat, region)), nil
 }

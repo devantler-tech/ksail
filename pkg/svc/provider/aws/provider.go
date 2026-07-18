@@ -130,7 +130,7 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 			return err
 		}
 
-		err = state.SaveEKSNodegroupState(clusterName, snapshot)
+		err = state.SaveEKSNodegroupState(clusterName, target.region, snapshot)
 		if err != nil {
 			return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
 		}
@@ -415,7 +415,9 @@ func (p *Provider) loadNodegroupsAndState(
 		return nil, nil, false, err
 	}
 
-	snapshot, found, err := p.loadNodegroupState(clusterName)
+	// p is the request-local target pinned by withResolvedLifecycleRegion, so p.region is the exact
+	// region the snapshot was keyed by at stop time.
+	snapshot, found, err := p.loadNodegroupState(clusterName, p.region)
 	if err != nil {
 		return nil, nil, false, err
 	}
