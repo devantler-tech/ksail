@@ -12,6 +12,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
+	meta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -220,13 +221,16 @@ func expandHelmRelease(
 	result.Degradations = append(result.Degradations, unresolvedValueRefs(&helmRelease, index)...)
 }
 
-// unresolvedValueRefs returns a DegradationPartialValues for each non-optional
-// valuesFrom reference on the HelmRelease that cannot be resolved from the
-// offline stream. Such a reference (typically a cluster-managed ConfigMap or
-// Secret, or one defined in another Flux Kustomization) is dropped from the
-// offline render, so the rendered output can diverge from what Flux applies with
-// the real value present. Optional references are Flux-tolerated (helm-controller
-// ignores a not-found optional ref) and produce no degradation.
+// unresolvedValueRefs returns a DegradationPartialValues for each valuesFrom
+// reference on the HelmRelease whose value the offline render could not obtain,
+// so the rendered output can diverge from what Flux applies with the real value
+// present. It mirrors helm-controller's own tolerance rule: "a not found error
+// for the values reference is ignored [when optional], but any ValuesKey,
+// TargetPath or transient error will still result in a reconciliation failure".
+// So only an ABSENT optional referent is silent (typically cluster-managed, or
+// defined in another Flux Kustomization); a referent that IS in the stream but
+// lacks the requested valuesKey fails in-cluster even when marked optional — a
+// `valuesKey` typo is exactly that case — and is always reported.
 func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) []Degradation {
 	key := helmRelease.Namespace + "/" + helmRelease.Name
 
@@ -234,22 +238,38 @@ func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) [
 
 	for index := range helmRelease.Spec.ValuesFrom {
 		ref := helmRelease.Spec.ValuesFrom[index]
-		if ref.Optional {
+
+		data, referentFound := lookupValuesSource(ref, helmRelease.Namespace, sources)
+		if !referentFound {
+			// Flux ignores a not-found optional referent; a missing required one
+			// means the chart rendered with incomplete values.
+			if ref.Optional {
+				continue
+			}
+
+			degradations = append(degradations, partialValuesDegradation(key, ref))
+
 			continue
 		}
 
-		if _, ok := lookupValuesRef(ref, helmRelease.Namespace, sources); ok {
-			continue
+		// The referent is in the stream, so a missing valuesKey is a hard
+		// reconciliation failure in Flux regardless of `optional`.
+		if _, ok := data[ref.GetValuesKey()]; !ok {
+			degradations = append(degradations, partialValuesDegradation(key, ref))
 		}
-
-		degradations = append(degradations, Degradation{
-			HelmRelease: key,
-			Kind:        DegradationPartialValues,
-			Reason:      fmt.Sprintf("%s %q (key %q)", ref.Kind, ref.Name, ref.GetValuesKey()),
-		})
 	}
 
 	return degradations
+}
+
+// partialValuesDegradation builds the DegradationPartialValues entry naming the
+// valuesFrom reference whose value could not be obtained offline.
+func partialValuesDegradation(key string, ref meta.ValuesReference) Degradation {
+	return Degradation{
+		HelmRelease: key,
+		Kind:        DegradationPartialValues,
+		Reason:      fmt.Sprintf("%s %q (key %q)", ref.Kind, ref.Name, ref.GetValuesKey()),
+	}
 }
 
 // isSilentDegradation reports whether a degradation is expected in normal repos

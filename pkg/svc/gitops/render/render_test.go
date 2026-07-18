@@ -271,6 +271,15 @@ spec:
 	helmReleaseValuesFromOptionalYAML = helmReleaseValuesFromYAML + `
       optional: true`
 
+	// helmReleaseValuesFromOptionalMissingKeyYAML marks the reference optional but
+	// requests a valuesKey the referenced ConfigMap does not carry (a typo of
+	// "values.yaml"). helm-controller forgives only a NOT-FOUND optional referent —
+	// "any ValuesKey, TargetPath or transient error will still result in a
+	// reconciliation failure" — so this must still be reported.
+	helmReleaseValuesFromOptionalMissingKeyYAML = helmReleaseValuesFromYAML + `
+      optional: true
+      valuesKey: valuse.yaml`
+
 	appConfigYAML = `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -308,6 +317,19 @@ func TestExpandDegradesOnUnresolvableValuesFrom(t *testing.T) {
 		{
 			name:         "optional valuesFrom absent from the stream is tolerated",
 			stream:       joinDocs(helmReleaseValuesFromOptionalYAML),
+			wantDegraded: false,
+		},
+		{
+			// Flux forgives only a not-found optional referent; a present one
+			// missing the requested valuesKey still fails reconciliation, so a
+			// valuesKey typo must not be silently swallowed by `optional: true`.
+			name:         "optional valuesFrom present but missing its valuesKey degrades",
+			stream:       joinDocs(helmReleaseValuesFromOptionalMissingKeyYAML, appConfigYAML),
+			wantDegraded: true,
+		},
+		{
+			name:         "optional valuesFrom resolvable from the stream does not degrade",
+			stream:       joinDocs(helmReleaseValuesFromOptionalYAML, appConfigYAML),
 			wantDegraded: false,
 		},
 		{
