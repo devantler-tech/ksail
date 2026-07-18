@@ -586,6 +586,68 @@ func TestStartNodesRetainsCapacityStateWhenScalingFails(t *testing.T) {
 	assert.Equal(t, 2, saved.Nodegroups[0].MinSize)
 }
 
+// TestStopNodesDoesNotPersistAnAllStoppedSnapshot guards the stop→start round trip for a cluster
+// that is ALREADY at zero (stopped by an older release, or scaled down by hand). Recording its
+// all-zero live state as the restore target would make the next start a silent no-op: live already
+// matches the snapshot, every scale is skipped, the snapshot is cleared, and success is reported
+// with every nodegroup still at zero — while permanently shadowing the no-snapshot fallback.
+func TestStopNodesDoesNotPersistAnAllStoppedSnapshot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: nodegroupJSON(0, 0)}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+
+	// Nothing to scale (already stopped) and, critically, no snapshot written.
+	assert.Empty(t, scaleCalls(runner.calls))
+
+	_, err := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound,
+		"an all-stopped snapshot must not be persisted")
+}
+
+// TestStopThenStartOnAlreadyStoppedClusterStillRestores is the end-to-end consequence: after a stop
+// on an already-zero cluster, start must actually bring nodes back rather than report a no-op
+// success.
+func TestStopThenStartOnAlreadyStoppedClusterStillRestores(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup":   {{stdout: nodegroupJSON(0, 0)}, {stdout: nodegroupJSON(0, 0)}},
+		"scale nodegroup": {{}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+
+	assert.Equal(t, []string{
+		"scale nodegroup --cluster demo --name ng-1 --nodes 1 --nodes-min 0 --nodes-max 5 " +
+			"--region us-east-1",
+	}, scaleCalls(runner.calls), "start must restore capacity, not silently no-op")
+}
+
+// TestStopNodesStillSnapshotsPartiallyRunningNodegroups is the negative half: a snapshot is only
+// withheld when EVERY group is stopped, so a mixed cluster keeps its recoverable capacity.
+func TestStopNodesStillSnapshotsPartiallyRunningNodegroups(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, _ := newProvider(t, map[string][]response{
+		"get nodegroup": {{stdout: []byte(`[
+			{"Cluster":"demo","Name":"a-stopped","DesiredCapacity":0,"MinSize":0,"MaxSize":5},
+			{"Cluster":"demo","Name":"b-running","DesiredCapacity":3,"MinSize":2,"MaxSize":5}
+		]`)}},
+		"scale nodegroup": {{}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+
+	saved, err := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.NoError(t, err, "a partially running cluster must keep its snapshot")
+	assert.Len(t, saved.Nodegroups, 2)
+}
+
 // TestStartNodesWithoutSnapshotFallsBackToMinimumOne pins upgrade compatibility: releases before
 // capacity snapshots stopped a cluster by scaling desired AND minimum to zero without recording
 // anything. Such a cluster must still start after an upgrade, using the historical max(MinSize, 1)

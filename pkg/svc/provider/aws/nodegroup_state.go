@@ -232,6 +232,23 @@ func verifyNodegroupsRestored(
 	return nil
 }
 
+// snapshotIsAllStopped reports whether every nodegroup in the snapshot is already fully scaled down.
+// Such a snapshot carries no recoverable capacity — restoring to it is a no-op — so it must never be
+// persisted as the target state for a later start.
+func snapshotIsAllStopped(snapshot *state.EKSNodegroupState) bool {
+	if snapshot == nil || len(snapshot.Nodegroups) == 0 {
+		return false
+	}
+
+	for _, capacity := range snapshot.Nodegroups {
+		if capacity.DesiredCapacity > 0 || capacity.MinSize > 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
 func nodegroupMatchesCapacity(
 	nodegroup eksctlclient.NodegroupSummary,
 	capacity state.EKSNodegroupCapacity,
