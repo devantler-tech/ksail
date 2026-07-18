@@ -218,8 +218,11 @@ func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
 			Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
 		},
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: configuredConn.SecretName, Namespace: configuredConn.Namespace},
-			Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configuredConn.SecretName,
+				Namespace: configuredConn.Namespace,
+			},
+			Data: map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
 		},
 	)
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
