@@ -8,14 +8,18 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
 	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
@@ -81,9 +85,13 @@ func NeedsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 // In general, we install LoadBalancer only when it is explicitly Enabled AND the
 // distribution × provider combination does not provide it by default.
 //
-// Special case:
+// Special cases:
 //   - Talos × Hetzner: hcloud-ccm is not pre-installed and must be installed
 //     by KSail when LoadBalancer is either Default or Enabled.
+//   - EKS: the AWS Load Balancer Controller is an explicit experimental
+//     opt-in (spec.cluster.eks.experimentalAWSLoadBalancerController) on top
+//     of LoadBalancer Enabled; without it EKS keeps its default in-tree
+//     Classic Load Balancer path and nothing is installed.
 func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	dist := clusterCfg.Spec.Cluster.Distribution
 	provider := clusterCfg.Spec.Cluster.Provider
@@ -102,6 +110,14 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	if dist == v1alpha1.DistributionTalos && provider == v1alpha1.ProviderHetzner {
 		return lbSetting == v1alpha1.LoadBalancerDefault ||
 			lbSetting == v1alpha1.LoadBalancerEnabled
+	}
+
+	// Special handling for EKS: install the AWS Load Balancer Controller only
+	// on the explicit experimental opt-in, and only when LoadBalancer is
+	// explicitly Enabled (Default keeps the in-tree path untouched).
+	if dist == v1alpha1.DistributionEKS {
+		return lbSetting == v1alpha1.LoadBalancerEnabled &&
+			clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController
 	}
 
 	// Generic behavior for all other distribution × provider combinations.
@@ -174,6 +190,7 @@ func InstallMetricsServerSilent(
 // For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a Docker container.
 // For Talos × Docker, installs MetalLB.
 // For Talos × Hetzner, installs hcloud-cloud-controller-manager.
+// For EKS, installs the AWS Load Balancer Controller on the experimental opt-in.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -187,14 +204,78 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS,
+	case v1alpha1.DistributionEKS:
+		// Default: EKS keeps its in-tree Classic Load Balancer path; the AWS
+		// Load Balancer Controller is installed only on the experimental opt-in.
+		return installEKSLoadBalancer(ctx, clusterCfg, factories)
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
 		// VCluster (Vind) handles LoadBalancer via its own networking.
 		// KWOK is a simulation cluster with no real network dataplane.
-		// EKS relies on AWS Load Balancer Controller (installed separately).
 		// GKE relies on GCP's built-in cloud load balancing.
 		// AKS relies on Azure's built-in cloud load balancing.
 		return nil
+	}
+
+	return nil
+}
+
+// installEKSLoadBalancer installs the AWS Load Balancer Controller when the
+// experimental opt-in is set together with LoadBalancer Enabled; otherwise EKS
+// keeps its default in-tree path and nothing is installed. The chart's
+// required clusterName value is resolved the same way the config manager
+// resolves it (eksctl config file first, kubeconfig context as fallback).
+func installEKSLoadBalancer(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	if !NeedsLoadBalancerInstall(clusterCfg) {
+		return nil
+	}
+
+	clusterName, fileRegion, nameFromConfig, err := ksailconfigmanager.ResolveEKSClusterMetadata(
+		clusterCfg,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
+	}
+
+	// Honor the same region precedence as the create path: the environment
+	// variable named by spec.provider.aws.regionEnvVar (default AWS_REGION)
+	// overrides eks.yaml, whose region is target-bound only when the file also
+	// named the cluster.
+	region := lifecycle.ResolveAWSRegion(
+		clusterCfg.Spec.Provider.AWS,
+		&clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Region:         fileRegion,
+				NameFromConfig: nameFromConfig,
+			},
+		},
+	)
+
+	helmClient, _, timeout, err := helmClientSetup(clusterCfg, factories)
+	if err != nil {
+		return fmt.Errorf("failed to setup helm client for aws-load-balancer-controller: %w", err)
+	}
+
+	haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
+
+	lbInstaller, err := awslbcontrollerinstaller.NewInstaller(
+		helmClient,
+		timeout,
+		clusterName,
+		region,
+		haEnabled,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to configure aws-load-balancer-controller installer: %w", err)
+	}
+
+	installErr := lbInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("aws-load-balancer-controller installation failed: %w", installErr)
 	}
 
 	return nil

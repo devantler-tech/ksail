@@ -30,7 +30,7 @@ var installOrder = []string{
 	"cert-manager",
 	"local-path-storage", "hetzner-csi",
 	"metrics-server", "kubelet-csr-approver",
-	"metallb", "cloud-provider-kind", "hcloud-ccm",
+	"metallb", "cloud-provider-kind", "hcloud-ccm", "aws-load-balancer-controller",
 	"kyverno", "gatekeeper",
 	"cluster-autoscaler",
 	"flux", "argocd",
@@ -102,6 +102,9 @@ func InstallComponents(
 			"",
 			componentInstallTimeout,
 			distribution,
+			// The AWS Load Balancer Controller chart requires the provisioned
+			// EKS cluster name; harmless for every other distribution.
+			installer.WithEKSClusterName(controller.ProvisionedName(cluster)),
 		)
 	}
 
