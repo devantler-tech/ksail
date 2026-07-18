@@ -311,6 +311,16 @@ spec:
                   eks:
                     description: EKS holds options specific to the EKS distribution.
                     properties:
+                      experimentalAWSLoadBalancerController:
+                        description: |-
+                          ExperimentalAWSLoadBalancerController enables installing the AWS Load
+                          Balancer Controller as the cluster's LoadBalancer component when
+                          spec.cluster.loadBalancer is Enabled. Default false: EKS keeps its
+                          default in-tree Classic Load Balancer path and KSail installs nothing.
+                          The controller's IAM permissions (IRSA or node role) and subnet tags are
+                          prerequisites KSail does not create — see the awslbcontroller installer
+                          package docs. Not yet validated against a live EKS cluster.
+                        type: boolean
                       experimentalInPlaceUpdates:
                         description: |-
                           ExperimentalInPlaceUpdates enables the experimental in-place update path for

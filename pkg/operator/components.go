@@ -102,6 +102,9 @@ func InstallComponents(
 			"",
 			componentInstallTimeout,
 			distribution,
+			// The AWS Load Balancer Controller chart requires the provisioned
+			// EKS cluster name; harmless for every other distribution.
+			installer.WithEKSClusterName(controller.ProvisionedName(cluster)),
 		)
 	}
 

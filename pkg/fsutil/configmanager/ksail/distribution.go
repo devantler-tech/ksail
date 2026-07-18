@@ -785,11 +785,42 @@ func parseEKSConfigMetadata(data []byte) (string, string, error) {
 	return name, meta.Metadata.Region, nil
 }
 
+// ResolveEKSClusterMetadata resolves the EKS cluster name and region the same
+// way the config manager does when caching the distribution config: from the
+// eksctl config file named by spec.cluster.distributionConfig (defaulting to
+// eks.yaml), falling back to the kubeconfig context for the name. It exists
+// for callers that hold only the cluster config (e.g. the post-creation
+// component setup) and need the chart-facing cluster identity without a
+// ConfigManager.
+func ResolveEKSClusterMetadata(cluster *v1alpha1.Cluster) (string, string, error) {
+	configPath := strings.TrimSpace(cluster.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = v1alpha1.DefaultEKSDistributionConfig
+	}
+
+	_, name, region, err := readEKSConfigMetadata(configPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	if name == "" {
+		name = eksNameFromContext(cluster.Spec.Cluster.Connection.Context)
+	}
+
+	return name, region, nil
+}
+
 // resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig
 // context of the form "<iam-identity>@<name>.<region>.eksctl.io", falling
 // back to "eks-default".
 func (m *ConfigManager) resolveEKSNameFromContext() string {
-	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	return eksNameFromContext(m.Config.Spec.Cluster.Connection.Context)
+}
+
+// eksNameFromContext is the pure context-parsing half of
+// resolveEKSNameFromContext, shared with ResolveEKSClusterMetadata.
+func eksNameFromContext(kubeContext string) string {
+	ctx := strings.TrimSpace(kubeContext)
 	if ctx == "" {
 		return "eks-default"
 	}

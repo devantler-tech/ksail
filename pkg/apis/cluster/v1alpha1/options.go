@@ -25,6 +25,15 @@ type OptionsEKS struct {
 	// diffed — changes to them are not detected by `cluster update` while this
 	// experimental path is enabled.
 	ExperimentalInPlaceUpdates bool `json:"experimentalInPlaceUpdates,omitzero" jsonschema_description:"Experimental: apply managed node-group scaling changes in-place via 'eksctl scale nodegroup' during 'cluster update' instead of recreating the cluster. Default false. Diff coverage is limited to node-group scaling and instanceType; other managed-node-group fields are not diffed."` //nolint:lll
+
+	// ExperimentalAWSLoadBalancerController enables installing the AWS Load
+	// Balancer Controller as the cluster's LoadBalancer component when
+	// spec.cluster.loadBalancer is Enabled. Default false: EKS keeps its
+	// default in-tree Classic Load Balancer path and KSail installs nothing.
+	// The controller's IAM permissions (IRSA or node role) and subnet tags are
+	// prerequisites KSail does not create — see the awslbcontroller installer
+	// package docs. Not yet validated against a live EKS cluster.
+	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll
 }
 
 // OptionsTalos defines options specific to the Talos distribution.
