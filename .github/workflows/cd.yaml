@@ -819,6 +819,36 @@ jobs:
           # never deletes a good release.
           handoff_failed=0
 
+          reconcile_merged_handoff() {
+            local name="$1" context="$2" branch="goreleaser/$1"
+            local attempt merged_pr merged_reason
+
+            # An initially-open evergreen PR can auto-merge at any point in this step. Every failure
+            # after selecting that PR comes through here: only immutable merge evidence plus an
+            # unchanged pinned-main cask can turn the race into success. If it is still open, or any
+            # proof is unavailable, preserve the original fail-closed outcome.
+            for attempt in 1 2; do
+              if merged_pr="$(.github/scripts/find-merged-cask-pr-handoff.sh \
+                --tap "$TAP" \
+                --cask-name "$name" \
+                --source-repo "$GITHUB_REPOSITORY" \
+                --tag "$TAG" \
+                --output-dir "$evidence_dir" 2>&1)"; then
+                echo "::notice::${TAP}#${merged_pr} cask ${name} is merged and current for ${TAG}; ${context}"
+                printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
+                  "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+                return 0
+              fi
+              if [[ "$attempt" -eq 1 ]]; then
+                sleep 1
+              fi
+            done
+
+            merged_reason="${merged_pr//$'\n'/; }"
+            echo "::warning::${context}; no fully validated merged handoff for ${branch}: ${merged_reason:-no merged evidence}"
+            handoff_failed=1
+          }
+
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
             # `|| true` keeps the job fail-soft: a transient API failure (5xx, rate limit,
@@ -839,24 +869,13 @@ jobs:
               continue
             fi
             if [ "$count" -eq 0 ]; then
-              # A partial rerun may already have MERGED this cask: the tap's auto-merge can land the
-              # first cask before this job is rerun. A merged PR is no longer `open`, so the open-only
-              # query returns nothing — treat a merged, this-tag-titled, tap-owned cask as done rather
-              # than failing the rerun red. `state=closed` returns merged AND closed-unmerged, so filter
-              # on `merged_at != null`. Fail-soft: an enumeration hiccup falls through to the pending path.
-              merged="$(gh api \
-                "repos/$TAP/pulls?state=closed&head=${TAP%%/*}:${branch}&per_page=100" 2>/dev/null \
-                | jq -er --arg full "$TAP" --arg title "chore(cask): update ${name} to ${TAG}" \
-                    '[.[] | select(.merged_at != null and .head.repo.full_name == $full and .user.login == "devantler" and .title == $title)] | length' \
-                2>/dev/null || echo 0)"
-              if [ "${merged:-0}" -ge 1 ]; then
-                echo "${TAP} cask ${name} already merged for ${TAG}; nothing to do"
-                printf -- '- %s cask %s already merged for %s (idempotent retry)\n' \
-                  "$TAP" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
-                continue
-              fi
-              echo "::warning::No open or merged tap-owned cask PR on $TAP for branch ${branch}; leaving it pending"
-              handoff_failed=1
+              # The tap may merge the evergreen PR while the next release is still publishing, so
+              # this tag can be coalesced into a PR whose title names the previous tag. Titles are not
+              # release evidence. Accept the zero-open-PR state only when the paginated finder proves
+              # a trusted merged PR's immutable result and the pinned current-main cask are identical,
+              # contain this release, match its asset digests, and remain on main after collection.
+              reconcile_merged_handoff "$name" \
+                "No open tap-owned cask PR was found for ${branch}"
               continue
             fi
             if [ "$count" -ne 1 ]; then
@@ -897,7 +916,8 @@ jobs:
               echo "::warning::${TAP}#${pr} is ready and titled but failed prepared revalidation: ${validation}"
               printf -- '- %s#%s ready but revalidation failed: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} failed ready-PR revalidation"
               continue
             fi
 
@@ -908,7 +928,8 @@ jobs:
               validation="${validation//$'\n'/; }"
               echo "::warning::Refusing to mutate ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s left untouched: %s\n' "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} failed draft validation after open enumeration"
               continue
             fi
             echo "Preparing ${TAP}#${pr} (${branch})"
@@ -938,7 +959,8 @@ jobs:
                 if ! command -v brew >/dev/null 2>&1; then
                   echo "::error::brew is not available on this runner; cannot style-check ${name}"
                   rm -rf "$work"
-                  handoff_failed=1
+                  reconcile_merged_handoff "$name" \
+                    "brew became unavailable while preparing ${TAP}#${pr}"
                   continue
                 fi
                 # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
@@ -982,7 +1004,8 @@ jobs:
               echo "::error::Could not ensure ${name} cask is brew-style-clean; the tap's style gate would block auto-merge for ${TAG}"
               printf -- '- %s cask %s left draft/open: could not ensure it is brew-style-clean\n' \
                 "$TAP" "$name" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} could not be confirmed brew-style-clean"
               continue
             fi
 
@@ -993,7 +1016,8 @@ jobs:
               echo "::warning::Post-style validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open after style validation failed: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} failed post-style validation"
               continue
             fi
 
@@ -1007,7 +1031,8 @@ jobs:
             title="chore(cask): update ${name} to ${TAG}"
             if ! gh api -X PATCH "repos/${TAP}/pulls/${pr}" -f title="$title" >/dev/null; then
               echo "::warning::Could not normalize the title on ${TAP}#${pr}; leaving it draft/open"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} could not receive normalized metadata"
               continue
             fi
             metadata_ok=true
@@ -1034,7 +1059,8 @@ jobs:
             done
             if [ "$metadata_ok" != true ]; then
               echo "::warning::${TAP}#${pr} metadata is incomplete; leaving it draft/open"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} metadata could not be completed"
               continue
             fi
 
@@ -1043,7 +1069,8 @@ jobs:
               echo "::warning::Prepared handoff validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open with incomplete handoff metadata: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} failed prepared validation"
               continue
             fi
 
@@ -1069,7 +1096,8 @@ jobs:
               echo "::error::Could not mark ${TAP}#${pr} ready; it remains draft and the tap will NOT pick up ${TAG}"
               printf -- '- %s#%s remains draft/open: could not mark it ready after validation\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
-              handoff_failed=1
+              reconcile_merged_handoff "$name" \
+                "${TAP}#${pr} could not be marked ready"
             fi
           done
 
