@@ -354,8 +354,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	if region != "" {
 		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
 		if err != nil {
-			if errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
-				errors.Is(err, state.ErrInvalidEKSOwnershipState) {
+			if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
 				return nil
 			}
 

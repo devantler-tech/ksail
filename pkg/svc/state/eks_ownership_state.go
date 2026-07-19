@@ -43,8 +43,9 @@ type EKSOwnershipState struct {
 	AccountID   string    `json:"accountId"`
 	ClusterARN  string    `json:"clusterArn"`
 	CreatedAt   time.Time `json:"createdAt"`
-	// AWSOptions stores only the environment-variable names used to resolve AWS credentials.
-	// Credential values are never persisted.
+	// AWSOptions stores the complete environment-variable-name mapping used to resolve AWS
+	// credentials. Credential values are never persisted. Records without this mapping predate the
+	// schema extension and require explicit rebind before state-only lifecycle commands may use them.
 	AWSOptions v1alpha1.OptionsAWS `json:"awsOptions,omitzero"`
 }
 
@@ -214,7 +215,8 @@ func validateEKSOwnershipFields(
 	if strings.TrimSpace(ownership.ClusterName) != clusterName ||
 		strings.TrimSpace(ownership.Region) != region ||
 		!awsAccountIDPattern.MatchString(strings.TrimSpace(ownership.AccountID)) ||
-		strings.TrimSpace(ownership.ClusterARN) == "" || ownership.CreatedAt.IsZero() {
+		strings.TrimSpace(ownership.ClusterARN) == "" || ownership.CreatedAt.IsZero() ||
+		!hasCompleteAWSOptions(ownership.AWSOptions) {
 		return fmt.Errorf(
 			"%w: required identity fields are missing or do not match the state key",
 			ErrInvalidEKSOwnershipState,
@@ -222,6 +224,14 @@ func validateEKSOwnershipFields(
 	}
 
 	return nil
+}
+
+func hasCompleteAWSOptions(options v1alpha1.OptionsAWS) bool {
+	return strings.TrimSpace(options.ProfileEnvVar) != "" &&
+		strings.TrimSpace(options.RegionEnvVar) != "" &&
+		strings.TrimSpace(options.AccessKeyIDEnvVar) != "" &&
+		strings.TrimSpace(options.SecretAccessKeyEnvVar) != "" &&
+		strings.TrimSpace(options.SessionTokenEnvVar) != ""
 }
 
 func validateEKSOwnershipARN(

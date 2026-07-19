@@ -783,8 +783,11 @@ func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Now().UTC(),
 		AWSOptions: v1alpha1.OptionsAWS{
-			RegionEnvVar:      "KSAIL_REGION",
-			AccessKeyIDEnvVar: "KSAIL_ACCESS",
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
 		},
 	}
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))

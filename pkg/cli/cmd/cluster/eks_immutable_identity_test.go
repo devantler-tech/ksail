@@ -469,6 +469,7 @@ func persistStandaloneEKSIdentityInRegion(
 			AccountID:   accountID,
 			ClusterARN:  "arn:aws:eks:" + region + ":" + accountID + ":cluster/" + clusterName,
 			CreatedAt:   createdAt,
+			AWSOptions:  credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{}),
 		},
 	))
 }
