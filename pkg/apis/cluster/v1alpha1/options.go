@@ -48,7 +48,9 @@ type OptionsEKS struct {
 	// ServiceAccount. When empty (default), the chart creates its own service
 	// account and IAM comes from node-role credentials. Only meaningful
 	// together with experimentalAWSLoadBalancerController; inert otherwise.
-	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitzero" jsonschema_description:"Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController."` //nolint:lll // long generated-schema description
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitzero" jsonschema:"maxLength=253,pattern=^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" jsonschema_description:"Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController."` //nolint:lll // long generated-schema description
 }
 
 // OptionsTalos defines options specific to the Talos distribution.

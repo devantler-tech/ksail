@@ -125,8 +125,11 @@ func buildValuesYaml(clusterName, region, serviceAccountName string, haEnabled b
 	}
 
 	if serviceAccountName = strings.TrimSpace(serviceAccountName); serviceAccountName != "" {
+		// Quoted: DNS-1123 names like "123", "null", "true" or "on" are
+		// otherwise parsed as YAML numbers/nulls/booleans, not strings.
+		// Validation guarantees the name contains no quote or backslash.
 		parts = append(parts,
-			"serviceAccount:\n  create: false\n  name: "+serviceAccountName)
+			"serviceAccount:\n  create: false\n  name: \""+serviceAccountName+"\"")
 	}
 
 	if haEnabled {

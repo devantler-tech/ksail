@@ -164,7 +164,7 @@ func TestBuildValuesYaml_ServiceAccount(t *testing.T) {
 			clusterName:    "prod-eks",
 			serviceAccount: "aws-load-balancer-controller",
 			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
-				"serviceAccount:\n  create: false\n  name: aws-load-balancer-controller\nreplicaCount: 1",
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 1",
 		},
 		{
 			name:           "pre-created service account with region and ha",
@@ -173,13 +173,22 @@ func TestBuildValuesYaml_ServiceAccount(t *testing.T) {
 			serviceAccount: "aws-load-balancer-controller",
 			haEnabled:      true,
 			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\n" +
-				"serviceAccount:\n  create: false\n  name: aws-load-balancer-controller\nreplicaCount: 2",
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 2",
 		},
 		{
 			name:           "whitespace-only service account is unset",
 			clusterName:    "prod-eks",
 			serviceAccount: "   ",
 			want:           "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
+		},
+		{
+			// "123" is a valid DNS-1123 name that YAML would otherwise parse
+			// as a number — the quoting is what keeps it a string.
+			name:           "numeric service account name stays a string",
+			clusterName:    "prod-eks",
+			serviceAccount: "123",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
+				"serviceAccount:\n  create: false\n  name: \"123\"\nreplicaCount: 1",
 		},
 	}
 

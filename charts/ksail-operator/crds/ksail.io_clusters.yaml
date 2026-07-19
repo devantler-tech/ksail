@@ -321,6 +321,8 @@ spec:
                           ServiceAccount. When empty (default), the chart creates its own service
                           account and IAM comes from node-role credentials. Only meaningful
                           together with experimentalAWSLoadBalancerController; inert otherwise.
+                        maxLength: 253
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                         type: string
                       experimentalAWSLoadBalancerController:
                         description: |-

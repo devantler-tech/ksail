@@ -775,6 +775,8 @@
                 },
                 "awsLoadBalancerControllerServiceAccount": {
                   "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$",
                   "description": "Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController."
                 }
               },

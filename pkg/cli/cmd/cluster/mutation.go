@@ -178,6 +178,14 @@ func loadAndValidateClusterConfig(
 		return nil, "", fmt.Errorf("OIDC configuration: %w", err)
 	}
 
+	// Validate EKS options here, before any billable provisioning: a
+	// deterministically-invalid value must not first surface in the
+	// post-create component setup (the installer re-checks as defense in depth).
+	err = v1alpha1.ValidateEKSConfig(&ctx.ClusterCfg.Spec.Cluster)
+	if err != nil {
+		return nil, "", fmt.Errorf("EKS configuration: %w", err)
+	}
+
 	clusterName := resolveClusterNameFromContext(ctx)
 
 	return ctx, clusterName, nil
