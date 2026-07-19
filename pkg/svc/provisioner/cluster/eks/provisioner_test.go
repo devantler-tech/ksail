@@ -130,7 +130,6 @@ func TestCreate_ShellsOutWithConfig(t *testing.T) {
 		[]string{
 			"create", "cluster",
 			"--config-file", "/tmp/eksctl.yaml",
-			"--region", "us-east-1",
 			"--kubeconfig", "/tmp/kubeconfig",
 		},
 		runner.calls[0],

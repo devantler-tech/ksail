@@ -317,7 +317,7 @@ func TestRequireCredentialValuesAcceptsProfileOrStaticPair(t *testing.T) {
 	}
 }
 
-func TestCreateCluster_InvokesCorrectArgs(t *testing.T) {
+func TestCreateCluster_ConfigRegionIsNotDuplicatedAsAFlag(t *testing.T) {
 	t.Parallel()
 
 	runner := &fakeRunner{}
@@ -328,7 +328,7 @@ func TestCreateCluster_InvokesCorrectArgs(t *testing.T) {
 
 	assert.Equal(t, "eksctl-under-test", runner.lastName)
 	assert.Equal(t,
-		[]string{"create", "cluster", "--config-file", "eks.yaml", "--region", "us-east-1"},
+		[]string{"create", "cluster", "--config-file", "eks.yaml"},
 		runner.lastArgs,
 	)
 }
@@ -366,7 +366,6 @@ func TestCreateCluster_WithKubeconfigPinsOutputPath(t *testing.T) {
 		[]string{
 			"create", "cluster",
 			"--config-file", "eks.yaml",
-			"--region", "eu-west-1",
 			"--kubeconfig", "/tmp/ksail-kubeconfig",
 		},
 		runner.lastArgs,
