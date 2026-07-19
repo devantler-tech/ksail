@@ -103,6 +103,46 @@ func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
 	assert.NotContains(t, string(workflowSource), "secrets.AWS_OIDC_ROLE_ARN")
 }
 
+func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
+
+	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	assert.Contains(
+		t,
+		initStep.Run,
+		"--local-registry ghcr.io/devantler-tech/ksail/system-test-manifests",
+	)
+
+	createStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster create")
+	assert.Equal(t, "create", createStep.ID)
+	attemptIndex := strings.Index(createStep.Run, `echo "attempted=true" >> "$GITHUB_OUTPUT"`)
+	createIndex := strings.Index(createStep.Run, "ksail cluster create")
+
+	require.NotEqual(t, -1, attemptIndex, "cluster create must record its attempt")
+	require.NotEqual(t, -1, createIndex, "cluster create command is missing")
+	assert.Less(t, attemptIndex, createIndex)
+
+	cleanupStep := findHarnessStep(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Equal(
+		t,
+		"${{ steps.create.outputs.attempted }}",
+		cleanupStep.Env["EKS_CREATE_ATTEMPTED"],
+	)
+	guardIndex := strings.Index(
+		cleanupStep.Run,
+		`if [ "${EKS_CREATE_ATTEMPTED:-}" != "true" ]; then`,
+	)
+	deleteIndex := strings.Index(cleanupStep.Run, "ksail cluster delete")
+
+	require.NotEqual(t, -1, guardIndex, "pre-create cleanup guard is missing")
+	require.NotEqual(t, -1, deleteIndex, "cluster delete command is missing")
+	assert.Less(t, guardIndex, deleteIndex)
+}
+
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
 func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	t.Parallel()

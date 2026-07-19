@@ -209,6 +209,7 @@ jobs:
             --name "$KSAIL_EKS_CLUSTER_NAME"
             --distribution EKS
             --provider AWS
+            --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests
           )
           if [ "$GITOPS_ENGINE" != "None" ]; then
             args+=(--gitops-engine "$GITOPS_ENGINE")
@@ -242,11 +243,13 @@ jobs:
           '
 
       - name: 🧪 ksail cluster create
+        id: create
         timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
+          echo "attempted=true" >> "$GITHUB_OUTPUT"
           ksail cluster create
 
       - name: 🧪 ksail cluster info
@@ -270,8 +273,15 @@ jobs:
         if: always()
         timeout-minutes: 45
         shell: bash
+        env:
+          EKS_CREATE_ATTEMPTED: ${{ steps.create.outputs.attempted }}
         run: |
           set +e
+          if [ "${EKS_CREATE_ATTEMPTED:-}" != "true" ]; then
+            echo "Cluster creation did not start; nothing to clean up."
+            exit 0
+          fi
+
           if [ ! -d "$KSAIL_EKS_WORKDIR" ]; then
             echo "No EKS smoke workdir exists; nothing to clean up."
             exit 0
