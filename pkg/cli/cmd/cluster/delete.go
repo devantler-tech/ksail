@@ -676,6 +676,17 @@ func handleUnmanagedDeleteTarget(
 
 	cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, nil)
 
+	// KSail's own bookkeeping for this name goes with the containers. Left behind,
+	// ~/.ksail/clusters/<name>/spec.json and ttl.json are inherited by the next cluster created
+	// under the same name — a stale TTL or stale spec surfacing in update/info operations.
+	//
+	// This is the path that fires in practice for a node-less remnant: the guard refuses before
+	// executeDelete is ever reached, so cleaning state only on the not-found path would miss it.
+	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	if stateErr != nil {
+		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
+	}
+
 	return nil
 }
 
