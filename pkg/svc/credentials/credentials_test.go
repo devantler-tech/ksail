@@ -59,6 +59,23 @@ func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {
 	assert.Empty(t, credentials.DefaultEnvVar(credentials.Key("nope.nope")))
 }
 
+func TestAWSOptionsWithDefaultsPreservesCustomNamesAndFillsEmptyNames(t *testing.T) {
+	t.Parallel()
+
+	got := credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{
+		ProfileEnvVar: "KSAIL_PROFILE",
+		RegionEnvVar:  "KSAIL_REGION",
+	})
+
+	assert.Equal(t, v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}, got)
+}
+
 // TestEnvResolver_CopilotTokenFallback verifies the Copilot credential resolves from COPILOT_TOKEN when
 // the primary KSAIL_COPILOT_TOKEN is unset, mirroring webchat.copilotToken()'s two-variable lookup.
 func TestEnvResolver_CopilotTokenFallback(t *testing.T) {

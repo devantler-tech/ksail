@@ -1,11 +1,13 @@
 package state_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,6 +23,13 @@ func TestSaveLoadEKSOwnershipState(t *testing.T) {
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/ownership-round-trip",
 		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "KSAIL_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "KSAIL_SECRET",
+			SessionTokenEnvVar:    "KSAIL_SESSION",
+		},
 	}
 
 	require.NoError(t, state.SaveEKSOwnershipState(want.ClusterName, want.Region, want))
@@ -78,6 +87,13 @@ func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *test
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "KSAIL_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "KSAIL_SECRET",
+			SessionTokenEnvVar:    "KSAIL_SESSION",
+		},
 	}
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, snapshot))
 
@@ -91,11 +107,16 @@ func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *test
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
 
+	var persisted map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(contents, &persisted))
+
 	for _, credentialField := range []string{
-		"accessKey", "profile", "secret", "sessionToken", "token",
+		"accessKeyId", "secretAccessKey", "sessionToken", "profile",
 	} {
-		assert.NotContains(t, string(contents), credentialField)
+		assert.NotContains(t, persisted, credentialField)
 	}
+	assert.Contains(t, string(persisted["awsOptions"]), `"accessKeyIdEnvVar": "KSAIL_ACCESS"`)
+	assert.Contains(t, string(persisted["awsOptions"]), `"secretAccessKeyEnvVar": "KSAIL_SECRET"`)
 
 	dirInfo, err := os.Stat(dir)
 	require.NoError(t, err)

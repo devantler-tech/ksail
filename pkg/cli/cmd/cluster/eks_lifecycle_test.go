@@ -680,6 +680,77 @@ func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) 
 	)
 }
 
+// TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState verifies a no-config
+// lifecycle command uses the same custom AWS environment-variable names captured at creation.
+//
+//nolint:paralleltest // mutates process environment and working directory
+func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testing.T) {
+	const (
+		clusterName = "ksail-eks-start-state-custom-mappings-6227"
+		region      = "ap-southeast-2"
+	)
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	binDir := t.TempDir()
+	markerPath := filepath.Join(t.TempDir(), "eksctl-calls")
+	writeExecutableFixture(t, filepath.Join(binDir, "eksctl"), standaloneEKSEksctlFixture)
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
+	t.Setenv("KSAIL_EKS_CLUSTER", clusterName)
+	t.Setenv("KSAIL_PROFILE", "selected-profile")
+	t.Setenv("KSAIL_REGION", region)
+	t.Setenv("KSAIL_ACCESS", "fixture-access")
+	t.Setenv("KSAIL_SECRET", "fixture-secret")
+	t.Setenv("KSAIL_SESSION", "fixture-session")
+	t.Setenv("AWS_PROFILE", "ambient-profile")
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-session")
+	t.Setenv("KUBECONFIG", filepath.Join(workingDir, "kubeconfig"))
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+	writeStandaloneEKSKubeconfig(t, clusterName, region)
+	configureStandaloneEKSIdentityInRegion(t, clusterName, region)
+
+	ownership, err := state.LoadEKSOwnershipState(clusterName, region)
+	require.NoError(t, err)
+	ownership.AWSOptions = v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "KSAIL_SECRET",
+		SessionTokenEnvVar:    "KSAIL_SESSION",
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(
+		t,
+		standaloneEKSLifecycleCases()[1].expectedCalls(clusterName),
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assert.Equal(t, "ambient-profile", os.Getenv("AWS_PROFILE"))
+	assert.Equal(t, "us-east-1", os.Getenv("AWS_REGION"))
+	assert.Equal(t, "ambient-access", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "ambient-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "ambient-session", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
 // TestEKSMutationCommandsRejectNameOverrideMismatch proves create and update cannot claim a name
 // that eksctl will ignore because the actual create/delete source is eks.yaml.
 //

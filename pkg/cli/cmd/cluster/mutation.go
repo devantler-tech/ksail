@@ -503,12 +503,21 @@ func captureCreatedEKSIdentity(
 		return fmt.Errorf("capture immutable EKS ownership identity: create AWS client: %w", err)
 	}
 
-	ownership, err := eksidentity.Capture(
+	ownership, err := eksidentity.Observe(
 		ctx,
 		identityClient,
 		strings.TrimSpace(clusterCtx.EKSConfig.Name),
 		strings.TrimSpace(clusterCtx.EKSConfig.Region),
 	)
+	if err != nil {
+		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
+	}
+
+	ownership.AWSOptions = credentials.AWSOptionsWithDefaults(
+		clusterCtx.ClusterCfg.Spec.Provider.AWS,
+	)
+
+	err = eksidentity.Persist(ownership.ClusterName, ownership.Region, ownership)
 	if err != nil {
 		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
 	}

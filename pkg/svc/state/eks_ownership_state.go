@@ -11,6 +11,7 @@ import (
 	"time"
 
 	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
@@ -41,6 +42,9 @@ type EKSOwnershipState struct {
 	AccountID   string    `json:"accountId"`
 	ClusterARN  string    `json:"clusterArn"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// AWSOptions stores only the environment-variable names used to resolve AWS credentials.
+	// Credential values are never persisted.
+	AWSOptions v1alpha1.OptionsAWS `json:"awsOptions,omitzero"`
 }
 
 // SaveEKSOwnershipState atomically persists one validated immutable ownership record.

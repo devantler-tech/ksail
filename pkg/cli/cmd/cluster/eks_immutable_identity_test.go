@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
@@ -146,6 +147,13 @@ func TestStandaloneEKSLifecycleFreezesCustomAWSCredentialsForEveryConsumer(t *te
 	const clusterName = "ksail-eks-start-frozen-credentials-6202"
 
 	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	ownership, err := state.LoadEKSOwnershipState(clusterName, "ap-southeast-2")
+	require.NoError(t, err)
+	ownership.AWSOptions = credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{})
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(clusterName, "ap-southeast-2", ownership),
+	)
 	identityClient := &fakeEKSIdentityClient{
 		accountID: "123456789012",
 		cluster: immutableEKSCluster(

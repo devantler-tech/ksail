@@ -274,7 +274,7 @@ func ensureAWSClusterManaged(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) error {
-	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved)
+	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved, true)
 	if err != nil {
 		return err
 	}
@@ -304,6 +304,7 @@ func ensureAWSClusterManaged(
 func resolveAWSOwnershipTarget(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
+	restorePersistedOptions bool,
 ) (eksidentity.Client, error) {
 	if !hasLocalKSailEKSTargetEvidence(resolved) {
 		return nil, fmt.Errorf(
@@ -316,6 +317,13 @@ func resolveAWSOwnershipTarget(
 	err := bindAWSRegionFromKubeconfig(resolved)
 	if err != nil {
 		return nil, err
+	}
+
+	if restorePersistedOptions {
+		err = restorePersistedAWSOptions(resolved)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	auth, err := queryFrozenAWSOwnership(ctx, resolved)
@@ -335,6 +343,52 @@ func resolveAWSOwnershipTarget(
 	}
 
 	return identityClient, nil
+}
+
+func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
+	if strings.TrimSpace(resolved.AWSRegion) == "" {
+		return nil
+	}
+
+	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, resolved.AWSRegion)
+	if err != nil {
+		if errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
+			errors.Is(err, state.ErrInvalidEKSOwnershipState) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+	return nil
+}
+
+func mergeAWSOptions(
+	current, persisted v1alpha1.OptionsAWS,
+) v1alpha1.OptionsAWS {
+	if current.ProfileEnvVar == "" {
+		current.ProfileEnvVar = persisted.ProfileEnvVar
+	}
+
+	if current.RegionEnvVar == "" {
+		current.RegionEnvVar = persisted.RegionEnvVar
+	}
+
+	if current.AccessKeyIDEnvVar == "" {
+		current.AccessKeyIDEnvVar = persisted.AccessKeyIDEnvVar
+	}
+
+	if current.SecretAccessKeyEnvVar == "" {
+		current.SecretAccessKeyEnvVar = persisted.SecretAccessKeyEnvVar
+	}
+
+	if current.SessionTokenEnvVar == "" {
+		current.SessionTokenEnvVar = persisted.SessionTokenEnvVar
+	}
+
+	return current
 }
 
 func queryFrozenAWSOwnership(
