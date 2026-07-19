@@ -75,7 +75,8 @@ type compositeAction struct {
 
 type ciWorkflow struct {
 	Jobs map[string]struct {
-		Steps []harnessStep `yaml:"steps"`
+		TimeoutMinutes int           `yaml:"timeout-minutes"`
+		Steps          []harnessStep `yaml:"steps"`
 	} `yaml:"jobs"`
 }
 
@@ -396,6 +397,74 @@ func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
 	assert.Less(t, infoIndex, updateIndex)
 	assert.Less(t, updateIndex, deleteIndex)
+}
+
+func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+	assert.Equal(t, 210, smokeJob.TimeoutMinutes)
+
+	boundedStepNames := []string{
+		"📄 Checkout",
+		"🔐 Configure AWS credentials (OIDC)",
+		"🔐 Resolve EKS permissions boundary",
+		"⚙️ Setup Go",
+		"📦 Cache KSail Binary",
+		"📥 Install eksctl",
+		"🔧 Initialize EKS project",
+		"🧪 ksail cluster create",
+		"🧪 ksail cluster info",
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+		"🧪 ksail cluster update scales EKS nodes",
+		"🧪 ksail workload reconcile",
+		"🧹 Delete EKS smoke cluster",
+	}
+
+	boundedMinutes := 0
+	for _, name := range boundedStepNames {
+		step := findHarnessStep(t, smokeJob.Steps, name)
+		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
+		boundedMinutes += step.TimeoutMinutes
+	}
+	assert.LessOrEqual(t, boundedMinutes+15, smokeJob.TimeoutMinutes)
+
+	initialCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Configure AWS credentials (OIDC)",
+	)
+	refreshCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	assert.Equal(t, initialCredentials.Uses, refreshCredentials.Uses)
+	assert.Equal(
+		t,
+		initialCredentials.With["role-to-assume"],
+		refreshCredentials.With["role-to-assume"],
+	)
+	assert.Equal(t, 7200, refreshCredentials.With["role-duration-seconds"])
+	assert.Contains(t, refreshCredentials.If, "always()")
+
+	refreshIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, refreshIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+
+	postRefreshMinutes := 0
+	for _, name := range boundedStepNames[10:] {
+		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
+	}
+	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
 }
 
 func harnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
