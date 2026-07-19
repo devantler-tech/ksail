@@ -354,27 +354,39 @@ func (c *Configs) WithHetznerVIP(vip, hcloudAPIToken string) (*Configs, error) {
 	})
 }
 
+// hetznerPublicNICBusPath is the PCI bus path of the public NIC on a Hetzner Cloud
+// server. The public interface is always the first virtio device (slot 01); a cluster
+// private network attaches as a later device (slot 07 on the two-NIC servers KSail
+// provisions), so the bus path distinguishes the two where `physical: true` cannot.
+const hetznerPublicNICBusPath = "0000:01:00.0"
+
 // buildHetznerVIPPatch builds a control-plane-scope patch that configures the Talos
 // virtual (shared) IP on the public interface, with hcloud API management so the
 // elected leader reassigns the floating IP to itself.
 //
-// The public interface is addressed by name (eth0) rather than a deviceSelector:
-// KSail always attaches its servers to a cluster private network, so the VMs carry
-// two virtio NICs and a `physical: true` selector would match both — while Hetzner
-// Cloud VMs predictably enumerate the public NIC first under Talos' ethN naming
-// (design decision on devantler-tech/ksail#5718). dhcp stays enabled so declaring
-// the interface does not drop its primary address configuration.
+// The public interface is addressed by a deviceSelector on its PCI bus path rather
+// than by link name. Addressing it as `eth0` (the original design on
+// devantler-tech/ksail#5718) assumed Talos uses ethN naming — it does not: Talos
+// applies predictable interface names, so a Hetzner control plane enumerates its NICs
+// as enp1s0 (public) and enp7s0 (private) and carries no `eth0` at all. The patch
+// therefore matched no link, the VIP was never claimed on the node, and the floating
+// IP stayed attached-but-unbound with a dead API endpoint (devantler-tech/ksail#6070).
+// A `physical: true` selector cannot be used instead: KSail always attaches its servers
+// to a cluster private network, so it would match both NICs. dhcp stays enabled so
+// declaring the interface does not drop its primary address configuration.
 func buildHetznerVIPPatch(vip, hcloudAPIToken string) Patch {
 	content := fmt.Sprintf(
 		"machine:\n"+
 			"  network:\n"+
 			"    interfaces:\n"+
-			"      - interface: eth0\n"+
+			"      - deviceSelector:\n"+
+			"          busPath: %q\n"+
 			"        dhcp: true\n"+
 			"        vip:\n"+
 			"          ip: %q\n"+
 			"          hcloud:\n"+
 			"            apiToken: %q\n",
+		hetznerPublicNICBusPath,
 		vip,
 		hcloudAPIToken,
 	)
