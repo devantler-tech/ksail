@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -116,6 +117,64 @@ func LoadEKSOwnershipState(clusterName, region string) (*EKSOwnershipState, erro
 	}
 
 	return &ownership, nil
+}
+
+// ListEKSOwnershipStates loads every region-scoped immutable ownership record for a cluster.
+// Callers use this only when no region was resolved from config or kubeconfig; multiple records
+// remain ambiguous until an explicitly configured region environment variable selects one.
+func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
+	dir, err := clusterStateDir(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	paths, err := filepath.Glob(filepath.Join(dir, "eks-ownership-*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("list EKS ownership state: %w", err)
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrEKSOwnershipStateNotFound, clusterName)
+	}
+
+	ownerships := make([]*EKSOwnershipState, 0, len(paths))
+	for _, path := range paths {
+		//nolint:gosec // glob is rooted under the validated per-cluster state directory.
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, fmt.Errorf("read EKS ownership state: %w", readErr)
+		}
+
+		var ownership EKSOwnershipState
+		if unmarshalErr := json.Unmarshal(data, &ownership); unmarshalErr != nil {
+			return nil, fmt.Errorf(
+				"unmarshal EKS ownership state: %w: %w",
+				unmarshalErr,
+				ErrInvalidEKSOwnershipState,
+			)
+		}
+
+		region := strings.TrimSpace(ownership.Region)
+		if validateErr := validateEKSOwnershipState(clusterName, region, &ownership); validateErr != nil {
+			return nil, validateErr
+		}
+
+		expectedPath, pathErr := eksOwnershipStatePath(clusterName, region)
+		if pathErr != nil || filepath.Clean(expectedPath) != filepath.Clean(path) {
+			return nil, fmt.Errorf(
+				"%w: ownership filename does not match region %q",
+				ErrInvalidEKSOwnershipState,
+				region,
+			)
+		}
+
+		ownerships = append(ownerships, &ownership)
+	}
+
+	sort.Slice(ownerships, func(i, j int) bool {
+		return ownerships[i].Region < ownerships[j].Region
+	})
+
+	return ownerships, nil
 }
 
 func validateEKSOwnershipState(clusterName, region string, ownership *EKSOwnershipState) error {

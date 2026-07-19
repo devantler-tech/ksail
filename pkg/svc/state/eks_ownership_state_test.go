@@ -72,6 +72,29 @@ func TestEKSOwnershipStateIsScopedPerRegion(t *testing.T) {
 	assert.Equal(t, east, gotEast)
 }
 
+func TestListEKSOwnershipStatesReturnsSortedValidatedRegions(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "ownership-list-regions"
+	for _, region := range []string{"us-west-2", "eu-north-1"} {
+		ownership := &state.EKSOwnershipState{
+			Version:     state.EKSOwnershipStateVersion,
+			ClusterName: clusterName,
+			Region:      region,
+			AccountID:   "123456789012",
+			ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+			CreatedAt:   time.Now().UTC(),
+		}
+		require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+	}
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 2)
+	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+	assert.Equal(t, "us-west-2", ownerships[1].Region)
+}
+
 func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *testing.T) {
 	t.Parallel()
 

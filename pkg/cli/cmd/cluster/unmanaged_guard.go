@@ -346,49 +346,103 @@ func resolveAWSOwnershipTarget(
 }
 
 func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
-	if strings.TrimSpace(resolved.AWSRegion) == "" {
+	if resolved.ConfigSource {
 		return nil
 	}
 
-	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, resolved.AWSRegion)
+	region := strings.TrimSpace(resolved.AWSRegion)
+	if region != "" {
+		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+		if err != nil {
+			if errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
+				errors.Is(err, state.ErrInvalidEKSOwnershipState) {
+				return nil
+			}
+
+			return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+		}
+
+		resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+		return nil
+	}
+
+	ownerships, err := state.ListEKSOwnershipStates(resolved.ClusterName)
 	if err != nil {
-		if errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
-			errors.Is(err, state.ErrInvalidEKSOwnershipState) {
+		if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
 			return nil
 		}
 
 		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
 	}
 
+	ownership, err := selectPersistedAWSOwnership(ownerships)
+	if err != nil {
+		return err
+	}
+
 	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+	resolved.AWSRegion = strings.TrimSpace(ownership.Region)
 
 	return nil
 }
 
-func mergeAWSOptions(
-	current, persisted v1alpha1.OptionsAWS,
-) v1alpha1.OptionsAWS {
+func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
 	if current.ProfileEnvVar == "" {
 		current.ProfileEnvVar = persisted.ProfileEnvVar
 	}
-
 	if current.RegionEnvVar == "" {
 		current.RegionEnvVar = persisted.RegionEnvVar
 	}
-
 	if current.AccessKeyIDEnvVar == "" {
 		current.AccessKeyIDEnvVar = persisted.AccessKeyIDEnvVar
 	}
-
 	if current.SecretAccessKeyEnvVar == "" {
 		current.SecretAccessKeyEnvVar = persisted.SecretAccessKeyEnvVar
 	}
-
 	if current.SessionTokenEnvVar == "" {
 		current.SessionTokenEnvVar = persisted.SessionTokenEnvVar
 	}
 
 	return current
+}
+
+func selectPersistedAWSOwnership(
+	ownerships []*state.EKSOwnershipState,
+) (*state.EKSOwnershipState, error) {
+	requestedRegions := make(map[string]struct{})
+
+	for _, ownership := range ownerships {
+		options := credentials.AWSOptionsWithDefaults(ownership.AWSOptions)
+		if region := strings.TrimSpace(os.Getenv(options.RegionEnvVar)); region != "" {
+			requestedRegions[region] = struct{}{}
+		}
+	}
+
+	if len(requestedRegions) == 1 {
+		for requestedRegion := range requestedRegions {
+			for _, ownership := range ownerships {
+				if strings.TrimSpace(ownership.Region) == requestedRegion {
+					return ownership, nil
+				}
+			}
+
+			return nil, fmt.Errorf(
+				"no persisted EKS ownership state for configured region %q",
+				requestedRegion,
+			)
+		}
+	}
+
+	if len(requestedRegions) > 1 || len(ownerships) != 1 {
+		return nil, fmt.Errorf(
+			"%w %q: persisted ownership state does not select one region",
+			errAWSOwnershipRegionAmbiguous,
+			ownerships[0].ClusterName,
+		)
+	}
+
+	return ownerships[0], nil
 }
 
 func queryFrozenAWSOwnership(
@@ -644,6 +698,7 @@ func resolveUpdateTarget(
 	resolved.EKSConfigSource = eksConfig.NameFromConfig &&
 		strings.TrimSpace(eksConfig.ConfigPath) != "" &&
 		resolved.ConfigClusterName != ""
+	resolved.ConfigSource = resolved.EKSConfigSource
 	resolved.AWSRegion = effectiveAWSRegion
 	resolved.AWSRegionFromConfig = effectiveAWSRegion != "" &&
 		effectiveAWSRegion == configuredAWSRegion

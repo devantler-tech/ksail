@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
@@ -749,6 +750,50 @@ func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testin
 	assert.Equal(t, "ambient-access", os.Getenv("AWS_ACCESS_KEY_ID"))
 	assert.Equal(t, "ambient-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
 	assert.Equal(t, "ambient-session", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
+func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	resolved := &lifecycle.ResolvedClusterInfo{
+		ClusterName:  "loaded-config-keeps-defaults-6270",
+		ConfigSource: true,
+		AWSRegion:    "eu-north-1",
+	}
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
+	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
+}
+
+//nolint:paralleltest // mutates HOME and process environment.
+func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
+	const (
+		clusterName = "state-region-alias-6270"
+		region      = "ap-southeast-2"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_REGION", region)
+	ownership := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Now().UTC(),
+		AWSOptions: v1alpha1.OptionsAWS{
+			RegionEnvVar:      "KSAIL_REGION",
+			AccessKeyIDEnvVar: "KSAIL_ACCESS",
+		},
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+
+	resolved := &lifecycle.ResolvedClusterInfo{ClusterName: clusterName}
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Equal(t, region, resolved.AWSRegion)
+	assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar)
+	assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar)
 }
 
 // TestEKSMutationCommandsRejectNameOverrideMismatch proves create and update cannot claim a name
