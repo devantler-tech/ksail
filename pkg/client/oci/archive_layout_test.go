@@ -155,17 +155,17 @@ func archiveEntryContents(t *testing.T, root string) map[string]string {
 	return contents
 }
 
-// TestManifestLayerCompatibilityAliasNeverShadowsRoot covers the collision Codex flagged on #6285.
+// TestManifestLayerNeverShadowsARootEntry covers the collisions Codex flagged on #6285.
 //
-// The compatibility copies are written under a directory named after the source directory. When
-// the source tree itself contains a child of that same name — sourceDirectory "k8s" holding a
-// nested "k8s/" — the alias of a top-level file and the root entry of the nested file both land
-// on "k8s/<name>". Two different files, one tar name.
+// This builder used to emit a second copy of every file under a directory named after the
+// source directory. When the source tree contained a child of that same name — sourceDirectory
+// "k8s" holding a nested "k8s/" — that copy took the name of the nested file's root entry, and
+// since tar permits duplicate names the extractor silently kept whichever came last.
 //
-// The root tree is what Argo CD's path "." and Flux's "./" resolve against, so the alias must
-// never win: whoever reads "k8s/kustomization.yaml" must get the nested file, not the top-level
-// one wearing its name.
-func TestManifestLayerCompatibilityAliasNeverShadowsRoot(t *testing.T) {
+// Publishing the source tree only at the root removes the whole class (equal, ancestor and
+// descendant name conflicts alike). This test is what keeps it removed: whoever reads
+// "k8s/kustomization.yaml" must get the nested file, never a copy of the top-level one.
+func TestManifestLayerNeverShadowsARootEntry(t *testing.T) {
 	t.Parallel()
 
 	root := filepath.Join(t.TempDir(), "k8s")
@@ -193,25 +193,24 @@ func TestManifestLayerCompatibilityAliasNeverShadowsRoot(t *testing.T) {
 			"alias of the top-level file shadowing it")
 }
 
-// TestManifestLayerPublishesRootAndPrefixedEntries pins the full layout contract.
+// TestManifestLayerMirrorsSourceTreeAtRootOnly pins the full layout contract.
 //
-// The root entries are what both consumers resolve against — Flux via the
-// FluxInstance sync path (default "./") and Argo CD via the Application source
-// path ("."). The prefixed copies are the retained compatibility alias for a
-// consumer pointed at "<sourceDirectory>/...".
-func TestManifestLayerPublishesRootAndPrefixedEntries(t *testing.T) {
+// The archive is the source directory's contents at the archive root, and nothing else. That
+// is what both consumers resolve against — Flux via the FluxInstance sync path (default "./")
+// and Argo CD via the Application source path (".").
+//
+// The absence assertions matter as much as the presence ones: the "<sourceDirectory>/" copies
+// this builder used to emit had no consumer, doubled every artifact, and could take the name
+// of a real root entry (#6285).
+func TestManifestLayerMirrorsSourceTreeAtRootOnly(t *testing.T) {
 	t.Parallel()
 
 	root := writeWorkloadTree(t)
 	entries := archiveEntries(t, root)
 
-	assert.Contains(t, entries, "kustomization.yaml",
-		"entrypoint kustomization must be published at the archive root")
-	assert.Contains(t, entries, "clusters/local/kustomization.yaml",
-		"nested layout must be preserved under the archive root")
-
-	assert.Contains(t, entries, "k8s/kustomization.yaml",
-		"compatibility prefix copy must be retained")
-	assert.Contains(t, entries, "k8s/clusters/local/kustomization.yaml",
-		"compatibility prefix copy must preserve the nested layout")
+	assert.ElementsMatch(t,
+		[]string{"kustomization.yaml", "clusters/local/kustomization.yaml"},
+		entries,
+		"the archive must mirror the source tree at its root, with no prefixed duplicates",
+	)
 }

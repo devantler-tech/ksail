@@ -309,15 +309,15 @@ func collectManifestFiles(root string) ([]string, error) {
 // Files are added to the tar archive with their relative paths from the root directory.
 // File permissions are set to 0o644 for consistency.
 //
-// Every file is written twice: once at the archive root, and once under a
-// directory named after the source directory. Both GitOps engines resolve their
-// configured path against the archive ROOT — Flux via the FluxInstance sync path
-// (default "./") and Argo CD via the Application source path (argocd.DefaultSourcePath,
-// "."). The prefixed copies are retained only so an artifact stays readable by a
-// consumer that was pointed at "<sourceDirectory>/...".
+// The archive mirrors the source directory at its ROOT, which is the path every consumer
+// resolves against — Flux via the FluxInstance sync path (default "./") and Argo CD via the
+// Application source path (argocd.DefaultSourcePath, "."). Suppressing the root entries for an
+// engine breaks it silently: Argo CD renders zero resources and still reports Synced/Healthy
+// (issue #6284).
 //
-// Suppressing the root copies for any engine breaks that engine silently: Argo CD
-// renders zero resources and still reports Synced/Healthy (issue #6284).
+// Nothing is published under a "<sourceDirectory>/" prefix. Those duplicate copies had no
+// consumer in this repository, doubled every artifact, and could take the name of a real root
+// entry — corrupting the very tree both engines read (see #6285).
 //
 // Returns an OCI v1.Layer suitable for inclusion in an OCI image.
 func newManifestLayer(
@@ -331,19 +331,8 @@ func newManifestLayer(
 
 	tarWriter := tar.NewWriter(gzipWriter)
 
-	// Determine the compatibility prefix for the archive structure.
-	prefix := filepath.Base(root)
-	if prefix == "." || prefix == string(os.PathSeparator) {
-		prefix = ""
-	}
-
-	rootNames, err := rootEntryNames(root, files)
-	if err != nil {
-		return nil, err
-	}
-
 	for _, path := range files {
-		err = addFileToArchive(tarWriter, root, path, prefix, rootNames)
+		err := addFileToArchive(tarWriter, root, path)
 		if err != nil {
 			return nil, err
 		}
@@ -361,12 +350,10 @@ func newManifestLayer(
 //   - Fixed permissions of 0o644
 //   - Original file content
 //
-// The file is written at the archive root, and again under prefix when one is set — unless that
-// alias would collide with another file's root entry (see rootEntryNames).
+// The file is written once, at the archive root.
 func addFileToArchive(
 	tarWriter *tar.Writer,
-	root, path, prefix string,
-	rootNames map[string]struct{},
+	root, path string,
 ) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -385,47 +372,8 @@ func addFileToArchive(
 		return fmt.Errorf("read file %s: %w", path, err)
 	}
 
-	// Write files at the archive root — the path every consumer resolves against.
-	err = writeTarEntry(tarWriter, info, path, rel, content)
-	if err != nil {
-		return err
-	}
-
-	// Write files under prefix as well (when prefix is set), unless the alias would take the
-	// name of another file's root entry. The root tree is what every consumer resolves against,
-	// so an alias must never shadow it.
-	if prefix != "" {
-		aliasName := filepath.ToSlash(filepath.Join(prefix, rel))
-		if _, collides := rootNames[aliasName]; !collides {
-			err = writeTarEntry(tarWriter, info, path, aliasName, content)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// rootEntryNames returns the archive-root name of every file, which is the set a compatibility
-// alias must not collide with.
-//
-// The collision is reachable whenever the source tree contains a child directory named after the
-// source directory itself (sourceDirectory "k8s" holding a nested "k8s/"): the alias of a
-// top-level file and the root entry of the nested file both resolve to "k8s/<name>".
-func rootEntryNames(root string, files []string) (map[string]struct{}, error) {
-	names := make(map[string]struct{}, len(files))
-
-	for _, path := range files {
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil, fmt.Errorf("get relative path for %s: %w", path, err)
-		}
-
-		names[filepath.ToSlash(rel)] = struct{}{}
-	}
-
-	return names, nil
+	// Write the file at the archive root — the path every consumer resolves against.
+	return writeTarEntry(tarWriter, info, path, rel, content)
 }
 
 // writeTarEntry writes a single tar entry with the given name and content.
