@@ -284,6 +284,39 @@ func (rm *RegistryManager) ListRegistriesOnNetwork(
 	return registries, nil
 }
 
+// ListAllRegistries returns every registry container on the host, regardless of network
+// membership.
+//
+// ListRegistriesOnNetwork cannot see a registry whose cluster network has already been
+// destroyed, which is exactly the state a partial teardown leaves behind. Callers cleaning
+// up such a remnant use this instead and narrow the result themselves (by KSail ownership
+// and cluster-name prefix).
+func (rm *RegistryManager) ListAllRegistries(ctx context.Context) ([]RegistryInfo, error) {
+	containers, err := rm.listAllRegistryImageContainers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	registries := make([]RegistryInfo, 0, len(containers))
+
+	for _, containerInfo := range containers {
+		containerName := ""
+		if len(containerInfo.Names) > 0 {
+			containerName = strings.TrimPrefix(containerInfo.Names[0], "/")
+		}
+
+		_, isKSailOwned := containerInfo.Labels[RegistryLabelKey]
+
+		registries = append(registries, RegistryInfo{
+			Name:         containerName,
+			ID:           containerInfo.ID,
+			IsKSailOwned: isKSailOwned,
+		})
+	}
+
+	return registries, nil
+}
+
 // extractRegistryInfoIfOnNetwork checks if a container is on the target network and returns its info.
 func (rm *RegistryManager) extractRegistryInfoIfOnNetwork(
 	ctx context.Context,

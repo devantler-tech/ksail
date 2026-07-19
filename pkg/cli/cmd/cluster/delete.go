@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -113,7 +114,7 @@ func runDeleteAction(
 	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
 	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally
 	// deletes a cluster it does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	err = applyDeleteUnmanagedGuard(cmd, resolved)
 	if err != nil {
 		return err
 	}
@@ -138,8 +139,7 @@ func runDeleteAction(
 		return err
 	}
 
-	// Delete the cluster
-	err = executeDelete(cmd, tmr, provisioner, resolved)
+	err = executeDeleteTolerantOfMissingNodes(cmd, tmr, provisioner, resolved)
 	if err != nil {
 		return err
 	}
@@ -256,6 +256,14 @@ func detectDeleteClusterInfo(
 	}
 	if detectedInfo != nil {
 		clusterInfo.Distribution = detectedInfo.Distribution
+	}
+
+	// Carry the container-name fallback into the distribution. Without this the fallback is
+	// computed and then discarded, so a Kind cluster whose kubeconfig detection failed resolves
+	// its registry network as Talos (the cluster name) instead of "kind" — discovery finds
+	// nothing and the registries leak silently (#6286).
+	if clusterInfo.Distribution == "" && isKindCluster {
+		clusterInfo.Distribution = v1alpha1.DistributionVanilla
 	}
 
 	return detectedInfo, isKindCluster, clusterInfo
@@ -589,13 +597,23 @@ func cleanupRegistriesAfterDelete(
 			cleanupDeps,
 		)
 	} else {
-		// Discover and cleanup registries by network
-		// Use Talos as fallback since it uses cluster name as network name
-		err = mirrorregistry.CleanupRegistriesByNetwork(
+		// Nothing was pre-discovered. The network may already be gone (or was resolved from a
+		// misdetected distribution), so fall back to network-independent discovery by cluster
+		// name rather than guessing a network name — guessing is what let registries leak (#6286).
+		remnant := mirrorregistry.DiscoverClusterRegistryRemnant(
+			cmd,
+			resolved.ClusterName,
+			cleanupDeps,
+		)
+
+		if len(remnant.Registries) == 0 {
+			return
+		}
+
+		err = mirrorregistry.CleanupPreDiscoveredRegistries(
 			cmd,
 			tmr,
-			v1alpha1.DistributionTalos,
-			resolved.ClusterName,
+			remnant.Registries,
 			deleteStorage,
 			cleanupDeps,
 		)
@@ -608,6 +626,121 @@ func cleanupRegistriesAfterDelete(
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
+
+	reportRegistryLeftovers(cmd, resolved.ClusterName, cleanupDeps)
+}
+
+// applyDeleteUnmanagedGuard runs the unmanaged-cluster guard, tolerating the one case where its
+// verdict is an artifact of a partial teardown rather than genuine foreign ownership.
+//
+// Ownership is discovered by enumerating node containers, so a cluster whose nodes are already
+// gone always reads as unmanaged. When KSail's own registry containers for that cluster are still
+// running, KSail plainly did provision it, and refusing leaves the user no supported way to finish
+// the teardown (#6286). Only KSail-owned containers are ever removed on this path, so the guard's
+// purpose — never destroying a cluster KSail does not own — is preserved.
+func applyDeleteUnmanagedGuard(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	err := deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	if err == nil {
+		return nil
+	}
+
+	if !errors.Is(err, ErrUnmanagedCluster) || !hasClusterRegistryRemnant(cmd, resolved) {
+		return err
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type: notify.WarningType,
+		Content: "cluster " + resolved.ClusterName +
+			" has no nodes; removing the registry containers it left behind",
+		Writer: cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// executeDeleteTolerantOfMissingNodes deletes the cluster, treating an already-node-less cluster
+// as success when KSail registry containers for it survive.
+//
+// Returning ErrClusterNotFound here would abort before post-deletion cleanup, so the containers
+// the user is trying to remove would be skipped precisely when they are the only thing left (#6286).
+func executeDeleteTolerantOfMissingNodes(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	provisioner clusterprovisioner.Provisioner,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	err := executeDelete(cmd, tmr, provisioner, resolved)
+	if err == nil {
+		return nil
+	}
+
+	if !errors.Is(err, clustererr.ErrClusterNotFound) ||
+		!hasClusterRegistryRemnant(cmd, resolved) {
+		return err
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.WarningType,
+		Content: "cluster nodes are already gone; cleaning up its remaining resources",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// hasClusterRegistryRemnant reports whether KSail-owned registry containers for this cluster are
+// still running. It is the evidence that KSail provisioned the cluster even after every node
+// container is gone, and it never consults a Docker network (which a teardown may have destroyed).
+//
+// Docker-provider only: no other provider creates these containers.
+func hasClusterRegistryRemnant(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) bool {
+	if resolved.Provider != v1alpha1.ProviderDocker {
+		return false
+	}
+
+	remnant := mirrorregistry.DiscoverClusterRegistryRemnant(
+		cmd,
+		resolved.ClusterName,
+		getCleanupDeps(),
+	)
+
+	return len(remnant.Registries) > 0
+}
+
+// reportRegistryLeftovers names any KSail-owned registry container that survived cleanup.
+//
+// Teardown previously reported success unconditionally, so a partial teardown was
+// indistinguishable from a complete one and the leaked containers (and the host ports they
+// hold) went unnoticed until the next cluster collided with them (#6286).
+func reportRegistryLeftovers(
+	cmd *cobra.Command,
+	clusterName string,
+	cleanupDeps mirrorregistry.CleanupDependencies,
+) {
+	leftover := mirrorregistry.DiscoverClusterRegistryRemnant(cmd, clusterName, cleanupDeps)
+	if len(leftover.Registries) == 0 {
+		return
+	}
+
+	names := make([]string, 0, len(leftover.Registries))
+	for _, reg := range leftover.Registries {
+		names = append(names, reg.Name)
+	}
+
+	sort.Strings(names)
+
+	notify.WriteMessage(notify.Message{
+		Type: notify.ErrorType,
+		Content: "these registry containers could not be removed and are still running: " +
+			strings.Join(names, ", "),
+		Writer: cmd.OutOrStdout(),
+	})
 }
 
 // discoverDockerNodes discovers cluster node containers for Docker provider.

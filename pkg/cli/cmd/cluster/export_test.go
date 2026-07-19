@@ -113,6 +113,16 @@ func ExportResolveKubeContext(ctx *localregistry.Context) string {
 	return resolveKubeContext(ctx)
 }
 
+// ExportHasClusterRegistryRemnant exports hasClusterRegistryRemnant for testing. It is the
+// evidence check that decides whether an "unmanaged" node-less cluster is really KSail's own
+// partial teardown, so its false cases are a safety property (#6286).
+func ExportHasClusterRegistryRemnant(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) bool {
+	return hasClusterRegistryRemnant(cmd, resolved)
+}
+
 // ExportEnsureClusterManaged exports ensureClusterManaged for testing, driving it from a fixed
 // managed-set + completeness pair (instead of the live cross-provider discoverer) so the
 // unmanaged-cluster guard can be exercised fully offline.
