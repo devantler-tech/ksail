@@ -56,6 +56,44 @@ func DiscoverClusterRegistryRemnant(
 		return &DiscoveredRegistries{}
 	}
 
+	return discoverRegistries(
+		cmd,
+		clusterName,
+		cleanupDeps,
+		"for cluster "+clusterName,
+		func(registryMgr *dockerclient.RegistryManager) ([]dockerclient.RegistryInfo, error) {
+			discovered, err := registryMgr.ListAllRegistries(cmd.Context())
+			if err != nil {
+				return nil, fmt.Errorf("list registries: %w", err)
+			}
+
+			owned := make([]dockerclient.RegistryInfo, 0, len(discovered))
+
+			for _, reg := range discovered {
+				if reg.IsKSailOwned {
+					owned = append(owned, reg)
+				}
+			}
+
+			return owned, nil
+		},
+	)
+}
+
+// registryLister produces the candidate registries a discovery variant considers, before they are
+// narrowed to a single cluster.
+type registryLister func(*dockerclient.RegistryManager) ([]dockerclient.RegistryInfo, error)
+
+// discoverRegistries runs a registry listing through the Docker client and narrows the result to
+// the registries belonging to clusterName. subject describes what was being looked for, and is
+// used only in the warning emitted when discovery fails.
+func discoverRegistries(
+	cmd *cobra.Command,
+	clusterName string,
+	cleanupDeps CleanupDependencies,
+	subject string,
+	list registryLister,
+) *DiscoveredRegistries {
 	var registries []dockerclient.RegistryInfo
 
 	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
@@ -64,29 +102,17 @@ func DiscoverClusterRegistryRemnant(
 			return fmt.Errorf("create registry manager: %w", mgrErr)
 		}
 
-		discovered, listErr := registryMgr.ListAllRegistries(cmd.Context())
+		discovered, listErr := list(registryMgr)
 		if listErr != nil {
-			return fmt.Errorf("list registries: %w", listErr)
+			return listErr
 		}
 
-		owned := make([]dockerclient.RegistryInfo, 0, len(discovered))
-
-		for _, reg := range discovered {
-			if reg.IsKSailOwned {
-				owned = append(owned, reg)
-			}
-		}
-
-		registries = filterRegistriesByClusterName(owned, clusterName)
+		registries = filterRegistriesByClusterName(discovered, clusterName)
 
 		return nil
 	})
 	if err != nil {
-		cmd.PrintErrf(
-			"Warning: failed to discover registries for cluster %q: %v\n",
-			clusterName,
-			err,
-		)
+		cmd.PrintErrf("Warning: failed to discover registries %s: %v\n", subject, err)
 	}
 
 	return &DiscoveredRegistries{Registries: registries}
@@ -103,30 +129,18 @@ func DiscoverRegistriesByNetwork(
 ) *DiscoveredRegistries {
 	networkName := GetNetworkNameForDistribution(distribution, clusterName)
 
-	var registries []dockerclient.RegistryInfo
+	return discoverRegistries(
+		cmd,
+		clusterName,
+		cleanupDeps,
+		"on network "+networkName,
+		func(registryMgr *dockerclient.RegistryManager) ([]dockerclient.RegistryInfo, error) {
+			discovered, err := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+			if err != nil {
+				return nil, fmt.Errorf("list registries on network: %w", err)
+			}
 
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("create registry manager: %w", mgrErr)
-		}
-
-		discovered, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
-		if listErr != nil {
-			return fmt.Errorf("list registries on network: %w", listErr)
-		}
-
-		registries = filterRegistriesByClusterName(discovered, clusterName)
-
-		return nil
-	})
-	if err != nil {
-		cmd.PrintErrf(
-			"Warning: failed to discover registries on network %q: %v\n",
-			networkName,
-			err,
-		)
-	}
-
-	return &DiscoveredRegistries{Registries: registries}
+			return discovered, nil
+		},
+	)
 }

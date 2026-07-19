@@ -266,22 +266,9 @@ func (rm *RegistryManager) ListRegistriesOnNetwork(
 		return nil, nil
 	}
 
-	// List all containers with registry image (includes non-KSail registries)
-	containers, err := rm.listAllRegistryImageContainers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list registry containers: %w", err)
-	}
-
-	registries := make([]RegistryInfo, 0, len(containers))
-
-	for _, containerInfo := range containers {
-		regInfo, ok := rm.extractRegistryInfoIfOnNetwork(ctx, containerInfo, trimmedNetwork)
-		if ok {
-			registries = append(registries, regInfo)
-		}
-	}
-
-	return registries, nil
+	return rm.collectRegistries(ctx, func(summary container.Summary) (RegistryInfo, bool) {
+		return rm.extractRegistryInfoIfOnNetwork(ctx, summary, trimmedNetwork)
+	})
 }
 
 // ListAllRegistries returns every registry container on the host, regardless of network
@@ -292,6 +279,17 @@ func (rm *RegistryManager) ListRegistriesOnNetwork(
 // up such a remnant use this instead and narrow the result themselves (by KSail ownership
 // and cluster-name prefix).
 func (rm *RegistryManager) ListAllRegistries(ctx context.Context) ([]RegistryInfo, error) {
+	return rm.collectRegistries(ctx, func(summary container.Summary) (RegistryInfo, bool) {
+		return registryInfoFromSummary(summary), true
+	})
+}
+
+// collectRegistries lists every registry-image container and maps each one through keep, which
+// returns the RegistryInfo to include, or false to skip that container.
+func (rm *RegistryManager) collectRegistries(
+	ctx context.Context,
+	keep func(container.Summary) (RegistryInfo, bool),
+) ([]RegistryInfo, error) {
 	containers, err := rm.listAllRegistryImageContainers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list registry containers: %w", err)
@@ -300,21 +298,30 @@ func (rm *RegistryManager) ListAllRegistries(ctx context.Context) ([]RegistryInf
 	registries := make([]RegistryInfo, 0, len(containers))
 
 	for _, containerInfo := range containers {
-		containerName := ""
-		if len(containerInfo.Names) > 0 {
-			containerName = strings.TrimPrefix(containerInfo.Names[0], "/")
+		regInfo, ok := keep(containerInfo)
+		if ok {
+			registries = append(registries, regInfo)
 		}
-
-		_, isKSailOwned := containerInfo.Labels[RegistryLabelKey]
-
-		registries = append(registries, RegistryInfo{
-			Name:         containerName,
-			ID:           containerInfo.ID,
-			IsKSailOwned: isKSailOwned,
-		})
 	}
 
 	return registries, nil
+}
+
+// registryInfoFromSummary reads a registry container's identity straight off its list entry.
+// IsKSailOwned is what callers use to decide whether they may remove the container.
+func registryInfoFromSummary(summary container.Summary) RegistryInfo {
+	containerName := ""
+	if len(summary.Names) > 0 {
+		containerName = strings.TrimPrefix(summary.Names[0], "/")
+	}
+
+	_, isKSailOwned := summary.Labels[RegistryLabelKey]
+
+	return RegistryInfo{
+		Name:         containerName,
+		ID:           summary.ID,
+		IsKSailOwned: isKSailOwned,
+	}
 }
 
 // extractRegistryInfoIfOnNetwork checks if a container is on the target network and returns its info.
@@ -333,20 +340,7 @@ func (rm *RegistryManager) extractRegistryInfoIfOnNetwork(
 		return RegistryInfo{}, false
 	}
 
-	// Get container name
-	containerName := ""
-	if len(containerSummary.Names) > 0 {
-		containerName = strings.TrimPrefix(containerSummary.Names[0], "/")
-	}
-
-	// Check if KSail-managed
-	_, isKSailOwned := containerSummary.Labels[RegistryLabelKey]
-
-	return RegistryInfo{
-		Name:         containerName,
-		ID:           containerSummary.ID,
-		IsKSailOwned: isKSailOwned,
-	}, true
+	return registryInfoFromSummary(containerSummary), true
 }
 
 // DeleteRegistriesOnNetwork deletes all registry containers connected to a specific network.
