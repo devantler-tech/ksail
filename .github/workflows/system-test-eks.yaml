@@ -69,9 +69,8 @@ jobs:
           AWS_OIDC_ROLE_ARN: ${{ env.AWS_OIDC_ROLE_ARN }}
         run: |
           if [ -z "${AWS_OIDC_ROLE_ARN:-}" ]; then
-            echo "::notice::Skipping EKS smoke test because AWS_OIDC_ROLE_ARN is not configured."
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::AWS_OIDC_ROLE_ARN is required for the EKS smoke test."
+            exit 1
           fi
 
           echo "available=true" >> "$GITHUB_OUTPUT"
@@ -209,10 +208,12 @@ jobs:
             --name "$KSAIL_EKS_CLUSTER_NAME"
             --distribution EKS
             --provider AWS
-            --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests
           )
           if [ "$GITOPS_ENGINE" != "None" ]; then
-            args+=(--gitops-engine "$GITOPS_ENGINE")
+            args+=(
+              --gitops-engine "$GITOPS_ENGINE"
+              --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests
+            )
           fi
 
           ksail "${args[@]}"

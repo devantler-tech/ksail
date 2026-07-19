@@ -94,6 +94,15 @@ func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
 	preflightStep := findHarnessStep(t, preflightJob.Steps, "🔎 Check required AWS OIDC role")
 	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", preflightStep.Env["AWS_OIDC_ROLE_ARN"])
 
+	preflightOutput, diagnostics, err := executeOIDCPreflight(t, preflightStep.Run, "")
+	require.Error(t, err, "empty checked-in OIDC role must fail the dispatch")
+	assert.Empty(t, preflightOutput)
+	assert.Contains(t, diagnostics, "AWS_OIDC_ROLE_ARN is required")
+
+	preflightOutput, diagnostics, err = executeOIDCPreflight(t, preflightStep.Run, roleARN)
+	require.NoErrorf(t, err, "declared OIDC role was rejected:\n%s", diagnostics)
+	assert.Equal(t, "available=true\n", preflightOutput)
+
 	smokeJob, found := workflow.Jobs["smoke-test"]
 	require.True(t, found, "smoke-test job is missing")
 	configureStep := findHarnessStep(t, smokeJob.Steps, "🔐 Configure AWS credentials (OIDC)")
@@ -111,11 +120,22 @@ func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
 	require.True(t, found, "smoke-test job is missing")
 
 	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
-	assert.Contains(
-		t,
+	gitopsGuardIndex := strings.Index(
+		initStep.Run,
+		`if [ "$GITOPS_ENGINE" != "None" ]; then`,
+	)
+	registryIndex := strings.Index(
 		initStep.Run,
 		"--local-registry ghcr.io/devantler-tech/ksail/system-test-manifests",
 	)
+
+	require.NotEqual(t, -1, gitopsGuardIndex, "GitOps engine guard is missing")
+	require.NotEqual(t, -1, registryIndex, "GitOps registry argument is missing")
+
+	gitopsEndIndex := strings.Index(initStep.Run[gitopsGuardIndex:], "\nfi")
+	require.NotEqual(t, -1, gitopsEndIndex, "GitOps engine guard is unterminated")
+	assert.Greater(t, registryIndex, gitopsGuardIndex)
+	assert.Less(t, registryIndex, gitopsGuardIndex+gitopsEndIndex)
 
 	createStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster create")
 	assert.Equal(t, "create", createStep.ID)
@@ -507,6 +527,33 @@ esac
 	require.NoError(t, err)
 
 	return string(boundaryOutput), string(diagnostics), commandErr
+}
+
+func executeOIDCPreflight(
+	t *testing.T,
+	workflowRun string,
+	roleARN string,
+) (string, string, error) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "github-output")
+	require.NoError(t, os.WriteFile(outputPath, nil, 0o600))
+
+	// The shell source is repository-owned workflow content.
+	command := exec.CommandContext(t.Context(), "bash", "-c", workflowRun) //nolint:gosec
+
+	command.Env = append(
+		os.Environ(),
+		"AWS_OIDC_ROLE_ARN="+roleARN,
+		"GITHUB_OUTPUT="+outputPath,
+	)
+	diagnostics, commandErr := command.CombinedOutput()
+
+	preflightOutput, err := os.ReadFile(outputPath) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+
+	return string(preflightOutput), string(diagnostics), commandErr
 }
 
 func assertEKSSmokeMutation(t *testing.T, config map[string]any) {
