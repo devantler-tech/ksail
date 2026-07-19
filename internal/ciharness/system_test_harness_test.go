@@ -89,18 +89,17 @@ func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
 	roleARN := workflow.Env["AWS_OIDC_ROLE_ARN"]
 	require.Regexp(t, `^arn:aws:iam::[0-9]{12}:role/eks-ci$`, roleARN)
 
-	preflightJob, ok := workflow.Jobs["preflight"]
-	require.True(t, ok, "preflight job is missing")
+	preflightJob, found := workflow.Jobs["preflight"]
+	require.True(t, found, "preflight job is missing")
 	preflightStep := findHarnessStep(t, preflightJob.Steps, "🔎 Check required AWS OIDC role")
 	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", preflightStep.Env["AWS_OIDC_ROLE_ARN"])
 
-	smokeJob, ok := workflow.Jobs["smoke-test"]
-	require.True(t, ok, "smoke-test job is missing")
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
 	configureStep := findHarnessStep(t, smokeJob.Steps, "🔐 Configure AWS credentials (OIDC)")
 	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", configureStep.With["role-to-assume"])
 
-	workflowSource, err := os.ReadFile(workflowPath)
-	require.NoError(t, err)
+	workflowSource := readRepoFile(t, workflowPath)
 	assert.NotContains(t, string(workflowSource), "secrets.AWS_OIDC_ROLE_ARN")
 }
 
