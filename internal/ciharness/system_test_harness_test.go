@@ -74,9 +74,34 @@ type compositeAction struct {
 }
 
 type ciWorkflow struct {
+	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
 		Steps []harnessStep `yaml:"steps"`
 	} `yaml:"jobs"`
+}
+
+func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := ".github/workflows/system-test-eks.yaml"
+	workflow := readCIWorkflow(t, workflowPath)
+
+	roleARN := workflow.Env["AWS_OIDC_ROLE_ARN"]
+	require.Regexp(t, `^arn:aws:iam::[0-9]{12}:role/eks-ci$`, roleARN)
+
+	preflightJob, ok := workflow.Jobs["preflight"]
+	require.True(t, ok, "preflight job is missing")
+	preflightStep := findHarnessStep(t, preflightJob.Steps, "🔎 Check required AWS OIDC role")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", preflightStep.Env["AWS_OIDC_ROLE_ARN"])
+
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+	configureStep := findHarnessStep(t, smokeJob.Steps, "🔐 Configure AWS credentials (OIDC)")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", configureStep.With["role-to-assume"])
+
+	workflowSource, err := os.ReadFile(workflowPath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(workflowSource), "secrets.AWS_OIDC_ROLE_ARN")
 }
 
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
