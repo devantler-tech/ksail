@@ -354,11 +354,16 @@ func (c *Configs) WithHetznerVIP(vip, hcloudAPIToken string) (*Configs, error) {
 	})
 }
 
-// hetznerPublicNICBusPath is the PCI bus path of the public NIC on a Hetzner Cloud
+// HetznerPublicNICBusPath is the PCI bus path of the public NIC on a Hetzner Cloud
 // server. The public interface is always the first virtio device (slot 01); a cluster
 // private network attaches as a later device (slot 07 on the two-NIC servers KSail
 // provisions), so the bus path distinguishes the two where `physical: true` cannot.
-const hetznerPublicNICBusPath = "0000:01:00.0"
+//
+// Exported because the update path reads it too: drift detection has to recognise a
+// VIP that is present but addressed the OLD (name-based) way, so clusters built by an
+// earlier release are migrated rather than reported as already configured. Keep the
+// two uses in lockstep — they are the same contract seen from both ends.
+const HetznerPublicNICBusPath = "0000:01:00.0"
 
 // buildHetznerVIPPatch builds a control-plane-scope patch that configures the Talos
 // virtual (shared) IP on the public interface, with hcloud API management so the
@@ -386,7 +391,7 @@ func buildHetznerVIPPatch(vip, hcloudAPIToken string) Patch {
 			"          ip: %q\n"+
 			"          hcloud:\n"+
 			"            apiToken: %q\n",
-		hetznerPublicNICBusPath,
+		HetznerPublicNICBusPath,
 		vip,
 		hcloudAPIToken,
 	)
