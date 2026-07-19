@@ -33,6 +33,7 @@ func expandedSpecStringFields() []string {
 		"Cluster.LocalRegistry.Registry",
 		"Cluster.Vanilla.MirrorsDir",
 		"Cluster.Talos.Config",
+		"Cluster.EKS.AWSLoadBalancerControllerServiceAccount",
 		"Provider.Hetzner.SSHKeyName",
 		"Provider.Hetzner.NetworkName",
 		"Provider.Hetzner.PlacementGroup",

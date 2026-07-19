@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -662,6 +663,33 @@ func ValidateNestedCIDRs(podCIDR, serviceCIDR string) error {
 				)
 			}
 		}
+	}
+
+	return nil
+}
+
+// ErrInvalidEKSConfig indicates an invalid EKS options configuration.
+var ErrInvalidEKSConfig = errors.New("invalid EKS configuration")
+
+// ValidateEKSConfig validates the EKS distribution options before any
+// provisioning happens: a deterministically-invalid value must fail here, at
+// config load, rather than after a billable cluster has already been created
+// (the installer re-checks as defense in depth).
+func ValidateEKSConfig(cluster *ClusterSpec) error {
+	if cluster == nil || cluster.Distribution != DistributionEKS {
+		return nil
+	}
+
+	name := strings.TrimSpace(cluster.EKS.AWSLoadBalancerControllerServiceAccount)
+	if name == "" {
+		return nil
+	}
+
+	if errs := validation.IsDNS1123Subdomain(name); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: awsLoadBalancerControllerServiceAccount %q must be a valid DNS-1123 subdomain: %s",
+			ErrInvalidEKSConfig, name, strings.Join(errs, "; "),
+		)
 	}
 
 	return nil

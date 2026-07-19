@@ -267,6 +267,7 @@ func installEKSLoadBalancer(
 		timeout,
 		clusterName,
 		region,
+		clusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 		haEnabled,
 	)
 	if err != nil {

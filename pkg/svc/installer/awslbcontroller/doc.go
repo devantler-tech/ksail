@@ -7,12 +7,14 @@
 //
 // Prerequisites the installer does NOT create (documented, not automated —
 // these are account-level IAM/VPC concerns outside a chart install):
-//   - IAM permissions for the controller: the node instance role must carry
-//     the controller's IAM policy. The chart installs its own service
-//     account with no role annotation (node-role credentials); a
-//     PRE-created IRSA service account is not yet supported — the chart
-//     would try to create the ServiceAccount that eksctl already created
-//     and fail (#6232 tracks IRSA support).
+//   - IAM permissions for the controller. By default the chart installs its
+//     own service account with no role annotation, so the node instance
+//     role must carry the controller's IAM policy (node-role credentials).
+//     Alternatively, a PRE-created IRSA service account (AWS's documented
+//     eksctl path) is reused by setting
+//     spec.cluster.eks.awsLoadBalancerControllerServiceAccount — the chart
+//     then installs with serviceAccount.create=false and that name, and the
+//     IAM role annotation on the pre-created account carries permissions.
 //   - Subnet tags for load balancer discovery (kubernetes.io/role/elb and
 //     kubernetes.io/role/internal-elb); eksctl-created VPCs tag these
 //     automatically.
