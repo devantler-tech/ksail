@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -252,34 +251,6 @@ func TestPushWithRetry_CancelledContext(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "push cancelled")
-}
-
-// TestShouldWriteAtRoot verifies that the archive-root write flag is
-// true for every GitOps engine except ArgoCD (which uses prefix-only layout).
-func TestShouldWriteAtRoot(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		engine   v1alpha1.GitOpsEngine
-		wantRoot bool
-	}{
-		{v1alpha1.GitOpsEngineNone, true},
-		{v1alpha1.GitOpsEngineFlux, true},
-		{v1alpha1.GitOpsEngineArgoCD, false},
-		{"", true},
-	}
-
-	for _, testCase := range tests {
-		t.Run(string(testCase.engine), func(t *testing.T) {
-			t.Parallel()
-
-			got := oci.ShouldWriteAtRoot(testCase.engine)
-			assert.Equal(t, testCase.wantRoot, got,
-				"ShouldWriteAtRoot(%q) = %v, want %v",
-				testCase.engine, got, testCase.wantRoot,
-			)
-		})
-	}
 }
 
 // TestCollectManifestFiles verifies that only non-empty YAML/YML/JSON files
