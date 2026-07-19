@@ -52,7 +52,7 @@ go install github.com/devantler-tech/ksail/v7@latest   # Go install
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), **KWOK** (kwokctl, simulated), and **EKS** (cluster lifecycle — create/delete/start/stop/list/info — supported via `eksctl`; KSail-managed component installation and `ksail cluster update` are still in progress). See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
+KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), **KWOK** (kwokctl, simulated), and **EKS** (cluster lifecycle and managed node-group capacity updates supported via `eksctl`; KSail-managed component installation is still in progress). See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
 
 ### Can I create multiple clusters?
 
@@ -107,7 +107,7 @@ See the [Support Matrix](/support-matrix/#component--distribution-matrix) for th
 
 ### Can I add nodes to an existing cluster?
 
-Node scaling support depends on the distribution: Talos supports both control-plane and worker nodes via `ksail cluster update`, K3s supports worker (agent) nodes only (server scaling requires recreation), and Vanilla (Kind) requires full recreation. See the [Update Behavior](/support-matrix/#update-behavior) table for details.
+Node scaling support depends on the distribution: Talos supports both control-plane and worker nodes via `ksail cluster update`, K3s supports worker (agent) nodes only (server scaling requires recreation), EKS supports in-place `desiredCapacity`, `minSize`, and `maxSize` updates for existing managed node groups, and Vanilla (Kind) requires full recreation. See the [Update Behavior](/support-matrix/#update-behavior) table for details.
 
 ### What does `ksail cluster update --dry-run` show?
 

@@ -12,7 +12,7 @@ EKS is the only distribution that uses the [AWS provider](/providers/aws/). It i
 EKS is ideal when you:
 
 - Need a managed AWS Kubernetes cluster with full cloud integrations (ELB, EBS, VPC, IAM OIDC)
-- Want to use the same KSail workflow (init → create → delete) for cloud clusters
+- Want to use the same KSail workflow (init → create → update → delete) for cloud clusters
 - Require GitOps workflows (Flux or ArgoCD) on managed AWS infrastructure
 
 For local development and testing, consider the [Vanilla](/distributions/vanilla/), [K3s](/distributions/k3s/), or [VCluster](/distributions/vcluster/) distributions instead.
@@ -120,6 +120,7 @@ KSail invokes eksctl to provision the cluster from `eks.yaml` and waits for comp
 | Command                | Effect                                                              |
 | ---------------------- | ------------------------------------------------------------------- |
 | `ksail cluster create` | Provisions the cluster from `eks.yaml` via eksctl and waits for it  |
+| `ksail cluster update` | Applies managed node-group capacity changes in-place               |
 | `ksail cluster delete` | Deletes the cluster, unwinding the eksctl CloudFormation stacks     |
 | `ksail cluster stop`   | Scales every managed nodegroup to zero to halt node costs           |
 | `ksail cluster start`  | Restores the managed nodegroups to their configured capacity        |
@@ -135,7 +136,8 @@ EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>
 - EKS is a cloud distribution — **local mirror registries and local registry containers are not supported**. Use external registry URLs (e.g., `docker.io=https://registry-1.docker.io`)
 - EKS only supports the **AWS provider** — the Docker, Hetzner, and Omni providers are not available
 - The control plane keeps running (and billing) while nodegroups are stopped — use `ksail cluster delete` to tear down the cluster and stop its cluster-related charges (resources provisioned by workloads, such as load balancers or persistent volumes, may need separate cleanup)
-- KSail-managed component installation (CNI/CSI/GitOps/security add-ons beyond eksctl's built-ins) is still in progress — the AWS Load Balancer Controller is available behind the experimental `spec.cluster.eks.experimentalAWSLoadBalancerController` opt-in, and `ksail cluster update` can apply node-group scaling in-place behind `spec.cluster.eks.experimentalInPlaceUpdates`; see [Support Matrix](/support-matrix/)
+- `ksail cluster update` applies `desiredCapacity`, `minSize`, and `maxSize` changes to existing managed node groups in-place. Changing an instance type or adding/removing a managed node group requires cluster recreation. Other managed-node-group fields (including AMI family, volumes, labels, taints, subnets, and IAM) are not currently diffed, so update will not detect those changes.
+- KSail-managed component installation (CNI/CSI/GitOps/security add-ons beyond eksctl's built-ins) is still in progress — the AWS Load Balancer Controller is available behind the experimental `spec.cluster.eks.experimentalAWSLoadBalancerController` opt-in; see [Support Matrix](/support-matrix/)
 
 ## Related
 

@@ -368,6 +368,50 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 	}
 }
 
+func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	updateStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	assert.Equal(t, 35, updateStep.TimeoutMinutes)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, "ksail cluster update --yes"))
+	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
+	assert.Contains(t, updateStep.Run, `assert_same_cluster`)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, `assert_same_cluster "$cluster_identity"`))
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 2 1 2`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 2 1 2 2`)
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 1 1 1`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 1 1 1 1`)
+	assert.Contains(t, updateStep.Run, `eksctl get nodegroup`)
+	assert.Contains(t, updateStep.Run, `.Status == "ACTIVE"`)
+	assert.Contains(t, updateStep.Run, `kubectl get nodes -o json`)
+	assert.Contains(t, updateStep.Run, `type == "Ready"`)
+	assert.NotContains(t, updateStep.Run, "experimentalInPlaceUpdates")
+
+	infoIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster info")
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, infoIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+}
+
+func harnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
+	t.Helper()
+
+	for index, step := range steps {
+		if step.Name == name {
+			return index
+		}
+	}
+
+	t.Fatalf("step %q is missing", name)
+
+	return -1
+}
+
 func requireTestExecutable(t *testing.T, name string) {
 	t.Helper()
 

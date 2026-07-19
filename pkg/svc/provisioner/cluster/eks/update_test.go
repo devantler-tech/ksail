@@ -19,13 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The wrapper must satisfy the orchestrator's Updater capability; the base
-// provisioner must not, so the capability stays opt-in.
-var (
-	_ clusterprovisioner.Updater = (*eksprovisioner.UpdatableProvisioner)(nil)
-
-	errScaleBoom = errors.New("scale exploded")
-)
+var errScaleBoom = errors.New("scale exploded")
 
 // clusterupdateOptions builds UpdateOptions with the given dry-run state.
 func clusterupdateOptions(dryRun bool) clusterupdate.UpdateOptions {
@@ -59,12 +53,12 @@ func writeUpdateTestConfig(t *testing.T, content string) string {
 	return configPath
 }
 
-func newUpdatableProvisioner(
+func newTestProvisioner(
 	t *testing.T,
 	responses map[string][]response,
 	configPath string,
 	opts ...eksprovisioner.Option,
-) (*eksprovisioner.UpdatableProvisioner, *scriptedRunner) {
+) (*eksprovisioner.Provisioner, *scriptedRunner) {
 	t.Helper()
 
 	runner := &scriptedRunner{t: t, responses: responses}
@@ -79,23 +73,26 @@ func newUpdatableProvisioner(
 	)
 	require.NoError(t, err)
 
-	return eksprovisioner.NewUpdatableProvisioner(prov), runner
+	return prov, runner
 }
 
-func TestBaseProvisionerDoesNotImplementUpdater(t *testing.T) {
+func TestBaseProvisionerImplementsUpdaterAfterGraduation(t *testing.T) {
 	t.Parallel()
 
 	var prov any = &eksprovisioner.Provisioner{}
 
 	_, ok := prov.(clusterprovisioner.Updater)
-	assert.False(t, ok, "the base EKS provisioner must not expose Updater; the capability is gated")
+	assert.True(
+		t, ok,
+		"the graduated EKS provisioner must expose Updater without an opt-in wrapper",
+	)
 }
 
 func TestDiffConfig_ScalingChangeIsInPlace(t *testing.T) {
 	t.Parallel()
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
 	}, configPath)
 
@@ -117,7 +114,7 @@ func TestDiffConfig_AddedNodegroupRequiresRecreate(t *testing.T) {
 	configPath := writeUpdateTestConfig(t, updateTestConfig+`  - name: ng-2
     desiredCapacity: 1
 `)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
 	}, configPath)
 
@@ -138,7 +135,7 @@ func TestDiffConfig_RemovedNodegroupRequiresRecreate(t *testing.T) {
 		`"MaxSize":1,"NodeGroupType":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveTwoGroups)}},
 	}, configPath)
 
@@ -160,7 +157,7 @@ func TestDiffConfig_UnmanagedLiveGroupIsIgnored(t *testing.T) {
 		`"MaxSize":1,"NodeGroupType":"unmanaged"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveWithUnmanaged)}},
 	}, configPath)
 
@@ -176,7 +173,7 @@ func TestDiffConfig_UnmanagedLiveGroupIsIgnored(t *testing.T) {
 func TestDiffConfig_MissingConfigFileYieldsNoChanges(t *testing.T) {
 	t.Parallel()
 
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{},
+	prov, runner := newTestProvisioner(t, map[string][]response{},
 		filepath.Join(t.TempDir(), "absent.yaml"))
 
 	diff, err := prov.DiffConfig(
@@ -192,7 +189,7 @@ func TestUpdate_AppliesNodegroupScaling(t *testing.T) {
 	t.Parallel()
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+	prov, runner := newTestProvisioner(t, map[string][]response{
 		// One list for the diff, one for the apply pass.
 		"get nodegroup": {
 			{stdout: []byte(liveNodegroupsJSON)},
@@ -225,7 +222,7 @@ func TestUpdate_RechecksImmutableIdentityAfterReadsBeforeScaling(t *testing.T) {
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	verifierCalls := 0
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+	prov, runner := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {
 			{stdout: []byte(liveNodegroupsJSON)},
 			{stdout: []byte(liveNodegroupsJSON)},
@@ -252,7 +249,7 @@ func TestUpdate_DryRunDoesNotScale(t *testing.T) {
 	t.Parallel()
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+	prov, runner := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
 	}, configPath)
 
@@ -276,7 +273,7 @@ func TestUpdate_RecreateRequiredErrors(t *testing.T) {
 	configPath := writeUpdateTestConfig(t, updateTestConfig+`  - name: ng-2
     desiredCapacity: 1
 `)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
 	}, configPath)
 
@@ -291,7 +288,7 @@ func TestUpdate_ScaleFailureIsRecorded(t *testing.T) {
 	t.Parallel()
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {
 			{stdout: []byte(liveNodegroupsJSON)},
 			{stdout: []byte(liveNodegroupsJSON)},
@@ -315,7 +312,7 @@ func TestUpdate_NoChangesIsANoOp(t *testing.T) {
 		`"NodeGroupType":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+	prov, runner := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {
 			{stdout: []byte(liveMatchingConfig)},
 			{stdout: []byte(liveMatchingConfig)},
@@ -343,7 +340,7 @@ func TestDiffConfig_InstanceTypeChangeRequiresRecreate(t *testing.T) {
 		`"InstanceType":"t3.large","NodeGroupType":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveOtherType)}},
 	}, configPath)
 
@@ -369,7 +366,7 @@ metadata:
 `
 
 	configPath := writeUpdateTestConfig(t, noGroupsConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveNodegroupsJSON)}},
 	}, configPath)
 
@@ -403,7 +400,7 @@ managedNodeGroups:
 		`"NodeGroupType":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, minOnlyConfig)
-	prov, runner := newUpdatableProvisioner(t, map[string][]response{
+	prov, runner := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {
 			{stdout: []byte(liveBelowNewMin)},
 			{stdout: []byte(liveBelowNewMin)},
@@ -438,7 +435,7 @@ func TestDiffConfig_RemovalsAreEmittedInSortedOrder(t *testing.T) {
 		`{"Name":"alpha","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"NodeGroupType":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{
+	prov, _ := newTestProvisioner(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(liveThreeGroups)}},
 	}, configPath)
 
@@ -452,10 +449,10 @@ func TestDiffConfig_RemovalsAreEmittedInSortedOrder(t *testing.T) {
 	assert.Equal(t, "eks.managedNodeGroups[zeta]", diff.RecreateRequired[1].Field)
 }
 
-func TestUpdatableProvisionerIsComponentDetectorAware(t *testing.T) {
+func TestProvisionerIsComponentDetectorAwareAfterGraduation(t *testing.T) {
 	t.Parallel()
 
-	var prov any = &eksprovisioner.UpdatableProvisioner{}
+	var prov any = &eksprovisioner.Provisioner{}
 
 	_, ok := prov.(clusterprovisioner.ComponentDetectorAware)
 	assert.True(t, ok, "the orchestrator injects the detector via ComponentDetectorAware")
@@ -464,7 +461,7 @@ func TestUpdatableProvisionerIsComponentDetectorAware(t *testing.T) {
 func TestGetCurrentConfig_MarksComponentsUnknownWithoutDetector(t *testing.T) {
 	t.Parallel()
 
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{},
+	prov, _ := newTestProvisioner(t, map[string][]response{},
 		filepath.Join(t.TempDir(), "absent.yaml"))
 
 	spec, _, err := prov.GetCurrentConfig(t.Context(), "update-test-no-state")
@@ -477,7 +474,7 @@ func TestGetCurrentConfig_MarksComponentsUnknownWithoutDetector(t *testing.T) {
 func TestGetCurrentConfig_ReturnsEKSDefaults(t *testing.T) {
 	t.Parallel()
 
-	prov, _ := newUpdatableProvisioner(t, map[string][]response{},
+	prov, _ := newTestProvisioner(t, map[string][]response{},
 		filepath.Join(t.TempDir(), "absent.yaml"))
 
 	spec, providerSpec, err := prov.GetCurrentConfig(t.Context(), "update-test-no-state")

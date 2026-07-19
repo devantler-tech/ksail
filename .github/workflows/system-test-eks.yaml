@@ -256,6 +256,100 @@ jobs:
           cd "$KSAIL_EKS_WORKDIR"
           ksail cluster info
 
+      - name: 🧪 ksail cluster update scales EKS nodes
+        timeout-minutes: 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+
+          cluster_identity() {
+            aws eks describe-cluster \
+              --name "$KSAIL_EKS_CLUSTER_NAME" \
+              --region "$AWS_REGION" \
+              --query 'cluster.[arn,createdAt]' \
+              --output text
+          }
+
+          assert_same_cluster() {
+            local expected="$1"
+            local actual
+            actual="$(cluster_identity)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::EKS cluster identity changed during update."
+              return 1
+            fi
+          }
+
+          set_nodegroup_capacity() {
+            local desired="$1"
+            local min_size="$2"
+            local max_size="$3"
+            DESIRED="$desired" MIN_SIZE="$min_size" MAX_SIZE="$max_size" ruby -ryaml -e '
+              path = "eks.yaml"
+              data = YAML.load_file(path)
+              nodegroups = Array(data["managedNodeGroups"])
+              raise "eks.yaml has no managed node groups" if nodegroups.empty?
+
+              nodegroups.each do |nodegroup|
+                nodegroup["desiredCapacity"] = Integer(ENV.fetch("DESIRED"))
+                nodegroup["minSize"] = Integer(ENV.fetch("MIN_SIZE"))
+                nodegroup["maxSize"] = Integer(ENV.fetch("MAX_SIZE"))
+              end
+              File.write(path, data.to_yaml)
+            '
+          }
+
+          wait_for_capacity() {
+            local desired="$1"
+            local min_size="$2"
+            local max_size="$3"
+            local ready_nodes="$4"
+            local nodegroups
+            local nodes
+
+            for _ in {1..60}; do
+              if nodegroups="$(eksctl get nodegroup \
+                   --cluster "$KSAIL_EKS_CLUSTER_NAME" \
+                   --region "$AWS_REGION" \
+                   --output json)" &&
+                 nodes="$(kubectl get nodes -o json)" &&
+                 jq -e \
+                   --argjson desired "$desired" \
+                   --argjson min_size "$min_size" \
+                   --argjson max_size "$max_size" \
+                   'length > 0 and all(.[];
+                     .Status == "ACTIVE" and
+                     .DesiredCapacity == $desired and
+                     .MinSize == $min_size and
+                     .MaxSize == $max_size)' <<< "$nodegroups" >/dev/null &&
+                 jq -e \
+                   --argjson ready_nodes "$ready_nodes" \
+                   '[.items[] | select(any(.status.conditions[]?;
+                     .type == "Ready" and .status == "True"))] |
+                    length == $ready_nodes' <<< "$nodes" >/dev/null; then
+                return 0
+              fi
+
+              sleep 20
+            done
+
+            echo "::error::EKS managed node groups did not reach the requested capacity."
+            return 1
+          }
+
+          cluster_identity="$(cluster_identity)"
+
+          set_nodegroup_capacity 2 1 2
+          ksail cluster update --yes
+          wait_for_capacity 2 1 2 2
+          assert_same_cluster "$cluster_identity"
+
+          set_nodegroup_capacity 1 1 1
+          ksail cluster update --yes
+          wait_for_capacity 1 1 1 1
+          assert_same_cluster "$cluster_identity"
+
       - name: 🧪 ksail workload reconcile
         if: inputs.gitops_engine != 'None'
         timeout-minutes: 15
