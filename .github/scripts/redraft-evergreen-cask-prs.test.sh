@@ -21,18 +21,29 @@ new_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls?state=open&head=devantler-tech:goreleaser/ksail&per_page=100" ]]; then
 	if [[ "${scenario}" == open ]]; then
-		printf '%s\n' '[{"number":77,"draft":true,"node_id":"PR_77","user":{"login":"devantler"},"head":{"repo":{"full_name":"devantler-tech/homebrew-tap"}}}]'
+		printf '%s\n' '[{"number":77,"draft":true,"node_id":"PR_77","user":{"login":"devantler"},"head":{"ref":"goreleaser/ksail","repo":{"full_name":"devantler-tech/homebrew-tap"}}}]'
+	elif [[ "${scenario}" == untrusted-open ]]; then
+		printf '%s\n' '[{"number":78,"draft":false,"node_id":"PR_78","user":{"login":"another-author"},"head":{"ref":"goreleaser/ksail","repo":{"full_name":"devantler-tech/homebrew-tap"}}}]'
+	elif [[ "${scenario}" == pr-appeared && -f "${state_dir}/ref-read-final" ]]; then
+		printf '%s\n' '[{"number":79,"draft":true,"node_id":"PR_79","user":{"login":"another-author"},"head":{"ref":"goreleaser/ksail","repo":{"full_name":"devantler-tech/homebrew-tap"}}}]'
 	else
 		printf '%s\n' '[]'
 	fi
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/git/matching-refs/heads/goreleaser/ksail" ]]; then
 	if [[ "${scenario}" == no-branch ]]; then
 		printf '%s\n' '[]'
-	elif [[ "${scenario}" == moved-ref && -f "${state_dir}/ref-read" ]]; then
-		printf '[{"ref":"refs/heads/goreleaser/ksail","object":{"sha":"%s"}}]\n' "${new_sha}"
 	else
-		touch "${state_dir}/ref-read"
-		printf '[{"ref":"refs/heads/goreleaser/ksail","object":{"sha":"%s"}}]\n' "${old_sha}"
+		if [[ -f "${state_dir}/ref-read" ]]; then
+			touch "${state_dir}/ref-read-final"
+			if [[ "${scenario}" == moved-ref ]]; then
+				printf '[{"ref":"refs/heads/goreleaser/ksail","object":{"sha":"%s"}}]\n' "${new_sha}"
+			else
+				printf '[{"ref":"refs/heads/goreleaser/ksail","object":{"sha":"%s"}}]\n' "${old_sha}"
+			fi
+		else
+			touch "${state_dir}/ref-read"
+			printf '[{"ref":"refs/heads/goreleaser/ksail","object":{"sha":"%s"}}]\n' "${old_sha}"
+		fi
 	fi
 elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls?state=closed&head=devantler-tech:goreleaser/ksail&per_page=100" ]]; then
 	evidence_sha="${old_sha}"
@@ -95,7 +106,9 @@ run_case() {
 
 run_case no-branch 0 'no retained branch' false
 run_case open 0 'already a draft' false
+run_case untrusted-open 1 'not trusted for re-draft' false
 run_case terminal 0 'Removed terminal branch' true
+run_case pr-appeared 1 'acquired an open PR' false
 run_case moved-ref 1 'moved before deletion' false
 run_case delete-failure 1 'could not delete terminal branch' true
 run_case no-evidence 1 'no terminal PR evidence matching' false

@@ -33,7 +33,7 @@ if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || $# -lt 1 ]]; then
 fi
 tap_owner="${tap%%/*}"
 
-trusted_open_prs() {
+open_branch_prs() {
 	local branch="$1" matches
 	if ! matches="$(gh api \
 		"repos/${tap}/pulls?state=open&head=${tap_owner}:${branch}&per_page=100")"; then
@@ -41,9 +41,12 @@ trusted_open_prs() {
 			"${tap}" "${branch}" >&2
 		return 1
 	fi
-	if ! jq -ec --arg full "${tap}" '
-      [.[] | select(.head.repo.full_name == $full and .user.login == "devantler")
-        | {number, isDraft: .draft, id: .node_id}]
+	if ! jq -ec --arg full "${tap}" --arg branch "${branch}" '
+      [
+        .[]
+        | select(.head.repo.full_name == $full and .head.ref == $branch)
+        | {number, isDraft: .draft, id: .node_id, author: .user.login}
+      ]
     ' <<<"${matches}"; then
 		printf 'ERROR: could not filter cask PR candidates for branch %s\n' "${branch}" >&2
 		return 1
@@ -127,20 +130,22 @@ prune_terminal_branch() {
 	# Close the discovery-to-delete race as far as the APIs permit: recheck both the open-PR keep
 	# set and the branch SHA immediately before a compare-and-swap delete. The force-with-lease
 	# refuses if another actor moves the ref after this evidence was gathered.
-	if ! open_now="$(trusted_open_prs "${branch}")"; then
-		return 1
-	fi
-	if [[ "$(jq -r 'length' <<<"${open_now}")" -ne 0 ]]; then
-		printf 'ERROR: retained branch %s acquired an open PR before deletion; refusing to delete it\n' \
-			"${branch}" >&2
-		return 1
-	fi
 	if ! current_sha="$(current_branch_sha "${branch}")"; then
 		return 1
 	fi
 	if [[ "${current_sha}" != "${branch_sha}" ]]; then
 		printf 'ERROR: retained branch %s moved before deletion; expected %s, found %s\n' \
 			"${branch}" "${branch_sha}" "${current_sha:-missing}" >&2
+		return 1
+	fi
+	# Keep the any-author open-PR lookup as the final remote-state check. A leased push protects
+	# the ref value, but it cannot detect a new PR that points at an unchanged ref.
+	if ! open_now="$(open_branch_prs "${branch}")"; then
+		return 1
+	fi
+	if [[ "$(jq -r 'length' <<<"${open_now}")" -ne 0 ]]; then
+		printf 'ERROR: retained branch %s acquired an open PR before deletion; refusing to delete it\n' \
+			"${branch}" >&2
 		return 1
 	fi
 	if [[ -z "${GH_TOKEN:-}" ]]; then
@@ -164,7 +169,7 @@ for name in "$@"; do
 	# branch-name filter, so same-name fork branches could fill a client-side page
 	# before any jq filter runs). The owner qualifier still admits a same-owner
 	# sibling repo's branch, so keep the full_name + author checks below.
-	if ! ours="$(trusted_open_prs "${branch}")"; then
+	if ! ours="$(open_branch_prs "${branch}")"; then
 		exit 1
 	fi
 	count="$(jq -r 'length' <<<"${ours}")"
@@ -179,6 +184,11 @@ for name in "$@"; do
 		exit 1
 	fi
 	pr="$(jq -r '.[0].number' <<<"${ours}")"
+	if [[ "$(jq -r '.[0].author' <<<"${ours}")" != "devantler" ]]; then
+		printf 'ERROR: %s#%s references %s but is not trusted for re-draft; refusing to rewrite it\n' \
+			"${tap}" "${pr}" "${branch}" >&2
+		exit 1
+	fi
 	if [[ "$(jq -r '.[0].isDraft' <<<"${ours}")" == "true" ]]; then
 		printf '%s#%s is already a draft; checkpoint holds\n' "${tap}" "${pr}"
 		continue
