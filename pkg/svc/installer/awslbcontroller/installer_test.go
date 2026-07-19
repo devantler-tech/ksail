@@ -11,17 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type newInstallerCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	wantErr        error
+	description    string
+}
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		clusterName    string
-		region         string
-		serviceAccount string
-		wantErr        error
-		description    string
-	}{
+	tests := []newInstallerCase{
 		{
 			name: "creates installer with cluster name", clusterName: "prod-eks",
 			description: "A named cluster is the one required input",
@@ -41,6 +43,15 @@ func TestNewInstaller(t *testing.T) {
 			wantErr:     awslbcontrollerinstaller.ErrClusterNameRequired,
 			description: "Whitespace must not smuggle past the required-name check",
 		},
+	}
+
+	runNewInstallerCases(t, tests)
+}
+
+func TestNewInstaller_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []newInstallerCase{
 		{
 			name: "creates installer with pre-created service account", clusterName: "prod-eks",
 			serviceAccount: "aws-load-balancer-controller",
@@ -64,6 +75,12 @@ func TestNewInstaller(t *testing.T) {
 			description:    "A newline-bearing name must never be interpolated into values YAML",
 		},
 	}
+
+	runNewInstallerCases(t, tests)
+}
+
+func runNewInstallerCases(t *testing.T, tests []newInstallerCase) {
+	t.Helper()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -98,17 +115,19 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 	require.NotNil(t, installer)
 }
 
+type buildValuesCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	haEnabled      bool
+	want           string
+}
+
 func TestBuildValuesYaml(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		clusterName    string
-		region         string
-		serviceAccount string
-		haEnabled      bool
-		want           string
-	}{
+	tests := []buildValuesCase{
 		{
 			name: "cluster name only", clusterName: "prod-eks",
 			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
@@ -130,6 +149,15 @@ func TestBuildValuesYaml(t *testing.T) {
 			haEnabled:   true,
 			want:        "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\nreplicaCount: 2",
 		},
+	}
+
+	runBuildValuesCases(t, tests)
+}
+
+func TestBuildValuesYaml_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []buildValuesCase{
 		{
 			name:           "pre-created service account",
 			clusterName:    "prod-eks",
@@ -153,6 +181,12 @@ func TestBuildValuesYaml(t *testing.T) {
 			want:           "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
 		},
 	}
+
+	runBuildValuesCases(t, tests)
+}
+
+func runBuildValuesCases(t *testing.T, tests []buildValuesCase) {
+	t.Helper()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
