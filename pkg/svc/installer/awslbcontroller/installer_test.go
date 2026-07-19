@@ -11,16 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type newInstallerCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	wantErr        error
+	description    string
+}
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		region      string
-		wantErr     error
-		description string
-	}{
+	tests := []newInstallerCase{
 		{
 			name: "creates installer with cluster name", clusterName: "prod-eks",
 			description: "A named cluster is the one required input",
@@ -42,13 +45,52 @@ func TestNewInstaller(t *testing.T) {
 		},
 	}
 
+	runNewInstallerCases(t, tests)
+}
+
+func TestNewInstaller_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []newInstallerCase{
+		{
+			name: "creates installer with pre-created service account", clusterName: "prod-eks",
+			serviceAccount: "aws-load-balancer-controller",
+			description:    "A valid pre-created IRSA service account name is accepted",
+		},
+		{
+			name: "treats whitespace-only service account as unset", clusterName: "prod-eks",
+			serviceAccount: "   ",
+			description:    "Whitespace-only means unset: the chart keeps creating its own SA",
+		},
+		{
+			name:           "rejects invalid service account name",
+			clusterName:    "prod-eks",
+			serviceAccount: "Not_A_Valid_SA!",
+			wantErr:        awslbcontrollerinstaller.ErrInvalidServiceAccountName,
+			description:    "A non-DNS-1123-subdomain SA name must fail loud, not reach Helm values",
+		},
+		{
+			name: "rejects service account name with newline", clusterName: "prod-eks",
+			serviceAccount: "sa\ninjected: true",
+			wantErr:        awslbcontrollerinstaller.ErrInvalidServiceAccountName,
+			description:    "A newline-bearing name must never be interpolated into values YAML",
+		},
+	}
+
+	runNewInstallerCases(t, tests)
+}
+
+func runNewInstallerCases(t *testing.T, tests []newInstallerCase) {
+	t.Helper()
+
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient := helm.NewMockInterface(t)
 			installer, err := awslbcontrollerinstaller.NewInstaller(
-				mockClient, 5*time.Minute, testCase.clusterName, testCase.region, false,
+				mockClient, 5*time.Minute,
+				testCase.clusterName, testCase.region, testCase.serviceAccount, false,
 			)
 
 			if testCase.wantErr != nil {
@@ -67,23 +109,26 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 
 	mockClient := helm.NewMockInterface(t)
 	installer, err := awslbcontrollerinstaller.NewInstaller(
-		mockClient, 5*time.Minute, "prod-eks", "eu-north-1", true,
+		mockClient, 5*time.Minute, "prod-eks", "eu-north-1", "", true,
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, installer)
 }
 
+type buildValuesCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	haEnabled      bool
+	want           string
+}
+
 func TestBuildValuesYaml(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		region      string
-		haEnabled   bool
-		want        string
-	}{
+	tests := []buildValuesCase{
 		{
 			name: "cluster name only", clusterName: "prod-eks",
 			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
@@ -107,12 +152,58 @@ func TestBuildValuesYaml(t *testing.T) {
 		},
 	}
 
+	runBuildValuesCases(t, tests)
+}
+
+func TestBuildValuesYaml_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []buildValuesCase{
+		{
+			name:           "pre-created service account",
+			clusterName:    "prod-eks",
+			serviceAccount: "aws-load-balancer-controller",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 1",
+		},
+		{
+			name:           "pre-created service account with region and ha",
+			clusterName:    "prod-eks",
+			region:         "eu-north-1",
+			serviceAccount: "aws-load-balancer-controller",
+			haEnabled:      true,
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\n" +
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 2",
+		},
+		{
+			name:           "whitespace-only service account is unset",
+			clusterName:    "prod-eks",
+			serviceAccount: "   ",
+			want:           "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
+		},
+		{
+			// "123" is a valid DNS-1123 name that YAML would otherwise parse
+			// as a number — the quoting is what keeps it a string.
+			name:           "numeric service account name stays a string",
+			clusterName:    "prod-eks",
+			serviceAccount: "123",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
+				"serviceAccount:\n  create: false\n  name: \"123\"\nreplicaCount: 1",
+		},
+	}
+
+	runBuildValuesCases(t, tests)
+}
+
+func runBuildValuesCases(t *testing.T, tests []buildValuesCase) {
+	t.Helper()
+
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			got := awslbcontrollerinstaller.BuildValuesYamlForTest(
-				testCase.clusterName, testCase.region, testCase.haEnabled,
+				testCase.clusterName, testCase.region, testCase.serviceAccount, testCase.haEnabled,
 			)
 
 			assert.Equal(t, testCase.want, got)

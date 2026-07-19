@@ -52,6 +52,7 @@ func (c *Cluster) expandClusterSpec() {
 	// Expand distribution-specific options
 	c.expandVanillaOptions()
 	c.expandTalosOptions()
+	c.expandEKSOptions()
 }
 
 func (c *Cluster) expandVanillaOptions() {
@@ -62,6 +63,13 @@ func (c *Cluster) expandVanillaOptions() {
 func (c *Cluster) expandTalosOptions() {
 	talos := &c.Spec.Cluster.Talos
 	talos.Config = envvar.Expand(talos.Config)
+}
+
+func (c *Cluster) expandEKSOptions() {
+	eks := &c.Spec.Cluster.EKS
+	eks.AWSLoadBalancerControllerServiceAccount = envvar.Expand(
+		eks.AWSLoadBalancerControllerServiceAccount,
+	)
 }
 
 func (c *Cluster) expandProviderSpec() {
