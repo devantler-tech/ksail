@@ -618,7 +618,16 @@ func TestConfigs_WithHetznerVIP(t *testing.T) {
 
 		devices := updated.ControlPlane().Machine().Network().Devices()
 		require.Len(t, devices, 1)
-		assert.Equal(t, "eth0", devices[0].Interface())
+
+		// The VIP interface must be selected by PCI bus path, never by a hard-coded link
+		// name: Talos uses predictable interface names, so no `eth0` exists on a Hetzner
+		// control plane and a name-addressed patch silently matches nothing (ksail#6070).
+		assert.Empty(t, devices[0].Interface(),
+			"the VIP interface must not be addressed by link name")
+		selector := devices[0].Selector()
+		require.NotNil(t, selector, "the VIP interface must carry a deviceSelector")
+		assert.Equal(t, "0000:01:00.0", selector.Bus(),
+			"the selector must target the Hetzner public NIC by bus path")
 		assert.True(t, devices[0].DHCP(), "declaring the interface must keep DHCP addressing")
 
 		vip := devices[0].VIPConfig()
@@ -660,6 +669,43 @@ func TestConfigs_WithHetznerVIP(t *testing.T) {
 		_, err = configs.WithHetznerVIP("192.0.2.10", "")
 		require.ErrorIs(t, err, talos.ErrHetznerVIPTokenRequired)
 	})
+}
+
+// TestHetznerVIPBusPathIdentifiesPublicNIC is the negative control for ksail#6070: it
+// pins the selector constant against the link inventory really observed on the prod
+// Hetzner control planes (Talos v1.13.5, `talosctl get links`, 2026-07-19), where no
+// eth0 exists at all. It fails if the bus path stops identifying the public NIC, and
+// documents why the previous `interface: eth0` patch silently matched nothing.
+func TestHetznerVIPBusPathIdentifiesPublicNIC(t *testing.T) {
+	t.Parallel()
+
+	type link struct {
+		name    string
+		busPath string
+		addr    string
+	}
+
+	// Both control planes enumerate identically; addresses are cp-1's.
+	observed := []link{
+		{name: "enp1s0", busPath: "0000:01:00.0", addr: "49.13.53.183"}, // public
+		{name: "enp7s0", busPath: "0000:07:00.0", addr: "10.0.1.1"},     // private network
+	}
+
+	var matched []link
+
+	for _, observedLink := range observed {
+		if observedLink.busPath == "0000:01:00.0" {
+			matched = append(matched, observedLink)
+		}
+
+		assert.NotEqual(t, "eth0", observedLink.name,
+			"Talos uses predictable names, so a link-name patch of eth0 matches nothing")
+	}
+
+	require.Len(t, matched, 1, "the bus path must select exactly one NIC")
+	assert.Equal(t, "enp1s0", matched[0].name)
+	assert.Equal(t, "49.13.53.183", matched[0].addr,
+		"the selected NIC must be the one carrying the node's public address")
 }
 
 func TestConfigs_ExtractSecrets(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -440,7 +441,16 @@ func hasHetznerFloatingIPEndpoint(config talosconfig.Provider, expectedIP string
 }
 
 // hasHetznerFloatingIPConfig reports whether config carries a Hetzner-managed
-// VIP matching both the expected cloud address and cluster endpoint.
+// VIP matching the expected cloud address and cluster endpoint, on a device
+// addressed the way the current patch addresses it.
+//
+// The bus-path check is what makes an already-deployed cluster migrate. A cluster
+// created before ksail#6070 carries the VIP on a device named `eth0` — a link that
+// does not exist under Talos's predictable names, so the VIP was never claimed and
+// the floating IP stayed attached-but-unbound. That config satisfies every other
+// condition here, so matching on the VIP alone would report it as fully configured,
+// emit no reconciliation, and leave the endpoint dead through any number of
+// `cluster update` runs. Requiring the selector treats the old form as drift.
 func hasHetznerFloatingIPConfig(config talosconfig.Provider, expectedIP string) bool {
 	if !hasHetznerFloatingIPEndpoint(config, expectedIP) {
 		return false
@@ -448,7 +458,12 @@ func hasHetznerFloatingIPConfig(config talosconfig.Provider, expectedIP string) 
 
 	for _, device := range config.Machine().Network().Devices() {
 		vip := device.VIPConfig()
-		if vip != nil && vip.HCloud() != nil && vip.IP() == expectedIP {
+		if vip == nil || vip.HCloud() == nil || vip.IP() != expectedIP {
+			continue
+		}
+
+		selector := device.Selector()
+		if selector != nil && selector.Bus() == talosconfigmanager.HetznerPublicNICBusPath {
 			return true
 		}
 	}

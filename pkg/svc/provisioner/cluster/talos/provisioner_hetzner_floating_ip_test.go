@@ -261,7 +261,11 @@ func assertFloatingIPRenderedConfigs(t *testing.T, configs *talos.Configs) {
 
 	devices := configs.ControlPlane().Machine().Network().Devices()
 	require.Len(t, devices, 1)
-	assert.Equal(t, "eth0", devices[0].Interface())
+	// Selected by bus path, not link name: Talos' predictable naming means no eth0
+	// exists on a Hetzner node, so a name-addressed VIP never binds (ksail#6070).
+	assert.Empty(t, devices[0].Interface())
+	require.NotNil(t, devices[0].Selector())
+	assert.Equal(t, "0000:01:00.0", devices[0].Selector().Bus())
 
 	vip := devices[0].VIPConfig()
 	require.NotNil(t, vip)
