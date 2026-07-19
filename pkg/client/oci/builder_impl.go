@@ -337,9 +337,13 @@ func newManifestLayer(
 		prefix = ""
 	}
 
-	var err error
+	rootNames, err := rootEntryNames(root, files)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, path := range files {
-		err = addFileToArchive(tarWriter, root, path, prefix)
+		err = addFileToArchive(tarWriter, root, path, prefix, rootNames)
 		if err != nil {
 			return nil, err
 		}
@@ -357,10 +361,12 @@ func newManifestLayer(
 //   - Fixed permissions of 0o644
 //   - Original file content
 //
-// The file is written at the archive root, and again under prefix when one is set.
+// The file is written at the archive root, and again under prefix when one is set — unless that
+// alias would collide with another file's root entry (see rootEntryNames).
 func addFileToArchive(
 	tarWriter *tar.Writer,
 	root, path, prefix string,
+	rootNames map[string]struct{},
 ) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -385,15 +391,41 @@ func addFileToArchive(
 		return err
 	}
 
-	// Write files under prefix as well (when prefix is set).
+	// Write files under prefix as well (when prefix is set), unless the alias would take the
+	// name of another file's root entry. The root tree is what every consumer resolves against,
+	// so an alias must never shadow it.
 	if prefix != "" {
-		err = writeTarEntry(tarWriter, info, path, filepath.Join(prefix, rel), content)
-		if err != nil {
-			return err
+		aliasName := filepath.ToSlash(filepath.Join(prefix, rel))
+		if _, collides := rootNames[aliasName]; !collides {
+			err = writeTarEntry(tarWriter, info, path, aliasName, content)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
+}
+
+// rootEntryNames returns the archive-root name of every file, which is the set a compatibility
+// alias must not collide with.
+//
+// The collision is reachable whenever the source tree contains a child directory named after the
+// source directory itself (sourceDirectory "k8s" holding a nested "k8s/"): the alias of a
+// top-level file and the root entry of the nested file both resolve to "k8s/<name>".
+func rootEntryNames(root string, files []string) (map[string]struct{}, error) {
+	names := make(map[string]struct{}, len(files))
+
+	for _, path := range files {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil, fmt.Errorf("get relative path for %s: %w", path, err)
+		}
+
+		names[filepath.ToSlash(rel)] = struct{}{}
+	}
+
+	return names, nil
 }
 
 // writeTarEntry writes a single tar entry with the given name and content.
