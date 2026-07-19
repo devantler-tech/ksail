@@ -23,7 +23,7 @@ func eksTestCluster() *v1alpha1.Cluster {
 	return cluster
 }
 
-func TestCreateEKSProvisionerPinsKubeconfigPath(t *testing.T) {
+func TestCreateEKSProvisionerPinsKubeconfigPathWithoutOverridingConfigRegion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script eksctl fixture is not portable to Windows")
 	}
@@ -82,7 +82,6 @@ printf '%s\n' "$@" > "$KSAIL_EKSCTL_ARGS"
 	assert.Equal(t, []string{
 		"create", "cluster",
 		"--config-file", "eks.yaml",
-		"--region", "eu-west-1",
 		"--kubeconfig", "/tmp/ksail-kubeconfig",
 	}, strings.Fields(string(args)))
 }
