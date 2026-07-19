@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
@@ -93,6 +95,13 @@ func newProvisioner(
 	t.Helper()
 
 	runner := &scriptedRunner{t: t, responses: responses}
+	configPath := filepath.Join(t.TempDir(), "eksctl.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: ksail-test
+  region: us-east-1
+`), 0o600))
 
 	client := eksctlclient.NewClient(
 		eksctlclient.WithBinary(testBinary),
@@ -100,7 +109,7 @@ func newProvisioner(
 	)
 
 	prov, err := eksprovisioner.NewProvisioner(
-		"ksail-test", "us-east-1", "/tmp/eksctl.yaml",
+		"ksail-test", "us-east-1", configPath,
 		client, infra, eksprovisioner.WithKubeconfigPath("/tmp/kubeconfig"),
 	)
 	require.NoError(t, err)
@@ -125,11 +134,12 @@ func TestCreate_ShellsOutWithConfig(t *testing.T) {
 	require.NoError(t, prov.Create(context.Background(), ""))
 
 	require.Len(t, runner.calls, 1)
+	require.Len(t, runner.calls[0], 6)
 	assert.Equal(
 		t,
 		[]string{
 			"create", "cluster",
-			"--config-file", "/tmp/eksctl.yaml",
+			"--config-file", runner.calls[0][3],
 			"--kubeconfig", "/tmp/kubeconfig",
 		},
 		runner.calls[0],
