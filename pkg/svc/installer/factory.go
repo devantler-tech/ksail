@@ -314,18 +314,20 @@ func (f *Factory) addLoadBalancerInstaller(
 
 	if f.needsAWSLBController(spec) {
 		// Fail loud rather than silently skipping: the user explicitly opted
-		// in, so an unknowable cluster name is a wiring bug, not a no-op.
+		// in, so an unknowable cluster name (a wiring bug — construct the
+		// factory with WithEKSClusterName) or an invalid pre-created service
+		// account name is an error, not a no-op.
 		awslbc, err := awslbcontrollerinstaller.NewInstaller(
 			f.helmClient,
 			f.timeout,
 			f.eksClusterName,
 			"", // region: rely on the chart's own discovery
+			spec.EKS.AWSLoadBalancerControllerServiceAccount,
 			haEnabled,
 		)
 		if err != nil {
 			return fmt.Errorf(
-				"experimental AWS Load Balancer Controller is enabled but unusable "+
-					"(construct the factory with WithEKSClusterName): %w",
+				"experimental AWS Load Balancer Controller is enabled but unusable: %w",
 				err,
 			)
 		}

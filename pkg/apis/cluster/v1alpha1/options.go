@@ -30,13 +30,25 @@ type OptionsEKS struct {
 	// Balancer Controller as the cluster's LoadBalancer component when
 	// spec.cluster.loadBalancer is Enabled. Default false: EKS keeps its
 	// default in-tree Classic Load Balancer path and KSail installs nothing.
-	// The controller's IAM permissions (node-role credentials; IRSA is #6232)
-	// and subnet tags are prerequisites KSail does not create — see the
-	// awslbcontroller installer package docs. Installed at cluster create and
-	// by the operator's reconcile; enabling it on an existing cluster is not
-	// yet detected by `cluster update`'s diff (#6231). Not yet validated
-	// against a live EKS cluster.
+	// The controller's IAM permissions (node-role credentials by default; a
+	// pre-created IRSA service account via
+	// awsLoadBalancerControllerServiceAccount) and subnet tags are
+	// prerequisites KSail does not create — see the awslbcontroller installer
+	// package docs. Installed at cluster create and by the operator's
+	// reconcile; enabling it on an existing cluster is not yet detected by
+	// `cluster update`'s diff (#6231). Not yet validated against a live EKS
+	// cluster.
 	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll,tagliatelle // AWS keeps its conventional casing, like the sibling issuerURL/floatingIP fields
+
+	// AWSLoadBalancerControllerServiceAccount names a pre-created service
+	// account (AWS's documented IRSA install path) for the AWS Load Balancer
+	// Controller chart. When set, the chart is installed with
+	// serviceAccount.create=false and this name, so clusters following AWS's
+	// eksctl IRSA setup work instead of Helm failing on an already-existing
+	// ServiceAccount. When empty (default), the chart creates its own service
+	// account and IAM comes from node-role credentials. Only meaningful
+	// together with experimentalAWSLoadBalancerController; inert otherwise.
+	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitzero" jsonschema_description:"Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController."` //nolint:lll // long generated-schema description
 }
 
 // OptionsTalos defines options specific to the Talos distribution.
