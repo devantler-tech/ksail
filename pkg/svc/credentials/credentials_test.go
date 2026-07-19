@@ -59,6 +59,7 @@ func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {
 	assert.Empty(t, credentials.DefaultEnvVar(credentials.Key("nope.nope")))
 }
 
+//nolint:gosec // G101: these are environment-variable names, never credential values.
 func TestAWSOptionsWithDefaultsPreservesCustomNamesAndFillsEmptyNames(t *testing.T) {
 	t.Parallel()
 

@@ -681,10 +681,26 @@ func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) 
 	)
 }
 
+// setCustomAWSMappingEnvironment points the custom KSAIL_* variables at the values the eksctl
+// fixture demands, while every canonical AWS_* variable holds a decoy. A run that resolves through
+// the default mapping therefore hands eksctl the ambient values and the fixture rejects it.
+func setCustomAWSMappingEnvironment(t *testing.T, region string) {
+	t.Helper()
+
+	t.Setenv("KSAIL_PROFILE", "selected-profile")
+	t.Setenv("KSAIL_REGION", region)
+	t.Setenv("KSAIL_ACCESS", "fixture-access")
+	t.Setenv("KSAIL_SECRET", "fixture-secret")
+	t.Setenv("KSAIL_SESSION", "fixture-session")
+	t.Setenv("AWS_PROFILE", "ambient-profile")
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-session")
+}
+
 // TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState verifies a no-config
 // lifecycle command uses the same custom AWS environment-variable names captured at creation.
-//
-//nolint:paralleltest // mutates process environment and working directory
 func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testing.T) {
 	const (
 		clusterName = "ksail-eks-start-state-custom-mappings-6227"
@@ -703,16 +719,7 @@ func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testin
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
 	t.Setenv("KSAIL_EKS_CLUSTER", clusterName)
-	t.Setenv("KSAIL_PROFILE", "selected-profile")
-	t.Setenv("KSAIL_REGION", region)
-	t.Setenv("KSAIL_ACCESS", "fixture-access")
-	t.Setenv("KSAIL_SECRET", "fixture-secret")
-	t.Setenv("KSAIL_SESSION", "fixture-session")
-	t.Setenv("AWS_PROFILE", "ambient-profile")
-	t.Setenv("AWS_REGION", "us-east-1")
-	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-access")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
-	t.Setenv("AWS_SESSION_TOKEN", "ambient-session")
+	setCustomAWSMappingEnvironment(t, region)
 	t.Setenv("KUBECONFIG", filepath.Join(workingDir, "kubeconfig"))
 
 	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
@@ -724,6 +731,7 @@ func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testin
 
 	ownership, err := state.LoadEKSOwnershipState(clusterName, region)
 	require.NoError(t, err)
+
 	ownership.AWSOptions = v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "KSAIL_PROFILE",
 		RegionEnvVar:          "KSAIL_REGION",
@@ -752,6 +760,44 @@ func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testin
 	assert.Equal(t, "ambient-session", os.Getenv("AWS_SESSION_TOKEN"))
 }
 
+// TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError proves a record predating the
+// awsOptions schema does not surface an opaque restore failure. The actionable error — the one
+// naming the rebind command — belongs to eksidentity.NewVerifier, so the restore step must decline
+// quietly rather than shadow it. The command still fails closed downstream.
+func TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError(t *testing.T) {
+	const (
+		clusterName = "legacy-defers-to-verifier-6270"
+		region      = "eu-north-1"
+	)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	legacy := fmt.Sprintf(`{
+  "version": %d,
+  "clusterName": %q,
+  "region": %q,
+  "accountId": "123456789012",
+  "clusterArn": "arn:aws:eks:%s:123456789012:cluster/%s",
+  "createdAt": "2026-07-18T12:00:00Z"
+}`, state.EKSOwnershipStateVersion, clusterName, region, region, clusterName)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "eks-ownership-"+region+".json"),
+		[]byte(legacy),
+		0o600,
+	))
+
+	resolved := &lifecycle.ResolvedClusterInfo{ClusterName: clusterName, AWSRegion: region}
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
+	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
+}
+
 func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -766,7 +812,6 @@ func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
-//nolint:paralleltest // mutates HOME and process environment.
 func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 	const (
 		clusterName = "state-region-alias-6270"
@@ -782,6 +827,7 @@ func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Now().UTC(),
+		//nolint:gosec // G101: these are environment-variable names, never credential values.
 		AWSOptions: v1alpha1.OptionsAWS{
 			ProfileEnvVar:         "AWS_PROFILE",
 			RegionEnvVar:          "KSAIL_REGION",

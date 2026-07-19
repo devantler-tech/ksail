@@ -41,6 +41,9 @@ var (
 	errAWSOwnershipRegionAmbiguous = errors.New(
 		"multiple kubeconfig regions match EKS cluster",
 	)
+	errAWSOwnershipRegionUnrecorded = errors.New(
+		"no persisted EKS ownership state for configured region",
+	)
 	errAWSOwnershipProvenanceMissing = errors.New(
 		"exact AWS ownership query did not report an eksctl-created cluster",
 	)
@@ -314,16 +317,20 @@ func resolveAWSOwnershipTarget(
 		)
 	}
 
-	err := bindAWSRegionFromKubeconfig(resolved)
-	if err != nil {
-		return nil, err
-	}
-
+	// Restore before the kubeconfig fallback: the persisted mapping may name a custom region
+	// variable, and bindAWSRegionFromKubeconfig is a no-op once a region is known. Binding first
+	// would let a stale or duplicated same-name kubeconfig context pin (or reject) the region
+	// before the captured RegionEnvVar is ever consulted.
 	if restorePersistedOptions {
-		err = restorePersistedAWSOptions(resolved)
+		err := restorePersistedAWSOptions(resolved)
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	err := bindAWSRegionFromKubeconfig(resolved)
+	if err != nil {
+		return nil, err
 	}
 
 	auth, err := queryFrozenAWSOwnership(ctx, resolved)
@@ -345,6 +352,16 @@ func resolveAWSOwnershipTarget(
 	return identityClient, nil
 }
 
+// isRestorableOwnershipStateAbsence reports that no usable credential mapping could be restored,
+// which is never fatal here. A legacy record predating the mapping schema is deliberately treated
+// like a missing one: the authoritative, actionable failure belongs to eksidentity.NewVerifier,
+// whose migrationRequiredError names the rebind command. Returning early keeps that message intact
+// instead of shadowing it with an opaque validation error, and still fails closed downstream.
+func isRestorableOwnershipStateAbsence(err error) bool {
+	return errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
+		errors.Is(err, state.ErrInvalidEKSOwnershipState)
+}
+
 func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	if resolved.ConfigSource {
 		return nil
@@ -354,7 +371,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	if region != "" {
 		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
 		if err != nil {
-			if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
+			if isRestorableOwnershipStateAbsence(err) {
 				return nil
 			}
 
@@ -368,7 +385,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 
 	ownerships, err := state.ListEKSOwnershipStates(resolved.ClusterName)
 	if err != nil {
-		if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
+		if isRestorableOwnershipStateAbsence(err) {
 			return nil
 		}
 
@@ -390,15 +407,19 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 	if current.ProfileEnvVar == "" {
 		current.ProfileEnvVar = persisted.ProfileEnvVar
 	}
+
 	if current.RegionEnvVar == "" {
 		current.RegionEnvVar = persisted.RegionEnvVar
 	}
+
 	if current.AccessKeyIDEnvVar == "" {
 		current.AccessKeyIDEnvVar = persisted.AccessKeyIDEnvVar
 	}
+
 	if current.SecretAccessKeyEnvVar == "" {
 		current.SecretAccessKeyEnvVar = persisted.SecretAccessKeyEnvVar
 	}
+
 	if current.SessionTokenEnvVar == "" {
 		current.SessionTokenEnvVar = persisted.SessionTokenEnvVar
 	}
@@ -427,7 +448,8 @@ func selectPersistedAWSOwnership(
 			}
 
 			return nil, fmt.Errorf(
-				"no persisted EKS ownership state for configured region %q",
+				"%w %q",
+				errAWSOwnershipRegionUnrecorded,
 				requestedRegion,
 			)
 		}

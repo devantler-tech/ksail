@@ -376,6 +376,7 @@ func TestCreate_EKSProfileRegionFeedsIdentityCapture(t *testing.T) {
 
 	ownership, err := state.LoadEKSOwnershipState("st-eks", "eu-north-1")
 	require.NoError(t, err)
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
 	assert.Equal(t, v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "KSAIL_PROFILE",
 		RegionEnvVar:          "AWS_REGION",

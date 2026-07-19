@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
@@ -52,15 +53,23 @@ func VerifyBeforeMutation(ctx context.Context, verifier Verifier) error {
 // Capture observes the current caller and live cluster, validates their relationship, and atomically
 // stores the immutable identity. It performs no AWS mutation and is suitable after create or during
 // an explicit legacy-state rebind.
+//
+// awsOptions must be a complete environment-variable-name mapping (see
+// credentials.AWSOptionsWithDefaults). It is required rather than defaulted so a caller operating a
+// cluster through custom credential variables cannot silently persist canonical names and later
+// resolve a different ambient identity.
 func Capture(
 	ctx context.Context,
 	client Client,
 	clusterName, region string,
+	awsOptions v1alpha1.OptionsAWS,
 ) (*state.EKSOwnershipState, error) {
 	ownership, err := Observe(ctx, client, clusterName, region)
 	if err != nil {
 		return nil, err
 	}
+
+	ownership.AWSOptions = awsOptions
 
 	err = Persist(clusterName, ownership.Region, ownership)
 	if err != nil {

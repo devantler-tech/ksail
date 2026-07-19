@@ -142,18 +142,26 @@ func TestStandaloneEKSLifecycleRechecksSameARNReplacementImmediatelyBeforeMutati
 	}
 }
 
+// setDefaultAWSOptionsOnOwnership stamps the canonical mapping onto an already-persisted ownership
+// record, mirroring what creation now captures.
+func setDefaultAWSOptionsOnOwnership(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	ownership, err := state.LoadEKSOwnershipState(clusterName, region)
+	require.NoError(t, err)
+
+	ownership.AWSOptions = credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{})
+
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+}
+
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestStandaloneEKSLifecycleFreezesCustomAWSCredentialsForEveryConsumer(t *testing.T) {
 	const clusterName = "ksail-eks-start-frozen-credentials-6202"
 
 	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
-	ownership, err := state.LoadEKSOwnershipState(clusterName, "ap-southeast-2")
-	require.NoError(t, err)
-	ownership.AWSOptions = credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{})
-	require.NoError(
-		t,
-		state.SaveEKSOwnershipState(clusterName, "ap-southeast-2", ownership),
-	)
+	setDefaultAWSOptionsOnOwnership(t, clusterName, "ap-southeast-2")
+
 	identityClient := &fakeEKSIdentityClient{
 		accountID: "123456789012",
 		cluster: immutableEKSCluster(

@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// canonicalAWSOptions is the default environment-variable-name mapping.
+//
+//nolint:gosec // G101: these are environment-variable names, never credential values.
 func canonicalAWSOptions() v1alpha1.OptionsAWS {
 	return v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "AWS_PROFILE",
@@ -108,6 +111,75 @@ func TestListEKSOwnershipStatesReturnsSortedValidatedRegions(t *testing.T) {
 	assert.Equal(t, "us-west-2", ownerships[1].Region)
 }
 
+// TestListEKSOwnershipStatesSkipsUnusableRecords proves one legacy record in an unrelated region
+// cannot strand a cluster whose target region is recorded correctly. Before ListEKSOwnershipStates
+// skipped unusable records, the legacy file below aborted the whole listing.
+func TestListEKSOwnershipStatesSkipsUnusableRecords(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-skips-legacy"
+
+	valid := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      "eu-north-1",
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions:  canonicalAWSOptions(),
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, valid.Region, valid))
+
+	writeLegacyOwnershipRecord(t, clusterName, "us-west-2")
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 1)
+	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+}
+
+// TestListEKSOwnershipStatesReportsAbsenceWhenNoRecordIsUsable proves skipping never degrades into
+// silently succeeding with nothing: an all-legacy directory is indistinguishable from no record,
+// so the caller's absence path applies and the authoritative rebind error is still produced later.
+func TestListEKSOwnershipStatesReportsAbsenceWhenNoRecordIsUsable(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-all-legacy"
+
+	writeLegacyOwnershipRecord(t, clusterName, "eu-north-1")
+
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+}
+
+// writeLegacyOwnershipRecord writes an ownership record in the pre-awsOptions schema.
+func writeLegacyOwnershipRecord(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	legacy := map[string]any{
+		"version":     state.EKSOwnershipStateVersion,
+		"clusterName": clusterName,
+		"region":      region,
+		"accountId":   "123456789012",
+		"clusterArn":  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		"createdAt":   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+	}
+
+	data, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "eks-ownership-"+region+".json"),
+		data,
+		0o600,
+	))
+}
+
 func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *testing.T) {
 	t.Parallel()
 
@@ -151,6 +223,7 @@ func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *test
 	} {
 		assert.NotContains(t, persisted, credentialField)
 	}
+
 	assert.Contains(t, string(persisted["awsOptions"]), `"accessKeyIdEnvVar": "KSAIL_ACCESS"`)
 	assert.Contains(t, string(persisted["awsOptions"]), `"secretAccessKeyEnvVar": "KSAIL_SECRET"`)
 
@@ -177,8 +250,10 @@ func TestLoadEKSOwnershipStateRejectsLegacyRecordWithoutAWSOptions(t *testing.T)
 		clusterName = "legacy-without-aws-options"
 		region      = "eu-north-1"
 	)
+
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
+
 	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 
