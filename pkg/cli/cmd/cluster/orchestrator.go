@@ -1349,10 +1349,17 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 	// destroy the Docker network during deletion, which fails if containers are
 	// still connected. Registries are reused on recreate, so only disconnect is needed.
 	if o.ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-		disconnectRegistriesBeforeDelete(o.cmd, &clusterdetector.Info{
+		clusterInfo := &clusterdetector.Info{
 			Distribution: o.ctx.ClusterCfg.Spec.Cluster.Distribution,
 			ClusterName:  o.clusterName,
-		})
+		}
+		// Discover first: the disconnect is scoped to THIS cluster's registries, because some
+		// networks (notably Kind's shared "kind") carry other live clusters' registries too.
+		disconnectRegistriesBeforeDelete(
+			o.cmd,
+			clusterInfo,
+			discoverRegistriesBeforeDelete(o.cmd, clusterInfo),
+		)
 	}
 
 	// Execute delete

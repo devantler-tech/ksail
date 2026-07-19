@@ -114,9 +114,9 @@ func runDeleteAction(
 	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
 	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally
 	// deletes a cluster it does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = applyDeleteUnmanagedGuard(cmd, resolved)
-	if err != nil {
-		return err
+	guardErr := deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	if guardErr != nil {
+		return handleUnmanagedDeleteTarget(cmd, tmr, resolved, flags, guardErr)
 	}
 
 	// Detect cluster distribution and info before deletion
@@ -280,7 +280,7 @@ func prepareDockerDeletion(
 	}
 
 	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	disconnectRegistriesBeforeDelete(cmd, clusterInfo)
+	disconnectRegistriesBeforeDelete(cmd, clusterInfo, preDiscovered)
 
 	return preDiscovered
 }
@@ -417,7 +417,12 @@ func discoverRegistriesBeforeDelete(
 func disconnectRegistriesBeforeDelete(
 	cmd *cobra.Command,
 	clusterInfo *clusterdetector.Info,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
 ) {
+	if preDiscovered == nil || len(preDiscovered.Registries) == 0 {
+		return
+	}
+
 	cleanupDeps := getCleanupDeps()
 
 	// Resolve the distribution-specific network name
@@ -431,9 +436,18 @@ func disconnectRegistriesBeforeDelete(
 		clusterInfo.ClusterName,
 	)
 
-	// Silently disconnect registries - errors are ignored since the cluster
-	// may not have any registries connected, or the network may not exist
-	_ = mirrorregistry.DisconnectRegistriesFromNetwork(cmd, networkName, cleanupDeps)
+	// Disconnect only THIS cluster's registries. The Kind network ("kind") is shared by every
+	// Kind cluster on the host, so disconnecting everything attached to it would sever the
+	// registries of other, live clusters — and this runs before the confirmation prompt, so it
+	// would happen even when the user then cancels the delete.
+	//
+	// Errors are ignored: a registry may already be gone or never connected.
+	_ = mirrorregistry.DisconnectRegistriesByInfo(
+		cmd,
+		networkName,
+		preDiscovered.Registries,
+		cleanupDeps,
+	)
 }
 
 // buildDeletionPreview builds a preview of resources that will be deleted.
@@ -630,33 +644,37 @@ func cleanupRegistriesAfterDelete(
 	reportRegistryLeftovers(cmd, resolved.ClusterName, cleanupDeps)
 }
 
-// applyDeleteUnmanagedGuard runs the unmanaged-cluster guard, tolerating the one case where its
-// verdict is an artifact of a partial teardown rather than genuine foreign ownership.
+// handleUnmanagedDeleteTarget decides what to do when the unmanaged-cluster guard refuses.
 //
-// Ownership is discovered by enumerating node containers, so a cluster whose nodes are already
-// gone always reads as unmanaged. When KSail's own registry containers for that cluster are still
-// running, KSail plainly did provision it, and refusing leaves the user no supported way to finish
-// the teardown (#6286). Only KSail-owned containers are ever removed on this path, so the guard's
-// purpose — never destroying a cluster KSail does not own — is preserved.
-func applyDeleteUnmanagedGuard(
+// A surviving KSail-owned registry container proves KSail created THAT CONTAINER. It does not
+// prove the kubeconfig target is KSail's cluster, and it does not prove the cluster is node-less:
+// cluster discovery skips a distribution whose listing fails without reporting the result as
+// incomplete, so a foreign cluster of the same name can be refused as unmanaged while an old
+// remnant is still lying around. Letting that combination back into the normal delete flow would
+// hand `provisioner.Delete` a cluster KSail does not own — exactly what the guard exists to stop.
+//
+// So the remnant only ever authorises removing the containers themselves. The provisioner is
+// never reached from here, and the guard's refusal still stands for the cluster.
+func handleUnmanagedDeleteTarget(
 	cmd *cobra.Command,
+	tmr timer.Timer,
 	resolved *lifecycle.ResolvedClusterInfo,
+	flags *deleteFlags,
+	guardErr error,
 ) error {
-	err := deleteUnmanagedGuardFunc(cmd.Context(), resolved)
-	if err == nil {
-		return nil
-	}
-
-	if !errors.Is(err, ErrUnmanagedCluster) || !hasClusterRegistryRemnant(cmd, resolved) {
-		return err
+	if !errors.Is(guardErr, ErrUnmanagedCluster) || !hasClusterRegistryRemnant(cmd, resolved) {
+		return guardErr
 	}
 
 	notify.WriteMessage(notify.Message{
 		Type: notify.WarningType,
 		Content: "cluster " + resolved.ClusterName +
-			" has no nodes; removing the registry containers it left behind",
+			" is not a KSail-managed cluster, but KSail-created registry containers for it are " +
+			"still running; removing only those containers",
 		Writer: cmd.OutOrStdout(),
 	})
+
+	cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, nil)
 
 	return nil
 }
@@ -687,6 +705,14 @@ func executeDeleteTolerantOfMissingNodes(
 		Content: "cluster nodes are already gone; cleaning up its remaining resources",
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	// executeDelete returns before its own state cleanup on this path, so do it here. Left
+	// behind, ~/.ksail/clusters/<name>/spec.json and ttl.json are inherited by the next cluster
+	// of the same name — a stale TTL or stale spec surfacing in update/info operations.
+	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	if stateErr != nil {
+		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
+	}
 
 	return nil
 }
