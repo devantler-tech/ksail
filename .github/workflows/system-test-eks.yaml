@@ -112,6 +112,7 @@ jobs:
     permissions:
       contents: read
       id-token: write # Required to exchange GitHub's OIDC token for the scoped AWS role.
+      packages: write # Publish the ephemeral GitOps artifact when it is not already present.
     env:
       AWS_REGION: ${{ inputs.region }}
       AWS_DEFAULT_REGION: ${{ inputs.region }}
@@ -197,6 +198,8 @@ jobs:
         shell: bash
         env:
           AWS_PERMISSIONS_BOUNDARY_ARN: ${{ steps.permissions-boundary.outputs.arn }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
           GITOPS_ENGINE: ${{ inputs.gitops_engine }}
         run: |
           set -euo pipefail
@@ -210,9 +213,13 @@ jobs:
             --provider AWS
           )
           if [ "$GITOPS_ENGINE" != "None" ]; then
+            if [ -z "${GHCR_USER:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
+              echo "::error::GitOps EKS smoke runs require GHCR write credentials."
+              exit 1
+            fi
             args+=(
               --gitops-engine "$GITOPS_ENGINE"
-              --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests
+              --local-registry "${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/devantler-tech/ksail/system-test-manifests"
             )
           fi
 

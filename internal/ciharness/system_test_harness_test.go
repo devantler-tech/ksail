@@ -76,7 +76,8 @@ type compositeAction struct {
 type ciWorkflow struct {
 	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
-		Steps []harnessStep `yaml:"steps"`
+		Permissions map[string]string `yaml:"permissions"`
+		Steps       []harnessStep     `yaml:"steps"`
 	} `yaml:"jobs"`
 }
 
@@ -118,19 +119,24 @@ func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, found := workflow.Jobs["smoke-test"]
 	require.True(t, found, "smoke-test job is missing")
+	assert.Equal(t, "write", smokeJob.Permissions["packages"])
 
 	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	assert.Equal(t, "${{ github.actor }}", initStep.Env["GHCR_USER"])
+	assert.Equal(t, "${{ github.token }}", initStep.Env["GHCR_TOKEN"])
 	gitopsGuardIndex := strings.Index(
 		initStep.Run,
 		`if [ "$GITOPS_ENGINE" != "None" ]; then`,
 	)
 	registryIndex := strings.Index(
 		initStep.Run,
-		"--local-registry ghcr.io/devantler-tech/ksail/system-test-manifests",
+		"${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/devantler-tech/ksail/system-test-manifests",
 	)
 
 	require.NotEqual(t, -1, gitopsGuardIndex, "GitOps engine guard is missing")
 	require.NotEqual(t, -1, registryIndex, "GitOps registry argument is missing")
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_USER:-}" ]`)
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_TOKEN:-}" ]`)
 
 	gitopsEndIndex := strings.Index(initStep.Run[gitopsGuardIndex:], "\nfi")
 	require.NotEqual(t, -1, gitopsEndIndex, "GitOps engine guard is unterminated")
