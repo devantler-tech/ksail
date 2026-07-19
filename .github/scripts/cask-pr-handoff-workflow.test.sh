@@ -219,12 +219,23 @@ assert_contains 'pulls?state=open&head=' \
 assert_contains 'head.repo.full_name == $full' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	'the checkpoint script must scope matches to the tap-owned devantler PR (full head-repo name)'
+assert_contains 'git/matching-refs/heads/${branch}' \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+	'the checkpoint script must inspect retained evergreen branch refs when no PR is open'
+assert_contains '--force-with-lease="refs/heads/${branch}:${branch_sha}"' \
+	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+	'the checkpoint script must delete terminal branches with an exact-SHA compare-and-swap'
 # The checkpoint script is release-critical: CI must both re-run this suite when it
 # changes and shellcheck it (a filter/shellcheck omission lets it break unnoticed).
 assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.sh'" "${ci_workflow}" \
 	'CI paths filter must trigger the handoff job on checkpoint-script changes'
 if [ "$(grep -Fc -- '.github/scripts/redraft-evergreen-cask-prs.sh' "${ci_workflow}")" -lt 2 ]; then
 	fail 'CI must also shellcheck the checkpoint script, not just path-filter it'
+fi
+assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.test.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on checkpoint-test changes'
+if [ "$(grep -Fc -- '.github/scripts/redraft-evergreen-cask-prs.test.sh' "${ci_workflow}")" -lt 3 ]; then
+	fail 'CI must shellcheck and execute the checkpoint behavior test'
 fi
 assert_contains 'release-asset digest evidence is missing' \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
