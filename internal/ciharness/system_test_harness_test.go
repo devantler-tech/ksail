@@ -73,6 +73,7 @@ type compositeAction struct {
 	} `yaml:"runs"`
 }
 
+//nolint:tagliatelle // GitHub Actions defines this external key in kebab-case.
 type ciWorkflow struct {
 	Jobs map[string]struct {
 		TimeoutMinutes int           `yaml:"timeout-minutes"`
@@ -399,6 +400,7 @@ func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	assert.Less(t, updateIndex, deleteIndex)
 }
 
+//nolint:funlen // One test locks the complete job-budget and credential-refresh contract.
 func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -424,11 +426,13 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	}
 
 	boundedMinutes := 0
+
 	for _, name := range boundedStepNames {
 		step := findHarnessStep(t, smokeJob.Steps, name)
 		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
 		boundedMinutes += step.TimeoutMinutes
 	}
+
 	assert.LessOrEqual(t, boundedMinutes+15, smokeJob.TimeoutMinutes)
 
 	initialCredentials := findHarnessStep(
@@ -464,6 +468,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	for _, name := range boundedStepNames[10:] {
 		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
+
 	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
 }
 
