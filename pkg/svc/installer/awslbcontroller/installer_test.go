@@ -63,7 +63,8 @@ func TestNewInstaller_ServiceAccount(t *testing.T) {
 			description:    "Whitespace-only means unset: the chart keeps creating its own SA",
 		},
 		{
-			name: "rejects invalid service account name", clusterName: "prod-eks",
+			name:           "rejects invalid service account name",
+			clusterName:    "prod-eks",
 			serviceAccount: "Not_A_Valid_SA!",
 			wantErr:        awslbcontrollerinstaller.ErrInvalidServiceAccountName,
 			description:    "A non-DNS-1123-subdomain SA name must fail loud, not reach Helm values",
