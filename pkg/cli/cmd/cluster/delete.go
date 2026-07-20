@@ -429,6 +429,18 @@ func disconnectRegistriesBeforeDelete(
 		distribution = v1alpha1.DistributionTalos
 	}
 
+	// Kind's network is SHARED by every Kind cluster on the host, and
+	// DisconnectRegistriesFromNetwork detaches everything attached to a network without filtering
+	// by cluster — so running it here would sever other, live clusters' registry mirrors. It also
+	// runs before the confirmation prompt, so it would happen even if the user then cancelled.
+	//
+	// Nothing is lost by skipping it: the disconnect exists only because some distributions destroy
+	// their own network during deletion and cannot do so while containers remain attached. Kind
+	// leaves "kind" in place, so there is no network to unblock.
+	if distribution == v1alpha1.DistributionVanilla {
+		return
+	}
+
 	networkName := mirrorregistry.GetNetworkNameForDistribution(
 		distribution,
 		clusterInfo.ClusterName,
