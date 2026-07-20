@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -93,6 +94,13 @@ func TestRebindEKSOwnershipPersistsOnlyAfterExplicitConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "123456789012", ownership.AccountID)
 	assert.Equal(t, immutableIdentityTime(), ownership.CreatedAt)
+	assert.Equal(t, v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "KSAIL_SECRET",
+		SessionTokenEnvVar:    "KSAIL_SESSION",
+	}, ownership.AWSOptions)
 
 	_, err = state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)

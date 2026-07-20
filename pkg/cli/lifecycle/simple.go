@@ -119,6 +119,9 @@ func BindNameAndProviderFlags(
 type ResolvedClusterInfo struct {
 	ClusterName       string
 	ConfigClusterName string
+	// ConfigSource reports that a real ksail.yaml was loaded. Empty AWS option names from a loaded
+	// config deliberately select canonical defaults and must not be overwritten by persisted aliases.
+	ConfigSource bool
 	// EKSConfigSource reports that ConfigClusterName came from an actual loaded eks.yaml, rather
 	// than another distribution config or a synthetic fallback.
 	EKSConfigSource bool
@@ -325,6 +328,7 @@ func resolveFromConfig(
 		return nil
 	}
 
+	resolved.ConfigSource = true
 	resolveClusterIdentityFromConfig(resolved, cfg, distCfg)
 
 	resolved.OmniOpts = cfg.Spec.Provider.Omni

@@ -516,6 +516,7 @@ func captureCreatedEKSIdentity(
 		identityClient,
 		strings.TrimSpace(clusterCtx.EKSConfig.Name),
 		strings.TrimSpace(clusterCtx.EKSConfig.Region),
+		credentials.AWSOptionsWithDefaults(clusterCtx.ClusterCfg.Spec.Provider.AWS),
 	)
 	if err != nil {
 		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
