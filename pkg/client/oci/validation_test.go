@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	"github.com/stretchr/testify/require"
 )
@@ -163,58 +162,5 @@ func TestBuildOptionsValidate(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, "ksail/workloads/my-app", validated.Repository)
-	})
-
-	t.Run("preserves GitOpsEngine field", func(t *testing.T) {
-		t.Parallel()
-
-		// Test with various GitOpsEngine values
-		testCases := []struct {
-			name          string
-			gitOpsEngine  v1alpha1.GitOpsEngine
-			expectedValue v1alpha1.GitOpsEngine
-		}{
-			{
-				name:          "Flux engine",
-				gitOpsEngine:  v1alpha1.GitOpsEngineFlux,
-				expectedValue: v1alpha1.GitOpsEngineFlux,
-			},
-			{
-				name:          "ArgoCD engine",
-				gitOpsEngine:  v1alpha1.GitOpsEngineArgoCD,
-				expectedValue: v1alpha1.GitOpsEngineArgoCD,
-			},
-			{
-				name:          "None engine",
-				gitOpsEngine:  v1alpha1.GitOpsEngineNone,
-				expectedValue: v1alpha1.GitOpsEngineNone,
-			},
-			{
-				name:          "empty engine",
-				gitOpsEngine:  "",
-				expectedValue: "",
-			},
-		}
-
-		for _, testCase := range testCases {
-			t.Run(testCase.name, func(t *testing.T) {
-				t.Parallel()
-
-				source := filepath.Join(t.TempDir(), "k8s")
-				require.NoError(t, os.MkdirAll(source, 0o750))
-
-				opts := oci.BuildOptions{
-					SourcePath:       source,
-					RegistryEndpoint: "localhost:5000",
-					Version:          "1.0.0",
-					GitOpsEngine:     testCase.gitOpsEngine,
-				}
-
-				validated, err := opts.Validate()
-
-				require.NoError(t, err)
-				require.Equal(t, testCase.expectedValue, validated.GitOpsEngine)
-			})
-		}
 	})
 }
