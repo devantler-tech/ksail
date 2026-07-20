@@ -41,6 +41,22 @@ func filterRegistriesByClusterName(
 // called "<name>-local-registry" is therefore proof that a cluster called "<name>" exists.
 const localRegistrySuffix = "-local-registry"
 
+// withRegistryManager runs action against a registry manager built from the Docker client.
+func withRegistryManager(
+	cmd *cobra.Command,
+	cleanupDeps CleanupDependencies,
+	action func(*dockerclient.RegistryManager) error,
+) error {
+	return cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
+		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
+		if mgrErr != nil {
+			return fmt.Errorf("create registry manager: %w", mgrErr)
+		}
+
+		return action(registryMgr)
+	})
+}
+
 // attributeRegistriesToCluster returns the registries that belong to clusterName, resolving the
 // ambiguity inherent in KSail's registry naming.
 //
@@ -175,36 +191,35 @@ func DiscoverRegistriesToDisconnect(
 
 	var registries []dockerclient.RegistryInfo
 
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("create registry manager: %w", mgrErr)
-		}
-
-		// The full host list is what makes attribution possible; the network list is what is
-		// actually attached.
-		all, listErr := registryMgr.ListAllRegistries(cmd.Context())
-		if listErr != nil {
-			return fmt.Errorf("list registries: %w", listErr)
-		}
-
-		onNetwork, netErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
-		if netErr != nil {
-			return fmt.Errorf("list registries on network: %w", netErr)
-		}
-
-		otherClusters := knownClustersExcept(all, clusterName)
-
-		for _, reg := range onNetwork {
-			if !reg.IsKSailOwned || belongsToAnyCluster(reg.Name, otherClusters) {
-				continue
+	err := withRegistryManager(
+		cmd,
+		cleanupDeps,
+		func(registryMgr *dockerclient.RegistryManager) error {
+			// The full host list is what makes attribution possible; the network list is what is
+			// actually attached.
+			all, listErr := registryMgr.ListAllRegistries(cmd.Context())
+			if listErr != nil {
+				return fmt.Errorf("list registries: %w", listErr)
 			}
 
-			registries = append(registries, reg)
-		}
+			onNetwork, netErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+			if netErr != nil {
+				return fmt.Errorf("list registries on network: %w", netErr)
+			}
 
-		return nil
-	})
+			otherClusters := knownClustersExcept(all, clusterName)
+
+			for _, reg := range onNetwork {
+				if !reg.IsKSailOwned || belongsToAnyCluster(reg.Name, otherClusters) {
+					continue
+				}
+
+				registries = append(registries, reg)
+			}
+
+			return nil
+		},
+	)
 	if err != nil {
 		cmd.PrintErrf(
 			"Warning: failed to discover registries to disconnect from %q: %v\n",
@@ -278,21 +293,20 @@ func discoverRegistries(
 ) *DiscoveredRegistries {
 	var registries []dockerclient.RegistryInfo
 
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("create registry manager: %w", mgrErr)
-		}
+	err := withRegistryManager(
+		cmd,
+		cleanupDeps,
+		func(registryMgr *dockerclient.RegistryManager) error {
+			discovered, listErr := list(registryMgr)
+			if listErr != nil {
+				return listErr
+			}
 
-		discovered, listErr := list(registryMgr)
-		if listErr != nil {
-			return listErr
-		}
+			registries = narrow(discovered, clusterName)
 
-		registries = narrow(discovered, clusterName)
-
-		return nil
-	})
+			return nil
+		},
+	)
 	if err != nil {
 		cmd.PrintErrf("Warning: failed to discover registries %s: %v\n", subject, err)
 	}
