@@ -409,8 +409,36 @@ func discoverRegistriesBeforeDelete(
 		cmd,
 		distribution,
 		clusterInfo.ClusterName,
+		otherClusterNames(cmd.Context(), clusterInfo.ClusterName),
 		cleanupDeps,
 	)
+}
+
+// otherClusterNames lists the clusters that currently exist besides this one.
+//
+// Registry names cannot say which cluster owns them — "foo-bar-ghcr.io" fits both "foo" and
+// "foo-bar" — and on a shared network the wrong answer deletes a live cluster's mirrors. Asking
+// the discoverer which clusters actually exist replaces that guess with a fact.
+//
+// Deliberately NOT inferred from registry names: a cluster "foo" with a mirror host called
+// "bar-local-registry" produces a container named "foo-bar-local-registry", which no naming rule
+// can distinguish from a cluster "foo-bar". Mirror hosts are user-configurable, so only node
+// containers are trustworthy evidence that a cluster is real.
+//
+// Best-effort by design. An incomplete discovery yields a shorter list, which can only widen the
+// prefix match back toward the pre-existing behaviour — never past it.
+func otherClusterNames(ctx context.Context, clusterName string) []string {
+	managed, _ := discoverManagedClusters(ctx)
+
+	others := make([]string, 0, len(managed))
+
+	for name := range managed {
+		if name != clusterName {
+			others = append(others, name)
+		}
+	}
+
+	return others
 }
 
 // disconnectRegistriesBeforeDelete disconnects registries from the cluster network.
@@ -627,6 +655,7 @@ func cleanupRegistriesAfterDelete(
 			distribution,
 			resolved.ClusterName,
 			deleteStorage,
+			otherClusterNames(cmd.Context(), resolved.ClusterName),
 			cleanupDeps,
 		)
 	}

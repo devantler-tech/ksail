@@ -32,7 +32,6 @@ func names(registries []dockerclient.RegistryInfo) []string {
 func TestFilterRegistriesByClusterName_DoesNotClaimAnotherClustersRegistries(t *testing.T) {
 	t.Parallel()
 
-	// Both clusters are live on the shared network, and each has its own local registry.
 	onNetwork := []dockerclient.RegistryInfo{
 		reg("foo-local-registry"),
 		reg("foo-ghcr.io"),
@@ -40,33 +39,40 @@ func TestFilterRegistriesByClusterName_DoesNotClaimAnotherClustersRegistries(t *
 		reg("foo-bar-ghcr.io"),
 	}
 
-	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo")
+	// "foo-bar" is a real cluster, as reported by cluster discovery.
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{"foo-bar"})
 
 	assert.ElementsMatch(t, []string{"foo-local-registry", "foo-ghcr.io"}, names(got),
 		"tearing down foo must take only foo's registries; foo-bar is a live cluster")
 
 	// And the longer-named cluster still gets everything of its own.
-	gotBar := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo-bar")
+	gotBar := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo-bar", []string{"foo"})
 
 	assert.ElementsMatch(t, []string{"foo-bar-local-registry", "foo-bar-ghcr.io"}, names(gotBar),
-		"tearing down foo-bar must still find its own registries")
+		"tearing down foo-bar must still find its own; a SHORTER rival never claims them")
 }
 
-// TestFilterRegistriesByClusterName_KeepsAmbiguousNameWhenNoRivalExists verifies the narrowing
-// does not over-correct: with no cluster "foo-bar" present, "foo-bar-ghcr.io" really is cluster
-// "foo" with a host called "bar-ghcr.io", and must still be cleaned up.
-func TestFilterRegistriesByClusterName_KeepsAmbiguousNameWhenNoRivalExists(t *testing.T) {
+// TestFilterRegistriesByClusterName_KeepsRegistriesWhenNoRivalCluster verifies the narrowing does
+// not over-correct, and is why the rival set comes from cluster discovery rather than from names.
+//
+// A cluster "foo" may legitimately configure a mirror host called "bar-local-registry", producing
+// a container "foo-bar-local-registry" that LOOKS like evidence of a cluster "foo-bar". No such
+// cluster exists, so those registries are foo's and must be cleaned up rather than orphaned.
+func TestFilterRegistriesByClusterName_KeepsRegistriesWhenNoRivalCluster(t *testing.T) {
 	t.Parallel()
 
 	onNetwork := []dockerclient.RegistryInfo{
 		reg("foo-local-registry"),
+		reg("foo-bar-local-registry"),
 		reg("foo-bar-ghcr.io"),
 	}
 
-	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo")
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{})
 
-	assert.ElementsMatch(t, []string{"foo-local-registry", "foo-bar-ghcr.io"}, names(got),
-		"no cluster foo-bar exists, so the registry belongs to foo and must not be orphaned")
+	assert.ElementsMatch(t,
+		[]string{"foo-local-registry", "foo-bar-local-registry", "foo-bar-ghcr.io"},
+		names(got),
+		"no cluster foo-bar exists, so these are foo's mirrors and must not be left behind")
 }
 
 // TestFilterRegistriesByClusterName_IgnoresUnrelatedClusters keeps the ordinary case honest.
@@ -79,7 +85,7 @@ func TestFilterRegistriesByClusterName_IgnoresUnrelatedClusters(t *testing.T) {
 		reg("beta-quay.io"),
 	}
 
-	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "beta")
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "beta", []string{"alpha"})
 
 	assert.ElementsMatch(t, []string{"beta-local-registry", "beta-quay.io"}, names(got))
 }

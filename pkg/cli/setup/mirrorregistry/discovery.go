@@ -15,10 +15,6 @@ type DiscoveredRegistries struct {
 	Registries []dockerclient.RegistryInfo
 }
 
-// localRegistrySuffix is the fixed tail of a cluster's local-registry container name, so a
-// container called "<name>-local-registry" is evidence that a cluster called "<name>" exists.
-const localRegistrySuffix = "-local-registry"
-
 // filterRegistriesByClusterName filters registries to only include those belonging to a specific cluster.
 // Registry names follow the pattern "{clusterName}-{host}" (e.g., "my-cluster-ghcr.io").
 //
@@ -27,28 +23,25 @@ const localRegistrySuffix = "-local-registry"
 // on a network several clusters share — every Kind cluster sits on "kind" — because the caller
 // then DELETES what this returns. Deleting "foo" would take a live "foo-bar" cluster's mirrors.
 //
-// So a candidate is dropped when some longer cluster name, evidenced by its own local-registry
-// container in this same set, also prefixes it. That is a narrowing step: it can only ever remove
-// entries a bare prefix test would have returned, never add one.
+// otherClusters resolves that: it is the set of clusters that DEMONSTRABLY EXIST, discovered from
+// their node containers rather than inferred from registry names, and a candidate claimed by a
+// longer name in that set is left alone. Passing an empty set restores the plain prefix behaviour.
 //
-// It is not exact ownership. A cluster with mirror registries but no local registry announces
-// nothing, so its mirrors can still be misattributed — see #6294, which adds an owning-cluster
-// label and makes this decidable.
+// Deriving rivals from names instead would misfire on a legitimate configuration: a cluster "foo"
+// with a mirror host called "bar-local-registry" produces a container "foo-bar-local-registry",
+// which reads as a cluster "foo-bar" that does not exist — and its own mirrors would then be
+// skipped and leaked. Mirror hosts are user-configurable, so no name pattern is a safe existence
+// marker.
+//
+// This narrows: it only ever removes entries the plain prefix test would have returned, never adds
+// one. It is still not exact ownership — #6294 adds an owning-cluster label for that.
 func filterRegistriesByClusterName(
 	registries []dockerclient.RegistryInfo,
 	clusterName string,
+	otherClusters []string,
 ) []dockerclient.RegistryInfo {
 	if clusterName == "" {
 		return registries
-	}
-
-	otherClusters := make([]string, 0, len(registries))
-
-	for _, reg := range registries {
-		name, ok := strings.CutSuffix(reg.Name, localRegistrySuffix)
-		if ok && len(name) > len(clusterName) {
-			otherClusters = append(otherClusters, name)
-		}
 	}
 
 	prefix := clusterName + "-"
@@ -59,7 +52,7 @@ func filterRegistriesByClusterName(
 			continue
 		}
 
-		if claimedByLongerCluster(reg.Name, otherClusters) {
+		if claimedByLongerCluster(reg.Name, clusterName, otherClusters) {
 			continue
 		}
 
@@ -69,10 +62,10 @@ func filterRegistriesByClusterName(
 	return filtered
 }
 
-// claimedByLongerCluster reports whether a longer, demonstrably-existing cluster owns this registry.
-func claimedByLongerCluster(registryName string, otherClusters []string) bool {
+// claimedByLongerCluster reports whether an existing cluster with a longer name owns this registry.
+func claimedByLongerCluster(registryName, clusterName string, otherClusters []string) bool {
 	for _, other := range otherClusters {
-		if strings.HasPrefix(registryName, other+"-") {
+		if len(other) > len(clusterName) && strings.HasPrefix(registryName, other+"-") {
 			return true
 		}
 	}
@@ -87,6 +80,7 @@ func DiscoverRegistriesByNetwork(
 	cmd *cobra.Command,
 	distribution v1alpha1.Distribution,
 	clusterName string,
+	otherClusters []string,
 	cleanupDeps CleanupDependencies,
 ) *DiscoveredRegistries {
 	networkName := GetNetworkNameForDistribution(distribution, clusterName)
@@ -104,7 +98,7 @@ func DiscoverRegistriesByNetwork(
 			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
-		registries = filterRegistriesByClusterName(discovered, clusterName)
+		registries = filterRegistriesByClusterName(discovered, clusterName, otherClusters)
 
 		return nil
 	})
