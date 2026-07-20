@@ -10,6 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +19,12 @@ import (
 )
 
 var errIdentityQuery = errors.New("identity query failed")
+
+// captureAWSOptions is the canonical default mapping used by Capture call sites that do not
+// exercise custom credential variables.
+func captureAWSOptions() v1alpha1.OptionsAWS {
+	return credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{})
+}
 
 type fakeClient struct {
 	accountID     string
@@ -50,7 +58,7 @@ func TestCapturePersistsImmutableEKSIdentity(t *testing.T) {
 	}
 
 	got, err := eksidentity.Capture(
-		t.Context(), client, "capture-identity", "eu-north-1",
+		t.Context(), client, "capture-identity", "eu-north-1", captureAWSOptions(),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "123456789012", got.AccountID)
@@ -93,7 +101,9 @@ func TestCaptureClearsStaleNodegroupCapacityState(t *testing.T) {
 		),
 	}
 
-	_, err := eksidentity.Capture(t.Context(), client, clusterName, "eu-north-1")
+	_, err := eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
 	require.NoError(t, err)
 
 	_, err = state.LoadEKSNodegroupState(clusterName, "eu-north-1")
@@ -128,7 +138,9 @@ func TestCaptureFailsClosedWhenNodegroupCapacityStateCannotBeCleared(t *testing.
 		),
 	}
 
-	_, err = eksidentity.Capture(t.Context(), client, clusterName, "eu-north-1")
+	_, err = eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
 	require.ErrorContains(t, err, "clear stale EKS nodegroup capacity state")
 
 	_, loadErr := state.LoadEKSOwnershipState(clusterName, "eu-north-1")
@@ -278,6 +290,7 @@ func persistOwnership(t *testing.T, clusterName string, createdAt time.Time) {
 			AccountID:   accountID,
 			ClusterARN:  "arn:aws:eks:eu-north-1:" + accountID + ":cluster/" + clusterName,
 			CreatedAt:   createdAt,
+			AWSOptions:  captureAWSOptions(),
 		},
 	))
 }

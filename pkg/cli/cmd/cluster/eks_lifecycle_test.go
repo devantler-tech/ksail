@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
@@ -678,6 +679,170 @@ func TestStandaloneEKSStartAcceptsPersistedOwnershipWithoutConfig(t *testing.T) 
 		},
 		readStandaloneEKSCalls(t, markerPath),
 	)
+}
+
+// setCustomAWSMappingEnvironment points the custom KSAIL_* variables at the values the eksctl
+// fixture demands, while every canonical AWS_* variable holds a decoy. A run that resolves through
+// the default mapping therefore hands eksctl the ambient values and the fixture rejects it.
+func setCustomAWSMappingEnvironment(t *testing.T, region string) {
+	t.Helper()
+
+	t.Setenv("KSAIL_PROFILE", "selected-profile")
+	t.Setenv("KSAIL_REGION", region)
+	t.Setenv("KSAIL_ACCESS", "fixture-access")
+	t.Setenv("KSAIL_SECRET", "fixture-secret")
+	t.Setenv("KSAIL_SESSION", "fixture-session")
+	t.Setenv("AWS_PROFILE", "ambient-profile")
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-session")
+}
+
+// TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState verifies a no-config
+// lifecycle command uses the same custom AWS environment-variable names captured at creation.
+func TestStandaloneEKSStartRestoresCustomAWSMappingsFromOwnershipState(t *testing.T) {
+	const (
+		clusterName = "ksail-eks-start-state-custom-mappings-6227"
+		region      = "ap-southeast-2"
+	)
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	binDir := t.TempDir()
+	markerPath := filepath.Join(t.TempDir(), "eksctl-calls")
+	writeExecutableFixture(t, filepath.Join(binDir, "eksctl"), standaloneEKSEksctlFixture)
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("KSAIL_EKSCTL_MARKER", markerPath)
+	t.Setenv("KSAIL_EKS_CLUSTER", clusterName)
+	setCustomAWSMappingEnvironment(t, region)
+	t.Setenv("KUBECONFIG", filepath.Join(workingDir, "kubeconfig"))
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+	writeStandaloneEKSKubeconfig(t, clusterName, region)
+	configureStandaloneEKSIdentityInRegion(t, clusterName, region)
+
+	ownership, err := state.LoadEKSOwnershipState(clusterName, region)
+	require.NoError(t, err)
+
+	ownership.AWSOptions = v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "KSAIL_SECRET",
+		SessionTokenEnvVar:    "KSAIL_SESSION",
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+
+	cmd := cluster.NewStartCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(
+		t,
+		standaloneEKSLifecycleCases()[1].expectedCalls(clusterName),
+		readStandaloneEKSCalls(t, markerPath),
+	)
+	assert.Equal(t, "ambient-profile", os.Getenv("AWS_PROFILE"))
+	assert.Equal(t, "us-east-1", os.Getenv("AWS_REGION"))
+	assert.Equal(t, "ambient-access", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Equal(t, "ambient-secret", os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	assert.Equal(t, "ambient-session", os.Getenv("AWS_SESSION_TOKEN"))
+}
+
+// TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError proves a record predating the
+// awsOptions schema does not surface an opaque restore failure. The actionable error — the one
+// naming the rebind command — belongs to eksidentity.NewVerifier, so the restore step must decline
+// quietly rather than shadow it. The command still fails closed downstream.
+func TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError(t *testing.T) {
+	const (
+		clusterName = "legacy-defers-to-verifier-6270"
+		region      = "eu-north-1"
+	)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	legacy := fmt.Sprintf(`{
+  "version": %d,
+  "clusterName": %q,
+  "region": %q,
+  "accountId": "123456789012",
+  "clusterArn": "arn:aws:eks:%s:123456789012:cluster/%s",
+  "createdAt": "2026-07-18T12:00:00Z"
+}`, state.EKSOwnershipStateVersion, clusterName, region, region, clusterName)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "eks-ownership-"+region+".json"),
+		[]byte(legacy),
+		0o600,
+	))
+
+	resolved := &lifecycle.ResolvedClusterInfo{ClusterName: clusterName, AWSRegion: region}
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
+	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
+}
+
+func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	resolved := &lifecycle.ResolvedClusterInfo{
+		ClusterName:  "loaded-config-keeps-defaults-6270",
+		ConfigSource: true,
+		AWSRegion:    "eu-north-1",
+	}
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
+	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
+}
+
+func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
+	const (
+		clusterName = "state-region-alias-6270"
+		region      = "ap-southeast-2"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_REGION", region)
+	ownership := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Now().UTC(),
+		//nolint:gosec // G101: these are environment-variable names, never credential values.
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+		},
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+
+	resolved := &lifecycle.ResolvedClusterInfo{ClusterName: clusterName}
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Equal(t, region, resolved.AWSRegion)
+	assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar)
+	assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar)
 }
 
 // TestEKSMutationCommandsRejectNameOverrideMismatch proves create and update cannot claim a name
