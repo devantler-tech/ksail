@@ -9,10 +9,10 @@ import (
 
 // DisconnectRegistriesByInfo disconnects only the given registries from a network.
 //
-// Prefer this over DisconnectRegistriesFromNetwork whenever the caller knows which registries
-// belong to the cluster it is tearing down. Some networks are SHARED between clusters — every
-// Kind cluster sits on the single "kind" network — so disconnecting everything on the network
-// severs registries belonging to other, live clusters.
+// Disconnecting everything attached to a network is not safe here: some networks are SHARED
+// between clusters — every Kind cluster sits on the single "kind" network — so a network-wide
+// disconnect severs registries belonging to other, live clusters. Callers therefore pass the
+// registries they have already scoped to the cluster being torn down.
 func DisconnectRegistriesByInfo(
 	cmd *cobra.Command,
 	networkName string,
@@ -33,32 +33,6 @@ func DisconnectRegistriesByInfo(
 			// Best-effort per registry: one that is already gone or never connected must not
 			// stop the rest from being disconnected before the network is destroyed.
 			_ = registryMgr.DisconnectFromNetwork(cmd.Context(), reg.Name, networkName)
-		}
-
-		return nil
-	})
-}
-
-// DisconnectRegistriesFromNetwork disconnects all registries from a network.
-// This is used for Talos which needs registries disconnected BEFORE cluster deletion.
-func DisconnectRegistriesFromNetwork(
-	cmd *cobra.Command,
-	networkName string,
-	cleanupDeps CleanupDependencies,
-) error {
-	return cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-		}
-
-		_, disconnectErr := registryMgr.DisconnectAllFromNetwork(cmd.Context(), networkName)
-		if disconnectErr != nil {
-			return fmt.Errorf(
-				"failed to disconnect registries from network %s: %w",
-				networkName,
-				disconnectErr,
-			)
 		}
 
 		return nil
