@@ -188,15 +188,20 @@ type remnantCase struct {
 	reason    string
 }
 
-func remnantCases() []remnantCase {
-	ksailOwned := func(name string) container.Summary {
-		return container.Summary{
-			ID:     name,
-			Names:  []string{"/" + name},
-			Labels: map[string]string{dockerpkg.RegistryLabelKey: name},
-		}
+func ksailOwned(name string) container.Summary {
+	return container.Summary{
+		ID:     name,
+		Names:  []string{"/" + name},
+		Labels: map[string]string{dockerpkg.RegistryLabelKey: name},
 	}
+}
 
+// remnantCases covers what does and does not count as evidence. The false cases are the safety
+// property: each one is a way the remnant exception could otherwise authorise touching containers
+// it has no business touching.
+//
+//nolint:funlen // One table of scenarios reads better whole than split across helpers.
+func remnantCases() []remnantCase {
 	return []remnantCase{
 		{
 			name:      "ksail-owned registry for this cluster is evidence",
@@ -241,6 +246,35 @@ func remnantCases() []remnantCase {
 			summaries: []container.Summary{ksailOwned("spike-local-registry")},
 			want:      false,
 			reason:    "only the Docker provider creates these containers",
+		},
+		{
+			// Registry names are "<cluster>-<host>", so "foo-bar-docker.io" is ambiguous:
+			// cluster "foo" with host "bar-docker.io", or cluster "foo-bar" with host
+			// "docker.io"? A prefix test claims it for BOTH. Here "foo-bar" demonstrably
+			// exists — it has its own local registry — so the registries are its, and
+			// tearing down "foo" must not touch them.
+			name:     "another cluster's longer name is NOT evidence for this one",
+			cluster:  "foo",
+			provider: v1alpha1.ProviderDocker,
+			summaries: []container.Summary{
+				ksailOwned("foo-bar-local-registry"),
+				ksailOwned("foo-bar-docker.io"),
+			},
+			want:   false,
+			reason: "those registries belong to the live cluster foo-bar, not to foo",
+		},
+		{
+			// The same shape, but no cluster "foo-bar" exists, so "foo-bar-docker.io" really
+			// is cluster "foo" with host "bar-docker.io" and must still be recognised.
+			name:     "an unclaimed longer-looking name IS this cluster's",
+			cluster:  "foo",
+			provider: v1alpha1.ProviderDocker,
+			summaries: []container.Summary{
+				ksailOwned("foo-local-registry"),
+				ksailOwned("foo-bar-docker.io"),
+			},
+			want:   true,
+			reason: "no cluster foo-bar exists, so the registry is foo's",
 		},
 	}
 }

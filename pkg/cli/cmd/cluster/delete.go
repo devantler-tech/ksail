@@ -417,12 +417,8 @@ func discoverRegistriesBeforeDelete(
 func disconnectRegistriesBeforeDelete(
 	cmd *cobra.Command,
 	clusterInfo *clusterdetector.Info,
-	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	_ *mirrorregistry.DiscoveredRegistries,
 ) {
-	if preDiscovered == nil || len(preDiscovered.Registries) == 0 {
-		return
-	}
-
 	cleanupDeps := getCleanupDeps()
 
 	// Resolve the distribution-specific network name
@@ -436,16 +432,25 @@ func disconnectRegistriesBeforeDelete(
 		clusterInfo.ClusterName,
 	)
 
-	// Disconnect only THIS cluster's registries. The Kind network ("kind") is shared by every
-	// Kind cluster on the host, so disconnecting everything attached to it would sever the
-	// registries of other, live clusters — and this runs before the confirmation prompt, so it
-	// would happen even when the user then cancels the delete.
+	// Selected by NETWORK MEMBERSHIP, not by name: a local mirror endpoint configured without a
+	// prefix keeps its bare name, so a name-scoped filter would skip it and leave the network
+	// populated — which then blocks the distribution from deleting that network.
+	//
+	// Registries attributable to another cluster are still excluded, because the Kind network is
+	// shared by every Kind cluster on the host and this runs before the confirmation prompt.
 	//
 	// Errors are ignored: a registry may already be gone or never connected.
+	toDisconnect := mirrorregistry.DiscoverRegistriesToDisconnect(
+		cmd,
+		distribution,
+		clusterInfo.ClusterName,
+		cleanupDeps,
+	)
+
 	_ = mirrorregistry.DisconnectRegistriesByInfo(
 		cmd,
 		networkName,
-		preDiscovered.Registries,
+		toDisconnect.Registries,
 		cleanupDeps,
 	)
 }
@@ -666,15 +671,33 @@ func handleUnmanagedDeleteTarget(
 		return guardErr
 	}
 
+	remnant := clusterRegistryRemnant(cmd, resolved)
+
 	notify.WriteMessage(notify.Message{
 		Type: notify.WarningType,
 		Content: "cluster " + resolved.ClusterName +
 			" is not a KSail-managed cluster, but KSail-created registry containers for it are " +
-			"still running; removing only those containers",
+			"still running; only those containers will be removed",
 		Writer: cmd.OutOrStdout(),
 	})
 
+	// Removing containers (and, with --delete-storage, their volumes) is destructive, so it needs
+	// the same consent as every other delete path. Returning early from the guard must not become
+	// a way to skip the prompt.
+	err := confirmAndReverifyDeleteTarget(cmd, flags, resolved, remnant, false)
+	if err != nil {
+		return err
+	}
+
 	cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, nil)
+
+	// Fail loudly when the cleanup did not actually clean up. Reporting success while the
+	// containers and their host ports survive is precisely the defect this command is being
+	// fixed for (#6286) — it must not reappear as the exit status of the fix.
+	leftover := clusterRegistryRemnant(cmd, resolved)
+	if len(leftover.Registries) > 0 {
+		return fmt.Errorf("%w: %s", errRegistryRemnantSurvived, registryNames(leftover))
+	}
 
 	// KSail's own bookkeeping for this name goes with the containers. Left behind,
 	// ~/.ksail/clusters/<name>/spec.json and ttl.json are inherited by the next cluster created
@@ -728,6 +751,38 @@ func executeDeleteTolerantOfMissingNodes(
 	return nil
 }
 
+// errRegistryRemnantSurvived reports that registry cleanup finished without removing everything.
+var errRegistryRemnantSurvived = errors.New("registry containers could not be removed")
+
+// registryNames renders a discovered set as a stable, comma-separated list.
+func registryNames(d *mirrorregistry.DiscoveredRegistries) string {
+	names := make([]string, 0, len(d.Registries))
+	for _, reg := range d.Registries {
+		names = append(names, reg.Name)
+	}
+
+	sort.Strings(names)
+
+	return strings.Join(names, ", ")
+}
+
+// clusterRegistryRemnant returns the KSail-owned registry containers attributed to this cluster.
+// Docker-provider only: no other provider creates them.
+func clusterRegistryRemnant(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) *mirrorregistry.DiscoveredRegistries {
+	if resolved.Provider != v1alpha1.ProviderDocker {
+		return &mirrorregistry.DiscoveredRegistries{}
+	}
+
+	return mirrorregistry.DiscoverClusterRegistryRemnant(
+		cmd,
+		resolved.ClusterName,
+		getCleanupDeps(),
+	)
+}
+
 // hasClusterRegistryRemnant reports whether KSail-owned registry containers for this cluster are
 // still running. It is the evidence that KSail provisioned the cluster even after every node
 // container is gone, and it never consults a Docker network (which a teardown may have destroyed).
@@ -737,17 +792,7 @@ func hasClusterRegistryRemnant(
 	cmd *cobra.Command,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) bool {
-	if resolved.Provider != v1alpha1.ProviderDocker {
-		return false
-	}
-
-	remnant := mirrorregistry.DiscoverClusterRegistryRemnant(
-		cmd,
-		resolved.ClusterName,
-		getCleanupDeps(),
-	)
-
-	return len(remnant.Registries) > 0
+	return len(clusterRegistryRemnant(cmd, resolved).Registries) > 0
 }
 
 // reportRegistryLeftovers names any KSail-owned registry container that survived cleanup.
