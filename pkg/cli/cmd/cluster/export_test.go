@@ -64,6 +64,11 @@ func ExportAWSProviderStatus(
 	return awsProviderStatus(ctx, client, clusterName, region, opts...)
 }
 
+// ExportRestorePersistedAWSOptions exposes persisted AWS option restoration for focused tests.
+func ExportRestorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
+	return restorePersistedAWSOptions(resolved)
+}
+
 // ErrProviderNotConfigured exports errProviderNotConfigured for testing.
 var ErrProviderNotConfigured = errProviderNotConfigured
 
