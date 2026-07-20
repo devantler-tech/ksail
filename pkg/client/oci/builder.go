@@ -25,11 +25,6 @@ type BuildOptions struct {
 	Repository string
 	// Version is the artifact tag (required, can be any non-empty string such as "dev", "latest", or a semantic version).
 	Version string
-	// GitOpsEngine specifies the GitOps engine for which to optimize the artifact structure.
-	// When set to GitOpsEngineFlux, files are placed at the root.
-	// When set to GitOpsEngineArgoCD, files are placed under a prefix directory.
-	// When empty or GitOpsEngineNone, files are placed at both locations for compatibility (default).
-	GitOpsEngine v1alpha1.GitOpsEngine
 	// Username is the optional username for registry authentication.
 	// When provided with Password, enables basic authentication for the registry push.
 	Username string
@@ -52,8 +47,6 @@ type ValidatedBuildOptions struct {
 	Repository string
 	// Version is the validated version string.
 	Version string
-	// GitOpsEngine specifies the target GitOps engine for artifact structure optimization.
-	GitOpsEngine v1alpha1.GitOpsEngine
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
@@ -81,8 +74,6 @@ type EmptyBuildOptions struct {
 	Repository string
 	// Version is the artifact tag (required, can be any non-empty string such as "dev", "latest", or a semantic version).
 	Version string
-	// GitOpsEngine specifies the GitOps engine for which to optimize the artifact structure.
-	GitOpsEngine v1alpha1.GitOpsEngine
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
@@ -102,8 +93,6 @@ type ValidatedEmptyBuildOptions struct {
 	Repository string
 	// Version is the validated version string.
 	Version string
-	// GitOpsEngine specifies the target GitOps engine for artifact structure optimization.
-	GitOpsEngine v1alpha1.GitOpsEngine
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.

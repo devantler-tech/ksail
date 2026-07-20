@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,40 +194,6 @@ func TestBuildOptionsValidate_RepositoryNameNormalization(t *testing.T) {
 			}
 
 			assert.Equal(t, expectedRepository, validated.Repository)
-		})
-	}
-}
-
-// TestBuildOptionsValidate_GitOpsEnginePreserved verifies that GitOpsEngine
-// field values are preserved through validation.
-func TestBuildOptionsValidate_GitOpsEnginePreserved(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	testFile := filepath.Join(dir, "test.yaml")
-	require.NoError(t, os.WriteFile(testFile, []byte("apiVersion: v1"), 0o600))
-
-	engines := []v1alpha1.GitOpsEngine{
-		v1alpha1.GitOpsEngineFlux,
-		v1alpha1.GitOpsEngineArgoCD,
-		v1alpha1.GitOpsEngineNone,
-	}
-
-	for _, engine := range engines {
-		t.Run(string(engine), func(t *testing.T) {
-			t.Parallel()
-
-			opts := oci.BuildOptions{
-				SourcePath:       dir,
-				RegistryEndpoint: "localhost:5000",
-				Version:          "v1.0.0",
-				Repository:       "test",
-				GitOpsEngine:     engine,
-			}
-
-			validated, err := opts.Validate()
-			require.NoError(t, err)
-			assert.Equal(t, engine, validated.GitOpsEngine)
 		})
 	}
 }
