@@ -282,7 +282,7 @@ func prepareDockerDeletion(
 	}
 
 	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	disconnectRegistriesBeforeDelete(cmd, clusterInfo)
+	disconnectRegistriesBeforeDelete(cmd, clusterInfo, preDiscovered)
 
 	return preDiscovered
 }
@@ -448,7 +448,12 @@ func otherClusterNames(ctx context.Context, clusterName string) []string {
 func disconnectRegistriesBeforeDelete(
 	cmd *cobra.Command,
 	clusterInfo *clusterdetector.Info,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
 ) {
+	if preDiscovered == nil || len(preDiscovered.Registries) == 0 {
+		return
+	}
+
 	cleanupDeps := getCleanupDeps()
 
 	// Resolve the distribution-specific network name
@@ -457,26 +462,27 @@ func disconnectRegistriesBeforeDelete(
 		distribution = v1alpha1.DistributionTalos
 	}
 
-	// Kind's network is SHARED by every Kind cluster on the host, and
-	// DisconnectRegistriesFromNetwork detaches everything attached to a network without filtering
-	// by cluster — so running it here would sever other, live clusters' registry mirrors. It also
-	// runs before the confirmation prompt, so it would happen even if the user then cancelled.
-	//
-	// Nothing is lost by skipping it: the disconnect exists only because some distributions destroy
-	// their own network during deletion and cannot do so while containers remain attached. Kind
-	// leaves "kind" in place, so there is no network to unblock.
-	if distribution == v1alpha1.DistributionVanilla {
-		return
-	}
-
 	networkName := mirrorregistry.GetNetworkNameForDistribution(
 		distribution,
 		clusterInfo.ClusterName,
 	)
 
-	// Silently disconnect registries - errors are ignored since the cluster
-	// may not have any registries connected, or the network may not exist
-	_ = mirrorregistry.DisconnectRegistriesFromNetwork(cmd, networkName, cleanupDeps)
+	// Detach only THIS cluster's registries — the set already discovered and narrowed for it.
+	//
+	// Detaching everything on the network is unsafe because a network name does not identify one
+	// cluster. Kind's "kind" is shared by every Kind cluster outright, and the generated names
+	// collide across distributions too: cluster names may contain hyphens, so a K3d cluster "foo"
+	// and a Talos cluster "k3d-foo" both resolve to "k3d-foo" (likewise "kwok-" prefixed names).
+	// Detaching a bystander's registries would break a live cluster — and this runs before the
+	// confirmation prompt, so it would happen even if the user then cancelled.
+	//
+	// Errors are ignored: a registry may already be gone or never have been connected.
+	_ = mirrorregistry.DisconnectRegistriesByInfo(
+		cmd,
+		networkName,
+		preDiscovered.Registries,
+		cleanupDeps,
+	)
 }
 
 // buildDeletionPreview builds a preview of resources that will be deleted.
