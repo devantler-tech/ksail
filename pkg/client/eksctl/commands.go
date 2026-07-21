@@ -54,33 +54,30 @@ type NodegroupSummary struct {
 }
 
 // CreateCluster invokes `eksctl create cluster -f <configPath>`.
-// Pass "" for region unless overriding what the config file specifies.
-func (c *Client) CreateCluster(ctx context.Context, configPath, region string) error {
-	return c.createCluster(ctx, configPath, region, "")
+// The retained region parameter is ignored because eksctl requires the config
+// file to be the sole region source for config-driven creates.
+func (c *Client) CreateCluster(ctx context.Context, configPath, _ string) error {
+	return c.createCluster(ctx, configPath, "")
 }
 
 // CreateClusterWithKubeconfig invokes eksctl create while pinning the output
 // kubeconfig path used by subsequent KSail setup.
 func (c *Client) CreateClusterWithKubeconfig(
 	ctx context.Context,
-	configPath, region, kubeconfigPath string,
+	configPath, _, kubeconfigPath string,
 ) error {
-	return c.createCluster(ctx, configPath, region, kubeconfigPath)
+	return c.createCluster(ctx, configPath, kubeconfigPath)
 }
 
 func (c *Client) createCluster(
 	ctx context.Context,
-	configPath, region, kubeconfigPath string,
+	configPath, kubeconfigPath string,
 ) error {
 	if strings.TrimSpace(configPath) == "" {
 		return ErrEmptyConfigPath
 	}
 
 	args := []string{"create", subcommandCluster, "--config-file", configPath}
-	if region != "" {
-		args = append(args, "--region", region)
-	}
-
 	if path := strings.TrimSpace(kubeconfigPath); path != "" {
 		args = append(args, "--kubeconfig", path)
 	}
