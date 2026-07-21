@@ -33,6 +33,7 @@ func scaffoldEKSConfig(t *testing.T, clusterName string) string {
 
 	require.NoError(t, instance.Scaffold(tempDir, false))
 
+	//nolint:gosec // test reads from t.TempDir()
 	content, err := os.ReadFile(filepath.Join(tempDir, scaffolder.EKSConfigFile))
 	require.NoError(t, err)
 
