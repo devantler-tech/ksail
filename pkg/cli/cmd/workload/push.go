@@ -225,7 +225,6 @@ func buildAndPushArtifact(
 		RegistryEndpoint: registryEndpoint,
 		Repository:       params.Repository,
 		Version:          params.Ref,
-		GitOpsEngine:     params.GitOpsEngine,
 		Username:         params.Username,
 		Password:         params.Password,
 	})

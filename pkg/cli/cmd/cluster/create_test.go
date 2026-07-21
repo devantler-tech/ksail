@@ -373,6 +373,17 @@ func TestCreate_EKSProfileRegionFeedsIdentityCapture(t *testing.T) {
 	cmd.SetArgs([]string{"--gitops-engine", "ArgoCD"})
 	require.NoError(t, cmd.Execute())
 	assert.Equal(t, "eu-north-1", capturedRegion)
+
+	ownership, err := state.LoadEKSOwnershipState("st-eks", "eu-north-1")
+	require.NoError(t, err)
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	assert.Equal(t, v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "AWS_REGION",
+		AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}, ownership.AWSOptions)
 }
 
 func writeEKSProfileRegionCreateTestFiles(t *testing.T, workingDir string) {

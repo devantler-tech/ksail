@@ -166,7 +166,7 @@ func (b *Builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 		return BuildResult{}, ErrNoManifestFiles
 	}
 
-	layer, err := newManifestLayer(validated.SourcePath, manifestFiles, validated.GitOpsEngine)
+	layer, err := newManifestLayer(validated.SourcePath, manifestFiles)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("package manifests: %w", err)
 	}
@@ -309,18 +309,20 @@ func collectManifestFiles(root string) ([]string, error) {
 // Files are added to the tar archive with their relative paths from the root directory.
 // File permissions are set to 0o644 for consistency.
 //
-// The gitOpsEngine parameter controls the archive structure:
-//   - GitOpsEngineFlux: files at root + under prefix directory (Flux uses root, prefix for compatibility)
-//   - GitOpsEngineArgoCD: files under prefix directory only (optimization)
-//   - Empty/GitOpsEngineNone: files at both root and under prefix for compatibility
+// The archive mirrors the source directory at its ROOT, which is the path every consumer
+// resolves against — Flux via the FluxInstance sync path (default "./") and Argo CD via the
+// Application source path (argocd.DefaultSourcePath, "."). Suppressing the root entries for an
+// engine breaks it silently: Argo CD renders zero resources and still reports Synced/Healthy
+// (issue #6284).
+//
+// Nothing is published under a "<sourceDirectory>/" prefix. Those duplicate copies had no
+// consumer in this repository, doubled every artifact, and could take the name of a real root
+// entry — corrupting the very tree both engines read (see #6285).
 //
 // Returns an OCI v1.Layer suitable for inclusion in an OCI image.
-//
-
 func newManifestLayer(
 	root string,
 	files []string,
-	gitOpsEngine v1alpha1.GitOpsEngine,
 ) (v1.Layer, error) {
 	compressed := bytes.NewBuffer(nil)
 	gzipWriter := gzip.NewWriter(compressed)
@@ -329,17 +331,8 @@ func newManifestLayer(
 
 	tarWriter := tar.NewWriter(gzipWriter)
 
-	// Determine the prefix for the archive structure.
-	// All engines use a prefix directory to maintain compatibility with both Flux and ArgoCD.
-	// ArgoCD only uses the prefixed files, while Flux uses both root and prefixed files.
-	prefix := filepath.Base(root)
-	if prefix == "." || prefix == string(os.PathSeparator) {
-		prefix = ""
-	}
-
-	var err error
 	for _, path := range files {
-		err = addFileToArchive(tarWriter, root, path, prefix, gitOpsEngine)
+		err := addFileToArchive(tarWriter, root, path)
 		if err != nil {
 			return nil, err
 		}
@@ -357,15 +350,10 @@ func newManifestLayer(
 //   - Fixed permissions of 0o644
 //   - Original file content
 //
-// The gitOpsEngine parameter controls how files are written:
-//   - GitOpsEngineFlux: files at root + under prefix (Flux uses root, prefix for compatibility)
-//   - GitOpsEngineArgoCD: files under prefix directory only (optimization)
-//   - Empty/GitOpsEngineNone: files at both locations for compatibility
-
+// The file is written once, at the archive root.
 func addFileToArchive(
 	tarWriter *tar.Writer,
-	root, path, prefix string,
-	gitOpsEngine v1alpha1.GitOpsEngine,
+	root, path string,
 ) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -384,29 +372,8 @@ func addFileToArchive(
 		return fmt.Errorf("read file %s: %w", path, err)
 	}
 
-	// Write files at root for all engines except ArgoCD.
-	if shouldWriteAtRoot(gitOpsEngine) {
-		err = writeTarEntry(tarWriter, info, path, rel, content)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Write files under prefix for all engines (when prefix is set).
-	if prefix != "" {
-		err = writeTarEntry(tarWriter, info, path, filepath.Join(prefix, rel), content)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// shouldWriteAtRoot determines if files should be written at the root of the archive.
-// ArgoCD does not need files at root (optimization), all other engines do.
-func shouldWriteAtRoot(gitOpsEngine v1alpha1.GitOpsEngine) bool {
-	return gitOpsEngine != v1alpha1.GitOpsEngineArgoCD
+	// Write the file at the archive root — the path every consumer resolves against.
+	return writeTarEntry(tarWriter, info, path, rel, content)
 }
 
 // writeTarEntry writes a single tar entry with the given name and content.
