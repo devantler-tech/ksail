@@ -20,32 +20,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// UpdatableProvisioner wraps Provisioner with the Updater capability:
-// managed node-group scaling changes declared in eksctl.yaml are applied
-// in-place via `eksctl scale nodegroup` instead of the recreate flow.
-//
-// It is a separate type (rather than methods on Provisioner) so the
-// capability can be gated: the orchestrator discovers Updater by type
-// assertion, and the factory only returns this wrapper when
-// spec.cluster.eks.experimentalInPlaceUpdates is set. Graduating the flag
-// (once the path is validated against a live EKS cluster) means moving the
-// methods onto Provisioner and deleting the wrapper and the spec field.
-type UpdatableProvisioner struct {
-	*Provisioner
-
-	// componentDetector probes the running cluster's components for the
-	// update baseline; injected by the orchestrator via SetComponentDetector.
-	componentDetector *detector.ComponentDetector
-}
-
-// NewUpdatableProvisioner wraps an EKS provisioner with in-place update support.
-func NewUpdatableProvisioner(provisioner *Provisioner) *UpdatableProvisioner {
-	return &UpdatableProvisioner{Provisioner: provisioner}
-}
-
 // SetComponentDetector implements the ComponentDetectorAware capability so
 // the orchestrator can inject the live-cluster component detector.
-func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetector) {
+func (u *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 	u.componentDetector = d
 }
 
@@ -64,7 +41,7 @@ type managedNodeGroupConfig struct {
 // The first supported in-place dimension is managed node-group scaling
 // (desiredCapacity/minSize/maxSize); everything else reports as
 // recreate-required and is handled by the orchestrator's recreate flow.
-func (u *UpdatableProvisioner) Update(
+func (u *Provisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -81,7 +58,7 @@ func (u *UpdatableProvisioner) Update(
 // managed node groups and the live cluster state. Scaling changes on an
 // existing managed node group are in-place; adding or removing node groups
 // is classified recreate-required (not supported in-place yet).
-func (u *UpdatableProvisioner) DiffConfig(
+func (u *Provisioner) DiffConfig(
 	ctx context.Context,
 	name string,
 	_, _ *v1alpha1.ClusterSpec,
@@ -147,7 +124,7 @@ func (u *UpdatableProvisioner) DiffConfig(
 // state via the injected detector when available (marked Unknown otherwise,
 // so the diff engine never fabricates confident component diffs from
 // defaults), merged with persisted non-introspectable state.
-func (u *UpdatableProvisioner) GetCurrentConfig(
+func (u *Provisioner) GetCurrentConfig(
 	ctx context.Context,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
@@ -182,7 +159,7 @@ func (u *UpdatableProvisioner) GetCurrentConfig(
 // applyNodegroupScaling converges each declared managed node group's
 // scaling toward the eksctl.yaml values via `eksctl scale nodegroup`,
 // recording applied and failed changes on the result.
-func (u *UpdatableProvisioner) applyNodegroupScaling(
+func (u *Provisioner) applyNodegroupScaling(
 	ctx context.Context,
 	name string,
 	result *clusterupdate.UpdateResult,
@@ -238,10 +215,8 @@ func (u *UpdatableProvisioner) applyNodegroupScaling(
 // desiredCapacity is deliberately undeclared — the cluster autoscaler owns
 // the current size — the freshly-listed live value is passed, clamped into
 // the new min/max bounds. The list-to-scale window is a small inherent race
-// against a concurrent autoscaler decision; the experimental flag gates this
-// path until it is validated against a live cluster (see the graduation
-// issue referenced by the flag's docs).
-func (u *UpdatableProvisioner) scaleNodegroup(
+// against a concurrent autoscaler decision.
+func (u *Provisioner) scaleNodegroup(
 	ctx context.Context,
 	clusterName string,
 	group managedNodeGroupConfig,
@@ -295,7 +270,7 @@ func nodegroupScaleTargets(
 // at all: a present file with no (remaining) managed node groups is a real
 // declaration — live managed groups then diff as removals — while a missing
 // file means there is nothing declared to diff against.
-func (u *UpdatableProvisioner) desiredNodegroups() ([]managedNodeGroupConfig, bool, error) {
+func (u *Provisioner) desiredNodegroups() ([]managedNodeGroupConfig, bool, error) {
 	if strings.TrimSpace(u.configPath) == "" {
 		return nil, false, nil
 	}
