@@ -7,6 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -52,6 +53,11 @@ func NewInstaller(
 		return nil, ErrClusterNameRequired
 	}
 
+	valuesYaml, err := buildValuesYaml(clusterName, region, haEnabled)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Installer{
 		Base: helmutil.NewBase(
 			"aws-load-balancer-controller",
@@ -76,7 +82,7 @@ func NewInstaller(
 				// (helm v4 maps !UpgradeCRDs to SkipCRDs).
 				UpgradeCRDs: true,
 				Timeout:     timeout,
-				ValuesYaml:  buildValuesYaml(clusterName, region, haEnabled),
+				ValuesYaml:  valuesYaml,
 			},
 		),
 	}, nil
@@ -91,21 +97,25 @@ func NewInstaller(
 // disabled: it makes this controller the default for every new LoadBalancer
 // Service, and during install its admitted-but-not-ready window rejects
 // Services created by concurrently-installing components.
-func buildValuesYaml(clusterName, region string, haEnabled bool) string {
-	parts := []string{
-		"clusterName: " + clusterName,
-		"enableServiceMutatorWebhook: false",
+func buildValuesYaml(clusterName, region string, haEnabled bool) (string, error) {
+	values := struct {
+		ClusterName                 string `json:"clusterName"`
+		EnableServiceMutatorWebhook bool   `json:"enableServiceMutatorWebhook"`
+		Region                      string `json:"region,omitempty"`
+		ReplicaCount                int    `json:"replicaCount"`
+	}{
+		ClusterName:  clusterName,
+		Region:       region,
+		ReplicaCount: 1,
 	}
-
-	if region != "" {
-		parts = append(parts, "region: "+region)
-	}
-
 	if haEnabled {
-		parts = append(parts, "replicaCount: 2")
-	} else {
-		parts = append(parts, "replicaCount: 1")
+		values.ReplicaCount = 2
 	}
 
-	return strings.Join(parts, "\n")
+	encoded, err := yaml.Marshal(values)
+	if err != nil {
+		return "", err
+	}
+
+	return string(encoded), nil
 }
