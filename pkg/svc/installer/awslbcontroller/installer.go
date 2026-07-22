@@ -1,6 +1,7 @@
 package awslbcontrollerinstaller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -42,6 +43,8 @@ var ErrInvalidServiceAccountName = errors.New(
 // resources are created outside the chart.
 type Installer struct {
 	*helmutil.Base
+
+	client helm.Interface
 }
 
 // NewInstaller creates a new AWS Load Balancer Controller installer instance.
@@ -99,7 +102,35 @@ func NewInstaller(
 				ValuesYaml:  buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
 			},
 		),
+		client: client,
 	}, nil
+}
+
+// Uninstall removes the AWS Load Balancer Controller only when KSail owns the
+// Helm release. A Flux- or ArgoCD-managed release is left untouched, and an
+// ownership lookup failure aborts before Helm can delete anything.
+func (i *Installer) Uninstall(ctx context.Context) error {
+	skip, err := helmutil.SkipIfGitOpsManaged(
+		ctx,
+		i.client,
+		"aws-load-balancer-controller",
+		awslbcRelease,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return fmt.Errorf("check AWS load balancer controller release ownership: %w", err)
+	}
+
+	if skip {
+		return nil
+	}
+
+	err = i.Base.Uninstall(ctx)
+	if err != nil {
+		return fmt.Errorf("uninstall AWS load balancer controller: %w", err)
+	}
+
+	return nil
 }
 
 // buildValuesYaml generates the Helm values YAML for the chart. clusterName is

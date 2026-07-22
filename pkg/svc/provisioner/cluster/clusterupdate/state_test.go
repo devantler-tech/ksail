@@ -88,3 +88,36 @@ func TestMergePersistedState_ForwardCompatibleWithCurrentRelease(t *testing.T) {
 	assert.Equal(t, "localhost:5050", baseline.LocalRegistry.Registry,
 		"persisted localRegistry must merge back so it is not a false recreate-required diff")
 }
+
+// TestMergePersistedState_PreservesEKSLoadBalancerControllerOptIn verifies the
+// non-introspectable EKS component choice comes from the last successfully
+// applied spec. Both transitions matter: otherwise disable is invisible, or an
+// enabled controller is offered for installation on every update.
+//
+//nolint:paralleltest // writes/reads cluster state files under the shared isolated $HOME
+func TestMergePersistedState_PreservesEKSLoadBalancerControllerOptIn(t *testing.T) {
+	for _, savedOptIn := range []bool{false, true} {
+		clusterName := "eks-lb-disabled"
+		if savedOptIn {
+			clusterName = "eks-lb-enabled"
+		}
+
+		saved := &v1alpha1.ClusterSpec{
+			Distribution: v1alpha1.DistributionEKS,
+			Provider:     v1alpha1.ProviderAWS,
+		}
+		saved.EKS.ExperimentalAWSLoadBalancerController = savedOptIn
+		require.NoError(t, state.SaveClusterSpec(clusterName, saved))
+		t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+		baseline := clusterupdate.DefaultCurrentSpec(
+			v1alpha1.DistributionEKS,
+			v1alpha1.ProviderAWS,
+		)
+		baseline.EKS.ExperimentalAWSLoadBalancerController = !savedOptIn
+
+		err := clusterupdate.MergePersistedState(baseline, clusterName)
+		require.NoError(t, err)
+		assert.Equal(t, savedOptIn, baseline.EKS.ExperimentalAWSLoadBalancerController)
+	}
+}

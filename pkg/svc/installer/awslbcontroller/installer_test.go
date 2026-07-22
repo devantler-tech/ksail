@@ -1,6 +1,7 @@
 package awslbcontrollerinstaller_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,6 +116,61 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, installer)
+}
+
+func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "aws-load-balancer-controller"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestUninstallAllowsKSailOwnedRelease(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"owner": "helm"}, nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestUninstallFailsClosedWhenOwnershipUnknown(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil, assert.AnError)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "check release ownership for aws-load-balancer-controller")
 }
 
 type buildValuesCase struct {

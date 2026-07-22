@@ -21,6 +21,8 @@ import (
 //     node's containerd config at creation (Kind/K3s baselines otherwise carry the
 //     zero value, so a configured mirrorsDir reads as recreate-required every run;
 //     see kind.DiffConfig and diff/engine.go's documented LocalRegistry limitation).
+//   - EKS.ExperimentalAWSLoadBalancerController — an explicit component ownership
+//     choice that cannot be inferred from generic component detection alone.
 //
 // It is a no-op (returns nil) when no state exists for clusterName
 // (state.ErrStateNotFound). Any other failure (I/O, corrupt JSON, permission)
@@ -55,6 +57,11 @@ func MergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
 	if saved.Vanilla.MirrorsDir != "" {
 		spec.Vanilla.MirrorsDir = saved.Vanilla.MirrorsDir
 	}
+
+	// The AWS Load Balancer Controller opt-in is declarative KSail ownership
+	// state. Preserve both true and false so enable and disable transitions are
+	// each compared against the last successfully applied configuration.
+	spec.EKS.ExperimentalAWSLoadBalancerController = saved.EKS.ExperimentalAWSLoadBalancerController
 
 	return nil
 }

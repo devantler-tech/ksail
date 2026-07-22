@@ -79,7 +79,7 @@ func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 					ConfigPath: "/tmp/eksctl.yaml",
 				},
 			},
-			expectedType: &eksprovisioner.Provisioner{},
+			expectedType: &eksprovisioner.UpdatableProvisioner{},
 			expectError:  false,
 		},
 		{
