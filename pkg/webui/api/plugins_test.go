@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
@@ -29,6 +31,120 @@ func (p pluginStub) PluginAsset(_ context.Context, _, _ string) (api.PluginAsset
 	}
 
 	return p.asset, nil
+}
+
+type pluginInstallerStub struct {
+	pluginStub
+
+	installCalled bool
+}
+
+func (p *pluginInstallerStub) InstallPlugin(
+	_ context.Context,
+	_ api.PluginInstallRequest,
+) (api.PluginInfo, error) {
+	p.installCalled = true
+
+	return api.PluginInfo{Name: "demo", Main: "main.js"}, nil
+}
+
+func (p *pluginInstallerStub) UninstallPlugin(_ context.Context, _ string) error {
+	return nil
+}
+
+func doPluginInstall(
+	t *testing.T,
+	server *api.Server,
+	body string,
+	headers map[string]string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/plugins",
+		strings.NewReader(body),
+	)
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	return recorder
+}
+
+func TestInstallPluginRequiresJSONContentType(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "text/plain"})
+
+	if recorder.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("install status = %d, want 415", recorder.Code)
+	}
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a non-JSON request")
+	}
+}
+
+func TestInstallPluginRequiresTrustedConsent(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz"}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "application/json"})
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("install status = %d, want 422", recorder.Code)
+	}
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called without trusted consent")
+	}
+}
+
+func TestInstallPluginRejectsCrossSiteBrowserRequest(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "https://evil.example",
+	})
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("install status = %d, want 403", recorder.Code)
+	}
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a cross-site request")
+	}
+}
+
+func TestInstallPluginAcceptsTrustedJSONRequest(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "application/json"})
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for a trusted JSON request")
+	}
 }
 
 func TestConfigAdvertisesPluginsCapability(t *testing.T) {

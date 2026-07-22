@@ -110,6 +110,7 @@ function PluginInstallForm({ onInstalled }: { onInstalled: () => void }) {
       await installPlugin({
         url: url.trim(),
         sha256: sha256.trim() || undefined,
+        trusted: consent,
         signature: signature.trim() || undefined,
         cosign: cleanCosign(cosign),
       });
@@ -412,7 +413,7 @@ function CatalogEntryRow({
 
     try {
       // Forward the catalog's published SHA-256 (when present) so the install flow verifies integrity.
-      await installPlugin({ url: entry.url, sha256: entry.checksum });
+      await installPlugin({ url: entry.url, sha256: entry.checksum, trusted: consented });
       setInstalled(true);
       onInstalled();
     } catch (err) {
