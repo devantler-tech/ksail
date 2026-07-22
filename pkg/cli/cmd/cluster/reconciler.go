@@ -200,19 +200,27 @@ func (r *componentReconciler) reconcileLoadBalancer(
 	ctx context.Context,
 	change clusterupdate.Change,
 ) error {
+	// A generic EKS load-balancer change with the controller opt-in disabled is
+	// intentionally a no-op. Do not consume the coalescing slot here: when the
+	// opt-in also changed, its later dedicated diff must still reach uninstall.
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		change.Field != "cluster.eks.experimentalAWSLoadBalancerController" &&
+		!r.clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController {
+		return nil
+	}
+
 	if r.loadBalancerReconciled {
 		return r.loadBalancerErr
 	}
 
 	r.loadBalancerReconciled = true
-	r.loadBalancerErr = r.doReconcileLoadBalancer(ctx, change)
+	r.loadBalancerErr = r.doReconcileLoadBalancer(ctx)
 
 	return r.loadBalancerErr
 }
 
 func (r *componentReconciler) doReconcileLoadBalancer(
 	ctx context.Context,
-	change clusterupdate.Change,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
 		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
@@ -224,11 +232,6 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 	}
 
 	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
-		return nil
-	}
-
-	if change.Field != "cluster.eks.experimentalAWSLoadBalancerController" &&
-		!r.clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController {
 		return nil
 	}
 
