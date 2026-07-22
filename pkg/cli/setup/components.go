@@ -38,7 +38,7 @@ var (
 		"cluster-autoscaler installer factory is nil",
 	)
 	ErrAWSLoadBalancerControllerInstallerFactoryNil = errors.New(
-		"AWS Load Balancer Controller installer factory is nil",
+		"aws load balancer controller installer factory is nil",
 	)
 )
 
