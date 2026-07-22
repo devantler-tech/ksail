@@ -48,17 +48,8 @@ type Input struct {
 	// multi-node flow fixes the cluster identity with. Optional.
 	ServerInitFiles []cloudinitbootstrap.File
 	// ServerInitPrelude are commands run on the cluster-initialising control
-	// plane before its install commands — e.g. pinning the cluster's stable join
-	// name locally so a ClusterConfiguration.controlPlaneEndpoint carrying that
-	// name resolves before `kubeadm init` writes it into the node's kubeconfigs.
-	// Optional; ignored on joining nodes.
+	// plane before its install commands. Optional; ignored on joining nodes.
 	ServerInitPrelude []string
-	// ServerJoinFiles are extra files delivered only to the additional
-	// control-plane joiners (RoleServer) — the pre-seeded shared PKI kubeadm's
-	// manual certificate distribution requires on every control plane before
-	// `kubeadm join --control-plane`. Optional; never delivered to agents, which
-	// must not carry private cluster-identity material.
-	ServerJoinFiles []cloudinitbootstrap.File
 	// JoinPrelude are commands run on every joining node before its install
 	// commands — e.g. pinning the stable join name to the init control plane's
 	// resolved private address in /etc/hosts, which must happen before `kubeadm
@@ -169,11 +160,10 @@ func buildNodeCloudInit(
 	commands := install.Commands
 
 	// The per-role extras: the init control plane receives the pre-seeded cluster
-	// identity files (and any init prelude, e.g. the local join-name pin its
-	// controlPlaneEndpoint needs); an additional control-plane joiner additionally
-	// receives the shared PKI (kubeadm's manual certificate distribution); every
-	// joining node runs the join prelude (e.g. the /etc/hosts pin of the stable
-	// join name) before its install commands reach `kubeadm join`.
+	// identity files (and any init prelude); every joining node runs the join
+	// prelude (e.g. the /etc/hosts pin of the stable join name) before its
+	// install commands reach `kubeadm join`. Additional control planes are not
+	// given private cluster PKI through cloud-init user-data.
 	switch node.Config.Role {
 	case kubeadmbootstrap.RoleServerInit:
 		files = append(files, input.ServerInitFiles...)
@@ -181,7 +171,6 @@ func buildNodeCloudInit(
 			commands = append(slices.Clone(input.ServerInitPrelude), commands...)
 		}
 	case kubeadmbootstrap.RoleServer:
-		files = append(files, input.ServerJoinFiles...)
 		if len(input.JoinPrelude) > 0 {
 			commands = append(slices.Clone(input.JoinPrelude), commands...)
 		}
