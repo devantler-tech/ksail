@@ -95,3 +95,47 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 		})
 	}
 }
+
+//nolint:paralleltest // replaces the process-global installer factory.
+func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{}
+	restore := overrideInstallerFactory(func(factories *setup.InstallerFactories) {
+		factories.AWSLoadBalancerController = func(
+			_ *v1alpha1.Cluster,
+		) (installer.Installer, error) {
+			return fakeInstaller, nil
+		}
+	})
+	t.Cleanup(restore)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = true
+
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(
+		detected.InPlaceChanges,
+		clusterupdate.Change{
+			Field:    "cluster.loadBalancer",
+			OldValue: string(v1alpha1.LoadBalancerDisabled),
+			NewValue: string(v1alpha1.LoadBalancerEnabled),
+		},
+		clusterupdate.Change{
+			Field:    "cluster.eks.experimentalAWSLoadBalancerController",
+			OldValue: "false",
+			NewValue: "true",
+		},
+	)
+	applied := clusterupdate.NewEmptyUpdateResult()
+	reconciler := newComponentReconciler(
+		&cobra.Command{Use: "test"}, clusterCfg, "eks-default",
+	)
+
+	err := reconciler.reconcileComponents(context.Background(), detected, applied)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, fakeInstaller.installCalls)
+	assert.Len(t, applied.AppliedChanges, 2)
+}

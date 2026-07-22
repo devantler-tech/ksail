@@ -40,6 +40,10 @@ type componentReconciler struct {
 	// subsequent calls surface the same failure instead of silently succeeding.
 	autoscalerReconciled bool
 	autoscalerErr        error
+	// loadBalancerReconciled coalesces the generic load-balancer field and the
+	// EKS-specific controller opt-in when both change in one update pass.
+	loadBalancerReconciled bool
+	loadBalancerErr        error
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
@@ -193,6 +197,20 @@ func (r *componentReconciler) reconcileMetricsServer(
 
 // reconcileLoadBalancer installs or uninstalls the load balancer.
 func (r *componentReconciler) reconcileLoadBalancer(
+	ctx context.Context,
+	change clusterupdate.Change,
+) error {
+	if r.loadBalancerReconciled {
+		return r.loadBalancerErr
+	}
+
+	r.loadBalancerReconciled = true
+	r.loadBalancerErr = r.doReconcileLoadBalancer(ctx, change)
+
+	return r.loadBalancerErr
+}
+
+func (r *componentReconciler) doReconcileLoadBalancer(
 	ctx context.Context,
 	change clusterupdate.Change,
 ) error {
