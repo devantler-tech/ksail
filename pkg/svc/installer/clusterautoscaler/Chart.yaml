@@ -17,5 +17,5 @@ description: Dependabot version pin for the cluster-autoscaler Helm chart (not a
 version: 0.0.0
 dependencies:
   - name: cluster-autoscaler
-    version: 9.58.0
+    version: 9.59.0
     repository: https://kubernetes.github.io/autoscaler
