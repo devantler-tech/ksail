@@ -149,6 +149,7 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
+              - '.govulncheck-allow.txt'
               - '.github/actions/**'
             system-test:
               # NOTE: Do not use negative patterns (!) here.

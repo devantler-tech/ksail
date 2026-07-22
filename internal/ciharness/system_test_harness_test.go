@@ -81,6 +81,17 @@ type ciWorkflow struct {
 	} `yaml:"jobs"`
 }
 
+func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	changesJob, found := workflow.Jobs["changes"]
+	require.True(t, found, "changes job is missing")
+	filterStep := findHarnessStep(t, changesJob.Steps, "🔍 Filter paths")
+
+	assert.Contains(t, stringValue(filterStep.With["filters"]), ".govulncheck-allow.txt")
+}
+
 func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
 	t.Parallel()
 
