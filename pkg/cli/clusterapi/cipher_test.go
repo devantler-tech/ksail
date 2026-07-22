@@ -59,6 +59,29 @@ func TestCipherRoundTripDefaultRecipient(t *testing.T) { //nolint:paralleltest /
 	assert.Contains(t, decrypted, "token: abc123")
 }
 
+func TestDecryptSecretRejectsNonAgeSopsMetadata(t *testing.T) {
+	t.Parallel()
+
+	service := clusterapi.NewTestService(nil)
+	encrypted := `data: ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]
+sops:
+  hc_vault:
+    - vault_address: http://127.0.0.1:1
+      engine_path: transit
+      key_name: attacker
+      created_at: "2026-07-12T00:00:00Z"
+      enc: vault:v1:attacker-controlled
+  lastmodified: "2026-07-12T00:00:00Z"
+  mac: ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]
+  version: 3.13.2
+`
+
+	_, err := service.DecryptSecret(context.Background(), encrypted, "yaml")
+
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.ErrorContains(t, err, "only age recipients")
+}
+
 func TestCipherRecipientsFromKeyFile(t *testing.T) { //nolint:paralleltest // t.Setenv
 	recipient := writeAgeKey(t)
 	service := clusterapi.NewTestService(nil)

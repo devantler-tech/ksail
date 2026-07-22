@@ -52,6 +52,9 @@ func doRequest(handler http.Handler, method, target, body string) *httptest.Resp
 		target,
 		strings.NewReader(body),
 	)
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 

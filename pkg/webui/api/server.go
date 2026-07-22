@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"path"
@@ -1093,12 +1094,22 @@ func isMutating(method string) bool {
 	}
 }
 
-// decodeJSON decodes a size-capped JSON request body into v. On failure it writes the appropriate
-// error response (413 if oversized, else 400) and returns the error so the handler returns early.
+// decodeJSON decodes an application/json, size-capped request body into v. On failure it writes the
+// appropriate error response (415 for non-JSON content, 413 if oversized, else 400) and returns the
+// error so the handler returns early.
 func decodeJSON(writer http.ResponseWriter, request *http.Request, value any) error {
+	contentType := request.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "application/json" {
+		wrapped := fmt.Errorf("content type must be application/json")
+		writeError(writer, http.StatusUnsupportedMediaType, wrapped)
+
+		return wrapped
+	}
+
 	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
 
-	err := json.NewDecoder(limited).Decode(value)
+	err = json.NewDecoder(limited).Decode(value)
 	if err != nil {
 		wrapped := fmt.Errorf("decode request: %w", err)
 		writeDecodeError(writer, wrapped)
