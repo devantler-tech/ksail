@@ -189,6 +189,25 @@ func TestCloneOverlay_OverwritesExistingWithForce(t *testing.T) {
 	assert.Contains(t, top, "cluster_name: staging")
 }
 
+func TestCloneOverlay_RejectsSymlinkedDestinationParent(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	outside := t.TempDir()
+	writeOverlay(t, repoRoot)
+
+	destParent := filepath.Join(repoRoot, "k8s", "clusters", "staging")
+	require.NoError(t, os.Symlink(outside, destParent))
+
+	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
+
+	_, err := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", rewrites, false)
+	require.ErrorIs(t, err, environment.ErrDestinationEscapesRepository)
+
+	_, statErr := os.Stat(filepath.Join(outside, "kustomization.yaml"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
 func TestCloneOverlay_MissingSourceOverlay(t *testing.T) {
 	t.Parallel()
 
@@ -365,6 +384,27 @@ func TestCloneEnvironmentConfig_OverwritesExistingWithForce(t *testing.T) {
 	clone := readClone(t, repoRoot, "ksail.staging.yaml")
 	assert.NotContains(t, clone, "SENTINEL")
 	assert.Contains(t, clone, "name: staging")
+}
+
+func TestCloneEnvironmentConfig_RejectsSymlinkedDestinationWithForce(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	outside := t.TempDir()
+	writeRootConfig(t, repoRoot)
+	outsideTarget := filepath.Join(outside, "target.yaml")
+	require.NoError(t, os.WriteFile(outsideTarget, []byte("SENTINEL\n"), 0o600))
+	require.NoError(t, os.Symlink(outsideTarget, filepath.Join(repoRoot, "ksail.staging.yaml")))
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	_, _, err := environment.CloneEnvironmentConfig(
+		repoRoot, "ksail.prod.yaml", rewrites, true)
+	require.ErrorIs(t, err, environment.ErrDestinationEscapesRepository)
+
+	data, readErr := os.ReadFile(outsideTarget)
+	require.NoError(t, readErr)
+	assert.Equal(t, "SENTINEL\n", string(data))
 }
 
 func TestCloneEnvironmentConfig_MissingSource(t *testing.T) {
