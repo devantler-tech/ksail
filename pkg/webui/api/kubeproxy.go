@@ -52,14 +52,11 @@ func (s *Server) handleKubeProxy(writer http.ResponseWriter, request *http.Reque
 
 	defer func() { _ = result.Body.Close() }()
 
-	contentType := result.ContentType
-	if contentType == "" {
-		contentType = "application/json"
-	}
-
-	// nosniff keeps the upstream content type authoritative; the body is streamed (not buffered) so a
-	// large list response does not balloon server memory.
-	writer.Header().Set("Content-Type", contentType)
+	// Always serve kube-apiserver proxy responses as JSON. Kubernetes proxy subresources can return
+	// attacker-controlled active content (for example text/html or application/javascript); preserving
+	// that upstream Content-Type would make it executable in the KSail UI origin. The body remains
+	// streamed (not buffered) so a large list response does not balloon server memory.
+	writer.Header().Set("Content-Type", "application/json")
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.WriteHeader(result.Status)
 	_, _ = io.Copy(writer, result.Body)
