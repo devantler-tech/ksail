@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -119,7 +120,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.tag":                      r.reconcileWorkloadTag,
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
-	handlers["cluster.eks.experimentalAWSLoadBalancerController"] = r.reconcileLoadBalancer
+	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -204,7 +205,7 @@ func (r *componentReconciler) reconcileLoadBalancer(
 	// intentionally a no-op. Do not consume the coalescing slot here: when the
 	// opt-in also changed, its later dedicated diff must still reach uninstall.
 	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
-		change.Field != "cluster.eks.experimentalAWSLoadBalancerController" &&
+		change.Field != specdiff.EKSLoadBalancerControllerField &&
 		!r.clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController {
 		return nil
 	}

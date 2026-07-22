@@ -7,6 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/stretchr/testify/assert"
@@ -79,7 +80,7 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 
 			detected := clusterupdate.NewEmptyUpdateResult()
 			detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
-				Field:    "cluster.eks.experimentalAWSLoadBalancerController",
+				Field:    specdiff.EKSLoadBalancerControllerField,
 				OldValue: strconv.FormatBool(testCase.oldValue),
 				NewValue: strconv.FormatBool(testCase.newValue),
 			})
@@ -161,7 +162,7 @@ func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
 					NewValue: testCase.genericNew,
 				},
 				clusterupdate.Change{
-					Field:    "cluster.eks.experimentalAWSLoadBalancerController",
+					Field:    specdiff.EKSLoadBalancerControllerField,
 					OldValue: testCase.optInOld,
 					NewValue: testCase.optInNew,
 				},

@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
@@ -36,7 +37,7 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		"cluster.csi",
 		"cluster.metricsServer",
 		"cluster.loadBalancer",
-		"cluster.eks.experimentalAWSLoadBalancerController",
+		specdiff.EKSLoadBalancerControllerField,
 		"cluster.certManager",
 		"cluster.policyEngine",
 		"cluster.gitOpsEngine",

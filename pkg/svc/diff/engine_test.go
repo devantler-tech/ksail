@@ -266,7 +266,7 @@ func TestEngine_EKSAWSLoadBalancerControllerOptInChange(t *testing.T) {
 			assertSingleChange(
 				t,
 				result.InPlaceChanges,
-				"cluster.eks.experimentalAWSLoadBalancerController",
+				diff.EKSLoadBalancerControllerField,
 				strconv.FormatBool(testCase.oldValue),
 				strconv.FormatBool(testCase.newValue),
 				clusterupdate.ChangeCategoryInPlace,
