@@ -235,6 +235,46 @@ func TestEngine_ComponentChanges(t *testing.T) {
 	}
 }
 
+func TestEngine_EKSAWSLoadBalancerControllerOptInChange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		oldValue bool
+		newValue bool
+	}{
+		{name: "enable", oldValue: false, newValue: true},
+		{name: "disable", oldValue: true, newValue: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			oldSpec := newBaseSpec()
+			oldSpec.Distribution = v1alpha1.DistributionEKS
+			oldSpec.Provider = v1alpha1.ProviderAWS
+			oldSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+			oldSpec.EKS.ExperimentalAWSLoadBalancerController = testCase.oldValue
+
+			newSpec := clone(oldSpec)
+			newSpec.EKS.ExperimentalAWSLoadBalancerController = testCase.newValue
+
+			engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+			result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+			assertSingleChange(
+				t,
+				result.InPlaceChanges,
+				"cluster.eks.experimentalAWSLoadBalancerController",
+				strconv.FormatBool(testCase.oldValue),
+				strconv.FormatBool(testCase.newValue),
+				clusterupdate.ChangeCategoryInPlace,
+			)
+		})
+	}
+}
+
 func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
 	t.Parallel()
 

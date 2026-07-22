@@ -235,6 +235,19 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			},
 		},
 		{
+			field:    "cluster.eks.experimentalAWSLoadBalancerController",
+			category: clusterupdate.ChangeCategoryInPlace,
+			reason:   "AWS Load Balancer Controller can be installed/uninstalled via Helm",
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				if e.distribution != v1alpha1.DistributionEKS ||
+					e.provider != v1alpha1.ProviderAWS {
+					return strconv.FormatBool(false)
+				}
+
+				return strconv.FormatBool(spec.EKS.ExperimentalAWSLoadBalancerController)
+			},
+		},
+		{
 			field:      "cluster.certManager",
 			category:   clusterupdate.ChangeCategoryInPlace,
 			reason:     "cert-manager can be installed/uninstalled via Helm",

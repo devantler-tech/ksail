@@ -21,7 +21,6 @@
 //
 // Installation is an experimental opt-in gated by
 // spec.cluster.eks.experimentalAWSLoadBalancerController together with
-// spec.cluster.loadBalancer: Enabled. It runs at cluster create and on the
-// operator's reconcile; enabling the opt-in on an EXISTING cluster via
-// `cluster update` is not yet detected by the diff engine (#6231).
+// spec.cluster.loadBalancer: Enabled. It runs at cluster create, on the
+// operator's reconcile, and during cluster update when the opt-in changes.
 package awslbcontrollerinstaller

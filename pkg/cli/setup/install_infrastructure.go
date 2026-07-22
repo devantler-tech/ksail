@@ -234,11 +234,59 @@ func installEKSLoadBalancer(
 		return nil
 	}
 
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories)
+	if err != nil {
+		return err
+	}
+
+	installErr := lbInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("aws-load-balancer-controller installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// UninstallEKSLoadBalancerControllerSilent removes the AWS Load Balancer Controller
+// Helm release from an EKS cluster during an in-place cluster update.
+func UninstallEKSLoadBalancerControllerSilent(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories)
+	if err != nil {
+		return err
+	}
+
+	uninstallErr := lbInstaller.Uninstall(ctx)
+	if uninstallErr != nil {
+		return fmt.Errorf("aws-load-balancer-controller uninstall failed: %w", uninstallErr)
+	}
+
+	return nil
+}
+
+func createEKSLoadBalancerInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (installer.Installer, error) {
+	if factories.AWSLoadBalancerController == nil {
+		return nil, ErrAWSLoadBalancerControllerInstallerFactoryNil
+	}
+
+	return factories.AWSLoadBalancerController(clusterCfg)
+}
+
+func newEKSLoadBalancerInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (installer.Installer, error) {
 	clusterName, fileRegion, nameFromConfig, err := ksailconfigmanager.ResolveEKSClusterMetadata(
 		clusterCfg,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
+		return nil, fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
 	}
 
 	// Honor the same region precedence as the create path: the environment
@@ -257,7 +305,10 @@ func installEKSLoadBalancer(
 
 	helmClient, _, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
-		return fmt.Errorf("failed to setup helm client for aws-load-balancer-controller: %w", err)
+		return nil, fmt.Errorf(
+			"failed to setup helm client for aws-load-balancer-controller: %w",
+			err,
+		)
 	}
 
 	haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
@@ -271,15 +322,13 @@ func installEKSLoadBalancer(
 		haEnabled,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to configure aws-load-balancer-controller installer: %w", err)
+		return nil, fmt.Errorf(
+			"failed to configure aws-load-balancer-controller installer: %w",
+			err,
+		)
 	}
 
-	installErr := lbInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("aws-load-balancer-controller installation failed: %w", installErr)
-	}
-
-	return nil
+	return lbInstaller, nil
 }
 
 // installTalosLoadBalancer installs the provider-appropriate load balancer for

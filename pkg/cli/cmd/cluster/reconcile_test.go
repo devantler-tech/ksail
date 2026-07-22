@@ -36,6 +36,7 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		"cluster.csi",
 		"cluster.metricsServer",
 		"cluster.loadBalancer",
+		"cluster.eks.experimentalAWSLoadBalancerController",
 		"cluster.certManager",
 		"cluster.policyEngine",
 		"cluster.gitOpsEngine",

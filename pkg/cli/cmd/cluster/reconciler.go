@@ -115,6 +115,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.tag":                      r.reconcileWorkloadTag,
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
+	handlers["cluster.eks.experimentalAWSLoadBalancerController"] = r.reconcileLoadBalancer
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -193,13 +194,33 @@ func (r *componentReconciler) reconcileMetricsServer(
 // reconcileLoadBalancer installs or uninstalls the load balancer.
 func (r *componentReconciler) reconcileLoadBalancer(
 	ctx context.Context,
-	_ clusterupdate.Change,
+	change clusterupdate.Change,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
 		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
 		if err != nil {
 			return fmt.Errorf("failed to install load balancer: %w", err)
 		}
+
+		return nil
+	}
+
+	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if change.Field != "cluster.eks.experimentalAWSLoadBalancerController" &&
+		!r.clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController {
+		return nil
+	}
+
+	err := setup.UninstallEKSLoadBalancerControllerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil && errors.Is(err, helm.ErrReleaseNotFound) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to uninstall load balancer: %w", err)
 	}
 
 	return nil
