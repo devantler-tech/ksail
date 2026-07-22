@@ -73,6 +73,7 @@ func newHostReconciler(
 
 			return false, nil, errBoom
 		},
+		HostClusterNamespace: hostNamespace,
 		ObserveHostStatus: func(
 			_ context.Context,
 			_ client.Reader,
@@ -125,6 +126,26 @@ func TestReconcile_HostClusterReportsReadyWithoutProvisioner(t *testing.T) {
 	assert.Equal(t, metav1.ConditionFalse, ignored.Status)
 }
 
+func TestReconcile_ForgedHostLabelUsesNormalDelete(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	cluster := newHostCluster(true)
+	cluster.Name = "evil-alias"
+	fakeClient := newFakeClient(scheme, cluster)
+	prov := &fakeProvisioner{exists: true}
+	reconciler := newReconciler(scheme, fakeClient, prov)
+	reconciler.HostClusterNamespace = hostNamespace
+
+	require.NoError(t, fakeClient.Delete(context.Background(), cluster))
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, prov.deleteCalls, "forged host labels must not bypass normal teardown")
+}
+
 func TestReconcile_HostClusterDeleteSkipsProvisioner(t *testing.T) {
 	t.Parallel()
 
@@ -135,6 +156,7 @@ func TestReconcile_HostClusterDeleteSkipsProvisioner(t *testing.T) {
 	fakeClient := newFakeClient(scheme, cluster)
 	prov := &fakeProvisioner{exists: true}
 	reconciler := newReconciler(scheme, fakeClient, prov)
+	reconciler.HostClusterNamespace = hostNamespace
 
 	require.NoError(t, fakeClient.Delete(context.Background(), cluster))
 
