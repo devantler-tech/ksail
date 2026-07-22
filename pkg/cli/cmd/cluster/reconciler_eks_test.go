@@ -1,5 +1,4 @@
-//nolint:testpackage // White-box coverage verifies the unexported reconciliation seam.
-package cluster
+package cluster_test
 
 import (
 	"context"
@@ -7,10 +6,9 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,15 +60,15 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			fakeInstaller := &recordingEKSLoadBalancerInstaller{}
 			factoryCalls := 0
-			restore := overrideInstallerFactory(func(factories *setup.InstallerFactories) {
-				factories.AWSLoadBalancerController = func(
+			restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+				func(
 					_ *v1alpha1.Cluster,
 				) (installer.Installer, error) {
 					factoryCalls++
 
 					return fakeInstaller, nil
-				}
-			})
+				},
+			)
 			t.Cleanup(restore)
 
 			clusterCfg := &v1alpha1.Cluster{}
@@ -79,19 +77,23 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 			clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
 			clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = testCase.newValue
 
-			reconciler := newComponentReconciler(
-				&cobra.Command{Use: "test"}, clusterCfg, "eks-default",
-			)
-			err := reconciler.reconcileLoadBalancer(context.Background(), clusterupdate.Change{
+			detected := clusterupdate.NewEmptyUpdateResult()
+			detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
 				Field:    "cluster.eks.experimentalAWSLoadBalancerController",
 				OldValue: strconv.FormatBool(testCase.oldValue),
 				NewValue: strconv.FormatBool(testCase.newValue),
 			})
+			applied := clusterupdate.NewEmptyUpdateResult()
+
+			err := cluster.ExportReconcileComponents(
+				newReconcileTestCmd(), clusterCfg, detected, applied,
+			)
 
 			require.NoError(t, err)
 			assert.Equal(t, 1, factoryCalls)
 			assert.Equal(t, testCase.wantInstallCalls, fakeInstaller.installCalls)
 			assert.Equal(t, testCase.wantUninstallCalls, fakeInstaller.uninstallCalls)
+			assert.Len(t, applied.AppliedChanges, 1)
 		})
 	}
 }
@@ -99,13 +101,13 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 //nolint:paralleltest // replaces the process-global installer factory.
 func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
 	fakeInstaller := &recordingEKSLoadBalancerInstaller{}
-	restore := overrideInstallerFactory(func(factories *setup.InstallerFactories) {
-		factories.AWSLoadBalancerController = func(
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(
 			_ *v1alpha1.Cluster,
 		) (installer.Installer, error) {
 			return fakeInstaller, nil
-		}
-	})
+		},
+	)
 	t.Cleanup(restore)
 
 	clusterCfg := &v1alpha1.Cluster{}
@@ -129,11 +131,9 @@ func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
 		},
 	)
 	applied := clusterupdate.NewEmptyUpdateResult()
-	reconciler := newComponentReconciler(
-		&cobra.Command{Use: "test"}, clusterCfg, "eks-default",
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied,
 	)
-
-	err := reconciler.reconcileComponents(context.Background(), detected, applied)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, fakeInstaller.installCalls)
