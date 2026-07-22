@@ -17,6 +17,14 @@ import (
 // LifecycleService/ImageService upgrade APIs.
 const talosVersionLifecycleGA = "v1.13.0"
 
+func TestKubernetesImageRefUsesTalosKubeletAvailability(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil)
+
+	assert.Equal(t, "ghcr.io/siderolabs/kubelet", provisioner.KubernetesImageRef())
+}
+
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks
 // the LifecycleService/ImageService APIs only for Talos >= 1.13 and otherwise
 // falls back to the legacy MachineService.Upgrade API. The v1.12.4 → false case

@@ -320,11 +320,11 @@ func lowestTalosVersion(tags []string) (string, error) {
 	return lowestTag, nil
 }
 
-// KubernetesImageRef returns the Kubernetes apiserver image repository, which is
-// used for version discovery. While Talos manages K8s versions internally through
-// machine configuration, we need a registry to query for available versions.
+// KubernetesImageRef returns the Talos kubelet image repository used for version
+// discovery. The kubelet is the Talos-specific artifact required by every
+// Kubernetes upgrade, so its published tags are the safe availability boundary.
 func (p *Provisioner) KubernetesImageRef() string {
-	return constants.KubernetesAPIServerImage
+	return constants.KubeletImage
 }
 
 // DistributionImageRef returns the OCI repository for Talos node images.
