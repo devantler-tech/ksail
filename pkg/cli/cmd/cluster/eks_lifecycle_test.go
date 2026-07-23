@@ -1181,6 +1181,7 @@ func persistEKSRegionComponentStates(t *testing.T, clusterName string) {
 			Version:     state.EKSComponentStateVersion,
 			ClusterName: clusterName,
 			Region:      region,
+			AccountID:   testEKSComponentAccountID,
 		}
 		require.NoError(t, state.SaveEKSComponentState(clusterName, region, snapshot))
 	}
@@ -1190,7 +1191,7 @@ func assertEKSRegionComponentStatesRemain(t *testing.T, clusterName string) {
 	t.Helper()
 
 	for _, region := range []string{"eu-north-1", "us-east-1"} {
-		_, err := state.LoadEKSComponentState(clusterName, region)
+		_, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 		require.NoError(t, err, "state for region %s must remain", region)
 	}
 }

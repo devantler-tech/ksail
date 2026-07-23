@@ -37,16 +37,23 @@ func persistRequiredEKSComponentState(
 	}
 
 	region := strings.TrimSpace(ctx.EKSConfig.Region)
+
+	accountID, err := resolveEKSContextAccountID(ctx, clusterName, region)
+	if err != nil {
+		return fmt.Errorf("persist required EKS component state: %w", err)
+	}
+
 	snapshot := state.EKSComponentState{
 		Version:                                  state.EKSComponentStateVersion,
 		ClusterName:                              clusterName,
 		Region:                                   region,
+		AccountID:                                accountID,
 		AWSLoadBalancerControllerManaged:         controllerManaged,
 		AWSLoadBalancerControllerReleaseIdentity: releaseIdentity,
 		AWSLoadBalancerControllerServiceAccount:  ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 	}
 
-	err := state.SaveEKSComponentState(clusterName, region, &snapshot)
+	err = state.SaveEKSComponentState(clusterName, region, &snapshot)
 	if err != nil {
 		return fmt.Errorf("persist required EKS component state: %w", err)
 	}
@@ -76,7 +83,12 @@ func clearDeletedEKSState(ctx *localregistry.Context, clusterName string) error 
 		return fmt.Errorf("clear deleted EKS state: %w", state.ErrInvalidRegion)
 	}
 
-	err := state.DeleteEKSRegionState(clusterName, region)
+	accountID, err := resolveEKSContextAccountID(ctx, clusterName, region)
+	if err != nil {
+		return fmt.Errorf("clear deleted EKS state: %w", err)
+	}
+
+	err = state.DeleteEKSRegionState(clusterName, region, accountID)
 	if err != nil {
 		return fmt.Errorf("clear deleted EKS state: %w", err)
 	}

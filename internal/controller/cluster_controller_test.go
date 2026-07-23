@@ -508,8 +508,15 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	reconciler.InstallComponents = func(
 		_ context.Context,
 		_ clusterprovisioner.Provisioner,
-		_ *v1alpha1.Cluster,
+		cluster *v1alpha1.Cluster,
 	) (bool, []v1alpha1.ComponentStatus, error) {
+		if cluster.Annotations == nil {
+			cluster.Annotations = map[string]string{}
+		}
+
+		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = "partial-controller-release-uid"
+		cluster.Annotations["installer-transient"] = "must-not-persist"
+
 		return true, []v1alpha1.ComponentStatus{
 			{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
 		}, errBoom
@@ -540,6 +547,24 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	assert.Equal(t, []v1alpha1.ComponentStatus{
 		{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
 	}, got.Status.Components)
+	assert.Equal(
+		t,
+		"partial-controller-release-uid",
+		got.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+		"partial controller ownership must survive the component failure requeue",
+	)
+	assert.NotContains(
+		t,
+		got.Annotations,
+		v1alpha1.LastAppliedComponentsAnnotation,
+		"a failed component pass must not advance the full component baseline",
+	)
+	assert.NotContains(
+		t,
+		got.Annotations,
+		"installer-transient",
+		"the failure path must persist only the narrow ownership marker",
+	)
 }
 
 func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {

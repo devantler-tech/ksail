@@ -937,7 +937,7 @@ func promoteUnsupportedInPlaceChanges(
 
 	supported := make([]clusterupdate.Change, 0, len(diff.InPlaceChanges))
 	for _, change := range diff.InPlaceChanges {
-		if isComponentReconcileField(change.Field) ||
+		if isComponentReconcileChange(change) ||
 			fieldSupport.SupportsInPlaceField(change.Field) {
 			supported = append(supported, change)
 
@@ -950,6 +950,15 @@ func promoteUnsupportedInPlaceChanges(
 	}
 
 	diff.InPlaceChanges = supported
+}
+
+func isComponentReconcileChange(change clusterupdate.Change) bool {
+	if change.Field == "cluster.metricsServer" &&
+		v1alpha1.MetricsServer(change.NewValue) == v1alpha1.MetricsServerDisabled {
+		return false
+	}
+
+	return isComponentReconcileField(change.Field)
 }
 
 // computeSpecOnlyDiff computes a spec-level diff using default values as

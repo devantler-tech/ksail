@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -326,10 +327,18 @@ func (r *ClusterReconciler) reconcileComponents(
 		return true
 	}
 
+	annotationsBefore := cluster.DeepCopy().Annotations
 	applied, components, err := r.InstallComponents(ctx, provisioner, cluster)
 	cluster.Status.Components = components
 
 	if err != nil {
+		ownershipErr := r.recordComponentOwnershipProgress(
+			ctx,
+			cluster,
+			annotationsBefore,
+		)
+		err = errors.Join(err, ownershipErr)
+
 		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
 		setCondition(
 			cluster,

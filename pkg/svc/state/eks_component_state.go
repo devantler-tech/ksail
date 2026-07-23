@@ -13,10 +13,10 @@ import (
 
 const (
 	// EKSComponentStateVersion is the on-disk schema version for declarative EKS component state.
-	EKSComponentStateVersion = 2
-	// eksComponentStateFileNameFormat is region-scoped because EKS cluster names
-	// are unique only within an AWS region.
-	eksComponentStateFileNameFormat = "eks-components-%s.json"
+	EKSComponentStateVersion = 3
+	// eksComponentStateFileNameFormat is account-and-region-scoped because EKS cluster names are
+	// unique only within one AWS account and region.
+	eksComponentStateFileNameFormat = "eks-components-%s-%s.json"
 )
 
 var (
@@ -32,19 +32,25 @@ type EKSComponentState struct {
 	Version                                  int    `json:"version"`
 	ClusterName                              string `json:"clusterName"`
 	Region                                   string `json:"region"`
+	AccountID                                string `json:"accountId"`
 	AWSLoadBalancerControllerManaged         bool   `json:"awsLoadBalancerControllerManaged,omitzero"`          //nolint:lll // exact component ownership marker
 	AWSLoadBalancerControllerReleaseIdentity string `json:"awsLoadBalancerControllerReleaseIdentity,omitempty"` //nolint:lll // Helm storage object UID
 	AWSLoadBalancerControllerServiceAccount  string `json:"awsLoadBalancerControllerServiceAccount,omitempty"`  //nolint:lll // matches public EKS option key
 }
 
-// SaveEKSComponentState atomically persists an exact-region component baseline.
+// SaveEKSComponentState atomically persists an exact-account-and-region component baseline.
 func SaveEKSComponentState(clusterName, region string, snapshot *EKSComponentState) error {
-	statePath, err := eksComponentStatePath(clusterName, region)
+	accountID := ""
+	if snapshot != nil {
+		accountID = snapshot.AccountID
+	}
+
+	err := validateEKSComponentState(clusterName, region, accountID, snapshot)
 	if err != nil {
 		return err
 	}
 
-	err = validateEKSComponentState(clusterName, region, snapshot)
+	statePath, err := eksComponentStatePath(clusterName, region, accountID)
 	if err != nil {
 		return err
 	}
@@ -67,9 +73,19 @@ func SaveEKSComponentState(clusterName, region string, snapshot *EKSComponentSta
 	return nil
 }
 
-// LoadEKSComponentState reads and validates an exact-region component baseline.
-func LoadEKSComponentState(clusterName, region string) (*EKSComponentState, error) {
-	statePath, err := eksComponentStatePath(clusterName, region)
+// LoadEKSComponentState reads and validates an exact-account-and-region component baseline. Normal
+// callers omit accountID so the immutable ownership record supplies it; tests and migrations may
+// provide one explicit account ID without creating a live ownership binding.
+func LoadEKSComponentState(
+	clusterName, region string,
+	accountIDs ...string,
+) (*EKSComponentState, error) {
+	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	statePath, err := eksComponentStatePath(clusterName, region, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +121,7 @@ func LoadEKSComponentState(clusterName, region string) (*EKSComponentState, erro
 		)
 	}
 
-	err = validateEKSComponentState(clusterName, region, &snapshot)
+	err = validateEKSComponentState(clusterName, region, accountID, &snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +130,7 @@ func LoadEKSComponentState(clusterName, region string) (*EKSComponentState, erro
 }
 
 func validateEKSComponentState(
-	clusterName, region string,
+	clusterName, region, accountID string,
 	snapshot *EKSComponentState,
 ) error {
 	if snapshot == nil {
@@ -123,10 +139,13 @@ func validateEKSComponentState(
 
 	clusterName = strings.TrimSpace(clusterName)
 	region = strings.TrimSpace(region)
+	accountID = strings.TrimSpace(accountID)
 
 	if snapshot.Version != EKSComponentStateVersion ||
 		strings.TrimSpace(snapshot.ClusterName) != clusterName ||
-		strings.TrimSpace(snapshot.Region) != region {
+		strings.TrimSpace(snapshot.Region) != region ||
+		strings.TrimSpace(snapshot.AccountID) != accountID ||
+		!awsAccountIDPattern.MatchString(accountID) {
 		return fmt.Errorf(
 			"%w: identity or version does not match",
 			ErrInvalidEKSComponentState,
@@ -146,8 +165,51 @@ func validateEKSComponentState(
 	return nil
 }
 
-func eksComponentStatePath(clusterName, region string) (string, error) {
-	return eksRegionScopedStatePath(clusterName, region, eksComponentStateFileNameFormat)
+func eksComponentStatePath(clusterName, region, accountID string) (string, error) {
+	accountID = strings.TrimSpace(accountID)
+	if !awsAccountIDPattern.MatchString(accountID) {
+		return "", fmt.Errorf("%w: invalid AWS account ID", ErrInvalidEKSComponentState)
+	}
+
+	return eksRegionScopedStatePath(
+		clusterName,
+		region,
+		fmt.Sprintf(eksComponentStateFileNameFormat, accountID, "%s"),
+	)
+}
+
+func resolveEKSComponentAccountID(
+	clusterName, region string,
+	accountIDs []string,
+) (string, error) {
+	if len(accountIDs) > 1 {
+		return "", fmt.Errorf("%w: multiple AWS account IDs", ErrInvalidEKSComponentState)
+	}
+
+	if len(accountIDs) == 1 {
+		accountID := strings.TrimSpace(accountIDs[0])
+		if !awsAccountIDPattern.MatchString(accountID) {
+			return "", fmt.Errorf("%w: invalid AWS account ID", ErrInvalidEKSComponentState)
+		}
+
+		return accountID, nil
+	}
+
+	ownership, err := LoadEKSOwnershipState(clusterName, region)
+	if err != nil {
+		if errors.Is(err, ErrEKSOwnershipStateNotFound) {
+			return "", fmt.Errorf(
+				"%w: %s in %s has no account binding",
+				ErrEKSComponentStateNotFound,
+				clusterName,
+				region,
+			)
+		}
+
+		return "", fmt.Errorf("resolve EKS component account binding: %w", err)
+	}
+
+	return ownership.AccountID, nil
 }
 
 func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (string, error) {
@@ -170,8 +232,13 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 // are name-scoped, so they are also removed: retaining either can auto-delete or
 // misconfigure a later same-named cluster, while neither can safely identify
 // another region.
-func DeleteEKSRegionState(clusterName, region string) error {
-	componentPath, err := eksComponentStatePath(clusterName, region)
+func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) error {
+	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
+	if err != nil {
+		return err
+	}
+
+	componentPath, err := eksComponentStatePath(clusterName, region, accountID)
 	if err != nil {
 		return err
 	}

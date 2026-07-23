@@ -235,6 +235,12 @@ func TestPromoteUnsupportedInPlaceChangesRequiresRecreation(t *testing.T) {
 		{Field: "cluster.localRegistry.registry", Category: clusterupdate.ChangeCategoryInPlace},
 		{Field: "cluster.cni", Category: clusterupdate.ChangeCategoryInPlace},
 		{
+			Field:    "cluster.metricsServer",
+			OldValue: string(v1alpha1.MetricsServerEnabled),
+			NewValue: string(v1alpha1.MetricsServerDisabled),
+			Category: clusterupdate.ChangeCategoryInPlace,
+		},
+		{
 			Field:    "eks.managedNodeGroups[workers].desiredCapacity",
 			Category: clusterupdate.ChangeCategoryInPlace,
 		},
@@ -252,9 +258,11 @@ func TestPromoteUnsupportedInPlaceChangesRequiresRecreation(t *testing.T) {
 		"cluster.cni",
 		"eks.managedNodeGroups[workers].desiredCapacity",
 	}, []string{diff.InPlaceChanges[0].Field, diff.InPlaceChanges[1].Field})
-	require.Len(t, diff.RecreateRequired, 1)
+	require.Len(t, diff.RecreateRequired, 2)
 	assert.Equal(t, "cluster.localRegistry.registry", diff.RecreateRequired[0].Field)
 	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
+	assert.Equal(t, "cluster.metricsServer", diff.RecreateRequired[1].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[1].Category)
 }
 
 // TestComputeUpdateDiff_PropagatesProvisionerError verifies live provisioner

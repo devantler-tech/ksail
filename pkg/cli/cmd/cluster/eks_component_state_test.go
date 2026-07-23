@@ -35,7 +35,8 @@ func TestPersistRequiredEKSComponentStateRecordsControllerOwnership(t *testing.T
 	)
 
 	ctx := &localregistry.Context{
-		ClusterCfg: &v1alpha1.Cluster{},
+		ClusterCfg:   &v1alpha1.Cluster{},
+		EKSAccountID: testEKSComponentAccountID,
 		EKSConfig: &clusterprovisioner.EKSConfig{
 			Name:   clusterName,
 			Region: region,
@@ -49,13 +50,13 @@ func TestPersistRequiredEKSComponentStateRecordsControllerOwnership(t *testing.T
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 
 	require.NoError(t, cluster.ExportPersistRequiredEKSComponentState(ctx, clusterName))
-	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	snapshot, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.NoError(t, err)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 
 	ctx.ClusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = false
 	require.NoError(t, cluster.ExportPersistRequiredEKSComponentState(ctx, clusterName))
-	snapshot, err = state.LoadEKSComponentState(clusterName, region)
+	snapshot, err = state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.NoError(t, err)
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 }
@@ -68,10 +69,12 @@ func TestOverlayOwnedEKSControllerCleanupBaselineExposesFailedReleaseForRemoval(
 	)
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	saveTestEKSOwnership(t, clusterName, region)
 	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
 		Version:                                  state.EKSComponentStateVersion,
 		ClusterName:                              clusterName,
 		Region:                                   region,
+		AccountID:                                testEKSComponentAccountID,
 		AWSLoadBalancerControllerManaged:         true,
 		AWSLoadBalancerControllerReleaseIdentity: "failed-release-uid",
 	}))
@@ -110,10 +113,12 @@ func TestOverlayOwnedEKSControllerCleanupBaselineDoesNotMaskMissingDesiredReleas
 	)
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	saveTestEKSOwnership(t, clusterName, region)
 	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
 		Version:                                  state.EKSComponentStateVersion,
 		ClusterName:                              clusterName,
 		Region:                                   region,
+		AccountID:                                testEKSComponentAccountID,
 		AWSLoadBalancerControllerManaged:         true,
 		AWSLoadBalancerControllerReleaseIdentity: "missing-release-uid",
 	}))
@@ -159,7 +164,8 @@ func TestPersistRequiredEKSComponentState_FailsClosed(t *testing.T) {
 	))
 
 	ctx := &localregistry.Context{
-		ClusterCfg: &v1alpha1.Cluster{},
+		ClusterCfg:   &v1alpha1.Cluster{},
+		EKSAccountID: testEKSComponentAccountID,
 		EKSConfig: &clusterprovisioner.EKSConfig{
 			Name:   clusterName,
 			Region: "eu-north-1",
@@ -191,13 +197,14 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 		Version:                          state.EKSComponentStateVersion,
 		ClusterName:                      clusterName,
 		Region:                           region,
+		AccountID:                        testEKSComponentAccountID,
 		AWSLoadBalancerControllerManaged: false,
 	}))
 
 	ctx := managedEKSComponentContext(clusterName)
 	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil, true))
 
-	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	snapshot, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.NoError(t, err)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
@@ -226,7 +233,11 @@ func TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure(t *tes
 
 	require.ErrorIs(t, err, creationErr)
 
-	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
 	require.NoError(t, loadErr)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
@@ -259,7 +270,7 @@ func TestFinishRecreateFlowSkipsOwnershipLookupAfterTotalCreationFailure(t *test
 	require.ErrorIs(t, err, creationErr)
 	assert.Zero(t, installer.gitOpsManagedCalls)
 
-	_, loadErr := state.LoadEKSComponentState(clusterName, region)
+	_, loadErr := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.ErrorIs(t, loadErr, state.ErrEKSComponentStateNotFound)
 }
 
@@ -304,7 +315,7 @@ func TestFinishRecreateFlowDoesNotClaimGitOpsManagedController(t *testing.T) {
 	ctx := managedEKSComponentContext(clusterName)
 	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil, true))
 
-	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	snapshot, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.NoError(t, err)
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 }
@@ -324,6 +335,7 @@ func TestClearDeletedEKSStateInvalidatesControllerOwnership(t *testing.T) {
 		Version:                                  state.EKSComponentStateVersion,
 		ClusterName:                              clusterName,
 		Region:                                   region,
+		AccountID:                                testEKSComponentAccountID,
 		AWSLoadBalancerControllerManaged:         true,
 		AWSLoadBalancerControllerReleaseIdentity: "release-uid",
 	}))
@@ -331,7 +343,7 @@ func TestClearDeletedEKSStateInvalidatesControllerOwnership(t *testing.T) {
 	ctx := managedEKSComponentContext(clusterName)
 	require.NoError(t, cluster.ExportClearDeletedEKSState(ctx, clusterName))
 
-	_, err := state.LoadEKSComponentState(clusterName, region)
+	_, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.ErrorIs(t, err, state.ErrEKSComponentStateNotFound)
 }
 
@@ -346,6 +358,7 @@ func TestApplyInPlaceChangesDoesNotClaimManualEKSController(t *testing.T) {
 	)
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	saveTestEKSOwnership(t, clusterName, region)
 
 	ctx := managedEKSComponentContext(clusterName)
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -370,7 +383,7 @@ func TestApplyInPlaceChangesDoesNotClaimManualEKSController(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	snapshot, err := state.LoadEKSComponentState(clusterName, region, testEKSComponentAccountID)
 	require.NoError(t, err)
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 }
@@ -418,6 +431,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 			clusterName := "controller-outcome-" + strconv.Itoa(index)
 
 			t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+			saveTestEKSOwnership(t, clusterName, region)
 
 			if testCase.initial != nil {
 				require.NoError(t, state.SaveEKSComponentState(
@@ -428,6 +442,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 							Version:                          state.EKSComponentStateVersion,
 							ClusterName:                      clusterName,
 							Region:                           region,
+							AccountID:                        testEKSComponentAccountID,
 							AWSLoadBalancerControllerManaged: *testCase.initial,
 						}
 						if *testCase.initial {
@@ -476,7 +491,11 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			snapshot, err := state.LoadEKSComponentState(clusterName, region)
+			snapshot, err := state.LoadEKSComponentState(
+				clusterName,
+				region,
+				testEKSComponentAccountID,
+			)
 			require.NoError(t, err)
 			assert.Equal(t, testCase.wantManaged, snapshot.AWSLoadBalancerControllerManaged)
 			assert.Equal(t, testCase.wantInstall, fakeInstaller.installCalls)
@@ -497,8 +516,10 @@ func TestApplyInPlaceChangesRejectsSkippedEKSControllerMutation(t *testing.T) {
 	)
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	saveTestEKSOwnership(t, clusterName, region)
 	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
 		Version: state.EKSComponentStateVersion, ClusterName: clusterName, Region: region,
+		AccountID:                               testEKSComponentAccountID,
 		AWSLoadBalancerControllerServiceAccount: "old-service-account",
 	}))
 	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{installSkipped: true})
@@ -519,7 +540,11 @@ func TestApplyInPlaceChangesRejectsSkippedEKSControllerMutation(t *testing.T) {
 
 	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
 
-	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
 	require.NoError(t, loadErr)
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "old-service-account", snapshot.AWSLoadBalancerControllerServiceAccount)
@@ -565,7 +590,11 @@ func TestApplyInPlaceChangesPersistsControllerMutationOnPartialFailure(t *testin
 
 	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
 
-	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
 	require.NoError(t, loadErr)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "partial-success-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
@@ -588,7 +617,8 @@ func setEKSControllerTestInstaller(
 
 func managedEKSComponentContext(clusterName string) *localregistry.Context {
 	ctx := &localregistry.Context{
-		ClusterCfg: &v1alpha1.Cluster{},
+		ClusterCfg:   &v1alpha1.Cluster{},
+		EKSAccountID: testEKSComponentAccountID,
 		EKSConfig: &clusterprovisioner.EKSConfig{
 			Name:   clusterName,
 			Region: "eu-north-1",

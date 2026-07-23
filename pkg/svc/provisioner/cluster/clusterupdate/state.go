@@ -66,12 +66,13 @@ func MergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
 func MergePersistedEKSState(
 	spec *v1alpha1.ClusterSpec,
 	clusterName, region string,
+	accountIDs ...string,
 ) error {
 	if spec == nil {
 		return nil
 	}
 
-	saved, err := state.LoadEKSComponentState(clusterName, region)
+	saved, err := state.LoadEKSComponentState(clusterName, region, accountIDs...)
 	if err != nil {
 		if errors.Is(err, state.ErrEKSComponentStateNotFound) {
 			return nil

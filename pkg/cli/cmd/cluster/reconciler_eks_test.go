@@ -72,6 +72,7 @@ var _ installer.Installer = (*recordingEKSLoadBalancerInstaller)(nil)
 
 func persistManagedEKSControllerState(t *testing.T, region string) {
 	t.Helper()
+	saveTestEKSOwnership(t, "test-cluster", region)
 
 	require.NoError(t, state.SaveEKSComponentState(
 		"test-cluster",
@@ -80,6 +81,7 @@ func persistManagedEKSControllerState(t *testing.T, region string) {
 			Version:                                  state.EKSComponentStateVersion,
 			ClusterName:                              "test-cluster",
 			Region:                                   region,
+			AccountID:                                testEKSComponentAccountID,
 			AWSLoadBalancerControllerManaged:         true,
 			AWSLoadBalancerControllerReleaseIdentity: "release-uid",
 		},
@@ -283,7 +285,11 @@ func TestReconcileLoadBalancer_EKSGitOpsTakeoverRemainsUnresolved(t *testing.T) 
 	assert.Empty(t, applied.AppliedChanges)
 	require.Len(t, applied.FailedChanges, 1)
 
-	snapshot, loadErr := state.LoadEKSComponentState("test-cluster", region)
+	snapshot, loadErr := state.LoadEKSComponentState(
+		"test-cluster",
+		region,
+		testEKSComponentAccountID,
+	)
 	require.NoError(t, loadErr)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
