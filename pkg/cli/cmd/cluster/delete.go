@@ -626,7 +626,11 @@ func executeDelete(
 }
 
 func deleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
-	if resolved.Provider == v1alpha1.ProviderAWS && strings.TrimSpace(resolved.AWSRegion) != "" {
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		if strings.TrimSpace(resolved.AWSRegion) == "" {
+			return fmt.Errorf("delete exact-region EKS state: %w", state.ErrInvalidRegion)
+		}
+
 		err := state.DeleteEKSRegionState(resolved.ClusterName, resolved.AWSRegion)
 		if err != nil {
 			return fmt.Errorf("delete exact-region EKS state: %w", err)

@@ -1131,6 +1131,70 @@ func TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion(t *testing.T) {
 	assertParentAWSEnvironmentUnchanged(t)
 }
 
+// TestDeleteResolvedEKSStateFailsClosedWithoutRegion proves ordinary deletion cannot erase
+// every same-named EKS target's state when exact-region resolution is unavailable.
+func TestDeleteResolvedEKSStateFailsClosedWithoutRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "delete-missing-region-eks-6231"
+	persistEKSRegionComponentStates(t, clusterName)
+
+	err := cluster.ExportDeleteResolvedClusterState(&lifecycle.ResolvedClusterInfo{
+		ClusterName: clusterName,
+		Provider:    v1alpha1.ProviderAWS,
+	})
+	require.ErrorIs(t, err, state.ErrInvalidRegion)
+	assertEKSRegionComponentStatesRemain(t, clusterName)
+}
+
+// TestDeleteTTLEKSStateFailsClosedWithoutRegion proves TTL cleanup cannot erase every same-named
+// EKS target's state when its exact-region configuration is absent or incomplete.
+func TestDeleteTTLEKSStateFailsClosedWithoutRegion(t *testing.T) {
+	testCases := map[string]*clusterprovisioner.EKSConfig{
+		"missing config": nil,
+		"blank region":   {},
+	}
+
+	for name, eksConfig := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+
+			const clusterName = "ttl-missing-region-eks-6231"
+			persistEKSRegionComponentStates(t, clusterName)
+
+			err := cluster.ExportDeleteTTLClusterState(
+				clusterName,
+				standaloneEKSTTLClusterConfig(),
+				eksConfig,
+			)
+			require.ErrorIs(t, err, state.ErrInvalidRegion)
+			assertEKSRegionComponentStatesRemain(t, clusterName)
+		})
+	}
+}
+
+func persistEKSRegionComponentStates(t *testing.T, clusterName string) {
+	t.Helper()
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		snapshot := &state.EKSComponentState{
+			Version:     state.EKSComponentStateVersion,
+			ClusterName: clusterName,
+			Region:      region,
+		}
+		require.NoError(t, state.SaveEKSComponentState(clusterName, region, snapshot))
+	}
+}
+
+func assertEKSRegionComponentStatesRemain(t *testing.T, clusterName string) {
+	t.Helper()
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		_, err := state.LoadEKSComponentState(clusterName, region)
+		require.NoError(t, err, "state for region %s must remain", region)
+	}
+}
+
 // TestAutoDeleteEKSFailsClosedWithoutOwnership verifies TTL never constructs a destructive
 // provisioner when ownership provenance is absent or the actual EKS target is unavailable.
 //

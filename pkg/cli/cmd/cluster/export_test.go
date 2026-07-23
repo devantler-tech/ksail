@@ -378,6 +378,20 @@ func ExportAutoDeleteCluster(
 	return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
 }
 
+// ExportDeleteResolvedClusterState exposes exact-target state cleanup for safety tests.
+func ExportDeleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
+	return deleteResolvedClusterState(resolved)
+}
+
+// ExportDeleteTTLClusterState exposes TTL state cleanup for safety tests.
+func ExportDeleteTTLClusterState(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	return deleteTTLClusterState(clusterName, clusterCfg, eksConfig)
+}
+
 // ExportNormalizeVersionTag exposes normalizeVersionTag for testing.
 func ExportNormalizeVersionTag(tag string) string {
 	return normalizeVersionTag(tag)

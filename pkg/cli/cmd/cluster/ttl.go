@@ -117,8 +117,11 @@ func deleteTTLClusterState(
 	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
 	if clusterCfg != nil &&
-		clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
-		eksConfig != nil && strings.TrimSpace(eksConfig.Region) != "" {
+		clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if eksConfig == nil || strings.TrimSpace(eksConfig.Region) == "" {
+			return fmt.Errorf("delete exact-region EKS TTL state: %w", state.ErrInvalidRegion)
+		}
+
 		err := state.DeleteEKSRegionState(clusterName, eksConfig.Region)
 		if err != nil {
 			return fmt.Errorf("delete exact-region EKS TTL state: %w", err)

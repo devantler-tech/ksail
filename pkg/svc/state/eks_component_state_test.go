@@ -50,7 +50,7 @@ func TestLoadEKSComponentStateRejectsSymlinkEscape(t *testing.T) {
 }
 
 func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	const clusterName = "same-name-region-delete"
 
