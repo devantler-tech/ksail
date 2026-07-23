@@ -302,7 +302,7 @@ func runClusterCreationWorkflow(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
-) error {
+) (bool, error) {
 	localDeps := getLocalRegistryDeps()
 
 	err := ensureLocalRegistriesReady(
@@ -313,7 +313,7 @@ func runClusterCreationWorkflow(
 		localDeps,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	setupK3dCNI(ctx.ClusterCfg, ctx.K3dConfig)
@@ -324,19 +324,19 @@ func runClusterCreationWorkflow(
 
 	err = resolveNestedMirrorSpecs(cmd, cfgManager, ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	err = prepareEKSCreateIdentity(cmd.Context(), ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	configureProvisionerFactory(&deps, ctx)
 
 	err = executeClusterCreationAndCapture(cmd, ctx, deps)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Post-creation Docker steps are only needed for local Docker clusters.
@@ -359,7 +359,7 @@ func runClusterCreationWorkflow(
 			localDeps,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to connect local registry: %w", err)
+			return false, fmt.Errorf("failed to connect local registry: %w", err)
 		}
 	}
 
@@ -370,7 +370,7 @@ func runClusterCreationWorkflow(
 		localDeps.DockerInvoker,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to wait for local registry: %w", err)
+		return false, fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
 	// Set Connection.Context so post-CNI setup (InstallCNI, helm, kubectl) can resolve
@@ -383,7 +383,7 @@ func runClusterCreationWorkflow(
 	// If an explicit context is already configured, preserve it.
 	err = resolvePostCreateContext(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)

@@ -195,7 +195,7 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 	}))
 
 	ctx := managedEKSComponentContext(clusterName)
-	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
+	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil, true))
 
 	snapshot, err := state.LoadEKSComponentState(clusterName, region)
 	require.NoError(t, err)
@@ -221,6 +221,7 @@ func TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure(t *tes
 		managedEKSComponentContext(clusterName),
 		clusterName,
 		creationErr,
+		true,
 	)
 
 	require.ErrorIs(t, err, creationErr)
@@ -229,6 +230,37 @@ func TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure(t *tes
 	require.NoError(t, loadErr)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
+// TestFinishRecreateFlowSkipsOwnershipLookupAfterTotalCreationFailure proves
+// an error before post-CNI reconciliation does not add a live Helm round trip
+// to the original creation failure.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestFinishRecreateFlowSkipsOwnershipLookupAfterTotalCreationFailure(t *testing.T) {
+	const (
+		clusterName = "failed-recreate-component-state"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	installer := &recordingEKSLoadBalancerInstaller{}
+	setEKSControllerTestInstaller(t, installer)
+
+	creationErr := assert.AnError
+	err := cluster.ExportFinishRecreateFlow(
+		managedEKSComponentContext(clusterName),
+		clusterName,
+		creationErr,
+		false,
+	)
+
+	require.ErrorIs(t, err, creationErr)
+	assert.Zero(t, installer.gitOpsManagedCalls)
+
+	_, loadErr := state.LoadEKSComponentState(clusterName, region)
+	require.ErrorIs(t, loadErr, state.ErrEKSComponentStateNotFound)
 }
 
 // TestFinishRecreateFlowPersistsReplacementClusterSpec proves recreation
@@ -248,7 +280,7 @@ func TestFinishRecreateFlowPersistsReplacementClusterSpec(t *testing.T) {
 
 	ctx := managedEKSComponentContext(clusterName)
 	ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount = "replacement-sa"
-	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
+	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil, true))
 
 	snapshot, err := state.LoadClusterSpec(clusterName)
 	require.NoError(t, err)
@@ -270,7 +302,7 @@ func TestFinishRecreateFlowDoesNotClaimGitOpsManagedController(t *testing.T) {
 	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{gitOpsManaged: true})
 
 	ctx := managedEKSComponentContext(clusterName)
-	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
+	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil, true))
 
 	snapshot, err := state.LoadEKSComponentState(clusterName, region)
 	require.NoError(t, err)

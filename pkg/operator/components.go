@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	awslbcontroller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -52,7 +53,7 @@ var installOrder = []string{
 	"cert-manager",
 	"local-path-storage", "hetzner-csi",
 	"metrics-server", "kubelet-csr-approver",
-	"metallb", "cloud-provider-kind", "hcloud-ccm", "aws-load-balancer-controller",
+	"metallb", "cloud-provider-kind", "hcloud-ccm", awslbcontroller.ReleaseName,
 	"kyverno", "gatekeeper",
 	"cluster-autoscaler",
 	"flux", "argocd",
@@ -214,7 +215,7 @@ func removedComponentInstallers(
 	for key, inst := range previous {
 		_, stillDesired := desired[key]
 		if !stillDesired {
-			if key == "aws-load-balancer-controller" {
+			if key == awslbcontroller.ReleaseName {
 				expectedIdentity := strings.TrimSpace(
 					cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
 				)
@@ -326,7 +327,7 @@ func recordAWSLoadBalancerControllerOwnership(
 	cluster *v1alpha1.Cluster,
 	installers map[string]installer.Installer,
 ) error {
-	component, desired := installers["aws-load-balancer-controller"]
+	component, desired := installers[awslbcontroller.ReleaseName]
 	if !desired {
 		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
 
@@ -383,7 +384,7 @@ func recordAWSLoadBalancerControllerOwnershipAfterApply(
 	installers map[string]installer.Installer,
 	uninstallErr, installErr error,
 ) error {
-	_, controllerDesired := installers["aws-load-balancer-controller"]
+	_, controllerDesired := installers[awslbcontroller.ReleaseName]
 	if !controllerDesired && (uninstallErr != nil || installErr != nil) {
 		// The caller joins and returns both sibling errors. This helper adds no
 		// duplicate error; it only preserves the existing ownership annotation.

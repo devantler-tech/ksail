@@ -20,6 +20,7 @@ import (
 type recordingEKSLoadBalancerInstaller struct {
 	installCalls       int
 	uninstallCalls     int
+	gitOpsManagedCalls int
 	installSkipped     bool
 	gitOpsManaged      bool
 	releaseIdentity    string
@@ -40,6 +41,8 @@ func (r *recordingEKSLoadBalancerInstaller) InstallWithResult(ctx context.Contex
 }
 
 func (r *recordingEKSLoadBalancerInstaller) IsGitOpsManaged(context.Context) (bool, error) {
+	r.gitOpsManagedCalls++
+
 	return r.gitOpsManaged, nil
 }
 

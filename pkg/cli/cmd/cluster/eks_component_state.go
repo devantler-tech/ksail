@@ -155,7 +155,12 @@ func persistCreatedEKSComponentStateAfterWorkflow(
 	ctx *localregistry.Context,
 	clusterName string,
 	workflowErr error,
+	controllerReconciliationStarted bool,
 ) error {
+	if workflowErr != nil && !controllerReconciliationStarted {
+		return workflowErr
+	}
+
 	stateErr := persistCreatedEKSComponentState(goCtx, ctx, clusterName)
 
 	return errors.Join(workflowErr, stateErr)

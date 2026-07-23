@@ -208,12 +208,36 @@ func TestReleaseExistsUsesLatestDeployedStatus(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestNewClientNormalizesReleaseStorageDriver(t *testing.T) {
+	t.Setenv("HELM_DRIVER", " ConfigMap ")
+
+	client, err := helm.NewClient(newTestHelmKubeconfig(t), "fake")
+
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
 func newMemoryHelmClient(
 	t *testing.T,
 	namespace string,
 ) (*helm.Client, *helmv4action.Configuration) {
 	t.Helper()
 	t.Setenv("HELM_DRIVER", "memory")
+
+	kubeconfigPath := newTestHelmKubeconfig(t)
+
+	settings := helmv4cli.New()
+	settings.KubeConfig = kubeconfigPath
+	settings.SetNamespace(namespace)
+
+	cfg := new(helmv4action.Configuration)
+	require.NoError(t, cfg.Init(settings.RESTClientGetter(), namespace, "memory"))
+
+	return helm.NewClientFromParts(cfg, settings), cfg
+}
+
+func newTestHelmKubeconfig(t *testing.T) string {
+	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/version" {
@@ -245,14 +269,7 @@ users:
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
 
-	settings := helmv4cli.New()
-	settings.KubeConfig = kubeconfigPath
-	settings.SetNamespace(namespace)
-
-	cfg := new(helmv4action.Configuration)
-	require.NoError(t, cfg.Init(settings.RESTClientGetter(), namespace, "memory"))
-
-	return helm.NewClientFromParts(cfg, settings), cfg
+	return kubeconfigPath
 }
 
 // ---------------------------------------------------------------------------

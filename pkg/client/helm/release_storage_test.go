@@ -50,6 +50,52 @@ func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
 	require.ErrorIs(t, err, helm.ErrNoReleaseStorage)
 }
 
+func TestFetchReleaseStorageMetadataNormalizesDriver(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		driver string
+		want   string
+	}{
+		"configmap mixed case and whitespace":     {driver: " ConfigMap ", want: "configmap-uid"},
+		"secret plural mixed case and whitespace": {driver: " SECRETS ", want: "secret-uid"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			clientset := fake.NewSimpleClientset(
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
+					UID: types.UID("secret-uid"),
+					Labels: map[string]string{
+						"name": "controller", "owner": "helm", "version": "1",
+					},
+				}},
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+					Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
+					UID: types.UID("configmap-uid"),
+					Labels: map[string]string{
+						"name": "controller", "owner": "helm", "version": "1",
+					},
+				}},
+			)
+
+			metadata, err := helm.FetchReleaseStorageMetadata(
+				context.Background(),
+				clientset,
+				test.driver,
+				"kube-system",
+				"name=controller,owner=helm",
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, test.want, metadata.Identity)
+		})
+	}
+}
+
 func TestFetchReleaseStorageMetadataExcludesKeepHistoryReplacement(t *testing.T) {
 	t.Parallel()
 

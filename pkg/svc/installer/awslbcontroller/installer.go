@@ -17,7 +17,8 @@ import (
 const (
 	awslbcRepoName = "eks"
 	awslbcRepoURL  = "https://aws.github.io/eks-charts"
-	awslbcRelease  = "aws-load-balancer-controller"
+	// ReleaseName is the canonical component and Helm release key.
+	ReleaseName = "aws-load-balancer-controller"
 	// The controller is conventionally installed into kube-system (the chart's
 	// documented default target), which always exists — no namespace creation.
 	awslbcNamespace = "kube-system"
@@ -106,7 +107,7 @@ func NewInstaller(
 
 	return &Installer{
 		Base: helmutil.NewBase(
-			"aws-load-balancer-controller",
+			ReleaseName,
 			client,
 			timeout,
 			&helm.RepositoryEntry{
@@ -114,7 +115,7 @@ func NewInstaller(
 				URL:  awslbcRepoURL,
 			},
 			&helm.ChartSpec{
-				ReleaseName:     awslbcRelease,
+				ReleaseName:     ReleaseName,
 				ChartName:       awslbcChartName,
 				Namespace:       awslbcNamespace,
 				Version:         chartVersion(),
@@ -142,7 +143,7 @@ func NewInstaller(
 // IsGitOpsManaged reports whether the current release is owned by Flux or
 // ArgoCD. Missing release storage means there is no GitOps-owned release.
 func (i *Installer) IsGitOpsManaged(ctx context.Context) (bool, error) {
-	labels, err := i.client.GetReleaseStorageLabels(ctx, awslbcRelease, awslbcNamespace)
+	labels, err := i.client.GetReleaseStorageLabels(ctx, ReleaseName, awslbcNamespace)
 	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
 		return false, fmt.Errorf(
 			"check AWS load balancer controller release ownership: %w",
@@ -161,7 +162,7 @@ func (i *Installer) IsGitOpsManaged(ctx context.Context) (bool, error) {
 func (i *Installer) ReleaseIdentity(ctx context.Context) (string, error) {
 	metadata, err := i.client.GetReleaseStorageMetadata(
 		ctx,
-		awslbcRelease,
+		ReleaseName,
 		awslbcNamespace,
 	)
 	if err != nil {
@@ -191,7 +192,7 @@ func (i *Installer) ReleaseIdentity(ctx context.Context) (string, error) {
 func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error) {
 	metadata, err := i.client.GetReleaseStorageMetadata(
 		ctx,
-		awslbcRelease,
+		ReleaseName,
 		awslbcNamespace,
 	)
 	if err != nil {
@@ -229,8 +230,8 @@ func (i *Installer) Uninstall(ctx context.Context) error {
 	skip, err := helmutil.SkipIfGitOpsManaged(
 		ctx,
 		i.client,
-		"aws-load-balancer-controller",
-		awslbcRelease,
+		ReleaseName,
+		ReleaseName,
 		awslbcNamespace,
 	)
 	if err != nil {

@@ -102,13 +102,19 @@ func handleCreateRunE(
 		return err
 	}
 
-	creationErr := runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(
+		cmd,
+		cfgManager,
+		ctx,
+		deps,
+	)
 
 	requiredStateErr := persistCreatedEKSComponentStateAfterWorkflow(
 		cmd.Context(),
 		ctx,
 		clusterName,
 		creationErr,
+		controllerReconciliationStarted,
 	)
 	if creationErr != nil {
 		return requiredStateErr
@@ -420,10 +426,10 @@ func handlePostCreationSetup(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
-) error {
+) (bool, error) {
 	cniInstalled, err := setup.InstallCNI(cmd, clusterCfg, tmr)
 	if err != nil {
-		return fmt.Errorf("failed to install CNI: %w", err)
+		return false, fmt.Errorf("failed to install CNI: %w", err)
 	}
 
 	factories := getInstallerFactories()
@@ -438,7 +444,7 @@ func handlePostCreationSetup(
 		cniInstalled,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to install post-CNI components: %w", err)
+		return true, fmt.Errorf("failed to install post-CNI components: %w", err)
 	}
 
 	// Configure OIDC kubeconfig entries when OIDC is enabled
@@ -454,7 +460,7 @@ func handlePostCreationSetup(
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // maybeDisableK3dFeature conditionally appends a K3s --disable flag to K3d config.

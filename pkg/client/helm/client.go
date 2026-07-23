@@ -30,13 +30,21 @@ const (
 // only with Secret or ConfigMap storage so they can distinguish a same-name
 // replacement from the release incarnation KSail actually mutated.
 func ValidateKubernetesReleaseStorageDriver(driver string) error {
-	driver = strings.ToLower(strings.TrimSpace(driver))
+	driver = normalizeReleaseStorageDriver(driver)
 	switch driver {
 	case "", "secret", "secrets", "configmap", "configmaps":
 		return nil
 	default:
 		return fmt.Errorf("%w: %q", ErrReleaseStorageDriverUnsupported, driver)
 	}
+}
+
+func normalizeReleaseStorageDriver(driver string) string {
+	return strings.ToLower(strings.TrimSpace(driver))
+}
+
+func configuredReleaseStorageDriver() string {
+	return normalizeReleaseStorageDriver(os.Getenv("HELM_DRIVER"))
 }
 
 // Client represents the default helm implementation used by KSail.
@@ -108,7 +116,7 @@ func newClient(
 	initErr := actionConfig.Init(
 		settings.RESTClientGetter(),
 		settings.Namespace(),
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if initErr != nil {
 		return nil, fmt.Errorf("failed to initialize helm v4 action config: %w", initErr)
@@ -163,7 +171,7 @@ func (c *Client) RefreshDiscovery() error {
 	initErr := c.actionConfig.Init(
 		settings.RESTClientGetter(),
 		settings.Namespace(),
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if initErr != nil {
 		return fmt.Errorf("reinitialize helm action config after discovery refresh: %w", initErr)
@@ -338,7 +346,7 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	reinitErr := c.actionConfig.Init(
 		c.settings.RESTClientGetter(),
 		"",
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if reinitErr != nil {
 		restoreErr := c.restoreNamespace(previousNamespace)
@@ -416,7 +424,7 @@ func (c *Client) GetReleaseStorageMetadata(
 		namespace = c.settings.Namespace()
 	}
 
-	driver := os.Getenv("HELM_DRIVER")
+	driver := configuredReleaseStorageDriver()
 
 	err := ValidateKubernetesReleaseStorageDriver(driver)
 	if err != nil {
@@ -487,6 +495,8 @@ func (c *Client) fetchReleaseStorageMetadata(
 	clientset kubernetes.Interface,
 	driver, namespace, selector string,
 ) (*ReleaseStorageMetadata, error) {
+	driver = normalizeReleaseStorageDriver(driver)
+
 	err := ValidateKubernetesReleaseStorageDriver(driver)
 	if err != nil {
 		return nil, err

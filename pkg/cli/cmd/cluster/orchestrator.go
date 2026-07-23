@@ -1471,9 +1471,20 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 	})
 
 	// Execute create using shared workflow.
-	creationErr := runClusterCreationWorkflow(o.cmd, o.cfgManager, o.ctx, o.deps)
+	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(
+		o.cmd,
+		o.cfgManager,
+		o.ctx,
+		o.deps,
+	)
 
-	return finishRecreateFlow(o.cmd.Context(), o.ctx, o.clusterName, creationErr)
+	return finishRecreateFlow(
+		o.cmd.Context(),
+		o.ctx,
+		o.clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
 }
 
 // finishRecreateFlow keeps successful recreation finalization separate from the
@@ -1483,8 +1494,15 @@ func finishRecreateFlow(
 	ctx *localregistry.Context,
 	clusterName string,
 	creationErr error,
+	controllerReconciliationStarted bool,
 ) error {
-	err := persistCreatedEKSComponentStateAfterWorkflow(goCtx, ctx, clusterName, creationErr)
+	err := persistCreatedEKSComponentStateAfterWorkflow(
+		goCtx,
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
 	if err != nil {
 		return err
 	}

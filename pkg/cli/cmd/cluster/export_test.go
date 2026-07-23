@@ -291,8 +291,15 @@ func ExportFinishRecreateFlow(
 	ctx *localregistry.Context,
 	clusterName string,
 	creationErr error,
+	controllerReconciliationStarted bool,
 ) error {
-	return finishRecreateFlow(context.Background(), ctx, clusterName, creationErr)
+	return finishRecreateFlow(
+		context.Background(),
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
 }
 
 // ExportClearDeletedEKSState exposes the post-delete state invalidation boundary.
