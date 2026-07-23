@@ -296,6 +296,7 @@ func TestInstallActionAdapter(t *testing.T) {
 		WaitForJobs: true,
 		Timeout:     3 * time.Minute,
 		Version:     "1.5.0",
+		Labels:      map[string]string{"ksail.io/owner": "ksail"},
 	}
 
 	helm.ApplyCommonActionConfig(adapter, spec)
@@ -305,6 +306,7 @@ func TestInstallActionAdapter(t *testing.T) {
 	assert.True(t, install.WaitForJobs)
 	assert.Equal(t, 3*time.Minute, install.Timeout)
 	assert.Equal(t, "1.5.0", install.Version)
+	assert.Equal(t, map[string]string{"ksail.io/owner": "ksail"}, install.Labels)
 }
 
 func TestUpgradeActionAdapter(t *testing.T) {
@@ -316,6 +318,7 @@ func TestUpgradeActionAdapter(t *testing.T) {
 		WaitForJobs: false,
 		Timeout:     7 * time.Minute,
 		Version:     "2.1.0",
+		Labels:      map[string]string{"ksail.io/owner": "ksail"},
 	}
 
 	helm.ApplyCommonActionConfig(adapter, spec)
@@ -325,6 +328,7 @@ func TestUpgradeActionAdapter(t *testing.T) {
 	assert.False(t, upgrade.WaitForJobs)
 	assert.Equal(t, 7*time.Minute, upgrade.Timeout)
 	assert.Equal(t, "2.1.0", upgrade.Version)
+	assert.Equal(t, map[string]string{"ksail.io/owner": "ksail"}, upgrade.Labels)
 }
 
 // ---------------------------------------------------------------------------

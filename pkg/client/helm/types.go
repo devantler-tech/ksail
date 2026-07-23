@@ -62,6 +62,7 @@ type ChartSpec struct {
 	SetValues   map[string]string
 	SetFileVals map[string]string
 	SetJSONVals map[string]string
+	Labels      map[string]string
 
 	RepoURL  string
 	Username string
@@ -106,11 +107,10 @@ type ReleaseInfo struct {
 type ReleaseStorageMetadata struct {
 	Labels   map[string]string
 	Identity string
-	// HistoryIdentities contains every retained revision and is diagnostic only.
+	// HistoryIdentities contains every retained revision. Callers must combine
+	// it with positive ownership metadata from the latest revision before using
+	// a historical identity as uninstall authority.
 	HistoryIdentities []string
-	// CurrentIncarnationIdentities excludes revisions before the latest Helm
-	// uninstalled boundary and is safe for release-ownership comparisons.
-	CurrentIncarnationIdentities []string
 }
 
 // ChartManager defines the chart lifecycle operations required by KSail.

@@ -147,6 +147,20 @@ func persistCreatedEKSComponentState(
 	)
 }
 
+// persistCreatedEKSComponentStateAfterWorkflow preserves controller ownership
+// created before a later workflow stage failed, while retaining every original
+// failure for the caller.
+func persistCreatedEKSComponentStateAfterWorkflow(
+	goCtx context.Context,
+	ctx *localregistry.Context,
+	clusterName string,
+	workflowErr error,
+) error {
+	stateErr := persistCreatedEKSComponentState(goCtx, ctx, clusterName)
+
+	return errors.Join(workflowErr, stateErr)
+}
+
 // overlayOwnedEKSControllerCleanupBaseline turns positive persisted ownership
 // into a removal-only diff signal when the desired controller is disabled.
 // Live deployed status remains authoritative when the controller is desired,

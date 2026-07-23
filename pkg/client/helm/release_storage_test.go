@@ -37,11 +37,6 @@ func TestFetchReleaseStorageMetadataSelectsLatestIncarnation(t *testing.T) {
 	assert.Equal(t, "current-uid", metadata.Identity)
 	assert.Equal(t, "2", metadata.Labels["version"])
 	assert.ElementsMatch(t, []string{"old-uid", "current-uid"}, metadata.HistoryIdentities)
-	assert.ElementsMatch(
-		t,
-		[]string{"old-uid", "current-uid"},
-		metadata.CurrentIncarnationIdentities,
-	)
 }
 
 func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
@@ -70,7 +65,7 @@ func TestFetchReleaseStorageMetadataExcludesKeepHistoryReplacement(t *testing.T)
 			Name: "sh.helm.release.v1.controller.v2", Namespace: "kube-system",
 			UID: types.UID("uninstalled-uid"),
 			Labels: map[string]string{
-				"name": "controller", "owner": "helm", "version": "2", "status": "uninstalled",
+				"name": "controller", "owner": "helm", "version": "2", "status": "superseded",
 			},
 		}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -89,8 +84,8 @@ func TestFetchReleaseStorageMetadataExcludesKeepHistoryReplacement(t *testing.T)
 	require.NoError(t, err)
 	assert.ElementsMatch(
 		t,
-		[]string{"replacement-uid"},
-		metadata.CurrentIncarnationIdentities,
+		[]string{"persisted-owned-uid", "uninstalled-uid", "replacement-uid"},
+		metadata.HistoryIdentities,
 	)
 }
 

@@ -203,6 +203,34 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
 }
 
+// TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure proves
+// a later create-phase failure cannot orphan an already-installed controller.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure(t *testing.T) {
+	const (
+		clusterName = "partial-recreate-component-state"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{})
+
+	creationErr := assert.AnError
+	err := cluster.ExportFinishRecreateFlow(
+		managedEKSComponentContext(clusterName),
+		clusterName,
+		creationErr,
+	)
+
+	require.ErrorIs(t, err, creationErr)
+
+	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, loadErr)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
 // TestFinishRecreateFlowPersistsReplacementClusterSpec proves recreation
 // restores the declarative baseline cleared immediately after deletion.
 //

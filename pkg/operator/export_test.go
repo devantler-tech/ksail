@@ -22,6 +22,8 @@ var (
 	NewInstallerFactory = newInstallerFactory
 	// RecordAWSLoadBalancerControllerOwnership exposes outcome-based operator ownership capture.
 	RecordAWSLoadBalancerControllerOwnership = recordAWSLoadBalancerControllerOwnership
+	// RecordAWSLoadBalancerControllerOwnershipAfterApply exposes partial-apply ownership capture.
+	RecordAWSLoadBalancerControllerOwnershipAfterApply = recordAWSLoadBalancerControllerOwnershipAfterApply
 	// SanitizeForWrite exposes the API write-boundary sanitization for testing.
 	SanitizeForWrite = sanitizeForWrite
 	// CountReadyNodes exposes countReadyNodes for testing.

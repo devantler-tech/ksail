@@ -367,6 +367,28 @@ func TestRecordAWSLoadBalancerControllerOwnershipUsesActualInstallOutcome(t *tes
 	)
 }
 
+func TestRecordAWSLoadBalancerControllerOwnershipSurvivesSiblingFailure(t *testing.T) {
+	t.Parallel()
+
+	cluster := &v1alpha1.Cluster{}
+	err := operator.RecordAWSLoadBalancerControllerOwnershipAfterApply(
+		t.Context(),
+		cluster,
+		map[string]installer.Installer{
+			componentAWSLB: &ownershipReportingInstaller{identity: "partial-apply-release-uid"},
+		},
+		errBoom,
+		errBoom,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"partial-apply-release-uid",
+		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+	)
+}
+
 func TestSanitizeForWriteDropsClientSuppliedControllerOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -420,12 +442,9 @@ func TestRemovedComponentInstallers_DoesNotInferAWSOwnershipFromDesiredBaseline(
 		map[string]installer.Installer{},
 	)
 	require.NoError(t, err)
-	assert.NotContains(
-		t,
-		removed,
-		componentAWSLB,
-		"the desired-spec baseline alone is not positive operator ownership",
-	)
+	require.Contains(t, removed, componentAWSLB)
+	err = operator.RunUninstallers(t.Context(), removed)
+	require.ErrorContains(t, err, "operator ownership evidence is required")
 }
 
 func TestRemovedComponentInstallers_BaselineFactoryUsesPreviousDistribution(t *testing.T) {

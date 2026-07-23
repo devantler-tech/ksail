@@ -13,6 +13,7 @@ type actionConfig interface {
 	setWaitForJobs(wait bool)
 	setTimeout(timeout time.Duration)
 	setVersion(version string)
+	setLabels(labels map[string]string)
 }
 
 // installActionAdapter wraps Install to implement actionConfig.
@@ -22,6 +23,7 @@ func (a installActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.Wai
 func (a installActionAdapter) setWaitForJobs(w bool)                     { a.WaitForJobs = w }
 func (a installActionAdapter) setTimeout(t time.Duration)                { a.Timeout = t }
 func (a installActionAdapter) setVersion(v string)                       { a.Version = v }
+func (a installActionAdapter) setLabels(labels map[string]string)        { a.Labels = labels }
 
 // upgradeActionAdapter wraps Upgrade to implement actionConfig.
 type upgradeActionAdapter struct{ *helmv4action.Upgrade }
@@ -30,6 +32,7 @@ func (a upgradeActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.Wai
 func (a upgradeActionAdapter) setWaitForJobs(w bool)                     { a.WaitForJobs = w }
 func (a upgradeActionAdapter) setTimeout(t time.Duration)                { a.Timeout = t }
 func (a upgradeActionAdapter) setVersion(v string)                       { a.Version = v }
+func (a upgradeActionAdapter) setLabels(labels map[string]string)        { a.Labels = labels }
 
 // applyCommonActionConfig applies shared configuration from spec to action.
 //
@@ -57,4 +60,5 @@ func applyCommonActionConfig(action actionConfig, spec *ChartSpec) {
 
 	action.setTimeout(timeout)
 	action.setVersion(spec.Version)
+	action.setLabels(spec.Labels)
 }

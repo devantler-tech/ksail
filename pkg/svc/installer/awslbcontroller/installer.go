@@ -22,6 +22,11 @@ const (
 	// documented default target), which always exists — no namespace creation.
 	awslbcNamespace = "kube-system"
 	awslbcChartName = "eks/aws-load-balancer-controller"
+	// ReleaseOwnershipLabel is attached to every Helm revision KSail creates.
+	// Helm upgrades preserve custom release labels, while an external
+	// `helm install --replace` starts without it even when old history remains.
+	ReleaseOwnershipLabel = "ksail.io/aws-load-balancer-controller-owner"
+	releaseOwnershipValue = "ksail"
 )
 
 // ErrClusterNameRequired is returned when no EKS cluster name is available for
@@ -122,8 +127,11 @@ func NewInstaller(
 				// upgrades leave them at the previously-installed version
 				// (helm v4 maps !UpgradeCRDs to SkipCRDs).
 				UpgradeCRDs: true,
-				Timeout:     timeout,
-				ValuesYaml:  buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
+				Labels: map[string]string{
+					ReleaseOwnershipLabel: releaseOwnershipValue,
+				},
+				Timeout:    timeout,
+				ValuesYaml: buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
 			},
 		),
 		client:       client,
@@ -198,8 +206,15 @@ func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (b
 		return false, nil
 	}
 
-	return metadata.Identity == expected ||
-		slices.Contains(metadata.CurrentIncarnationIdentities, expected), nil
+	if metadata.Identity == expected {
+		return true, nil
+	}
+
+	if metadata.Labels[ReleaseOwnershipLabel] != releaseOwnershipValue {
+		return false, nil
+	}
+
+	return slices.Contains(metadata.HistoryIdentities, expected), nil
 }
 
 // Uninstall removes the AWS Load Balancer Controller only when the caller has

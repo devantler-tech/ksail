@@ -55,12 +55,14 @@ type TestableActionConfig struct {
 	WaitForJobs  bool
 	Timeout      time.Duration
 	Version      string
+	Labels       map[string]string
 }
 
 func (t *TestableActionConfig) setWaitStrategy(s helmv4kube.WaitStrategy) { t.WaitStrategy = s }
 func (t *TestableActionConfig) setWaitForJobs(w bool)                     { t.WaitForJobs = w }
 func (t *TestableActionConfig) setTimeout(d time.Duration)                { t.Timeout = d }
 func (t *TestableActionConfig) setVersion(v string)                       { t.Version = v }
+func (t *TestableActionConfig) setLabels(labels map[string]string)        { t.Labels = labels }
 
 // NewInstallActionAdapter creates an installActionAdapter wrapping an Install action.
 func NewInstallActionAdapter() (actionConfig, *helmv4action.Install) {

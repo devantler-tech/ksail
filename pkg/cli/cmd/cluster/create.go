@@ -102,12 +102,17 @@ func handleCreateRunE(
 		return err
 	}
 
-	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
-	if err != nil {
-		return err
-	}
+	creationErr := runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 
-	requiredStateErr := persistCreatedEKSComponentState(cmd.Context(), ctx, clusterName)
+	requiredStateErr := persistCreatedEKSComponentStateAfterWorkflow(
+		cmd.Context(),
+		ctx,
+		clusterName,
+		creationErr,
+	)
+	if creationErr != nil {
+		return requiredStateErr
+	}
 
 	// Persist the ClusterSpec so that future updates have an accurate baseline
 	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).

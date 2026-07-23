@@ -37,6 +37,9 @@ var (
 	errAWSControllerIdentityEmpty = errors.New(
 		"AWS load balancer controller operator identity is empty",
 	)
+	errOperatorOwnershipEvidenceRequired = errors.New(
+		"AWS load balancer controller operator ownership evidence is required",
+	)
 )
 
 // installOrder lists component installers in the order they must run: CNI first (pods cannot
@@ -132,11 +135,13 @@ func InstallComponents(
 
 	components, installErr := runInstallers(ctx, installers)
 
-	var ownershipErr error
-
-	if uninstallErr == nil && installErr == nil {
-		ownershipErr = recordAWSLoadBalancerControllerOwnership(ctx, cluster, installers)
-	}
+	ownershipErr := recordAWSLoadBalancerControllerOwnershipAfterApply(
+		ctx,
+		cluster,
+		installers,
+		uninstallErr,
+		installErr,
+	)
 
 	return true, components, errors.Join(uninstallErr, installErr, ownershipErr)
 }
@@ -218,12 +223,12 @@ func removedComponentInstallers(
 					cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
 				)
 				if expectedIdentity == "" {
-					continue
-				}
-
-				inst = &releaseIdentityBoundInstaller{
-					Installer:        inst,
-					expectedIdentity: expectedIdentity,
+					inst = &unresolvedRemovalInstaller{Installer: inst}
+				} else {
+					inst = &releaseIdentityBoundInstaller{
+						Installer:        inst,
+						expectedIdentity: expectedIdentity,
+					}
 				}
 			}
 
@@ -250,6 +255,14 @@ type releaseIdentityBoundInstaller struct {
 	installer.Installer
 
 	expectedIdentity string
+}
+
+type unresolvedRemovalInstaller struct {
+	installer.Installer
+}
+
+func (*unresolvedRemovalInstaller) Uninstall(context.Context) error {
+	return errOperatorOwnershipEvidenceRequired
 }
 
 func (bound *releaseIdentityBoundInstaller) Uninstall(ctx context.Context) error {
@@ -362,6 +375,27 @@ func recordAWSLoadBalancerControllerOwnership(
 	cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = identity
 
 	return nil
+}
+
+// recordAWSLoadBalancerControllerOwnershipAfterApply records the controller's
+// actual outcome even when a sibling component failed later in the same pass.
+// A removal only clears existing authority after the complete pass succeeds;
+// otherwise the next reconcile must retain enough evidence to retry cleanup.
+func recordAWSLoadBalancerControllerOwnershipAfterApply(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	installers map[string]installer.Installer,
+	uninstallErr, installErr error,
+) error {
+	_, controllerDesired := installers["aws-load-balancer-controller"]
+	if !controllerDesired && (uninstallErr != nil || installErr != nil) {
+		// The caller joins and returns both sibling errors. This helper adds no
+		// duplicate error; it only preserves the existing ownership annotation.
+		//nolint:nilerr // sibling failures are returned by InstallComponents
+		return nil
+	}
+
+	return recordAWSLoadBalancerControllerOwnership(ctx, cluster, installers)
 }
 
 // lastAppliedComponentsSpec parses the component-baseline annotation into a spec. The second return

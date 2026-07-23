@@ -1484,11 +1484,7 @@ func finishRecreateFlow(
 	clusterName string,
 	creationErr error,
 ) error {
-	if creationErr != nil {
-		return creationErr
-	}
-
-	err := persistCreatedEKSComponentState(goCtx, ctx, clusterName)
+	err := persistCreatedEKSComponentStateAfterWorkflow(goCtx, ctx, clusterName, creationErr)
 	if err != nil {
 		return err
 	}

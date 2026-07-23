@@ -118,6 +118,29 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 	require.NotNil(t, installer)
 }
 
+func TestInstallLabelsReleaseWithKSailOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil, helm.ErrNoReleaseStorage)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, 5*time.Minute).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			return spec.Labels[awslbcontrollerinstaller.ReleaseOwnershipLabel] == "ksail"
+		})).
+		Return(&helm.ReleaseInfo{}, nil)
+
+	component, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+	require.NoError(t, component.Install(t.Context()))
+}
+
 func TestNewInstallerRejectsStorageWithoutKubernetesReleaseIdentity(t *testing.T) {
 	t.Setenv("HELM_DRIVER", "sql")
 
@@ -203,18 +226,19 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 		{
 			name: "owned failed upgrade retains the persisted revision UID",
 			metadata: &helm.ReleaseStorageMetadata{
-				Identity:                     "failed-upgrade-uid",
-				HistoryIdentities:            []string{"persisted-owned-uid", "failed-upgrade-uid"},
-				CurrentIncarnationIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
+				Labels: map[string]string{
+					awslbcontrollerinstaller.ReleaseOwnershipLabel: "ksail",
+				},
+				Identity:          "failed-upgrade-uid",
+				HistoryIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
 			},
 			want: true,
 		},
 		{
 			name: "same-name replacement has a disjoint release history",
 			metadata: &helm.ReleaseStorageMetadata{
-				Identity:                     "replacement-uid",
-				HistoryIdentities:            []string{"replacement-uid"},
-				CurrentIncarnationIdentities: []string{"replacement-uid"},
+				Identity:          "replacement-uid",
+				HistoryIdentities: []string{"replacement-uid"},
 			},
 			want: false,
 		},
@@ -227,7 +251,6 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 					"uninstalled-uid",
 					"replacement-uid",
 				},
-				CurrentIncarnationIdentities: []string{"replacement-uid"},
 			},
 			want: false,
 		},
