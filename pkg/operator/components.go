@@ -136,11 +136,7 @@ func InstallComponents(
 	components, installErr := runInstallers(ctx, installers)
 
 	ownershipErr := recordAWSLoadBalancerControllerOwnershipAfterApply(
-		ctx,
-		cluster,
-		installers,
-		uninstallErr,
-		installErr,
+		ctx, cluster, installers, uninstallErr, installErr,
 	)
 
 	return true, components, errors.Join(uninstallErr, installErr, ownershipErr)
