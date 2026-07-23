@@ -35,6 +35,9 @@ var (
 	errAWSControllerIdentityUnavailable = errors.New(
 		"AWS load balancer controller cannot report release identity",
 	)
+	errAWSControllerReleaseOwnershipUnavailable = errors.New(
+		"AWS load balancer controller cannot verify KSail release ownership",
+	)
 	errAWSControllerIdentityEmpty = errors.New(
 		"AWS load balancer controller operator identity is empty",
 	)
@@ -334,35 +337,15 @@ func recordAWSLoadBalancerControllerOwnership(
 		return nil
 	}
 
-	ownershipReporter, ownershipSupported := component.(gitOpsOwnershipReporter)
-	if !ownershipSupported {
-		return errAWSControllerOwnershipUnavailable
-	}
-
-	gitOpsManaged, err := ownershipReporter.IsGitOpsManaged(ctx)
+	identity, operatorOwned, err := resolveAWSLoadBalancerControllerOwnership(ctx, component)
 	if err != nil {
-		return fmt.Errorf("verify AWS load balancer controller operator ownership: %w", err)
+		return err
 	}
 
-	if gitOpsManaged {
+	if !operatorOwned {
 		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
 
 		return nil
-	}
-
-	identityReporter, identitySupported := component.(releaseIdentityReporter)
-	if !identitySupported {
-		return errAWSControllerIdentityUnavailable
-	}
-
-	identity, err := identityReporter.ReleaseIdentity(ctx)
-	if err != nil {
-		return fmt.Errorf("read AWS load balancer controller operator identity: %w", err)
-	}
-
-	identity = strings.TrimSpace(identity)
-	if identity == "" {
-		return errAWSControllerIdentityEmpty
 	}
 
 	if cluster.Annotations == nil {
@@ -372,6 +355,59 @@ func recordAWSLoadBalancerControllerOwnership(
 	cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = identity
 
 	return nil
+}
+
+func resolveAWSLoadBalancerControllerOwnership(
+	ctx context.Context,
+	component installer.Installer,
+) (string, bool, error) {
+	ownershipReporter, ownershipSupported := component.(gitOpsOwnershipReporter)
+	if !ownershipSupported {
+		return "", false, errAWSControllerOwnershipUnavailable
+	}
+
+	gitOpsManaged, err := ownershipReporter.IsGitOpsManaged(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf(
+			"verify AWS load balancer controller operator ownership: %w",
+			err,
+		)
+	}
+
+	if gitOpsManaged {
+		return "", false, nil
+	}
+
+	identityReporter, identitySupported := component.(releaseIdentityReporter)
+	if !identitySupported {
+		return "", false, errAWSControllerIdentityUnavailable
+	}
+
+	identity, err := identityReporter.ReleaseIdentity(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("read AWS load balancer controller operator identity: %w", err)
+	}
+
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return "", false, errAWSControllerIdentityEmpty
+	}
+
+	releaseOwnershipReporter, releaseOwnershipSupported := component.(releaseIdentityOwnershipReporter)
+	if !releaseOwnershipSupported {
+		return "", false, errAWSControllerReleaseOwnershipUnavailable
+	}
+
+	owned, err := releaseOwnershipReporter.OwnsReleaseIdentity(ctx, identity)
+	if err != nil {
+		return "", false, fmt.Errorf("verify AWS load balancer controller KSail ownership: %w", err)
+	}
+
+	if !owned {
+		return "", false, errOperatorOwnershipEvidenceRequired
+	}
+
+	return identity, true, nil
 }
 
 // recordAWSLoadBalancerControllerOwnershipAfterApply records the controller's

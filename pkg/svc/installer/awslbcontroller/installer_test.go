@@ -215,14 +215,15 @@ func TestReleaseIdentityReturnsStorageUID(t *testing.T) {
 	assert.Equal(t, "release-uid", identity)
 }
 
-func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.T) {
-	t.Parallel()
+type releaseIdentityOwnershipCase struct {
+	name     string
+	metadata *helm.ReleaseStorageMetadata
+	expected string
+	want     bool
+}
 
-	for _, testCase := range []struct {
-		name     string
-		metadata *helm.ReleaseStorageMetadata
-		want     bool
-	}{
+func releaseIdentityOwnershipCases() []releaseIdentityOwnershipCase {
+	return []releaseIdentityOwnershipCase{
 		{
 			name: "owned failed upgrade retains the persisted revision UID",
 			metadata: &helm.ReleaseStorageMetadata{
@@ -232,7 +233,17 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 				Identity:          "failed-upgrade-uid",
 				HistoryIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
 			},
-			want: true,
+			expected: "persisted-owned-uid",
+			want:     true,
+		},
+		{
+			name: "unlabelled manual release cannot own its current UID",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity:          "manual-release-uid",
+				HistoryIdentities: []string{"manual-release-uid"},
+			},
+			expected: "manual-release-uid",
+			want:     false,
 		},
 		{
 			name: "same-name replacement has a disjoint release history",
@@ -240,7 +251,8 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 				Identity:          "replacement-uid",
 				HistoryIdentities: []string{"replacement-uid"},
 			},
-			want: false,
+			expected: "persisted-owned-uid",
+			want:     false,
 		},
 		{
 			name: "keep-history replacement excludes the prior incarnation",
@@ -252,9 +264,16 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 					"replacement-uid",
 				},
 			},
-			want: false,
+			expected: "persisted-owned-uid",
+			want:     false,
 		},
-	} {
+	}
+}
+
+func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range releaseIdentityOwnershipCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -271,7 +290,7 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 			)
 			require.NoError(t, err)
 
-			owned, err := component.OwnsReleaseIdentity(t.Context(), "persisted-owned-uid")
+			owned, err := component.OwnsReleaseIdentity(t.Context(), testCase.expected)
 			require.NoError(t, err)
 			assert.Equal(t, testCase.want, owned)
 		})

@@ -323,6 +323,24 @@ func ExportComputeUpdateDiff(
 	return orchestrator.computeUpdateDiff(updater)
 }
 
+// ExportApplyOrReportChanges exposes the no-change state-repair boundary for tests.
+func ExportApplyOrReportChanges(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+	currentSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.applyOrReportChanges(updater, currentSpec, diff, nil)
+}
+
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
 func ExportReportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	reportNoApplicableChanges(cmd, diff)

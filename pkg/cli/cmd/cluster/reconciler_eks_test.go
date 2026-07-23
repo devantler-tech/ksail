@@ -22,6 +22,7 @@ type recordingEKSLoadBalancerInstaller struct {
 	uninstallCalls     int
 	gitOpsManagedCalls int
 	installSkipped     bool
+	installErr         error
 	gitOpsManaged      bool
 	releaseIdentity    string
 	releaseIdentityErr error
@@ -32,7 +33,7 @@ type recordingEKSLoadBalancerInstaller struct {
 func (r *recordingEKSLoadBalancerInstaller) Install(_ context.Context) error {
 	r.installCalls++
 
-	return nil
+	return r.installErr
 }
 
 func (r *recordingEKSLoadBalancerInstaller) InstallWithResult(ctx context.Context) (bool, error) {

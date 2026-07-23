@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -99,6 +100,7 @@ type recordingInstaller struct {
 type ownershipReportingInstaller struct {
 	gitOpsManaged bool
 	identity      string
+	identityOwned bool
 }
 
 func (*ownershipReportingInstaller) Install(context.Context) error   { return nil }
@@ -113,6 +115,13 @@ func (i *ownershipReportingInstaller) IsGitOpsManaged(context.Context) (bool, er
 
 func (i *ownershipReportingInstaller) ReleaseIdentity(context.Context) (string, error) {
 	return i.identity, nil
+}
+
+func (i *ownershipReportingInstaller) OwnsReleaseIdentity(
+	context.Context,
+	string,
+) (bool, error) {
+	return i.identityOwned, nil
 }
 
 func (r *recordingInstaller) Install(_ context.Context) error {
@@ -286,7 +295,12 @@ func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *test
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
 		GetReleaseStorageMetadata(mock.Anything, componentAWSLB, "kube-system").
-		Return(&helm.ReleaseStorageMetadata{Identity: "operator-release-uid"}, nil)
+		Return(&helm.ReleaseStorageMetadata{
+			Identity: "operator-release-uid",
+			Labels: map[string]string{
+				awslbcontrollerinstaller.ReleaseOwnershipLabel: "ksail",
+			},
+		}, nil)
 	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, componentAWSLB, "kube-system").
 		Return(map[string]string{"owner": "helm"}, nil)
@@ -356,7 +370,9 @@ func TestRecordAWSLoadBalancerControllerOwnershipUsesActualInstallOutcome(t *tes
 		t.Context(),
 		cluster,
 		map[string]installer.Installer{
-			componentAWSLB: &ownershipReportingInstaller{identity: "operator-release-uid"},
+			componentAWSLB: &ownershipReportingInstaller{
+				identity: "operator-release-uid", identityOwned: true,
+			},
 		},
 	)
 	require.NoError(t, err)
@@ -364,6 +380,26 @@ func TestRecordAWSLoadBalancerControllerOwnershipUsesActualInstallOutcome(t *tes
 		t,
 		"operator-release-uid",
 		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+	)
+}
+
+func TestRecordAWSLoadBalancerControllerOwnershipRejectsManualRelease(t *testing.T) {
+	t.Parallel()
+
+	cluster := &v1alpha1.Cluster{}
+	err := operator.RecordAWSLoadBalancerControllerOwnership(
+		t.Context(),
+		cluster,
+		map[string]installer.Installer{
+			componentAWSLB: &ownershipReportingInstaller{identity: "manual-release-uid"},
+		},
+	)
+
+	require.Error(t, err)
+	assert.NotContains(
+		t,
+		cluster.Annotations,
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation,
 	)
 }
 
@@ -375,7 +411,9 @@ func TestRecordAWSLoadBalancerControllerOwnershipSurvivesSiblingFailure(t *testi
 		t.Context(),
 		cluster,
 		map[string]installer.Installer{
-			componentAWSLB: &ownershipReportingInstaller{identity: "partial-apply-release-uid"},
+			componentAWSLB: &ownershipReportingInstaller{
+				identity: "partial-apply-release-uid", identityOwned: true,
+			},
 		},
 		errBoom,
 		errBoom,

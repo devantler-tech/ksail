@@ -279,6 +279,12 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 
 func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) error {
 	controllerManaged, releaseIdentity, err := r.installLoadBalancer(ctx)
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS && controllerManaged {
+		r.eksLoadBalancerOwnershipUpdated = true
+		r.eksLoadBalancerManaged = true
+		r.eksLoadBalancerReleaseIdentity = releaseIdentity
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to install load balancer: %w", err)
 	}
@@ -290,10 +296,6 @@ func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) 
 	if !controllerManaged {
 		return errEKSLoadBalancerControllerMutationSkipped
 	}
-
-	r.eksLoadBalancerOwnershipUpdated = true
-	r.eksLoadBalancerManaged = true
-	r.eksLoadBalancerReleaseIdentity = releaseIdentity
 
 	return nil
 }
@@ -345,7 +347,10 @@ func (r *componentReconciler) installLoadBalancer(ctx context.Context) (bool, st
 			r.factories,
 		)
 		if err != nil {
-			return false, "", fmt.Errorf("install EKS load balancer controller: %w", err)
+			return managed, releaseIdentity, fmt.Errorf(
+				"install EKS load balancer controller: %w",
+				err,
+			)
 		}
 
 		return managed, releaseIdentity, nil

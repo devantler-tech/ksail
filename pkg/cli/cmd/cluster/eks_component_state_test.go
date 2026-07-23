@@ -635,6 +635,90 @@ func TestApplyInPlaceChangesPersistsControllerMutationOnPartialFailure(t *testin
 	assert.Equal(t, "partial-success-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
 }
 
+// TestApplyInPlaceChangesPersistsOwnershipAfterPartialControllerInstall proves
+// a Helm error after creating a KSail-labelled revision retains the concrete
+// UID needed to clean up that partial release on a later disable.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestApplyInPlaceChangesPersistsOwnershipAfterPartialControllerInstall(t *testing.T) {
+	const (
+		clusterName = "partial-controller-install"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	owned := true
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{
+		installErr:      assert.AnError,
+		releaseIdentity: "partial-install-uid",
+		releaseOwned:    &owned,
+	})
+
+	ctx := managedEKSComponentContext(clusterName)
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field: specdiff.EKSLoadBalancerControllerField, OldValue: "false", NewValue: "true",
+	})
+
+	err := cluster.ExportApplyInPlaceChanges(
+		newReconcileTestCmd(),
+		&fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()},
+		clusterName,
+		&v1alpha1.ClusterSpec{}, ctx, diff, nil, false, false,
+	)
+
+	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
+
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
+	require.NoError(t, loadErr)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "partial-install-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
+// TestApplyOrReportChangesRepairsMissingControllerOwnershipOnNoChange proves a
+// transient state-save failure can be retried after Helm has already converged.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestApplyOrReportChangesRepairsMissingControllerOwnershipOnNoChange(t *testing.T) {
+	const (
+		clusterName = "no-change-controller-state-repair"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	owned := true
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{
+		releaseIdentity: "recovered-release-uid",
+		releaseOwned:    &owned,
+	})
+
+	ctx := managedEKSComponentContext(clusterName)
+	err := cluster.ExportApplyOrReportChanges(
+		newReconcileTestCmd(),
+		ctx,
+		clusterName,
+		&fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()},
+		&v1alpha1.ClusterSpec{},
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.NoError(t, err)
+
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
+	require.NoError(t, loadErr)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "recovered-release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
 func setEKSControllerTestInstaller(
 	t *testing.T,
 	fakeInstaller *recordingEKSLoadBalancerInstaller,

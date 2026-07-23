@@ -881,16 +881,11 @@ func (o *updateOrchestrator) computeUpdateDiff(
 		)
 	}
 
-	eksRegion := ""
-	if o.ctx.EKSConfig != nil {
-		eksRegion = o.ctx.EKSConfig.Region
-	}
-
 	err = overlayOwnedEKSControllerCleanupBaseline(
 		currentSpec,
 		&o.ctx.ClusterCfg.Spec.Cluster,
 		o.clusterName,
-		eksRegion,
+		o.eksRegion(),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -1234,6 +1229,11 @@ func (o *updateOrchestrator) applyOrReportChanges(
 	}
 
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
+		err := o.repairEKSComponentState()
+		if err != nil {
+			return err
+		}
+
 		reportNoApplicableChanges(o.cmd, diff)
 
 		return nil
@@ -1246,19 +1246,43 @@ func (o *updateOrchestrator) applyOrReportChanges(
 		return nil
 	}
 
-	eksRegion := ""
-	if o.ctx.EKSConfig != nil {
-		eksRegion = o.ctx.EKSConfig.Region
-	}
-
 	reconciler := newComponentReconciler(
-		o.cmd, o.ctx.ClusterCfg, o.clusterName, eksRegion,
+		o.cmd, o.ctx.ClusterCfg, o.clusterName, o.eksRegion(),
 	)
 
 	return applyInPlaceChanges(
 		o.cmd, updater, reconciler, o.clusterName,
 		currentSpec, o.ctx, diff, outputTimer, o.forceDrain, allowRolling,
 	)
+}
+
+func (o *updateOrchestrator) eksRegion() string {
+	if o.ctx.EKSConfig == nil {
+		return ""
+	}
+
+	return o.ctx.EKSConfig.Region
+}
+
+// repairEKSComponentState restores verified controller ownership when an
+// earlier state write failed after Helm had already converged. Non-EKS updates
+// have no component state to repair.
+func (o *updateOrchestrator) repairEKSComponentState() error {
+	if o.ctx == nil || o.ctx.ClusterCfg == nil ||
+		o.ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	err := persistCreatedEKSComponentState(
+		o.cmd.Context(),
+		o.ctx,
+		o.clusterName,
+	)
+	if err != nil {
+		return fmt.Errorf("repair EKS component state after no-change update: %w", err)
+	}
+
+	return nil
 }
 
 // handleRecreateRequired warns about recreate-required changes and proceeds

@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -266,10 +267,16 @@ func InstallEKSLoadBalancerControllerWithResult(
 	) (bool, error) {
 		mutated, installErr := installWithResult(ctx, lbInstaller)
 		if installErr != nil {
-			return false, fmt.Errorf(
+			managed, identity, ownershipErr := loadBalancerControllerOwnershipAfterInstallAttempt(
+				ctx,
+				lbInstaller,
+			)
+			releaseIdentity = identity
+
+			return managed, errors.Join(fmt.Errorf(
 				"aws-load-balancer-controller installation failed: %w",
 				installErr,
-			)
+			), ownershipErr)
 		}
 
 		if !mutated {
@@ -324,7 +331,7 @@ func withRequiredEKSLoadBalancerInstaller(
 
 	result, err := action(lbInstaller)
 	if err != nil {
-		return false, fmt.Errorf("run required EKS load balancer controller action: %w", err)
+		return result, fmt.Errorf("run required EKS load balancer controller action: %w", err)
 	}
 
 	return result, nil
@@ -346,6 +353,13 @@ func EKSLoadBalancerControllerManagedByKSail(
 		return false, "", err
 	}
 
+	return loadBalancerControllerOwnershipAfterInstallAttempt(ctx, lbInstaller)
+}
+
+func loadBalancerControllerOwnershipAfterInstallAttempt(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+) (bool, string, error) {
 	reporter, reportsOwnership := lbInstaller.(gitOpsOwnershipReporter)
 	if !reportsOwnership {
 		return false, "", ErrAWSLoadBalancerControllerOwnershipReporterUnavailable
@@ -365,6 +379,10 @@ func EKSLoadBalancerControllerManagedByKSail(
 
 	identity, err := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
 	if err != nil {
+		if errors.Is(err, helm.ErrNoReleaseStorage) || errors.Is(err, helm.ErrReleaseNotFound) {
+			return false, "", nil
+		}
+
 		return false, "", err
 	}
 

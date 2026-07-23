@@ -207,15 +207,12 @@ func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (b
 		return false, nil
 	}
 
-	if metadata.Identity == expected {
-		return true, nil
-	}
-
 	if metadata.Labels[ReleaseOwnershipLabel] != releaseOwnershipValue {
 		return false, nil
 	}
 
-	return slices.Contains(metadata.HistoryIdentities, expected), nil
+	return metadata.Identity == expected ||
+		slices.Contains(metadata.HistoryIdentities, expected), nil
 }
 
 // Uninstall removes the AWS Load Balancer Controller only when the caller has

@@ -116,6 +116,7 @@ func TestDiffConfig_NodegroupUpdatesDisabledSkipsEksctl(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, diff.InPlaceChanges)
 	assert.Empty(t, diff.RecreateRequired)
+	assert.False(t, prov.SupportsInPlaceField("eks.managedNodeGroups[ng-1].desiredCapacity"))
 	assert.Empty(t, runner.calls, "disabled node updates must not query or mutate EKS node groups")
 }
 

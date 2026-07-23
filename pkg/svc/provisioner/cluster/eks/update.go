@@ -73,7 +73,7 @@ func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetecto
 // actually mutates. Component fields are handled separately by the CLI
 // component reconciler and therefore are not listed here.
 func (u *UpdatableProvisioner) SupportsInPlaceField(field string) bool {
-	return strings.HasPrefix(field, "eks.managedNodeGroups[")
+	return u.managedNodegroupUpdates && strings.HasPrefix(field, "eks.managedNodeGroups[")
 }
 
 // managedNodeGroupConfig is the subset of an eksctl.yaml managedNodeGroups

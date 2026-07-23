@@ -1133,9 +1133,9 @@ func TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion(t *testing.T) {
 
 // TestDeleteResolvedEKSStateFailsClosedWithoutRegion proves ordinary deletion cannot erase
 // every same-named EKS target's state when exact-region resolution is unavailable.
+//
+//nolint:paralleltest // writes package-isolated state for one fixed cluster name.
 func TestDeleteResolvedEKSStateFailsClosedWithoutRegion(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
 	const clusterName = "delete-missing-region-eks-6231"
 	persistEKSRegionComponentStates(t, clusterName)
 
@@ -1149,6 +1149,8 @@ func TestDeleteResolvedEKSStateFailsClosedWithoutRegion(t *testing.T) {
 
 // TestDeleteTTLEKSStateFailsClosedWithoutRegion proves TTL cleanup cannot erase every same-named
 // EKS target's state when its exact-region configuration is absent or incomplete.
+//
+//nolint:paralleltest // subtests reuse one package-isolated cluster-state fixture.
 func TestDeleteTTLEKSStateFailsClosedWithoutRegion(t *testing.T) {
 	testCases := map[string]*clusterprovisioner.EKSConfig{
 		"missing config": nil,
@@ -1156,9 +1158,8 @@ func TestDeleteTTLEKSStateFailsClosedWithoutRegion(t *testing.T) {
 	}
 
 	for name, eksConfig := range testCases {
+		//nolint:paralleltest // subtests reuse the same cluster name and state paths.
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
-
 			const clusterName = "ttl-missing-region-eks-6231"
 			persistEKSRegionComponentStates(t, clusterName)
 
