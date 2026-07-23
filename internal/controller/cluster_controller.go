@@ -332,23 +332,7 @@ func (r *ClusterReconciler) reconcileComponents(
 	cluster.Status.Components = components
 
 	if err != nil {
-		ownershipErr := r.recordComponentOwnershipProgress(
-			ctx,
-			cluster,
-			annotationsBefore,
-		)
-		err = errors.Join(err, ownershipErr)
-
-		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
-		setCondition(
-			cluster,
-			v1alpha1.ConditionComponentsReady,
-			metav1.ConditionFalse,
-			"ComponentsFailed",
-			err.Error(),
-		)
-
-		return false
+		return r.recordComponentInstallFailure(ctx, cluster, annotationsBefore, err)
 	}
 
 	if !applied {
@@ -393,6 +377,27 @@ func (r *ClusterReconciler) reconcileComponents(
 	)
 
 	return true
+}
+
+func (r *ClusterReconciler) recordComponentInstallFailure(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	annotationsBefore map[string]string,
+	installErr error,
+) bool {
+	ownershipErr := r.recordComponentOwnershipProgress(ctx, cluster, annotationsBefore)
+	err := errors.Join(installErr, ownershipErr)
+
+	logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
+	setCondition(
+		cluster,
+		v1alpha1.ConditionComponentsReady,
+		metav1.ConditionFalse,
+		"ComponentsFailed",
+		err.Error(),
+	)
+
+	return false
 }
 
 // componentsUpToDate reports whether component reconciliation has settled for the cluster's current

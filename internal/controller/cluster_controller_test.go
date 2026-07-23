@@ -505,22 +505,7 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	scheme := newScheme(t)
 	fakeClient := newFakeClient(scheme, newCluster(true))
 	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
-	reconciler.InstallComponents = func(
-		_ context.Context,
-		_ clusterprovisioner.Provisioner,
-		cluster *v1alpha1.Cluster,
-	) (bool, []v1alpha1.ComponentStatus, error) {
-		if cluster.Annotations == nil {
-			cluster.Annotations = map[string]string{}
-		}
-
-		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = "partial-controller-release-uid"
-		cluster.Annotations["installer-transient"] = "must-not-persist"
-
-		return true, []v1alpha1.ComponentStatus{
-			{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
-		}, errBoom
-	}
+	reconciler.InstallComponents = installComponentsWithPartialControllerFailure
 
 	result, err := reconciler.Reconcile(context.Background(), request())
 	// A component-install failure must not fail the reconcile.
@@ -565,6 +550,23 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 		"installer-transient",
 		"the failure path must persist only the narrow ownership marker",
 	)
+}
+
+func installComponentsWithPartialControllerFailure(
+	_ context.Context,
+	_ clusterprovisioner.Provisioner,
+	cluster *v1alpha1.Cluster,
+) (bool, []v1alpha1.ComponentStatus, error) {
+	if cluster.Annotations == nil {
+		cluster.Annotations = map[string]string{}
+	}
+
+	cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = "partial-controller-release-uid"
+	cluster.Annotations["installer-transient"] = "must-not-persist"
+
+	return true, []v1alpha1.ComponentStatus{
+		{Name: "cilium", State: v1alpha1.ComponentStateFailed, Message: errBoom.Error()},
+	}, errBoom
 }
 
 func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {

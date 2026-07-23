@@ -1117,7 +1117,7 @@ func checkWorkloadTagDrift(
 
 	var currentTag string
 
-	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
+	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
 		currentTag, err = fluxinstaller.GetCurrentSyncRef(
 			cmd.Context(), kubeconfigPath, kubeContext,
@@ -1126,6 +1126,8 @@ func checkWorkloadTagDrift(
 		currentTag, err = getCurrentArgoCDTargetRevision(
 			cmd.Context(), kubeconfigPath, kubeContext,
 		)
+	case v1alpha1.GitOpsEngineNone:
+		return
 	default:
 		return
 	}
@@ -1437,23 +1439,7 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// Disconnect registries from Docker network before deletion.
-	// Required for distributions like VCluster and Talos because their provisioners
-	// destroy the Docker network during deletion, which fails if containers are
-	// still connected. Registries are reused on recreate, so only disconnect is needed.
-	if o.ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-		clusterInfo := &clusterdetector.Info{
-			Distribution: o.ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ClusterName:  o.clusterName,
-		}
-		// Discover first: the disconnect is scoped to THIS cluster's registries, because a
-		// network name does not identify a single cluster (see DisconnectRegistriesByInfo).
-		disconnectRegistriesBeforeDelete(
-			o.cmd,
-			clusterInfo,
-			discoverRegistriesBeforeDelete(o.cmd, clusterInfo),
-		)
-	}
+	o.disconnectRegistriesBeforeRecreate()
 
 	// Execute delete
 	notify.WriteMessage(notify.Message{
@@ -1493,6 +1479,27 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		o.clusterName,
 		creationErr,
 		controllerReconciliationStarted,
+	)
+}
+
+// disconnectRegistriesBeforeRecreate releases Docker network attachments that
+// would otherwise prevent the provisioner from deleting the network. The
+// registries remain available for reuse by the create half of the workflow.
+func (o *updateOrchestrator) disconnectRegistriesBeforeRecreate() {
+	if o.ctx.ClusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderDocker {
+		return
+	}
+
+	clusterInfo := &clusterdetector.Info{
+		Distribution: o.ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ClusterName:  o.clusterName,
+	}
+	// Discover first: the disconnect is scoped to THIS cluster's registries, because a
+	// network name does not identify a single cluster (see DisconnectRegistriesByInfo).
+	disconnectRegistriesBeforeDelete(
+		o.cmd,
+		clusterInfo,
+		discoverRegistriesBeforeDelete(o.cmd, clusterInfo),
 	)
 }
 
