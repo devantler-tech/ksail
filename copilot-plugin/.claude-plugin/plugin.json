@@ -1,6 +1,6 @@
 {
   "name": "ksail",
-  "version": "7.176.8",
+  "version": "7.176.9",
   "description": "KSail MCP server + expertise skill — spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster) and GitOps workloads declaratively.",
   "author": {
     "name": "devantler-tech",
