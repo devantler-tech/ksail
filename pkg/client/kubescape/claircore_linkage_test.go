@@ -77,26 +77,30 @@ func TestAuditedClaircoreVersionsIncludeToolkit(t *testing.T) {
 	wantModulePaths := []string{claircoreModulePath, claircoreToolkitModulePath}
 
 	for _, moduleName := range []string{"root", "desktop"} {
-		auditedVersions, ok := auditedClaircoreVersions()[moduleName]
-		if !ok {
-			t.Fatalf("module %q has no audited Claircore module versions", moduleName)
-		}
+		t.Run(moduleName, func(t *testing.T) {
+			t.Parallel()
 
-		if len(auditedVersions) != len(wantModulePaths) {
-			t.Fatalf(
-				"module %q must audit %d Claircore modules, got %d: %v",
-				moduleName,
-				len(wantModulePaths),
-				len(auditedVersions),
-				auditedVersions,
-			)
-		}
-
-		for _, modulePath := range wantModulePaths {
-			if auditedVersions[modulePath] == "" {
-				t.Errorf("module %q has no audited version for %q", moduleName, modulePath)
+			auditedVersions, ok := auditedClaircoreVersions()[moduleName]
+			if !ok {
+				t.Fatalf("module %q has no audited Claircore module versions", moduleName)
 			}
-		}
+
+			if len(auditedVersions) != len(wantModulePaths) {
+				t.Fatalf(
+					"module %q must audit %d Claircore modules, got %d: %v",
+					moduleName,
+					len(wantModulePaths),
+					len(auditedVersions),
+					auditedVersions,
+				)
+			}
+
+			for _, modulePath := range wantModulePaths {
+				if auditedVersions[modulePath] == "" {
+					t.Errorf("module %q has no audited version for %q", moduleName, modulePath)
+				}
+			}
+		})
 	}
 }
 
@@ -167,14 +171,21 @@ func assertClaircoreVersions(
 		)
 		cmd.Dir = moduleDir
 
-		out, err := cmd.CombinedOutput()
+		out, err := cmd.Output()
 		if err != nil {
+			var stderr string
+
+			exitErr := new(exec.ExitError)
+			if errors.As(err, &exitErr) {
+				stderr = string(exitErr.Stderr)
+			}
+
 			t.Fatalf(
 				"read %q version from module %q: %v\n%s",
 				modulePath,
 				moduleDir,
 				err,
-				out,
+				stderr,
 			)
 		}
 
