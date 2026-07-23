@@ -47,6 +47,11 @@ type componentReconciler struct {
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
 	loadBalancerErr        error
+	// eksLoadBalancerOwnershipUpdated is set only after this update pass actually
+	// installs/upgrades or uninstalls the EKS controller. If untouched, final state
+	// persistence preserves the prior exact-region ownership marker.
+	eksLoadBalancerOwnershipUpdated bool
+	eksLoadBalancerManaged          bool
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
@@ -238,6 +243,11 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 			return fmt.Errorf("failed to install load balancer: %w", err)
 		}
 
+		if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+			r.eksLoadBalancerOwnershipUpdated = true
+			r.eksLoadBalancerManaged = true
+		}
+
 		return nil
 	}
 
@@ -264,6 +274,9 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 		managed,
 	)
 	if err != nil && errors.Is(err, helm.ErrReleaseNotFound) {
+		r.eksLoadBalancerOwnershipUpdated = true
+		r.eksLoadBalancerManaged = false
+
 		return nil
 	}
 
@@ -271,7 +284,18 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 		return fmt.Errorf("failed to uninstall load balancer: %w", err)
 	}
 
+	r.eksLoadBalancerOwnershipUpdated = true
+	r.eksLoadBalancerManaged = false
+
 	return nil
+}
+
+func (r *componentReconciler) eksLoadBalancerControllerManagedAfterReconcile() (bool, error) {
+	if r.eksLoadBalancerOwnershipUpdated {
+		return r.eksLoadBalancerManaged, nil
+	}
+
+	return r.eksLoadBalancerControllerManagedByKSail()
 }
 
 func (r *componentReconciler) eksLoadBalancerControllerManagedByKSail() (bool, error) {

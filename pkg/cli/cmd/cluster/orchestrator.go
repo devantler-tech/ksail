@@ -1299,7 +1299,7 @@ func applyInPlaceChanges(
 
 	reportFailedChanges(cmd, result)
 
-	return finalizeInPlaceApply(cmd, ctx, clusterName, result, componentErr)
+	return finalizeInPlaceApply(cmd, ctx, reconciler, clusterName, result, componentErr)
 }
 
 // finalizeInPlaceApply reports the apply outcome: a non-empty FailedChanges set
@@ -1310,6 +1310,7 @@ func applyInPlaceChanges(
 func finalizeInPlaceApply(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
+	reconciler *componentReconciler,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 	componentErr error,
@@ -1331,7 +1332,7 @@ func finalizeInPlaceApply(
 
 	// Persist the updated ClusterSpec for future update baselines now that every
 	// change applied successfully.
-	err := persistRequiredEKSComponentState(ctx, clusterName)
+	err := persistReconciledEKSComponentState(ctx, clusterName, reconciler)
 	if err != nil {
 		return err
 	}
@@ -1405,6 +1406,26 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		Writer:  o.cmd.OutOrStdout(),
 	})
 
-	// Execute create using shared workflow
-	return runClusterCreationWorkflow(o.cmd, o.cfgManager, o.ctx, o.deps)
+	// Execute create using shared workflow.
+	creationErr := runClusterCreationWorkflow(o.cmd, o.cfgManager, o.ctx, o.deps)
+
+	return finishRecreateFlow(o.ctx, o.clusterName, creationErr)
+}
+
+// finishRecreateFlow keeps successful recreation finalization separate from the
+// destructive delete/create orchestration so its required state is testable.
+func finishRecreateFlow(
+	ctx *localregistry.Context,
+	clusterName string,
+	creationErr error,
+) error {
+	if creationErr != nil {
+		return creationErr
+	}
+
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+	)
 }

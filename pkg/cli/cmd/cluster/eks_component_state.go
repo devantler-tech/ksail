@@ -1,14 +1,16 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
+
+var errEKSComponentReconcilerUnavailable = errors.New("component reconciler is unavailable")
 
 // persistRequiredEKSComponentState saves the declarative baseline needed to
 // reconcile non-introspectable EKS component ownership. Unlike the wider
@@ -17,6 +19,7 @@ import (
 func persistRequiredEKSComponentState(
 	ctx *localregistry.Context,
 	clusterName string,
+	controllerManaged bool,
 ) error {
 	if ctx == nil || ctx.ClusterCfg == nil ||
 		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
@@ -35,7 +38,7 @@ func persistRequiredEKSComponentState(
 		Version:                                 state.EKSComponentStateVersion,
 		ClusterName:                             clusterName,
 		Region:                                  region,
-		AWSLoadBalancerControllerManaged:        setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+		AWSLoadBalancerControllerManaged:        controllerManaged,
 		AWSLoadBalancerControllerServiceAccount: ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 	}
 
@@ -45,4 +48,32 @@ func persistRequiredEKSComponentState(
 	}
 
 	return nil
+}
+
+// persistReconciledEKSComponentState records the ownership resulting from this
+// update pass. When the controller was not touched, the reconciler returns the
+// existing exact-region marker instead of inferring ownership from desired config.
+func persistReconciledEKSComponentState(
+	ctx *localregistry.Context,
+	clusterName string,
+	reconciler *componentReconciler,
+) error {
+	if ctx == nil || ctx.ClusterCfg == nil ||
+		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if reconciler == nil {
+		return fmt.Errorf(
+			"persist required EKS component state: %w",
+			errEKSComponentReconcilerUnavailable,
+		)
+	}
+
+	controllerManaged, err := reconciler.eksLoadBalancerControllerManagedAfterReconcile()
+	if err != nil {
+		return err
+	}
+
+	return persistRequiredEKSComponentState(ctx, clusterName, controllerManaged)
 }

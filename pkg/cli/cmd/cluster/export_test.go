@@ -108,7 +108,11 @@ func ExportPersistRequiredEKSComponentState(
 	ctx *localregistry.Context,
 	clusterName string,
 ) error {
-	return persistRequiredEKSComponentState(ctx, clusterName)
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+	)
 }
 
 // ExportFinishCreateWithTTL exports the create finalization ordering for testing.
@@ -248,6 +252,15 @@ func ExportExecuteRecreateFlow(
 	}
 
 	return orchestrator.executeRecreateFlow()
+}
+
+// ExportFinishRecreateFlow exposes successful recreation finalization for safety tests.
+func ExportFinishRecreateFlow(
+	ctx *localregistry.Context,
+	clusterName string,
+	creationErr error,
+) error {
+	return finishRecreateFlow(ctx, clusterName, creationErr)
 }
 
 // ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.

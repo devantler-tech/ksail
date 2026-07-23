@@ -107,7 +107,11 @@ func handleCreateRunE(
 		return err
 	}
 
-	requiredStateErr := persistRequiredEKSComponentState(ctx, clusterName)
+	requiredStateErr := persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+	)
 
 	// Persist the ClusterSpec so that future updates have an accurate baseline
 	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
