@@ -21,8 +21,6 @@ import (
 //     node's containerd config at creation (Kind/K3s baselines otherwise carry the
 //     zero value, so a configured mirrorsDir reads as recreate-required every run;
 //     see kind.DiffConfig and diff/engine.go's documented LocalRegistry limitation).
-//   - EKS.ExperimentalAWSLoadBalancerController — an explicit component ownership
-//     choice that cannot be inferred from generic component detection alone.
 //
 // It is a no-op (returns nil) when no state exists for clusterName
 // (state.ErrStateNotFound). Any other failure (I/O, corrupt JSON, permission)
@@ -58,10 +56,36 @@ func MergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
 		spec.Vanilla.MirrorsDir = saved.Vanilla.MirrorsDir
 	}
 
-	// The AWS Load Balancer Controller opt-in is declarative KSail ownership
-	// state. Preserve both true and false so enable and disable transitions are
-	// each compared against the last successfully applied configuration.
-	spec.EKS.ExperimentalAWSLoadBalancerController = saved.EKS.ExperimentalAWSLoadBalancerController
+	return nil
+}
+
+// MergePersistedEKSState restores declarative EKS component choices from the
+// exact target region. A missing baseline is a no-op so an existing cluster can
+// adopt the feature; corrupt or unreadable state fails closed.
+func MergePersistedEKSState(
+	spec *v1alpha1.ClusterSpec,
+	clusterName, region string,
+) error {
+	if spec == nil {
+		return nil
+	}
+
+	saved, err := state.LoadEKSComponentState(clusterName, region)
+	if err != nil {
+		if errors.Is(err, state.ErrEKSComponentStateNotFound) {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"load persisted EKS component state for %q in %q: %w",
+			clusterName,
+			region,
+			err,
+		)
+	}
+
+	spec.LoadBalancer = saved.LoadBalancer
+	spec.EKS.ExperimentalAWSLoadBalancerController = saved.ExperimentalAWSLoadBalancerController
 
 	return nil
 }

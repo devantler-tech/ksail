@@ -89,25 +89,29 @@ func TestMergePersistedState_ForwardCompatibleWithCurrentRelease(t *testing.T) {
 		"persisted localRegistry must merge back so it is not a false recreate-required diff")
 }
 
-// TestMergePersistedState_PreservesEKSLoadBalancerControllerOptIn verifies the
-// non-introspectable EKS component choice comes from the last successfully
-// applied spec. Both transitions matter: otherwise disable is invisible, or an
-// enabled controller is offered for installation on every update.
+// TestMergePersistedEKSState_PreservesComponentActivation verifies the
+// non-introspectable EKS component choices come from the last successfully
+// applied state in the exact target region.
 //
 //nolint:paralleltest // writes/reads cluster state files under the shared isolated $HOME
-func TestMergePersistedState_PreservesEKSLoadBalancerControllerOptIn(t *testing.T) {
+func TestMergePersistedEKSState_PreservesComponentActivation(t *testing.T) {
+	const region = "eu-north-1"
+
 	for _, savedOptIn := range []bool{false, true} {
 		clusterName := "eks-lb-disabled"
 		if savedOptIn {
 			clusterName = "eks-lb-enabled"
 		}
 
-		saved := &v1alpha1.ClusterSpec{
-			Distribution: v1alpha1.DistributionEKS,
-			Provider:     v1alpha1.ProviderAWS,
+		saved := state.EKSComponentState{
+			Version:                               state.EKSComponentStateVersion,
+			ClusterName:                           clusterName,
+			Region:                                region,
+			LoadBalancer:                          v1alpha1.LoadBalancerEnabled,
+			ExperimentalAWSLoadBalancerController: savedOptIn,
 		}
-		saved.EKS.ExperimentalAWSLoadBalancerController = savedOptIn
-		require.NoError(t, state.SaveClusterSpec(clusterName, saved))
+		require.NoError(t, state.SaveEKSComponentState(clusterName, region, &saved))
+
 		t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 
 		baseline := clusterupdate.DefaultCurrentSpec(
@@ -116,8 +120,51 @@ func TestMergePersistedState_PreservesEKSLoadBalancerControllerOptIn(t *testing.
 		)
 		baseline.EKS.ExperimentalAWSLoadBalancerController = !savedOptIn
 
-		err := clusterupdate.MergePersistedState(baseline, clusterName)
+		baseline.LoadBalancer = v1alpha1.LoadBalancerDefault
+
+		err := clusterupdate.MergePersistedEKSState(baseline, clusterName, region)
 		require.NoError(t, err)
 		assert.Equal(t, savedOptIn, baseline.EKS.ExperimentalAWSLoadBalancerController)
+		assert.Equal(t, v1alpha1.LoadBalancerEnabled, baseline.LoadBalancer)
 	}
+}
+
+// TestMergePersistedEKSState_IsRegionScoped prevents same-named clusters in
+// different regions from sharing the controller ownership baseline.
+//
+//nolint:paralleltest // writes/reads cluster state files under the shared isolated $HOME
+func TestMergePersistedEKSState_IsRegionScoped(t *testing.T) {
+	const clusterName = "same-name-eks"
+
+	for _, saved := range []state.EKSComponentState{
+		{
+			Version:                               state.EKSComponentStateVersion,
+			ClusterName:                           clusterName,
+			Region:                                "eu-north-1",
+			LoadBalancer:                          v1alpha1.LoadBalancerEnabled,
+			ExperimentalAWSLoadBalancerController: true,
+		},
+		{
+			Version:                               state.EKSComponentStateVersion,
+			ClusterName:                           clusterName,
+			Region:                                "us-east-1",
+			LoadBalancer:                          v1alpha1.LoadBalancerDefault,
+			ExperimentalAWSLoadBalancerController: false,
+		},
+	} {
+		snapshot := saved
+		require.NoError(t, state.SaveEKSComponentState(clusterName, saved.Region, &snapshot))
+	}
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	baseline := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionEKS,
+		v1alpha1.ProviderAWS,
+	)
+
+	err := clusterupdate.MergePersistedEKSState(baseline, clusterName, "eu-north-1")
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerEnabled, baseline.LoadBalancer)
+	assert.True(t, baseline.EKS.ExperimentalAWSLoadBalancerController)
 }

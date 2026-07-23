@@ -106,6 +106,11 @@ func handleCreateRunE(
 		return err
 	}
 
+	err = persistRequiredEKSComponentState(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	// Persist the ClusterSpec so that future updates have an accurate baseline
 	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
 	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)

@@ -275,6 +275,60 @@ func TestEngine_EKSAWSLoadBalancerControllerOptInChange(t *testing.T) {
 	}
 }
 
+func TestEngine_EKSAWSLoadBalancerControllerEffectiveActivationChange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		oldLoadBalancer v1alpha1.LoadBalancer
+		newLoadBalancer v1alpha1.LoadBalancer
+		oldValue        string
+		newValue        string
+	}{
+		{
+			name:            "explicit enable activates controller",
+			oldLoadBalancer: v1alpha1.LoadBalancerDefault,
+			newLoadBalancer: v1alpha1.LoadBalancerEnabled,
+			oldValue:        "false",
+			newValue:        "true",
+		},
+		{
+			name:            "return to default deactivates controller",
+			oldLoadBalancer: v1alpha1.LoadBalancerEnabled,
+			newLoadBalancer: v1alpha1.LoadBalancerDefault,
+			oldValue:        "true",
+			newValue:        "false",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			oldSpec := newBaseSpec()
+			oldSpec.Distribution = v1alpha1.DistributionEKS
+			oldSpec.Provider = v1alpha1.ProviderAWS
+			oldSpec.LoadBalancer = testCase.oldLoadBalancer
+			oldSpec.EKS.ExperimentalAWSLoadBalancerController = true
+
+			newSpec := clone(oldSpec)
+			newSpec.LoadBalancer = testCase.newLoadBalancer
+
+			engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+			result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+			assertSingleChange(
+				t,
+				result.InPlaceChanges,
+				diff.EKSLoadBalancerControllerField,
+				testCase.oldValue,
+				testCase.newValue,
+				clusterupdate.ChangeCategoryInPlace,
+			)
+		})
+	}
+}
+
 func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
 	t.Parallel()
 

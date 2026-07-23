@@ -103,6 +103,14 @@ func ExportCreateAndVerifyProvisioner(
 	return createAndVerifyProvisioner(cmd, ctx, clusterName)
 }
 
+// ExportPersistRequiredEKSComponentState exports the fail-closed EKS component writer for testing.
+func ExportPersistRequiredEKSComponentState(
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	return persistRequiredEKSComponentState(ctx, clusterName)
+}
+
 // ExportResolveClusterContext exports resolveClusterContext for testing.
 func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)

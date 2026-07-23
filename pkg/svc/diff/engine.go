@@ -249,7 +249,10 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 					return strconv.FormatBool(false)
 				}
 
-				return strconv.FormatBool(spec.EKS.ExperimentalAWSLoadBalancerController)
+				return strconv.FormatBool(
+					spec.EKS.ExperimentalAWSLoadBalancerController &&
+						spec.LoadBalancer == v1alpha1.LoadBalancerEnabled,
+				)
 			},
 		},
 		{

@@ -199,6 +199,11 @@ func (u *UpdatableProvisioner) GetCurrentConfig(
 		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
 	}
 
+	err = clusterupdate.MergePersistedEKSState(spec, clusterName, u.region)
+	if err != nil {
+		return nil, nil, fmt.Errorf("merge persisted EKS state: %w", err)
+	}
+
 	return spec, nil, nil
 }
 

@@ -689,6 +689,18 @@ func createAndVerifyProvisioner(
 		}
 	}
 
+	// EKS contexts are identity- and region-qualified. When the config leaves the
+	// context implicit, bind the exact context written by eksctl before building
+	// Helm or Kubernetes clients; an empty Helm context would otherwise use the
+	// kubeconfig's unrelated ambient current-context.
+	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) == "" {
+		err = resolveEKSPostCreateContext(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve exact EKS kubeconfig context: %w", err)
+		}
+	}
+
 	// Build a ComponentDetector scoped to the running cluster.
 	// Now that kubeconfig is ensured, the detector can connect.
 	componentDetector := buildComponentDetector(cmd, ctx)
@@ -1312,6 +1324,11 @@ func finalizeInPlaceApply(
 
 	// Persist the updated ClusterSpec for future update baselines now that every
 	// change applied successfully.
+	err := persistRequiredEKSComponentState(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
 	if saveErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
