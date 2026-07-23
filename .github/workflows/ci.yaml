@@ -122,6 +122,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -149,7 +150,10 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
+              - '.govulncheck-allow.txt'
               - '.github/actions/**'
+            govuln-allowlist:
+              - '.govulncheck-allow.txt'
             system-test:
               # NOTE: Do not use negative patterns (!) here.
               # dorny/paths-filter v4 uses picomatch where negated patterns
@@ -316,7 +320,12 @@ jobs:
 
   ci-go:
     name: ✅ Validate Go Project
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changes.outputs.govuln-allowlist == 'true')
     uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@5c284fdf432754a697710c336fc2c26bc99868bb # v10.2.0
     permissions:
       contents: write
