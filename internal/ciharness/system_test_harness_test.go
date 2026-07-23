@@ -78,6 +78,9 @@ type ciWorkflow struct {
 	Jobs map[string]struct {
 		Permissions map[string]string `yaml:"permissions"`
 		Steps       []harnessStep     `yaml:"steps"`
+		If          string            `yaml:"if"`
+		Needs       []string          `yaml:"needs"`
+		Uses        string            `yaml:"uses"`
 	} `yaml:"jobs"`
 }
 
@@ -88,8 +91,16 @@ func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
 	changesJob, found := workflow.Jobs["changes"]
 	require.True(t, found, "changes job is missing")
 	filterStep := findHarnessStep(t, changesJob.Steps, "🔍 Filter paths")
+	filters := stringValue(filterStep.With["filters"])
+	assert.Contains(t, filters, "govuln-allowlist:\n  - '.govulncheck-allow.txt'")
 
-	assert.Contains(t, stringValue(filterStep.With["filters"]), ".govulncheck-allow.txt")
+	validateJob, found := workflow.Jobs["ci-go"]
+	require.True(t, found, "ci-go job is missing")
+	assert.Contains(t, validateJob.Needs, "changes")
+	assert.Contains(t, validateJob.If, "github.event_name == 'pull_request'")
+	assert.Contains(t, validateJob.If, "github.event.pull_request.head.repo.full_name == github.repository")
+	assert.Contains(t, validateJob.If, "needs.changes.outputs.govuln-allowlist == 'true'")
+	assert.Contains(t, validateJob.Uses, "validate-go-project.yaml")
 }
 
 func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
