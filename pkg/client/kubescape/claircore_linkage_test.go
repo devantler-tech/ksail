@@ -75,11 +75,13 @@ func TestAuditedClaircoreVersionsIncludeToolkit(t *testing.T) {
 	t.Parallel()
 
 	wantModulePaths := []string{claircoreModulePath, claircoreToolkitModulePath}
+
 	for _, moduleName := range []string{"root", "desktop"} {
 		auditedVersions, ok := auditedClaircoreVersions()[moduleName]
 		if !ok {
 			t.Fatalf("module %q has no audited Claircore module versions", moduleName)
 		}
+
 		if len(auditedVersions) != len(wantModulePaths) {
 			t.Fatalf(
 				"module %q must audit %d Claircore modules, got %d: %v",
@@ -153,6 +155,7 @@ func assertClaircoreVersions(
 	t.Helper()
 
 	for modulePath, auditedVersion := range auditedVersions {
+		//nolint:gosec // modulePath is selected only from the fixed audited-version map above.
 		cmd := exec.CommandContext(
 			t.Context(),
 			"go",
