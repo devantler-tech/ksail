@@ -169,7 +169,7 @@ func (u *UpdatableProvisioner) DiffConfig(
 // GetCurrentConfig retrieves the current cluster configuration: component
 // state via the injected detector when available (marked Unknown otherwise,
 // so the diff engine never fabricates confident component diffs from
-// defaults), merged with persisted non-introspectable state.
+// defaults), enriched with persisted non-introspectable installer inputs.
 func (u *UpdatableProvisioner) GetCurrentConfig(
 	ctx context.Context,
 	clusterName string,

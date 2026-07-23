@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
@@ -31,11 +29,10 @@ var (
 // EKSComponentState preserves declarative choices that cannot be inferred
 // unambiguously from the live EKS cluster.
 type EKSComponentState struct {
-	Version                               int                   `json:"version"`
-	ClusterName                           string                `json:"clusterName"`
-	Region                                string                `json:"region"`
-	LoadBalancer                          v1alpha1.LoadBalancer `json:"loadBalancer"`
-	ExperimentalAWSLoadBalancerController bool                  `json:"experimentalAWSLoadBalancerController"` //nolint:lll,tagliatelle // matches public EKS option key
+	Version                                 int    `json:"version"`
+	ClusterName                             string `json:"clusterName"`
+	Region                                  string `json:"region"`
+	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitempty"` //nolint:lll // matches public EKS option key
 }
 
 // SaveEKSComponentState atomically persists an exact-region component baseline.
@@ -77,10 +74,10 @@ func LoadEKSComponentState(clusterName, region string) (*EKSComponentState, erro
 
 	data, err := fsutil.ReadFileSafe(filepath.Dir(statePath), statePath)
 	if err != nil {
-		missingState := os.IsNotExist(err)
+		missingState := errors.Is(err, os.ErrNotExist)
 		if errors.Is(err, fsutil.ErrPathOutsideBase) {
 			_, statErr := os.Stat(statePath)
-			missingState = os.IsNotExist(statErr)
+			missingState = errors.Is(statErr, os.ErrNotExist)
 		}
 
 		if missingState {
@@ -127,10 +124,9 @@ func validateEKSComponentState(
 
 	if snapshot.Version != EKSComponentStateVersion ||
 		strings.TrimSpace(snapshot.ClusterName) != clusterName ||
-		strings.TrimSpace(snapshot.Region) != region ||
-		!slices.Contains(v1alpha1.ValidLoadBalancers(), snapshot.LoadBalancer) {
+		strings.TrimSpace(snapshot.Region) != region {
 		return fmt.Errorf(
-			"%w: identity, version, or load-balancer value does not match",
+			"%w: identity or version does not match",
 			ErrInvalidEKSComponentState,
 		)
 	}
@@ -155,4 +151,38 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 	}
 
 	return filepath.Join(dir, fmt.Sprintf(fileNameFormat, region)), nil
+}
+
+// DeleteEKSRegionState removes only state scoped to one exact EKS target,
+// retaining same-named clusters in other AWS regions.
+func DeleteEKSRegionState(clusterName, region string) error {
+	componentPath, err := eksComponentStatePath(clusterName, region)
+	if err != nil {
+		return err
+	}
+
+	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
+	if err != nil {
+		return err
+	}
+
+	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
+	if err != nil {
+		return err
+	}
+
+	var cleanupErrs []error
+
+	for _, statePath := range []string{componentPath, nodegroupPath, ownershipPath} {
+		removeErr := os.Remove(statePath)
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf(
+				"remove EKS region state %q: %w",
+				statePath,
+				removeErr,
+			))
+		}
+	}
+
+	return errors.Join(cleanupErrs...)
 }

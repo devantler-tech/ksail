@@ -682,6 +682,25 @@ func TestDetectComponents_Success(t *testing.T) {
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
 }
 
+func TestDetectComponents_EKSAWSLoadBalancerController(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
+		{Name: "aws-load-balancer-controller", Namespace: "kube-system"},
+	}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerEnabled, spec.LoadBalancer)
+	assert.True(t, spec.EKS.ExperimentalAWSLoadBalancerController)
+}
+
 func TestDetectComponents_ArgoCD(t *testing.T) {
 	t.Parallel()
 
@@ -1041,11 +1060,13 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"extraArgs": map[string]any{
@@ -1089,11 +1110,13 @@ func TestDetectNodeAutoscaler_CapacityBuffers(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"extraArgs": map[string]any{
@@ -1116,11 +1139,13 @@ func TestDetectNodeAutoscaler_SkipNodesAndDaemonsets(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"extraArgs": map[string]any{
@@ -1153,11 +1178,13 @@ func TestDetectNodeAutoscaler_SkipNodesUnsetStayNil(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"extraArgs": map[string]any{},
@@ -1182,7 +1209,8 @@ func TestDetectNodeAutoscaler_NotInstalled(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(false, nil)
 
@@ -1201,11 +1229,13 @@ func TestDetectNodeAutoscaler_ValuesUnreadable(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(nil, errValues)
 
@@ -1224,11 +1254,13 @@ func TestDetectNodeAutoscaler_SkipsPoolWithEmptyName(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx,
+	helmClient.On(
+		"ReleaseExists", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(true, nil)
 
-	helmClient.On("GetReleaseValues", ctx,
+	helmClient.On(
+		"GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
 	).Return(map[string]any{
 		"autoscalingGroups": []any{

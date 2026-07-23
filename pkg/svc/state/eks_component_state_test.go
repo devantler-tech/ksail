@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/require"
@@ -32,11 +31,9 @@ func TestLoadEKSComponentStateRejectsSymlinkEscape(t *testing.T) {
 	require.NoError(t, os.MkdirAll(clusterDir, 0o700))
 
 	snapshot := state.EKSComponentState{
-		Version:                               state.EKSComponentStateVersion,
-		ClusterName:                           clusterName,
-		Region:                                region,
-		LoadBalancer:                          v1alpha1.LoadBalancerEnabled,
-		ExperimentalAWSLoadBalancerController: true,
+		Version:     state.EKSComponentStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
 	}
 	data, err := json.Marshal(&snapshot)
 	require.NoError(t, err)
@@ -49,4 +46,27 @@ func TestLoadEKSComponentStateRejectsSymlinkEscape(t *testing.T) {
 
 	_, err = state.LoadEKSComponentState(clusterName, region)
 	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
+}
+
+func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "same-name-region-delete"
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		snapshot := state.EKSComponentState{
+			Version:     state.EKSComponentStateVersion,
+			ClusterName: clusterName,
+			Region:      region,
+		}
+		require.NoError(t, state.SaveEKSComponentState(clusterName, region, &snapshot))
+	}
+
+	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	_, err := state.LoadEKSComponentState(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSComponentStateNotFound)
+
+	_, err = state.LoadEKSComponentState(clusterName, "us-east-1")
+	require.NoError(t, err)
 }

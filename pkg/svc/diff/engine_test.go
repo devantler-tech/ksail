@@ -329,6 +329,32 @@ func TestEngine_EKSAWSLoadBalancerControllerEffectiveActivationChange(t *testing
 	}
 }
 
+func TestEngine_EKSAWSLoadBalancerControllerServiceAccountChange(t *testing.T) {
+	t.Parallel()
+
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionEKS
+	oldSpec.Provider = v1alpha1.ProviderAWS
+	oldSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	oldSpec.EKS.ExperimentalAWSLoadBalancerController = true
+	oldSpec.EKS.AWSLoadBalancerControllerServiceAccount = "old-service-account"
+
+	newSpec := clone(oldSpec)
+	newSpec.EKS.AWSLoadBalancerControllerServiceAccount = "new-service-account"
+
+	engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		diff.EKSLoadBalancerControllerField,
+		"true:old-service-account",
+		"true:new-service-account",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
 func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
 	t.Parallel()
 

@@ -74,4 +74,9 @@ const (
 	ReleaseClusterAutoscaler = "cluster-autoscaler"
 	// NamespaceClusterAutoscaler is the namespace where the Cluster Autoscaler is installed.
 	NamespaceClusterAutoscaler = "kube-system"
+
+	// ReleaseAWSLoadBalancerController is the EKS AWS Load Balancer Controller release.
+	ReleaseAWSLoadBalancerController = "aws-load-balancer-controller"
+	// NamespaceAWSLoadBalancerController is where KSail installs the controller.
+	NamespaceAWSLoadBalancerController = "kube-system"
 )

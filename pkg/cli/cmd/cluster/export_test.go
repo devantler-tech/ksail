@@ -111,6 +111,11 @@ func ExportPersistRequiredEKSComponentState(
 	return persistRequiredEKSComponentState(ctx, clusterName)
 }
 
+// ExportFinishCreateWithTTL exports the create finalization ordering for testing.
+func ExportFinishCreateWithTTL(requiredStateErr error, waitForTTL func() error) error {
+	return finishCreateWithTTL(requiredStateErr, waitForTTL)
+}
+
 // ExportResolveClusterContext exports resolveClusterContext for testing.
 func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)

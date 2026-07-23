@@ -29,7 +29,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errSTSUnavailable = errors.New("STS unavailable")
+var (
+	errSTSUnavailable       = errors.New("STS unavailable")
+	errRequiredStateFailure = errors.New("required state write failed")
+	errTTLCleanupFailure    = errors.New("TTL cleanup failed")
+)
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
@@ -341,6 +345,22 @@ func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
 
 	_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
+}
+
+func TestFinishCreateWithTTL_RunsCleanupAfterPersistenceFailure(t *testing.T) {
+	t.Parallel()
+
+	ttlCalled := false
+
+	err := cluster.ExportFinishCreateWithTTL(errRequiredStateFailure, func() error {
+		ttlCalled = true
+
+		return errTTLCleanupFailure
+	})
+
+	assert.True(t, ttlCalled)
+	require.ErrorIs(t, err, errRequiredStateFailure)
+	require.ErrorIs(t, err, errTTLCleanupFailure)
 }
 
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.

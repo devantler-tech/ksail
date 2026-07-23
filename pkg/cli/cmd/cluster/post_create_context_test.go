@@ -26,7 +26,7 @@ func TestResolvePostCreateContext_EKS(t *testing.T) {
 		clusterName = "st-eks"
 		region      = "eu-west-1"
 		firstMatch  = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
-		secondMatch = "dev@example.com@st-eks.eu-west-1.eksctl.io"
+		secondMatch = "arn:aws:iam::123456789012:role/operator@st-eks.eu-west-1.eksctl.io"
 	)
 
 	testCases := []struct {
@@ -98,7 +98,8 @@ func TestResolvePostCreateContext_EKS(t *testing.T) {
 						},
 					},
 				},
-				EKSConfig: &clusterprovisioner.EKSConfig{Name: clusterName, Region: region},
+				EKSConfig:    &clusterprovisioner.EKSConfig{Name: clusterName, Region: region},
+				EKSAccountID: "123456789012",
 			}
 
 			err := cluster.ExportResolvePostCreateContext(ctx)
@@ -176,7 +177,8 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 				},
 			},
 		},
-		EKSConfig: &clusterprovisioner.EKSConfig{Name: "st-eks"},
+		EKSConfig:    &clusterprovisioner.EKSConfig{Name: "st-eks"},
+		EKSAccountID: "123456789012",
 	}
 
 	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))

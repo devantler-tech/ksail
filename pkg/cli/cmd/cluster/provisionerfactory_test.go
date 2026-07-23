@@ -131,7 +131,7 @@ func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
 	const (
 		clusterName   = "factory-coverage"
 		region        = "us-east-1"
-		ambient       = "ambient-other-cluster"
+		ambient       = "arn:aws:iam::999999999999:role/ci@factory-coverage.us-east-1.eksctl.io"
 		targetContext = "arn:aws:iam::123456789012:role/ci@factory-coverage.us-east-1.eksctl.io"
 	)
 
@@ -160,6 +160,7 @@ func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
 	ctx.ClusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
 	ctx.ClusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
 	ctx.EKSConfig.Region = region
+	ctx.EKSAccountID = "123456789012"
 
 	_, err := cluster.ExportCreateAndVerifyProvisioner(cmd, ctx, clusterName)
 	require.NoError(t, err)

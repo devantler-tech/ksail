@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -106,10 +107,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	err = persistRequiredEKSComponentState(ctx, clusterName)
-	if err != nil {
-		return err
-	}
+	requiredStateErr := persistRequiredEKSComponentState(ctx, clusterName)
 
 	// Persist the ClusterSpec so that future updates have an accurate baseline
 	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
@@ -118,7 +116,15 @@ func handleCreateRunE(
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
-	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+	return finishCreateWithTTL(requiredStateErr, func() error {
+		return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+	})
+}
+
+func finishCreateWithTTL(requiredStateErr error, waitForTTL func() error) error {
+	ttlErr := waitForTTL()
+
+	return errors.Join(requiredStateErr, ttlErr)
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.

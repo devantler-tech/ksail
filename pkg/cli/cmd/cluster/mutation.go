@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	kubeconfigutil "github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
@@ -20,6 +21,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -523,6 +525,7 @@ func captureCreatedEKSIdentity(
 	}
 
 	clusterCtx.EKSConfig.Region = ownership.Region
+	clusterCtx.EKSAccountID = ownership.AccountID
 
 	return nil
 }
@@ -618,10 +621,16 @@ func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
 		return err
 	}
 
+	accountID, err := resolveEKSContextAccountID(ctx, clusterName, region)
+	if err != nil {
+		return err
+	}
+
 	matches := make([]string, 0, len(config.Contexts))
 
 	for contextName := range config.Contexts {
-		if matchesEKSContext(contextName, clusterName, region) {
+		if matchesEKSContext(contextName, clusterName, region) &&
+			matchesEKSContextAccount(contextName, accountID) {
 			matches = append(matches, contextName)
 		}
 	}
@@ -637,6 +646,38 @@ func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
 	pinEKSRegionFromContext(ctx, selected)
 
 	return nil
+}
+
+func resolveEKSContextAccountID(
+	ctx *localregistry.Context,
+	clusterName, region string,
+) (string, error) {
+	if accountID := strings.TrimSpace(ctx.EKSAccountID); accountID != "" {
+		return accountID, nil
+	}
+
+	ownership, err := state.LoadEKSOwnershipState(clusterName, region)
+	if err != nil {
+		return "", fmt.Errorf("load EKS ownership for kubeconfig context selection: %w", err)
+	}
+
+	ctx.EKSAccountID = ownership.AccountID
+
+	return ownership.AccountID, nil
+}
+
+func matchesEKSContextAccount(contextName, accountID string) bool {
+	identityEnd := strings.LastIndex(contextName, "@")
+	if identityEnd <= 0 {
+		return false
+	}
+
+	identity, err := awsarn.Parse(contextName[:identityEnd])
+	if err != nil {
+		return false
+	}
+
+	return identity.AccountID == accountID
 }
 
 // pinEKSRegionFromContext preserves the exact region eksctl selected after a create whose region was

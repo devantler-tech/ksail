@@ -59,9 +59,10 @@ func MergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
 	return nil
 }
 
-// MergePersistedEKSState restores declarative EKS component choices from the
-// exact target region. A missing baseline is a no-op so an existing cluster can
-// adopt the feature; corrupt or unreadable state fails closed.
+// MergePersistedEKSState restores non-introspectable EKS installer inputs from
+// the exact target region. Live Helm detection remains authoritative for
+// activation. A missing baseline is a no-op so an existing cluster can adopt
+// the feature; corrupt or unreadable state fails closed.
 func MergePersistedEKSState(
 	spec *v1alpha1.ClusterSpec,
 	clusterName, region string,
@@ -84,8 +85,9 @@ func MergePersistedEKSState(
 		)
 	}
 
-	spec.LoadBalancer = saved.LoadBalancer
-	spec.EKS.ExperimentalAWSLoadBalancerController = saved.ExperimentalAWSLoadBalancerController
+	// Activation is live state and must come from the Helm detector. Only the
+	// installer input that Helm release existence cannot reveal is restored.
+	spec.EKS.AWSLoadBalancerControllerServiceAccount = saved.AWSLoadBalancerControllerServiceAccount
 
 	return nil
 }

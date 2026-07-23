@@ -110,44 +110,41 @@ func TestMergePersistedState_ForwardCompatibleWithCurrentRelease(t *testing.T) {
 		"persisted localRegistry must merge back so it is not a false recreate-required diff")
 }
 
-// TestMergePersistedEKSState_PreservesComponentActivation verifies the
-// non-introspectable EKS component choices come from the last successfully
-// applied state in the exact target region.
+// TestMergePersistedEKSState_RestoresOnlyInstallerInputs verifies persisted
+// configuration enriches the live baseline without overriding live activation.
 //
 //nolint:paralleltest // writes/reads cluster state files under the shared isolated $HOME
-func TestMergePersistedEKSState_PreservesComponentActivation(t *testing.T) {
-	const region = "eu-north-1"
+func TestMergePersistedEKSState_RestoresOnlyInstallerInputs(t *testing.T) {
+	const (
+		region      = "eu-north-1"
+		clusterName = "eks-live-baseline-wins"
+	)
 
-	for _, savedOptIn := range []bool{false, true} {
-		clusterName := "eks-lb-disabled"
-		if savedOptIn {
-			clusterName = "eks-lb-enabled"
-		}
-
-		saved := state.EKSComponentState{
-			Version:                               state.EKSComponentStateVersion,
-			ClusterName:                           clusterName,
-			Region:                                region,
-			LoadBalancer:                          v1alpha1.LoadBalancerEnabled,
-			ExperimentalAWSLoadBalancerController: savedOptIn,
-		}
-		require.NoError(t, state.SaveEKSComponentState(clusterName, region, &saved))
-
-		t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
-
-		baseline := clusterupdate.DefaultCurrentSpec(
-			v1alpha1.DistributionEKS,
-			v1alpha1.ProviderAWS,
-		)
-		baseline.EKS.ExperimentalAWSLoadBalancerController = !savedOptIn
-
-		baseline.LoadBalancer = v1alpha1.LoadBalancerDefault
-
-		err := clusterupdate.MergePersistedEKSState(baseline, clusterName, region)
-		require.NoError(t, err)
-		assert.Equal(t, savedOptIn, baseline.EKS.ExperimentalAWSLoadBalancerController)
-		assert.Equal(t, v1alpha1.LoadBalancerEnabled, baseline.LoadBalancer)
+	saved := state.EKSComponentState{
+		Version:                                 state.EKSComponentStateVersion,
+		ClusterName:                             clusterName,
+		Region:                                  region,
+		AWSLoadBalancerControllerServiceAccount: "persisted-service-account",
 	}
+	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &saved))
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	baseline := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionEKS,
+		v1alpha1.ProviderAWS,
+	)
+	baseline.LoadBalancer = v1alpha1.LoadBalancerDefault
+	baseline.EKS.ExperimentalAWSLoadBalancerController = false
+
+	err := clusterupdate.MergePersistedEKSState(baseline, clusterName, region)
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, baseline.LoadBalancer)
+	assert.False(t, baseline.EKS.ExperimentalAWSLoadBalancerController)
+	assert.Equal(
+		t,
+		"persisted-service-account",
+		baseline.EKS.AWSLoadBalancerControllerServiceAccount,
+	)
 }
 
 // TestMergePersistedEKSState_IsRegionScoped prevents same-named clusters in
@@ -159,18 +156,16 @@ func TestMergePersistedEKSState_IsRegionScoped(t *testing.T) {
 
 	for _, saved := range []state.EKSComponentState{
 		{
-			Version:                               state.EKSComponentStateVersion,
-			ClusterName:                           clusterName,
-			Region:                                "eu-north-1",
-			LoadBalancer:                          v1alpha1.LoadBalancerEnabled,
-			ExperimentalAWSLoadBalancerController: true,
+			Version:                                 state.EKSComponentStateVersion,
+			ClusterName:                             clusterName,
+			Region:                                  "eu-north-1",
+			AWSLoadBalancerControllerServiceAccount: "north-service-account",
 		},
 		{
-			Version:                               state.EKSComponentStateVersion,
-			ClusterName:                           clusterName,
-			Region:                                "us-east-1",
-			LoadBalancer:                          v1alpha1.LoadBalancerDefault,
-			ExperimentalAWSLoadBalancerController: false,
+			Version:                                 state.EKSComponentStateVersion,
+			ClusterName:                             clusterName,
+			Region:                                  "us-east-1",
+			AWSLoadBalancerControllerServiceAccount: "east-service-account",
 		},
 	} {
 		snapshot := saved
@@ -186,6 +181,11 @@ func TestMergePersistedEKSState_IsRegionScoped(t *testing.T) {
 
 	err := clusterupdate.MergePersistedEKSState(baseline, clusterName, "eu-north-1")
 	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.LoadBalancerEnabled, baseline.LoadBalancer)
-	assert.True(t, baseline.EKS.ExperimentalAWSLoadBalancerController)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, baseline.LoadBalancer)
+	assert.False(t, baseline.EKS.ExperimentalAWSLoadBalancerController)
+	assert.Equal(
+		t,
+		"north-service-account",
+		baseline.EKS.AWSLoadBalancerControllerServiceAccount,
+	)
 }

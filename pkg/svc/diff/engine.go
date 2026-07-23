@@ -249,10 +249,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 					return strconv.FormatBool(false)
 				}
 
-				return strconv.FormatBool(
-					spec.EKS.ExperimentalAWSLoadBalancerController &&
-						spec.LoadBalancer == v1alpha1.LoadBalancerEnabled,
-				)
+				return eksLoadBalancerControllerValue(spec)
 			},
 		},
 		{
@@ -277,6 +274,21 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			defaultVal: string(v1alpha1.GitOpsEngineNone),
 		},
 	}
+}
+
+func eksLoadBalancerControllerValue(spec *v1alpha1.ClusterSpec) string {
+	active := spec.EKS.ExperimentalAWSLoadBalancerController &&
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+	if !active {
+		return strconv.FormatBool(false)
+	}
+
+	serviceAccount := strings.TrimSpace(spec.EKS.AWSLoadBalancerControllerServiceAccount)
+	if serviceAccount == "" {
+		return strconv.FormatBool(true)
+	}
+
+	return strconv.FormatBool(true) + ":" + serviceAccount
 }
 
 // appendChange appends a single diff change to the appropriate category slice in result.

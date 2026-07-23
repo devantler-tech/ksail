@@ -30,13 +30,11 @@ func persistRequiredEKSComponentState(
 	}
 
 	region := strings.TrimSpace(ctx.EKSConfig.Region)
-	spec := &ctx.ClusterCfg.Spec.Cluster
 	snapshot := state.EKSComponentState{
-		Version:                               state.EKSComponentStateVersion,
-		ClusterName:                           clusterName,
-		Region:                                region,
-		LoadBalancer:                          spec.LoadBalancer,
-		ExperimentalAWSLoadBalancerController: spec.EKS.ExperimentalAWSLoadBalancerController,
+		Version:                                 state.EKSComponentStateVersion,
+		ClusterName:                             clusterName,
+		Region:                                  region,
+		AWSLoadBalancerControllerServiceAccount: ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 	}
 
 	err := state.SaveEKSComponentState(clusterName, region, &snapshot)
