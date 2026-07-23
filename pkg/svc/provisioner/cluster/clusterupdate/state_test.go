@@ -43,6 +43,27 @@ func TestMergePersistedState_NilSpecIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestMergePersistedEKSState_NoStateIsNoOp preserves adoption behavior when no
+// exact-region component baseline has been written yet.
+func TestMergePersistedEKSState_NoStateIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	baseline := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionEKS,
+		v1alpha1.ProviderAWS,
+	)
+	baseline.LoadBalancer = v1alpha1.LoadBalancerDefault
+
+	err := clusterupdate.MergePersistedEKSState(
+		baseline,
+		"eks-component-state-not-yet-written",
+		"eu-north-1",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, baseline.LoadBalancer)
+	assert.False(t, baseline.EKS.ExperimentalAWSLoadBalancerController)
+}
+
 // TestMergePersistedState_ForwardCompatibleWithCurrentRelease persists a spec
 // using the CURRENT release's state writer (state.SaveClusterSpec) — the exact
 // on-disk spec.json format an already-deployed binary would have written — then

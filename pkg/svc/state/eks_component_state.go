@@ -75,10 +75,15 @@ func LoadEKSComponentState(clusterName, region string) (*EKSComponentState, erro
 		return nil, err
 	}
 
-	//nolint:gosec // the cluster name and region path components are validated.
-	data, err := os.ReadFile(statePath)
+	data, err := fsutil.ReadFileSafe(filepath.Dir(statePath), statePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		missingState := os.IsNotExist(err)
+		if errors.Is(err, fsutil.ErrPathOutsideBase) {
+			_, statErr := os.Stat(statePath)
+			missingState = os.IsNotExist(statErr)
+		}
+
+		if missingState {
 			return nil, fmt.Errorf(
 				"%w: %s in %s",
 				ErrEKSComponentStateNotFound,
