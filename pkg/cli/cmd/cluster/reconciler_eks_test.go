@@ -176,10 +176,12 @@ func TestReconcileLoadBalancer_EKSManualReleaseIsPreserved(t *testing.T) {
 		newReconcileTestCmd(), clusterCfg, detected, applied,
 	)
 
-	require.NoError(t, err)
+	require.Error(t, err)
 	assert.Zero(t, factoryCalls)
 	assert.Zero(t, fakeInstaller.uninstallCalls)
-	assert.Len(t, applied.AppliedChanges, 1)
+	assert.Empty(t, applied.AppliedChanges)
+	require.Len(t, applied.FailedChanges, 1)
+	assert.Contains(t, applied.FailedChanges[0].Reason, "ownership")
 }
 
 //nolint:funlen,paralleltest // table coverage replaces the process-global installer factory.

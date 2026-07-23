@@ -1399,6 +1399,11 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("failed to delete existing cluster: %w", err)
 	}
 
+	err = clearDeletedEKSState(o.ctx, o.clusterName)
+	if err != nil {
+		return err
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cluster deleted",

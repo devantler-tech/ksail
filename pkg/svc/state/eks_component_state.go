@@ -155,9 +155,10 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 }
 
 // DeleteEKSRegionState removes state scoped to one exact EKS target, retaining
-// same-named clusters in other AWS regions. The legacy TTL file is name-scoped,
-// so it is also removed: retaining it can auto-delete or misreport a later
-// same-named cluster, while it cannot safely identify another region.
+// same-named clusters in other AWS regions. The legacy TTL and ClusterSpec files
+// are name-scoped, so they are also removed: retaining either can auto-delete or
+// misconfigure a later same-named cluster, while neither can safely identify
+// another region.
 func DeleteEKSRegionState(clusterName, region string) error {
 	componentPath, err := eksComponentStatePath(clusterName, region)
 	if err != nil {
@@ -179,9 +180,20 @@ func DeleteEKSRegionState(clusterName, region string) error {
 		return err
 	}
 
+	specPath, err := clusterStatePath(clusterName)
+	if err != nil {
+		return err
+	}
+
 	var cleanupErrs []error
 
-	for _, statePath := range []string{componentPath, nodegroupPath, ownershipPath, ttlPath} {
+	for _, statePath := range []string{
+		componentPath,
+		nodegroupPath,
+		ownershipPath,
+		ttlPath,
+		specPath,
+	} {
 		removeErr := os.Remove(statePath)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf(

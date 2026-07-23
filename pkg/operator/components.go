@@ -95,16 +95,11 @@ func InstallComponents(
 	// for the spec it was built for; the baseline uninstall set below rebuilds
 	// one for the previously-applied distribution rather than reusing this one.
 	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
-		return installer.NewFactory(
+		return newInstallerFactory(
 			helmClient,
-			nil, // no Docker client: child-cluster components are Helm-based
 			kubeconfigPath,
-			"",
-			componentInstallTimeout,
+			controller.ProvisionedName(cluster),
 			distribution,
-			// The AWS Load Balancer Controller chart requires the provisioned
-			// EKS cluster name; harmless for every other distribution.
-			installer.WithEKSClusterName(controller.ProvisionedName(cluster)),
 		)
 	}
 
@@ -119,6 +114,27 @@ func InstallComponents(
 	components, installErr := runInstallers(ctx, installers)
 
 	return true, components, errors.Join(uninstallErr, installErr)
+}
+
+// newInstallerFactory constructs the operator's component lifecycle factory.
+// A component present in the operator's last-applied baseline was installed by
+// this lifecycle, so its reconstructed installer carries positive ownership
+// evidence and may uninstall it when the desired spec drops the component.
+func newInstallerFactory(
+	helmClient helm.Interface,
+	kubeconfigPath, eksClusterName string,
+	distribution v1alpha1.Distribution,
+) *installer.Factory {
+	return installer.NewFactory(
+		helmClient,
+		nil, // no Docker client: child-cluster components are Helm-based
+		kubeconfigPath,
+		"",
+		componentInstallTimeout,
+		distribution,
+		installer.WithEKSClusterName(eksClusterName),
+		installer.WithAWSLoadBalancerControllerManaged(true),
+	)
 }
 
 // uninstallRemovedComponents tears down components present in the last-applied-components baseline but

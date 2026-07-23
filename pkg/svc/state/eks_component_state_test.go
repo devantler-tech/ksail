@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,13 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 	}
 
 	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+		LocalRegistry: v1alpha1.LocalRegistry{
+			Registry: "stale.example.test",
+		},
+	}))
 
 	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
 
@@ -77,5 +85,11 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 	require.ErrorIs(
 		t, err, state.ErrTTLNotSet,
 		"deleted EKS targets must not retain a stale name-scoped TTL",
+	)
+
+	_, err = state.LoadClusterSpec(clusterName)
+	require.ErrorIs(
+		t, err, state.ErrStateNotFound,
+		"deleted EKS targets must not retain a stale name-scoped spec baseline",
 	)
 }

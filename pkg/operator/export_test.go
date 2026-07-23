@@ -18,6 +18,8 @@ var (
 	RunUninstallers = runUninstallers
 	// RemovedComponentInstallers exposes removedComponentInstallers for testing.
 	RemovedComponentInstallers = removedComponentInstallers
+	// NewInstallerFactory exposes the operator-owned component factory for testing.
+	NewInstallerFactory = newInstallerFactory
 	// CountReadyNodes exposes countReadyNodes for testing.
 	CountReadyNodes = countReadyNodes
 )

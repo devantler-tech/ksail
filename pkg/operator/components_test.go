@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,7 @@ const (
 	componentCilium        = "cilium"
 	componentMetricsServer = "metrics-server"
 	componentFlux          = "flux"
+	componentAWSLB         = "aws-load-balancer-controller"
 )
 
 // stubProvisioner satisfies clusterprovisioner.Provisioner without implementing Connector.
@@ -257,6 +259,51 @@ func TestRemovedComponentInstallers_ReturnsComponentsDroppedFromSpec(t *testing.
 	require.NoError(t, err)
 	assert.Contains(t, removed, componentKyverno, "a component dropped from the spec is removed")
 	assert.NotContains(t, removed, componentFlux, "a still-desired component is not removed")
+}
+
+func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, componentAWSLB, "kube-system").
+		Return(map[string]string{"owner": "helm"}, nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, componentAWSLB, "kube-system").
+		Return(nil)
+
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+		LoadBalancer: v1alpha1.LoadBalancerEnabled,
+		EKS: v1alpha1.OptionsEKS{
+			ExperimentalAWSLoadBalancerController: true,
+		},
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+	}
+	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
+		return operator.NewInstallerFactory(
+			client,
+			"/tmp/kubeconfig",
+			"operator-owned-eks",
+			distribution,
+		)
+	}
+
+	removed, err := operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	require.Contains(t, removed, componentAWSLB)
+	require.NoError(t, operator.RunUninstallers(t.Context(), removed))
 }
 
 func TestRemovedComponentInstallers_BaselineFactoryUsesPreviousDistribution(t *testing.T) {

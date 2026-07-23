@@ -263,6 +263,11 @@ func ExportFinishRecreateFlow(
 	return finishRecreateFlow(context.Background(), ctx, clusterName, creationErr)
 }
 
+// ExportClearDeletedEKSState exposes the post-delete state invalidation boundary.
+func ExportClearDeletedEKSState(ctx *localregistry.Context, clusterName string) error {
+	return clearDeletedEKSState(ctx, clusterName)
+}
+
 // ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
 func ExportComputeUpdateDiff(
 	cmd *cobra.Command,

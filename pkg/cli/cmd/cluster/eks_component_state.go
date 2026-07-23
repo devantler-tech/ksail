@@ -52,6 +52,36 @@ func persistRequiredEKSComponentState(
 	return nil
 }
 
+// clearDeletedEKSState invalidates every state artifact that could otherwise
+// be mistaken for the replacement EKS cluster. It runs after deletion and
+// before creation so a failed recreate cannot retain ownership of a cluster
+// that no longer exists.
+func clearDeletedEKSState(ctx *localregistry.Context, clusterName string) error {
+	if ctx == nil || ctx.ClusterCfg == nil ||
+		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if ctx.EKSConfig == nil {
+		return fmt.Errorf(
+			"clear deleted EKS state: %w",
+			errEKSConfigurationUnavailable,
+		)
+	}
+
+	region := strings.TrimSpace(ctx.EKSConfig.Region)
+	if region == "" {
+		return fmt.Errorf("clear deleted EKS state: %w", state.ErrInvalidRegion)
+	}
+
+	err := state.DeleteEKSRegionState(clusterName, region)
+	if err != nil {
+		return fmt.Errorf("clear deleted EKS state: %w", err)
+	}
+
+	return nil
+}
+
 // persistReconciledEKSComponentState records the ownership resulting from this
 // update pass. When the controller was not touched, the reconciler returns the
 // existing exact-region marker instead of inferring ownership from desired config.

@@ -135,6 +135,31 @@ func TestFinishRecreateFlowDoesNotClaimGitOpsManagedController(t *testing.T) {
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 }
 
+// TestClearDeletedEKSStateInvalidatesControllerOwnership proves recreation clears the deleted
+// cluster's exact-region ownership evidence before any replacement cluster can be attempted.
+//
+//nolint:paralleltest // writes exact-region state under the package-isolated test HOME.
+func TestClearDeletedEKSStateInvalidatesControllerOwnership(t *testing.T) {
+	const (
+		clusterName = "failed-recreate-component-state"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
+		Version:                          state.EKSComponentStateVersion,
+		ClusterName:                      clusterName,
+		Region:                           region,
+		AWSLoadBalancerControllerManaged: true,
+	}))
+
+	ctx := managedEKSComponentContext(clusterName)
+	require.NoError(t, cluster.ExportClearDeletedEKSState(ctx, clusterName))
+
+	_, err := state.LoadEKSComponentState(clusterName, region)
+	require.ErrorIs(t, err, state.ErrEKSComponentStateNotFound)
+}
+
 // TestApplyInPlaceChangesDoesNotClaimManualEKSController proves an unrelated successful update
 // cannot infer KSail ownership solely from an already-satisfied desired controller opt-in.
 //

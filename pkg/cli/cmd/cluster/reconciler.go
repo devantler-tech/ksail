@@ -27,6 +27,12 @@ var errMetricsServerDisableUnsupported = errors.New(
 	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
 )
 
+// errEKSLoadBalancerControllerOwnershipRequired reports that desired removal
+// cannot converge while a live release lacks exact-region KSail ownership.
+var errEKSLoadBalancerControllerOwnershipRequired = errors.New(
+	"AWS load balancer controller ownership is unresolved; preserve the live release",
+)
+
 // componentReconciler applies component-level changes detected by the DiffEngine.
 // It maps field names from the diff to installer Install/Uninstall operations.
 type componentReconciler struct {
@@ -262,9 +268,9 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 
 	if !managed {
 		// A live Helm release without exact-region KSail ownership state may be
-		// manually managed. Preserve it rather than turning desired false into a
-		// destructive ownership claim.
-		return nil
+		// manually managed. Preserve it, but report unresolved convergence so the
+		// requested removal is not recorded in the applied baseline as success.
+		return errEKSLoadBalancerControllerOwnershipRequired
 	}
 
 	err = setup.UninstallEKSLoadBalancerControllerSilent(
