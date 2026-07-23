@@ -25,5 +25,7 @@
 // operator's reconcile, and during cluster update when the opt-in changes.
 // Opting out during cluster update uninstalls only a release backed by
 // exact-region KSail ownership state; manually installed and GitOps-managed
-// releases are preserved.
+// releases are preserved. Live detection considers only the latest deployed
+// Helm revision, so failed or uninstalled history is repaired on the next
+// enabled update instead of masking the absent controller.
 package awslbcontrollerinstaller
