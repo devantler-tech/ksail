@@ -234,7 +234,7 @@ func installEKSLoadBalancer(
 		return nil
 	}
 
-	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories)
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, false)
 	if err != nil {
 		return err
 	}
@@ -253,8 +253,9 @@ func UninstallEKSLoadBalancerControllerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
+	ksailManaged bool,
 ) error {
-	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories)
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, ksailManaged)
 	if err != nil {
 		return err
 	}
@@ -270,17 +271,19 @@ func UninstallEKSLoadBalancerControllerSilent(
 func createEKSLoadBalancerInstaller(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
+	ksailManaged bool,
 ) (installer.Installer, error) {
 	if factories.AWSLoadBalancerController == nil {
 		return nil, ErrAWSLoadBalancerControllerInstallerFactoryNil
 	}
 
-	return factories.AWSLoadBalancerController(clusterCfg)
+	return factories.AWSLoadBalancerController(clusterCfg, ksailManaged)
 }
 
 func newEKSLoadBalancerInstaller(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
+	ksailManaged bool,
 ) (installer.Installer, error) {
 	clusterName, fileRegion, nameFromConfig, err := ksailconfigmanager.ResolveEKSClusterMetadata(
 		clusterCfg,
@@ -320,6 +323,7 @@ func newEKSLoadBalancerInstaller(
 		region,
 		clusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 		haEnabled,
+		ksailManaged,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(

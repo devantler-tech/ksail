@@ -221,7 +221,12 @@ func ExportApplyInPlaceChanges(
 	force bool,
 	allowRolling bool,
 ) error {
-	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
+	eksRegion := ""
+	if ctx.EKSConfig != nil {
+		eksRegion = ctx.EKSConfig.Region
+	}
+
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName, eksRegion)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
@@ -460,8 +465,9 @@ func ExportReconcileComponents(
 	clusterCfg *v1alpha1.Cluster,
 	diff *clusterupdate.UpdateResult,
 	result *clusterupdate.UpdateResult,
+	eksRegion ...string,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster", eksRegion...)
 
 	return r.reconcileComponents(context.Background(), diff, result)
 }

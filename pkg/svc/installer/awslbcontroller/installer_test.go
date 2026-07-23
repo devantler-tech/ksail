@@ -126,7 +126,7 @@ func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
 		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
 		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "aws-load-balancer-controller"}, nil)
 	installer, err := awslbcontrollerinstaller.NewInstaller(
-		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
 	)
 	require.NoError(t, err)
 
@@ -146,7 +146,7 @@ func TestUninstallAllowsKSailOwnedRelease(t *testing.T) {
 		UninstallRelease(mock.Anything, "aws-load-balancer-controller", "kube-system").
 		Return(nil)
 	installer, err := awslbcontrollerinstaller.NewInstaller(
-		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
 	)
 	require.NoError(t, err)
 
@@ -163,7 +163,7 @@ func TestUninstallFailsClosedWhenOwnershipUnknown(t *testing.T) {
 		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
 		Return(nil, assert.AnError)
 	installer, err := awslbcontrollerinstaller.NewInstaller(
-		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
 	)
 	require.NoError(t, err)
 
@@ -171,6 +171,20 @@ func TestUninstallFailsClosedWhenOwnershipUnknown(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "check release ownership for aws-load-balancer-controller")
+}
+
+func TestUninstallPreservesReleaseWithoutKSailOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
 }
 
 type buildValuesCase struct {

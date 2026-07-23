@@ -56,7 +56,10 @@ type InstallerFactories struct {
 	ArgoCD                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	KubeletCSRApprover        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ClusterAutoscaler         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	AWSLoadBalancerController func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	AWSLoadBalancerController func(
+		clusterCfg *v1alpha1.Cluster,
+		ksailManaged bool,
+	) (installer.Installer, error)
 	// EnsureArgoCDResources configures default Argo CD resources post-install.
 	EnsureArgoCDResources func(
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
@@ -316,8 +319,9 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
 	factories.AWSLoadBalancerController = func(
 		clusterCfg *v1alpha1.Cluster,
+		ksailManaged bool,
 	) (installer.Installer, error) {
-		return newEKSLoadBalancerInstaller(clusterCfg, factories)
+		return newEKSLoadBalancerInstaller(clusterCfg, factories, ksailManaged)
 	}
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources

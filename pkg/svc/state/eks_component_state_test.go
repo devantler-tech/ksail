@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -62,6 +63,8 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 		require.NoError(t, state.SaveEKSComponentState(clusterName, region, &snapshot))
 	}
 
+	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
+
 	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
 
 	_, err := state.LoadEKSComponentState(clusterName, "eu-north-1")
@@ -69,4 +72,10 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 
 	_, err = state.LoadEKSComponentState(clusterName, "us-east-1")
 	require.NoError(t, err)
+
+	_, err = state.LoadClusterTTL(clusterName)
+	require.ErrorIs(
+		t, err, state.ErrTTLNotSet,
+		"deleted EKS targets must not retain a stale name-scoped TTL",
+	)
 }

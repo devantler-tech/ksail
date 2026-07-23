@@ -32,6 +32,7 @@ type EKSComponentState struct {
 	Version                                 int    `json:"version"`
 	ClusterName                             string `json:"clusterName"`
 	Region                                  string `json:"region"`
+	AWSLoadBalancerControllerManaged        bool   `json:"awsLoadBalancerControllerManaged,omitzero"`         //nolint:lll // exact component ownership marker
 	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitempty"` //nolint:lll // matches public EKS option key
 }
 
@@ -153,8 +154,10 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 	return filepath.Join(dir, fmt.Sprintf(fileNameFormat, region)), nil
 }
 
-// DeleteEKSRegionState removes only state scoped to one exact EKS target,
-// retaining same-named clusters in other AWS regions.
+// DeleteEKSRegionState removes state scoped to one exact EKS target, retaining
+// same-named clusters in other AWS regions. The legacy TTL file is name-scoped,
+// so it is also removed: retaining it can auto-delete or misreport a later
+// same-named cluster, while it cannot safely identify another region.
 func DeleteEKSRegionState(clusterName, region string) error {
 	componentPath, err := eksComponentStatePath(clusterName, region)
 	if err != nil {
@@ -171,9 +174,14 @@ func DeleteEKSRegionState(clusterName, region string) error {
 		return err
 	}
 
+	ttlPath, err := clusterTTLPath(clusterName)
+	if err != nil {
+		return err
+	}
+
 	var cleanupErrs []error
 
-	for _, statePath := range []string{componentPath, nodegroupPath, ownershipPath} {
+	for _, statePath := range []string{componentPath, nodegroupPath, ownershipPath, ttlPath} {
 		removeErr := os.Remove(statePath)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf(

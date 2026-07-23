@@ -92,7 +92,12 @@ func SetAWSLoadBalancerControllerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.AWSLoadBalancerController = factory
+		f.AWSLoadBalancerController = func(
+			clusterCfg *v1alpha1.Cluster,
+			_ bool,
+		) (installer.Installer, error) {
+			return factory(clusterCfg)
+		}
 	})
 }
 

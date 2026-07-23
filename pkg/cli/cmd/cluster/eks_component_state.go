@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
@@ -34,6 +35,7 @@ func persistRequiredEKSComponentState(
 		Version:                                 state.EKSComponentStateVersion,
 		ClusterName:                             clusterName,
 		Region:                                  region,
+		AWSLoadBalancerControllerManaged:        setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
 		AWSLoadBalancerControllerServiceAccount: ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 	}
 

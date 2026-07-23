@@ -53,9 +53,9 @@ func NewComponentDetector(
 	}
 }
 
-// releaseSet is an in-memory index of Helm releases keyed by
-// name+namespace for O(1) existence checks after a single ListReleases call.
-type releaseSet map[releaseKey]struct{}
+// releaseSet is an in-memory index of the latest Helm release revision keyed
+// by name+namespace for O(1) deployed-state checks after one ListReleases call.
+type releaseSet map[releaseKey]helm.ReleaseInfo
 
 type releaseKey struct {
 	name      string
@@ -86,9 +86,12 @@ func (c *cachedHelmClient) ReleaseExists(
 		return exists, nil
 	}
 
-	_, ok := c.set[releaseKey{name: name, namespace: namespace}]
+	release, ok := c.set[releaseKey{name: name, namespace: namespace}]
+	if !ok {
+		return false, nil
+	}
 
-	return ok, nil
+	return strings.EqualFold(release.Status, "deployed"), nil
 }
 
 // DetectComponents probes the running cluster to populate a ClusterSpec that
@@ -120,7 +123,12 @@ func (d *ComponentDetector) DetectComponents(
 
 	releaseIndex := make(releaseSet, len(releases))
 	for _, r := range releases {
-		releaseIndex[releaseKey{name: r.Name, namespace: r.Namespace}] = struct{}{}
+		key := releaseKey{name: r.Name, namespace: r.Namespace}
+
+		current, exists := releaseIndex[key]
+		if !exists || r.Revision >= current.Revision {
+			releaseIndex[key] = r
+		}
 	}
 
 	cached := &ComponentDetector{

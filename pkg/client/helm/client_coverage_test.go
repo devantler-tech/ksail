@@ -145,10 +145,76 @@ func TestListReleases_TemplateOnlyClient(t *testing.T) {
 // check performed by helmv4action.List.Run(), since this test exercises the
 // real Client.ListReleases path (not a mock). The test cannot run in parallel
 // because it sets the HELM_DRIVER env var.
+//
+//nolint:paralleltest // helper mutates HELM_DRIVER for the real Helm memory backend.
 func TestListReleases_ReturnsAllNamespaces(t *testing.T) {
+	client, cfg := newMemoryHelmClient(t, "default")
+
+	// Seed a release in the "argocd" namespace. Memory.Create uses the release's
+	// own Namespace field to determine where to store it.
+	rel := helm.NewTestRelease(
+		"argo-cd", "argocd", "argo-cd", "v2.10.0", "",
+		releasecommon.StatusDeployed, 1, time.Now(),
+	)
+	err := cfg.Releases.Create(rel)
+	require.NoError(t, err)
+
+	// After Create the memory driver namespace is "argocd"; reset it to "default"
+	// to reproduce the regression: without the re-init in ListReleases the driver
+	// stays scoped to "default" and the "argocd" release would be invisible.
+	memDriver, ok := cfg.Releases.Driver.(*helmv4driver.Memory)
+	require.True(t, ok, "expected memory driver after HELM_DRIVER=memory init")
+	memDriver.SetNamespace("default")
+
+	releases, err := client.ListReleases(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, releases, 1, "expected release from non-default namespace to be visible")
+	assert.Equal(t, "argo-cd", releases[0].Name)
+	assert.Equal(t, "argocd", releases[0].Namespace)
+	assert.Equal(t, 1, releases[0].Revision)
+	assert.Equal(t, "deployed", releases[0].Status)
+}
+
+// TestReleaseExistsUsesLatestDeployedStatus proves retained Helm history is not
+// mistaken for a live component after the latest revision fails.
+//
+//nolint:paralleltest // helper mutates HELM_DRIVER for the real Helm memory backend.
+func TestReleaseExistsUsesLatestDeployedStatus(t *testing.T) {
+	client, cfg := newMemoryHelmClient(t, "kube-system")
+
+	deployed := helm.NewTestRelease(
+		"aws-load-balancer-controller", "kube-system", "aws-load-balancer-controller", "v1", "",
+		releasecommon.StatusDeployed, 1, time.Now(),
+	)
+	require.NoError(t, cfg.Releases.Create(deployed))
+
+	exists, err := client.ReleaseExists(
+		context.Background(), "aws-load-balancer-controller", "kube-system",
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	failed := helm.NewTestRelease(
+		"aws-load-balancer-controller", "kube-system", "aws-load-balancer-controller", "v1", "",
+		releasecommon.StatusFailed, 2, time.Now(),
+	)
+	require.NoError(t, cfg.Releases.Create(failed))
+
+	exists, err = client.ReleaseExists(
+		context.Background(), "aws-load-balancer-controller", "kube-system",
+	)
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func newMemoryHelmClient(
+	t *testing.T,
+	namespace string,
+) (*helm.Client, *helmv4action.Configuration) {
+	t.Helper()
 	t.Setenv("HELM_DRIVER", "memory")
 
-	// Fake Kubernetes API server — only /version is needed for IsReachable().
 	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/version" {
 			resp.Header().Set("Content-Type", "application/json")
@@ -161,7 +227,6 @@ func TestListReleases_ReturnsAllNamespaces(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// Write a kubeconfig pointing to the fake server.
 	kubeconfig := fmt.Sprintf(`apiVersion: v1
 clusters:
 - cluster:
@@ -182,37 +247,12 @@ users:
 
 	settings := helmv4cli.New()
 	settings.KubeConfig = kubeconfigPath
-	settings.SetNamespace("default")
+	settings.SetNamespace(namespace)
 
 	cfg := new(helmv4action.Configuration)
-	// Initialize at "default" namespace — simulates a client scoped to a single
-	// namespace, which would miss releases in other namespaces without the fix.
-	err := cfg.Init(settings.RESTClientGetter(), "default", "memory")
-	require.NoError(t, err)
+	require.NoError(t, cfg.Init(settings.RESTClientGetter(), namespace, "memory"))
 
-	// Seed a release in the "argocd" namespace. Memory.Create uses the release's
-	// own Namespace field to determine where to store it.
-	rel := helm.NewTestRelease(
-		"argo-cd", "argocd", "argo-cd", "v2.10.0", "",
-		releasecommon.StatusDeployed, 1, time.Now(),
-	)
-	err = cfg.Releases.Create(rel)
-	require.NoError(t, err)
-
-	// After Create the memory driver namespace is "argocd"; reset it to "default"
-	// to reproduce the regression: without the re-init in ListReleases the driver
-	// stays scoped to "default" and the "argocd" release would be invisible.
-	memDriver, ok := cfg.Releases.Driver.(*helmv4driver.Memory)
-	require.True(t, ok, "expected memory driver after HELM_DRIVER=memory init")
-	memDriver.SetNamespace("default")
-
-	client := helm.NewClientFromParts(cfg, settings)
-	releases, err := client.ListReleases(context.Background())
-
-	require.NoError(t, err)
-	require.Len(t, releases, 1, "expected release from non-default namespace to be visible")
-	assert.Equal(t, "argo-cd", releases[0].Name)
-	assert.Equal(t, "argocd", releases[0].Namespace)
+	return helm.NewClientFromParts(cfg, settings), cfg
 }
 
 // ---------------------------------------------------------------------------

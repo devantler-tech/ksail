@@ -10,6 +10,7 @@ import (
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,15 +38,35 @@ func (r *recordingEKSLoadBalancerInstaller) Images(_ context.Context) ([]string,
 
 var _ installer.Installer = (*recordingEKSLoadBalancerInstaller)(nil)
 
+func persistManagedEKSControllerState(t *testing.T, region string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveEKSComponentState(
+		"test-cluster",
+		region,
+		&state.EKSComponentState{
+			Version:                          state.EKSComponentStateVersion,
+			ClusterName:                      "test-cluster",
+			Region:                           region,
+			AWSLoadBalancerControllerManaged: true,
+		},
+	))
+	t.Cleanup(func() { _ = state.DeleteClusterState("test-cluster") })
+}
+
+type eksOptInTransitionCase struct {
+	name               string
+	oldValue           bool
+	newValue           bool
+	wantInstallCalls   int
+	wantUninstallCalls int
+}
+
 //nolint:paralleltest // subtests replace the process-global installer factory.
 func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
-	tests := []struct {
-		name               string
-		oldValue           bool
-		newValue           bool
-		wantInstallCalls   int
-		wantUninstallCalls int
-	}{
+	const region = "eu-north-1"
+
+	tests := []eksOptInTransitionCase{
 		{
 			name: "enable installs", oldValue: false, newValue: true,
 			wantInstallCalls: 1,
@@ -59,48 +80,100 @@ func TestReconcileLoadBalancer_EKSOptInTransitionsReachHelm(t *testing.T) {
 	for _, testCase := range tests {
 		//nolint:paralleltest // each case replaces the process-global installer factory.
 		t.Run(testCase.name, func(t *testing.T) {
-			fakeInstaller := &recordingEKSLoadBalancerInstaller{}
-			factoryCalls := 0
-			restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
-				func(
-					_ *v1alpha1.Cluster,
-				) (installer.Installer, error) {
-					factoryCalls++
-
-					return fakeInstaller, nil
-				},
-			)
-			t.Cleanup(restore)
-
-			clusterCfg := &v1alpha1.Cluster{}
-			clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
-			clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
-			clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
-			clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = testCase.newValue
-
-			detected := clusterupdate.NewEmptyUpdateResult()
-			detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
-				Field:    specdiff.EKSLoadBalancerControllerField,
-				OldValue: strconv.FormatBool(testCase.oldValue),
-				NewValue: strconv.FormatBool(testCase.newValue),
-			})
-			applied := clusterupdate.NewEmptyUpdateResult()
-
-			err := cluster.ExportReconcileComponents(
-				newReconcileTestCmd(), clusterCfg, detected, applied,
-			)
-
-			require.NoError(t, err)
-			assert.Equal(t, 1, factoryCalls)
-			assert.Equal(t, testCase.wantInstallCalls, fakeInstaller.installCalls)
-			assert.Equal(t, testCase.wantUninstallCalls, fakeInstaller.uninstallCalls)
-			assert.Len(t, applied.AppliedChanges, 1)
+			runEKSOptInTransitionCase(t, testCase, region)
 		})
 	}
 }
 
+func runEKSOptInTransitionCase(
+	t *testing.T,
+	testCase eksOptInTransitionCase,
+	region string,
+) {
+	t.Helper()
+
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{}
+	factoryCalls := 0
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			factoryCalls++
+
+			return fakeInstaller, nil
+		},
+	)
+	t.Cleanup(restore)
+
+	if testCase.wantUninstallCalls > 0 {
+		persistManagedEKSControllerState(t, region)
+	}
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = testCase.newValue
+
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
+		Field:    specdiff.EKSLoadBalancerControllerField,
+		OldValue: strconv.FormatBool(testCase.oldValue),
+		NewValue: strconv.FormatBool(testCase.newValue),
+	})
+	applied := clusterupdate.NewEmptyUpdateResult()
+
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied, region,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, factoryCalls)
+	assert.Equal(t, testCase.wantInstallCalls, fakeInstaller.installCalls)
+	assert.Equal(t, testCase.wantUninstallCalls, fakeInstaller.uninstallCalls)
+	assert.Len(t, applied.AppliedChanges, 1)
+}
+
+//nolint:paralleltest // replaces the process-global installer factory.
+func TestReconcileLoadBalancer_EKSManualReleaseIsPreserved(t *testing.T) {
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{}
+	factoryCalls := 0
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(
+			_ *v1alpha1.Cluster,
+		) (installer.Installer, error) {
+			factoryCalls++
+
+			return fakeInstaller, nil
+		},
+	)
+	t.Cleanup(restore)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
+		Field:    specdiff.EKSLoadBalancerControllerField,
+		OldValue: "true",
+		NewValue: "false",
+	})
+	applied := clusterupdate.NewEmptyUpdateResult()
+
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied,
+	)
+
+	require.NoError(t, err)
+	assert.Zero(t, factoryCalls)
+	assert.Zero(t, fakeInstaller.uninstallCalls)
+	assert.Len(t, applied.AppliedChanges, 1)
+}
+
 //nolint:funlen,paralleltest // table coverage replaces the process-global installer factory.
 func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
+	const region = "eu-north-1"
+
 	tests := []struct {
 		name                string
 		desiredLoadBalancer v1alpha1.LoadBalancer
@@ -147,6 +220,10 @@ func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
 			)
 			t.Cleanup(restore)
 
+			if testCase.wantUninstallCalls > 0 {
+				persistManagedEKSControllerState(t, region)
+			}
+
 			clusterCfg := &v1alpha1.Cluster{}
 			clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
 			clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
@@ -169,7 +246,7 @@ func TestReconcileComponents_EKSLoadBalancerChangesCoalesce(t *testing.T) {
 			)
 			applied := clusterupdate.NewEmptyUpdateResult()
 			err := cluster.ExportReconcileComponents(
-				newReconcileTestCmd(), clusterCfg, detected, applied,
+				newReconcileTestCmd(), clusterCfg, detected, applied, region,
 			)
 
 			require.NoError(t, err)

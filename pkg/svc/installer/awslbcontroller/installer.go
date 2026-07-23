@@ -44,7 +44,8 @@ var ErrInvalidServiceAccountName = errors.New(
 type Installer struct {
 	*helmutil.Base
 
-	client helm.Interface
+	client       helm.Interface
+	ksailManaged bool
 }
 
 // NewInstaller creates a new AWS Load Balancer Controller installer instance.
@@ -62,6 +63,7 @@ func NewInstaller(
 	timeout time.Duration,
 	clusterName, region, serviceAccountName string,
 	haEnabled bool,
+	ksailManaged ...bool,
 ) (*Installer, error) {
 	if strings.TrimSpace(clusterName) == "" {
 		return nil, ErrClusterNameRequired
@@ -74,6 +76,8 @@ func NewInstaller(
 				ErrInvalidServiceAccountName, serviceAccountName, strings.Join(errs, "; "))
 		}
 	}
+
+	managed := len(ksailManaged) > 0 && ksailManaged[0]
 
 	return &Installer{
 		Base: helmutil.NewBase(
@@ -102,14 +106,20 @@ func NewInstaller(
 				ValuesYaml:  buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
 			},
 		),
-		client: client,
+		client:       client,
+		ksailManaged: managed,
 	}, nil
 }
 
-// Uninstall removes the AWS Load Balancer Controller only when KSail owns the
-// Helm release. A Flux- or ArgoCD-managed release is left untouched, and an
-// ownership lookup failure aborts before Helm can delete anything.
+// Uninstall removes the AWS Load Balancer Controller only when the caller has
+// supplied positive KSail ownership evidence. A Flux- or ArgoCD-managed release
+// is still left untouched, and an ownership lookup failure aborts before Helm
+// can delete anything.
 func (i *Installer) Uninstall(ctx context.Context) error {
+	if !i.ksailManaged {
+		return nil
+	}
+
 	skip, err := helmutil.SkipIfGitOpsManaged(
 		ctx,
 		i.client,

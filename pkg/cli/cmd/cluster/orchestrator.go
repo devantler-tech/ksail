@@ -1192,7 +1192,14 @@ func (o *updateOrchestrator) applyOrReportChanges(
 		return nil
 	}
 
-	reconciler := newComponentReconciler(o.cmd, o.ctx.ClusterCfg, o.clusterName)
+	eksRegion := ""
+	if o.ctx.EKSConfig != nil {
+		eksRegion = o.ctx.EKSConfig.Region
+	}
+
+	reconciler := newComponentReconciler(
+		o.cmd, o.ctx.ClusterCfg, o.clusterName, eksRegion,
+	)
 
 	return applyInPlaceChanges(
 		o.cmd, updater, reconciler, o.clusterName,

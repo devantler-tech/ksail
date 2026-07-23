@@ -667,8 +667,11 @@ func TestDetectComponents_Success(t *testing.T) {
 	// DetectComponents calls ListReleases once to build an in-memory release set.
 	// The test returns Cilium and metrics-server as installed releases.
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
-		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium},
-		{Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer},
+		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium, Status: "deployed"},
+		{
+			Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer,
+			Status: "deployed",
+		},
 	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
@@ -690,7 +693,7 @@ func TestDetectComponents_EKSAWSLoadBalancerController(t *testing.T) {
 	k8sClientset := fake.NewClientset()
 
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
-		{Name: "aws-load-balancer-controller", Namespace: "kube-system"},
+		{Name: "aws-load-balancer-controller", Namespace: "kube-system", Status: "deployed"},
 	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
@@ -699,6 +702,29 @@ func TestDetectComponents_EKSAWSLoadBalancerController(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerEnabled, spec.LoadBalancer)
 	assert.True(t, spec.EKS.ExperimentalAWSLoadBalancerController)
+}
+
+func TestDetectComponents_EKSFailedAWSLoadBalancerControllerReleaseIsInactive(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
+		{
+			Name:      "aws-load-balancer-controller",
+			Namespace: "kube-system",
+			Revision:  2,
+			Status:    "failed",
+		},
+	}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+
+	require.NoError(t, err)
+	assert.False(t, spec.EKS.ExperimentalAWSLoadBalancerController)
 }
 
 func TestDetectComponents_ArgoCD(t *testing.T) {
@@ -711,7 +737,7 @@ func TestDetectComponents_ArgoCD(t *testing.T) {
 	// Regression test: ArgoCD release (name "argocd" in namespace "argocd")
 	// must be detected correctly via ListReleases → releaseSet lookup.
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
-		{Name: detector.ReleaseArgoCD, Namespace: detector.NamespaceArgoCD},
+		{Name: detector.ReleaseArgoCD, Namespace: detector.NamespaceArgoCD, Status: "deployed"},
 	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
@@ -774,7 +800,7 @@ func TestDetectComponents_ArgoCD_MultiNamespace(t *testing.T) {
 	// ListReleases returns the ArgoCD release in the "argocd" namespace — a
 	// non-default namespace. DetectComponents must correctly identify it.
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
-		{Name: detector.ReleaseArgoCD, Namespace: detector.NamespaceArgoCD},
+		{Name: detector.ReleaseArgoCD, Namespace: detector.NamespaceArgoCD, Status: "deployed"},
 	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)

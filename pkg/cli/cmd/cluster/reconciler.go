@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ type componentReconciler struct {
 	cmd         *cobra.Command
 	clusterCfg  *v1alpha1.Cluster
 	clusterName string
+	eksRegion   string
 	factories   *setup.InstallerFactories
 	// autoscalerReconciled tracks whether the cluster autoscaler has already been
 	// reconciled during this update pass. Multiple diff fields share the
@@ -52,11 +54,18 @@ func newComponentReconciler(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	eksRegion ...string,
 ) *componentReconciler {
+	region := ""
+	if len(eksRegion) > 0 {
+		region = strings.TrimSpace(eksRegion[0])
+	}
+
 	return &componentReconciler{
 		cmd:         cmd,
 		clusterCfg:  clusterCfg,
 		clusterName: clusterName,
+		eksRegion:   region,
 		factories:   getInstallerFactories(),
 	}
 }
@@ -236,7 +245,24 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 		return nil
 	}
 
-	err := setup.UninstallEKSLoadBalancerControllerSilent(ctx, r.clusterCfg, r.factories)
+	managed, err := r.eksLoadBalancerControllerManagedByKSail()
+	if err != nil {
+		return err
+	}
+
+	if !managed {
+		// A live Helm release without exact-region KSail ownership state may be
+		// manually managed. Preserve it rather than turning desired false into a
+		// destructive ownership claim.
+		return nil
+	}
+
+	err = setup.UninstallEKSLoadBalancerControllerSilent(
+		ctx,
+		r.clusterCfg,
+		r.factories,
+		managed,
+	)
 	if err != nil && errors.Is(err, helm.ErrReleaseNotFound) {
 		return nil
 	}
@@ -246,6 +272,23 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 	}
 
 	return nil
+}
+
+func (r *componentReconciler) eksLoadBalancerControllerManagedByKSail() (bool, error) {
+	if r.eksRegion == "" {
+		return false, nil
+	}
+
+	snapshot, err := state.LoadEKSComponentState(r.clusterName, r.eksRegion)
+	if err != nil {
+		if errors.Is(err, state.ErrEKSComponentStateNotFound) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("verify AWS load balancer controller ownership: %w", err)
+	}
+
+	return snapshot.AWSLoadBalancerControllerManaged, nil
 }
 
 // reconcileClusterAutoscaler installs or uninstalls the Cluster Autoscaler.

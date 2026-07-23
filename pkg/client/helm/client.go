@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
@@ -248,8 +249,9 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 	return nil
 }
 
-// ReleaseExists checks whether a Helm release with the given name exists in the
-// specified namespace. It returns true when at least one revision is recorded.
+// ReleaseExists checks whether the latest Helm release revision with the given
+// name is deployed in the specified namespace. Failed, pending, uninstalled,
+// and superseded history must not be treated as a live component.
 func (c *Client) ReleaseExists(
 	_ context.Context,
 	releaseName, namespace string,
@@ -266,7 +268,6 @@ func (c *Client) ReleaseExists(
 	defer cleanup()
 
 	histClient := helmv4action.NewHistory(c.actionConfig)
-	histClient.Max = 1
 
 	releases, err := histClient.Run(releaseName)
 	if err != nil {
@@ -277,7 +278,26 @@ func (c *Client) ReleaseExists(
 		return false, fmt.Errorf("failed to check release history for %q: %w", releaseName, err)
 	}
 
-	return len(releases) > 0, nil
+	latestVersion := -1
+	latestStatus := ""
+
+	for _, release := range releases {
+		accessor, accessorErr := helmv4release.NewAccessor(release)
+		if accessorErr != nil {
+			return false, fmt.Errorf(
+				"failed to access release history for %q: %w",
+				releaseName,
+				accessorErr,
+			)
+		}
+
+		if accessor.Version() > latestVersion {
+			latestVersion = accessor.Version()
+			latestStatus = accessor.Status()
+		}
+	}
+
+	return latestVersion >= 0 && strings.EqualFold(latestStatus, "deployed"), nil
 }
 
 // ListReleases returns Helm releases across all namespaces for all statuses in a
@@ -341,6 +361,8 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 		result = append(result, ReleaseInfo{
 			Name:      accessor.Name(),
 			Namespace: accessor.Namespace(),
+			Revision:  accessor.Version(),
+			Status:    accessor.Status(),
 		})
 	}
 

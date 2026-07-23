@@ -9,8 +9,43 @@ import (
 	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+//nolint:paralleltest // writes exact-region state under the package-isolated test HOME.
+func TestPersistRequiredEKSComponentStateRecordsControllerOwnership(t *testing.T) {
+	const (
+		clusterName = "managed-component-state"
+		region      = "eu-north-1"
+	)
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		EKSConfig: &clusterprovisioner.EKSConfig{
+			Name:   clusterName,
+			Region: region,
+		},
+	}
+	ctx.ClusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	ctx.ClusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	ctx.ClusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	ctx.ClusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = true
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	require.NoError(t, cluster.ExportPersistRequiredEKSComponentState(ctx, clusterName))
+	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, err)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+
+	ctx.ClusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = false
+	require.NoError(t, cluster.ExportPersistRequiredEKSComponentState(ctx, clusterName))
+	snapshot, err = state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, err)
+	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
+}
 
 // TestPersistRequiredEKSComponentState_FailsClosed proves an applied EKS
 // component mutation cannot report success when its exact-region baseline
