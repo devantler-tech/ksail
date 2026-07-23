@@ -326,7 +326,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@5c284fdf432754a697710c336fc2c26bc99868bb # v10.2.0
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@9705e47d7df0b556ec06786247297c0e5020e56d # v10.2.1
     permissions:
       contents: write
       issues: write
