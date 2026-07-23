@@ -104,9 +104,13 @@ type ReleaseInfo struct {
 // is the Kubernetes object UID, so deleting and reinstalling a same-name
 // release produces different ownership evidence even when its revision resets.
 type ReleaseStorageMetadata struct {
-	Labels            map[string]string
-	Identity          string
+	Labels   map[string]string
+	Identity string
+	// HistoryIdentities contains every retained revision and is diagnostic only.
 	HistoryIdentities []string
+	// CurrentIncarnationIdentities excludes revisions before the latest Helm
+	// uninstalled boundary and is safe for release-ownership comparisons.
+	CurrentIncarnationIdentities []string
 }
 
 // ChartManager defines the chart lifecycle operations required by KSail.

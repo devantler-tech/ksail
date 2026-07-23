@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,7 @@ type recordingEKSLoadBalancerInstaller struct {
 	gitOpsManaged      bool
 	releaseIdentity    string
 	releaseIdentityErr error
+	uninstallErr       error
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Install(_ context.Context) error {
@@ -56,7 +58,7 @@ func (r *recordingEKSLoadBalancerInstaller) ReleaseIdentity(context.Context) (st
 func (r *recordingEKSLoadBalancerInstaller) Uninstall(_ context.Context) error {
 	r.uninstallCalls++
 
-	return nil
+	return r.uninstallErr
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Images(_ context.Context) ([]string, error) {
@@ -237,6 +239,51 @@ func TestReconcileLoadBalancer_EKSReplacementInvalidatesOwnership(t *testing.T) 
 	assert.Empty(t, applied.AppliedChanges)
 	require.Len(t, applied.FailedChanges, 1)
 	assert.Contains(t, applied.FailedChanges[0].Reason, "ownership")
+}
+
+// TestReconcileLoadBalancer_EKSGitOpsTakeoverRemainsUnresolved proves a
+// release that becomes GitOps-managed is preserved without advancing the
+// disabled baseline or clearing KSail's prior ownership evidence.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestReconcileLoadBalancer_EKSGitOpsTakeoverRemainsUnresolved(t *testing.T) {
+	const region = "eu-north-1"
+
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{
+		uninstallErr: awslbcontrollerinstaller.ErrGitOpsManagedUninstallSkipped,
+	}
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return fakeInstaller, nil
+		},
+	)
+	t.Cleanup(restore)
+	persistManagedEKSControllerState(t, region)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
+		Field: specdiff.EKSLoadBalancerControllerField, OldValue: "true", NewValue: "false",
+	})
+	applied := clusterupdate.NewEmptyUpdateResult()
+
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied, region,
+	)
+
+	require.ErrorIs(t, err, awslbcontrollerinstaller.ErrGitOpsManagedUninstallSkipped)
+	assert.Equal(t, 1, fakeInstaller.uninstallCalls)
+	assert.Empty(t, applied.AppliedChanges)
+	require.Len(t, applied.FailedChanges, 1)
+
+	snapshot, loadErr := state.LoadEKSComponentState("test-cluster", region)
+	require.NoError(t, loadErr)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
 }
 
 // TestReconcileLoadBalancer_EKSRemovedReleaseClearsOwnership proves an absent

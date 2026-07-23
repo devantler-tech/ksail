@@ -153,7 +153,7 @@ func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
 
 	err = installer.Uninstall(context.Background())
 
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "managed by GitOps")
 }
 
 func TestIsGitOpsManagedReportsFluxOwnership(t *testing.T) {
@@ -203,16 +203,31 @@ func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.
 		{
 			name: "owned failed upgrade retains the persisted revision UID",
 			metadata: &helm.ReleaseStorageMetadata{
-				Identity:          "failed-upgrade-uid",
-				HistoryIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
+				Identity:                     "failed-upgrade-uid",
+				HistoryIdentities:            []string{"persisted-owned-uid", "failed-upgrade-uid"},
+				CurrentIncarnationIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
 			},
 			want: true,
 		},
 		{
 			name: "same-name replacement has a disjoint release history",
 			metadata: &helm.ReleaseStorageMetadata{
-				Identity:          "replacement-uid",
-				HistoryIdentities: []string{"replacement-uid"},
+				Identity:                     "replacement-uid",
+				HistoryIdentities:            []string{"replacement-uid"},
+				CurrentIncarnationIdentities: []string{"replacement-uid"},
+			},
+			want: false,
+		},
+		{
+			name: "keep-history replacement excludes the prior incarnation",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity: "replacement-uid",
+				HistoryIdentities: []string{
+					"persisted-owned-uid",
+					"uninstalled-uid",
+					"replacement-uid",
+				},
+				CurrentIncarnationIdentities: []string{"replacement-uid"},
 			},
 			want: false,
 		},

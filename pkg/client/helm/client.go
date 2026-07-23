@@ -551,9 +551,10 @@ func latestReleaseStorageMetadata(
 	}
 
 	return &ReleaseStorageMetadata{
-		Labels:            items[bestIdx].Labels,
-		Identity:          items[bestIdx].UID,
-		HistoryIdentities: releaseStorageIdentities(items),
+		Labels:                       items[bestIdx].Labels,
+		Identity:                     items[bestIdx].UID,
+		HistoryIdentities:            releaseStorageIdentities(items),
+		CurrentIncarnationIdentities: currentReleaseStorageIdentities(items),
 	}, nil
 }
 
@@ -566,6 +567,81 @@ func releaseStorageIdentities(items []releaseStorageItem) []string {
 	}
 
 	return identities
+}
+
+// currentReleaseStorageIdentities returns only the Helm storage UIDs that
+// belong to the current release incarnation. An uninstalled revision is an
+// incarnation boundary: `helm install --replace` retains older history but
+// starts the replacement after that boundary. When the latest revision itself
+// is uninstalled, the preceding boundary is used so callers can still
+// recognize the just-removed incarnation as their own idempotent cleanup.
+func currentReleaseStorageIdentities(items []releaseStorageItem) []string {
+	latestVersion, latestStatus := latestReleaseStorageVersionAndStatus(items)
+	boundaryVersion := releaseIncarnationBoundary(items, latestVersion, latestStatus)
+
+	return releaseStorageIdentitiesAfter(items, boundaryVersion)
+}
+
+func latestReleaseStorageVersionAndStatus(items []releaseStorageItem) (int, string) {
+	latestVersion := -1
+	latestStatus := ""
+
+	for _, item := range items {
+		version := releaseStorageVersion(item)
+		if version > latestVersion {
+			latestVersion = version
+			latestStatus = releaseStorageStatus(item)
+		}
+	}
+
+	return latestVersion, latestStatus
+}
+
+func releaseIncarnationBoundary(
+	items []releaseStorageItem,
+	latestVersion int,
+	latestStatus string,
+) int {
+	boundaryVersion := -1
+
+	for _, item := range items {
+		version := releaseStorageVersion(item)
+
+		isLatestUninstalled := latestStatus == "uninstalled" && version == latestVersion
+		if releaseStorageStatus(item) != "uninstalled" || isLatestUninstalled {
+			continue
+		}
+
+		if version > boundaryVersion {
+			boundaryVersion = version
+		}
+	}
+
+	return boundaryVersion
+}
+
+func releaseStorageIdentitiesAfter(items []releaseStorageItem, boundaryVersion int) []string {
+	identities := make([]string, 0, len(items))
+	for _, item := range items {
+		version := releaseStorageVersion(item)
+		identity := strings.TrimSpace(item.UID)
+
+		if version > boundaryVersion && identity != "" {
+			identities = append(identities, identity)
+		}
+	}
+
+	return identities
+}
+
+func releaseStorageVersion(item releaseStorageItem) int {
+	version, _ := strconv.Atoi(item.Labels["version"])
+
+	return version
+}
+
+func releaseStorageStatus(item releaseStorageItem) string {
+	return strings.ToLower(strings.TrimSpace(item.Labels["status"]))
 }
 
 func (c *Client) installRelease(

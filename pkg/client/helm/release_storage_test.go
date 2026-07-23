@@ -37,6 +37,11 @@ func TestFetchReleaseStorageMetadataSelectsLatestIncarnation(t *testing.T) {
 	assert.Equal(t, "current-uid", metadata.Identity)
 	assert.Equal(t, "2", metadata.Labels["version"])
 	assert.ElementsMatch(t, []string{"old-uid", "current-uid"}, metadata.HistoryIdentities)
+	assert.ElementsMatch(
+		t,
+		[]string{"old-uid", "current-uid"},
+		metadata.CurrentIncarnationIdentities,
+	)
 }
 
 func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
@@ -48,6 +53,45 @@ func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, helm.ErrNoReleaseStorage)
+}
+
+func TestFetchReleaseStorageMetadataExcludesKeepHistoryReplacement(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewSimpleClientset(
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
+			UID: types.UID("persisted-owned-uid"),
+			Labels: map[string]string{
+				"name": "controller", "owner": "helm", "version": "1", "status": "superseded",
+			},
+		}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: "sh.helm.release.v1.controller.v2", Namespace: "kube-system",
+			UID: types.UID("uninstalled-uid"),
+			Labels: map[string]string{
+				"name": "controller", "owner": "helm", "version": "2", "status": "uninstalled",
+			},
+		}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: "sh.helm.release.v1.controller.v3", Namespace: "kube-system",
+			UID: types.UID("replacement-uid"),
+			Labels: map[string]string{
+				"name": "controller", "owner": "helm", "version": "3", "status": "deployed",
+			},
+		}},
+	)
+
+	metadata, err := helm.FetchReleaseStorageMetadata(
+		context.Background(), clientset, "secret", "kube-system", "name=controller,owner=helm",
+	)
+
+	require.NoError(t, err)
+	assert.ElementsMatch(
+		t,
+		[]string{"replacement-uid"},
+		metadata.CurrentIncarnationIdentities,
+	)
 }
 
 func TestFetchReleaseStorageMetadataRejectsUnsupportedDriver(t *testing.T) {

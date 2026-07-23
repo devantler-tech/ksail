@@ -45,6 +45,13 @@ var ErrReleaseIdentityEmpty = errors.New(
 	"aws-load-balancer-controller Helm storage UID is empty",
 )
 
+// ErrGitOpsManagedUninstallSkipped reports a release that became externally
+// managed after KSail recorded ownership. Preserving it is correct, but the
+// requested disabled state remains unresolved and must not advance baselines.
+var ErrGitOpsManagedUninstallSkipped = errors.New(
+	"aws-load-balancer-controller is managed by GitOps; uninstall skipped",
+)
+
 // Installer installs or upgrades the AWS Load Balancer Controller.
 //
 // It embeds helmutil.Base for the whole Helm lifecycle; no extra Kubernetes
@@ -192,7 +199,7 @@ func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (b
 	}
 
 	return metadata.Identity == expected ||
-		slices.Contains(metadata.HistoryIdentities, expected), nil
+		slices.Contains(metadata.CurrentIncarnationIdentities, expected), nil
 }
 
 // Uninstall removes the AWS Load Balancer Controller only when the caller has
@@ -216,7 +223,7 @@ func (i *Installer) Uninstall(ctx context.Context) error {
 	}
 
 	if skip {
-		return nil
+		return ErrGitOpsManagedUninstallSkipped
 	}
 
 	err = i.Base.Uninstall(ctx)
