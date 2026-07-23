@@ -9,7 +9,27 @@ import (
 	"testing"
 )
 
-const auditedClaircoreVersion = "v1.5.35"
+const (
+	claircoreModulePath        = "github.com/quay/claircore"
+	claircoreToolkitModulePath = "github.com/quay/claircore/toolkit"
+)
+
+// auditedClaircoreVersions pins the independently selected Claircore modules
+// in every shipped KSail Go module. A toolkit-only upgrade can change linked
+// code without changing the parent Claircore module, so both versions are part
+// of the reachability verdict.
+func auditedClaircoreVersions() map[string]map[string]string {
+	return map[string]map[string]string{
+		"root": {
+			claircoreModulePath:        "v1.5.35",
+			claircoreToolkitModulePath: "v1.2.4",
+		},
+		"desktop": {
+			claircoreModulePath:        "v1.5.53",
+			claircoreToolkitModulePath: "v1.6.1",
+		},
+	}
+}
 
 // inertClaircorePackages is the full set of claircore packages the ksail
 // binary may link. They are parsing/type/local-filesystem code only — none
@@ -19,9 +39,12 @@ func inertClaircorePackages() map[string]bool {
 	return map[string]bool{
 		"github.com/quay/claircore":                   true,
 		"github.com/quay/claircore/indexer":           true,
+		"github.com/quay/claircore/internal/filterfs": true,
 		"github.com/quay/claircore/osrelease":         true,
 		"github.com/quay/claircore/pkg/cpe":           true,
 		"github.com/quay/claircore/pkg/tarfs":         true,
+		"github.com/quay/claircore/toolkit/log":       true,
+		"github.com/quay/claircore/toolkit/types":     true,
 		"github.com/quay/claircore/toolkit/types/cpe": true,
 	}
 }
@@ -42,6 +65,35 @@ func TestClaircoreModuleDirsIncludesDesktop(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("module directory %d: expected %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+// TestAuditedClaircoreVersionsIncludeToolkit prevents the independently
+// versioned toolkit module from dropping out of the fail-closed audit.
+func TestAuditedClaircoreVersionsIncludeToolkit(t *testing.T) {
+	t.Parallel()
+
+	wantModulePaths := []string{claircoreModulePath, claircoreToolkitModulePath}
+	for _, moduleName := range []string{"root", "desktop"} {
+		auditedVersions, ok := auditedClaircoreVersions()[moduleName]
+		if !ok {
+			t.Fatalf("module %q has no audited Claircore module versions", moduleName)
+		}
+		if len(auditedVersions) != len(wantModulePaths) {
+			t.Fatalf(
+				"module %q must audit %d Claircore modules, got %d: %v",
+				moduleName,
+				len(wantModulePaths),
+				len(auditedVersions),
+				auditedVersions,
+			)
+		}
+
+		for _, modulePath := range wantModulePaths {
+			if auditedVersions[modulePath] == "" {
+				t.Errorf("module %q has no audited version for %q", moduleName, modulePath)
+			}
 		}
 	}
 }
@@ -72,7 +124,12 @@ func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			assertClaircoreVersion(t, moduleDir)
+			versions, ok := auditedClaircoreVersions()[name]
+			if !ok {
+				t.Fatalf("module %q has no audited Claircore module versions", name)
+			}
+
+			assertClaircoreVersions(t, moduleDir, versions)
 			assertClaircorePackagesStayInert(t, moduleDir)
 		})
 	}
@@ -85,36 +142,49 @@ func claircoreModuleDirs(root string) []string {
 	return []string{root, filepath.Join(root, "desktop")}
 }
 
-// assertClaircoreVersion invalidates the reachability verdict whenever either
-// module moves away from the audited Claircore release, even if its package
-// paths remain within the existing allow-list.
-func assertClaircoreVersion(t *testing.T, moduleDir string) {
+// assertClaircoreVersions invalidates the reachability verdict whenever a
+// shipped module moves away from either audited Claircore release, even if its
+// package paths remain within the existing allow-list.
+func assertClaircoreVersions(
+	t *testing.T,
+	moduleDir string,
+	auditedVersions map[string]string,
+) {
 	t.Helper()
 
-	cmd := exec.CommandContext(
-		t.Context(),
-		"go",
-		"list",
-		"-m",
-		"-f",
-		"{{.Version}}",
-		"github.com/quay/claircore",
-	)
-	cmd.Dir = moduleDir
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("read Claircore version from module %q: %v\n%s", moduleDir, err, out)
-	}
-
-	if got := strings.TrimSpace(string(out)); got != auditedClaircoreVersion {
-		t.Fatalf(
-			"module %q uses Claircore %q; re-establish the #6008 SSRF reachability verdict "+
-				"before updating auditedClaircoreVersion %q",
-			moduleDir,
-			got,
-			auditedClaircoreVersion,
+	for modulePath, auditedVersion := range auditedVersions {
+		cmd := exec.CommandContext(
+			t.Context(),
+			"go",
+			"list",
+			"-m",
+			"-f",
+			"{{.Version}}",
+			modulePath,
 		)
+		cmd.Dir = moduleDir
+
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf(
+				"read %q version from module %q: %v\n%s",
+				modulePath,
+				moduleDir,
+				err,
+				out,
+			)
+		}
+
+		if got := strings.TrimSpace(string(out)); got != auditedVersion {
+			t.Fatalf(
+				"module %q uses %s %q; re-establish the #6008 SSRF reachability verdict "+
+					"before updating the audited version %q",
+				moduleDir,
+				modulePath,
+				got,
+				auditedVersion,
+			)
+		}
 	}
 }
 
