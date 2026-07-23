@@ -103,13 +103,17 @@ type ReleaseStorageMetadata struct {
 	Identity string
 }
 
-// Interface defines the subset of Helm functionality required by KSail.
-type Interface interface {
+// ChartManager defines the chart lifecycle operations required by KSail.
+type ChartManager interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
+}
+
+// ReleaseInspector defines the live release queries required by KSail.
+type ReleaseInspector interface {
 	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
 	// ListReleases returns Helm releases across all namespaces for all statuses.
 	// Name, Namespace, Revision, and Status are populated; the remaining fields
@@ -148,4 +152,10 @@ type Interface interface {
 	// that depend on them by another, the second install fails with "ensure CRDs
 	// are installed first" unless discovery is refreshed in between.
 	RefreshDiscovery() error
+}
+
+// Interface defines the subset of Helm functionality required by KSail.
+type Interface interface {
+	ChartManager
+	ReleaseInspector
 }

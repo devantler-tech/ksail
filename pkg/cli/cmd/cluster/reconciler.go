@@ -249,28 +249,38 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 	ctx context.Context,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
-		controllerManaged, releaseIdentity, err := r.installLoadBalancer(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to install load balancer: %w", err)
-		}
-
-		if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
-			if !controllerManaged {
-				return errEKSLoadBalancerControllerMutationSkipped
-			}
-
-			r.eksLoadBalancerOwnershipUpdated = true
-			r.eksLoadBalancerManaged = true
-			r.eksLoadBalancerReleaseIdentity = releaseIdentity
-		}
-
-		return nil
+		return r.reconcileLoadBalancerInstall(ctx)
 	}
 
 	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
 		return nil
 	}
 
+	return r.reconcileLoadBalancerUninstall(ctx)
+}
+
+func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) error {
+	controllerManaged, releaseIdentity, err := r.installLoadBalancer(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to install load balancer: %w", err)
+	}
+
+	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if !controllerManaged {
+		return errEKSLoadBalancerControllerMutationSkipped
+	}
+
+	r.eksLoadBalancerOwnershipUpdated = true
+	r.eksLoadBalancerManaged = true
+	r.eksLoadBalancerReleaseIdentity = releaseIdentity
+
+	return nil
+}
+
+func (r *componentReconciler) reconcileLoadBalancerUninstall(ctx context.Context) error {
 	managed, releaseIdentity, err := r.eksLoadBalancerControllerOwnership()
 	if err != nil {
 		return err

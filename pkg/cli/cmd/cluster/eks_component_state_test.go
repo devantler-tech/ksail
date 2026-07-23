@@ -254,8 +254,14 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 			initial: new(true), wantManaged: false, wantRemove: 1,
 		},
 		{
-			name: "GitOps-skipped install remains unowned", oldOptIn: false, newOptIn: true,
-			initial: new(false), wantManaged: false, wantInstall: 1, installSkip: true, wantErr: true,
+			name:        "GitOps-skipped install remains unowned",
+			oldOptIn:    false,
+			newOptIn:    true,
+			initial:     new(false),
+			wantManaged: false,
+			wantInstall: 1,
+			installSkip: true,
+			wantErr:     true,
 		},
 	}
 
