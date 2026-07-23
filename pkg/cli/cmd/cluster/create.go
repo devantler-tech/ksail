@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -101,9 +102,22 @@ func handleCreateRunE(
 		return err
 	}
 
-	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
-	if err != nil {
-		return err
+	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(
+		cmd,
+		cfgManager,
+		ctx,
+		deps,
+	)
+
+	requiredStateErr := persistCreatedEKSComponentStateAfterWorkflow(
+		cmd.Context(),
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
+	if creationErr != nil {
+		return requiredStateErr
 	}
 
 	// Persist the ClusterSpec so that future updates have an accurate baseline
@@ -113,7 +127,40 @@ func handleCreateRunE(
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
-	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+	return finishCreateWithTTL(
+		requiredStateErr,
+		func() error {
+			ttlValue, _ := cmd.Flags().GetString("ttl")
+			if strings.TrimSpace(ttlValue) == "" {
+				return nil
+			}
+
+			return autoDeleteCluster(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+		},
+		func() error {
+			return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+		},
+	)
+}
+
+func finishCreateWithTTL(
+	requiredStateErr error,
+	cleanupFailedTTLCreate func() error,
+	waitForTTL func() error,
+) error {
+	if requiredStateErr != nil {
+		cleanupErr := cleanupFailedTTLCreate()
+		if cleanupErr != nil {
+			cleanupErr = fmt.Errorf(
+				"clean up TTL cluster after required state persistence failed: %w",
+				cleanupErr,
+			)
+		}
+
+		return errors.Join(requiredStateErr, cleanupErr)
+	}
+
+	return waitForTTL()
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
@@ -379,10 +426,10 @@ func handlePostCreationSetup(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
-) error {
+) (bool, error) {
 	cniInstalled, err := setup.InstallCNI(cmd, clusterCfg, tmr)
 	if err != nil {
-		return fmt.Errorf("failed to install CNI: %w", err)
+		return false, fmt.Errorf("failed to install CNI: %w", err)
 	}
 
 	factories := getInstallerFactories()
@@ -397,7 +444,7 @@ func handlePostCreationSetup(
 		cniInstalled,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to install post-CNI components: %w", err)
+		return true, fmt.Errorf("failed to install post-CNI components: %w", err)
 	}
 
 	// Configure OIDC kubeconfig entries when OIDC is enabled
@@ -413,7 +460,7 @@ func handlePostCreationSetup(
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // maybeDisableK3dFeature conditionally appends a K3s --disable flag to K3d config.

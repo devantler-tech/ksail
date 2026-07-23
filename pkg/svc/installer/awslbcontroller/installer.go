@@ -1,8 +1,11 @@
 package awslbcontrollerinstaller
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,11 +17,17 @@ import (
 const (
 	awslbcRepoName = "eks"
 	awslbcRepoURL  = "https://aws.github.io/eks-charts"
-	awslbcRelease  = "aws-load-balancer-controller"
+	// ReleaseName is the canonical component and Helm release key.
+	ReleaseName = "aws-load-balancer-controller"
 	// The controller is conventionally installed into kube-system (the chart's
 	// documented default target), which always exists — no namespace creation.
 	awslbcNamespace = "kube-system"
 	awslbcChartName = "eks/aws-load-balancer-controller"
+	// ReleaseOwnershipLabel is attached to every Helm revision KSail creates.
+	// Helm upgrades preserve custom release labels, while an external
+	// `helm install --replace` starts without it even when old history remains.
+	ReleaseOwnershipLabel = "ksail.io/aws-load-balancer-controller-owner"
+	releaseOwnershipValue = "ksail"
 )
 
 // ErrClusterNameRequired is returned when no EKS cluster name is available for
@@ -36,12 +45,28 @@ var ErrInvalidServiceAccountName = errors.New(
 	"aws-load-balancer-controller service account name must be a valid DNS-1123 subdomain",
 )
 
+// ErrReleaseIdentityEmpty reports Helm storage without a Kubernetes UID. A
+// caller cannot safely bind uninstall ownership to such a release.
+var ErrReleaseIdentityEmpty = errors.New(
+	"aws-load-balancer-controller Helm storage UID is empty",
+)
+
+// ErrGitOpsManagedUninstallSkipped reports a release that became externally
+// managed after KSail recorded ownership. Preserving it is correct, but the
+// requested disabled state remains unresolved and must not advance baselines.
+var ErrGitOpsManagedUninstallSkipped = errors.New(
+	"aws-load-balancer-controller is managed by GitOps; uninstall skipped",
+)
+
 // Installer installs or upgrades the AWS Load Balancer Controller.
 //
 // It embeds helmutil.Base for the whole Helm lifecycle; no extra Kubernetes
 // resources are created outside the chart.
 type Installer struct {
 	*helmutil.Base
+
+	client       helm.Interface
+	ksailManaged bool
 }
 
 // NewInstaller creates a new AWS Load Balancer Controller installer instance.
@@ -59,7 +84,13 @@ func NewInstaller(
 	timeout time.Duration,
 	clusterName, region, serviceAccountName string,
 	haEnabled bool,
+	ksailManaged ...bool,
 ) (*Installer, error) {
+	err := helm.ValidateKubernetesReleaseStorageDriver(os.Getenv("HELM_DRIVER"))
+	if err != nil {
+		return nil, fmt.Errorf("validate release identity storage: %w", err)
+	}
+
 	if strings.TrimSpace(clusterName) == "" {
 		return nil, ErrClusterNameRequired
 	}
@@ -72,9 +103,11 @@ func NewInstaller(
 		}
 	}
 
+	managed := len(ksailManaged) > 0 && ksailManaged[0]
+
 	return &Installer{
 		Base: helmutil.NewBase(
-			"aws-load-balancer-controller",
+			ReleaseName,
 			client,
 			timeout,
 			&helm.RepositoryEntry{
@@ -82,7 +115,7 @@ func NewInstaller(
 				URL:  awslbcRepoURL,
 			},
 			&helm.ChartSpec{
-				ReleaseName:     awslbcRelease,
+				ReleaseName:     ReleaseName,
 				ChartName:       awslbcChartName,
 				Namespace:       awslbcNamespace,
 				Version:         chartVersion(),
@@ -95,11 +128,123 @@ func NewInstaller(
 				// upgrades leave them at the previously-installed version
 				// (helm v4 maps !UpgradeCRDs to SkipCRDs).
 				UpgradeCRDs: true,
-				Timeout:     timeout,
-				ValuesYaml:  buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
+				Labels: map[string]string{
+					ReleaseOwnershipLabel: releaseOwnershipValue,
+				},
+				Timeout:    timeout,
+				ValuesYaml: buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
 			},
 		),
+		client:       client,
+		ksailManaged: managed,
 	}, nil
+}
+
+// IsGitOpsManaged reports whether the current release is owned by Flux or
+// ArgoCD. Missing release storage means there is no GitOps-owned release.
+func (i *Installer) IsGitOpsManaged(ctx context.Context) (bool, error) {
+	labels, err := i.client.GetReleaseStorageLabels(ctx, ReleaseName, awslbcNamespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
+		return false, fmt.Errorf(
+			"check AWS load balancer controller release ownership: %w",
+			err,
+		)
+	}
+
+	_, managed := helmutil.IsGitOpsManaged(labels)
+
+	return managed, nil
+}
+
+// ReleaseIdentity returns the Kubernetes UID of the latest Helm storage
+// object. Unlike a release name or revision, this changes when a deleted
+// same-name release is installed again.
+func (i *Installer) ReleaseIdentity(ctx context.Context) (string, error) {
+	metadata, err := i.client.GetReleaseStorageMetadata(
+		ctx,
+		ReleaseName,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return "", fmt.Errorf(
+			"read AWS load balancer controller release identity: %w",
+			err,
+		)
+	}
+
+	if metadata == nil {
+		return "", ErrReleaseIdentityEmpty
+	}
+
+	identity := strings.TrimSpace(metadata.Identity)
+	if identity == "" {
+		return "", ErrReleaseIdentityEmpty
+	}
+
+	return identity, nil
+}
+
+// OwnsReleaseIdentity reports whether the expected Kubernetes UID still
+// belongs to the current Helm release history. Helm upgrades create a new
+// storage object for each revision, so requiring only the latest UID would
+// reject cleanup after an owned failed/pending upgrade. A deleted and
+// reinstalled same-name release has a new history and therefore does not match.
+func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error) {
+	metadata, err := i.client.GetReleaseStorageMetadata(
+		ctx,
+		ReleaseName,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return false, fmt.Errorf(
+			"read AWS load balancer controller release identity history: %w",
+			err,
+		)
+	}
+
+	expected = strings.TrimSpace(expected)
+	if expected == "" || metadata == nil {
+		return false, nil
+	}
+
+	if metadata.Labels[ReleaseOwnershipLabel] != releaseOwnershipValue {
+		return false, nil
+	}
+
+	return metadata.Identity == expected ||
+		slices.Contains(metadata.HistoryIdentities, expected), nil
+}
+
+// Uninstall removes the AWS Load Balancer Controller only when the caller has
+// supplied positive KSail ownership evidence. A Flux- or ArgoCD-managed release
+// is still left untouched, and an ownership lookup failure aborts before Helm
+// can delete anything.
+func (i *Installer) Uninstall(ctx context.Context) error {
+	if !i.ksailManaged {
+		return nil
+	}
+
+	skip, err := helmutil.SkipIfGitOpsManaged(
+		ctx,
+		i.client,
+		ReleaseName,
+		ReleaseName,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return fmt.Errorf("check AWS load balancer controller release ownership: %w", err)
+	}
+
+	if skip {
+		return ErrGitOpsManagedUninstallSkipped
+	}
+
+	err = i.Base.Uninstall(ctx)
+	if err != nil {
+		return fmt.Errorf("uninstall AWS load balancer controller: %w", err)
+	}
+
+	return nil
 }
 
 // buildValuesYaml generates the Helm values YAML for the chart. clusterName is

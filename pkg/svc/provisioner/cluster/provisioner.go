@@ -67,6 +67,14 @@ type Updater interface {
 	) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
 }
 
+// InPlaceFieldSupport is an optional capability for updaters that implement a
+// deliberately narrow subset of the spec-level in-place diff vocabulary. The
+// orchestrator promotes any unhandled field to recreate-required rather than
+// recording an unapplied desired value as the new baseline.
+type InPlaceFieldSupport interface {
+	SupportsInPlaceField(field string) bool
+}
+
 // ProviderAware is an optional interface for provisioners that can use a provider
 // for infrastructure operations (start/stop nodes).
 type ProviderAware interface {

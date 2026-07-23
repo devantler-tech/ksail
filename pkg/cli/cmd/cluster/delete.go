@@ -608,7 +608,7 @@ func executeDelete(
 
 	// Clean up persisted state (spec + TTL) for the deleted cluster.
 	// Best-effort: log a warning on failure rather than blocking success.
-	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	stateErr := deleteResolvedClusterState(resolved)
 	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
 	}
@@ -621,6 +621,28 @@ func executeDelete(
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+func deleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		if strings.TrimSpace(resolved.AWSRegion) == "" {
+			return fmt.Errorf("delete exact-region EKS state: %w", state.ErrInvalidRegion)
+		}
+
+		err := state.DeleteEKSRegionState(resolved.ClusterName, resolved.AWSRegion)
+		if err != nil {
+			return fmt.Errorf("delete exact-region EKS state: %w", err)
+		}
+
+		return nil
+	}
+
+	err := state.DeleteClusterState(resolved.ClusterName)
+	if err != nil {
+		return fmt.Errorf("delete cluster state: %w", err)
+	}
 
 	return nil
 }

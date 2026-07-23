@@ -2,8 +2,10 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -230,15 +232,301 @@ func installEKSLoadBalancer(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if !NeedsLoadBalancerInstall(clusterCfg) {
-		return nil
+	_, _, err := InstallEKSLoadBalancerControllerWithResult(ctx, clusterCfg, factories)
+
+	return err
+}
+
+type installResultReporter interface {
+	InstallWithResult(ctx context.Context) (mutated bool, err error)
+}
+
+type gitOpsOwnershipReporter interface {
+	IsGitOpsManaged(ctx context.Context) (managed bool, err error)
+}
+
+type releaseIdentityReporter interface {
+	ReleaseIdentity(ctx context.Context) (string, error)
+}
+
+type releaseIdentityOwnershipReporter interface {
+	OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error)
+}
+
+// InstallEKSLoadBalancerControllerWithResult installs or upgrades the controller and reports
+// whether Helm was actually mutated. GitOps-owned releases are successful, unmodified skips.
+func InstallEKSLoadBalancerControllerWithResult(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (bool, string, error) {
+	var releaseIdentity string
+
+	result, err := withRequiredEKSLoadBalancerInstaller(clusterCfg, factories, func(
+		lbInstaller installer.Installer,
+	) (bool, error) {
+		mutated, installErr := installWithResult(ctx, lbInstaller)
+		if installErr != nil {
+			managed, identity, ownershipErr := loadBalancerControllerOwnershipAfterInstallAttempt(
+				ctx,
+				lbInstaller,
+			)
+			releaseIdentity = identity
+
+			return managed, errors.Join(fmt.Errorf(
+				"aws-load-balancer-controller installation failed: %w",
+				installErr,
+			), ownershipErr)
+		}
+
+		if !mutated {
+			return false, nil
+		}
+
+		identity, identityErr := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
+		if identityErr != nil {
+			return false, identityErr
+		}
+
+		releaseIdentity = identity
+
+		return true, nil
+	})
+
+	return result, releaseIdentity, err
+}
+
+func installWithResult(ctx context.Context, component installer.Installer) (bool, error) {
+	resultReporter, reportsResult := component.(installResultReporter)
+	if reportsResult {
+		mutated, err := resultReporter.InstallWithResult(ctx)
+		if err != nil {
+			return false, fmt.Errorf("install component with result: %w", err)
+		}
+
+		return mutated, nil
 	}
 
+	installErr := component.Install(ctx)
+	if installErr != nil {
+		return false, fmt.Errorf("install component: %w", installErr)
+	}
+
+	return true, nil
+}
+
+func withRequiredEKSLoadBalancerInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	action func(installer.Installer) (bool, error),
+) (bool, error) {
+	if !NeedsLoadBalancerInstall(clusterCfg) {
+		return false, nil
+	}
+
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, false)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := action(lbInstaller)
+	if err != nil {
+		return result, fmt.Errorf("run required EKS load balancer controller action: %w", err)
+	}
+
+	return result, nil
+}
+
+// EKSLoadBalancerControllerManagedByKSail verifies the ownership established by a successful
+// create/recreate workflow. GitOps-owned and unlabelled manual releases remain unowned.
+func EKSLoadBalancerControllerManagedByKSail(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (bool, string, error) {
+	if !NeedsLoadBalancerInstall(clusterCfg) {
+		return false, "", nil
+	}
+
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, false)
+	if err != nil {
+		return false, "", err
+	}
+
+	return loadBalancerControllerOwnershipAfterInstallAttempt(ctx, lbInstaller)
+}
+
+func loadBalancerControllerOwnershipAfterInstallAttempt(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+) (bool, string, error) {
+	reporter, reportsOwnership := lbInstaller.(gitOpsOwnershipReporter)
+	if !reportsOwnership {
+		return false, "", ErrAWSLoadBalancerControllerOwnershipReporterUnavailable
+	}
+
+	gitOpsManaged, err := reporter.IsGitOpsManaged(ctx)
+	if err != nil {
+		return false, "", fmt.Errorf(
+			"verify AWS load balancer controller ownership after creation: %w",
+			err,
+		)
+	}
+
+	if gitOpsManaged {
+		return false, "", nil
+	}
+
+	identity, err := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
+	if err != nil {
+		if errors.Is(err, helm.ErrNoReleaseStorage) || errors.Is(err, helm.ErrReleaseNotFound) {
+			return false, "", nil
+		}
+
+		return false, "", err
+	}
+
+	owned, err := loadBalancerControllerReleaseManagedByKSail(ctx, lbInstaller, identity)
+	if err != nil {
+		return false, "", err
+	}
+
+	if !owned {
+		return false, "", nil
+	}
+
+	return true, identity, nil
+}
+
+func loadBalancerControllerReleaseManagedByKSail(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+	releaseIdentity string,
+) (bool, error) {
+	reporter, reportsOwnership := lbInstaller.(releaseIdentityOwnershipReporter)
+	if !reportsOwnership {
+		return false, ErrAWSLoadBalancerControllerReleaseOwnershipReporterUnavailable
+	}
+
+	owned, err := reporter.OwnsReleaseIdentity(ctx, releaseIdentity)
+	if err != nil {
+		return false, fmt.Errorf(
+			"verify KSail AWS load balancer controller release ownership after creation: %w",
+			err,
+		)
+	}
+
+	return owned, nil
+}
+
+func loadBalancerControllerReleaseIdentity(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+) (string, error) {
+	reporter, reportsIdentity := lbInstaller.(releaseIdentityReporter)
+	if !reportsIdentity {
+		return "", ErrAWSLoadBalancerControllerIdentityReporterUnavailable
+	}
+
+	identity, err := reporter.ReleaseIdentity(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve AWS load balancer controller release identity: %w", err)
+	}
+
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return "", ErrAWSLoadBalancerControllerReleaseIdentityEmpty
+	}
+
+	return identity, nil
+}
+
+// UninstallEKSLoadBalancerControllerSilent removes the AWS Load Balancer Controller
+// only when the live release identity still matches the persisted KSail-owned incarnation.
+func UninstallEKSLoadBalancerControllerSilent(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	expectedReleaseIdentity string,
+) error {
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, true)
+	if err != nil {
+		return err
+	}
+
+	matches, err := loadBalancerControllerOwnsReleaseIdentity(
+		ctx,
+		lbInstaller,
+		expectedReleaseIdentity,
+	)
+	if err != nil {
+		return err
+	}
+
+	if !matches {
+		return ErrAWSLoadBalancerControllerReleaseIdentityMismatch
+	}
+
+	uninstallErr := lbInstaller.Uninstall(ctx)
+	if uninstallErr != nil {
+		return fmt.Errorf("aws-load-balancer-controller uninstall failed: %w", uninstallErr)
+	}
+
+	return nil
+}
+
+func loadBalancerControllerOwnsReleaseIdentity(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+	expectedReleaseIdentity string,
+) (bool, error) {
+	expectedReleaseIdentity = strings.TrimSpace(expectedReleaseIdentity)
+	if expectedReleaseIdentity == "" {
+		return false, ErrAWSLoadBalancerControllerReleaseIdentityEmpty
+	}
+
+	if reporter, ok := lbInstaller.(releaseIdentityOwnershipReporter); ok {
+		matches, err := reporter.OwnsReleaseIdentity(ctx, expectedReleaseIdentity)
+		if err != nil {
+			return false, fmt.Errorf(
+				"verify AWS load balancer controller release identity history: %w",
+				err,
+			)
+		}
+
+		return matches, nil
+	}
+
+	liveReleaseIdentity, err := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
+	if err != nil {
+		return false, err
+	}
+
+	return liveReleaseIdentity == expectedReleaseIdentity, nil
+}
+
+func createEKSLoadBalancerInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	ksailManaged bool,
+) (installer.Installer, error) {
+	if factories.AWSLoadBalancerController == nil {
+		return nil, ErrAWSLoadBalancerControllerInstallerFactoryNil
+	}
+
+	return factories.AWSLoadBalancerController(clusterCfg, ksailManaged)
+}
+
+func newEKSLoadBalancerInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	ksailManaged bool,
+) (installer.Installer, error) {
 	clusterName, fileRegion, nameFromConfig, err := ksailconfigmanager.ResolveEKSClusterMetadata(
 		clusterCfg,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
+		return nil, fmt.Errorf("failed to resolve EKS cluster metadata: %w", err)
 	}
 
 	// Honor the same region precedence as the create path: the environment
@@ -257,7 +545,10 @@ func installEKSLoadBalancer(
 
 	helmClient, _, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
-		return fmt.Errorf("failed to setup helm client for aws-load-balancer-controller: %w", err)
+		return nil, fmt.Errorf(
+			"failed to setup helm client for aws-load-balancer-controller: %w",
+			err,
+		)
 	}
 
 	haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
@@ -269,17 +560,16 @@ func installEKSLoadBalancer(
 		region,
 		clusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 		haEnabled,
+		ksailManaged,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to configure aws-load-balancer-controller installer: %w", err)
+		return nil, fmt.Errorf(
+			"failed to configure aws-load-balancer-controller installer: %w",
+			err,
+		)
 	}
 
-	installErr := lbInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("aws-load-balancer-controller installation failed: %w", installErr)
-	}
-
-	return nil
+	return lbInstaller, nil
 }
 
 // installTalosLoadBalancer installs the provider-appropriate load balancer for

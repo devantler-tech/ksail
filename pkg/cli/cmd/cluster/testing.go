@@ -86,6 +86,21 @@ func SetClusterAutoscalerInstallerFactoryForTests(
 	})
 }
 
+// SetAWSLoadBalancerControllerInstallerFactoryForTests overrides the AWS Load
+// Balancer Controller installer factory.
+func SetAWSLoadBalancerControllerInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.AWSLoadBalancerController = func(
+			clusterCfg *v1alpha1.Cluster,
+			_ bool,
+		) (installer.Installer, error) {
+			return factory(clusterCfg)
+		}
+	})
+}
+
 // SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster, string) error,

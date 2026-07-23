@@ -7,18 +7,47 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	awslbcontroller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // componentInstallTimeout bounds each component's Helm install.
 const componentInstallTimeout = 5 * time.Minute
+
+var (
+	errOperatorReleaseIdentityMismatch = errors.New(
+		"operator-owned release identity no longer matches",
+	)
+	errOperatorReleaseIdentityUnavailable = errors.New(
+		"operator-owned release cannot report its identity",
+	)
+	errAWSControllerOwnershipUnavailable = errors.New(
+		"AWS load balancer controller cannot report GitOps ownership",
+	)
+	errAWSControllerIdentityUnavailable = errors.New(
+		"AWS load balancer controller cannot report release identity",
+	)
+	errAWSControllerReleaseOwnershipUnavailable = errors.New(
+		"AWS load balancer controller cannot verify KSail release ownership",
+	)
+	errAWSControllerIdentityEmpty = errors.New(
+		"AWS load balancer controller operator identity is empty",
+	)
+	errOperatorOwnershipEvidenceRequired = errors.New(
+		"AWS load balancer controller operator ownership evidence is required",
+	)
+	errAWSControllerCleanupInstallerUnavailable = errors.New(
+		"partial AWS controller cleanup installer is unavailable",
+	)
+)
 
 // installOrder lists component installers in the order they must run: CNI first (pods cannot
 // schedule without networking), then infrastructure add-ons, then GitOps last. Keys match the
@@ -30,7 +59,7 @@ var installOrder = []string{
 	"cert-manager",
 	"local-path-storage", "hetzner-csi",
 	"metrics-server", "kubelet-csr-approver",
-	"metallb", "cloud-provider-kind", "hcloud-ccm", "aws-load-balancer-controller",
+	"metallb", "cloud-provider-kind", "hcloud-ccm", awslbcontroller.ReleaseName,
 	"kyverno", "gatekeeper",
 	"cluster-autoscaler",
 	"flux", "argocd",
@@ -95,16 +124,11 @@ func InstallComponents(
 	// for the spec it was built for; the baseline uninstall set below rebuilds
 	// one for the previously-applied distribution rather than reusing this one.
 	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
-		return installer.NewFactory(
+		return newInstallerFactory(
 			helmClient,
-			nil, // no Docker client: child-cluster components are Helm-based
 			kubeconfigPath,
-			"",
-			componentInstallTimeout,
+			controller.ProvisionedName(cluster),
 			distribution,
-			// The AWS Load Balancer Controller chart requires the provisioned
-			// EKS cluster name; harmless for every other distribution.
-			installer.WithEKSClusterName(controller.ProvisionedName(cluster)),
 		)
 	}
 
@@ -118,7 +142,32 @@ func InstallComponents(
 
 	components, installErr := runInstallers(ctx, installers)
 
-	return true, components, errors.Join(uninstallErr, installErr)
+	ownershipErr := recordAWSLoadBalancerControllerOwnershipAfterApply(
+		ctx, cluster, installers, uninstallErr, installErr,
+	)
+
+	return true, components, errors.Join(uninstallErr, installErr, ownershipErr)
+}
+
+// newInstallerFactory constructs the operator's component lifecycle factory.
+// AWS controller uninstall authority is still enabled on reconstructed
+// installers, but removedComponentInstallers exposes one only when a concrete
+// release identity annotation supplies positive operator ownership evidence.
+func newInstallerFactory(
+	helmClient helm.Interface,
+	kubeconfigPath, eksClusterName string,
+	distribution v1alpha1.Distribution,
+) *installer.Factory {
+	return installer.NewFactory(
+		helmClient,
+		nil, // no Docker client: child-cluster components are Helm-based
+		kubeconfigPath,
+		"",
+		componentInstallTimeout,
+		distribution,
+		installer.WithEKSClusterName(eksClusterName),
+		installer.WithAWSLoadBalancerControllerManaged(true),
+	)
 }
 
 // uninstallRemovedComponents tears down components present in the last-applied-components baseline but
@@ -148,23 +197,36 @@ func uninstallRemovedComponents(
 // spec via a factory built FOR that baseline's distribution (several installers are
 // distribution-dependent, so reusing the current cluster's factory would compute the wrong uninstall
 // set after a distribution change), then keeps the entries whose key is absent from the desired set.
-// It returns an empty map when no baseline is recorded (first reconcile, or an unparseable annotation).
+// A persisted AWS controller release identity is also treated as a removal candidate. This covers a
+// partial apply where the controller install succeeded but a sibling failure prevented the full
+// component baseline from advancing.
 func removedComponentInstallers(
 	newFactory func(v1alpha1.Distribution) *installer.Factory,
 	cluster *v1alpha1.Cluster,
 	desired map[string]installer.Installer,
 ) (map[string]installer.Installer, error) {
-	previousSpec, ok := lastAppliedComponentsSpec(cluster)
-	if !ok {
-		return map[string]installer.Installer{}, nil
+	previousSpec, hasBaseline := lastAppliedComponentsSpec(cluster)
+
+	previous, err := buildPreviousComponentInstallers(newFactory, previousSpec, hasBaseline)
+	if err != nil {
+		return nil, err
 	}
 
-	previousCluster := &v1alpha1.Cluster{Spec: *previousSpec}
+	expectedControllerIdentity := strings.TrimSpace(
+		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+	)
 
-	previous, err := newFactory(previousSpec.Cluster.Distribution).
-		CreateInstallersForConfig(previousCluster)
+	err = addPartialAWSControllerCleanupInstaller(
+		newFactory,
+		cluster,
+		previousSpec,
+		hasBaseline,
+		desired,
+		previous,
+		expectedControllerIdentity,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("build previous installers: %w", err)
+		return nil, err
 	}
 
 	removed := make(map[string]installer.Installer)
@@ -172,11 +234,274 @@ func removedComponentInstallers(
 	for key, inst := range previous {
 		_, stillDesired := desired[key]
 		if !stillDesired {
+			if key == awslbcontroller.ReleaseName {
+				expectedIdentity := expectedControllerIdentity
+				if expectedIdentity == "" {
+					inst = &unresolvedRemovalInstaller{Installer: inst}
+				} else {
+					inst = &releaseIdentityBoundInstaller{
+						Installer:        inst,
+						expectedIdentity: expectedIdentity,
+					}
+				}
+			}
+
 			removed[key] = inst
 		}
 	}
 
 	return removed, nil
+}
+
+func buildPreviousComponentInstallers(
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
+	previousSpec *v1alpha1.Spec,
+	hasBaseline bool,
+) (map[string]installer.Installer, error) {
+	if !hasBaseline {
+		return map[string]installer.Installer{}, nil
+	}
+
+	previous, err := newFactory(previousSpec.Cluster.Distribution).
+		CreateInstallersForConfig(&v1alpha1.Cluster{Spec: *previousSpec})
+	if err != nil {
+		return nil, fmt.Errorf("build previous installers: %w", err)
+	}
+
+	return previous, nil
+}
+
+func addPartialAWSControllerCleanupInstaller(
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
+	cluster *v1alpha1.Cluster,
+	previousSpec *v1alpha1.Spec,
+	hasBaseline bool,
+	desired, previous map[string]installer.Installer,
+	expectedIdentity string,
+) error {
+	_, controllerDesired := desired[awslbcontroller.ReleaseName]
+
+	_, controllerInBaseline := previous[awslbcontroller.ReleaseName]
+	if controllerDesired || controllerInBaseline || expectedIdentity == "" {
+		return nil
+	}
+
+	cleanupSpec := cluster.Spec
+	if hasBaseline {
+		cleanupSpec = *previousSpec
+	}
+
+	cleanupSpec.Cluster.Distribution = v1alpha1.DistributionEKS
+	cleanupSpec.Cluster.Provider = v1alpha1.ProviderAWS
+	cleanupSpec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	cleanupSpec.Cluster.EKS.ExperimentalAWSLoadBalancerController = true
+
+	cleanupInstallers, err := newFactory(v1alpha1.DistributionEKS).
+		CreateInstallersForConfig(&v1alpha1.Cluster{Spec: cleanupSpec})
+	if err != nil {
+		return fmt.Errorf("build partial AWS controller cleanup installer: %w", err)
+	}
+
+	controller, exists := cleanupInstallers[awslbcontroller.ReleaseName]
+	if !exists {
+		return errAWSControllerCleanupInstallerUnavailable
+	}
+
+	previous[awslbcontroller.ReleaseName] = controller
+
+	return nil
+}
+
+type gitOpsOwnershipReporter interface {
+	IsGitOpsManaged(ctx context.Context) (bool, error)
+}
+
+type releaseIdentityReporter interface {
+	ReleaseIdentity(ctx context.Context) (string, error)
+}
+
+type releaseIdentityOwnershipReporter interface {
+	OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error)
+}
+
+type releaseIdentityBoundInstaller struct {
+	installer.Installer
+
+	expectedIdentity string
+}
+
+type unresolvedRemovalInstaller struct {
+	installer.Installer
+}
+
+func (*unresolvedRemovalInstaller) Uninstall(context.Context) error {
+	return errOperatorOwnershipEvidenceRequired
+}
+
+func (bound *releaseIdentityBoundInstaller) Uninstall(ctx context.Context) error {
+	releaseExists, matches, err := bound.releaseIdentityStatus(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !releaseExists {
+		return nil
+	}
+
+	if !matches {
+		return errOperatorReleaseIdentityMismatch
+	}
+
+	err = bound.Installer.Uninstall(ctx)
+	if err != nil {
+		return fmt.Errorf("uninstall operator-owned release: %w", err)
+	}
+
+	return nil
+}
+
+func (bound *releaseIdentityBoundInstaller) releaseIdentityStatus(
+	ctx context.Context,
+) (bool, bool, error) {
+	if reporter, supported := bound.Installer.(releaseIdentityOwnershipReporter); supported {
+		matches, err := reporter.OwnsReleaseIdentity(ctx, bound.expectedIdentity)
+		if err != nil {
+			if errors.Is(err, helm.ErrNoReleaseStorage) ||
+				errors.Is(err, helm.ErrReleaseNotFound) {
+				return false, false, nil
+			}
+
+			return false, false, fmt.Errorf(
+				"verify operator-owned release identity history: %w",
+				err,
+			)
+		}
+
+		return true, matches, nil
+	}
+
+	reporter, supported := bound.Installer.(releaseIdentityReporter)
+	if !supported {
+		return false, false, errOperatorReleaseIdentityUnavailable
+	}
+
+	liveIdentity, err := reporter.ReleaseIdentity(ctx)
+	if err != nil {
+		if errors.Is(err, helm.ErrNoReleaseStorage) ||
+			errors.Is(err, helm.ErrReleaseNotFound) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("read operator-owned release identity: %w", err)
+	}
+
+	return true, strings.TrimSpace(liveIdentity) == bound.expectedIdentity, nil
+}
+
+func recordAWSLoadBalancerControllerOwnership(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	installers map[string]installer.Installer,
+) error {
+	component, desired := installers[awslbcontroller.ReleaseName]
+	if !desired {
+		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
+
+		return nil
+	}
+
+	identity, operatorOwned, err := resolveAWSLoadBalancerControllerOwnership(ctx, component)
+	if err != nil {
+		return err
+	}
+
+	if !operatorOwned {
+		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
+
+		return nil
+	}
+
+	if cluster.Annotations == nil {
+		cluster.Annotations = map[string]string{}
+	}
+
+	cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = identity
+
+	return nil
+}
+
+func resolveAWSLoadBalancerControllerOwnership(
+	ctx context.Context,
+	component installer.Installer,
+) (string, bool, error) {
+	ownershipReporter, ownershipSupported := component.(gitOpsOwnershipReporter)
+	if !ownershipSupported {
+		return "", false, errAWSControllerOwnershipUnavailable
+	}
+
+	gitOpsManaged, err := ownershipReporter.IsGitOpsManaged(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf(
+			"verify AWS load balancer controller operator ownership: %w",
+			err,
+		)
+	}
+
+	if gitOpsManaged {
+		return "", false, nil
+	}
+
+	identityReporter, identitySupported := component.(releaseIdentityReporter)
+	if !identitySupported {
+		return "", false, errAWSControllerIdentityUnavailable
+	}
+
+	identity, err := identityReporter.ReleaseIdentity(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("read AWS load balancer controller operator identity: %w", err)
+	}
+
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return "", false, errAWSControllerIdentityEmpty
+	}
+
+	releaseOwnershipReporter, releaseOwnershipSupported := component.(releaseIdentityOwnershipReporter)
+	if !releaseOwnershipSupported {
+		return "", false, errAWSControllerReleaseOwnershipUnavailable
+	}
+
+	owned, err := releaseOwnershipReporter.OwnsReleaseIdentity(ctx, identity)
+	if err != nil {
+		return "", false, fmt.Errorf("verify AWS load balancer controller KSail ownership: %w", err)
+	}
+
+	if !owned {
+		return "", false, errOperatorOwnershipEvidenceRequired
+	}
+
+	return identity, true, nil
+}
+
+// recordAWSLoadBalancerControllerOwnershipAfterApply records the controller's
+// actual outcome even when a sibling component failed later in the same pass.
+// A removal only clears existing authority after the complete pass succeeds;
+// otherwise the next reconcile must retain enough evidence to retry cleanup.
+func recordAWSLoadBalancerControllerOwnershipAfterApply(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	installers map[string]installer.Installer,
+	uninstallErr, installErr error,
+) error {
+	_, controllerDesired := installers[awslbcontroller.ReleaseName]
+	if !controllerDesired && (uninstallErr != nil || installErr != nil) {
+		// The caller joins and returns both sibling errors. This helper adds no
+		// duplicate error; it only preserves the existing ownership annotation.
+		//nolint:nilerr // sibling failures are returned by InstallComponents
+		return nil
+	}
+
+	return recordAWSLoadBalancerControllerOwnership(ctx, cluster, installers)
 }
 
 // lastAppliedComponentsSpec parses the component-baseline annotation into a spec. The second return

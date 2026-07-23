@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
@@ -122,21 +121,5 @@ func DeleteEKSNodegroupState(clusterName, region string) error {
 // share — and clobber — a single snapshot: a stop in one region would be restored from the other's
 // capacities, or rejected outright by the snapshot's own region identity check.
 func eksNodegroupStatePath(clusterName, region string) (string, error) {
-	dir, err := clusterStateDir(clusterName)
-	if err != nil {
-		return "", err
-	}
-
-	region = strings.TrimSpace(region)
-	if region == "" {
-		return "", ErrInvalidRegion
-	}
-
-	if strings.Contains(region, "/") ||
-		strings.Contains(region, "\\") ||
-		strings.Contains(region, "..") {
-		return "", ErrInvalidRegion
-	}
-
-	return filepath.Join(dir, fmt.Sprintf(eksNodegroupStateFileNameFormat, region)), nil
+	return eksRegionScopedStatePath(clusterName, region, eksNodegroupStateFileNameFormat)
 }

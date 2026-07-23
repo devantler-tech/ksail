@@ -10,6 +10,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
+// EKSLoadBalancerControllerField is the diff key for the EKS AWS Load
+// Balancer Controller opt-in. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerController"
+
 // Engine computes configuration differences and classifies their impact.
 type Engine struct {
 	distribution v1alpha1.Distribution
@@ -235,6 +240,23 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			},
 		},
 		{
+			field:    EKSLoadBalancerControllerField,
+			category: clusterupdate.ChangeCategoryInPlace,
+			reason:   "AWS Load Balancer Controller can be installed/uninstalled via Helm",
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				if e.distribution != v1alpha1.DistributionEKS ||
+					e.provider != v1alpha1.ProviderAWS {
+					return strconv.FormatBool(false)
+				}
+
+				if e.componentBaselineUnknown(spec) {
+					return clusterupdate.UnknownBaselineValue
+				}
+
+				return eksLoadBalancerControllerValue(spec)
+			},
+		},
+		{
 			field:      "cluster.certManager",
 			category:   clusterupdate.ChangeCategoryInPlace,
 			reason:     "cert-manager can be installed/uninstalled via Helm",
@@ -256,6 +278,21 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			defaultVal: string(v1alpha1.GitOpsEngineNone),
 		},
 	}
+}
+
+func eksLoadBalancerControllerValue(spec *v1alpha1.ClusterSpec) string {
+	active := spec.EKS.ExperimentalAWSLoadBalancerController &&
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+	if !active {
+		return strconv.FormatBool(false)
+	}
+
+	serviceAccount := strings.TrimSpace(spec.EKS.AWSLoadBalancerControllerServiceAccount)
+	if serviceAccount == "" {
+		return strconv.FormatBool(true)
+	}
+
+	return strconv.FormatBool(true) + ":" + serviceAccount
 }
 
 // appendChange appends a single diff change to the appropriate category slice in result.

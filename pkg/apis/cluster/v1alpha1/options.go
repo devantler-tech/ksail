@@ -34,10 +34,9 @@ type OptionsEKS struct {
 	// pre-created IRSA service account via
 	// awsLoadBalancerControllerServiceAccount) and subnet tags are
 	// prerequisites KSail does not create — see the awslbcontroller installer
-	// package docs. Installed at cluster create and by the operator's
-	// reconcile; enabling it on an existing cluster is not yet detected by
-	// `cluster update`'s diff (#6231). Not yet validated against a live EKS
-	// cluster.
+	// package docs. Installed at cluster create, by the operator's reconcile,
+	// and by `cluster update` when the opt-in changes. Not yet validated against
+	// a live EKS cluster.
 	ExperimentalAWSLoadBalancerController bool `json:"experimentalAWSLoadBalancerController,omitzero" jsonschema_description:"Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."` //nolint:lll,tagliatelle // AWS keeps its conventional casing, like the sibling issuerURL/floatingIP fields
 
 	// AWSLoadBalancerControllerServiceAccount names a pre-created service

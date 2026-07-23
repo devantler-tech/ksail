@@ -35,11 +35,20 @@ func TestDetectComponents_AllReleasesFromCache(t *testing.T) {
 
 	// All installed releases are returned in a single ListReleases call.
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
-		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium},
-		{Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer},
-		{Name: detector.ReleaseCertManager, Namespace: detector.NamespaceCertManager},
-		{Name: detector.ReleaseKyverno, Namespace: detector.NamespaceKyverno},
-		{Name: detector.ReleaseFluxOperator, Namespace: detector.NamespaceFluxOperator},
+		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium, Status: "deployed"},
+		{
+			Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer,
+			Status: "deployed",
+		},
+		{
+			Name: detector.ReleaseCertManager, Namespace: detector.NamespaceCertManager,
+			Status: "deployed",
+		},
+		{Name: detector.ReleaseKyverno, Namespace: detector.NamespaceKyverno, Status: "deployed"},
+		{
+			Name: detector.ReleaseFluxOperator, Namespace: detector.NamespaceFluxOperator,
+			Status: "deployed",
+		},
 	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)

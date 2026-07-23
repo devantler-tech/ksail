@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"context"
 	"time"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
@@ -9,6 +10,7 @@ import (
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Expose unexported functions for testing.
@@ -53,12 +55,14 @@ type TestableActionConfig struct {
 	WaitForJobs  bool
 	Timeout      time.Duration
 	Version      string
+	Labels       map[string]string
 }
 
 func (t *TestableActionConfig) setWaitStrategy(s helmv4kube.WaitStrategy) { t.WaitStrategy = s }
 func (t *TestableActionConfig) setWaitForJobs(w bool)                     { t.WaitForJobs = w }
 func (t *TestableActionConfig) setTimeout(d time.Duration)                { t.Timeout = d }
 func (t *TestableActionConfig) setVersion(v string)                       { t.Version = v }
+func (t *TestableActionConfig) setLabels(labels map[string]string)        { t.Labels = labels }
 
 // NewInstallActionAdapter creates an installActionAdapter wrapping an Install action.
 func NewInstallActionAdapter() (actionConfig, *helmv4action.Install) {
@@ -118,4 +122,13 @@ func NewClientFromParts(cfg *helmv4action.Configuration, settings *helmv4cli.Env
 		settings:     settings,
 		debugLog:     func(string, ...any) {},
 	}
+}
+
+// FetchReleaseStorageMetadata exposes the storage-selection helper for tests.
+func FetchReleaseStorageMetadata(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	driver, namespace, selector string,
+) (*ReleaseStorageMetadata, error) {
+	return (&Client{}).fetchReleaseStorageMetadata(ctx, clientset, driver, namespace, selector)
 }

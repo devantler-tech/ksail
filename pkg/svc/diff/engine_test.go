@@ -235,6 +235,153 @@ func TestEngine_ComponentChanges(t *testing.T) {
 	}
 }
 
+func TestEngine_EKSAWSLoadBalancerControllerOptInChange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		oldValue bool
+		newValue bool
+	}{
+		{name: "enable", oldValue: false, newValue: true},
+		{name: "disable", oldValue: true, newValue: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			oldSpec := newBaseSpec()
+			oldSpec.Distribution = v1alpha1.DistributionEKS
+			oldSpec.Provider = v1alpha1.ProviderAWS
+			oldSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+			oldSpec.EKS.ExperimentalAWSLoadBalancerController = testCase.oldValue
+
+			newSpec := clone(oldSpec)
+			newSpec.EKS.ExperimentalAWSLoadBalancerController = testCase.newValue
+
+			engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+			result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+			assertSingleChange(
+				t,
+				result.InPlaceChanges,
+				diff.EKSLoadBalancerControllerField,
+				strconv.FormatBool(testCase.oldValue),
+				strconv.FormatBool(testCase.newValue),
+				clusterupdate.ChangeCategoryInPlace,
+			)
+		})
+	}
+}
+
+func TestEngine_EKSAWSLoadBalancerControllerUnknownBaseline(t *testing.T) {
+	t.Parallel()
+
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionEKS
+	oldSpec.Provider = v1alpha1.ProviderAWS
+	clusterupdate.MarkComponentsUnknown(oldSpec)
+
+	newSpec := newBaseSpec()
+	newSpec.Distribution = v1alpha1.DistributionEKS
+	newSpec.Provider = v1alpha1.ProviderAWS
+	newSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	newSpec.EKS.ExperimentalAWSLoadBalancerController = true
+
+	engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+	for _, change := range result.InPlaceChanges {
+		require.NotEqual(t, diff.EKSLoadBalancerControllerField, change.Field)
+	}
+
+	require.Len(t, result.UnknownBaseline, 1)
+	require.Equal(t, diff.EKSLoadBalancerControllerField, result.UnknownBaseline[0].Field)
+	require.Equal(t, clusterupdate.UnknownBaselineValue, result.UnknownBaseline[0].OldValue)
+	require.Equal(t, "true", result.UnknownBaseline[0].NewValue)
+}
+
+func TestEngine_EKSAWSLoadBalancerControllerEffectiveActivationChange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		oldLoadBalancer v1alpha1.LoadBalancer
+		newLoadBalancer v1alpha1.LoadBalancer
+		oldValue        string
+		newValue        string
+	}{
+		{
+			name:            "explicit enable activates controller",
+			oldLoadBalancer: v1alpha1.LoadBalancerDefault,
+			newLoadBalancer: v1alpha1.LoadBalancerEnabled,
+			oldValue:        "false",
+			newValue:        "true",
+		},
+		{
+			name:            "return to default deactivates controller",
+			oldLoadBalancer: v1alpha1.LoadBalancerEnabled,
+			newLoadBalancer: v1alpha1.LoadBalancerDefault,
+			oldValue:        "true",
+			newValue:        "false",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			oldSpec := newBaseSpec()
+			oldSpec.Distribution = v1alpha1.DistributionEKS
+			oldSpec.Provider = v1alpha1.ProviderAWS
+			oldSpec.LoadBalancer = testCase.oldLoadBalancer
+			oldSpec.EKS.ExperimentalAWSLoadBalancerController = true
+
+			newSpec := clone(oldSpec)
+			newSpec.LoadBalancer = testCase.newLoadBalancer
+
+			engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+			result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+			assertSingleChange(
+				t,
+				result.InPlaceChanges,
+				diff.EKSLoadBalancerControllerField,
+				testCase.oldValue,
+				testCase.newValue,
+				clusterupdate.ChangeCategoryInPlace,
+			)
+		})
+	}
+}
+
+func TestEngine_EKSAWSLoadBalancerControllerServiceAccountChange(t *testing.T) {
+	t.Parallel()
+
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionEKS
+	oldSpec.Provider = v1alpha1.ProviderAWS
+	oldSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	oldSpec.EKS.ExperimentalAWSLoadBalancerController = true
+	oldSpec.EKS.AWSLoadBalancerControllerServiceAccount = "old-service-account"
+
+	newSpec := clone(oldSpec)
+	newSpec.EKS.AWSLoadBalancerControllerServiceAccount = "new-service-account"
+
+	engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		diff.EKSLoadBalancerControllerField,
+		"true:old-service-account",
+		"true:new-service-account",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
 func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
 	t.Parallel()
 

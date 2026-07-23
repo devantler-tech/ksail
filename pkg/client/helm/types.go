@@ -25,6 +25,11 @@ var (
 	// Helm release storage objects (Secrets or ConfigMaps) exist for the
 	// given release name and namespace.
 	ErrNoReleaseStorage = errors.New("helm: no release storage objects found")
+	// ErrReleaseStorageDriverUnsupported reports a Helm backend that cannot
+	// provide Kubernetes object identity for fail-closed release ownership.
+	ErrReleaseStorageDriverUnsupported = errors.New(
+		"helm storage driver cannot provide a Kubernetes release identity",
+	)
 
 	// ErrReleaseNotFound re-exports the Helm SDK sentinel so callers can
 	// check whether an uninstall failed because the release never existed
@@ -57,6 +62,7 @@ type ChartSpec struct {
 	SetValues   map[string]string
 	SetFileVals map[string]string
 	SetJSONVals map[string]string
+	Labels      map[string]string
 
 	RepoURL  string
 	Username string
@@ -95,18 +101,34 @@ type ReleaseInfo struct {
 	Notes      string
 }
 
-// Interface defines the subset of Helm functionality required by KSail.
-type Interface interface {
+// ReleaseStorageMetadata identifies one concrete Helm storage object. Identity
+// is the Kubernetes object UID, so deleting and reinstalling a same-name
+// release produces different ownership evidence even when its revision resets.
+type ReleaseStorageMetadata struct {
+	Labels   map[string]string
+	Identity string
+	// HistoryIdentities contains every retained revision. Callers must combine
+	// it with positive ownership metadata from the latest revision before using
+	// a historical identity as uninstall authority.
+	HistoryIdentities []string
+}
+
+// ChartManager defines the chart lifecycle operations required by KSail.
+type ChartManager interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
+}
+
+// ReleaseInspector defines the live release queries required by KSail.
+type ReleaseInspector interface {
 	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
 	// ListReleases returns Helm releases across all namespaces for all statuses.
-	// Only the Name and Namespace fields of each ReleaseInfo are guaranteed to be
-	// populated; all other fields (Status, Revision, etc.) are left at their zero
-	// values. Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
+	// Name, Namespace, Revision, and Status are populated; the remaining fields
+	// are left at their zero values. Use this for bulk release detection to avoid
+	// N separate ReleaseExists roundtrips.
 	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
 	// GetReleaseStorageLabels returns the Kubernetes object labels from the
 	// latest Helm release storage object (Secret or ConfigMap, depending on
@@ -118,6 +140,13 @@ type Interface interface {
 		ctx context.Context,
 		releaseName, namespace string,
 	) (map[string]string, error)
+	// GetReleaseStorageMetadata returns labels and the Kubernetes UID from the
+	// latest Helm release storage object. The UID binds persisted ownership to
+	// one release incarnation rather than only to its reusable Helm name.
+	GetReleaseStorageMetadata(
+		ctx context.Context,
+		releaseName, namespace string,
+	) (*ReleaseStorageMetadata, error)
 	// GetReleaseValues returns the user-supplied values for the latest revision
 	// of the named release. Returns (nil, error) when the release does not exist
 	// or cannot be queried. Use this to introspect installed chart configuration
@@ -133,4 +162,10 @@ type Interface interface {
 	// that depend on them by another, the second install fails with "ensure CRDs
 	// are installed first" unless discovery is refreshed in between.
 	RefreshDiscovery() error
+}
+
+// Interface defines the subset of Helm functionality required by KSail.
+type Interface interface {
+	ChartManager
+	ReleaseInspector
 }

@@ -187,39 +187,37 @@ func TestCreateEKSProvisionerWithConfig(t *testing.T) {
 
 	provisioner, config, err := factory.Create(context.Background(), eksTestCluster())
 	require.NoError(t, err)
-	assert.IsType(t, &eksprovisioner.Provisioner{}, provisioner)
+	assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
 
 	eksConfig, isEKSConfig := config.(*clusterprovisioner.EKSConfig)
 	require.True(t, isEKSConfig)
 	assert.Equal(t, "test-eks", eksConfig.GetClusterName())
 }
 
-// TestCreateEKSProvisionerUpdaterGate asserts the experimental in-place
-// update capability is opt-in: the default returns the plain provisioner
-// (no Updater), and the spec flag switches to the updatable wrapper.
-func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
+// TestCreateEKSProvisionerUpdaterAvailableForComponents asserts EKS always
+// exposes the update orchestration path needed for component reconciliation.
+// The experimental flag gates managed node-group mutation inside the updater;
+// it must not hide unrelated component changes such as the load-balancer opt-in.
+func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name           string
 		inPlaceUpdates bool
 		configPath     string
-		wantUpdater    bool
 	}{
 		{
-			name: "default is recreate flow", inPlaceUpdates: false,
-			configPath: "eks.yaml", wantUpdater: false,
+			name: "default supports component reconciliation", inPlaceUpdates: false,
+			configPath: "eks.yaml",
 		},
 		{
-			name: "opt-in enables Updater", inPlaceUpdates: true,
-			configPath: "eks.yaml", wantUpdater: true,
+			name: "node update opt-in also supports reconciliation", inPlaceUpdates: true,
+			configPath: "eks.yaml",
 		},
 		{
-			// No declared config (e.g. the operator's name/region-only
-			// construction): the updater would have no source of truth and
-			// silently report zero changes, so the capability stays off.
-			name: "opt-in without a config path stays recreate flow", inPlaceUpdates: true,
-			configPath: "", wantUpdater: false,
+			name:           "component reconciliation does not require an eksctl config path",
+			inPlaceUpdates: true,
+			configPath:     "",
 		},
 	}
 
@@ -244,11 +242,8 @@ func TestCreateEKSProvisionerUpdaterGate(t *testing.T) {
 			require.NoError(t, err)
 
 			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
-			assert.Equal(t, testCase.wantUpdater, hasUpdater)
-
-			if testCase.wantUpdater {
-				assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
-			}
+			assert.True(t, hasUpdater)
+			assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
 		})
 	}
 }
