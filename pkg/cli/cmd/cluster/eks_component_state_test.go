@@ -243,6 +243,41 @@ func TestFinishRecreateFlowPersistsControllerOwnershipAfterPartialFailure(t *tes
 	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
 }
 
+// TestFinishRecreateFlowDoesNotClaimManualControllerAfterPartialFailure proves an earlier
+// post-CNI failure cannot turn a pre-existing unlabelled Helm release into KSail ownership.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestFinishRecreateFlowDoesNotClaimManualControllerAfterPartialFailure(t *testing.T) {
+	const (
+		clusterName = "partial-recreate-manual-controller"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{
+		releaseOwned: new(false),
+	})
+
+	creationErr := assert.AnError
+	err := cluster.ExportFinishRecreateFlow(
+		managedEKSComponentContext(clusterName),
+		clusterName,
+		creationErr,
+		true,
+	)
+
+	require.ErrorIs(t, err, creationErr)
+
+	snapshot, loadErr := state.LoadEKSComponentState(
+		clusterName,
+		region,
+		testEKSComponentAccountID,
+	)
+	require.NoError(t, loadErr)
+	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Empty(t, snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
 // TestFinishRecreateFlowSkipsOwnershipLookupAfterTotalCreationFailure proves
 // an error before post-CNI reconciliation does not add a live Helm round trip
 // to the original creation failure.

@@ -331,7 +331,7 @@ func withRequiredEKSLoadBalancerInstaller(
 }
 
 // EKSLoadBalancerControllerManagedByKSail verifies the ownership established by a successful
-// create/recreate workflow. A GitOps-owned release was deliberately skipped and remains unowned.
+// create/recreate workflow. GitOps-owned and unlabelled manual releases remain unowned.
 func EKSLoadBalancerControllerManagedByKSail(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -368,7 +368,37 @@ func EKSLoadBalancerControllerManagedByKSail(
 		return false, "", err
 	}
 
+	owned, err := loadBalancerControllerReleaseManagedByKSail(ctx, lbInstaller, identity)
+	if err != nil {
+		return false, "", err
+	}
+
+	if !owned {
+		return false, "", nil
+	}
+
 	return true, identity, nil
+}
+
+func loadBalancerControllerReleaseManagedByKSail(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+	releaseIdentity string,
+) (bool, error) {
+	reporter, reportsOwnership := lbInstaller.(releaseIdentityOwnershipReporter)
+	if !reportsOwnership {
+		return false, ErrAWSLoadBalancerControllerReleaseOwnershipReporterUnavailable
+	}
+
+	owned, err := reporter.OwnsReleaseIdentity(ctx, releaseIdentity)
+	if err != nil {
+		return false, fmt.Errorf(
+			"verify KSail AWS load balancer controller release ownership after creation: %w",
+			err,
+		)
+	}
+
+	return owned, nil
 }
 
 func loadBalancerControllerReleaseIdentity(

@@ -46,6 +46,9 @@ var (
 	ErrAWSLoadBalancerControllerIdentityReporterUnavailable = errors.New(
 		"aws load balancer controller installer cannot report release identity",
 	)
+	ErrAWSLoadBalancerControllerReleaseOwnershipReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot verify KSail release ownership",
+	)
 	ErrAWSLoadBalancerControllerReleaseIdentityMismatch = errors.New(
 		"aws load balancer controller ownership is unresolved: release identity changed",
 	)

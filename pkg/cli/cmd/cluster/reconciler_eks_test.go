@@ -25,6 +25,7 @@ type recordingEKSLoadBalancerInstaller struct {
 	gitOpsManaged      bool
 	releaseIdentity    string
 	releaseIdentityErr error
+	releaseOwned       *bool
 	uninstallErr       error
 }
 
@@ -56,6 +57,19 @@ func (r *recordingEKSLoadBalancerInstaller) ReleaseIdentity(context.Context) (st
 	}
 
 	return r.releaseIdentity, nil
+}
+
+func (r *recordingEKSLoadBalancerInstaller) OwnsReleaseIdentity(
+	ctx context.Context,
+	expected string,
+) (bool, error) {
+	if r.releaseOwned != nil {
+		return *r.releaseOwned, nil
+	}
+
+	identity, err := r.ReleaseIdentity(ctx)
+
+	return identity == expected, err
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Uninstall(_ context.Context) error {
