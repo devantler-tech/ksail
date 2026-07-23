@@ -98,7 +98,11 @@ func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
 	require.True(t, found, "ci-go job is missing")
 	assert.Contains(t, validateJob.Needs, "changes")
 	assert.Contains(t, validateJob.If, "github.event_name == 'pull_request'")
-	assert.Contains(t, validateJob.If, "github.event.pull_request.head.repo.full_name == github.repository")
+	assert.Contains(
+		t,
+		validateJob.If,
+		"github.event.pull_request.head.repo.full_name == github.repository",
+	)
 	assert.Contains(t, validateJob.If, "needs.changes.outputs.govuln-allowlist == 'true'")
 	assert.Contains(t, validateJob.Uses, "validate-go-project.yaml")
 }
