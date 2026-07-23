@@ -13,7 +13,7 @@ import (
 
 const (
 	// EKSComponentStateVersion is the on-disk schema version for declarative EKS component state.
-	EKSComponentStateVersion = 1
+	EKSComponentStateVersion = 2
 	// eksComponentStateFileNameFormat is region-scoped because EKS cluster names
 	// are unique only within an AWS region.
 	eksComponentStateFileNameFormat = "eks-components-%s.json"
@@ -29,11 +29,12 @@ var (
 // EKSComponentState preserves declarative choices that cannot be inferred
 // unambiguously from the live EKS cluster.
 type EKSComponentState struct {
-	Version                                 int    `json:"version"`
-	ClusterName                             string `json:"clusterName"`
-	Region                                  string `json:"region"`
-	AWSLoadBalancerControllerManaged        bool   `json:"awsLoadBalancerControllerManaged,omitzero"`         //nolint:lll // exact component ownership marker
-	AWSLoadBalancerControllerServiceAccount string `json:"awsLoadBalancerControllerServiceAccount,omitempty"` //nolint:lll // matches public EKS option key
+	Version                                  int    `json:"version"`
+	ClusterName                              string `json:"clusterName"`
+	Region                                   string `json:"region"`
+	AWSLoadBalancerControllerManaged         bool   `json:"awsLoadBalancerControllerManaged,omitzero"`          //nolint:lll // exact component ownership marker
+	AWSLoadBalancerControllerReleaseIdentity string `json:"awsLoadBalancerControllerReleaseIdentity,omitempty"` //nolint:lll // Helm storage object UID
+	AWSLoadBalancerControllerServiceAccount  string `json:"awsLoadBalancerControllerServiceAccount,omitempty"`  //nolint:lll // matches public EKS option key
 }
 
 // SaveEKSComponentState atomically persists an exact-region component baseline.
@@ -128,6 +129,16 @@ func validateEKSComponentState(
 		strings.TrimSpace(snapshot.Region) != region {
 		return fmt.Errorf(
 			"%w: identity or version does not match",
+			ErrInvalidEKSComponentState,
+		)
+	}
+
+	hasReleaseIdentity := strings.TrimSpace(
+		snapshot.AWSLoadBalancerControllerReleaseIdentity,
+	) != ""
+	if snapshot.AWSLoadBalancerControllerManaged != hasReleaseIdentity {
+		return fmt.Errorf(
+			"%w: controller ownership and release identity do not match",
 			ErrInvalidEKSComponentState,
 		)
 	}

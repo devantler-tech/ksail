@@ -7,6 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -16,10 +17,12 @@ import (
 )
 
 type recordingEKSLoadBalancerInstaller struct {
-	installCalls   int
-	uninstallCalls int
-	installSkipped bool
-	gitOpsManaged  bool
+	installCalls       int
+	uninstallCalls     int
+	installSkipped     bool
+	gitOpsManaged      bool
+	releaseIdentity    string
+	releaseIdentityErr error
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Install(_ context.Context) error {
@@ -36,6 +39,18 @@ func (r *recordingEKSLoadBalancerInstaller) InstallWithResult(ctx context.Contex
 
 func (r *recordingEKSLoadBalancerInstaller) IsGitOpsManaged(context.Context) (bool, error) {
 	return r.gitOpsManaged, nil
+}
+
+func (r *recordingEKSLoadBalancerInstaller) ReleaseIdentity(context.Context) (string, error) {
+	if r.releaseIdentityErr != nil {
+		return "", r.releaseIdentityErr
+	}
+
+	if r.releaseIdentity == "" {
+		return "release-uid", nil
+	}
+
+	return r.releaseIdentity, nil
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Uninstall(_ context.Context) error {
@@ -57,10 +72,11 @@ func persistManagedEKSControllerState(t *testing.T, region string) {
 		"test-cluster",
 		region,
 		&state.EKSComponentState{
-			Version:                          state.EKSComponentStateVersion,
-			ClusterName:                      "test-cluster",
-			Region:                           region,
-			AWSLoadBalancerControllerManaged: true,
+			Version:                                  state.EKSComponentStateVersion,
+			ClusterName:                              "test-cluster",
+			Region:                                   region,
+			AWSLoadBalancerControllerManaged:         true,
+			AWSLoadBalancerControllerReleaseIdentity: "release-uid",
 		},
 	))
 	t.Cleanup(func() { _ = state.DeleteClusterState("test-cluster") })
@@ -182,6 +198,82 @@ func TestReconcileLoadBalancer_EKSManualReleaseIsPreserved(t *testing.T) {
 	assert.Empty(t, applied.AppliedChanges)
 	require.Len(t, applied.FailedChanges, 1)
 	assert.Contains(t, applied.FailedChanges[0].Reason, "ownership")
+}
+
+// TestReconcileLoadBalancer_EKSReplacementInvalidatesOwnership proves a stale
+// marker from a deleted KSail release cannot authorize deleting a later,
+// same-name Helm release installed by somebody else.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestReconcileLoadBalancer_EKSReplacementInvalidatesOwnership(t *testing.T) {
+	const region = "eu-north-1"
+
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{releaseIdentity: "replacement-uid"}
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return fakeInstaller, nil
+		},
+	)
+	t.Cleanup(restore)
+	persistManagedEKSControllerState(t, region)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
+		Field: specdiff.EKSLoadBalancerControllerField, OldValue: "true", NewValue: "false",
+	})
+	applied := clusterupdate.NewEmptyUpdateResult()
+
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied, region,
+	)
+
+	require.Error(t, err)
+	assert.Zero(t, fakeInstaller.uninstallCalls)
+	assert.Empty(t, applied.AppliedChanges)
+	require.Len(t, applied.FailedChanges, 1)
+	assert.Contains(t, applied.FailedChanges[0].Reason, "ownership")
+}
+
+// TestReconcileLoadBalancer_EKSRemovedReleaseClearsOwnership proves an absent
+// release is a safe no-op rather than a permanent stale-ownership failure.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestReconcileLoadBalancer_EKSRemovedReleaseClearsOwnership(t *testing.T) {
+	const region = "eu-north-1"
+
+	fakeInstaller := &recordingEKSLoadBalancerInstaller{
+		releaseIdentityErr: helm.ErrNoReleaseStorage,
+	}
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return fakeInstaller, nil
+		},
+	)
+	t.Cleanup(restore)
+	persistManagedEKSControllerState(t, region)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	detected := clusterupdate.NewEmptyUpdateResult()
+	detected.InPlaceChanges = append(detected.InPlaceChanges, clusterupdate.Change{
+		Field: specdiff.EKSLoadBalancerControllerField, OldValue: "true", NewValue: "false",
+	})
+	applied := clusterupdate.NewEmptyUpdateResult()
+
+	err := cluster.ExportReconcileComponents(
+		newReconcileTestCmd(), clusterCfg, detected, applied, region,
+	)
+
+	require.NoError(t, err)
+	assert.Zero(t, fakeInstaller.uninstallCalls)
+	assert.Len(t, applied.AppliedChanges, 1)
 }
 
 //nolint:funlen,paralleltest // table coverage replaces the process-global installer factory.

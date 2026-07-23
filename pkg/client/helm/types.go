@@ -95,6 +95,14 @@ type ReleaseInfo struct {
 	Notes      string
 }
 
+// ReleaseStorageMetadata identifies one concrete Helm storage object. Identity
+// is the Kubernetes object UID, so deleting and reinstalling a same-name
+// release produces different ownership evidence even when its revision resets.
+type ReleaseStorageMetadata struct {
+	Labels   map[string]string
+	Identity string
+}
+
 // Interface defines the subset of Helm functionality required by KSail.
 type Interface interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
@@ -118,6 +126,13 @@ type Interface interface {
 		ctx context.Context,
 		releaseName, namespace string,
 	) (map[string]string, error)
+	// GetReleaseStorageMetadata returns labels and the Kubernetes UID from the
+	// latest Helm release storage object. The UID binds persisted ownership to
+	// one release incarnation rather than only to its reusable Helm name.
+	GetReleaseStorageMetadata(
+		ctx context.Context,
+		releaseName, namespace string,
+	) (*ReleaseStorageMetadata, error)
 	// GetReleaseValues returns the user-supplied values for the latest revision
 	// of the named release. Returns (nil, error) when the release does not exist
 	// or cannot be queried. Use this to introspect installed chart configuration

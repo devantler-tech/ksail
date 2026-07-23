@@ -43,6 +43,15 @@ var (
 	ErrAWSLoadBalancerControllerOwnershipReporterUnavailable = errors.New(
 		"aws load balancer controller installer cannot report GitOps ownership",
 	)
+	ErrAWSLoadBalancerControllerIdentityReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot report release identity",
+	)
+	ErrAWSLoadBalancerControllerReleaseIdentityMismatch = errors.New(
+		"aws load balancer controller ownership is unresolved: release identity changed",
+	)
+	ErrAWSLoadBalancerControllerReleaseIdentityEmpty = errors.New(
+		"aws load balancer controller release identity is empty",
+	)
 )
 
 // InstallerFactories holds factory functions for creating component installers.

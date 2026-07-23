@@ -37,6 +37,12 @@ var ErrInvalidServiceAccountName = errors.New(
 	"aws-load-balancer-controller service account name must be a valid DNS-1123 subdomain",
 )
 
+// ErrReleaseIdentityEmpty reports Helm storage without a Kubernetes UID. A
+// caller cannot safely bind uninstall ownership to such a release.
+var ErrReleaseIdentityEmpty = errors.New(
+	"aws-load-balancer-controller Helm storage UID is empty",
+)
+
 // Installer installs or upgrades the AWS Load Balancer Controller.
 //
 // It embeds helmutil.Base for the whole Helm lifecycle; no extra Kubernetes
@@ -125,6 +131,34 @@ func (i *Installer) IsGitOpsManaged(ctx context.Context) (bool, error) {
 	_, managed := helmutil.IsGitOpsManaged(labels)
 
 	return managed, nil
+}
+
+// ReleaseIdentity returns the Kubernetes UID of the latest Helm storage
+// object. Unlike a release name or revision, this changes when a deleted
+// same-name release is installed again.
+func (i *Installer) ReleaseIdentity(ctx context.Context) (string, error) {
+	metadata, err := i.client.GetReleaseStorageMetadata(
+		ctx,
+		awslbcRelease,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return "", fmt.Errorf(
+			"read AWS load balancer controller release identity: %w",
+			err,
+		)
+	}
+
+	if metadata == nil {
+		return "", ErrReleaseIdentityEmpty
+	}
+
+	identity := strings.TrimSpace(metadata.Identity)
+	if identity == "" {
+		return "", ErrReleaseIdentityEmpty
+	}
+
+	return identity, nil
 }
 
 // Uninstall removes the AWS Load Balancer Controller only when the caller has

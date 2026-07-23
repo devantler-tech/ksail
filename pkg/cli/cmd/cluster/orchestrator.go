@@ -1304,9 +1304,9 @@ func applyInPlaceChanges(
 
 // finalizeInPlaceApply reports the apply outcome: a non-empty FailedChanges set
 // means the apply was partial or fully failed, so it returns a non-nil error so
-// cobra exits non-zero (issue #4935) and skips the state save (a partial apply no
-// longer matches the desired spec). Otherwise it persists the updated spec as the
-// next update baseline.
+// cobra exits non-zero (issue #4935) and skips the desired ClusterSpec save. An
+// EKS controller mutation that already succeeded still persists its narrower
+// ownership state. Otherwise it persists the updated spec as the next baseline.
 func finalizeInPlaceApply(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
@@ -1315,26 +1315,42 @@ func finalizeInPlaceApply(
 	result *clusterupdate.UpdateResult,
 	componentErr error,
 ) error {
+	var (
+		componentStateErr       error
+		componentStatePersisted bool
+	)
+
+	// Component reconciliation can continue after an unrelated failure. Persist
+	// a controller mutation that already succeeded before reporting the partial
+	// apply, otherwise a later disable loses the only safe ownership evidence.
+	if reconciler.hasEKSLoadBalancerOwnershipUpdate() {
+		componentStateErr = persistReconciledEKSComponentState(ctx, clusterName, reconciler)
+		componentStatePersisted = componentStateErr == nil
+	}
+
 	// A non-empty FailedChanges set means the apply was partial or fully failed.
 	// Provisioner-level failures (e.g. a rejected Talos config) are recorded in
 	// result.FailedChanges with a nil Update error, and reconcileComponents
 	// appends component-level failures there too. Return a non-nil error so cobra
 	// exits non-zero — otherwise automation gating on the exit code treats a
-	// failed update as success (issue #4935). Skip the state save: a partial apply
-	// no longer matches the desired spec, so it must not become the saved baseline.
+	// failed update as success (issue #4935). Skip the desired ClusterSpec save: a
+	// partial apply no longer matches the desired spec, so it must not become the
+	// saved baseline.
 	if result.HasFailedChanges() {
-		if componentErr != nil {
-			return fmt.Errorf("%w: %w", errUpdateChangesFailed, componentErr)
-		}
+		return errors.Join(errUpdateChangesFailed, componentErr, componentStateErr)
+	}
 
-		return errUpdateChangesFailed
+	if componentStateErr != nil {
+		return componentStateErr
 	}
 
 	// Persist the updated ClusterSpec for future update baselines now that every
 	// change applied successfully.
-	err := persistReconciledEKSComponentState(ctx, clusterName, reconciler)
-	if err != nil {
-		return err
+	if !componentStatePersisted {
+		err := persistReconciledEKSComponentState(ctx, clusterName, reconciler)
+		if err != nil {
+			return err
+		}
 	}
 
 	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
@@ -1429,5 +1445,15 @@ func finishRecreateFlow(
 		return creationErr
 	}
 
-	return persistCreatedEKSComponentState(goCtx, ctx, clusterName)
+	err := persistCreatedEKSComponentState(goCtx, ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if err != nil {
+		return fmt.Errorf("persist recreated cluster state: %w", err)
+	}
+
+	return nil
 }

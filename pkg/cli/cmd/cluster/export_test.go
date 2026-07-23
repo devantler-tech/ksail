@@ -112,6 +112,13 @@ func ExportPersistRequiredEKSComponentState(
 		ctx,
 		clusterName,
 		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+		func() string {
+			if setup.NeedsLoadBalancerInstall(ctx.ClusterCfg) {
+				return "test-release-uid"
+			}
+
+			return ""
+		}(),
 	)
 }
 

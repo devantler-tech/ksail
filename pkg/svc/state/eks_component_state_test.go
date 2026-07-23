@@ -93,3 +93,37 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 		"deleted EKS targets must not retain a stale name-scoped spec baseline",
 	)
 }
+
+func TestSaveEKSComponentStateRequiresIdentityForManagedRelease(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	err := state.SaveEKSComponentState(
+		"managed-without-identity",
+		"eu-north-1",
+		&state.EKSComponentState{
+			Version:                          state.EKSComponentStateVersion,
+			ClusterName:                      "managed-without-identity",
+			Region:                           "eu-north-1",
+			AWSLoadBalancerControllerManaged: true,
+		},
+	)
+
+	require.ErrorIs(t, err, state.ErrInvalidEKSComponentState)
+}
+
+func TestSaveEKSComponentStateRejectsIdentityForUnmanagedRelease(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	err := state.SaveEKSComponentState(
+		"unmanaged-with-identity",
+		"eu-north-1",
+		&state.EKSComponentState{
+			Version:                                  state.EKSComponentStateVersion,
+			ClusterName:                              "unmanaged-with-identity",
+			Region:                                   "eu-north-1",
+			AWSLoadBalancerControllerReleaseIdentity: "stale-uid",
+		},
+	)
+
+	require.ErrorIs(t, err, state.ErrInvalidEKSComponentState)
+}

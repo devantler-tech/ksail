@@ -112,6 +112,32 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 	snapshot, err := state.LoadEKSComponentState(clusterName, region)
 	require.NoError(t, err)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "release-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
+}
+
+// TestFinishRecreateFlowPersistsReplacementClusterSpec proves recreation
+// restores the declarative baseline cleared immediately after deletion.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestFinishRecreateFlowPersistsReplacementClusterSpec(t *testing.T) {
+	const clusterName = "recreated-spec-state"
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{})
+
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Distribution = v1alpha1.DistributionEKS
+	oldSpec.Provider = v1alpha1.ProviderAWS
+	require.NoError(t, state.SaveClusterSpec(clusterName, oldSpec))
+
+	ctx := managedEKSComponentContext(clusterName)
+	ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount = "replacement-sa"
+	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
+
+	snapshot, err := state.LoadClusterSpec(clusterName)
+	require.NoError(t, err)
+	assert.True(t, snapshot.EKS.ExperimentalAWSLoadBalancerController)
+	assert.Equal(t, "replacement-sa", snapshot.EKS.AWSLoadBalancerControllerServiceAccount)
 }
 
 // TestFinishRecreateFlowDoesNotClaimGitOpsManagedController proves a successful recreation does
@@ -147,10 +173,11 @@ func TestClearDeletedEKSStateInvalidatesControllerOwnership(t *testing.T) {
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
-		Version:                          state.EKSComponentStateVersion,
-		ClusterName:                      clusterName,
-		Region:                           region,
-		AWSLoadBalancerControllerManaged: true,
+		Version:                                  state.EKSComponentStateVersion,
+		ClusterName:                              clusterName,
+		Region:                                   region,
+		AWSLoadBalancerControllerManaged:         true,
+		AWSLoadBalancerControllerReleaseIdentity: "release-uid",
 	}))
 
 	ctx := managedEKSComponentContext(clusterName)
@@ -216,6 +243,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 		wantInstall int
 		wantRemove  int
 		installSkip bool
+		wantErr     bool
 	}{
 		{
 			name: "successful install claims ownership", oldOptIn: false, newOptIn: true,
@@ -227,7 +255,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 		},
 		{
 			name: "GitOps-skipped install remains unowned", oldOptIn: false, newOptIn: true,
-			wantManaged: false, wantInstall: 1, installSkip: true,
+			initial: new(false), wantManaged: false, wantInstall: 1, installSkip: true, wantErr: true,
 		},
 	}
 
@@ -241,12 +269,19 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 				require.NoError(t, state.SaveEKSComponentState(
 					clusterName,
 					region,
-					&state.EKSComponentState{
-						Version:                          state.EKSComponentStateVersion,
-						ClusterName:                      clusterName,
-						Region:                           region,
-						AWSLoadBalancerControllerManaged: *testCase.initial,
-					},
+					func() *state.EKSComponentState {
+						snapshot := &state.EKSComponentState{
+							Version:                          state.EKSComponentStateVersion,
+							ClusterName:                      clusterName,
+							Region:                           region,
+							AWSLoadBalancerControllerManaged: *testCase.initial,
+						}
+						if *testCase.initial {
+							snapshot.AWSLoadBalancerControllerReleaseIdentity = "release-uid"
+						}
+
+						return snapshot
+					}(),
 				))
 			}
 
@@ -281,7 +316,11 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 				false,
 				false,
 			)
-			require.NoError(t, err)
+			if testCase.wantErr {
+				require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
+			} else {
+				require.NoError(t, err)
+			}
 
 			snapshot, err := state.LoadEKSComponentState(clusterName, region)
 			require.NoError(t, err)
@@ -290,6 +329,92 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 			assert.Equal(t, testCase.wantRemove, fakeInstaller.uninstallCalls)
 		})
 	}
+}
+
+// TestApplyInPlaceChangesRejectsSkippedEKSControllerMutation proves a GitOps
+// skip cannot advance the requested service-account baseline as though Helm
+// converged it.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestApplyInPlaceChangesRejectsSkippedEKSControllerMutation(t *testing.T) {
+	const (
+		clusterName = "skipped-controller-update"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
+		Version: state.EKSComponentStateVersion, ClusterName: clusterName, Region: region,
+		AWSLoadBalancerControllerServiceAccount: "old-service-account",
+	}))
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{installSkipped: true})
+
+	ctx := managedEKSComponentContext(clusterName)
+	ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount = "new-service-account"
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    specdiff.EKSLoadBalancerControllerField,
+		OldValue: "enabled|serviceAccount=old-service-account",
+		NewValue: "enabled|serviceAccount=new-service-account",
+	})
+
+	err := cluster.ExportApplyInPlaceChanges(
+		newReconcileTestCmd(), &fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()},
+		clusterName, &v1alpha1.ClusterSpec{}, ctx, diff, nil, false, false,
+	)
+
+	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
+
+	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, loadErr)
+	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "old-service-account", snapshot.AWSLoadBalancerControllerServiceAccount)
+}
+
+// TestApplyInPlaceChangesPersistsControllerMutationOnPartialFailure proves an
+// unrelated failed change cannot discard ownership evidence for a Helm
+// mutation that already succeeded in the same reconciliation pass.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestApplyInPlaceChangesPersistsControllerMutationOnPartialFailure(t *testing.T) {
+	const (
+		clusterName = "partial-controller-update"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{
+		releaseIdentity: "partial-success-uid",
+	})
+
+	restoreCSI := cluster.SetCSIInstallerFactoryForTests(nil)
+	t.Cleanup(restoreCSI)
+
+	ctx := managedEKSComponentContext(clusterName)
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(
+		diff.InPlaceChanges,
+		clusterupdate.Change{
+			Field: specdiff.EKSLoadBalancerControllerField, OldValue: "false", NewValue: "true",
+		},
+		clusterupdate.Change{
+			Field: "cluster.csi", OldValue: string(v1alpha1.CSIDisabled), NewValue: "ebs",
+		},
+	)
+
+	err := cluster.ExportApplyInPlaceChanges(
+		newReconcileTestCmd(),
+		&fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()},
+		clusterName,
+		&v1alpha1.ClusterSpec{}, ctx, diff, nil, false, false,
+	)
+
+	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
+
+	snapshot, loadErr := state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, loadErr)
+	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+	assert.Equal(t, "partial-success-uid", snapshot.AWSLoadBalancerControllerReleaseIdentity)
 }
 
 func setEKSControllerTestInstaller(

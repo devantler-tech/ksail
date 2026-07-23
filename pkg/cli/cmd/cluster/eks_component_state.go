@@ -22,6 +22,7 @@ func persistRequiredEKSComponentState(
 	ctx *localregistry.Context,
 	clusterName string,
 	controllerManaged bool,
+	releaseIdentity string,
 ) error {
 	if ctx == nil || ctx.ClusterCfg == nil ||
 		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
@@ -37,11 +38,12 @@ func persistRequiredEKSComponentState(
 
 	region := strings.TrimSpace(ctx.EKSConfig.Region)
 	snapshot := state.EKSComponentState{
-		Version:                                 state.EKSComponentStateVersion,
-		ClusterName:                             clusterName,
-		Region:                                  region,
-		AWSLoadBalancerControllerManaged:        controllerManaged,
-		AWSLoadBalancerControllerServiceAccount: ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
+		Version:                                  state.EKSComponentStateVersion,
+		ClusterName:                              clusterName,
+		Region:                                   region,
+		AWSLoadBalancerControllerManaged:         controllerManaged,
+		AWSLoadBalancerControllerReleaseIdentity: releaseIdentity,
+		AWSLoadBalancerControllerServiceAccount:  ctx.ClusterCfg.Spec.Cluster.EKS.AWSLoadBalancerControllerServiceAccount,
 	}
 
 	err := state.SaveEKSComponentState(clusterName, region, &snapshot)
@@ -102,12 +104,17 @@ func persistReconciledEKSComponentState(
 		)
 	}
 
-	controllerManaged, err := reconciler.eksLoadBalancerControllerManagedAfterReconcile()
+	controllerManaged, releaseIdentity, err := reconciler.eksLoadBalancerControllerOwnershipAfterReconcile()
 	if err != nil {
 		return err
 	}
 
-	return persistRequiredEKSComponentState(ctx, clusterName, controllerManaged)
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		controllerManaged,
+		releaseIdentity,
+	)
 }
 
 // persistCreatedEKSComponentState verifies post-create GitOps ownership before
@@ -123,7 +130,7 @@ func persistCreatedEKSComponentState(
 		return nil
 	}
 
-	controllerManaged, err := setup.EKSLoadBalancerControllerManagedByKSail(
+	controllerManaged, releaseIdentity, err := setup.EKSLoadBalancerControllerManagedByKSail(
 		goCtx,
 		ctx.ClusterCfg,
 		getInstallerFactories(),
@@ -132,5 +139,10 @@ func persistCreatedEKSComponentState(
 		return fmt.Errorf("resolve EKS controller ownership after creation: %w", err)
 	}
 
-	return persistRequiredEKSComponentState(ctx, clusterName, controllerManaged)
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		controllerManaged,
+		releaseIdentity,
+	)
 }

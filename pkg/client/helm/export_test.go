@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"context"
 	"time"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
@@ -9,6 +10,7 @@ import (
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Expose unexported functions for testing.
@@ -118,4 +120,13 @@ func NewClientFromParts(cfg *helmv4action.Configuration, settings *helmv4cli.Env
 		settings:     settings,
 		debugLog:     func(string, ...any) {},
 	}
+}
+
+// FetchReleaseStorageMetadata exposes the storage-selection helper for tests.
+func FetchReleaseStorageMetadata(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	driver, namespace, selector string,
+) (*ReleaseStorageMetadata, error) {
+	return (&Client{}).fetchReleaseStorageMetadata(ctx, clientset, driver, namespace, selector)
 }

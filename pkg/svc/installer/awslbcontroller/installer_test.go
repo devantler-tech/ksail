@@ -153,6 +153,41 @@ func TestIsGitOpsManagedReportsFluxOwnership(t *testing.T) {
 	assert.True(t, managed)
 }
 
+func TestReleaseIdentityReturnsStorageUID(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(&helm.ReleaseStorageMetadata{Identity: "release-uid"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	identity, err := installer.ReleaseIdentity(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "release-uid", identity)
+}
+
+func TestReleaseIdentityRejectsEmptyStorageUID(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(&helm.ReleaseStorageMetadata{}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	_, err = installer.ReleaseIdentity(context.Background())
+
+	require.ErrorIs(t, err, awslbcontrollerinstaller.ErrReleaseIdentityEmpty)
+}
+
 func TestUninstallAllowsKSailOwnedRelease(t *testing.T) {
 	t.Parallel()
 

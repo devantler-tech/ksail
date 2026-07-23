@@ -380,6 +380,20 @@ func (c *Client) GetReleaseStorageLabels(
 	ctx context.Context,
 	releaseName, namespace string,
 ) (map[string]string, error) {
+	metadata, err := c.GetReleaseStorageMetadata(ctx, releaseName, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return metadata.Labels, nil
+}
+
+// GetReleaseStorageMetadata returns labels and the Kubernetes UID from the
+// latest Helm release storage object (Secret or ConfigMap).
+func (c *Client) GetReleaseStorageMetadata(
+	ctx context.Context,
+	releaseName, namespace string,
+) (*ReleaseStorageMetadata, error) {
 	if releaseName == "" {
 		return nil, errReleaseNameRequired
 	}
@@ -405,7 +419,7 @@ func (c *Client) GetReleaseStorageLabels(
 
 	selector := fmt.Sprintf("name=%s,owner=helm", releaseName)
 
-	return c.fetchStorageLabels(ctx, clientset, driver, namespace, selector)
+	return c.fetchReleaseStorageMetadata(ctx, clientset, driver, namespace, selector)
 }
 
 // GetReleaseValues returns the user-supplied values for the latest revision of
@@ -445,18 +459,19 @@ func (c *Client) GetReleaseValues(
 	return values, nil
 }
 
-// fetchStorageLabels queries either ConfigMaps or Secrets (based on driver) and
-// returns labels from the storage object with the highest version.
-func (c *Client) fetchStorageLabels(
+type releaseStorageItem struct {
+	Labels map[string]string
+	UID    string
+}
+
+// fetchReleaseStorageMetadata queries either ConfigMaps or Secrets based on
+// the configured Helm storage driver.
+func (c *Client) fetchReleaseStorageMetadata(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	driver, namespace, selector string,
-) (map[string]string, error) {
-	type labeledItem struct {
-		Labels map[string]string
-	}
-
-	var items []labeledItem
+) (*ReleaseStorageMetadata, error) {
+	var items []releaseStorageItem
 
 	switch driver {
 	case "configmap", "configmaps":
@@ -470,7 +485,10 @@ func (c *Client) fetchStorageLabels(
 		}
 
 		for i := range cmList.Items {
-			items = append(items, labeledItem{Labels: cmList.Items[i].Labels})
+			items = append(items, releaseStorageItem{
+				Labels: cmList.Items[i].Labels,
+				UID:    string(cmList.Items[i].UID),
+			})
 		}
 	default:
 		secretList, err := clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
@@ -483,10 +501,19 @@ func (c *Client) fetchStorageLabels(
 		}
 
 		for i := range secretList.Items {
-			items = append(items, labeledItem{Labels: secretList.Items[i].Labels})
+			items = append(items, releaseStorageItem{
+				Labels: secretList.Items[i].Labels,
+				UID:    string(secretList.Items[i].UID),
+			})
 		}
 	}
 
+	return latestReleaseStorageMetadata(items)
+}
+
+func latestReleaseStorageMetadata(
+	items []releaseStorageItem,
+) (*ReleaseStorageMetadata, error) {
 	if len(items) == 0 {
 		return nil, ErrNoReleaseStorage
 	}
@@ -502,7 +529,10 @@ func (c *Client) fetchStorageLabels(
 		}
 	}
 
-	return items[bestIdx].Labels, nil
+	return &ReleaseStorageMetadata{
+		Labels:   items[bestIdx].Labels,
+		Identity: items[bestIdx].UID,
+	}, nil
 }
 
 func (c *Client) installRelease(
