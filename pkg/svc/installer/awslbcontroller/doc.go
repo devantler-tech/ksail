@@ -23,4 +23,7 @@
 // spec.cluster.eks.experimentalAWSLoadBalancerController together with
 // spec.cluster.loadBalancer: Enabled. It runs at cluster create, on the
 // operator's reconcile, and during cluster update when the opt-in changes.
+// Opting out during cluster update uninstalls only a release backed by
+// exact-region KSail ownership state; manually installed and GitOps-managed
+// releases are preserved.
 package awslbcontrollerinstaller
