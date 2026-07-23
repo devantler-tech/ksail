@@ -36,6 +36,7 @@ func TestFetchReleaseStorageMetadataSelectsLatestIncarnation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "current-uid", metadata.Identity)
 	assert.Equal(t, "2", metadata.Labels["version"])
+	assert.ElementsMatch(t, []string{"old-uid", "current-uid"}, metadata.HistoryIdentities)
 }
 
 func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
@@ -47,4 +48,15 @@ func TestFetchReleaseStorageMetadataReportsMissingRelease(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, helm.ErrNoReleaseStorage)
+}
+
+func TestFetchReleaseStorageMetadataRejectsUnsupportedDriver(t *testing.T) {
+	t.Parallel()
+
+	_, err := helm.FetchReleaseStorageMetadata(
+		context.Background(), fake.NewSimpleClientset(), "sql", "kube-system",
+		"name=controller,owner=helm",
+	)
+
+	require.ErrorContains(t, err, "cannot provide a Kubernetes release identity")
 }

@@ -18,6 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func changeFields(changes []clusterupdate.Change) []string {
+	fields := make([]string, 0, len(changes))
+	for _, change := range changes {
+		fields = append(fields, change.Field)
+	}
+
+	return fields
+}
+
 //nolint:paralleltest // writes exact-region state under the package-isolated test HOME.
 func TestPersistRequiredEKSComponentStateRecordsControllerOwnership(t *testing.T) {
 	const (
@@ -49,6 +58,85 @@ func TestPersistRequiredEKSComponentStateRecordsControllerOwnership(t *testing.T
 	snapshot, err = state.LoadEKSComponentState(clusterName, region)
 	require.NoError(t, err)
 	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
+}
+
+//nolint:paralleltest // writes exact-region state under the package-isolated test HOME.
+func TestOverlayOwnedEKSControllerCleanupBaselineExposesFailedReleaseForRemoval(t *testing.T) {
+	const (
+		clusterName = "failed-owned-controller"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
+		Version:                                  state.EKSComponentStateVersion,
+		ClusterName:                              clusterName,
+		Region:                                   region,
+		AWSLoadBalancerControllerManaged:         true,
+		AWSLoadBalancerControllerReleaseIdentity: "failed-release-uid",
+	}))
+
+	current := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionEKS,
+		v1alpha1.ProviderAWS,
+	)
+	desired := *current
+	desired.LoadBalancer = v1alpha1.LoadBalancerDisabled
+	desired.EKS.ExperimentalAWSLoadBalancerController = false
+
+	require.NoError(t, cluster.ExportOverlayOwnedEKSControllerCleanupBaseline(
+		current,
+		&desired,
+		clusterName,
+		region,
+	))
+	assert.Equal(t, v1alpha1.LoadBalancerEnabled, current.LoadBalancer)
+	assert.True(
+		t,
+		current.EKS.ExperimentalAWSLoadBalancerController,
+		"positive ownership must expose inactive Helm history as a removal diff",
+	)
+
+	result := specdiff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS).
+		ComputeDiff(current, &desired, nil, nil)
+	assert.Contains(t, changeFields(result.InPlaceChanges), specdiff.EKSLoadBalancerControllerField)
+}
+
+//nolint:paralleltest // writes exact-region state under the package-isolated test HOME.
+func TestOverlayOwnedEKSControllerCleanupBaselineDoesNotMaskMissingDesiredRelease(t *testing.T) {
+	const (
+		clusterName = "missing-desired-controller"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
+		Version:                                  state.EKSComponentStateVersion,
+		ClusterName:                              clusterName,
+		Region:                                   region,
+		AWSLoadBalancerControllerManaged:         true,
+		AWSLoadBalancerControllerReleaseIdentity: "missing-release-uid",
+	}))
+
+	current := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionEKS,
+		v1alpha1.ProviderAWS,
+	)
+	desired := *current
+	desired.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	desired.EKS.ExperimentalAWSLoadBalancerController = true
+
+	require.NoError(t, cluster.ExportOverlayOwnedEKSControllerCleanupBaseline(
+		current,
+		&desired,
+		clusterName,
+		region,
+	))
+	assert.False(
+		t,
+		current.EKS.ExperimentalAWSLoadBalancerController,
+		"a desired but missing release must remain inactive so update reinstalls it",
+	)
 }
 
 // TestPersistRequiredEKSComponentState_FailsClosed proves an applied EKS

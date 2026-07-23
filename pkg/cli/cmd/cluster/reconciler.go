@@ -162,6 +162,24 @@ func (r *componentReconciler) handlerForField(
 	return nil, false
 }
 
+func isComponentReconcileField(field string) bool {
+	switch field {
+	case "cluster.cni",
+		"cluster.csi",
+		"cluster.metricsServer",
+		"cluster.loadBalancer",
+		"cluster.certManager",
+		"cluster.policyEngine",
+		"cluster.gitOpsEngine",
+		"cluster.workload.tag",
+		"cluster.workload.flux.distributionVersion",
+		specdiff.EKSLoadBalancerControllerField:
+		return true
+	default:
+		return strings.HasPrefix(field, "cluster.autoscaler.node.")
+	}
+}
+
 // reconcileCNI switches the CNI by installing the new CNI.
 // The old CNI is not uninstalled — the new CNI replaces it via Helm upgrade.
 func (r *componentReconciler) reconcileCNI(_ context.Context, _ clusterupdate.Change) error {

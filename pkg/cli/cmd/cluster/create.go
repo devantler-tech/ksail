@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -115,14 +116,37 @@ func handleCreateRunE(
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
-	return finishCreateWithTTL(requiredStateErr, func() error {
-		return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
-	})
+	return finishCreateWithTTL(
+		requiredStateErr,
+		func() error {
+			ttlValue, _ := cmd.Flags().GetString("ttl")
+			if strings.TrimSpace(ttlValue) == "" {
+				return nil
+			}
+
+			return autoDeleteCluster(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+		},
+		func() error {
+			return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
+		},
+	)
 }
 
-func finishCreateWithTTL(requiredStateErr error, waitForTTL func() error) error {
+func finishCreateWithTTL(
+	requiredStateErr error,
+	cleanupFailedTTLCreate func() error,
+	waitForTTL func() error,
+) error {
 	if requiredStateErr != nil {
-		return requiredStateErr
+		cleanupErr := cleanupFailedTTLCreate()
+		if cleanupErr != nil {
+			cleanupErr = fmt.Errorf(
+				"clean up TTL cluster after required state persistence failed: %w",
+				cleanupErr,
+			)
+		}
+
+		return errors.Join(requiredStateErr, cleanupErr)
 	}
 
 	return waitForTTL()

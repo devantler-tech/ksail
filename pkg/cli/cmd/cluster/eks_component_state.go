@@ -146,3 +146,44 @@ func persistCreatedEKSComponentState(
 		releaseIdentity,
 	)
 }
+
+// overlayOwnedEKSControllerCleanupBaseline turns positive persisted ownership
+// into a removal-only diff signal when the desired controller is disabled.
+// Live deployed status remains authoritative when the controller is desired,
+// so an absent release still produces an install diff. On disable, however, an
+// owned failed/pending Helm revision must reach the identity-checked uninstall
+// path even though normal component detection reports it inactive.
+func overlayOwnedEKSControllerCleanupBaseline(
+	currentSpec, desiredSpec *v1alpha1.ClusterSpec,
+	clusterName, region string,
+) error {
+	if currentSpec == nil || desiredSpec == nil ||
+		desiredSpec.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	desired := &v1alpha1.Cluster{}
+
+	desired.Spec.Cluster = *desiredSpec
+	if setup.NeedsLoadBalancerInstall(desired) {
+		return nil
+	}
+
+	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	if err != nil {
+		if errors.Is(err, state.ErrEKSComponentStateNotFound) {
+			return nil
+		}
+
+		return fmt.Errorf("load EKS controller cleanup ownership: %w", err)
+	}
+
+	if !snapshot.AWSLoadBalancerControllerManaged {
+		return nil
+	}
+
+	currentSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	currentSpec.EKS.ExperimentalAWSLoadBalancerController = true
+
+	return nil
+}

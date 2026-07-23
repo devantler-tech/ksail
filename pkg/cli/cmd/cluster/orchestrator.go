@@ -881,6 +881,21 @@ func (o *updateOrchestrator) computeUpdateDiff(
 		)
 	}
 
+	eksRegion := ""
+	if o.ctx.EKSConfig != nil {
+		eksRegion = o.ctx.EKSConfig.Region
+	}
+
+	err = overlayOwnedEKSControllerCleanupBaseline(
+		currentSpec,
+		&o.ctx.ClusterCfg.Spec.Cluster,
+		o.clusterName,
+		eksRegion,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	diffEngine := specdiff.NewEngine(
 		o.ctx.ClusterCfg.Spec.Cluster.Distribution,
 		o.ctx.ClusterCfg.Spec.Cluster.Provider,
@@ -906,7 +921,35 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(o.cmd, o.ctx, diffEngine, diff)
 
+	promoteUnsupportedInPlaceChanges(updater, diff)
+
 	return currentSpec, diff, nil
+}
+
+func promoteUnsupportedInPlaceChanges(
+	updater clusterprovisioner.Updater,
+	diff *clusterupdate.UpdateResult,
+) {
+	fieldSupport, declaresSupport := updater.(clusterprovisioner.InPlaceFieldSupport)
+	if !declaresSupport || diff == nil {
+		return
+	}
+
+	supported := make([]clusterupdate.Change, 0, len(diff.InPlaceChanges))
+	for _, change := range diff.InPlaceChanges {
+		if isComponentReconcileField(change.Field) ||
+			fieldSupport.SupportsInPlaceField(change.Field) {
+			supported = append(supported, change)
+
+			continue
+		}
+
+		change.Category = clusterupdate.ChangeCategoryRecreateRequired
+		change.Reason = "the selected provisioner cannot apply this field in-place"
+		diff.RecreateRequired = append(diff.RecreateRequired, change)
+	}
+
+	diff.InPlaceChanges = supported
 }
 
 // computeSpecOnlyDiff computes a spec-level diff using default values as

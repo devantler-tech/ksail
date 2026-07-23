@@ -248,6 +248,10 @@ type releaseIdentityReporter interface {
 	ReleaseIdentity(ctx context.Context) (string, error)
 }
 
+type releaseIdentityOwnershipReporter interface {
+	OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error)
+}
+
 // InstallEKSLoadBalancerControllerWithResult installs or upgrades the controller and reports
 // whether Helm was actually mutated. GitOps-owned releases are successful, unmodified skips.
 func InstallEKSLoadBalancerControllerWithResult(
@@ -402,12 +406,16 @@ func UninstallEKSLoadBalancerControllerSilent(
 		return err
 	}
 
-	liveReleaseIdentity, err := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
+	matches, err := loadBalancerControllerOwnsReleaseIdentity(
+		ctx,
+		lbInstaller,
+		expectedReleaseIdentity,
+	)
 	if err != nil {
 		return err
 	}
 
-	if liveReleaseIdentity != strings.TrimSpace(expectedReleaseIdentity) {
+	if !matches {
 		return ErrAWSLoadBalancerControllerReleaseIdentityMismatch
 	}
 
@@ -417,6 +425,36 @@ func UninstallEKSLoadBalancerControllerSilent(
 	}
 
 	return nil
+}
+
+func loadBalancerControllerOwnsReleaseIdentity(
+	ctx context.Context,
+	lbInstaller installer.Installer,
+	expectedReleaseIdentity string,
+) (bool, error) {
+	expectedReleaseIdentity = strings.TrimSpace(expectedReleaseIdentity)
+	if expectedReleaseIdentity == "" {
+		return false, ErrAWSLoadBalancerControllerReleaseIdentityEmpty
+	}
+
+	if reporter, ok := lbInstaller.(releaseIdentityOwnershipReporter); ok {
+		matches, err := reporter.OwnsReleaseIdentity(ctx, expectedReleaseIdentity)
+		if err != nil {
+			return false, fmt.Errorf(
+				"verify AWS load balancer controller release identity history: %w",
+				err,
+			)
+		}
+
+		return matches, nil
+	}
+
+	liveReleaseIdentity, err := loadBalancerControllerReleaseIdentity(ctx, lbInstaller)
+	if err != nil {
+		return false, err
+	}
+
+	return liveReleaseIdentity == expectedReleaseIdentity, nil
 }
 
 func createEKSLoadBalancerInstaller(

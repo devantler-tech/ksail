@@ -118,6 +118,27 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 	require.NotNil(t, installer)
 }
 
+func TestNewInstallerRejectsStorageWithoutKubernetesReleaseIdentity(t *testing.T) {
+	t.Setenv("HELM_DRIVER", "sql")
+
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		helm.NewMockInterface(t),
+		5*time.Minute,
+		"prod-eks",
+		"eu-north-1",
+		"",
+		false,
+	)
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "cannot provide a Kubernetes release identity")
+	assert.Nil(
+		t,
+		installer,
+		"unsupported identity storage must fail before Helm mutates the cluster",
+	)
+}
+
 func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -169,6 +190,54 @@ func TestReleaseIdentityReturnsStorageUID(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "release-uid", identity)
+}
+
+func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name     string
+		metadata *helm.ReleaseStorageMetadata
+		want     bool
+	}{
+		{
+			name: "owned failed upgrade retains the persisted revision UID",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity:          "failed-upgrade-uid",
+				HistoryIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
+			},
+			want: true,
+		},
+		{
+			name: "same-name replacement has a disjoint release history",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity:          "replacement-uid",
+				HistoryIdentities: []string{"replacement-uid"},
+			},
+			want: false,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := helm.NewMockInterface(t)
+			client.EXPECT().
+				GetReleaseStorageMetadata(
+					mock.Anything,
+					"aws-load-balancer-controller",
+					"kube-system",
+				).
+				Return(testCase.metadata, nil)
+			component, err := awslbcontrollerinstaller.NewInstaller(
+				client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+			)
+			require.NoError(t, err)
+
+			owned, err := component.OwnsReleaseIdentity(t.Context(), "persisted-owned-uid")
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, owned)
+		})
+	}
 }
 
 func TestReleaseIdentityRejectsEmptyStorageUID(t *testing.T) {

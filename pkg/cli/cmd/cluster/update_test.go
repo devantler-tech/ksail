@@ -180,6 +180,16 @@ type fakeUpdater struct {
 	calls   int
 }
 
+type fieldSupportUpdater struct {
+	*fakeUpdater
+
+	supported map[string]bool
+}
+
+func (u *fieldSupportUpdater) SupportsInPlaceField(field string) bool {
+	return u.supported[field]
+}
+
 type countingFactory struct{ calls int }
 
 func (f *countingFactory) Create(
@@ -215,6 +225,36 @@ func (f *fakeUpdater) GetCurrentConfig(
 	_ string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	return nil, nil, nil
+}
+
+func TestPromoteUnsupportedInPlaceChangesRequiresRecreation(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = []clusterupdate.Change{
+		{Field: "cluster.localRegistry.registry", Category: clusterupdate.ChangeCategoryInPlace},
+		{Field: "cluster.cni", Category: clusterupdate.ChangeCategoryInPlace},
+		{
+			Field:    "eks.managedNodeGroups[workers].desiredCapacity",
+			Category: clusterupdate.ChangeCategoryInPlace,
+		},
+	}
+	updater := &fieldSupportUpdater{
+		fakeUpdater: &fakeUpdater{},
+		supported: map[string]bool{
+			"eks.managedNodeGroups[workers].desiredCapacity": true,
+		},
+	}
+
+	cluster.ExportPromoteUnsupportedInPlaceChanges(updater, diff)
+
+	assert.Equal(t, []string{
+		"cluster.cni",
+		"eks.managedNodeGroups[workers].desiredCapacity",
+	}, []string{diff.InPlaceChanges[0].Field, diff.InPlaceChanges[1].Field})
+	require.Len(t, diff.RecreateRequired, 1)
+	assert.Equal(t, "cluster.localRegistry.registry", diff.RecreateRequired[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
 }
 
 // TestComputeUpdateDiff_PropagatesProvisionerError verifies live provisioner

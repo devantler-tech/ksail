@@ -96,6 +96,25 @@ type recordingInstaller struct {
 	uninstallOrder *[]string
 }
 
+type ownershipReportingInstaller struct {
+	gitOpsManaged bool
+	identity      string
+}
+
+func (*ownershipReportingInstaller) Install(context.Context) error   { return nil }
+func (*ownershipReportingInstaller) Uninstall(context.Context) error { return nil }
+func (*ownershipReportingInstaller) Images(context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (i *ownershipReportingInstaller) IsGitOpsManaged(context.Context) (bool, error) {
+	return i.gitOpsManaged, nil
+}
+
+func (i *ownershipReportingInstaller) ReleaseIdentity(context.Context) (string, error) {
+	return i.identity, nil
+}
+
 func (r *recordingInstaller) Install(_ context.Context) error {
 	*r.order = append(*r.order, r.name)
 
@@ -266,6 +285,9 @@ func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *test
 
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, componentAWSLB, "kube-system").
+		Return(&helm.ReleaseStorageMetadata{Identity: "operator-release-uid"}, nil)
+	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, componentAWSLB, "kube-system").
 		Return(map[string]string{"owner": "helm"}, nil)
 	client.EXPECT().
@@ -285,7 +307,8 @@ func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *test
 
 	cluster := &v1alpha1.Cluster{}
 	cluster.Annotations = map[string]string{
-		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+		v1alpha1.LastAppliedComponentsAnnotation:                    string(baseline),
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation: "operator-release-uid",
 	}
 	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
 		return operator.NewInstallerFactory(
@@ -304,6 +327,105 @@ func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *test
 	require.NoError(t, err)
 	require.Contains(t, removed, componentAWSLB)
 	require.NoError(t, operator.RunUninstallers(t.Context(), removed))
+}
+
+func TestRecordAWSLoadBalancerControllerOwnershipUsesActualInstallOutcome(t *testing.T) {
+	t.Parallel()
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation: "stale-identity",
+	}
+
+	err := operator.RecordAWSLoadBalancerControllerOwnership(
+		t.Context(),
+		cluster,
+		map[string]installer.Installer{
+			componentAWSLB: &ownershipReportingInstaller{gitOpsManaged: true},
+		},
+	)
+	require.NoError(t, err)
+	assert.NotContains(
+		t,
+		cluster.Annotations,
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation,
+		"a GitOps-preserved release must not become operator-owned",
+	)
+
+	err = operator.RecordAWSLoadBalancerControllerOwnership(
+		t.Context(),
+		cluster,
+		map[string]installer.Installer{
+			componentAWSLB: &ownershipReportingInstaller{identity: "operator-release-uid"},
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"operator-release-uid",
+		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+	)
+}
+
+func TestSanitizeForWriteDropsClientSuppliedControllerOwnership(t *testing.T) {
+	t.Parallel()
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation: "forged-release-uid",
+		"example.com/retained": "value",
+	}
+
+	sanitized := operator.SanitizeForWrite(cluster)
+
+	assert.NotContains(
+		t,
+		sanitized.Annotations,
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation,
+	)
+	assert.Equal(t, "value", sanitized.Annotations["example.com/retained"])
+}
+
+func TestRemovedComponentInstallers_DoesNotInferAWSOwnershipFromDesiredBaseline(t *testing.T) {
+	t.Parallel()
+
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+		LoadBalancer: v1alpha1.LoadBalancerEnabled,
+		EKS: v1alpha1.OptionsEKS{
+			ExperimentalAWSLoadBalancerController: true,
+		},
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation: string(baseline),
+	}
+	client := helm.NewMockInterface(t)
+	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
+		return operator.NewInstallerFactory(
+			client,
+			"/tmp/kubeconfig",
+			"externally-owned-eks",
+			distribution,
+		)
+	}
+
+	removed, err := operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	assert.NotContains(
+		t,
+		removed,
+		componentAWSLB,
+		"the desired-spec baseline alone is not positive operator ownership",
+	)
 }
 
 func TestRemovedComponentInstallers_BaselineFactoryUsesPreviousDistribution(t *testing.T) {

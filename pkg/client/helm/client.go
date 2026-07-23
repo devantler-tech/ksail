@@ -25,6 +25,20 @@ const (
 	DefaultTimeout = 5 * time.Minute
 )
 
+// ValidateKubernetesReleaseStorageDriver rejects Helm backends whose release
+// records have no Kubernetes UID. Identity-bound lifecycle operations must run
+// only with Secret or ConfigMap storage so they can distinguish a same-name
+// replacement from the release incarnation KSail actually mutated.
+func ValidateKubernetesReleaseStorageDriver(driver string) error {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	switch driver {
+	case "", "secret", "secrets", "configmap", "configmaps":
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", ErrReleaseStorageDriverUnsupported, driver)
+	}
+}
+
 // Client represents the default helm implementation used by KSail.
 type Client struct {
 	actionConfig *helmv4action.Configuration
@@ -403,8 +417,10 @@ func (c *Client) GetReleaseStorageMetadata(
 	}
 
 	driver := os.Getenv("HELM_DRIVER")
-	if driver == "memory" {
-		return nil, ErrNoReleaseStorage
+
+	err := ValidateKubernetesReleaseStorageDriver(driver)
+	if err != nil {
+		return nil, err
 	}
 
 	restConfig, err := c.settings.RESTClientGetter().ToRESTConfig()
@@ -471,6 +487,11 @@ func (c *Client) fetchReleaseStorageMetadata(
 	clientset kubernetes.Interface,
 	driver, namespace, selector string,
 ) (*ReleaseStorageMetadata, error) {
+	err := ValidateKubernetesReleaseStorageDriver(driver)
+	if err != nil {
+		return nil, err
+	}
+
 	var items []releaseStorageItem
 
 	switch driver {
@@ -530,9 +551,21 @@ func latestReleaseStorageMetadata(
 	}
 
 	return &ReleaseStorageMetadata{
-		Labels:   items[bestIdx].Labels,
-		Identity: items[bestIdx].UID,
+		Labels:            items[bestIdx].Labels,
+		Identity:          items[bestIdx].UID,
+		HistoryIdentities: releaseStorageIdentities(items),
 	}, nil
+}
+
+func releaseStorageIdentities(items []releaseStorageItem) []string {
+	identities := make([]string, 0, len(items))
+	for _, item := range items {
+		if identity := strings.TrimSpace(item.UID); identity != "" {
+			identities = append(identities, identity)
+		}
+	}
+
+	return identities
 }
 
 func (c *Client) installRelease(

@@ -25,6 +25,11 @@ var (
 	// Helm release storage objects (Secrets or ConfigMaps) exist for the
 	// given release name and namespace.
 	ErrNoReleaseStorage = errors.New("helm: no release storage objects found")
+	// ErrReleaseStorageDriverUnsupported reports a Helm backend that cannot
+	// provide Kubernetes object identity for fail-closed release ownership.
+	ErrReleaseStorageDriverUnsupported = errors.New(
+		"helm storage driver cannot provide a Kubernetes release identity",
+	)
 
 	// ErrReleaseNotFound re-exports the Helm SDK sentinel so callers can
 	// check whether an uninstall failed because the release never existed
@@ -99,8 +104,9 @@ type ReleaseInfo struct {
 // is the Kubernetes object UID, so deleting and reinstalling a same-name
 // release produces different ownership evidence even when its revision resets.
 type ReleaseStorageMetadata struct {
-	Labels   map[string]string
-	Identity string
+	Labels            map[string]string
+	Identity          string
+	HistoryIdentities []string
 }
 
 // ChartManager defines the chart lifecycle operations required by KSail.

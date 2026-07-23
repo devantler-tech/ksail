@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -71,6 +73,11 @@ func NewInstaller(
 	haEnabled bool,
 	ksailManaged ...bool,
 ) (*Installer, error) {
+	err := helm.ValidateKubernetesReleaseStorageDriver(os.Getenv("HELM_DRIVER"))
+	if err != nil {
+		return nil, fmt.Errorf("validate release identity storage: %w", err)
+	}
+
 	if strings.TrimSpace(clusterName) == "" {
 		return nil, ErrClusterNameRequired
 	}
@@ -159,6 +166,33 @@ func (i *Installer) ReleaseIdentity(ctx context.Context) (string, error) {
 	}
 
 	return identity, nil
+}
+
+// OwnsReleaseIdentity reports whether the expected Kubernetes UID still
+// belongs to the current Helm release history. Helm upgrades create a new
+// storage object for each revision, so requiring only the latest UID would
+// reject cleanup after an owned failed/pending upgrade. A deleted and
+// reinstalled same-name release has a new history and therefore does not match.
+func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error) {
+	metadata, err := i.client.GetReleaseStorageMetadata(
+		ctx,
+		awslbcRelease,
+		awslbcNamespace,
+	)
+	if err != nil {
+		return false, fmt.Errorf(
+			"read AWS load balancer controller release identity history: %w",
+			err,
+		)
+	}
+
+	expected = strings.TrimSpace(expected)
+	if expected == "" || metadata == nil {
+		return false, nil
+	}
+
+	return metadata.Identity == expected ||
+		slices.Contains(metadata.HistoryIdentities, expected), nil
 }
 
 // Uninstall removes the AWS Load Balancer Controller only when the caller has

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
@@ -19,6 +20,24 @@ import (
 
 // componentInstallTimeout bounds each component's Helm install.
 const componentInstallTimeout = 5 * time.Minute
+
+var (
+	errOperatorReleaseIdentityMismatch = errors.New(
+		"operator-owned release identity no longer matches",
+	)
+	errOperatorReleaseIdentityUnavailable = errors.New(
+		"operator-owned release cannot report its identity",
+	)
+	errAWSControllerOwnershipUnavailable = errors.New(
+		"AWS load balancer controller cannot report GitOps ownership",
+	)
+	errAWSControllerIdentityUnavailable = errors.New(
+		"AWS load balancer controller cannot report release identity",
+	)
+	errAWSControllerIdentityEmpty = errors.New(
+		"AWS load balancer controller operator identity is empty",
+	)
+)
 
 // installOrder lists component installers in the order they must run: CNI first (pods cannot
 // schedule without networking), then infrastructure add-ons, then GitOps last. Keys match the
@@ -113,13 +132,19 @@ func InstallComponents(
 
 	components, installErr := runInstallers(ctx, installers)
 
-	return true, components, errors.Join(uninstallErr, installErr)
+	var ownershipErr error
+
+	if uninstallErr == nil && installErr == nil {
+		ownershipErr = recordAWSLoadBalancerControllerOwnership(ctx, cluster, installers)
+	}
+
+	return true, components, errors.Join(uninstallErr, installErr, ownershipErr)
 }
 
 // newInstallerFactory constructs the operator's component lifecycle factory.
-// A component present in the operator's last-applied baseline was installed by
-// this lifecycle, so its reconstructed installer carries positive ownership
-// evidence and may uninstall it when the desired spec drops the component.
+// AWS controller uninstall authority is still enabled on reconstructed
+// installers, but removedComponentInstallers exposes one only when a concrete
+// release identity annotation supplies positive operator ownership evidence.
 func newInstallerFactory(
 	helmClient helm.Interface,
 	kubeconfigPath, eksClusterName string,
@@ -188,11 +213,155 @@ func removedComponentInstallers(
 	for key, inst := range previous {
 		_, stillDesired := desired[key]
 		if !stillDesired {
+			if key == "aws-load-balancer-controller" {
+				expectedIdentity := strings.TrimSpace(
+					cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+				)
+				if expectedIdentity == "" {
+					continue
+				}
+
+				inst = &releaseIdentityBoundInstaller{
+					Installer:        inst,
+					expectedIdentity: expectedIdentity,
+				}
+			}
+
 			removed[key] = inst
 		}
 	}
 
 	return removed, nil
+}
+
+type gitOpsOwnershipReporter interface {
+	IsGitOpsManaged(ctx context.Context) (bool, error)
+}
+
+type releaseIdentityReporter interface {
+	ReleaseIdentity(ctx context.Context) (string, error)
+}
+
+type releaseIdentityOwnershipReporter interface {
+	OwnsReleaseIdentity(ctx context.Context, expected string) (bool, error)
+}
+
+type releaseIdentityBoundInstaller struct {
+	installer.Installer
+
+	expectedIdentity string
+}
+
+func (bound *releaseIdentityBoundInstaller) Uninstall(ctx context.Context) error {
+	releaseExists, matches, err := bound.releaseIdentityStatus(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !releaseExists {
+		return nil
+	}
+
+	if !matches {
+		return errOperatorReleaseIdentityMismatch
+	}
+
+	err = bound.Installer.Uninstall(ctx)
+	if err != nil {
+		return fmt.Errorf("uninstall operator-owned release: %w", err)
+	}
+
+	return nil
+}
+
+func (bound *releaseIdentityBoundInstaller) releaseIdentityStatus(
+	ctx context.Context,
+) (bool, bool, error) {
+	if reporter, supported := bound.Installer.(releaseIdentityOwnershipReporter); supported {
+		matches, err := reporter.OwnsReleaseIdentity(ctx, bound.expectedIdentity)
+		if err != nil {
+			if errors.Is(err, helm.ErrNoReleaseStorage) ||
+				errors.Is(err, helm.ErrReleaseNotFound) {
+				return false, false, nil
+			}
+
+			return false, false, fmt.Errorf(
+				"verify operator-owned release identity history: %w",
+				err,
+			)
+		}
+
+		return true, matches, nil
+	}
+
+	reporter, supported := bound.Installer.(releaseIdentityReporter)
+	if !supported {
+		return false, false, errOperatorReleaseIdentityUnavailable
+	}
+
+	liveIdentity, err := reporter.ReleaseIdentity(ctx)
+	if err != nil {
+		if errors.Is(err, helm.ErrNoReleaseStorage) ||
+			errors.Is(err, helm.ErrReleaseNotFound) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("read operator-owned release identity: %w", err)
+	}
+
+	return true, strings.TrimSpace(liveIdentity) == bound.expectedIdentity, nil
+}
+
+func recordAWSLoadBalancerControllerOwnership(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	installers map[string]installer.Installer,
+) error {
+	component, desired := installers["aws-load-balancer-controller"]
+	if !desired {
+		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
+
+		return nil
+	}
+
+	ownershipReporter, ownershipSupported := component.(gitOpsOwnershipReporter)
+	if !ownershipSupported {
+		return errAWSControllerOwnershipUnavailable
+	}
+
+	gitOpsManaged, err := ownershipReporter.IsGitOpsManaged(ctx)
+	if err != nil {
+		return fmt.Errorf("verify AWS load balancer controller operator ownership: %w", err)
+	}
+
+	if gitOpsManaged {
+		delete(cluster.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
+
+		return nil
+	}
+
+	identityReporter, identitySupported := component.(releaseIdentityReporter)
+	if !identitySupported {
+		return errAWSControllerIdentityUnavailable
+	}
+
+	identity, err := identityReporter.ReleaseIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("read AWS load balancer controller operator identity: %w", err)
+	}
+
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return errAWSControllerIdentityEmpty
+	}
+
+	if cluster.Annotations == nil {
+		cluster.Annotations = map[string]string{}
+	}
+
+	cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = identity
+
+	return nil
 }
 
 // lastAppliedComponentsSpec parses the component-baseline annotation into a spec. The second return

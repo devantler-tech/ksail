@@ -347,19 +347,34 @@ func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
 }
 
-func TestFinishCreateWithTTL_ReturnsBeforeWaitAfterPersistenceFailure(t *testing.T) {
+func TestFinishCreateWithTTL_CleansUpWithoutWaitingAfterPersistenceFailure(t *testing.T) {
 	t.Parallel()
 
-	ttlCalled := false
+	cleanupCalled := false
+	waitCalled := false
 
-	err := cluster.ExportFinishCreateWithTTL(errRequiredStateFailure, func() error {
-		ttlCalled = true
+	err := cluster.ExportFinishCreateWithTTL(
+		errRequiredStateFailure,
+		func() error {
+			cleanupCalled = true
 
-		return errTTLCleanupFailure
-	})
+			return errTTLCleanupFailure
+		},
+		func() error {
+			waitCalled = true
 
-	assert.False(t, ttlCalled, "a known-fatal state error must not enter the normal TTL wait")
+			return nil
+		},
+	)
+
+	assert.True(
+		t,
+		cleanupCalled,
+		"a TTL cluster must be deleted after required state persistence fails",
+	)
+	assert.False(t, waitCalled, "a known-fatal state error must not enter the normal TTL wait")
 	require.ErrorIs(t, err, errRequiredStateFailure)
+	require.ErrorIs(t, err, errTTLCleanupFailure)
 }
 
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.

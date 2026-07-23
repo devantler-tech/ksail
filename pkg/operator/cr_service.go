@@ -212,7 +212,8 @@ func sanitizeForWrite(cluster *v1alpha1.Cluster) *v1alpha1.Cluster {
 
 		for key, value := range cluster.Annotations {
 			if key == v1alpha1.LastAppliedSpecAnnotation ||
-				key == v1alpha1.LastAppliedComponentsAnnotation {
+				key == v1alpha1.LastAppliedComponentsAnnotation ||
+				key == v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation {
 				continue
 			}
 

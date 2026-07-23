@@ -69,6 +69,13 @@ func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetecto
 	u.componentDetector = d
 }
 
+// SupportsInPlaceField reports the provisioner-level fields the EKS updater
+// actually mutates. Component fields are handled separately by the CLI
+// component reconciler and therefore are not listed here.
+func (u *UpdatableProvisioner) SupportsInPlaceField(field string) bool {
+	return strings.HasPrefix(field, "eks.managedNodeGroups[")
+}
+
 // managedNodeGroupConfig is the subset of an eksctl.yaml managedNodeGroups
 // entry the updater diffs. Pointer fields distinguish "not declared" (nil,
 // dimension is skipped) from an explicit zero.

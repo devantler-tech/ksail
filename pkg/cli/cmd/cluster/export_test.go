@@ -123,8 +123,33 @@ func ExportPersistRequiredEKSComponentState(
 }
 
 // ExportFinishCreateWithTTL exports the create finalization ordering for testing.
-func ExportFinishCreateWithTTL(requiredStateErr error, waitForTTL func() error) error {
-	return finishCreateWithTTL(requiredStateErr, waitForTTL)
+func ExportFinishCreateWithTTL(
+	requiredStateErr error,
+	cleanupFailedTTLCreate func() error,
+	waitForTTL func() error,
+) error {
+	return finishCreateWithTTL(requiredStateErr, cleanupFailedTTLCreate, waitForTTL)
+}
+
+// ExportPromoteUnsupportedInPlaceChanges exposes fail-closed updater field routing.
+func ExportPromoteUnsupportedInPlaceChanges(
+	updater clusterprovisioner.Updater,
+	diff *clusterupdate.UpdateResult,
+) {
+	promoteUnsupportedInPlaceChanges(updater, diff)
+}
+
+// ExportOverlayOwnedEKSControllerCleanupBaseline exposes the owned failed-release cleanup signal.
+func ExportOverlayOwnedEKSControllerCleanupBaseline(
+	currentSpec, desiredSpec *v1alpha1.ClusterSpec,
+	clusterName, region string,
+) error {
+	return overlayOwnedEKSControllerCleanupBaseline(
+		currentSpec,
+		desiredSpec,
+		clusterName,
+		region,
+	)
 }
 
 // ExportResolveClusterContext exports resolveClusterContext for testing.
