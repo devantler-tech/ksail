@@ -1409,12 +1409,13 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 	// Execute create using shared workflow.
 	creationErr := runClusterCreationWorkflow(o.cmd, o.cfgManager, o.ctx, o.deps)
 
-	return finishRecreateFlow(o.ctx, o.clusterName, creationErr)
+	return finishRecreateFlow(o.cmd.Context(), o.ctx, o.clusterName, creationErr)
 }
 
 // finishRecreateFlow keeps successful recreation finalization separate from the
 // destructive delete/create orchestration so its required state is testable.
 func finishRecreateFlow(
+	goCtx context.Context,
 	ctx *localregistry.Context,
 	clusterName string,
 	creationErr error,
@@ -1423,9 +1424,5 @@ func finishRecreateFlow(
 		return creationErr
 	}
 
-	return persistRequiredEKSComponentState(
-		ctx,
-		clusterName,
-		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
-	)
+	return persistCreatedEKSComponentState(goCtx, ctx, clusterName)
 }

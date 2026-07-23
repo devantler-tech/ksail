@@ -1,11 +1,13 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
@@ -73,6 +75,31 @@ func persistReconciledEKSComponentState(
 	controllerManaged, err := reconciler.eksLoadBalancerControllerManagedAfterReconcile()
 	if err != nil {
 		return err
+	}
+
+	return persistRequiredEKSComponentState(ctx, clusterName, controllerManaged)
+}
+
+// persistCreatedEKSComponentState verifies post-create GitOps ownership before
+// recording a KSail marker. The shared Helm installer may succeed by skipping
+// an externally managed release, which must remain unowned.
+func persistCreatedEKSComponentState(
+	goCtx context.Context,
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	if ctx == nil || ctx.ClusterCfg == nil ||
+		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	controllerManaged, err := setup.EKSLoadBalancerControllerManagedByKSail(
+		goCtx,
+		ctx.ClusterCfg,
+		getInstallerFactories(),
+	)
+	if err != nil {
+		return fmt.Errorf("resolve EKS controller ownership after creation: %w", err)
 	}
 
 	return persistRequiredEKSComponentState(ctx, clusterName, controllerManaged)

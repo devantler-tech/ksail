@@ -135,6 +135,24 @@ func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestIsGitOpsManagedReportsFluxOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "aws-load-balancer-controller"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	managed, err := installer.IsGitOpsManaged(context.Background())
+
+	require.NoError(t, err)
+	assert.True(t, managed)
+}
+
 func TestUninstallAllowsKSailOwnedRelease(t *testing.T) {
 	t.Parallel()
 

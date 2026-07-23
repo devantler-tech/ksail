@@ -51,18 +51,26 @@ func NewBase(
 // (Flux or ArgoCD), the install is skipped to avoid overwriting externally
 // managed values.
 func (b *Base) Install(ctx context.Context) error {
+	_, err := b.InstallWithResult(ctx)
+
+	return err
+}
+
+// InstallWithResult installs or upgrades the chart and reports whether Helm
+// was actually mutated. A GitOps-owned release returns false with no error.
+func (b *Base) InstallWithResult(ctx context.Context) (bool, error) {
 	skip, err := SkipIfGitOpsManaged(ctx, b.client, b.name, b.spec.ReleaseName, b.spec.Namespace)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if skip {
-		return nil
+		return false, nil
 	}
 
 	err = b.client.AddRepository(ctx, b.repo, b.timeout)
 	if err != nil {
-		return fmt.Errorf("failed to add %s repository: %w", b.repo.Name, err)
+		return false, fmt.Errorf("failed to add %s repository: %w", b.repo.Name, err)
 	}
 
 	installCtx, cancel := context.WithTimeout(ctx, b.timeout+helm.ContextTimeoutBuffer)
@@ -70,10 +78,10 @@ func (b *Base) Install(ctx context.Context) error {
 
 	err = helm.InstallChartWithRetry(installCtx, b.client, b.spec, b.name)
 	if err != nil {
-		return fmt.Errorf("installing %s chart: %w", b.name, err)
+		return false, fmt.Errorf("installing %s chart: %w", b.name, err)
 	}
 
-	return nil
+	return true, nil
 }
 
 // Uninstall removes the Helm release.

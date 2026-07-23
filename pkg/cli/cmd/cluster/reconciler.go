@@ -238,14 +238,14 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 	ctx context.Context,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
-		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+		controllerManaged, err := r.installLoadBalancer(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to install load balancer: %w", err)
 		}
 
 		if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
 			r.eksLoadBalancerOwnershipUpdated = true
-			r.eksLoadBalancerManaged = true
+			r.eksLoadBalancerManaged = controllerManaged
 		}
 
 		return nil
@@ -288,6 +288,28 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 	r.eksLoadBalancerManaged = false
 
 	return nil
+}
+
+func (r *componentReconciler) installLoadBalancer(ctx context.Context) (bool, error) {
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		managed, err := setup.InstallEKSLoadBalancerControllerWithResult(
+			ctx,
+			r.clusterCfg,
+			r.factories,
+		)
+		if err != nil {
+			return false, fmt.Errorf("install EKS load balancer controller: %w", err)
+		}
+
+		return managed, nil
+	}
+
+	err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		return false, fmt.Errorf("install load balancer: %w", err)
+	}
+
+	return false, nil
 }
 
 func (r *componentReconciler) eksLoadBalancerControllerManagedAfterReconcile() (bool, error) {

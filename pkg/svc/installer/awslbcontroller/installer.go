@@ -111,6 +111,22 @@ func NewInstaller(
 	}, nil
 }
 
+// IsGitOpsManaged reports whether the current release is owned by Flux or
+// ArgoCD. Missing release storage means there is no GitOps-owned release.
+func (i *Installer) IsGitOpsManaged(ctx context.Context) (bool, error) {
+	labels, err := i.client.GetReleaseStorageLabels(ctx, awslbcRelease, awslbcNamespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
+		return false, fmt.Errorf(
+			"check AWS load balancer controller release ownership: %w",
+			err,
+		)
+	}
+
+	_, managed := helmutil.IsGitOpsManaged(labels)
+
+	return managed, nil
+}
+
 // Uninstall removes the AWS Load Balancer Controller only when the caller has
 // supplied positive KSail ownership evidence. A Flux- or ArgoCD-managed release
 // is still left untouched, and an ownership lookup failure aborts before Helm

@@ -260,7 +260,7 @@ func ExportFinishRecreateFlow(
 	clusterName string,
 	creationErr error,
 ) error {
-	return finishRecreateFlow(ctx, clusterName, creationErr)
+	return finishRecreateFlow(context.Background(), ctx, clusterName, creationErr)
 }
 
 // ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.

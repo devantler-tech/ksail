@@ -97,6 +97,7 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 	)
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{})
 
 	require.NoError(t, state.SaveEKSComponentState(clusterName, region, &state.EKSComponentState{
 		Version:                          state.EKSComponentStateVersion,
@@ -105,12 +106,33 @@ func TestFinishRecreateFlowPersistsEKSControllerOwnership(t *testing.T) {
 		AWSLoadBalancerControllerManaged: false,
 	}))
 
-	ctx := managedEKSComponentContext(clusterName, region)
+	ctx := managedEKSComponentContext(clusterName)
 	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
 
 	snapshot, err := state.LoadEKSComponentState(clusterName, region)
 	require.NoError(t, err)
 	assert.True(t, snapshot.AWSLoadBalancerControllerManaged)
+}
+
+// TestFinishRecreateFlowDoesNotClaimGitOpsManagedController proves a successful recreation does
+// not infer KSail ownership when the shared installer deliberately preserved a GitOps release.
+//
+//nolint:paralleltest // replaces the process-global installer factory and writes state.
+func TestFinishRecreateFlowDoesNotClaimGitOpsManagedController(t *testing.T) {
+	const (
+		clusterName = "recreated-gitops-controller"
+		region      = "eu-north-1"
+	)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+	setEKSControllerTestInstaller(t, &recordingEKSLoadBalancerInstaller{gitOpsManaged: true})
+
+	ctx := managedEKSComponentContext(clusterName)
+	require.NoError(t, cluster.ExportFinishRecreateFlow(ctx, clusterName, nil))
+
+	snapshot, err := state.LoadEKSComponentState(clusterName, region)
+	require.NoError(t, err)
+	assert.False(t, snapshot.AWSLoadBalancerControllerManaged)
 }
 
 // TestApplyInPlaceChangesDoesNotClaimManualEKSController proves an unrelated successful update
@@ -125,7 +147,7 @@ func TestApplyInPlaceChangesDoesNotClaimManualEKSController(t *testing.T) {
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 
-	ctx := managedEKSComponentContext(clusterName, region)
+	ctx := managedEKSComponentContext(clusterName)
 	result := clusterupdate.NewEmptyUpdateResult()
 	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 		Field: "controlPlanes", OldValue: "1", NewValue: "3",
@@ -168,6 +190,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 		wantManaged bool
 		wantInstall int
 		wantRemove  int
+		installSkip bool
 	}{
 		{
 			name: "successful install claims ownership", oldOptIn: false, newOptIn: true,
@@ -176,6 +199,10 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 		{
 			name: "successful uninstall releases ownership", oldOptIn: true, newOptIn: false,
 			initial: new(true), wantManaged: false, wantRemove: 1,
+		},
+		{
+			name: "GitOps-skipped install remains unowned", oldOptIn: false, newOptIn: true,
+			wantManaged: false, wantInstall: 1, installSkip: true,
 		},
 	}
 
@@ -198,7 +225,9 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 				))
 			}
 
-			fakeInstaller := &recordingEKSLoadBalancerInstaller{}
+			fakeInstaller := &recordingEKSLoadBalancerInstaller{
+				installSkipped: testCase.installSkip,
+			}
 			restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
 				func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 					return fakeInstaller, nil
@@ -207,7 +236,7 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 
 			t.Cleanup(restore)
 
-			ctx := managedEKSComponentContext(clusterName, region)
+			ctx := managedEKSComponentContext(clusterName)
 			ctx.ClusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController = testCase.newOptIn
 			diff := clusterupdate.NewEmptyUpdateResult()
 			diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
@@ -238,12 +267,27 @@ func TestApplyInPlaceChangesPersistsActualEKSControllerOutcome(t *testing.T) {
 	}
 }
 
-func managedEKSComponentContext(clusterName, region string) *localregistry.Context {
+func setEKSControllerTestInstaller(
+	t *testing.T,
+	fakeInstaller *recordingEKSLoadBalancerInstaller,
+) {
+	t.Helper()
+
+	restore := cluster.SetAWSLoadBalancerControllerInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return fakeInstaller, nil
+		},
+	)
+
+	t.Cleanup(restore)
+}
+
+func managedEKSComponentContext(clusterName string) *localregistry.Context {
 	ctx := &localregistry.Context{
 		ClusterCfg: &v1alpha1.Cluster{},
 		EKSConfig: &clusterprovisioner.EKSConfig{
 			Name:   clusterName,
-			Region: region,
+			Region: "eu-north-1",
 		},
 	}
 	ctx.ClusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS

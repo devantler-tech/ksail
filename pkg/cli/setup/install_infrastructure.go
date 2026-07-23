@@ -230,21 +230,89 @@ func installEKSLoadBalancer(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
+	_, err := InstallEKSLoadBalancerControllerWithResult(ctx, clusterCfg, factories)
+
+	return err
+}
+
+type installResultReporter interface {
+	InstallWithResult(ctx context.Context) (mutated bool, err error)
+}
+
+type gitOpsOwnershipReporter interface {
+	IsGitOpsManaged(ctx context.Context) (managed bool, err error)
+}
+
+// InstallEKSLoadBalancerControllerWithResult installs or upgrades the controller and reports
+// whether Helm was actually mutated. GitOps-owned releases are successful, unmodified skips.
+func InstallEKSLoadBalancerControllerWithResult(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (bool, error) {
 	if !NeedsLoadBalancerInstall(clusterCfg) {
-		return nil
+		return false, nil
 	}
 
 	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, false)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	resultReporter, reportsResult := lbInstaller.(installResultReporter)
+	if reportsResult {
+		mutated, installErr := resultReporter.InstallWithResult(ctx)
+		if installErr != nil {
+			return false, fmt.Errorf(
+				"aws-load-balancer-controller installation failed: %w",
+				installErr,
+			)
+		}
+
+		return mutated, nil
 	}
 
 	installErr := lbInstaller.Install(ctx)
 	if installErr != nil {
-		return fmt.Errorf("aws-load-balancer-controller installation failed: %w", installErr)
+		return false, fmt.Errorf(
+			"aws-load-balancer-controller installation failed: %w",
+			installErr,
+		)
 	}
 
-	return nil
+	return true, nil
+}
+
+// EKSLoadBalancerControllerManagedByKSail verifies the ownership established by a successful
+// create/recreate workflow. A GitOps-owned release was deliberately skipped and remains unowned.
+func EKSLoadBalancerControllerManagedByKSail(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (bool, error) {
+	if !NeedsLoadBalancerInstall(clusterCfg) {
+		return false, nil
+	}
+
+	lbInstaller, err := createEKSLoadBalancerInstaller(clusterCfg, factories, false)
+	if err != nil {
+		return false, err
+	}
+
+	reporter, reportsOwnership := lbInstaller.(gitOpsOwnershipReporter)
+	if !reportsOwnership {
+		return false, ErrAWSLoadBalancerControllerOwnershipReporterUnavailable
+	}
+
+	gitOpsManaged, err := reporter.IsGitOpsManaged(ctx)
+	if err != nil {
+		return false, fmt.Errorf(
+			"verify AWS load balancer controller ownership after creation: %w",
+			err,
+		)
+	}
+
+	return !gitOpsManaged, nil
 }
 
 // UninstallEKSLoadBalancerControllerSilent removes the AWS Load Balancer Controller

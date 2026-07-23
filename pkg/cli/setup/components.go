@@ -40,6 +40,9 @@ var (
 	ErrAWSLoadBalancerControllerInstallerFactoryNil = errors.New(
 		"aws load balancer controller installer factory is nil",
 	)
+	ErrAWSLoadBalancerControllerOwnershipReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot report GitOps ownership",
+	)
 )
 
 // InstallerFactories holds factory functions for creating component installers.

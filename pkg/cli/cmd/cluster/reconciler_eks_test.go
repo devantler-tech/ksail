@@ -18,12 +18,24 @@ import (
 type recordingEKSLoadBalancerInstaller struct {
 	installCalls   int
 	uninstallCalls int
+	installSkipped bool
+	gitOpsManaged  bool
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Install(_ context.Context) error {
 	r.installCalls++
 
 	return nil
+}
+
+func (r *recordingEKSLoadBalancerInstaller) InstallWithResult(ctx context.Context) (bool, error) {
+	err := r.Install(ctx)
+
+	return !r.installSkipped, err
+}
+
+func (r *recordingEKSLoadBalancerInstaller) IsGitOpsManaged(context.Context) (bool, error) {
+	return r.gitOpsManaged, nil
 }
 
 func (r *recordingEKSLoadBalancerInstaller) Uninstall(_ context.Context) error {
