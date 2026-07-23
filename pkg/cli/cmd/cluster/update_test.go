@@ -255,14 +255,38 @@ func TestPromoteUnsupportedInPlaceChangesRequiresRecreation(t *testing.T) {
 	cluster.ExportPromoteUnsupportedInPlaceChanges(updater, diff)
 
 	assert.Equal(t, []string{
-		"cluster.cni",
 		"eks.managedNodeGroups[workers].desiredCapacity",
-	}, []string{diff.InPlaceChanges[0].Field, diff.InPlaceChanges[1].Field})
-	require.Len(t, diff.RecreateRequired, 2)
+	}, []string{diff.InPlaceChanges[0].Field})
+	require.Len(t, diff.RecreateRequired, 3)
 	assert.Equal(t, "cluster.localRegistry.registry", diff.RecreateRequired[0].Field)
 	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
-	assert.Equal(t, "cluster.metricsServer", diff.RecreateRequired[1].Field)
+	assert.Equal(t, "cluster.cni", diff.RecreateRequired[1].Field)
 	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[1].Category)
+	assert.Equal(t, "cluster.metricsServer", diff.RecreateRequired[2].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[2].Category)
+}
+
+func TestPromoteUnsupportedInPlaceChangesRequiresRecreationForCNISwitch(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = []clusterupdate.Change{{
+		Field:    "cluster.cni",
+		OldValue: string(v1alpha1.CNICilium),
+		NewValue: string(v1alpha1.CNICalico),
+		Category: clusterupdate.ChangeCategoryInPlace,
+	}}
+	updater := &fieldSupportUpdater{
+		fakeUpdater: &fakeUpdater{},
+		supported:   map[string]bool{},
+	}
+
+	cluster.ExportPromoteUnsupportedInPlaceChanges(updater, diff)
+
+	assert.Empty(t, diff.InPlaceChanges)
+	require.Len(t, diff.RecreateRequired, 1)
+	assert.Equal(t, "cluster.cni", diff.RecreateRequired[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
 }
 
 // TestComputeUpdateDiff_PropagatesProvisionerError verifies live provisioner

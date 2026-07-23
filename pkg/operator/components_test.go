@@ -343,6 +343,57 @@ func TestRemovedComponentInstallers_OperatorOwnedAWSControllerUninstalls(t *test
 	require.NoError(t, operator.RunUninstallers(t.Context(), removed))
 }
 
+func TestRemovedComponentInstallers_PartialAWSControllerInstallUninstalls(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, componentAWSLB, "kube-system").
+		Return(&helm.ReleaseStorageMetadata{
+			Identity: "partial-install-release-uid",
+			Labels: map[string]string{
+				awslbcontrollerinstaller.ReleaseOwnershipLabel: "ksail",
+			},
+		}, nil)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, componentAWSLB, "kube-system").
+		Return(map[string]string{"owner": "helm"}, nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, componentAWSLB, "kube-system").
+		Return(nil)
+
+	previous := &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+		LoadBalancer: v1alpha1.LoadBalancerDisabled,
+	}}}
+	baseline, err := json.Marshal(previous.Spec)
+	require.NoError(t, err)
+
+	cluster := &v1alpha1.Cluster{}
+	cluster.Annotations = map[string]string{
+		v1alpha1.LastAppliedComponentsAnnotation:                    string(baseline),
+		v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation: "partial-install-release-uid",
+	}
+	newFactory := func(distribution v1alpha1.Distribution) *installer.Factory {
+		return operator.NewInstallerFactory(
+			client,
+			"/tmp/kubeconfig",
+			"partial-install-eks",
+			distribution,
+		)
+	}
+
+	removed, err := operator.RemovedComponentInstallers(
+		newFactory,
+		cluster,
+		map[string]installer.Installer{},
+	)
+	require.NoError(t, err)
+	require.Contains(t, removed, componentAWSLB)
+	require.NoError(t, operator.RunUninstallers(t.Context(), removed))
+}
+
 func TestRecordAWSLoadBalancerControllerOwnershipUsesActualInstallOutcome(t *testing.T) {
 	t.Parallel()
 

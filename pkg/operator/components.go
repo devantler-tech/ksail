@@ -44,6 +44,9 @@ var (
 	errOperatorOwnershipEvidenceRequired = errors.New(
 		"AWS load balancer controller operator ownership evidence is required",
 	)
+	errAWSControllerCleanupInstallerUnavailable = errors.New(
+		"partial AWS controller cleanup installer is unavailable",
+	)
 )
 
 // installOrder lists component installers in the order they must run: CNI first (pods cannot
@@ -194,23 +197,36 @@ func uninstallRemovedComponents(
 // spec via a factory built FOR that baseline's distribution (several installers are
 // distribution-dependent, so reusing the current cluster's factory would compute the wrong uninstall
 // set after a distribution change), then keeps the entries whose key is absent from the desired set.
-// It returns an empty map when no baseline is recorded (first reconcile, or an unparseable annotation).
+// A persisted AWS controller release identity is also treated as a removal candidate. This covers a
+// partial apply where the controller install succeeded but a sibling failure prevented the full
+// component baseline from advancing.
 func removedComponentInstallers(
 	newFactory func(v1alpha1.Distribution) *installer.Factory,
 	cluster *v1alpha1.Cluster,
 	desired map[string]installer.Installer,
 ) (map[string]installer.Installer, error) {
-	previousSpec, ok := lastAppliedComponentsSpec(cluster)
-	if !ok {
-		return map[string]installer.Installer{}, nil
+	previousSpec, hasBaseline := lastAppliedComponentsSpec(cluster)
+
+	previous, err := buildPreviousComponentInstallers(newFactory, previousSpec, hasBaseline)
+	if err != nil {
+		return nil, err
 	}
 
-	previousCluster := &v1alpha1.Cluster{Spec: *previousSpec}
+	expectedControllerIdentity := strings.TrimSpace(
+		cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
+	)
 
-	previous, err := newFactory(previousSpec.Cluster.Distribution).
-		CreateInstallersForConfig(previousCluster)
+	err = addPartialAWSControllerCleanupInstaller(
+		newFactory,
+		cluster,
+		previousSpec,
+		hasBaseline,
+		desired,
+		previous,
+		expectedControllerIdentity,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("build previous installers: %w", err)
+		return nil, err
 	}
 
 	removed := make(map[string]installer.Installer)
@@ -219,9 +235,7 @@ func removedComponentInstallers(
 		_, stillDesired := desired[key]
 		if !stillDesired {
 			if key == awslbcontroller.ReleaseName {
-				expectedIdentity := strings.TrimSpace(
-					cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation],
-				)
+				expectedIdentity := expectedControllerIdentity
 				if expectedIdentity == "" {
 					inst = &unresolvedRemovalInstaller{Installer: inst}
 				} else {
@@ -237,6 +251,65 @@ func removedComponentInstallers(
 	}
 
 	return removed, nil
+}
+
+func buildPreviousComponentInstallers(
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
+	previousSpec *v1alpha1.Spec,
+	hasBaseline bool,
+) (map[string]installer.Installer, error) {
+	if !hasBaseline {
+		return map[string]installer.Installer{}, nil
+	}
+
+	previous, err := newFactory(previousSpec.Cluster.Distribution).
+		CreateInstallersForConfig(&v1alpha1.Cluster{Spec: *previousSpec})
+	if err != nil {
+		return nil, fmt.Errorf("build previous installers: %w", err)
+	}
+
+	return previous, nil
+}
+
+func addPartialAWSControllerCleanupInstaller(
+	newFactory func(v1alpha1.Distribution) *installer.Factory,
+	cluster *v1alpha1.Cluster,
+	previousSpec *v1alpha1.Spec,
+	hasBaseline bool,
+	desired, previous map[string]installer.Installer,
+	expectedIdentity string,
+) error {
+	_, controllerDesired := desired[awslbcontroller.ReleaseName]
+
+	_, controllerInBaseline := previous[awslbcontroller.ReleaseName]
+	if controllerDesired || controllerInBaseline || expectedIdentity == "" {
+		return nil
+	}
+
+	cleanupSpec := cluster.Spec
+	if hasBaseline {
+		cleanupSpec = *previousSpec
+	}
+
+	cleanupSpec.Cluster.Distribution = v1alpha1.DistributionEKS
+	cleanupSpec.Cluster.Provider = v1alpha1.ProviderAWS
+	cleanupSpec.Cluster.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	cleanupSpec.Cluster.EKS.ExperimentalAWSLoadBalancerController = true
+
+	cleanupInstallers, err := newFactory(v1alpha1.DistributionEKS).
+		CreateInstallersForConfig(&v1alpha1.Cluster{Spec: cleanupSpec})
+	if err != nil {
+		return fmt.Errorf("build partial AWS controller cleanup installer: %w", err)
+	}
+
+	controller, exists := cleanupInstallers[awslbcontroller.ReleaseName]
+	if !exists {
+		return errAWSControllerCleanupInstallerUnavailable
+	}
+
+	previous[awslbcontroller.ReleaseName] = controller
+
+	return nil
 }
 
 type gitOpsOwnershipReporter interface {
