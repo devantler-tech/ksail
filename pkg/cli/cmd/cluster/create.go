@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -122,9 +121,11 @@ func handleCreateRunE(
 }
 
 func finishCreateWithTTL(requiredStateErr error, waitForTTL func() error) error {
-	ttlErr := waitForTTL()
+	if requiredStateErr != nil {
+		return requiredStateErr
+	}
 
-	return errors.Join(requiredStateErr, ttlErr)
+	return waitForTTL()
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.

@@ -249,6 +249,10 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 					return strconv.FormatBool(false)
 				}
 
+				if e.componentBaselineUnknown(spec) {
+					return clusterupdate.UnknownBaselineValue
+				}
+
 				return eksLoadBalancerControllerValue(spec)
 			},
 		},

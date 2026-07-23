@@ -347,7 +347,7 @@ func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
 }
 
-func TestFinishCreateWithTTL_RunsCleanupAfterPersistenceFailure(t *testing.T) {
+func TestFinishCreateWithTTL_ReturnsBeforeWaitAfterPersistenceFailure(t *testing.T) {
 	t.Parallel()
 
 	ttlCalled := false
@@ -358,9 +358,8 @@ func TestFinishCreateWithTTL_RunsCleanupAfterPersistenceFailure(t *testing.T) {
 		return errTTLCleanupFailure
 	})
 
-	assert.True(t, ttlCalled)
+	assert.False(t, ttlCalled, "a known-fatal state error must not enter the normal TTL wait")
 	require.ErrorIs(t, err, errRequiredStateFailure)
-	require.ErrorIs(t, err, errTTLCleanupFailure)
 }
 
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.

@@ -275,6 +275,33 @@ func TestEngine_EKSAWSLoadBalancerControllerOptInChange(t *testing.T) {
 	}
 }
 
+func TestEngine_EKSAWSLoadBalancerControllerUnknownBaseline(t *testing.T) {
+	t.Parallel()
+
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionEKS
+	oldSpec.Provider = v1alpha1.ProviderAWS
+	clusterupdate.MarkComponentsUnknown(oldSpec)
+
+	newSpec := newBaseSpec()
+	newSpec.Distribution = v1alpha1.DistributionEKS
+	newSpec.Provider = v1alpha1.ProviderAWS
+	newSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	newSpec.EKS.ExperimentalAWSLoadBalancerController = true
+
+	engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	result := engine.ComputeDiff(oldSpec, newSpec, nil, nil)
+
+	for _, change := range result.InPlaceChanges {
+		require.NotEqual(t, diff.EKSLoadBalancerControllerField, change.Field)
+	}
+
+	require.Len(t, result.UnknownBaseline, 1)
+	require.Equal(t, diff.EKSLoadBalancerControllerField, result.UnknownBaseline[0].Field)
+	require.Equal(t, clusterupdate.UnknownBaselineValue, result.UnknownBaseline[0].OldValue)
+	require.Equal(t, "true", result.UnknownBaseline[0].NewValue)
+}
+
 func TestEngine_EKSAWSLoadBalancerControllerEffectiveActivationChange(t *testing.T) {
 	t.Parallel()
 
