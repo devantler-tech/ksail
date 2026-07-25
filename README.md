@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.devantler-tech%2Fksail.svg)](https://mcptoplist.com/server/io.github.devantler-tech%2Fksail)
+
 <!-- mcp-name: io.github.devantler-tech/ksail -->
 [![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
 [![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
