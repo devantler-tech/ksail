@@ -20,10 +20,60 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// UpdatableProvisioner wraps Provisioner with the Updater capability needed by
+// the orchestrator for both component reconciliation and managed node-group
+// scaling. Component reconciliation is always available; managed node-group
+// mutation remains gated by spec.cluster.eks.experimentalInPlaceUpdates.
+type UpdatableProvisioner struct {
+	*Provisioner
+
+	managedNodegroupUpdates bool
+
+	// componentDetector probes the running cluster's components for the
+	// update baseline; injected by the orchestrator via SetComponentDetector.
+	componentDetector *detector.ComponentDetector
+}
+
+// UpdatableOption configures optional EKS update capabilities.
+type UpdatableOption func(*UpdatableProvisioner)
+
+// WithManagedNodegroupUpdates controls whether eksctl-managed node-group
+// changes may be detected and applied. It does not affect component updates.
+func WithManagedNodegroupUpdates(enabled bool) UpdatableOption {
+	return func(provisioner *UpdatableProvisioner) {
+		provisioner.managedNodegroupUpdates = enabled
+	}
+}
+
+// NewUpdatableProvisioner wraps an EKS provisioner with component update
+// support. Managed node-group updates default to enabled for compatibility;
+// the cluster factory supplies the user's explicit experimental opt-in.
+func NewUpdatableProvisioner(
+	provisioner *Provisioner,
+	options ...UpdatableOption,
+) *UpdatableProvisioner {
+	updatable := &UpdatableProvisioner{
+		Provisioner:             provisioner,
+		managedNodegroupUpdates: true,
+	}
+	for _, option := range options {
+		option(updatable)
+	}
+
+	return updatable
+}
+
 // SetComponentDetector implements the ComponentDetectorAware capability so
 // the orchestrator can inject the live-cluster component detector.
-func (u *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
+func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetector) {
 	u.componentDetector = d
+}
+
+// SupportsInPlaceField reports the provisioner-level fields the EKS updater
+// actually mutates. Component fields are handled separately by the CLI
+// component reconciler and therefore are not listed here.
+func (u *UpdatableProvisioner) SupportsInPlaceField(field string) bool {
+	return u.managedNodegroupUpdates && strings.HasPrefix(field, "eks.managedNodeGroups[")
 }
 
 // managedNodeGroupConfig is the subset of an eksctl.yaml managedNodeGroups
@@ -41,7 +91,7 @@ type managedNodeGroupConfig struct {
 // The first supported in-place dimension is managed node-group scaling
 // (desiredCapacity/minSize/maxSize); everything else reports as
 // recreate-required and is handled by the orchestrator's recreate flow.
-func (u *Provisioner) Update(
+func (u *UpdatableProvisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -58,12 +108,15 @@ func (u *Provisioner) Update(
 // managed node groups and the live cluster state. Scaling changes on an
 // existing managed node group are in-place; adding or removing node groups
 // is classified recreate-required (not supported in-place yet).
-func (u *Provisioner) DiffConfig(
+func (u *UpdatableProvisioner) DiffConfig(
 	ctx context.Context,
 	name string,
 	_, _ *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
 	result := clusterupdate.NewEmptyUpdateResult()
+	if !u.managedNodegroupUpdates {
+		return result, nil
+	}
 
 	desired, declared, err := u.desiredNodegroups()
 	if err != nil {
@@ -123,8 +176,8 @@ func (u *Provisioner) DiffConfig(
 // GetCurrentConfig retrieves the current cluster configuration: component
 // state via the injected detector when available (marked Unknown otherwise,
 // so the diff engine never fabricates confident component diffs from
-// defaults), merged with persisted non-introspectable state.
-func (u *Provisioner) GetCurrentConfig(
+// defaults), enriched with persisted non-introspectable installer inputs.
+func (u *UpdatableProvisioner) GetCurrentConfig(
 	ctx context.Context,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
@@ -153,17 +206,26 @@ func (u *Provisioner) GetCurrentConfig(
 		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
 	}
 
+	err = clusterupdate.MergePersistedEKSState(spec, clusterName, u.region)
+	if err != nil {
+		return nil, nil, fmt.Errorf("merge persisted EKS state: %w", err)
+	}
+
 	return spec, nil, nil
 }
 
 // applyNodegroupScaling converges each declared managed node group's
 // scaling toward the eksctl.yaml values via `eksctl scale nodegroup`,
 // recording applied and failed changes on the result.
-func (u *Provisioner) applyNodegroupScaling(
+func (u *UpdatableProvisioner) applyNodegroupScaling(
 	ctx context.Context,
 	name string,
 	result *clusterupdate.UpdateResult,
 ) error {
+	if !u.managedNodegroupUpdates {
+		return nil
+	}
+
 	clusterName := u.resolveName(name)
 
 	desired, declared, err := u.desiredNodegroups()
@@ -215,8 +277,10 @@ func (u *Provisioner) applyNodegroupScaling(
 // desiredCapacity is deliberately undeclared — the cluster autoscaler owns
 // the current size — the freshly-listed live value is passed, clamped into
 // the new min/max bounds. The list-to-scale window is a small inherent race
-// against a concurrent autoscaler decision.
-func (u *Provisioner) scaleNodegroup(
+// against a concurrent autoscaler decision; the experimental flag gates this
+// path until it is validated against a live cluster (see the graduation
+// issue referenced by the flag's docs).
+func (u *UpdatableProvisioner) scaleNodegroup(
 	ctx context.Context,
 	clusterName string,
 	group managedNodeGroupConfig,
@@ -270,7 +334,7 @@ func nodegroupScaleTargets(
 // at all: a present file with no (remaining) managed node groups is a real
 // declaration — live managed groups then diff as removals — while a missing
 // file means there is nothing declared to diff against.
-func (u *Provisioner) desiredNodegroups() ([]managedNodeGroupConfig, bool, error) {
+func (u *UpdatableProvisioner) desiredNodegroups() ([]managedNodeGroupConfig, bool, error) {
 	if strings.TrimSpace(u.configPath) == "" {
 		return nil, false, nil
 	}

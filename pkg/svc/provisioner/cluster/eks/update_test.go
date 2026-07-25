@@ -58,7 +58,7 @@ func newTestProvisioner(
 	responses map[string][]response,
 	configPath string,
 	opts ...eksprovisioner.Option,
-) (*eksprovisioner.Provisioner, *scriptedRunner) {
+) (*eksprovisioner.UpdatableProvisioner, *scriptedRunner) {
 	t.Helper()
 
 	runner := &scriptedRunner{t: t, responses: responses}
@@ -68,24 +68,56 @@ func newTestProvisioner(
 		eksctlclient.WithRunner(runner),
 	)
 
-	prov, err := eksprovisioner.NewProvisioner(
+	base, err := eksprovisioner.NewProvisioner(
 		"ksail-test", "us-east-1", configPath, client, nil, opts...,
 	)
 	require.NoError(t, err)
 
-	return prov, runner
+	// Managed node-group updates are graduated: no experimental opt-in remains,
+	// so the default wrapper is what the factory now builds for every EKS cluster
+	// carrying an eksctl config path.
+	return eksprovisioner.NewUpdatableProvisioner(base), runner
 }
 
-func TestBaseProvisionerImplementsUpdaterAfterGraduation(t *testing.T) {
+func TestUpdatableProvisionerImplementsUpdaterAfterGraduation(t *testing.T) {
 	t.Parallel()
 
-	var prov any = &eksprovisioner.Provisioner{}
+	var prov any = &eksprovisioner.UpdatableProvisioner{}
 
 	_, ok := prov.(clusterprovisioner.Updater)
 	assert.True(
 		t, ok,
-		"the graduated EKS provisioner must expose Updater without an opt-in wrapper",
+		"the graduated EKS provisioner must expose Updater without an experimental spec field",
 	)
+}
+
+func TestDiffConfig_NodegroupUpdatesDisabledSkipsEksctl(t *testing.T) {
+	t.Parallel()
+
+	configPath := writeUpdateTestConfig(t, updateTestConfig)
+	runner := &scriptedRunner{t: t, responses: map[string][]response{}}
+	client := eksctlclient.NewClient(
+		eksctlclient.WithBinary(testBinary),
+		eksctlclient.WithRunner(runner),
+	)
+	base, err := eksprovisioner.NewProvisioner(
+		"ksail-test", "us-east-1", configPath, client, nil,
+	)
+	require.NoError(t, err)
+
+	prov := eksprovisioner.NewUpdatableProvisioner(
+		base,
+		eksprovisioner.WithManagedNodegroupUpdates(false),
+	)
+
+	diff, err := prov.DiffConfig(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, diff.InPlaceChanges)
+	assert.Empty(t, diff.RecreateRequired)
+	assert.False(t, prov.SupportsInPlaceField("eks.managedNodeGroups[ng-1].desiredCapacity"))
+	assert.Empty(t, runner.calls, "disabled node updates must not query or mutate EKS node groups")
 }
 
 func TestDiffConfig_ScalingChangeIsInPlace(t *testing.T) {
@@ -452,7 +484,7 @@ func TestDiffConfig_RemovalsAreEmittedInSortedOrder(t *testing.T) {
 func TestProvisionerIsComponentDetectorAwareAfterGraduation(t *testing.T) {
 	t.Parallel()
 
-	var prov any = &eksprovisioner.Provisioner{}
+	var prov any = &eksprovisioner.UpdatableProvisioner{}
 
 	_, ok := prov.(clusterprovisioner.ComponentDetectorAware)
 	assert.True(t, ok, "the orchestrator injects the detector via ComponentDetectorAware")

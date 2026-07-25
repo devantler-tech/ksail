@@ -103,6 +103,55 @@ func ExportCreateAndVerifyProvisioner(
 	return createAndVerifyProvisioner(cmd, ctx, clusterName)
 }
 
+// ExportPersistRequiredEKSComponentState exports the fail-closed EKS component writer for testing.
+func ExportPersistRequiredEKSComponentState(
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+		func() string {
+			if setup.NeedsLoadBalancerInstall(ctx.ClusterCfg) {
+				return "test-release-uid"
+			}
+
+			return ""
+		}(),
+	)
+}
+
+// ExportFinishCreateWithTTL exports the create finalization ordering for testing.
+func ExportFinishCreateWithTTL(
+	requiredStateErr error,
+	cleanupFailedTTLCreate func() error,
+	waitForTTL func() error,
+) error {
+	return finishCreateWithTTL(requiredStateErr, cleanupFailedTTLCreate, waitForTTL)
+}
+
+// ExportPromoteUnsupportedInPlaceChanges exposes fail-closed updater field routing.
+func ExportPromoteUnsupportedInPlaceChanges(
+	updater clusterprovisioner.Updater,
+	diff *clusterupdate.UpdateResult,
+) {
+	promoteUnsupportedInPlaceChanges(updater, diff)
+}
+
+// ExportOverlayOwnedEKSControllerCleanupBaseline exposes the owned failed-release cleanup signal.
+func ExportOverlayOwnedEKSControllerCleanupBaseline(
+	currentSpec, desiredSpec *v1alpha1.ClusterSpec,
+	clusterName, region string,
+) error {
+	return overlayOwnedEKSControllerCleanupBaseline(
+		currentSpec,
+		desiredSpec,
+		clusterName,
+		region,
+	)
+}
+
 // ExportResolveClusterContext exports resolveClusterContext for testing.
 func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)
@@ -208,7 +257,12 @@ func ExportApplyInPlaceChanges(
 	force bool,
 	allowRolling bool,
 ) error {
-	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
+	eksRegion := ""
+	if ctx.EKSConfig != nil {
+		eksRegion = ctx.EKSConfig.Region
+	}
+
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName, eksRegion)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
@@ -232,6 +286,27 @@ func ExportExecuteRecreateFlow(
 	return orchestrator.executeRecreateFlow()
 }
 
+// ExportFinishRecreateFlow exposes successful recreation finalization for safety tests.
+func ExportFinishRecreateFlow(
+	ctx *localregistry.Context,
+	clusterName string,
+	creationErr error,
+	controllerReconciliationStarted bool,
+) error {
+	return finishRecreateFlow(
+		context.Background(),
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
+}
+
+// ExportClearDeletedEKSState exposes the post-delete state invalidation boundary.
+func ExportClearDeletedEKSState(ctx *localregistry.Context, clusterName string) error {
+	return clearDeletedEKSState(ctx, clusterName)
+}
+
 // ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
 func ExportComputeUpdateDiff(
 	cmd *cobra.Command,
@@ -246,6 +321,24 @@ func ExportComputeUpdateDiff(
 	}
 
 	return orchestrator.computeUpdateDiff(updater)
+}
+
+// ExportApplyOrReportChanges exposes the no-change state-repair boundary for tests.
+func ExportApplyOrReportChanges(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+	currentSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.applyOrReportChanges(updater, currentSpec, diff, nil)
 }
 
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
@@ -360,6 +453,20 @@ func ExportAutoDeleteCluster(
 	return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
 }
 
+// ExportDeleteResolvedClusterState exposes exact-target state cleanup for safety tests.
+func ExportDeleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
+	return deleteResolvedClusterState(resolved)
+}
+
+// ExportDeleteTTLClusterState exposes TTL state cleanup for safety tests.
+func ExportDeleteTTLClusterState(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	return deleteTTLClusterState(clusterName, clusterCfg, eksConfig)
+}
+
 // ExportNormalizeVersionTag exposes normalizeVersionTag for testing.
 func ExportNormalizeVersionTag(tag string) string {
 	return normalizeVersionTag(tag)
@@ -447,8 +554,9 @@ func ExportReconcileComponents(
 	clusterCfg *v1alpha1.Cluster,
 	diff *clusterupdate.UpdateResult,
 	result *clusterupdate.UpdateResult,
+	eksRegion ...string,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster", eksRegion...)
 
 	return r.reconcileComponents(context.Background(), diff, result)
 }

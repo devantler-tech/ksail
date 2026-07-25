@@ -187,34 +187,57 @@ func TestCreateEKSProvisionerWithConfig(t *testing.T) {
 
 	provisioner, config, err := factory.Create(context.Background(), eksTestCluster())
 	require.NoError(t, err)
-	assert.IsType(t, &eksprovisioner.Provisioner{}, provisioner)
+	assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
 
 	eksConfig, isEKSConfig := config.(*clusterprovisioner.EKSConfig)
 	require.True(t, isEKSConfig)
 	assert.Equal(t, "test-eks", eksConfig.GetClusterName())
 }
 
-// TestCreateEKSProvisionerProvidesStableUpdater asserts EKS node-group scaling
-// remains available without a release flag once the live path is graduated.
-func TestCreateEKSProvisionerProvidesStableUpdater(t *testing.T) {
+// TestCreateEKSProvisionerUpdaterAvailableForComponents asserts EKS always
+// exposes the update orchestration path needed for component reconciliation,
+// and that it no longer depends on an experimental spec field. Managed
+// node-group mutation is graduated: it is gated only by a declared eksctl
+// config path, which is what the node-group diff is computed from.
+func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 	t.Parallel()
 
-	factory := clusterprovisioner.DefaultFactory{
-		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			EKS: &clusterprovisioner.EKSConfig{
-				Name:       "test-eks",
-				Region:     "eu-west-1",
-				ConfigPath: "eks.yaml",
-			},
+	testCases := []struct {
+		name       string
+		configPath string
+	}{
+		{
+			name:       "supports component reconciliation with an eksctl config path",
+			configPath: "eks.yaml",
+		},
+		{
+			name:       "component reconciliation does not require an eksctl config path",
+			configPath: "",
 		},
 	}
 
-	provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
-	require.NoError(t, err)
-	assert.IsType(t, &eksprovisioner.Provisioner{}, provisioner)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-	_, hasUpdater := provisioner.(clusterprovisioner.Updater)
-	assert.True(t, hasUpdater, "EKS scaling must not require an experimental spec field")
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: &clusterprovisioner.DistributionConfig{
+					EKS: &clusterprovisioner.EKSConfig{
+						Name:       "test-eks",
+						Region:     "eu-west-1",
+						ConfigPath: testCase.configPath,
+					},
+				},
+			}
+
+			provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
+			require.NoError(t, err)
+
+			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
+			assert.True(t, hasUpdater, "EKS scaling must not require an experimental spec field")
+			assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
+		})
+	}
 }
 
 // TestCreateEKSProvisionerWithoutConfig asserts that selecting the EKS

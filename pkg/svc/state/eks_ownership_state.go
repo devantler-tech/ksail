@@ -266,16 +266,5 @@ func validateEKSOwnershipARN(
 }
 
 func eksOwnershipStatePath(clusterName, region string) (string, error) {
-	dir, err := clusterStateDir(clusterName)
-	if err != nil {
-		return "", err
-	}
-
-	region = strings.TrimSpace(region)
-	if region == "" || strings.Contains(region, "/") || strings.Contains(region, "\\") ||
-		strings.Contains(region, "..") {
-		return "", ErrInvalidRegion
-	}
-
-	return filepath.Join(dir, fmt.Sprintf(eksOwnershipStateFileNameFormat, region)), nil
+	return eksRegionScopedStatePath(clusterName, region, eksOwnershipStateFileNameFormat)
 }

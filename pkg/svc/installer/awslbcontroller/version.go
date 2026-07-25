@@ -14,5 +14,5 @@ var chartYAML string
 // ecosystem). The chart version diverges from the controller image version
 // history, so it cannot be tracked via a Dockerfile image tag.
 func chartVersion() string {
-	return parser.ParseChartVersionFromChartYaml(chartYAML, "aws-load-balancer-controller")
+	return parser.ParseChartVersionFromChartYaml(chartYAML, ReleaseName)
 }

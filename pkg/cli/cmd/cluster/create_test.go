@@ -29,7 +29,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errSTSUnavailable = errors.New("STS unavailable")
+var (
+	errSTSUnavailable       = errors.New("STS unavailable")
+	errRequiredStateFailure = errors.New("required state write failed")
+	errTTLCleanupFailure    = errors.New("TTL cleanup failed")
+)
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
@@ -341,6 +345,36 @@ func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
 
 	_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
+}
+
+func TestFinishCreateWithTTL_CleansUpWithoutWaitingAfterPersistenceFailure(t *testing.T) {
+	t.Parallel()
+
+	cleanupCalled := false
+	waitCalled := false
+
+	err := cluster.ExportFinishCreateWithTTL(
+		errRequiredStateFailure,
+		func() error {
+			cleanupCalled = true
+
+			return errTTLCleanupFailure
+		},
+		func() error {
+			waitCalled = true
+
+			return nil
+		},
+	)
+
+	assert.True(
+		t,
+		cleanupCalled,
+		"a TTL cluster must be deleted after required state persistence fails",
+	)
+	assert.False(t, waitCalled, "a known-fatal state error must not enter the normal TTL wait")
+	require.ErrorIs(t, err, errRequiredStateFailure)
+	require.ErrorIs(t, err, errTTLCleanupFailure)
 }
 
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
