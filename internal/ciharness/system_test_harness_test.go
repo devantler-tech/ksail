@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -486,6 +488,38 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 	}
 }
 
+// assertStepTimeoutCoversRetryBudget pins the RELATIONSHIP between the scaling
+// step's timeout and the retry loop inside it, rather than pinning each as its
+// own magic number. wait_for_capacity polls on a bounded loop and runs twice; if
+// those two calls can outlast the step, GitHub kills the step before the loop
+// prints why capacity was never reached, and a capacity failure becomes an
+// opaque timeout. Deriving the budget from the loop keeps the two in step when
+// either is retuned.
+func assertStepTimeoutCoversRetryBudget(t *testing.T, step harnessStep) {
+	t.Helper()
+
+	const (
+		sleepSeconds        = 20
+		waitForCapacityRuns = 2
+	)
+
+	bound := regexp.MustCompile(`for _ in \{1\.\.(\d+)\}`).FindStringSubmatch(step.Run)
+	require.Len(t, bound, 2, "wait_for_capacity retry bound not found in step")
+
+	iterations, err := strconv.Atoi(bound[1])
+	require.NoError(t, err)
+	require.Positive(t, iterations)
+
+	pollMinutes := iterations * sleepSeconds * waitForCapacityRuns / 60
+
+	assert.Greater(
+		t, step.TimeoutMinutes, pollMinutes,
+		"step timeout (%dm) must exceed its own worst-case polling budget (%d x %ds x %d = %dm), "+
+			"or the step timeout masks wait_for_capacity's diagnostic",
+		step.TimeoutMinutes, iterations, sleepSeconds, waitForCapacityRuns, pollMinutes,
+	)
+}
+
 func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	t.Parallel()
 
@@ -494,7 +528,7 @@ func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	require.True(t, ok, "smoke-test job is missing")
 
 	updateStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
-	assert.Equal(t, 35, updateStep.TimeoutMinutes)
+	assertStepTimeoutCoversRetryBudget(t, updateStep)
 	assert.Equal(t, 2, strings.Count(updateStep.Run, "ksail cluster update --yes"))
 	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
 	assert.Contains(t, updateStep.Run, `assert_same_cluster`)

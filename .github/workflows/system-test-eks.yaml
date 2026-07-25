@@ -286,7 +286,12 @@ jobs:
           role-duration-seconds: 7200
 
       - name: 🧪 ksail cluster update scales EKS nodes
-        timeout-minutes: 35
+        # Must exceed this step's own worst case, or the step timeout fires first
+        # and masks the diagnostic wait_for_capacity would have printed. Budget:
+        # wait_for_capacity polls 30 x 20s = 10m and runs twice (20m), leaving 20m
+        # for the two `ksail cluster update` invocations and the identity asserts.
+        # The harness test caps this step at 45m via the post-refresh budget.
+        timeout-minutes: 40
         shell: bash
         run: |
           set -euo pipefail
@@ -337,7 +342,10 @@ jobs:
             local nodegroups
             local nodes
 
-            for _ in {1..60}; do
+            # 30 x 20s = 10m per call, twice per step. Keep this in step with the
+            # step's timeout-minutes above: if two calls can outlast the step, the
+            # step timeout masks the error message below.
+            for _ in {1..30}; do
               if nodegroups="$(eksctl get nodegroup \
                    --cluster "$KSAIL_EKS_CLUSTER_NAME" \
                    --region "$AWS_REGION" \
