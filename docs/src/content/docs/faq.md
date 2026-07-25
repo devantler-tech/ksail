@@ -101,7 +101,7 @@ LoadBalancer support varies by distribution and provider:
 - **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250); **Talos/Hetzner**: Hetzner Cloud Load Balancer
 - **VCluster**: delegates to host cluster (`spec.cluster.loadBalancer` has no effect)
 - **KWOK**: simulated via API (no real traffic routing)
-- **EKS**: built-in AWS Load Balancer Controller (planned)
+- **EKS**: in-tree `Service` type `LoadBalancer` support ships with the cluster; the AWS Load Balancer Controller is an experimental opt-in (`spec.cluster.eks.experimentalAWSLoadBalancerController`) that KSail does not install by default
 
 See the [Support Matrix](/support-matrix/#component--distribution-matrix) for the full compatibility table.
 

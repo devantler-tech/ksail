@@ -276,13 +276,13 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
 	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
 
-	diagnosticUploadIndex := findHarnessStepIndex(
+	diagnosticUploadIndex := harnessStepIndex(
 		t,
 		dockerJob.Steps,
 		"📤 Upload system test diagnostics",
 	)
-	cleanupIndex := findHarnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
-	logUploadIndex := findHarnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
+	cleanupIndex := harnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
+	logUploadIndex := harnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
 	assert.Less(t, diagnosticUploadIndex, cleanupIndex)
 	assert.Less(t, cleanupIndex, logUploadIndex)
 	assertBoundedWorkflowUpload(
@@ -889,32 +889,12 @@ func readRepoFile(t *testing.T, path string) []byte {
 	return contents
 }
 
+// findHarnessStep returns the named step, delegating the lookup to
+// harnessStepIndex so a single linear search backs every step accessor.
 func findHarnessStep(t *testing.T, steps []harnessStep, name string) harnessStep {
 	t.Helper()
 
-	for _, step := range steps {
-		if step.Name == name {
-			return step
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return harnessStep{}
-}
-
-func findHarnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
-	t.Helper()
-
-	for index, step := range steps {
-		if step.Name == name {
-			return index
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return -1
+	return steps[harnessStepIndex(t, steps, name)]
 }
 
 func assertBoundedWorkflowUpload(
