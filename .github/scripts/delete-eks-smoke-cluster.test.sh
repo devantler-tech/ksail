@@ -46,6 +46,18 @@ EOF
 
 chmod +x "${fake_bin}/aws" "${fake_bin}/ksail" "${fake_bin}/eksctl"
 
+expect_status() {
+	[[ "$3" == "$2" ]] && return 0
+	printf 'FAIL: %s\n  want exit %s, got %s\n  output:\n%s\n' "$1" "$2" "$3" "$4" >&2
+	return 1
+}
+
+expect_substring() {
+	[[ "$3" == *"$2"* ]] && return 0
+	printf 'FAIL: %s\n  want output containing: %s\n  output:\n%s\n' "$1" "$2" "$3" >&2
+	return 1
+}
+
 run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
 	local describe_mode="$4" ksail_status="$5" eksctl_status="$6" case_workdir="$7"
@@ -64,16 +76,8 @@ run_case() {
 	status=$?
 	set -e
 
-	if [[ "${status}" -ne "${expected_status}" ]]; then
-		printf 'FAIL: %s: expected status %s, got %s\n%s\n' \
-			"${scenario}" "${expected_status}" "${status}" "${output}" >&2
-		return 1
-	fi
-	if [[ "${output}" != *"${expected_output}"* ]]; then
-		printf 'FAIL: %s: expected output containing %q, got:\n%s\n' \
-			"${scenario}" "${expected_output}" "${output}" >&2
-		return 1
-	fi
+	expect_status "${scenario}" "${expected_status}" "${status}" "${output}" || return 1
+	expect_substring "${scenario}" "${expected_output}" "${output}" || return 1
 
 	pass_count=$((pass_count + 1))
 	printf 'PASS: %s\n' "${scenario}"
