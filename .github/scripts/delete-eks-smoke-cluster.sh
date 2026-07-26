@@ -114,14 +114,18 @@ if [[ "${create_attempted}" == "false" ]]; then
 fi
 
 # ksail needs the scaffolded project directory; eksctl addresses the cluster by
-# name and region. A missing workdir therefore removes one teardown path, never
-# the obligation to verify that nothing is left running.
-if [[ -d "${workdir}" ]]; then
-	cd "${workdir}"
+# name and region. An unusable workdir therefore removes one teardown path, never
+# the obligation to verify that nothing is left running. The directory can also
+# exist and still refuse entry, so the change of directory is a tested condition:
+# under strict mode a bare `cd` would end the script here, skipping the eksctl
+# fallback and the absence check and stranding a billable cluster in silence.
+if [[ ! -d "${workdir}" ]]; then
+	echo "::warning::No EKS smoke workdir at ${workdir}; skipping ksail and using eksctl."
+elif ! cd "${workdir}"; then
+	echo "::warning::EKS smoke workdir ${workdir} could not be entered; skipping ksail and using eksctl."
+else
 	ksail cluster delete --provider AWS --name "${cluster_name}" --force ||
 		echo "::warning::ksail cluster delete failed."
-else
-	echo "::warning::No EKS smoke workdir at ${workdir}; skipping ksail and using eksctl."
 fi
 
 # A zero exit from ksail does not prove the cluster is gone, so the fallback is

@@ -5,12 +5,25 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cleaner="${script_dir}/delete-eks-smoke-cluster.sh"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "${tmp_dir}"' EXIT
+unenterable_workdir="${tmp_dir}/unenterable"
+# The unenterable case is created without search permission, so restore it before
+# the recursive delete or the trap cannot clean up after itself.
+trap 'chmod 700 "${unenterable_workdir}" 2>/dev/null || true; rm -rf "${tmp_dir}"' EXIT
 fake_bin="${tmp_dir}/fake-bin"
 workdir="${tmp_dir}/workdir"
 pass_count=0
 
-mkdir -p "${fake_bin}" "${workdir}"
+mkdir -p "${fake_bin}" "${workdir}" "${unenterable_workdir}"
+chmod 000 "${unenterable_workdir}"
+
+# A directory the process cannot enter is the whole point of the cases below, and
+# root can enter one regardless of its mode. Prove the precondition holds rather
+# than letting those cases pass without exercising anything.
+if (cd "${unenterable_workdir}") 2>/dev/null; then
+	printf 'FAIL: harness precondition — %s is enterable, so the unenterable-workdir cases prove nothing (running as root?).\n' \
+		"${unenterable_workdir}" >&2
+	exit 1
+fi
 
 cat >"${fake_bin}/aws" <<'EOF'
 #!/usr/bin/env bash
@@ -134,6 +147,14 @@ run_case missing-workdir-still-present 1 'may be billable' found 0 0 "${tmp_dir}
 
 # Same path, nothing actually left — verified rather than assumed.
 run_case missing-workdir-verified-clean 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${tmp_dir}/absent"
+
+# A workdir that exists but cannot be entered reaches the same place as a missing one: ksail is
+# unusable, eksctl and the probe are not. Under strict mode an unguarded `cd` would end the script
+# on the spot, so the cluster would still be running and nothing would say so.
+run_case unenterable-workdir-still-present 1 'may be billable' found 0 0 "${unenterable_workdir}"
+
+# And the clean variant, so the guard cannot be satisfied by failing everything.
+run_case unenterable-workdir-verified-clean 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${unenterable_workdir}"
 
 # A typo in the creation-attempt flag must not read as "nothing was created". Silently skipping
 # teardown is precisely the failure this script exists to prevent.
