@@ -23,6 +23,16 @@ deleting)
 	echo 'DELETING'
 	exit 0
 	;;
+until-fallback)
+	# Present until eksctl runs, so the eksctl path is only reached if the
+	# script probes AWS rather than trusting ksail's exit status.
+	if [[ ! -f "${FAKE_STATE_DIR}/eksctl-ran" ]]; then
+		echo 'ACTIVE'
+		exit 0
+	fi
+	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: st-eks-1-1.' >&2
+	exit 254
+	;;
 denied)
 	echo 'An error occurred (AccessDeniedException) when calling the DescribeCluster operation: not authorized' >&2
 	exit 254
@@ -41,6 +51,7 @@ EOF
 
 cat >"${fake_bin}/eksctl" <<'EOF'
 #!/usr/bin/env bash
+touch "${FAKE_STATE_DIR}/eksctl-ran"
 exit "${FAKE_EKSCTL_DELETE_STATUS:-0}"
 EOF
 
@@ -61,18 +72,22 @@ expect_substring() {
 run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
 	local describe_mode="$4" ksail_status="$5" eksctl_status="$6" case_workdir="$7"
-	local output status
+	local attempted="${8:-true}"
+	local output status state_dir="${tmp_dir}/state-${scenario}"
+
+	mkdir -p "${state_dir}"
 
 	set +e
 	output="$(PATH="${fake_bin}:${PATH}" \
 		FAKE_AWS_DESCRIBE_MODE="${describe_mode}" \
 		FAKE_KSAIL_DELETE_STATUS="${ksail_status}" \
 		FAKE_EKSCTL_DELETE_STATUS="${eksctl_status}" \
+		FAKE_STATE_DIR="${state_dir}" \
 		"${cleaner}" \
 		--cluster-name st-eks-1-1 \
 		--region us-east-1 \
 		--workdir "${case_workdir}" \
-		--create-attempted true 2>&1)"
+		--create-attempted "${attempted}" 2>&1)"
 	status=$?
 	set -e
 
@@ -108,8 +123,21 @@ run_case deleting-in-progress 0 'already tearing down' deleting 0 0 "${workdir}"
 # reported as a clean teardown, because that is what strands a billable cluster silently.
 run_case probe-inconclusive 1 'Could not determine whether cluster' denied 0 0 "${workdir}"
 
-# A create that never started leaves nothing to do, even before the workdir exists.
-run_case missing-workdir 0 'nothing to clean up' not-found 0 0 "${tmp_dir}/absent"
+# A zero exit from ksail does not prove deletion. AWS keeps reporting the cluster until eksctl
+# actually runs, so this only passes if the fallback is driven by the probe rather than by ksail's
+# status — otherwise cleanup spends one of its two teardown attempts and then gives up.
+run_case fallback-after-silent-ksail-noop 0 'No cluster st-eks-1-1 remains' until-fallback 0 0 "${workdir}"
+
+# ksail needs the scaffolded project directory but eksctl does not, so a missing workdir must not
+# skip verification: a cluster can still be running with no local trace of it.
+run_case missing-workdir-still-present 1 'may be billable' found 0 0 "${tmp_dir}/absent"
+
+# Same path, nothing actually left — verified rather than assumed.
+run_case missing-workdir-verified-clean 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${tmp_dir}/absent"
+
+# A typo in the creation-attempt flag must not read as "nothing was created". Silently skipping
+# teardown is precisely the failure this script exists to prevent.
+run_case invalid-create-attempted 2 'must be exactly true or false' not-found 0 0 "${workdir}" maybe
 
 set +e
 skipped_output="$(PATH="${fake_bin}:${PATH}" "${cleaner}" \

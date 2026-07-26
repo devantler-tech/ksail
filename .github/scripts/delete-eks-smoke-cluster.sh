@@ -98,20 +98,37 @@ cluster_absent() {
 	esac
 }
 
-if [[ "${create_attempted}" != "true" ]]; then
+# Anything other than an explicit false is treated as "a cluster may exist".
+# Silently skipping teardown on a typo is the one failure this script exists to
+# prevent, so an unrecognised value is a usage error rather than a skip.
+if [[ "${create_attempted}" != "true" && "${create_attempted}" != "false" ]]; then
+	printf -- '--create-attempted must be exactly true or false (got %s).\n\n' \
+		"${create_attempted:-<empty>}" >&2
+	usage >&2
+	exit 2
+fi
+
+if [[ "${create_attempted}" == "false" ]]; then
 	echo "Cluster creation did not start; nothing to clean up."
 	exit 0
 fi
 
-if [[ ! -d "${workdir}" ]]; then
-	echo "No EKS smoke workdir exists; nothing to clean up."
-	exit 0
+# ksail needs the scaffolded project directory; eksctl addresses the cluster by
+# name and region. A missing workdir therefore removes one teardown path, never
+# the obligation to verify that nothing is left running.
+if [[ -d "${workdir}" ]]; then
+	cd "${workdir}"
+	ksail cluster delete --provider AWS --name "${cluster_name}" --force ||
+		echo "::warning::ksail cluster delete failed."
+else
+	echo "::warning::No EKS smoke workdir at ${workdir}; skipping ksail and using eksctl."
 fi
 
-cd "${workdir}"
-
-if ! ksail cluster delete --provider AWS --name "${cluster_name}" --force; then
-	echo "::warning::ksail cluster delete failed; falling back to eksctl delete cluster."
+# A zero exit from ksail does not prove the cluster is gone, so the fallback is
+# driven by what AWS reports rather than by the previous command's status —
+# otherwise a delete that silently no-ops spends only one of the two attempts.
+if ! cluster_absent; then
+	echo "::warning::Cluster still present; falling back to eksctl delete cluster."
 	eksctl delete cluster \
 		--name "${cluster_name}" \
 		--region "${region}" \
