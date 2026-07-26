@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage:
+  delete-eks-smoke-cluster.sh --cluster-name NAME --region REGION
+                              --workdir DIR --create-attempted true|false
+
+Tear down the ephemeral EKS smoke-test cluster and confirm it is gone.
+
+Success is judged by a post-condition — that no cluster of that name remains —
+not by the exit status of any single delete command. A create that failed before
+the cluster existed has nothing to tear down and reports success, which keeps a
+failed teardown meaning the one thing worth acting on: a billable cluster may
+still be running.
+
+Absence must be proven by an explicit not-found response. Any other probe error
+leaves the cluster state unknown and fails closed, because reporting a clean
+teardown that was never confirmed is what strands a billable cluster silently.
+EOF
+}
+
+cluster_name=""
+region=""
+workdir=""
+create_attempted=""
+
+while (($# > 0)); do
+	case "$1" in
+	--help | -h)
+		usage
+		exit 0
+		;;
+	--cluster-name)
+		cluster_name="${2:-}"
+		shift 2
+		;;
+	--region)
+		region="${2:-}"
+		shift 2
+		;;
+	--workdir)
+		workdir="${2:-}"
+		shift 2
+		;;
+	--create-attempted)
+		create_attempted="${2:-}"
+		shift 2
+		;;
+	*)
+		printf 'Unknown argument: %s\n\n' "$1" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+done
+
+if [[ -z "${cluster_name}" || -z "${region}" || -z "${workdir}" ]]; then
+	printf '--cluster-name, --region and --workdir are required.\n\n' >&2
+	usage >&2
+	exit 2
+fi
+
+# Returns 0 only when AWS explicitly reports the cluster as absent.
+cluster_absent() {
+	local output
+	local status=0
+
+	output="$(aws eks describe-cluster \
+		--name "${cluster_name}" \
+		--region "${region}" 2>&1)" || status=$?
+
+	if ((status == 0)); then
+		return 1
+	fi
+
+	case "${output}" in
+	*ResourceNotFoundException*)
+		return 0
+		;;
+	*)
+		printf '::warning::Could not determine whether cluster %s still exists in %s: %s\n' \
+			"${cluster_name}" "${region}" "${output}" >&2
+		return 1
+		;;
+	esac
+}
+
+if [[ "${create_attempted}" != "true" ]]; then
+	echo "Cluster creation did not start; nothing to clean up."
+	exit 0
+fi
+
+if [[ ! -d "${workdir}" ]]; then
+	echo "No EKS smoke workdir exists; nothing to clean up."
+	exit 0
+fi
+
+cd "${workdir}"
+
+if ! ksail cluster delete --provider AWS --name "${cluster_name}" --force; then
+	echo "::warning::ksail cluster delete failed; falling back to eksctl delete cluster."
+	eksctl delete cluster \
+		--name "${cluster_name}" \
+		--region "${region}" \
+		--wait || true
+fi
+
+if cluster_absent; then
+	printf 'No cluster %s remains in %s.\n' "${cluster_name}" "${region}"
+	exit 0
+fi
+
+printf '::error::EKS cleanup did not complete. Cluster %s is still present in %s and may be billable.\n' \
+	"${cluster_name}" "${region}" >&2
+exit 1

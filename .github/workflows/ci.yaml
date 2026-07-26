@@ -135,6 +135,7 @@ jobs:
       desktop: ${{ steps.filter.outputs.desktop }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
       cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
+      eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -284,6 +285,32 @@ jobs:
               - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
+            eks-smoke-scripts:
+              - '.github/scripts/delete-eks-smoke-cluster.sh'
+              - '.github/scripts/delete-eks-smoke-cluster.test.sh'
+              - '.github/workflows/system-test-eks.yaml'
+              - '.github/workflows/ci.yaml'
+
+  eks-smoke-scripts:
+    name: 🧹 Validate EKS Smoke Teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.eks-smoke-scripts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Verify EKS smoke teardown reports only real leaks
+        run: |
+          shellcheck \
+            .github/scripts/delete-eks-smoke-cluster.sh \
+            .github/scripts/delete-eks-smoke-cluster.test.sh
+          .github/scripts/delete-eks-smoke-cluster.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff

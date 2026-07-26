@@ -284,30 +284,8 @@ jobs:
         env:
           EKS_CREATE_ATTEMPTED: ${{ steps.create.outputs.attempted }}
         run: |
-          set +e
-          if [ "${EKS_CREATE_ATTEMPTED:-}" != "true" ]; then
-            echo "Cluster creation did not start; nothing to clean up."
-            exit 0
-          fi
-
-          if [ ! -d "$KSAIL_EKS_WORKDIR" ]; then
-            echo "No EKS smoke workdir exists; nothing to clean up."
-            exit 0
-          fi
-
-          cd "$KSAIL_EKS_WORKDIR"
-          ksail cluster delete --provider AWS --name "$KSAIL_EKS_CLUSTER_NAME" --force
-          delete_status=$?
-          if [ "$delete_status" -ne 0 ]; then
-            echo "::warning::ksail cluster delete failed; falling back to eksctl delete cluster."
-            eksctl delete cluster \
-              --name "$KSAIL_EKS_CLUSTER_NAME" \
-              --region "$AWS_REGION" \
-              --wait
-            delete_status=$?
-          fi
-
-          if [ "$delete_status" -ne 0 ]; then
-            echo "::warning::EKS cleanup did not complete. Check AWS for cluster '$KSAIL_EKS_CLUSTER_NAME' in region '$AWS_REGION'."
-            exit "$delete_status"
-          fi
+          "$GITHUB_WORKSPACE/.github/scripts/delete-eks-smoke-cluster.sh" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --workdir "$KSAIL_EKS_WORKDIR" \
+            --create-attempted "${EKS_CREATE_ATTEMPTED:-false}"

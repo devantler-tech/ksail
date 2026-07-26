@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cleaner="${script_dir}/delete-eks-smoke-cluster.sh"
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "${tmp_dir}"' EXIT
+fake_bin="${tmp_dir}/fake-bin"
+workdir="${tmp_dir}/workdir"
+pass_count=0
+
+mkdir -p "${fake_bin}" "${workdir}"
+
+cat >"${fake_bin}/aws" <<'EOF'
+#!/usr/bin/env bash
+case "${FAKE_AWS_DESCRIBE_MODE:-not-found}" in
+found)
+	echo '{"cluster":{"status":"ACTIVE"}}'
+	exit 0
+	;;
+denied)
+	echo 'An error occurred (AccessDeniedException) when calling the DescribeCluster operation: not authorized' >&2
+	exit 254
+	;;
+*)
+	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: st-eks-1-1.' >&2
+	exit 254
+	;;
+esac
+EOF
+
+cat >"${fake_bin}/ksail" <<'EOF'
+#!/usr/bin/env bash
+exit "${FAKE_KSAIL_DELETE_STATUS:-0}"
+EOF
+
+cat >"${fake_bin}/eksctl" <<'EOF'
+#!/usr/bin/env bash
+exit "${FAKE_EKSCTL_DELETE_STATUS:-0}"
+EOF
+
+chmod +x "${fake_bin}/aws" "${fake_bin}/ksail" "${fake_bin}/eksctl"
+
+run_case() {
+	local scenario="$1" expected_status="$2" expected_output="$3"
+	local describe_mode="$4" ksail_status="$5" eksctl_status="$6" case_workdir="$7"
+	local output status
+
+	set +e
+	output="$(PATH="${fake_bin}:${PATH}" \
+		FAKE_AWS_DESCRIBE_MODE="${describe_mode}" \
+		FAKE_KSAIL_DELETE_STATUS="${ksail_status}" \
+		FAKE_EKSCTL_DELETE_STATUS="${eksctl_status}" \
+		"${cleaner}" \
+		--cluster-name st-eks-1-1 \
+		--region us-east-1 \
+		--workdir "${case_workdir}" \
+		--create-attempted true 2>&1)"
+	status=$?
+	set -e
+
+	if [[ "${status}" -ne "${expected_status}" ]]; then
+		printf 'FAIL: %s: expected status %s, got %s\n%s\n' \
+			"${scenario}" "${expected_status}" "${status}" "${output}" >&2
+		return 1
+	fi
+	if [[ "${output}" != *"${expected_output}"* ]]; then
+		printf 'FAIL: %s: expected output containing %q, got:\n%s\n' \
+			"${scenario}" "${expected_output}" "${output}" >&2
+		return 1
+	fi
+
+	pass_count=$((pass_count + 1))
+	printf 'PASS: %s\n' "${scenario}"
+}
+
+# Regression for the failure seen in run 29822971789: `ksail cluster create` died before any
+# cluster existed, so both delete paths returned not-found and the step failed the job. Nothing
+# was left running, so cleanup must report success — otherwise a red cleanup no longer means
+# "a billable cluster may still be up".
+run_case nothing-to-clean 0 'No cluster st-eks-1-1 remains' not-found 1 1 "${workdir}"
+
+# The ordinary success path: ksail tears the cluster down and AWS confirms it is gone.
+run_case deleted-by-ksail 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${workdir}"
+
+# ksail fails, the eksctl fallback succeeds, and absence is confirmed.
+run_case deleted-by-eksctl-fallback 0 'No cluster st-eks-1-1 remains' not-found 1 0 "${workdir}"
+
+# The case that must stay red: every delete "succeeded" but the cluster is still there, so it is
+# still accruing cost and a human has to look.
+run_case still-present 1 'may be billable' found 0 0 "${workdir}"
+
+# Fail closed. A probe that cannot prove absence (denied, throttled, unreachable) must never be
+# reported as a clean teardown, because that is what strands a billable cluster silently.
+run_case probe-inconclusive 1 'Could not determine whether cluster' denied 0 0 "${workdir}"
+
+# A create that never started leaves nothing to do, even before the workdir exists.
+run_case missing-workdir 0 'nothing to clean up' not-found 0 0 "${tmp_dir}/absent"
+
+set +e
+skipped_output="$(PATH="${fake_bin}:${PATH}" "${cleaner}" \
+	--cluster-name st-eks-1-1 \
+	--region us-east-1 \
+	--workdir "${workdir}" \
+	--create-attempted false 2>&1)"
+skipped_status=$?
+set -e
+if [[ "${skipped_status}" -ne 0 || "${skipped_output}" != *"Cluster creation did not start"* ]]; then
+	printf 'FAIL: create-not-attempted: expected clean skip, got status %s:\n%s\n' \
+		"${skipped_status}" "${skipped_output}" >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: create-not-attempted\n'
+
+set +e
+"${cleaner}" --cluster-name st-eks-1-1 --region us-east-1 >/dev/null 2>&1
+missing_arg_status=$?
+set -e
+if [[ "${missing_arg_status}" -ne 2 ]]; then
+	printf 'FAIL: missing-required-args: expected status 2, got %s\n' "${missing_arg_status}" >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: missing-required-args\n'
+
+printf '\n%s cases passed.\n' "${pass_count}"
