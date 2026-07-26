@@ -16,7 +16,11 @@ cat >"${fake_bin}/aws" <<'EOF'
 #!/usr/bin/env bash
 case "${FAKE_AWS_DESCRIBE_MODE:-not-found}" in
 found)
-	echo '{"cluster":{"status":"ACTIVE"}}'
+	echo 'ACTIVE'
+	exit 0
+	;;
+deleting)
+	echo 'DELETING'
 	exit 0
 	;;
 denied)
@@ -90,6 +94,11 @@ run_case deleted-by-eksctl-fallback 0 'No cluster st-eks-1-1 remains' not-found 
 # The case that must stay red: every delete "succeeded" but the cluster is still there, so it is
 # still accruing cost and a human has to look.
 run_case still-present 1 'may be billable' found 0 0 "${workdir}"
+
+# EKS teardown is asynchronous, so a delete that has taken effect can still report DELETING for a
+# while. That is not a leak, and calling it one would just move the false alarm from failed creates
+# onto successful deletes.
+run_case deleting-in-progress 0 'already tearing down' deleting 0 0 "${workdir}"
 
 # Fail closed. A probe that cannot prove absence (denied, throttled, unreachable) must never be
 # reported as a clean teardown, because that is what strands a billable cluster silently.

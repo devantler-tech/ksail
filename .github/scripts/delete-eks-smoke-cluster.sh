@@ -63,16 +63,26 @@ if [[ -z "${cluster_name}" || -z "${region}" || -z "${workdir}" ]]; then
 	exit 2
 fi
 
-# Returns 0 only when AWS explicitly reports the cluster as absent.
+# Returns 0 only when the cluster is gone or is irreversibly on its way out.
 cluster_absent() {
 	local output
 	local status=0
 
 	output="$(aws eks describe-cluster \
 		--name "${cluster_name}" \
-		--region "${region}" 2>&1)" || status=$?
+		--region "${region}" \
+		--query 'cluster.status' \
+		--output text 2>&1)" || status=$?
 
 	if ((status == 0)); then
+		# Teardown is asynchronous, so a cluster still reporting DELETING is a
+		# delete that took effect rather than a leak. Treating it as one would
+		# just move the false alarm from failed creates to successful deletes.
+		if [[ "${output}" == "DELETING" ]]; then
+			printf 'Cluster %s is already tearing down in %s.\n' "${cluster_name}" "${region}"
+			return 0
+		fi
+
 		return 1
 	fi
 
