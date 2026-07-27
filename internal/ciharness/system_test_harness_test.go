@@ -498,17 +498,36 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 func assertStepTimeoutCoversRetryBudget(t *testing.T, step harnessStep) {
 	t.Helper()
 
-	const (
-		sleepSeconds        = 20
-		waitForCapacityRuns = 2
-	)
-
 	bound := regexp.MustCompile(`for _ in \{1\.\.(\d+)\}`).FindStringSubmatch(step.Run)
 	require.Len(t, bound, 2, "wait_for_capacity retry bound not found in step")
 
 	iterations, err := strconv.Atoi(bound[1])
 	require.NoError(t, err)
 	require.Positive(t, iterations)
+
+	// Derive the sleep interval and the call count from the script too. Hard-coding
+	// either lets a workflow retune (a longer sleep, a third scaling assertion)
+	// leave this guard passing while the real budget has outgrown the timeout.
+	sleeps := regexp.MustCompile(`(?m)^\s*sleep\s+(\d+)\s*$`).FindAllStringSubmatch(step.Run, -1)
+	require.NotEmpty(t, sleeps, "wait_for_capacity poll interval not found in step")
+
+	sleepSeconds, err := strconv.Atoi(sleeps[0][1])
+	require.NoError(t, err)
+	require.Positive(t, sleepSeconds)
+
+	for _, sleep := range sleeps {
+		require.Equal(
+			t, sleeps[0][1], sleep[1],
+			"step mixes poll intervals (%s vs %s); the budget below assumes one",
+			sleeps[0][1], sleep[1],
+		)
+	}
+
+	// Count invocations, not the function definition — a call always passes args.
+	waitForCapacityRuns := len(
+		regexp.MustCompile(`(?m)^\s*wait_for_capacity\s+\d`).FindAllString(step.Run, -1),
+	)
+	require.Positive(t, waitForCapacityRuns, "no wait_for_capacity invocations found in step")
 
 	pollMinutes := iterations * sleepSeconds * waitForCapacityRuns / 60
 

@@ -203,16 +203,22 @@ func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name       string
-		configPath string
+		name string
+		// configPath is the graduated gate: managed node-group mutation is
+		// enabled iff an eksctl config path is declared, because the node-group
+		// diff is computed from that file.
+		configPath           string
+		wantNodegroupInPlace bool
 	}{
 		{
-			name:       "supports component reconciliation with an eksctl config path",
-			configPath: "eks.yaml",
+			name:                 "supports component reconciliation with an eksctl config path",
+			configPath:           "eks.yaml",
+			wantNodegroupInPlace: true,
 		},
 		{
-			name:       "component reconciliation does not require an eksctl config path",
-			configPath: "",
+			name:                 "component reconciliation does not require an eksctl config path",
+			configPath:           "",
+			wantNodegroupInPlace: false,
 		},
 	}
 
@@ -235,7 +241,26 @@ func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 
 			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
 			assert.True(t, hasUpdater, "EKS scaling must not require an experimental spec field")
-			assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
+
+			// Assert the managed-node-group capability itself, not just that a
+			// wrapper was returned. Both cases always yield an
+			// UpdatableProvisioner, so a type assertion alone still passes if the
+			// factory stops enabling node-group updates entirely.
+			updatable, isUpdatable := provisioner.(*eksprovisioner.UpdatableProvisioner)
+			require.True(t, isUpdatable, "EKS must return the updatable provisioner wrapper")
+			assert.Equal(
+				t,
+				testCase.wantNodegroupInPlace,
+				updatable.SupportsInPlaceField("eks.managedNodeGroups[ng-1].desiredCapacity"),
+				"managed node-group in-place updates are gated on a declared eksctl config path",
+			)
+			// Component reconciliation stays available either way, so a
+			// non-node-group field is never advertised as in-place here.
+			assert.False(
+				t,
+				updatable.SupportsInPlaceField("eks.version"),
+				"only managed node-group fields are mutated in place",
+			)
 		})
 	}
 }
