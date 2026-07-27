@@ -325,6 +325,17 @@ jobs:
               nodegroups = Array(data["managedNodeGroups"])
               raise "eks.yaml has no managed node groups" if nodegroups.empty?
 
+              # wait_for_capacity is given one ABSOLUTE Ready-node total, so scaling
+              # N groups to the same desiredCapacity would target N x desired nodes
+              # and never converge — it would poll to its 10m budget and report a
+              # timeout instead of the real cause. The scaffolded EKS config has
+              # exactly one managed node group; say so loudly if that ever changes.
+              if nodegroups.length > 1
+                raise "eks.yaml declares #{nodegroups.length} managed node groups; " \
+                      "this smoke test scales them uniformly against a single absolute " \
+                      "Ready-node target and assumes exactly one"
+              end
+
               nodegroups.each do |nodegroup|
                 nodegroup["desiredCapacity"] = Integer(ENV.fetch("DESIRED"))
                 nodegroup["minSize"] = Integer(ENV.fetch("MIN_SIZE"))
