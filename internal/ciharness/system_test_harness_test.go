@@ -184,15 +184,28 @@ func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
 		"${{ steps.create.outputs.attempted }}",
 		cleanupStep.Env["EKS_CREATE_ATTEMPTED"],
 	)
-	guardIndex := strings.Index(
-		cleanupStep.Run,
-		`if [ "${EKS_CREATE_ATTEMPTED:-}" != "true" ]; then`,
+	// The teardown logic lives in .github/scripts/delete-eks-smoke-cluster.sh
+	// (extracted in #6363 so it is testable). The step's job is to hand the
+	// create-attempted signal to that script; the guard itself is asserted in the
+	// script below. Assert the contract where each half actually lives — pinning
+	// the guard's text to the step's inline Run is what silently rotted when the
+	// logic moved out.
+	require.Contains(
+		t, cleanupStep.Run, "delete-eks-smoke-cluster.sh",
+		"cleanup step must delegate to the extracted teardown script",
 	)
-	deleteIndex := strings.Index(cleanupStep.Run, "ksail cluster delete")
+	require.Contains(
+		t, cleanupStep.Run, `--create-attempted "${EKS_CREATE_ATTEMPTED:-false}"`,
+		"cleanup step must forward the create-attempted signal to the script",
+	)
+
+	cleanupScript := string(readRepoFile(t, ".github/scripts/delete-eks-smoke-cluster.sh"))
+	guardIndex := strings.Index(cleanupScript, `if [[ "${create_attempted}" == "false" ]]; then`)
+	deleteIndex := strings.Index(cleanupScript, "ksail cluster delete")
 
 	require.NotEqual(t, -1, guardIndex, "pre-create cleanup guard is missing")
 	require.NotEqual(t, -1, deleteIndex, "cluster delete command is missing")
-	assert.Less(t, guardIndex, deleteIndex)
+	assert.Less(t, guardIndex, deleteIndex, "the guard must precede the delete")
 }
 
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
