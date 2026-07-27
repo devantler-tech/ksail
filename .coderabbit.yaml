@@ -6,10 +6,16 @@
 # inheritance: without this, a repository .coderabbit.yaml is the sole config source and
 # REPLACES any organization/UI settings (the docstring ERROR gate itself lives in the UI,
 # since the YAML default is `warning`). Enabling inheritance keeps every UI/org setting —
-# path filters, request_changes_workflow, custom checks — and only overrides the one value
-# defined below, so this change stays scoped to docstrings.
+# path filters, request_changes_workflow, custom checks — and only overrides the values
+# defined below.
 inheritance: true
 reviews:
+  # Primary lever for monorepo#2344 / ksail#6364: when CodeRabbit is rate-limited (or
+  # otherwise errors), do not fail the outward review/commit status. A failing
+  # `CodeRabbit` status forces mergeStateStatus=UNSTABLE even when every required check
+  # is green. Schema default is already false; pin it so an inherited UI/org override
+  # cannot re-enable failing statuses.
+  fail_commit_status: false
   pre_merge_checks:
     # Docstring Coverage counts every function in a PR's changed files against a single
     # coverage threshold, and it cannot be scoped per-path (the only path mechanism,
