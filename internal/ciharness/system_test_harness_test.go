@@ -200,12 +200,72 @@ func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
 	)
 
 	cleanupScript := string(readRepoFile(t, ".github/scripts/delete-eks-smoke-cluster.sh"))
-	guardIndex := strings.Index(cleanupScript, `if [[ "${create_attempted}" == "false" ]]; then`)
-	deleteIndex := strings.Index(cleanupScript, "ksail cluster delete")
+	require.Contains(
+		t, cleanupScript, "ksail cluster delete",
+		"cluster delete command is missing",
+	)
 
-	require.NotEqual(t, -1, guardIndex, "pre-create cleanup guard is missing")
-	require.NotEqual(t, -1, deleteIndex, "cluster delete command is missing")
-	assert.Less(t, guardIndex, deleteIndex, "the guard must precede the delete")
+	// Prove the property behaviourally rather than by source ordering. A
+	// guard-before-delete text check passes even if the guard's `exit 0` is
+	// removed, which is the only thing that actually stops the delete — so run the
+	// script for real with --create-attempted false and assert that no teardown
+	// tool is ever invoked.
+	diagnostics, invoked := runCleanupScriptWithoutCreate(t)
+	assert.Empty(
+		t, invoked,
+		"nothing may be invoked when creation never started, but the script ran: %v",
+		invoked,
+	)
+	assert.Contains(t, diagnostics, "nothing to clean up")
+}
+
+// runCleanupScriptWithoutCreate executes the teardown script on the
+// create-never-attempted path with every teardown binary replaced by a recorder,
+// and returns the script's output plus the names of any binaries it invoked.
+func runCleanupScriptWithoutCreate(t *testing.T) (string, []string) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	callLog := filepath.Join(tempDir, "invoked")
+	require.NoError(t, os.MkdirAll(binDir, 0o700))
+
+	// Any of these running at all means the guard let execution through.
+	for _, name := range []string{"ksail", "eksctl", "aws"} {
+		stub := "#!/bin/sh\nprintf '%s\\n' '" + name + "' >> \"$KSAIL_CLEANUP_CALL_LOG\"\nexit 0\n"
+		stubPath := filepath.Join(binDir, name)
+		require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o600))
+		//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
+		require.NoError(t, os.Chmod(stubPath, 0o700))
+	}
+
+	scriptPath := filepath.Join("..", "..", ".github", "scripts", "delete-eks-smoke-cluster.sh")
+	command := exec.CommandContext(t.Context(), "bash", scriptPath,
+		"--cluster-name", "fixture-cluster",
+		"--region", "us-east-1",
+		"--workdir", tempDir,
+		"--create-attempted", "false",
+	)
+	command.Env = append(
+		os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"KSAIL_CLEANUP_CALL_LOG="+callLog,
+	)
+
+	diagnostics, err := command.CombinedOutput()
+	// Deliberately assert, not require: a fall-through past the guard shows up
+	// both as a non-zero exit and as an invoked teardown binary, and reporting
+	// both makes the failure name the property rather than just the exit code.
+	assert.NoErrorf(t, err, "cleanup script must exit 0 when creation never started:\n%s", diagnostics)
+
+	recorded, readErr := os.ReadFile(callLog) //nolint:gosec // Test-owned temporary path.
+	if os.IsNotExist(readErr) {
+		return string(diagnostics), nil
+	}
+
+	require.NoError(t, readErr)
+
+	return string(diagnostics), strings.Fields(string(recorded))
 }
 
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
