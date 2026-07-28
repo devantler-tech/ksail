@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -103,6 +104,11 @@ func NewInstaller(
 		}
 	}
 
+	valuesYAML, err := buildValuesYaml(clusterName, region, serviceAccountName, haEnabled)
+	if err != nil {
+		return nil, fmt.Errorf("build AWS load balancer controller Helm values: %w", err)
+	}
+
 	managed := len(ksailManaged) > 0 && ksailManaged[0]
 
 	return &Installer{
@@ -132,7 +138,7 @@ func NewInstaller(
 					ReleaseOwnershipLabel: releaseOwnershipValue,
 				},
 				Timeout:    timeout,
-				ValuesYaml: buildValuesYaml(clusterName, region, serviceAccountName, haEnabled),
+				ValuesYaml: valuesYAML,
 			},
 		),
 		client:       client,
@@ -259,29 +265,39 @@ func (i *Installer) Uninstall(ctx context.Context) error {
 // disabled: it makes this controller the default for every new LoadBalancer
 // Service, and during install its admitted-but-not-ready window rejects
 // Services created by concurrently-installing components.
-func buildValuesYaml(clusterName, region, serviceAccountName string, haEnabled bool) string {
-	parts := []string{
-		"clusterName: " + clusterName,
-		"enableServiceMutatorWebhook: false",
+func buildValuesYaml(
+	clusterName, region, serviceAccountName string,
+	haEnabled bool,
+) (string, error) {
+	type serviceAccountValues struct {
+		Create bool   `json:"create"`
+		Name   string `json:"name"`
 	}
 
-	if region != "" {
-		parts = append(parts, "region: "+region)
+	values := struct {
+		ClusterName                 string                `json:"clusterName"`
+		EnableServiceMutatorWebhook bool                  `json:"enableServiceMutatorWebhook"`
+		Region                      string                `json:"region,omitempty"`
+		ReplicaCount                int                   `json:"replicaCount"`
+		ServiceAccount              *serviceAccountValues `json:"serviceAccount,omitempty"`
+	}{
+		ClusterName:  clusterName,
+		Region:       region,
+		ReplicaCount: 1,
 	}
 
 	if serviceAccountName = strings.TrimSpace(serviceAccountName); serviceAccountName != "" {
-		// Quoted: DNS-1123 names like "123", "null", "true" or "on" are
-		// otherwise parsed as YAML numbers/nulls/booleans, not strings.
-		// Validation guarantees the name contains no quote or backslash.
-		parts = append(parts,
-			"serviceAccount:\n  create: false\n  name: \""+serviceAccountName+"\"")
+		values.ServiceAccount = &serviceAccountValues{Name: serviceAccountName}
 	}
 
 	if haEnabled {
-		parts = append(parts, "replicaCount: 2")
-	} else {
-		parts = append(parts, "replicaCount: 1")
+		values.ReplicaCount = 2
 	}
 
-	return strings.Join(parts, "\n")
+	encoded, err := yaml.Marshal(values)
+	if err != nil {
+		return "", fmt.Errorf("marshal AWS load balancer controller Helm values: %w", err)
+	}
+
+	return string(encoded), nil
 }
