@@ -1,23 +1,12 @@
 package diff_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
-
-// theSecretPassword is the credential a rotation moves away from. Every
-// assertion below checks it never reaches a Change, because Change values are
-// rendered by the cluster-update output.
-//
-// It is a fabricated literal that has never been a real credential — it exists
-// precisely so a test can prove this value does NOT escape into output.
-//
-//nolint:gosec // G101: an intentional fake credential, and the subject of the leak assertions.
-const theSecretPassword = "ghp_rotated_token_value_9f3a"
 
 func newCredentialEngine() *specdiff.Engine {
 	return specdiff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -53,11 +42,16 @@ func TestCheckRegistryCredentialDetectsRotation(t *testing.T) {
 	}
 }
 
-// TestCheckRegistryCredentialNeverRendersTheCredential pins the redaction
-// property. The engine is given a single bit rather than the credential or a
-// digest of it, so the only thing it can render is its own fixed placeholder —
-// this test is what proves that placeholder stayed placeholder.
-func TestCheckRegistryCredentialNeverRendersTheCredential(t *testing.T) {
+// TestCheckRegistryCredentialRendersOnlyRedactedPlaceholders pins the redaction
+// property.
+//
+// The engine now receives a single bit rather than the credential or a digest of
+// it, so no input it is given can reach a rendered value — asserting that some
+// secret literal is absent would be unfalsifiable here. What is still worth
+// pinning, and what this asserts, is that the rendered values are the fixed
+// placeholders: reintroducing a value-carrying parameter and rendering it fails
+// this test.
+func TestCheckRegistryCredentialRendersOnlyRedactedPlaceholders(t *testing.T) {
 	t.Parallel()
 
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -68,10 +62,12 @@ func TestCheckRegistryCredentialNeverRendersTheCredential(t *testing.T) {
 	}
 
 	change := result.InPlaceChanges[0]
-	for _, rendered := range []string{change.OldValue, change.NewValue, change.Reason} {
-		if strings.Contains(rendered, theSecretPassword) {
-			t.Errorf("rendered value %q leaks the credential", rendered)
-		}
+	if change.OldValue != "stale (redacted)" {
+		t.Errorf("old value = %q, want the fixed redacted placeholder", change.OldValue)
+	}
+
+	if change.NewValue != "rotated (redacted)" {
+		t.Errorf("new value = %q, want the fixed redacted placeholder", change.NewValue)
 	}
 }
 
