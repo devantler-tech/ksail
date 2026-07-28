@@ -17,12 +17,17 @@ import (
 // about which context the write resolves, not about the write itself.
 var errStubREST = errors.New("stub rest config")
 
+// testKubeContext is the context every case below resolves. The drift read and
+// the credential write must both land on it: a test that let them differ would
+// pass while production delivered a rotated credential to the wrong cluster.
+const testKubeContext = "admin@prod"
+
 // newExternalRegistryCluster builds a cluster whose registry carries inline
 // credentials. token is the password half — the value a rotation replaces.
-func newExternalRegistryCluster(kubeContext, token string) *v1alpha1.Cluster {
+func newExternalRegistryCluster(token string) *v1alpha1.Cluster {
 	clusterCfg := v1alpha1.NewCluster()
 	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
-	clusterCfg.Spec.Cluster.Connection.Context = kubeContext
+	clusterCfg.Spec.Cluster.Connection.Context = testKubeContext
 	clusterCfg.Spec.Cluster.LocalRegistry.Registry = "ksail-bot:" + token + "@ghcr.io/devantler-tech/repo"
 
 	return clusterCfg
@@ -48,14 +53,14 @@ func TestEnsureRegistryCredentialsUsesTheGivenContext(t *testing.T) {
 	)
 	defer restore()
 
-	clusterCfg := newExternalRegistryCluster("admin@prod", "rotated-token")
+	clusterCfg := newExternalRegistryCluster("rotated-token")
 
 	err := fluxinstaller.EnsureRegistryCredentials(
-		context.Background(), "/tmp/kubeconfig", "admin@prod", clusterCfg,
+		context.Background(), "/tmp/kubeconfig", testKubeContext, clusterCfg,
 	)
 
 	require.ErrorIs(t, err, errStubREST)
-	assert.Equal(t, "admin@prod", gotContext,
+	assert.Equal(t, testKubeContext, gotContext,
 		"the credential write must target the context the drift check read from, "+
 			"not the ambient current-context")
 }
@@ -79,14 +84,14 @@ func TestRegistryCredentialDriftedReadsTheGivenContext(t *testing.T) {
 	)
 	defer restore()
 
-	clusterCfg := newExternalRegistryCluster("admin@prod", "rotated-token")
+	clusterCfg := newExternalRegistryCluster("rotated-token")
 
 	_, err := fluxinstaller.RegistryCredentialDrifted(
-		context.Background(), "/tmp/kubeconfig", "admin@prod", clusterCfg,
+		context.Background(), "/tmp/kubeconfig", testKubeContext, clusterCfg,
 	)
 
 	require.ErrorIs(t, err, errStubREST)
-	assert.Equal(t, "admin@prod", gotContext,
+	assert.Equal(t, testKubeContext, gotContext,
 		"the drift check must read the context the credential write targets, "+
 			"not the ambient current-context")
 }
@@ -104,7 +109,7 @@ func TestRegistryCredentialDriftedSkipsClusterWithoutCredentials(t *testing.T) {
 	defer restore()
 
 	drifted, err := fluxinstaller.RegistryCredentialDrifted(
-		context.Background(), "/tmp/kubeconfig", "admin@prod", v1alpha1.NewCluster(),
+		context.Background(), "/tmp/kubeconfig", testKubeContext, v1alpha1.NewCluster(),
 	)
 
 	require.NoError(t, err)
@@ -121,7 +126,7 @@ func TestHasExternalRegistryCredentials(t *testing.T) {
 		"a default cluster has no external registry")
 	assert.True(t,
 		fluxinstaller.HasExternalRegistryCredentials(
-			newExternalRegistryCluster("admin@prod", "a-token"),
+			newExternalRegistryCluster("a-token"),
 		),
 		"an external registry with inline credentials is worth a drift check")
 }
@@ -133,22 +138,26 @@ func TestBuildRegistrySecretSeparatesRotations(t *testing.T) {
 	t.Parallel()
 
 	before, err := fluxinstaller.BuildRegistrySecret(
-		newExternalRegistryCluster("admin@prod", "first-token"),
+		newExternalRegistryCluster("first-token"),
 	)
 	require.NoError(t, err)
 
 	repeat, err := fluxinstaller.BuildRegistrySecret(
-		newExternalRegistryCluster("admin@prod", "first-token"),
+		newExternalRegistryCluster("first-token"),
 	)
 	require.NoError(t, err)
 
 	after, err := fluxinstaller.BuildRegistrySecret(
-		newExternalRegistryCluster("admin@prod", "a-different-token"),
+		newExternalRegistryCluster("a-different-token"),
 	)
 	require.NoError(t, err)
 
 	firstConfig := before.Data[corev1.DockerConfigJsonKey]
-	require.NotEmpty(t, firstConfig, "an external registry with credentials must yield a docker config")
+	require.NotEmpty(
+		t,
+		firstConfig,
+		"an external registry with credentials must yield a docker config",
+	)
 
 	assert.False(t,
 		fluxinstaller.DockerConfigsDiffer(firstConfig, repeat.Data[corev1.DockerConfigJsonKey]),
