@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1480,7 +1481,7 @@ func newRegionRecordingEKSService(
 		if name != "" {
 			_, region, err := clusterapi.ExportEKSConfigForCreate(name)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("resolve EKS config for %q: %w", name, err)
 			}
 
 			recorder.record(region)
