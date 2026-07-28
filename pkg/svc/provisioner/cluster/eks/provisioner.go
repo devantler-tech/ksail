@@ -2,15 +2,26 @@ package eksprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"sigs.k8s.io/yaml"
+)
+
+var (
+	errEKSCreateConfigMetadataRequired = errors.New("metadata is required")
+	errEKSCreateConfigMetadataType     = errors.New("metadata must be an object")
 )
 
 // Provisioner manages Amazon EKS clusters via the eksctl CLI.
@@ -154,9 +165,15 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
+	effectiveConfigPath, cleanup, err := p.effectiveCreateConfig()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	err = p.client.CreateClusterWithKubeconfig(
 		ctx,
-		p.configPath,
+		effectiveConfigPath,
 		p.region,
 		p.kubeconfigPath,
 	)
@@ -288,4 +305,87 @@ func (p *Provisioner) resolveName(name string) string {
 	}
 
 	return p.name
+}
+
+// effectiveCreateConfig copies the declarative eksctl config to a private temporary file and
+// replaces metadata.region with the region selected by KSail's credential/lifecycle resolver. This
+// keeps eksctl's config-file-only invocation aligned with the exact region used for identity capture
+// and cleanup without modifying the user's source file.
+func (p *Provisioner) effectiveCreateConfig() (string, func(), error) {
+	region := strings.TrimSpace(p.region)
+	if region == "" {
+		return p.configPath, func() {}, nil
+	}
+
+	effectiveData, err := effectiveCreateConfigData(p.configPath, region)
+	if err != nil {
+		return "", func() {}, err
+	}
+
+	return writeEffectiveCreateConfig(effectiveData)
+}
+
+func effectiveCreateConfigData(configPath, region string) ([]byte, error) {
+	canonical, err := fsutil.EvalCanonicalPath(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize EKS create config: %w", err)
+	}
+
+	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
+	if err != nil {
+		return nil, fmt.Errorf("read EKS create config: %w", err)
+	}
+
+	var config map[string]any
+
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		return nil, fmt.Errorf("parse EKS create config: %w", err)
+	}
+
+	metadataValue, exists := config["metadata"]
+	if !exists {
+		return nil, fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigMetadataRequired)
+	}
+
+	metadata, ok := metadataValue.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigMetadataType)
+	}
+
+	metadata["region"] = region
+
+	effectiveData, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("marshal effective EKS create config: %w", err)
+	}
+
+	return effectiveData, nil
+}
+
+func writeEffectiveCreateConfig(data []byte) (string, func(), error) {
+	tempFile, err := os.CreateTemp("", "ksail-eks-create-*.yaml")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create effective EKS create config: %w", err)
+	}
+
+	tempPath := tempFile.Name()
+	cleanup := func() { _ = os.Remove(tempPath) }
+
+	_, writeErr := tempFile.Write(data)
+	closeErr := tempFile.Close()
+
+	if writeErr != nil {
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("write effective EKS create config: %w", writeErr)
+	}
+
+	if closeErr != nil {
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("close effective EKS create config: %w", closeErr)
+	}
+
+	return tempPath, cleanup, nil
 }

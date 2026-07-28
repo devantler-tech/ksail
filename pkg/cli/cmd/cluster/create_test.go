@@ -29,7 +29,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errSTSUnavailable = errors.New("STS unavailable")
+var (
+	errSTSUnavailable       = errors.New("STS unavailable")
+	errRequiredStateFailure = errors.New("required state write failed")
+	errTTLCleanupFailure    = errors.New("TTL cleanup failed")
+)
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
@@ -343,6 +347,36 @@ func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
 }
 
+func TestFinishCreateWithTTL_CleansUpWithoutWaitingAfterPersistenceFailure(t *testing.T) {
+	t.Parallel()
+
+	cleanupCalled := false
+	waitCalled := false
+
+	err := cluster.ExportFinishCreateWithTTL(
+		errRequiredStateFailure,
+		func() error {
+			cleanupCalled = true
+
+			return errTTLCleanupFailure
+		},
+		func() error {
+			waitCalled = true
+
+			return nil
+		},
+	)
+
+	assert.True(
+		t,
+		cleanupCalled,
+		"a TTL cluster must be deleted after required state persistence fails",
+	)
+	assert.False(t, waitCalled, "a known-fatal state error must not enter the normal TTL wait")
+	require.ErrorIs(t, err, errRequiredStateFailure)
+	require.ErrorIs(t, err, errTTLCleanupFailure)
+}
+
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestCreate_EKSProfileRegionFeedsIdentityCapture(t *testing.T) {
 	workingDir := t.TempDir()
@@ -373,6 +407,17 @@ func TestCreate_EKSProfileRegionFeedsIdentityCapture(t *testing.T) {
 	cmd.SetArgs([]string{"--gitops-engine", "ArgoCD"})
 	require.NoError(t, cmd.Execute())
 	assert.Equal(t, "eu-north-1", capturedRegion)
+
+	ownership, err := state.LoadEKSOwnershipState("st-eks", "eu-north-1")
+	require.NoError(t, err)
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	assert.Equal(t, v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "AWS_REGION",
+		AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}, ownership.AWSOptions)
 }
 
 func writeEKSProfileRegionCreateTestFiles(t *testing.T, workingDir string) {

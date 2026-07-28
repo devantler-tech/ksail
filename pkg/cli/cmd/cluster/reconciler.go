@@ -11,9 +11,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 )
 
@@ -25,12 +27,23 @@ var errMetricsServerDisableUnsupported = errors.New(
 	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
 )
 
+// errEKSLoadBalancerControllerOwnershipRequired reports that desired removal
+// cannot converge while a live release lacks exact-region KSail ownership.
+var errEKSLoadBalancerControllerOwnershipRequired = errors.New(
+	"AWS load balancer controller ownership is unresolved; preserve the live release",
+)
+
+var errEKSLoadBalancerControllerMutationSkipped = errors.New(
+	"AWS load balancer controller update was skipped; desired state remains unresolved",
+)
+
 // componentReconciler applies component-level changes detected by the DiffEngine.
 // It maps field names from the diff to installer Install/Uninstall operations.
 type componentReconciler struct {
 	cmd         *cobra.Command
 	clusterCfg  *v1alpha1.Cluster
 	clusterName string
+	eksRegion   string
 	factories   *setup.InstallerFactories
 	// autoscalerReconciled tracks whether the cluster autoscaler has already been
 	// reconciled during this update pass. Multiple diff fields share the
@@ -40,6 +53,16 @@ type componentReconciler struct {
 	// subsequent calls surface the same failure instead of silently succeeding.
 	autoscalerReconciled bool
 	autoscalerErr        error
+	// loadBalancerReconciled coalesces the generic load-balancer field and the
+	// EKS-specific controller opt-in when both change in one update pass.
+	loadBalancerReconciled bool
+	loadBalancerErr        error
+	// eksLoadBalancerOwnershipUpdated is set only after this update pass actually
+	// installs/upgrades or uninstalls the EKS controller. If untouched, final state
+	// persistence preserves the prior exact-region ownership marker.
+	eksLoadBalancerOwnershipUpdated bool
+	eksLoadBalancerManaged          bool
+	eksLoadBalancerReleaseIdentity  string
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
@@ -47,11 +70,18 @@ func newComponentReconciler(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	eksRegion ...string,
 ) *componentReconciler {
+	region := ""
+	if len(eksRegion) > 0 {
+		region = strings.TrimSpace(eksRegion[0])
+	}
+
 	return &componentReconciler{
 		cmd:         cmd,
 		clusterCfg:  clusterCfg,
 		clusterName: clusterName,
+		eksRegion:   region,
 		factories:   getInstallerFactories(),
 	}
 }
@@ -115,6 +145,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.tag":                      r.reconcileWorkloadTag,
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
+	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -129,6 +160,24 @@ func (r *componentReconciler) handlerForField(
 	}
 
 	return nil, false
+}
+
+func isComponentReconcileField(field string) bool {
+	switch field {
+	case "cluster.cni",
+		"cluster.csi",
+		"cluster.metricsServer",
+		"cluster.loadBalancer",
+		"cluster.certManager",
+		"cluster.policyEngine",
+		"cluster.gitOpsEngine",
+		"cluster.workload.tag",
+		"cluster.workload.flux.distributionVersion",
+		specdiff.EKSLoadBalancerControllerField:
+		return true
+	default:
+		return strings.HasPrefix(field, "cluster.autoscaler.node.")
+	}
 }
 
 // reconcileCNI switches the CNI by installing the new CNI.
@@ -193,16 +242,161 @@ func (r *componentReconciler) reconcileMetricsServer(
 // reconcileLoadBalancer installs or uninstalls the load balancer.
 func (r *componentReconciler) reconcileLoadBalancer(
 	ctx context.Context,
-	_ clusterupdate.Change,
+	change clusterupdate.Change,
+) error {
+	// A generic EKS load-balancer change with the controller opt-in disabled is
+	// intentionally a no-op. Do not consume the coalescing slot here: when the
+	// opt-in also changed, its later dedicated diff must still reach uninstall.
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		change.Field != specdiff.EKSLoadBalancerControllerField &&
+		!r.clusterCfg.Spec.Cluster.EKS.ExperimentalAWSLoadBalancerController {
+		return nil
+	}
+
+	if r.loadBalancerReconciled {
+		return r.loadBalancerErr
+	}
+
+	r.loadBalancerReconciled = true
+	r.loadBalancerErr = r.doReconcileLoadBalancer(ctx)
+
+	return r.loadBalancerErr
+}
+
+func (r *componentReconciler) doReconcileLoadBalancer(
+	ctx context.Context,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
-		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
-		if err != nil {
-			return fmt.Errorf("failed to install load balancer: %w", err)
-		}
+		return r.reconcileLoadBalancerInstall(ctx)
+	}
+
+	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	return r.reconcileLoadBalancerUninstall(ctx)
+}
+
+func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) error {
+	controllerManaged, releaseIdentity, err := r.installLoadBalancer(ctx)
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS && controllerManaged {
+		r.eksLoadBalancerOwnershipUpdated = true
+		r.eksLoadBalancerManaged = true
+		r.eksLoadBalancerReleaseIdentity = releaseIdentity
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to install load balancer: %w", err)
+	}
+
+	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	if !controllerManaged {
+		return errEKSLoadBalancerControllerMutationSkipped
 	}
 
 	return nil
+}
+
+func (r *componentReconciler) reconcileLoadBalancerUninstall(ctx context.Context) error {
+	managed, releaseIdentity, err := r.eksLoadBalancerControllerOwnership()
+	if err != nil {
+		return err
+	}
+
+	if !managed {
+		// A live Helm release without exact-region KSail ownership state may be
+		// manually managed. Preserve it, but report unresolved convergence so the
+		// requested removal is not recorded in the applied baseline as success.
+		return errEKSLoadBalancerControllerOwnershipRequired
+	}
+
+	err = setup.UninstallEKSLoadBalancerControllerSilent(
+		ctx,
+		r.clusterCfg,
+		r.factories,
+		releaseIdentity,
+	)
+	if err != nil && (errors.Is(err, helm.ErrReleaseNotFound) ||
+		errors.Is(err, helm.ErrNoReleaseStorage)) {
+		r.eksLoadBalancerOwnershipUpdated = true
+		r.eksLoadBalancerManaged = false
+		r.eksLoadBalancerReleaseIdentity = ""
+
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to uninstall load balancer: %w", err)
+	}
+
+	r.eksLoadBalancerOwnershipUpdated = true
+	r.eksLoadBalancerManaged = false
+	r.eksLoadBalancerReleaseIdentity = ""
+
+	return nil
+}
+
+func (r *componentReconciler) installLoadBalancer(ctx context.Context) (bool, string, error) {
+	if r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		managed, releaseIdentity, err := setup.InstallEKSLoadBalancerControllerWithResult(
+			ctx,
+			r.clusterCfg,
+			r.factories,
+		)
+		if err != nil {
+			return managed, releaseIdentity, fmt.Errorf(
+				"install EKS load balancer controller: %w",
+				err,
+			)
+		}
+
+		return managed, releaseIdentity, nil
+	}
+
+	err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		return false, "", fmt.Errorf("install load balancer: %w", err)
+	}
+
+	return false, "", nil
+}
+
+func (r *componentReconciler) eksLoadBalancerControllerOwnershipAfterReconcile() (
+	bool,
+	string,
+	error,
+) {
+	if r.eksLoadBalancerOwnershipUpdated {
+		return r.eksLoadBalancerManaged, r.eksLoadBalancerReleaseIdentity, nil
+	}
+
+	return r.eksLoadBalancerControllerOwnership()
+}
+
+func (r *componentReconciler) eksLoadBalancerControllerOwnership() (bool, string, error) {
+	if r.eksRegion == "" {
+		return false, "", nil
+	}
+
+	snapshot, err := state.LoadEKSComponentState(r.clusterName, r.eksRegion)
+	if err != nil {
+		if errors.Is(err, state.ErrEKSComponentStateNotFound) {
+			return false, "", nil
+		}
+
+		return false, "", fmt.Errorf("verify AWS load balancer controller ownership: %w", err)
+	}
+
+	return snapshot.AWSLoadBalancerControllerManaged,
+		snapshot.AWSLoadBalancerControllerReleaseIdentity,
+		nil
+}
+
+func (r *componentReconciler) hasEKSLoadBalancerOwnershipUpdate() bool {
+	return r != nil && r.eksLoadBalancerOwnershipUpdated
 }
 
 // reconcileClusterAutoscaler installs or uninstalls the Cluster Autoscaler.

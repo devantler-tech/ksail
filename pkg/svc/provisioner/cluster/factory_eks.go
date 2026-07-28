@@ -70,18 +70,16 @@ func (f DefaultFactory) createEKSProvisioner(
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
 	}
 
-	// The Updater capability is discovered by type assertion, so the
-	// experimental in-place update path is gated at construction: without the
-	// opt-in the orchestrator sees no Updater and keeps today's recreate flow.
-	// A config path is required too — with no declared eksctl.yaml (e.g. the
-	// operator's name/region-only construction) the updater would have no
-	// source of truth and silently report zero changes, which is worse than
-	// falling back to the existing flow.
-	if cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates && eksConfig.ConfigPath != "" {
-		return eksprovisioner.NewUpdatableProvisioner(provisioner), eksConfig, nil
-	}
+	// EKS always exposes Updater so component-only changes can reconcile without
+	// opting into experimental node-group mutation. Managed node-group updates
+	// remain gated by both the explicit flag and a declared eksctl config path.
+	managedNodegroupUpdates := cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates &&
+		eksConfig.ConfigPath != ""
 
-	return provisioner, eksConfig, nil
+	return eksprovisioner.NewUpdatableProvisioner(
+		provisioner,
+		eksprovisioner.WithManagedNodegroupUpdates(managedNodegroupUpdates),
+	), eksConfig, nil
 }
 
 // resolveEKSCredentialOptions snapshots one AWS resolution and derives aligned

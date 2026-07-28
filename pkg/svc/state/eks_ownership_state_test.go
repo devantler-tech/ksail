@@ -1,15 +1,30 @@
 package state_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// canonicalAWSOptions is the default environment-variable-name mapping.
+//
+//nolint:gosec // G101: these are environment-variable names, never credential values.
+func canonicalAWSOptions() v1alpha1.OptionsAWS {
+	return v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "AWS_PROFILE",
+		RegionEnvVar:          "AWS_REGION",
+		AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}
+}
 
 func TestSaveLoadEKSOwnershipState(t *testing.T) {
 	t.Parallel()
@@ -21,6 +36,13 @@ func TestSaveLoadEKSOwnershipState(t *testing.T) {
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/ownership-round-trip",
 		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "KSAIL_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "KSAIL_SECRET",
+			SessionTokenEnvVar:    "KSAIL_SESSION",
+		},
 	}
 
 	require.NoError(t, state.SaveEKSOwnershipState(want.ClusterName, want.Region, want))
@@ -41,6 +63,7 @@ func TestEKSOwnershipStateIsScopedPerRegion(t *testing.T) {
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions:  canonicalAWSOptions(),
 	}
 	east := &state.EKSOwnershipState{
 		Version:     state.EKSOwnershipStateVersion,
@@ -49,6 +72,7 @@ func TestEKSOwnershipStateIsScopedPerRegion(t *testing.T) {
 		AccountID:   "210987654321",
 		ClusterARN:  "arn:aws:eks:us-east-1:210987654321:cluster/" + clusterName,
 		CreatedAt:   time.Date(2026, 7, 18, 12, 1, 0, 0, time.UTC),
+		AWSOptions:  canonicalAWSOptions(),
 	}
 
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, north.Region, north))
@@ -61,6 +85,99 @@ func TestEKSOwnershipStateIsScopedPerRegion(t *testing.T) {
 	gotEast, err := state.LoadEKSOwnershipState(clusterName, east.Region)
 	require.NoError(t, err)
 	assert.Equal(t, east, gotEast)
+}
+
+func TestListEKSOwnershipStatesReturnsSortedValidatedRegions(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "ownership-list-regions"
+	for _, region := range []string{"us-west-2", "eu-north-1"} {
+		ownership := &state.EKSOwnershipState{
+			Version:     state.EKSOwnershipStateVersion,
+			ClusterName: clusterName,
+			Region:      region,
+			AccountID:   "123456789012",
+			ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+			CreatedAt:   time.Now().UTC(),
+			AWSOptions:  canonicalAWSOptions(),
+		}
+		require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+	}
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 2)
+	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+	assert.Equal(t, "us-west-2", ownerships[1].Region)
+}
+
+// TestListEKSOwnershipStatesSkipsUnusableRecords proves one legacy record in an unrelated region
+// cannot strand a cluster whose target region is recorded correctly. Before ListEKSOwnershipStates
+// skipped unusable records, the legacy file below aborted the whole listing.
+func TestListEKSOwnershipStatesSkipsUnusableRecords(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-skips-legacy"
+
+	valid := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      "eu-north-1",
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions:  canonicalAWSOptions(),
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, valid.Region, valid))
+
+	writeLegacyOwnershipRecord(t, clusterName, "us-west-2")
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 1)
+	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+}
+
+// TestListEKSOwnershipStatesReportsAbsenceWhenNoRecordIsUsable proves skipping never degrades into
+// silently succeeding with nothing: an all-legacy directory is indistinguishable from no record,
+// so the caller's absence path applies and the authoritative rebind error is still produced later.
+func TestListEKSOwnershipStatesReportsAbsenceWhenNoRecordIsUsable(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-all-legacy"
+
+	writeLegacyOwnershipRecord(t, clusterName, "eu-north-1")
+
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+}
+
+// writeLegacyOwnershipRecord writes an ownership record in the pre-awsOptions schema.
+func writeLegacyOwnershipRecord(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	legacy := map[string]any{
+		"version":     state.EKSOwnershipStateVersion,
+		"clusterName": clusterName,
+		"region":      region,
+		"accountId":   "123456789012",
+		"clusterArn":  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		"createdAt":   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+	}
+
+	data, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "eks-ownership-"+region+".json"),
+		data,
+		0o600,
+	))
 }
 
 func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *testing.T) {
@@ -78,6 +195,13 @@ func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *test
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "KSAIL_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "KSAIL_SECRET",
+			SessionTokenEnvVar:    "KSAIL_SESSION",
+		},
 	}
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, snapshot))
 
@@ -91,11 +215,17 @@ func TestEKSOwnershipStateContainsNoCredentialsAndUsesPrivatePermissions(t *test
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
 
+	var persisted map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(contents, &persisted))
+
 	for _, credentialField := range []string{
-		"accessKey", "profile", "secret", "sessionToken", "token",
+		"accessKeyId", "secretAccessKey", "sessionToken", "profile",
 	} {
-		assert.NotContains(t, string(contents), credentialField)
+		assert.NotContains(t, persisted, credentialField)
 	}
+
+	assert.Contains(t, string(persisted["awsOptions"]), `"accessKeyIdEnvVar": "KSAIL_ACCESS"`)
+	assert.Contains(t, string(persisted["awsOptions"]), `"secretAccessKeyEnvVar": "KSAIL_SECRET"`)
 
 	dirInfo, err := os.Stat(dir)
 	require.NoError(t, err)
@@ -111,6 +241,40 @@ func TestLoadEKSOwnershipStateMissingRequiresMigration(t *testing.T) {
 
 	_, err := state.LoadEKSOwnershipState("legacy-without-identity", "eu-north-1")
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+}
+
+func TestLoadEKSOwnershipStateRejectsLegacyRecordWithoutAWSOptions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clusterName = "legacy-without-aws-options"
+		region      = "eu-north-1"
+	)
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	legacy := map[string]any{
+		"version":     state.EKSOwnershipStateVersion,
+		"clusterName": clusterName,
+		"region":      region,
+		"accountId":   "123456789012",
+		"clusterArn":  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		"createdAt":   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+	}
+	data, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "eks-ownership-"+region+".json"),
+		data,
+		0o600,
+	))
+
+	_, err = state.LoadEKSOwnershipState(clusterName, region)
+	require.ErrorIs(t, err, state.ErrInvalidEKSOwnershipState)
 }
 
 func TestSaveEKSOwnershipStateRejectsMalformedIdentity(t *testing.T) {

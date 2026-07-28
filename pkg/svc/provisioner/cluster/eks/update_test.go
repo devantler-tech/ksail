@@ -91,6 +91,35 @@ func TestBaseProvisionerDoesNotImplementUpdater(t *testing.T) {
 	assert.False(t, ok, "the base EKS provisioner must not expose Updater; the capability is gated")
 }
 
+func TestDiffConfig_NodegroupUpdatesDisabledSkipsEksctl(t *testing.T) {
+	t.Parallel()
+
+	configPath := writeUpdateTestConfig(t, updateTestConfig)
+	runner := &scriptedRunner{t: t, responses: map[string][]response{}}
+	client := eksctlclient.NewClient(
+		eksctlclient.WithBinary(testBinary),
+		eksctlclient.WithRunner(runner),
+	)
+	base, err := eksprovisioner.NewProvisioner(
+		"ksail-test", "us-east-1", configPath, client, nil,
+	)
+	require.NoError(t, err)
+
+	prov := eksprovisioner.NewUpdatableProvisioner(
+		base,
+		eksprovisioner.WithManagedNodegroupUpdates(false),
+	)
+
+	diff, err := prov.DiffConfig(
+		t.Context(), "", &v1alpha1.ClusterSpec{}, &v1alpha1.ClusterSpec{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, diff.InPlaceChanges)
+	assert.Empty(t, diff.RecreateRequired)
+	assert.False(t, prov.SupportsInPlaceField("eks.managedNodeGroups[ng-1].desiredCapacity"))
+	assert.Empty(t, runner.calls, "disabled node updates must not query or mutate EKS node groups")
+}
+
 func TestDiffConfig_ScalingChangeIsInPlace(t *testing.T) {
 	t.Parallel()
 

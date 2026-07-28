@@ -37,18 +37,44 @@ var (
 	ErrClusterAutoscalerInstallerFactoryNil = errors.New(
 		"cluster-autoscaler installer factory is nil",
 	)
+	ErrAWSLoadBalancerControllerInstallerFactoryNil = errors.New(
+		"aws load balancer controller installer factory is nil",
+	)
+	ErrAWSLoadBalancerControllerOwnershipReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot report GitOps ownership",
+	)
+	ErrAWSLoadBalancerControllerIdentityReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot report release identity",
+	)
+	ErrAWSLoadBalancerControllerReleaseOwnershipReporterUnavailable = errors.New(
+		"aws load balancer controller installer cannot verify KSail release ownership",
+	)
+	ErrAWSLoadBalancerControllerReleaseIdentityMismatch = errors.New(
+		"aws load balancer controller ownership is unresolved: release identity changed",
+	)
+	ErrAWSLoadBalancerControllerReleaseIdentityEmpty = errors.New(
+		"aws load balancer controller release identity is empty",
+	)
 )
 
 // InstallerFactories holds factory functions for creating component installers.
 // These can be overridden in tests for dependency injection.
 type InstallerFactories struct {
-	Flux               func(client helm.Interface, timeout time.Duration, operatorVersion string) installer.Installer
-	CertManager        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	CSI                func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	PolicyEngine       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	ArgoCD             func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	KubeletCSRApprover func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
-	ClusterAutoscaler  func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	Flux func(
+		client helm.Interface,
+		timeout time.Duration,
+		operatorVersion string,
+	) installer.Installer
+	CertManager               func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	CSI                       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	PolicyEngine              func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	ArgoCD                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	KubeletCSRApprover        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	ClusterAutoscaler         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	AWSLoadBalancerController func(
+		clusterCfg *v1alpha1.Cluster,
+		ksailManaged bool,
+	) (installer.Installer, error)
 	// EnsureArgoCDResources configures default Argo CD resources post-install.
 	EnsureArgoCDResources func(
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
@@ -306,6 +332,12 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
+	factories.AWSLoadBalancerController = func(
+		clusterCfg *v1alpha1.Cluster,
+		ksailManaged bool,
+	) (installer.Installer, error) {
+		return newEKSLoadBalancerInstaller(clusterCfg, factories, ksailManaged)
+	}
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.SetupFluxInstance = fluxinstaller.SetupInstance

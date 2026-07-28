@@ -10,8 +10,8 @@
 # Policy: the allowlist is for UNPATCHABLE findings only. The moment an
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
-# Verified with `govulncheck ./...` against ksail main (re-validated 2026-06-25):
-#   the 6 reachable advisories below, each "Fixed in: N/A" for the version
+# Verified with `govulncheck ./...` against ksail main (re-validated 2026-07-22):
+#   the reachable advisories below, each "Fixed in: N/A" for the version
 #   pinned (transitively) in go.mod. Re-validate when bumping docker, k8s.io,
 #   or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT listed —
 #   it has an upstream fix (v0.43.0) and is bumped per policy, not allowlisted.
@@ -73,3 +73,16 @@ GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via
 # untrusted PGP-signed input. Re-evaluate if kubescape migrates off
 # x/crypto/openpgp.
 GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via kubescape core.Scan; no fix; local-input-only path)
+
+# --- github.com/quay/claircore @ v1.5.35 (transitive via kubescape) ---------
+# Published 2026-07-17. GO-2026-5939 covers SSRF when an unauthenticated
+# Claircore service accepts manifests whose layer URIs point to internal or
+# cloud-metadata endpoints. The advisory provides no symbol metadata, so
+# govulncheck conservatively reports any linked Claircore package as reachable.
+# KSail does not run a Claircore service or link its remote manifest fetchers:
+# `ksail workload scan` passes a local directory to Kubescape, and
+# TestClaircoreLinkedPackagesStayInert pins both shipped modules to v1.5.35 and
+# fails if anything beyond the audited parsing/type/local-filesystem packages
+# becomes linked (issue #6008, delivered by #6012). No patched release exists;
+# remove this entry and upgrade both modules as soon as one ships.
+GO-2026-5939  # Claircore manifest-URI SSRF (CVE-2026-10517; sink not linked; no fix)

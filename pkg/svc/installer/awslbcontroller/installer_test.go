@@ -1,6 +1,7 @@
 package awslbcontrollerinstaller_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -8,20 +9,24 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
 
+type newInstallerCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	wantErr        error
+	description    string
+}
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		region      string
-		wantErr     error
-		description string
-	}{
+	tests := []newInstallerCase{
 		{
 			name: "creates installer with cluster name", clusterName: "prod-eks",
 			description: "A named cluster is the one required input",
@@ -43,13 +48,52 @@ func TestNewInstaller(t *testing.T) {
 		},
 	}
 
+	runNewInstallerCases(t, tests)
+}
+
+func TestNewInstaller_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []newInstallerCase{
+		{
+			name: "creates installer with pre-created service account", clusterName: "prod-eks",
+			serviceAccount: "aws-load-balancer-controller",
+			description:    "A valid pre-created IRSA service account name is accepted",
+		},
+		{
+			name: "treats whitespace-only service account as unset", clusterName: "prod-eks",
+			serviceAccount: "   ",
+			description:    "Whitespace-only means unset: the chart keeps creating its own SA",
+		},
+		{
+			name:           "rejects invalid service account name",
+			clusterName:    "prod-eks",
+			serviceAccount: "Not_A_Valid_SA!",
+			wantErr:        awslbcontrollerinstaller.ErrInvalidServiceAccountName,
+			description:    "A non-DNS-1123-subdomain SA name must fail loud, not reach Helm values",
+		},
+		{
+			name: "rejects service account name with newline", clusterName: "prod-eks",
+			serviceAccount: "sa\ninjected: true",
+			wantErr:        awslbcontrollerinstaller.ErrInvalidServiceAccountName,
+			description:    "A newline-bearing name must never be interpolated into values YAML",
+		},
+	}
+
+	runNewInstallerCases(t, tests)
+}
+
+func runNewInstallerCases(t *testing.T, tests []newInstallerCase) {
+	t.Helper()
+
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient := helm.NewMockInterface(t)
 			installer, err := awslbcontrollerinstaller.NewInstaller(
-				mockClient, 5*time.Minute, testCase.clusterName, testCase.region, false,
+				mockClient, 5*time.Minute,
+				testCase.clusterName, testCase.region, testCase.serviceAccount, false,
 			)
 
 			if testCase.wantErr != nil {
@@ -68,23 +112,274 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 
 	mockClient := helm.NewMockInterface(t)
 	installer, err := awslbcontrollerinstaller.NewInstaller(
-		mockClient, 5*time.Minute, "prod-eks", "eu-north-1", true,
+		mockClient, 5*time.Minute, "prod-eks", "eu-north-1", "", true,
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, installer)
 }
 
+func TestInstallLabelsReleaseWithKSailOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil, helm.ErrNoReleaseStorage)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, 5*time.Minute).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			return spec.Labels[awslbcontrollerinstaller.ReleaseOwnershipLabel] == "ksail"
+		})).
+		Return(&helm.ReleaseInfo{}, nil)
+
+	component, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+	require.NoError(t, component.Install(t.Context()))
+}
+
+func TestNewInstallerRejectsStorageWithoutKubernetesReleaseIdentity(t *testing.T) {
+	t.Setenv("HELM_DRIVER", "sql")
+
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		helm.NewMockInterface(t),
+		5*time.Minute,
+		"prod-eks",
+		"eu-north-1",
+		"",
+		false,
+	)
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "cannot provide a Kubernetes release identity")
+	assert.Nil(
+		t,
+		installer,
+		"unsupported identity storage must fail before Helm mutates the cluster",
+	)
+}
+
+func TestUninstallPreservesGitOpsOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "aws-load-balancer-controller"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.ErrorContains(t, err, "managed by GitOps")
+}
+
+func TestIsGitOpsManagedReportsFluxOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "aws-load-balancer-controller"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	managed, err := installer.IsGitOpsManaged(context.Background())
+
+	require.NoError(t, err)
+	assert.True(t, managed)
+}
+
+func TestReleaseIdentityReturnsStorageUID(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(&helm.ReleaseStorageMetadata{Identity: "release-uid"}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	identity, err := installer.ReleaseIdentity(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "release-uid", identity)
+}
+
+type releaseIdentityOwnershipCase struct {
+	name     string
+	metadata *helm.ReleaseStorageMetadata
+	expected string
+	want     bool
+}
+
+func releaseIdentityOwnershipCases() []releaseIdentityOwnershipCase {
+	return []releaseIdentityOwnershipCase{
+		{
+			name: "owned failed upgrade retains the persisted revision UID",
+			metadata: &helm.ReleaseStorageMetadata{
+				Labels: map[string]string{
+					awslbcontrollerinstaller.ReleaseOwnershipLabel: "ksail",
+				},
+				Identity:          "failed-upgrade-uid",
+				HistoryIdentities: []string{"persisted-owned-uid", "failed-upgrade-uid"},
+			},
+			expected: "persisted-owned-uid",
+			want:     true,
+		},
+		{
+			name: "unlabelled manual release cannot own its current UID",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity:          "manual-release-uid",
+				HistoryIdentities: []string{"manual-release-uid"},
+			},
+			expected: "manual-release-uid",
+			want:     false,
+		},
+		{
+			name: "same-name replacement has a disjoint release history",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity:          "replacement-uid",
+				HistoryIdentities: []string{"replacement-uid"},
+			},
+			expected: "persisted-owned-uid",
+			want:     false,
+		},
+		{
+			name: "keep-history replacement excludes the prior incarnation",
+			metadata: &helm.ReleaseStorageMetadata{
+				Identity: "replacement-uid",
+				HistoryIdentities: []string{
+					"persisted-owned-uid",
+					"uninstalled-uid",
+					"replacement-uid",
+				},
+			},
+			expected: "persisted-owned-uid",
+			want:     false,
+		},
+	}
+}
+
+func TestOwnsReleaseIdentityAcceptsOwnedHistoryButRejectsReplacement(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range releaseIdentityOwnershipCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := helm.NewMockInterface(t)
+			client.EXPECT().
+				GetReleaseStorageMetadata(
+					mock.Anything,
+					"aws-load-balancer-controller",
+					"kube-system",
+				).
+				Return(testCase.metadata, nil)
+			component, err := awslbcontrollerinstaller.NewInstaller(
+				client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+			)
+			require.NoError(t, err)
+
+			owned, err := component.OwnsReleaseIdentity(t.Context(), testCase.expected)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, owned)
+		})
+	}
+}
+
+func TestReleaseIdentityRejectsEmptyStorageUID(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageMetadata(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(&helm.ReleaseStorageMetadata{}, nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	_, err = installer.ReleaseIdentity(context.Background())
+
+	require.ErrorIs(t, err, awslbcontrollerinstaller.ErrReleaseIdentityEmpty)
+}
+
+func TestUninstallAllowsKSailOwnedRelease(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(map[string]string{"owner": "helm"}, nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestUninstallFailsClosedWhenOwnershipUnknown(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "aws-load-balancer-controller", "kube-system").
+		Return(nil, assert.AnError)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false, true,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "check release ownership for aws-load-balancer-controller")
+}
+
+func TestUninstallPreservesReleaseWithoutKSailOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer, err := awslbcontrollerinstaller.NewInstaller(
+		client, 5*time.Minute, "prod-eks", "eu-north-1", "", false,
+	)
+	require.NoError(t, err)
+
+	err = installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+type buildValuesCase struct {
+	name           string
+	clusterName    string
+	region         string
+	serviceAccount string
+	haEnabled      bool
+	want           string
+}
+
 func TestBuildValuesYaml(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		region      string
-		haEnabled   bool
-		want        string
-	}{
+	tests := []buildValuesCase{
 		{
 			name: "cluster name only", clusterName: "prod-eks",
 			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
@@ -108,12 +403,58 @@ func TestBuildValuesYaml(t *testing.T) {
 		},
 	}
 
+	runBuildValuesCases(t, tests)
+}
+
+func TestBuildValuesYaml_ServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	tests := []buildValuesCase{
+		{
+			name:           "pre-created service account",
+			clusterName:    "prod-eks",
+			serviceAccount: "aws-load-balancer-controller",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 1",
+		},
+		{
+			name:           "pre-created service account with region and ha",
+			clusterName:    "prod-eks",
+			region:         "eu-north-1",
+			serviceAccount: "aws-load-balancer-controller",
+			haEnabled:      true,
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nregion: eu-north-1\n" +
+				"serviceAccount:\n  create: false\n  name: \"aws-load-balancer-controller\"\nreplicaCount: 2",
+		},
+		{
+			name:           "whitespace-only service account is unset",
+			clusterName:    "prod-eks",
+			serviceAccount: "   ",
+			want:           "clusterName: prod-eks\nenableServiceMutatorWebhook: false\nreplicaCount: 1",
+		},
+		{
+			// "123" is a valid DNS-1123 name that YAML would otherwise parse
+			// as a number — the quoting is what keeps it a string.
+			name:           "numeric service account name stays a string",
+			clusterName:    "prod-eks",
+			serviceAccount: "123",
+			want: "clusterName: prod-eks\nenableServiceMutatorWebhook: false\n" +
+				"serviceAccount:\n  create: false\n  name: \"123\"\nreplicaCount: 1",
+		},
+	}
+
+	runBuildValuesCases(t, tests)
+}
+
+func runBuildValuesCases(t *testing.T, tests []buildValuesCase) {
+	t.Helper()
+
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			got, err := awslbcontrollerinstaller.BuildValuesYamlForTest(
-				testCase.clusterName, testCase.region, testCase.haEnabled,
+				testCase.clusterName, testCase.region, testCase.serviceAccount, testCase.haEnabled,
 			)
 
 			require.NoError(t, err)
@@ -127,7 +468,7 @@ func TestBuildValuesYaml_EscapesUntrustedScalars(t *testing.T) {
 
 	clusterName := "prod-eks\nimage:\n  repository: attacker/controller"
 	region := "eu-north-1\nserviceAccount:\n  name: attacker"
-	values, err := awslbcontrollerinstaller.BuildValuesYamlForTest(clusterName, region, false)
+	values, err := awslbcontrollerinstaller.BuildValuesYamlForTest(clusterName, region, "", false)
 	require.NoError(t, err)
 
 	var parsed map[string]any

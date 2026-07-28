@@ -152,6 +152,20 @@ func NewAWSOptionsResolver(options v1alpha1.OptionsAWS) AWSOptionsResolver {
 	}}
 }
 
+// AWSOptionsWithDefaults returns a complete set of AWS environment-variable names without
+// resolving or persisting any credential values.
+func AWSOptionsWithDefaults(options v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
+	resolver := NewAWSOptionsResolver(options)
+
+	return v1alpha1.OptionsAWS{
+		ProfileEnvVar:         resolver.EnvVar(AWSProfile),
+		RegionEnvVar:          resolver.EnvVar(AWSRegion),
+		AccessKeyIDEnvVar:     resolver.EnvVar(AWSAccessKeyID),
+		SecretAccessKeyEnvVar: resolver.EnvVar(AWSSecretAccessKey),
+		SessionTokenEnvVar:    resolver.EnvVar(AWSSessionToken),
+	}
+}
+
 // EnvVar returns the default environment-variable name for key.
 func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
 

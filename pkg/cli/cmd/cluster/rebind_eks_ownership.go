@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -60,7 +61,7 @@ repeat with --yes to confirm. It never deletes or scales AWS resources.`,
 				)
 			}
 
-			identityClient, err := resolveAWSOwnershipTarget(ctx, resolved)
+			identityClient, err := resolveAWSOwnershipTarget(ctx, resolved, false)
 			if err != nil {
 				return err
 			}
@@ -74,6 +75,8 @@ repeat with --yes to confirm. It never deletes or scales AWS resources.`,
 			if err != nil {
 				return fmt.Errorf("observe EKS ownership identity: %w", err)
 			}
+
+			observed.AWSOptions = credentials.AWSOptionsWithDefaults(resolved.AWSOpts)
 
 			notify.Infof(cmd.OutOrStdout(), "AWS account: %s", observed.AccountID)
 			notify.Infof(cmd.OutOrStdout(), "cluster ARN: %s", observed.ClusterARN)

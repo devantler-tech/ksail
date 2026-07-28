@@ -20,33 +20,60 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// UpdatableProvisioner wraps Provisioner with the Updater capability:
-// managed node-group scaling changes declared in eksctl.yaml are applied
-// in-place via `eksctl scale nodegroup` instead of the recreate flow.
-//
-// It is a separate type (rather than methods on Provisioner) so the
-// capability can be gated: the orchestrator discovers Updater by type
-// assertion, and the factory only returns this wrapper when
-// spec.cluster.eks.experimentalInPlaceUpdates is set. Graduating the flag
-// (once the path is validated against a live EKS cluster) means moving the
-// methods onto Provisioner and deleting the wrapper and the spec field.
+// UpdatableProvisioner wraps Provisioner with the Updater capability needed by
+// the orchestrator for both component reconciliation and managed node-group
+// scaling. Component reconciliation is always available; managed node-group
+// mutation remains gated by spec.cluster.eks.experimentalInPlaceUpdates.
 type UpdatableProvisioner struct {
 	*Provisioner
+
+	managedNodegroupUpdates bool
 
 	// componentDetector probes the running cluster's components for the
 	// update baseline; injected by the orchestrator via SetComponentDetector.
 	componentDetector *detector.ComponentDetector
 }
 
-// NewUpdatableProvisioner wraps an EKS provisioner with in-place update support.
-func NewUpdatableProvisioner(provisioner *Provisioner) *UpdatableProvisioner {
-	return &UpdatableProvisioner{Provisioner: provisioner}
+// UpdatableOption configures optional EKS update capabilities.
+type UpdatableOption func(*UpdatableProvisioner)
+
+// WithManagedNodegroupUpdates controls whether eksctl-managed node-group
+// changes may be detected and applied. It does not affect component updates.
+func WithManagedNodegroupUpdates(enabled bool) UpdatableOption {
+	return func(provisioner *UpdatableProvisioner) {
+		provisioner.managedNodegroupUpdates = enabled
+	}
+}
+
+// NewUpdatableProvisioner wraps an EKS provisioner with component update
+// support. Managed node-group updates default to enabled for compatibility;
+// the cluster factory supplies the user's explicit experimental opt-in.
+func NewUpdatableProvisioner(
+	provisioner *Provisioner,
+	options ...UpdatableOption,
+) *UpdatableProvisioner {
+	updatable := &UpdatableProvisioner{
+		Provisioner:             provisioner,
+		managedNodegroupUpdates: true,
+	}
+	for _, option := range options {
+		option(updatable)
+	}
+
+	return updatable
 }
 
 // SetComponentDetector implements the ComponentDetectorAware capability so
 // the orchestrator can inject the live-cluster component detector.
 func (u *UpdatableProvisioner) SetComponentDetector(d *detector.ComponentDetector) {
 	u.componentDetector = d
+}
+
+// SupportsInPlaceField reports the provisioner-level fields the EKS updater
+// actually mutates. Component fields are handled separately by the CLI
+// component reconciler and therefore are not listed here.
+func (u *UpdatableProvisioner) SupportsInPlaceField(field string) bool {
+	return u.managedNodegroupUpdates && strings.HasPrefix(field, "eks.managedNodeGroups[")
 }
 
 // managedNodeGroupConfig is the subset of an eksctl.yaml managedNodeGroups
@@ -87,6 +114,9 @@ func (u *UpdatableProvisioner) DiffConfig(
 	_, _ *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
 	result := clusterupdate.NewEmptyUpdateResult()
+	if !u.managedNodegroupUpdates {
+		return result, nil
+	}
 
 	desired, declared, err := u.desiredNodegroups()
 	if err != nil {
@@ -146,7 +176,7 @@ func (u *UpdatableProvisioner) DiffConfig(
 // GetCurrentConfig retrieves the current cluster configuration: component
 // state via the injected detector when available (marked Unknown otherwise,
 // so the diff engine never fabricates confident component diffs from
-// defaults), merged with persisted non-introspectable state.
+// defaults), enriched with persisted non-introspectable installer inputs.
 func (u *UpdatableProvisioner) GetCurrentConfig(
 	ctx context.Context,
 	clusterName string,
@@ -176,6 +206,11 @@ func (u *UpdatableProvisioner) GetCurrentConfig(
 		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
 	}
 
+	err = clusterupdate.MergePersistedEKSState(spec, clusterName, u.region)
+	if err != nil {
+		return nil, nil, fmt.Errorf("merge persisted EKS state: %w", err)
+	}
+
 	return spec, nil, nil
 }
 
@@ -187,6 +222,10 @@ func (u *UpdatableProvisioner) applyNodegroupScaling(
 	name string,
 	result *clusterupdate.UpdateResult,
 ) error {
+	if !u.managedNodegroupUpdates {
+		return nil
+	}
+
 	clusterName := u.resolveName(name)
 
 	desired, declared, err := u.desiredNodegroups()

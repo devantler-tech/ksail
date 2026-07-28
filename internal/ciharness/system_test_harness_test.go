@@ -74,9 +74,214 @@ type compositeAction struct {
 }
 
 type ciWorkflow struct {
+	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
-		Steps []harnessStep `yaml:"steps"`
+		Permissions map[string]string `yaml:"permissions"`
+		Steps       []harnessStep     `yaml:"steps"`
+		If          string            `yaml:"if"`
+		Needs       []string          `yaml:"needs"`
+		Uses        string            `yaml:"uses"`
 	} `yaml:"jobs"`
+}
+
+func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	changesJob, found := workflow.Jobs["changes"]
+	require.True(t, found, "changes job is missing")
+	filterStep := findHarnessStep(t, changesJob.Steps, "🔍 Filter paths")
+	filters := stringValue(filterStep.With["filters"])
+	assert.Contains(t, filters, "govuln-allowlist:\n  - '.govulncheck-allow.txt'")
+
+	validateJob, found := workflow.Jobs["ci-go"]
+	require.True(t, found, "ci-go job is missing")
+	assert.Contains(t, validateJob.Needs, "changes")
+	assert.Contains(t, validateJob.If, "github.event_name == 'pull_request'")
+	assert.Contains(
+		t,
+		validateJob.If,
+		"github.event.pull_request.head.repo.full_name == github.repository",
+	)
+	assert.Contains(t, validateJob.If, "needs.changes.outputs.govuln-allowlist == 'true'")
+	assert.Contains(t, validateJob.Uses, "validate-go-project.yaml")
+}
+
+func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := ".github/workflows/system-test-eks.yaml"
+	workflow := readCIWorkflow(t, workflowPath)
+
+	roleARN := workflow.Env["AWS_OIDC_ROLE_ARN"]
+	require.Regexp(t, `^arn:aws:iam::[0-9]{12}:role/eks-ci$`, roleARN)
+
+	preflightJob, found := workflow.Jobs["preflight"]
+	require.True(t, found, "preflight job is missing")
+	preflightStep := findHarnessStep(t, preflightJob.Steps, "🔎 Check required AWS OIDC role")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", preflightStep.Env["AWS_OIDC_ROLE_ARN"])
+
+	preflightOutput, diagnostics, err := executeOIDCPreflight(t, preflightStep.Run, "")
+	require.Error(t, err, "empty checked-in OIDC role must fail the dispatch")
+	assert.Empty(t, preflightOutput)
+	assert.Contains(t, diagnostics, "AWS_OIDC_ROLE_ARN is required")
+
+	preflightOutput, diagnostics, err = executeOIDCPreflight(t, preflightStep.Run, roleARN)
+	require.NoErrorf(t, err, "declared OIDC role was rejected:\n%s", diagnostics)
+	assert.Equal(t, "available=true\n", preflightOutput)
+
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
+	configureStep := findHarnessStep(t, smokeJob.Steps, "🔐 Configure AWS credentials (OIDC)")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", configureStep.With["role-to-assume"])
+
+	workflowSource := readRepoFile(t, workflowPath)
+	assert.NotContains(t, string(workflowSource), "secrets.AWS_OIDC_ROLE_ARN")
+}
+
+func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
+	assert.Equal(t, "write", smokeJob.Permissions["packages"])
+
+	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	assert.Equal(t, "${{ github.actor }}", initStep.Env["GHCR_USER"])
+	assert.Equal(t, "${{ github.token }}", initStep.Env["GHCR_TOKEN"])
+	gitopsGuardIndex := strings.Index(
+		initStep.Run,
+		`if [ "$GITOPS_ENGINE" != "None" ]; then`,
+	)
+	registryIndex := strings.Index(
+		initStep.Run,
+		"${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/devantler-tech/ksail/system-test-manifests",
+	)
+
+	require.NotEqual(t, -1, gitopsGuardIndex, "GitOps engine guard is missing")
+	require.NotEqual(t, -1, registryIndex, "GitOps registry argument is missing")
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_USER:-}" ]`)
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_TOKEN:-}" ]`)
+
+	gitopsEndIndex := strings.Index(initStep.Run[gitopsGuardIndex:], "\nfi")
+	require.NotEqual(t, -1, gitopsEndIndex, "GitOps engine guard is unterminated")
+	assert.Greater(t, registryIndex, gitopsGuardIndex)
+	assert.Less(t, registryIndex, gitopsGuardIndex+gitopsEndIndex)
+
+	createStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster create")
+	assert.Equal(t, "create", createStep.ID)
+	attemptIndex := strings.Index(createStep.Run, `echo "attempted=true" >> "$GITHUB_OUTPUT"`)
+	createIndex := strings.Index(createStep.Run, "ksail cluster create")
+
+	require.NotEqual(t, -1, attemptIndex, "cluster create must record its attempt")
+	require.NotEqual(t, -1, createIndex, "cluster create command is missing")
+	assert.Less(t, attemptIndex, createIndex)
+
+	assertCleanupSkipsTeardownBeforeCreate(t, smokeJob.Steps)
+}
+
+// assertCleanupSkipsTeardownBeforeCreate locks the one safety property the
+// teardown path exists for: when creation never started, nothing is deleted.
+func assertCleanupSkipsTeardownBeforeCreate(t *testing.T, steps []harnessStep) {
+	t.Helper()
+
+	cleanupStep := findHarnessStep(t, steps, "🧹 Delete EKS smoke cluster")
+	assert.Equal(
+		t,
+		"${{ steps.create.outputs.attempted }}",
+		cleanupStep.Env["EKS_CREATE_ATTEMPTED"],
+	)
+	// The teardown logic lives in .github/scripts/delete-eks-smoke-cluster.sh
+	// (extracted in #6363 so it is testable). The step's job is to hand the
+	// create-attempted signal to that script; the guard itself is proven below.
+	// Assert the contract where each half actually lives — pinning the guard's
+	// text to the step's inline Run is what silently rotted when the logic
+	// moved out.
+	require.Contains(
+		t, cleanupStep.Run, "delete-eks-smoke-cluster.sh",
+		"cleanup step must delegate to the extracted teardown script",
+	)
+	require.Contains(
+		t, cleanupStep.Run, `--create-attempted "${EKS_CREATE_ATTEMPTED:-false}"`,
+		"cleanup step must forward the create-attempted signal to the script",
+	)
+
+	cleanupScript := string(readRepoFile(t, ".github/scripts/delete-eks-smoke-cluster.sh"))
+	require.Contains(
+		t, cleanupScript, "ksail cluster delete",
+		"cluster delete command is missing",
+	)
+
+	// Prove the property behaviourally rather than by source ordering. A
+	// guard-before-delete text check passes even if the guard's `exit 0` is
+	// removed, which is the only thing that actually stops the delete — so run the
+	// script for real with --create-attempted false and assert that no teardown
+	// tool is ever invoked.
+	diagnostics, invoked := runCleanupScriptWithoutCreate(t)
+	assert.Empty(
+		t, invoked,
+		"nothing may be invoked when creation never started, but the script ran: %v",
+		invoked,
+	)
+	assert.Contains(t, diagnostics, "nothing to clean up")
+}
+
+// runCleanupScriptWithoutCreate executes the teardown script on the
+// create-never-attempted path with every teardown binary replaced by a recorder,
+// and returns the script's output plus the names of any binaries it invoked.
+func runCleanupScriptWithoutCreate(t *testing.T) (string, []string) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	callLog := filepath.Join(tempDir, "invoked")
+
+	require.NoError(t, os.MkdirAll(binDir, 0o700))
+
+	// Any of these running at all means the guard let execution through.
+	for _, name := range []string{"ksail", "eksctl", "aws"} {
+		stub := "#!/bin/sh\nprintf '%s\\n' '" + name + "' >> \"$KSAIL_CLEANUP_CALL_LOG\"\nexit 0\n"
+		stubPath := filepath.Join(binDir, name)
+
+		require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o600))
+		//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
+		require.NoError(t, os.Chmod(stubPath, 0o700))
+	}
+
+	scriptPath := filepath.Join("..", "..", ".github", "scripts", "delete-eks-smoke-cluster.sh")
+	//nolint:gosec // scriptPath is a repository-owned constant path, not user input.
+	command := exec.CommandContext(t.Context(), "bash", scriptPath,
+		"--cluster-name", "fixture-cluster",
+		"--region", "us-east-1",
+		"--workdir", tempDir,
+		"--create-attempted", "false",
+	)
+
+	command.Env = append(
+		os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"KSAIL_CLEANUP_CALL_LOG="+callLog,
+	)
+
+	diagnostics, err := command.CombinedOutput()
+	// Deliberately assert, not require: a fall-through past the guard shows up
+	// both as a non-zero exit and as an invoked teardown binary, and reporting
+	// both makes the failure name the property rather than just the exit code.
+	//nolint:testifylint // assert, not require: a fall-through must report the invoked binaries too.
+	assert.NoErrorf(
+		t, err,
+		"cleanup script must exit 0 when creation never started:\n%s", diagnostics,
+	)
+
+	recorded, readErr := os.ReadFile(callLog) //nolint:gosec // Test-owned temporary path.
+	if os.IsNotExist(readErr) {
+		return string(diagnostics), nil
+	}
+
+	require.NoError(t, readErr)
+
+	return string(diagnostics), strings.Fields(string(recorded))
 }
 
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
@@ -443,6 +648,33 @@ esac
 	require.NoError(t, err)
 
 	return string(boundaryOutput), string(diagnostics), commandErr
+}
+
+func executeOIDCPreflight(
+	t *testing.T,
+	workflowRun string,
+	roleARN string,
+) (string, string, error) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "github-output")
+	require.NoError(t, os.WriteFile(outputPath, nil, 0o600))
+
+	// The shell source is repository-owned workflow content.
+	command := exec.CommandContext(t.Context(), "bash", "-c", workflowRun) //nolint:gosec
+
+	command.Env = append(
+		os.Environ(),
+		"AWS_OIDC_ROLE_ARN="+roleARN,
+		"GITHUB_OUTPUT="+outputPath,
+	)
+	diagnostics, commandErr := command.CombinedOutput()
+
+	preflightOutput, err := os.ReadFile(outputPath) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+
+	return string(preflightOutput), string(diagnostics), commandErr
 }
 
 func assertEKSSmokeMutation(t *testing.T, config map[string]any) {

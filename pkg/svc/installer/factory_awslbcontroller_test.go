@@ -86,3 +86,41 @@ func TestFactory_CreateInstallersForConfig_AWSLBControllerMissingName(t *testing
 		"an explicit opt-in with no resolvable cluster name must fail loud, not silently skip")
 	assert.Nil(t, installers)
 }
+
+func TestFactory_CreateInstallersForConfig_AWSLBControllerServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	factory := newEKSFactory(t, installer.WithEKSClusterName("prod-eks"))
+	cfg := newTestCluster(func(spec *v1alpha1.ClusterSpec) {
+		spec.Distribution = v1alpha1.DistributionEKS
+		spec.Provider = v1alpha1.ProviderAWS
+		spec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		spec.EKS.ExperimentalAWSLoadBalancerController = true
+		spec.EKS.AWSLoadBalancerControllerServiceAccount = "aws-load-balancer-controller"
+	})
+
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
+
+	assert.Contains(t, installers, "aws-load-balancer-controller",
+		"a pre-created IRSA service account must flow through to a working installer")
+}
+
+func TestFactory_CreateInstallersForConfig_AWSLBControllerInvalidServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	factory := newEKSFactory(t, installer.WithEKSClusterName("prod-eks"))
+	cfg := newTestCluster(func(spec *v1alpha1.ClusterSpec) {
+		spec.Distribution = v1alpha1.DistributionEKS
+		spec.Provider = v1alpha1.ProviderAWS
+		spec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		spec.EKS.ExperimentalAWSLoadBalancerController = true
+		spec.EKS.AWSLoadBalancerControllerServiceAccount = "Not_A_Valid_SA!"
+	})
+
+	installers, err := factory.CreateInstallersForConfig(cfg)
+
+	require.ErrorIs(t, err, awslbcontrollerinstaller.ErrInvalidServiceAccountName,
+		"an invalid pre-created service account name must fail loud, not reach Helm values")
+	assert.Nil(t, installers)
+}

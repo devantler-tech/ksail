@@ -99,7 +99,7 @@ func autoDeleteCluster(
 
 	// Clean up persisted state (spec + TTL).
 	// Best-effort: warn on failure rather than blocking success.
-	stateErr := state.DeleteClusterState(clusterName)
+	stateErr := deleteTTLClusterState(clusterName, clusterCfg, eksConfig)
 	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to clean up cluster state: %v", stateErr)
@@ -107,6 +107,33 @@ func autoDeleteCluster(
 
 	notify.Successf(cmd.OutOrStdout(),
 		"cluster %q auto-destroyed after TTL expiry", clusterName)
+
+	return nil
+}
+
+func deleteTTLClusterState(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	if clusterCfg != nil &&
+		clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if eksConfig == nil || strings.TrimSpace(eksConfig.Region) == "" {
+			return fmt.Errorf("delete exact-region EKS TTL state: %w", state.ErrInvalidRegion)
+		}
+
+		err := state.DeleteEKSRegionState(clusterName, eksConfig.Region)
+		if err != nil {
+			return fmt.Errorf("delete exact-region EKS TTL state: %w", err)
+		}
+
+		return nil
+	}
+
+	err := state.DeleteClusterState(clusterName)
+	if err != nil {
+		return fmt.Errorf("delete TTL cluster state: %w", err)
+	}
 
 	return nil
 }

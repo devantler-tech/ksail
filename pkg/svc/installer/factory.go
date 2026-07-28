@@ -39,6 +39,9 @@ type Factory struct {
 	// Load Balancer Controller chart. Only callers that know the provisioned
 	// name (e.g. the operator) can supply it — see WithEKSClusterName.
 	eksClusterName string
+	// awsLoadBalancerControllerManaged is positive ownership evidence supplied
+	// by callers whose own baseline proves KSail installed the controller.
+	awsLoadBalancerControllerManaged bool
 }
 
 // Option configures optional Factory dependencies.
@@ -49,6 +52,16 @@ type Option func(*Factory)
 func WithEKSClusterName(name string) Option {
 	return func(f *Factory) {
 		f.eksClusterName = name
+	}
+}
+
+// WithAWSLoadBalancerControllerManaged supplies positive KSail ownership
+// evidence for lifecycle paths that rebuild an installer from their own
+// last-applied baseline. The default remains false so ordinary discovery can
+// never infer ownership from a live Helm release alone.
+func WithAWSLoadBalancerControllerManaged(managed bool) Option {
+	return func(f *Factory) {
+		f.awsLoadBalancerControllerManaged = managed
 	}
 }
 
@@ -314,18 +327,21 @@ func (f *Factory) addLoadBalancerInstaller(
 
 	if f.needsAWSLBController(spec) {
 		// Fail loud rather than silently skipping: the user explicitly opted
-		// in, so an unknowable cluster name is a wiring bug, not a no-op.
+		// in, so an unknowable cluster name (a wiring bug — construct the
+		// factory with WithEKSClusterName) or an invalid pre-created service
+		// account name is an error, not a no-op.
 		awslbc, err := awslbcontrollerinstaller.NewInstaller(
 			f.helmClient,
 			f.timeout,
 			f.eksClusterName,
 			"", // region: rely on the chart's own discovery
+			spec.EKS.AWSLoadBalancerControllerServiceAccount,
 			haEnabled,
+			f.awsLoadBalancerControllerManaged,
 		)
 		if err != nil {
 			return fmt.Errorf(
-				"experimental AWS Load Balancer Controller is enabled but unusable "+
-					"(construct the factory with WithEKSClusterName): %w",
+				"experimental AWS Load Balancer Controller is enabled but unusable: %w",
 				err,
 			)
 		}
