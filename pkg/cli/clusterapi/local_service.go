@@ -529,7 +529,7 @@ func (s *Service) startJob(
 	// owns. Checking before the job is registered keeps a refused mutation from leaving an in-flight
 	// job behind.
 	if distribution == v1alpha1.DistributionEKS {
-		bindErr := confirmEKSOwnership(name, distribution, provider)
+		bindErr := confirmEKSOwnership(name, distribution, provider, phase)
 		if bindErr != nil {
 			return v1alpha1.Spec{}, bindErr
 		}
@@ -567,20 +567,25 @@ func (s *Service) startJob(
 // Missing or inconsistent state fails the mutation rather than falling back to ambient settings:
 // delete is destructive, and a same-named cluster in another reachable region is the exact outcome
 // the fallback would produce.
+//
+// The phase selects the recovery guidance, because this refusal is reached from every mutating entry
+// point: Delete arrives as ClusterPhaseDeleting, while Start and Stop both arrive as
+// ClusterPhaseUpdating. Only the delete path may suggest deleting the cluster — an operator who asked
+// to start or stop one must never be handed a destructive recovery step for a cluster KSail has just
+// said it cannot identify.
 func confirmEKSOwnership(
 	name string,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
+	phase v1alpha1.ClusterPhase,
 ) error {
 	persisted, err := state.LoadClusterSpec(name)
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotFound) {
 			return fmt.Errorf(
 				"%w: no local KSail ownership state for EKS cluster %q, so KSail cannot confirm"+
-					" which remote cluster this would act on; delete it with the AWS tooling"+
-					" directly (`eksctl delete cluster --name %s --region <region>`) once you have"+
-					" confirmed its region",
-				api.ErrInvalid, name, name,
+					" which remote cluster this would act on; %s",
+				api.ErrInvalid, name, unconfirmedEKSRecovery(name, phase),
 			)
 		}
 
@@ -601,6 +606,27 @@ func confirmEKSOwnership(
 	}
 
 	return nil
+}
+
+// unconfirmedEKSRecovery returns the recovery step for a mutation KSail refused because it cannot
+// identify the remote cluster. Deleting is suggested only when deleting is what was asked for;
+// Start/Stop are node-group operations, so their guidance stays non-destructive and names no KSail
+// subcommand, because none exists to re-establish the binding.
+func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
+	if phase == v1alpha1.ClusterPhaseDeleting {
+		return fmt.Sprintf(
+			"delete it with the AWS tooling directly"+
+				" (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
+				" its region",
+			name,
+		)
+	}
+
+	return fmt.Sprintf(
+		"start or stop its node groups with the AWS tooling directly once you have confirmed its"+
+			" region, or re-create %q with KSail so the binding is recorded",
+		name,
+	)
 }
 
 // jobInProgress reports whether a lifecycle action is already running for the cluster. It is a

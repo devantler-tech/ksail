@@ -1610,3 +1610,97 @@ func TestDeleteEKSRefusesWhenPersistedOwnershipStateDisagrees(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 	assert.Empty(t, provisioner.deletedNames())
 }
+
+// newReadyUnboundEKSService creates an EKS cluster, waits for it to settle, then removes the
+// ownership state — the state an operator is in when KSail can no longer identify the remote target.
+func newReadyUnboundEKSService(
+	t *testing.T,
+	clusterName string,
+) (*clusterapi.Service, *fakeProvisioner) {
+	t.Helper()
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, state.DeleteClusterState(clusterName))
+
+	return service, provisioner
+}
+
+// TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction pins the recovery guidance to the
+// action the operator actually asked for. All three mutating entry points reach the same refusal —
+// Delete as ClusterPhaseDeleting, Start and Stop as ClusterPhaseUpdating — so a single shared message
+// told an operator who asked to start a cluster to delete it instead. Deleting is suggested only on
+// the delete path.
+func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	for _, testCase := range []struct {
+		name        string
+		invoke      func(*clusterapi.Service, string) error
+		wantDelete  bool
+		wantMessage string
+	}{
+		{
+			name: "delete",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Delete(context.Background(), "default", cluster)
+			},
+			wantDelete:  true,
+			wantMessage: "eksctl delete cluster",
+		},
+		{
+			name: "start",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Start(context.Background(), "default", cluster)
+			},
+			wantDelete:  false,
+			wantMessage: "start or stop its node groups",
+		},
+		{
+			name: "stop",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Stop(context.Background(), "default", cluster)
+			},
+			wantDelete:  false,
+			wantMessage: "start or stop its node groups",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+
+			clusterName := "unbound-eks-" + testCase.name
+			service, provisioner := newReadyUnboundEKSService(t, clusterName)
+
+			err := testCase.invoke(service, clusterName)
+
+			require.ErrorIs(t, err, api.ErrInvalid,
+				"an unconfirmable EKS target must be refused on every mutating path")
+			assert.Contains(t, err.Error(), testCase.wantMessage,
+				"the recovery guidance must address the action the operator requested")
+			assert.Empty(t, provisioner.deletedNames(),
+				"a refused mutation must never reach the provisioner")
+
+			if !testCase.wantDelete {
+				assert.NotContains(t, err.Error(), "eksctl delete cluster",
+					"a non-destructive action must not be answered with a destructive recovery step")
+			}
+		})
+	}
+}
