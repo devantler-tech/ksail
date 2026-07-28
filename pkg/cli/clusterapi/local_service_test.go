@@ -1643,11 +1643,43 @@ func newReadyUnboundEKSService(
 	return service, provisioner
 }
 
+// assertUnconfirmedEKSGuidance checks one refusal message: it must be an api.ErrInvalid, address the
+// action the operator requested, always name the registered rebind command, and offer deletion only
+// on the delete path.
+func assertUnconfirmedEKSGuidance(
+	t *testing.T,
+	err error,
+	clusterName string,
+	wantMessage string,
+	wantDelete bool,
+) {
+	t.Helper()
+
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"an unconfirmable EKS target must be refused on every mutating path")
+	assert.Contains(t, err.Error(), wantMessage,
+		"the recovery guidance must address the action the operator requested")
+	assert.Contains(t, err.Error(),
+		"ksail cluster eks-bind --name "+clusterName+" --provider AWS --experimental",
+		"every path must name the registered command that restores the binding")
+
+	if !wantDelete {
+		assert.NotContains(t, err.Error(), "eksctl delete cluster",
+			"a non-destructive action must not be answered with a destructive recovery step")
+	}
+}
+
 // TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction pins the recovery guidance to the
 // action the operator actually asked for. All three mutating entry points reach the same refusal —
 // Delete as ClusterPhaseDeleting, Start and Stop as ClusterPhaseUpdating — so a single shared message
 // told an operator who asked to start a cluster to delete it instead. Deleting is suggested only on
 // the delete path.
+//
+// Every path must also lead with `ksail cluster eks-bind`, the registered command that restores the
+// missing binding without touching AWS resources. That assertion is deliberate: an earlier round on
+// this PR shipped guidance naming a command the CLI does not expose, and this round briefly claimed
+// no such command existed at all. Pinning the exact string makes both mistakes a test failure rather
+// than something only a reviewer catches.
 func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -1671,7 +1703,7 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				return s.Start(context.Background(), "default", cluster)
 			},
 			wantDelete:  false,
-			wantMessage: "start or stop its node groups",
+			wantMessage: "then retry",
 		},
 		{
 			name: "stop",
@@ -1679,7 +1711,7 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				return s.Stop(context.Background(), "default", cluster)
 			},
 			wantDelete:  false,
-			wantMessage: "start or stop its node groups",
+			wantMessage: "then retry",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1690,17 +1722,10 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 
 			err := testCase.invoke(service, clusterName)
 
-			require.ErrorIs(t, err, api.ErrInvalid,
-				"an unconfirmable EKS target must be refused on every mutating path")
-			assert.Contains(t, err.Error(), testCase.wantMessage,
-				"the recovery guidance must address the action the operator requested")
+			assertUnconfirmedEKSGuidance(t, err, clusterName, testCase.wantMessage,
+				testCase.wantDelete)
 			assert.Empty(t, provisioner.deletedNames(),
 				"a refused mutation must never reach the provisioner")
-
-			if !testCase.wantDelete {
-				assert.NotContains(t, err.Error(), "eksctl delete cluster",
-					"a non-destructive action must not be answered with a destructive recovery step")
-			}
 		})
 	}
 }

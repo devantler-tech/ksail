@@ -609,24 +609,34 @@ func confirmEKSOwnership(
 }
 
 // unconfirmedEKSRecovery returns the recovery step for a mutation KSail refused because it cannot
-// identify the remote cluster. Deleting is suggested only when deleting is what was asked for;
-// Start/Stop are node-group operations, so their guidance stays non-destructive and names no KSail
-// subcommand, because none exists to re-establish the binding.
+// identify the remote cluster.
+//
+// `ksail cluster eks-bind` leads on every path: it re-establishes the missing binding from the
+// cluster the current AWS credentials select, and it never deletes or scales anything, so the
+// refused action can simply be retried afterwards. eksidentity.migrationRequiredError already points
+// at the same command for the same underlying condition, so the two agree.
+//
+// Deleting is offered only when deleting is what was asked for. Start and Stop are node-group
+// operations, so answering them with a destructive step — for a cluster KSail has just said it
+// cannot identify — would be actively wrong.
 func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
+	rebind := fmt.Sprintf(
+		"after confirming the current AWS credentials select the intended cluster, run"+
+			" `ksail cluster eks-bind --name %s --provider AWS --experimental` to restore the"+
+			" binding",
+		name,
+	)
+
 	if phase == v1alpha1.ClusterPhaseDeleting {
 		return fmt.Sprintf(
-			"delete it with the AWS tooling directly"+
+			"%s; or, if you intend to delete it, use the AWS tooling directly"+
 				" (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
 				" its region",
-			name,
+			rebind, name,
 		)
 	}
 
-	return fmt.Sprintf(
-		"start or stop its node groups with the AWS tooling directly once you have confirmed its"+
-			" region, or re-create %q with KSail so the binding is recorded",
-		name,
-	)
+	return rebind + ", then retry"
 }
 
 // jobInProgress reports whether a lifecycle action is already running for the cluster. It is a
