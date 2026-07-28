@@ -1698,8 +1698,12 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				"a refused mutation must never reach the provisioner")
 
 			if !testCase.wantDelete {
-				assert.NotContains(t, err.Error(), "eksctl delete cluster",
-					"a non-destructive action must not be answered with a destructive recovery step")
+				assert.NotContains(
+					t,
+					err.Error(),
+					"eksctl delete cluster",
+					"a non-destructive action must not be answered with a destructive recovery step",
+				)
 			}
 		})
 	}
