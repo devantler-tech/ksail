@@ -516,15 +516,32 @@ func (s *Service) startJob(
 		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
 
+	// Reject an overlapping operation before reading ownership state. A create that is still in
+	// flight has not written its state yet, so binding first would report that absence instead of
+	// the accurate "already in progress". The authoritative check is repeated under the lock below.
+	if s.jobInProgress(name) {
+		return v1alpha1.Spec{}, overlappingJobError(name)
+	}
+
+	target := v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider}
+
+	// EKS mutations reach a remote AWS account, so they must run against the target bound when the
+	// cluster was created rather than whatever the caller has selected since. Resolving this before
+	// the job is registered keeps a refused mutation from leaving an in-flight job behind.
+	if distribution == v1alpha1.DistributionEKS {
+		bound, bindErr := eksMutationTarget(name, distribution, provider)
+		if bindErr != nil {
+			return v1alpha1.Spec{}, bindErr
+		}
+
+		target = *bound
+	}
+
 	s.mu.Lock()
 	if current, found := s.jobs[name]; found && jobIsInProgress(current.phase) {
 		s.mu.Unlock()
 
-		return v1alpha1.Spec{}, fmt.Errorf(
-			"%w: operation already in progress for %q",
-			api.ErrAlreadyExists,
-			name,
-		)
+		return v1alpha1.Spec{}, overlappingJobError(name)
 	}
 
 	s.jobs[name] = &job{
@@ -535,9 +552,70 @@ func (s *Service) startJob(
 	}
 	s.mu.Unlock()
 
-	return v1alpha1.Spec{
-		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
-	}, nil
+	return v1alpha1.Spec{Cluster: target}, nil
+}
+
+// eksMutationTarget returns the ownership state persisted when the cluster was created, for use as
+// the target of a delete/start/stop.
+//
+// The EKS provisioner regenerates eks.yaml from the spec it is handed, and a spec carrying only a
+// distribution and provider leaves the region to be resolved from the ambient environment at action
+// time. Changing the AWS region between creating a cluster and operating on it would therefore
+// redirect the action to a same-named cluster in the newly selected region, so the mutation target
+// is read back from disk instead of being rebuilt.
+//
+// Missing or inconsistent state fails the mutation rather than falling back to ambient settings:
+// delete is destructive, and a same-named cluster in another reachable region is the exact outcome
+// the fallback would produce. `ksail cluster rebind-eks-ownership` re-establishes the binding for a
+// cluster whose state predates it or was lost.
+func eksMutationTarget(
+	name string,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+) (*v1alpha1.ClusterSpec, error) {
+	persisted, err := state.LoadClusterSpec(name)
+	if err != nil {
+		if errors.Is(err, state.ErrStateNotFound) {
+			return nil, fmt.Errorf(
+				"%w: no local KSail ownership state for EKS cluster %q, so its region cannot be"+
+					" confirmed; run `ksail cluster rebind-eks-ownership --name %s` to re-establish"+
+					" it, or use `ksail cluster delete --name %s` to act on an explicit target",
+				api.ErrInvalid, name, name, name,
+			)
+		}
+
+		return nil, fmt.Errorf(
+			"%w: read local KSail ownership state for EKS cluster %q: %w",
+			api.ErrInvalid, name, err,
+		)
+	}
+
+	if persisted.Distribution != distribution || persisted.Provider != provider {
+		return nil, fmt.Errorf(
+			"%w: local KSail ownership state for EKS cluster %q records %s/%s but the cluster"+
+				" resolved as %s/%s; refusing to mutate an unconfirmed target",
+			api.ErrInvalid, name,
+			persisted.Distribution, persisted.Provider,
+			distribution, provider,
+		)
+	}
+
+	return persisted, nil
+}
+
+// jobInProgress reports whether a lifecycle action is already running for the cluster. It is a
+// point-in-time probe used to order startJob's error cases; registration re-checks under the lock.
+func (s *Service) jobInProgress(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, found := s.jobs[name]
+
+	return found && jobIsInProgress(current.phase)
+}
+
+func overlappingJobError(name string) error {
+	return fmt.Errorf("%w: operation already in progress for %q", api.ErrAlreadyExists, name)
 }
 
 func jobIsInProgress(phase v1alpha1.ClusterPhase) bool {
