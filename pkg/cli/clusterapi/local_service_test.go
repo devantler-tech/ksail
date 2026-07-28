@@ -1021,8 +1021,46 @@ func TestEKSConfigRejectsNonSegmentName(t *testing.T) {
 
 			_, _, err := clusterapi.ExportEKSConfigForCreate(name)
 			require.ErrorIs(t, err, api.ErrInvalid)
+			assert.NotContains(t, err.Error(), "no AWS region is selected",
+				"the name must be what is rejected, not the ambient region")
 		})
 	}
+}
+
+// TestEKSCreateRefusesWhenNoRegionIsSelected covers the create-time trap: an unset AWS_REGION would
+// otherwise be stamped into metadata.region, and boundEKSConfig rejects such a file permanently once
+// persisted state exists — leaving a cluster that can never be deleted, started or stopped through
+// KSail. Nothing may be written on this path.
+func TestEKSCreateRefusesWhenNoRegionIsSelected(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "")
+
+	const clusterName = "no-region-eks"
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "no AWS region is selected")
+
+	home, homeErr := os.UserHomeDir()
+	require.NoError(t, homeErr)
+	assert.NoFileExists(t, filepath.Join(home, ".ksail", "clusters", clusterName, "eks.yaml"),
+		"a refused create must leave no region-less binding behind")
+}
+
+// TestEKSConfigReportsNameErrorAheadOfMissingRegion pins the precedence between the two create-time
+// preconditions. Both are api.ErrInvalid, so without this the region check could silently take over
+// every rejection in TestEKSConfigRejectsNonSegmentName and make that guard vacuous whenever the
+// environment happens to carry no region.
+func TestEKSConfigReportsNameErrorAheadOfMissingRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "")
+
+	// "." is the discriminating case: unlike "foo/bar" it survives the state store's own name
+	// validation, so the segment check added ahead of the region check is what must reject it.
+	_, _, err := clusterapi.ExportEKSConfigForCreate(".")
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "single path segment")
+	assert.NotContains(t, err.Error(), "no AWS region is selected")
 }
 
 // TestCreatePassesProviderToFactory is the Phase 4 regression guard: the create path must route the
@@ -1307,11 +1345,11 @@ func TestListWithoutKubeconfigSurfacesNoUnmanaged(t *testing.T) {
 	assert.False(t, list.Items[0].IsUnmanaged())
 }
 
-// TestEKSActionAfterCreateBindsRegionToCreationNotCurrentSettings is the core guard for #6203: once
-// a cluster exists, a later delete/start/stop must target the region that created it. Re-resolving
-// the region from Settings would send the action to a same-named cluster in whichever region is
-// selected at action time — and delete is destructive.
-func TestEKSActionAfterCreateBindsRegionToCreationNotCurrentSettings(t *testing.T) {
+// TestEKSConfigResolutionAfterCreateBindsToCreationRegion pins the resolution half of #6203: once a
+// cluster exists, resolving its EKS config yields the region that created it rather than the one
+// selected now. TestDeleteEKSReachesProvisionerBoundToCreationRegion covers the lifecycle half —
+// that a successful action actually runs against that resolved region.
+func TestEKSConfigResolutionAfterCreateBindsToCreationRegion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AWS_REGION", "eu-north-1")
 
@@ -1382,6 +1420,124 @@ func TestEKSConfigRefusesWhenBindingEvidenceIsMissing(t *testing.T) {
 
 	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
 	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
+// regionRecorder collects the region each named EKS factory build resolved, in order.
+type regionRecorder struct {
+	mu      sync.Mutex
+	regions []string
+}
+
+func (r *regionRecorder) record(region string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.regions = append(r.regions, region)
+}
+
+// since returns the regions recorded at or after index n, so a test can assert about one phase
+// without the earlier phase's resolutions bleeding into it.
+func (r *regionRecorder) since(n int) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.regions[min(n, len(r.regions)):])
+}
+
+func (r *regionRecorder) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return len(r.regions)
+}
+
+// newRegionRecordingEKSService wires a Service whose factory resolves the EKS distribution config
+// exactly as the production defaultFactory does — from the cluster name alone — and records the
+// region that resolution produced. That is what makes the region observable in a test: the region
+// never travels in the action's Spec, it is read back from the on-disk eks.yaml when the provisioner
+// is built.
+func newRegionRecordingEKSService(
+	t *testing.T,
+	provisioner *fakeProvisioner,
+	recorder *regionRecorder,
+) *clusterapi.Service {
+	t.Helper()
+
+	// Only EKS gets the cluster-bearing provisioner. Handing the same one to every distribution
+	// would let discovery find the cluster under Vanilla first, so the action would resolve as a
+	// Vanilla cluster and never take the EKS path this test exists to exercise.
+	empty := &fakeProvisioner{}
+
+	return clusterapi.NewTestService(func(
+		distribution v1alpha1.Distribution,
+		name string,
+	) (clusterprovisioner.Factory, error) {
+		if distribution != v1alpha1.DistributionEKS {
+			return fakeFactory{provisioner: empty}, nil
+		}
+
+		// Discovery builds a factory with no cluster name; only a named build resolves a config.
+		if name != "" {
+			_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+			if err != nil {
+				return nil, err
+			}
+
+			recorder.record(region)
+		}
+
+		return fakeFactory{provisioner: provisioner}, nil
+	})
+}
+
+// TestDeleteEKSReachesProvisionerBoundToCreationRegion is the lifecycle guard #6203 needs: a
+// *successful* delete must reach the provisioner, and the config resolved to build that provisioner
+// must carry the creation region even though a different one is selected now. The refusal tests
+// below only prove that unconfirmed targets are blocked; without this one, a regression that bound
+// the happy path to the current region would pass the whole suite.
+func TestDeleteEKSReachesProvisionerBoundToCreationRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const clusterName = "lifecycle-eks"
+
+	recorder := &regionRecorder{}
+	provisioner := &fakeProvisioner{}
+	service := newRegionRecordingEKSService(t, provisioner, recorder)
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.Equal(t, []string{"eu-north-1"}, recorder.since(0),
+		"create must bind to the region selected at create time")
+
+	// The operator selects a different region before deleting.
+	beforeDelete := recorder.count()
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		return slices.Equal(provisioner.deletedNames(), []string{clusterName})
+	}, eventuallyTimeout, eventuallyTick)
+
+	deleteRegions := recorder.since(beforeDelete)
+	require.NotEmpty(t, deleteRegions, "the delete must have built a provisioner for this cluster")
+
+	for _, region := range deleteRegions {
+		assert.Equal(t, "eu-north-1", region,
+			"a successful delete must run against the creation region, not the one selected now")
+	}
 }
 
 // TestDeleteEKSRefusesWithoutPersistedOwnershipState guards the destructive path directly: with no

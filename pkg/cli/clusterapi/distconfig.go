@@ -73,7 +73,25 @@ func eksDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{EKS: bound}, nil
 	}
 
+	// Validate the name first so a malformed one keeps reporting itself. The region check below
+	// would otherwise fire for every name whenever no region is selected, masking the name error
+	// behind an environment one. This is the name check alone — resolving the full path here would
+	// canonicalize a ~/.ksail/clusters that a first create has not created yet.
+	err = validateClusterSegmentName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// An empty region would be stamped into metadata.region, and boundEKSConfig rejects such a file
+	// permanently once persisted state exists — leaving a cluster that can never be deleted, started
+	// or stopped through KSail. Refuse while nothing has been written instead.
 	region := os.Getenv(credentials.DefaultEnvVar(credentials.AWSRegion))
+	if region == "" {
+		return nil, fmt.Errorf(
+			"%w: no AWS region is selected for EKS cluster %q; set %s and create it again",
+			api.ErrInvalid, name, credentials.DefaultEnvVar(credentials.AWSRegion),
+		)
+	}
 
 	configPath, err := writeEKSConfig(name, region)
 	if err != nil {
@@ -124,8 +142,12 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		return nil, err
 	}
 
-	//nolint:gosec // configPath is contained within ~/.ksail/clusters (see canonicalClusterDir).
-	content, err := os.ReadFile(configPath)
+	clustersRoot, err := eksClustersRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := fsutil.ReadFileSafe(clustersRoot, configPath)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%w: read the eks config that binds cluster %q to its region: %w",
@@ -146,8 +168,8 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 	if parsed.Metadata.Region == "" {
 		return nil, fmt.Errorf(
 			"%w: the eks config for cluster %q records no region, so its target cannot be"+
-				" confirmed; run `ksail cluster rebind-eks-ownership --name %s` to re-establish it",
-			api.ErrInvalid, name, name,
+				" confirmed; set metadata.region in %s to the region the cluster was created in",
+			api.ErrInvalid, name, configPath,
 		)
 	}
 
@@ -170,20 +192,15 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 // createDir distinguishes the two callers: the write path creates the directory, while reading an
 // existing cluster's binding must not bring one into existence.
 func eksConfigPath(name string, createDir bool) (string, error) {
-	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
-		return "", fmt.Errorf(
-			"%w: cluster name %q must be a single path segment",
-			api.ErrInvalid,
-			name,
-		)
-	}
-
-	home, err := os.UserHomeDir()
+	err := validateClusterSegmentName(name)
 	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
+		return "", err
 	}
 
-	clustersRoot := filepath.Join(home, ".ksail", "clusters")
+	clustersRoot, err := eksClustersRoot()
+	if err != nil {
+		return "", err
+	}
 
 	if createDir {
 		mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
@@ -216,6 +233,36 @@ func writeEKSConfig(name, region string) (string, error) {
 	}
 
 	return configPath, nil
+}
+
+// validateClusterSegmentName rejects any cluster name that would not become exactly one directory
+// under ~/.ksail/clusters. filepath.IsLocal alone is insufficient — it still permits multi-segment
+// names like "foo/bar" and ".", which would redirect the path into an unintended nested directory —
+// so the name must also equal its own base element, and the "." / ".." specials are rejected.
+//
+// It is separated from eksConfigPath so callers can reject a bad name without touching the
+// filesystem, which matters before ~/.ksail/clusters exists.
+func validateClusterSegmentName(name string) error {
+	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
+		return fmt.Errorf(
+			"%w: cluster name %q must be a single path segment",
+			api.ErrInvalid,
+			name,
+		)
+	}
+
+	return nil
+}
+
+// eksClustersRoot resolves ~/.ksail/clusters — the single directory every generated cluster config
+// is confined to, and therefore the base every read of one is bounded by.
+func eksClustersRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	return filepath.Join(home, ".ksail", "clusters"), nil
 }
 
 // canonicalClusterDir canonicalizes ~/.ksail/clusters/<name> (resolving symlinks) and confirms it

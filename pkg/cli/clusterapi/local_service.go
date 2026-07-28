@@ -525,16 +525,14 @@ func (s *Service) startJob(
 
 	target := v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider}
 
-	// EKS mutations reach a remote AWS account, so they must run against the target bound when the
-	// cluster was created rather than whatever the caller has selected since. Resolving this before
-	// the job is registered keeps a refused mutation from leaving an in-flight job behind.
+	// EKS mutations reach a remote AWS account, so refuse one whose target KSail cannot confirm it
+	// owns. Checking before the job is registered keeps a refused mutation from leaving an in-flight
+	// job behind.
 	if distribution == v1alpha1.DistributionEKS {
-		bound, bindErr := eksMutationTarget(name, distribution, provider)
+		bindErr := confirmEKSOwnership(name, distribution, provider)
 		if bindErr != nil {
 			return v1alpha1.Spec{}, bindErr
 		}
-
-		target = *bound
 	}
 
 	s.mu.Lock()
@@ -555,43 +553,45 @@ func (s *Service) startJob(
 	return v1alpha1.Spec{Cluster: target}, nil
 }
 
-// eksMutationTarget returns the ownership state persisted when the cluster was created, for use as
-// the target of a delete/start/stop.
+// confirmEKSOwnership reports whether KSail can confirm it owns the named EKS cluster, so a
+// delete/start/stop is refused rather than aimed at a remote cluster it cannot account for. State
+// persisted at create time is the evidence: its presence marks the create as complete, and the
+// distribution/provider it records must match how the cluster resolved now.
 //
-// The EKS provisioner regenerates eks.yaml from the spec it is handed, and a spec carrying only a
-// distribution and provider leaves the region to be resolved from the ambient environment at action
-// time. Changing the AWS region between creating a cluster and operating on it would therefore
-// redirect the action to a same-named cluster in the newly selected region, so the mutation target
-// is read back from disk instead of being rebuilt.
+// It deliberately does NOT supply the action's target spec. The region binding is carried by the
+// on-disk eks.yaml, which the provisioner factory reads back through distributionConfig for the
+// cluster name — the spec never conveys it. Persisted state is also a sanitized snapshot (registry
+// credentials are redacted on the way in), so promoting it to the runtime target would hand the
+// provisioner values that were never meant to be replayed, while binding nothing extra.
 //
 // Missing or inconsistent state fails the mutation rather than falling back to ambient settings:
 // delete is destructive, and a same-named cluster in another reachable region is the exact outcome
-// the fallback would produce. `ksail cluster rebind-eks-ownership` re-establishes the binding for a
-// cluster whose state predates it or was lost.
-func eksMutationTarget(
+// the fallback would produce.
+func confirmEKSOwnership(
 	name string,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
-) (*v1alpha1.ClusterSpec, error) {
+) error {
 	persisted, err := state.LoadClusterSpec(name)
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotFound) {
-			return nil, fmt.Errorf(
-				"%w: no local KSail ownership state for EKS cluster %q, so its region cannot be"+
-					" confirmed; run `ksail cluster rebind-eks-ownership --name %s` to re-establish"+
-					" it, or use `ksail cluster delete --name %s` to act on an explicit target",
-				api.ErrInvalid, name, name, name,
+			return fmt.Errorf(
+				"%w: no local KSail ownership state for EKS cluster %q, so KSail cannot confirm"+
+					" which remote cluster this would act on; delete it with the AWS tooling"+
+					" directly (`eksctl delete cluster --name %s --region <region>`) once you have"+
+					" confirmed its region",
+				api.ErrInvalid, name, name,
 			)
 		}
 
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"%w: read local KSail ownership state for EKS cluster %q: %w",
 			api.ErrInvalid, name, err,
 		)
 	}
 
 	if persisted.Distribution != distribution || persisted.Provider != provider {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"%w: local KSail ownership state for EKS cluster %q records %s/%s but the cluster"+
 				" resolved as %s/%s; refusing to mutate an unconfirmed target",
 			api.ErrInvalid, name,
@@ -600,7 +600,7 @@ func eksMutationTarget(
 		)
 	}
 
-	return persisted, nil
+	return nil
 }
 
 // jobInProgress reports whether a lifecycle action is already running for the cluster. It is a
