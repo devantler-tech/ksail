@@ -858,10 +858,23 @@ func resolveKubeContext(ctx *localregistry.Context) string {
 	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
 	// context must resolve to the same value the guard validated, otherwise it
 	// would pass the guard yet break the REST clients the probes build.
-	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) != "" {
+		return kubeContextFor(ctx.ClusterCfg, "")
+	}
+
+	return kubeContextFor(ctx.ClusterCfg, resolveClusterNameFromContext(ctx))
+}
+
+// kubeContextFor resolves the kubeconfig context for a cluster from its pinned
+// spec.cluster.connection.context, falling back to the distribution's derived
+// context name for clusterName. Callers that hold a resolved cluster name but
+// not the full localregistry.Context use this directly, so a cluster read and
+// the write that follows it always target the same context — writing to the
+// ambient current-context instead would land the change on another cluster.
+func kubeContextFor(clusterCfg *v1alpha1.Cluster, clusterName string) string {
+	k8sContext := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 	if k8sContext == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+		k8sContext = clusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
 	}
 
 	return k8sContext

@@ -30,9 +30,14 @@ const (
 //
 // It is a no-op when the configured registry is not external or carries no
 // credentials.
+//
+// kubeContext must be the same context the drift check read from. An empty
+// context falls back to the kubeconfig's ambient current-context, which can be
+// a different cluster entirely — so a rotation detected on one cluster would be
+// written to another.
 func EnsureRegistryCredentials(
 	ctx context.Context,
-	kubeconfig string,
+	kubeconfig, kubeContext string,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	if clusterCfg == nil {
@@ -43,7 +48,7 @@ func EnsureRegistryCredentials(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig, "")
+	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return err
 	}

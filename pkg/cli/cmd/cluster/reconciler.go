@@ -649,7 +649,9 @@ func (r *componentReconciler) reconcileRegistryCredentials(
 		return fmt.Errorf("failed to get kubeconfig path: %w", err)
 	}
 
-	err = fluxinstaller.EnsureRegistryCredentials(ctx, kubeconfigPath, r.clusterCfg)
+	err = fluxinstaller.EnsureRegistryCredentials(
+		ctx, kubeconfigPath, kubeContextFor(r.clusterCfg, r.clusterName), r.clusterCfg,
+	)
 	if err != nil {
 		return fmt.Errorf("refresh registry credentials: %w", err)
 	}
