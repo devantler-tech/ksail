@@ -1525,6 +1525,7 @@ func TestDeleteEKSReachesProvisionerBoundToCreationRegion(t *testing.T) {
 
 	// The operator selects a different region before deleting.
 	beforeDelete := recorder.count()
+
 	t.Setenv("AWS_REGION", "us-east-1")
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
