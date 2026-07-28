@@ -617,9 +617,11 @@ func TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails(t *testing.T) {
 	}
 
 	clustersDir := filepath.Join(home, ".ksail", "clusters")
+	//nolint:gosec // 0500 is a directory mode: it keeps the state readable while removing write.
 	require.NoError(t, os.Chmod(clustersDir, 0o500))
 
 	t.Cleanup(func() {
+		//nolint:gosec // 0700 is a directory mode: restores write so TempDir cleanup can remove it.
 		_ = os.Chmod(clustersDir, 0o700)
 	})
 
@@ -1394,7 +1396,10 @@ func TestDeleteEKSRefusesWithoutPersistedOwnershipState(t *testing.T) {
 	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
 		v1alpha1.DistributionEKS: provisioner,
 	})
-	_, err := service.Create(context.Background(), clusterFor(clusterName, v1alpha1.DistributionEKS))
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		list, listErr := service.List(context.Background())
@@ -1424,7 +1429,10 @@ func TestDeleteEKSRefusesWhenPersistedOwnershipStateDisagrees(t *testing.T) {
 	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
 		v1alpha1.DistributionEKS: provisioner,
 	})
-	_, err := service.Create(context.Background(), clusterFor(clusterName, v1alpha1.DistributionEKS))
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		list, listErr := service.List(context.Background())
