@@ -146,6 +146,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
+	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -173,7 +174,8 @@ func isComponentReconcileField(field string) bool {
 		"cluster.gitOpsEngine",
 		"cluster.workload.tag",
 		"cluster.workload.flux.distributionVersion",
-		specdiff.EKSLoadBalancerControllerField:
+		specdiff.EKSLoadBalancerControllerField,
+		specdiff.RegistryCredentialField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -594,6 +596,22 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 	}
 }
 
+// fluxKubeconfigPath resolves the kubeconfig path for the Flux-only reconcile
+// handlers. isFlux is false when the cluster runs a different GitOps engine, in
+// which case those handlers have nothing to do and the path is empty.
+func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
+	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return "", false, nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	return kubeconfigPath, true, nil
+}
+
 // reconcileFluxVersion re-asserts the FluxInstance so a changed
 // spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
 // takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
@@ -602,13 +620,9 @@ func (r *componentReconciler) reconcileFluxVersion(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {
-	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return nil
-	}
-
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
+	if err != nil || !isFlux {
+		return err
 	}
 
 	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
@@ -625,6 +639,29 @@ func (r *componentReconciler) reconcileFluxVersion(
 	)
 	if err != nil {
 		return fmt.Errorf("setup flux instance: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileRegistryCredentials re-writes the KSail-managed registry Secret so a
+// rotated pull credential reaches the cluster. The upsert is idempotent and
+// carries no other FluxInstance state, so it is safe to run whenever credential
+// drift is detected.
+func (r *componentReconciler) reconcileRegistryCredentials(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
+	if err != nil || !isFlux {
+		return err
+	}
+
+	err = fluxinstaller.EnsureRegistryCredentials(
+		ctx, kubeconfigPath, kubeContextFor(r.clusterCfg, r.clusterName), r.clusterCfg,
+	)
+	if err != nil {
+		return fmt.Errorf("refresh registry credentials: %w", err)
 	}
 
 	return nil

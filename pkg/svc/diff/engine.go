@@ -15,6 +15,28 @@ import (
 // renames cannot silently disconnect detection from application.
 const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerController"
 
+// RegistryCredentialField is the diff key for the root registry pull credential
+// held in the KSail-managed registry Secret. Reconciliation uses the same
+// constant so field renames cannot silently disconnect detection from
+// application.
+//
+//nolint:gosec // G101 false positive: a diff key, not a credential.
+const RegistryCredentialField = "cluster.localRegistry.credentials"
+
+// registryCredentialOldDisplay and registryCredentialNewDisplay are the values
+// rendered for a credential rotation. The resolved credential — and any digest
+// of it — is deliberately never placed in a Change: Change values are printed by
+// the update output, and a digest of a low-entropy password with a known
+// registry and username is guessable offline.
+// These are exactly the strings a reader sees in place of a credential, so
+// G101 flagging them is the inverse of the truth.
+const (
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
+	registryCredentialOldDisplay = "stale (redacted)"
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
+	registryCredentialNewDisplay = "rotated (redacted)"
+)
+
 // Engine computes configuration differences and classifies their impact.
 type Engine struct {
 	distribution v1alpha1.Distribution
@@ -107,6 +129,34 @@ func (e *Engine) CheckFluxDistributionVersion(
 		oldVersion, newVersion, "",
 		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
 		clusterupdate.ChangeCategoryInPlace)
+}
+
+// CheckRegistryCredential appends an in-place change when the credential in the
+// KSail-managed registry Secret has drifted from the one the resolved
+// configuration would write. This is what makes a credential-only rotation
+// visible: the structural diff redacts registry passwords, so a rotated token
+// with otherwise identical configuration produces no field change and would
+// otherwise leave the cluster authenticating with a revoked value.
+//
+// drifted is a single bit decided by the flux installer, which holds both
+// credentials and compares them in constant time. No credential — and nothing
+// derived from one — crosses into this package, so there is nothing here that
+// could reach a rendered Change value; see registryCredentialOldDisplay.
+func (e *Engine) CheckRegistryCredential(
+	drifted bool,
+	result *clusterupdate.UpdateResult,
+) {
+	if !drifted {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    RegistryCredentialField,
+		OldValue: registryCredentialOldDisplay,
+		NewValue: registryCredentialNewDisplay,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "registry credentials can be refreshed in-place by re-writing the registry Secret",
+	})
 }
 
 // fieldRule describes how to diff a single scalar field.

@@ -858,10 +858,23 @@ func resolveKubeContext(ctx *localregistry.Context) string {
 	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
 	// context must resolve to the same value the guard validated, otherwise it
 	// would pass the guard yet break the REST clients the probes build.
-	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) != "" {
+		return kubeContextFor(ctx.ClusterCfg, "")
+	}
+
+	return kubeContextFor(ctx.ClusterCfg, resolveClusterNameFromContext(ctx))
+}
+
+// kubeContextFor resolves the kubeconfig context for a cluster from its pinned
+// spec.cluster.connection.context, falling back to the distribution's derived
+// context name for clusterName. Callers that hold a resolved cluster name but
+// not the full localregistry.Context use this directly, so a cluster read and
+// the write that follows it always target the same context — writing to the
+// ambient current-context instead would land the change on another cluster.
+func kubeContextFor(clusterCfg *v1alpha1.Cluster, clusterName string) string {
+	k8sContext := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 	if k8sContext == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+		k8sContext = clusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
 	}
 
 	return k8sContext
@@ -915,6 +928,9 @@ func (o *updateOrchestrator) computeUpdateDiff(
 
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(o.cmd, o.ctx, diffEngine, diff)
+
+	// Check for registry credential drift (a rotated token behind an unchanged spec)
+	checkRegistryCredentialDrift(o.cmd, o.ctx, diffEngine, diff)
 
 	promoteUnsupportedInPlaceChanges(updater, diff)
 
@@ -1198,6 +1214,53 @@ func checkFluxDistributionVersionDrift(
 		gitOpsEngine,
 		diff,
 	)
+}
+
+// checkRegistryCredentialDrift compares the credential held in the
+// KSail-managed registry Secret against the credential the resolved
+// configuration would write, and appends an in-place change when they differ.
+//
+// This is the only signal a credential-only rotation produces: registry
+// passwords are redacted from the structural diff, so rotating the environment
+// variable behind an otherwise identical configuration yields no field change
+// and the cluster keeps authenticating with the revoked value (issue #6107).
+// Flux only — the Secret is Flux's root pull Secret. Errors during cluster
+// queries are logged as warnings and skipped; they should not block the rest of
+// the update.
+func checkRegistryCredentialDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	if ctx.ClusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// No external registry, or no credentials configured — nothing to refresh.
+	if !fluxinstaller.HasExternalRegistryCredentials(ctx.ClusterCfg) {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for registry credential drift detection: %v", err)
+
+		return
+	}
+
+	drifted, err := fluxinstaller.RegistryCredentialDrifted(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot compare registry credentials for drift detection: %v", err)
+
+		return
+	}
+
+	diffEngine.CheckRegistryCredential(drifted, diff)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current

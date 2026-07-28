@@ -63,8 +63,11 @@ func ensureRegistrySecret(
 	return upsertSecret(ctx, k8sClient, secret)
 }
 
-// newCoreV1Client creates a Kubernetes client with core/v1 types registered.
-func newCoreV1Client(restConfig *rest.Config) (client.Client, error) {
+// newCoreV1Client creates a Kubernetes client with core/v1 types registered. It is a variable so
+// tests can substitute a fake, matching newKubernetesClient and the other client seams here.
+//
+//nolint:gochecknoglobals // Allows mocking for tests
+var newCoreV1Client = func(restConfig *rest.Config) (client.Client, error) {
 	scheme := runtime.NewScheme()
 
 	err := corev1.AddToScheme(scheme)
