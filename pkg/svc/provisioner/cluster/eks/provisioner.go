@@ -13,7 +13,6 @@ import (
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -59,8 +58,6 @@ type Provisioner struct {
 	requireCredentialValues bool
 	// ownershipVerifier rechecks immutable identity immediately before EKS mutations.
 	ownershipVerifier eksidentity.Verifier
-	// componentDetector probes the running cluster's components for the update baseline.
-	componentDetector *detector.ComponentDetector
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -139,7 +136,6 @@ func NewProvisioner(
 		eksClientOptions:        nil,
 		requireCredentialValues: false,
 		ownershipVerifier:       nil,
-		componentDetector:       nil,
 		awsMu:                   sync.Mutex{},
 	}
 
