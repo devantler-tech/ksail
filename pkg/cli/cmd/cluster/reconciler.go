@@ -596,6 +596,22 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 	}
 }
 
+// fluxKubeconfigPath resolves the kubeconfig path for the Flux-only reconcile
+// handlers. isFlux is false when the cluster runs a different GitOps engine, in
+// which case those handlers have nothing to do and the path is empty.
+func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
+	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return "", false, nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	return kubeconfigPath, true, nil
+}
+
 // reconcileFluxVersion re-asserts the FluxInstance so a changed
 // spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
 // takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
@@ -604,13 +620,9 @@ func (r *componentReconciler) reconcileFluxVersion(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {
-	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return nil
-	}
-
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
+	if err != nil || !isFlux {
+		return err
 	}
 
 	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
@@ -640,13 +652,9 @@ func (r *componentReconciler) reconcileRegistryCredentials(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {
-	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return nil
-	}
-
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
+	if err != nil || !isFlux {
+		return err
 	}
 
 	err = fluxinstaller.EnsureRegistryCredentials(
