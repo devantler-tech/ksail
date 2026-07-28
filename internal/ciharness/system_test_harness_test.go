@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,14 +75,16 @@ type compositeAction struct {
 	} `yaml:"runs"`
 }
 
+//nolint:tagliatelle // GitHub Actions defines this external key in kebab-case.
 type ciWorkflow struct {
 	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
-		Permissions map[string]string `yaml:"permissions"`
-		Steps       []harnessStep     `yaml:"steps"`
-		If          string            `yaml:"if"`
-		Needs       []string          `yaml:"needs"`
-		Uses        string            `yaml:"uses"`
+		TimeoutMinutes int               `yaml:"timeout-minutes"`
+		Permissions    map[string]string `yaml:"permissions"`
+		Steps          []harnessStep     `yaml:"steps"`
+		If             string            `yaml:"if"`
+		Needs          []string          `yaml:"needs"`
+		Uses           string            `yaml:"uses"`
 	} `yaml:"jobs"`
 }
 
@@ -361,13 +365,13 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
 	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
 
-	diagnosticUploadIndex := findHarnessStepIndex(
+	diagnosticUploadIndex := harnessStepIndex(
 		t,
 		dockerJob.Steps,
 		"📤 Upload system test diagnostics",
 	)
-	cleanupIndex := findHarnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
-	logUploadIndex := findHarnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
+	cleanupIndex := harnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
+	logUploadIndex := harnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
 	assert.Less(t, diagnosticUploadIndex, cleanupIndex)
 	assert.Less(t, cleanupIndex, logUploadIndex)
 	assertBoundedWorkflowUpload(
@@ -571,6 +575,173 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 			)
 		})
 	}
+}
+
+// assertStepTimeoutCoversRetryBudget pins the RELATIONSHIP between the scaling
+// step's timeout and the retry loop inside it, rather than pinning each as its
+// own magic number. wait_for_capacity polls on a bounded loop and runs twice; if
+// those two calls can outlast the step, GitHub kills the step before the loop
+// prints why capacity was never reached, and a capacity failure becomes an
+// opaque timeout. Deriving the budget from the loop keeps the two in step when
+// either is retuned.
+func assertStepTimeoutCoversRetryBudget(t *testing.T, step harnessStep) {
+	t.Helper()
+
+	bound := regexp.MustCompile(`for _ in \{1\.\.(\d+)\}`).FindStringSubmatch(step.Run)
+	require.Len(t, bound, 2, "wait_for_capacity retry bound not found in step")
+
+	iterations, err := strconv.Atoi(bound[1])
+	require.NoError(t, err)
+	require.Positive(t, iterations)
+
+	// Derive the sleep interval and the call count from the script too. Hard-coding
+	// either lets a workflow retune (a longer sleep, a third scaling assertion)
+	// leave this guard passing while the real budget has outgrown the timeout.
+	sleeps := regexp.MustCompile(`(?m)^\s*sleep\s+(\d+)\s*$`).FindAllStringSubmatch(step.Run, -1)
+	require.NotEmpty(t, sleeps, "wait_for_capacity poll interval not found in step")
+
+	sleepSeconds, err := strconv.Atoi(sleeps[0][1])
+	require.NoError(t, err)
+	require.Positive(t, sleepSeconds)
+
+	for _, sleep := range sleeps {
+		require.Equal(
+			t, sleeps[0][1], sleep[1],
+			"step mixes poll intervals (%s vs %s); the budget below assumes one",
+			sleeps[0][1], sleep[1],
+		)
+	}
+
+	// Count invocations, not the function definition — a call always passes args.
+	waitForCapacityRuns := len(
+		regexp.MustCompile(`(?m)^\s*wait_for_capacity\s+\d`).FindAllString(step.Run, -1),
+	)
+	require.Positive(t, waitForCapacityRuns, "no wait_for_capacity invocations found in step")
+
+	pollMinutes := iterations * sleepSeconds * waitForCapacityRuns / 60
+
+	assert.Greater(
+		t, step.TimeoutMinutes, pollMinutes,
+		"step timeout (%dm) must exceed its own worst-case polling budget (%d x %ds x %d = %dm), "+
+			"or the step timeout masks wait_for_capacity's diagnostic",
+		step.TimeoutMinutes, iterations, sleepSeconds, waitForCapacityRuns, pollMinutes,
+	)
+}
+
+func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	updateStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	assertStepTimeoutCoversRetryBudget(t, updateStep)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, "ksail cluster update --yes"))
+	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
+	assert.Contains(t, updateStep.Run, `assert_same_cluster`)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, `assert_same_cluster "$cluster_identity"`))
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 2 1 2`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 2 1 2 2`)
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 1 1 1`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 1 1 1 1`)
+	assert.Contains(t, updateStep.Run, `eksctl get nodegroup`)
+	assert.Contains(t, updateStep.Run, `.Status == "ACTIVE"`)
+	assert.Contains(t, updateStep.Run, `kubectl get nodes -o json`)
+	assert.Contains(t, updateStep.Run, `type == "Ready"`)
+	assert.NotContains(t, updateStep.Run, "experimentalInPlaceUpdates")
+
+	infoIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster info")
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, infoIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+}
+
+//nolint:funlen // One test locks the complete job-budget and credential-refresh contract.
+func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+	assert.Equal(t, 210, smokeJob.TimeoutMinutes)
+
+	boundedStepNames := []string{
+		"📄 Checkout",
+		"🔐 Configure AWS credentials (OIDC)",
+		"🔐 Resolve EKS permissions boundary",
+		"⚙️ Setup Go",
+		"📦 Cache KSail Binary",
+		"📥 Install eksctl",
+		"🔧 Initialize EKS project",
+		"🧪 ksail cluster create",
+		"🧪 ksail cluster info",
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+		"🧪 ksail cluster update scales EKS nodes",
+		"🧪 ksail workload reconcile",
+		"🧹 Delete EKS smoke cluster",
+	}
+
+	boundedMinutes := 0
+
+	for _, name := range boundedStepNames {
+		step := findHarnessStep(t, smokeJob.Steps, name)
+		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
+		boundedMinutes += step.TimeoutMinutes
+	}
+
+	assert.LessOrEqual(t, boundedMinutes+15, smokeJob.TimeoutMinutes)
+
+	initialCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Configure AWS credentials (OIDC)",
+	)
+	refreshCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	assert.Equal(t, initialCredentials.Uses, refreshCredentials.Uses)
+	assert.Equal(
+		t,
+		initialCredentials.With["role-to-assume"],
+		refreshCredentials.With["role-to-assume"],
+	)
+	assert.Equal(t, 7200, refreshCredentials.With["role-duration-seconds"])
+	assert.Contains(t, refreshCredentials.If, "always()")
+
+	refreshIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, refreshIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+
+	postRefreshMinutes := 0
+	for _, name := range boundedStepNames[10:] {
+		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
+	}
+
+	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
+}
+
+func harnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
+	t.Helper()
+
+	for index, step := range steps {
+		if step.Name == name {
+			return index
+		}
+	}
+
+	t.Fatalf("step %q is missing", name)
+
+	return -1
 }
 
 func requireTestExecutable(t *testing.T, name string) {
@@ -826,32 +997,12 @@ func readRepoFile(t *testing.T, path string) []byte {
 	return contents
 }
 
+// findHarnessStep returns the named step, delegating the lookup to
+// harnessStepIndex so a single linear search backs every step accessor.
 func findHarnessStep(t *testing.T, steps []harnessStep, name string) harnessStep {
 	t.Helper()
 
-	for _, step := range steps {
-		if step.Name == name {
-			return step
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return harnessStep{}
-}
-
-func findHarnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
-	t.Helper()
-
-	for index, step := range steps {
-		if step.Name == name {
-			return index
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return -1
+	return steps[harnessStepIndex(t, steps, name)]
 }
 
 func assertBoundedWorkflowUpload(

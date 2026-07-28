@@ -195,29 +195,30 @@ func TestCreateEKSProvisionerWithConfig(t *testing.T) {
 }
 
 // TestCreateEKSProvisionerUpdaterAvailableForComponents asserts EKS always
-// exposes the update orchestration path needed for component reconciliation.
-// The experimental flag gates managed node-group mutation inside the updater;
-// it must not hide unrelated component changes such as the load-balancer opt-in.
+// exposes the update orchestration path needed for component reconciliation,
+// and that it no longer depends on an experimental spec field. Managed
+// node-group mutation is graduated: it is gated only by a declared eksctl
+// config path, which is what the node-group diff is computed from.
 func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name           string
-		inPlaceUpdates bool
-		configPath     string
+		name string
+		// configPath is the graduated gate: managed node-group mutation is
+		// enabled iff an eksctl config path is declared, because the node-group
+		// diff is computed from that file.
+		configPath           string
+		wantNodegroupInPlace bool
 	}{
 		{
-			name: "default supports component reconciliation", inPlaceUpdates: false,
-			configPath: "eks.yaml",
+			name:                 "supports component reconciliation with an eksctl config path",
+			configPath:           "eks.yaml",
+			wantNodegroupInPlace: true,
 		},
 		{
-			name: "node update opt-in also supports reconciliation", inPlaceUpdates: true,
-			configPath: "eks.yaml",
-		},
-		{
-			name:           "component reconciliation does not require an eksctl config path",
-			inPlaceUpdates: true,
-			configPath:     "",
+			name:                 "component reconciliation does not require an eksctl config path",
+			configPath:           "",
+			wantNodegroupInPlace: false,
 		},
 	}
 
@@ -235,15 +236,31 @@ func TestCreateEKSProvisionerUpdaterAvailableForComponents(t *testing.T) {
 				},
 			}
 
-			cluster := eksTestCluster()
-			cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates = testCase.inPlaceUpdates
-
-			provisioner, _, err := factory.Create(context.Background(), cluster)
+			provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
 			require.NoError(t, err)
 
 			_, hasUpdater := provisioner.(clusterprovisioner.Updater)
-			assert.True(t, hasUpdater)
-			assert.IsType(t, &eksprovisioner.UpdatableProvisioner{}, provisioner)
+			assert.True(t, hasUpdater, "EKS scaling must not require an experimental spec field")
+
+			// Assert the managed-node-group capability itself, not just that a
+			// wrapper was returned. Both cases always yield an
+			// UpdatableProvisioner, so a type assertion alone still passes if the
+			// factory stops enabling node-group updates entirely.
+			updatable, isUpdatable := provisioner.(*eksprovisioner.UpdatableProvisioner)
+			require.True(t, isUpdatable, "EKS must return the updatable provisioner wrapper")
+			assert.Equal(
+				t,
+				testCase.wantNodegroupInPlace,
+				updatable.SupportsInPlaceField("eks.managedNodeGroups[ng-1].desiredCapacity"),
+				"managed node-group in-place updates are gated on a declared eksctl config path",
+			)
+			// Component reconciliation stays available either way, so a
+			// non-node-group field is never advertised as in-place here.
+			assert.False(
+				t,
+				updatable.SupportsInPlaceField("eks.version"),
+				"only managed node-group fields are mutated in place",
+			)
 		})
 	}
 }

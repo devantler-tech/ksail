@@ -70,11 +70,10 @@ func (f DefaultFactory) createEKSProvisioner(
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
 	}
 
-	// EKS always exposes Updater so component-only changes can reconcile without
-	// opting into experimental node-group mutation. Managed node-group updates
-	// remain gated by both the explicit flag and a declared eksctl config path.
-	managedNodegroupUpdates := cluster.Spec.Cluster.EKS.ExperimentalInPlaceUpdates &&
-		eksConfig.ConfigPath != ""
+	// EKS always exposes Updater so component-only changes can reconcile. Managed
+	// node-group mutation is graduated out of its experimental flag and now needs
+	// only a declared eksctl config path, which is what the diff is computed from.
+	managedNodegroupUpdates := eksConfig.ConfigPath != ""
 
 	return eksprovisioner.NewUpdatableProvisioner(
 		provisioner,

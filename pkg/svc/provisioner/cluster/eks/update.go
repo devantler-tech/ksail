@@ -23,7 +23,8 @@ import (
 // UpdatableProvisioner wraps Provisioner with the Updater capability needed by
 // the orchestrator for both component reconciliation and managed node-group
 // scaling. Component reconciliation is always available; managed node-group
-// mutation remains gated by spec.cluster.eks.experimentalInPlaceUpdates.
+// mutation requires only a declared eksctl config path, which is what the
+// node-group diff is computed from.
 type UpdatableProvisioner struct {
 	*Provisioner
 
