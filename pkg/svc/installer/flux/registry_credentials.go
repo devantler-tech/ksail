@@ -43,6 +43,13 @@ func EnsureRegistryCredentials(
 		return errInvalidClusterConfig
 	}
 
+	// Honour the documented no-op before reaching for the cluster. ensureExternalRegistrySecret
+	// already returns nil for a registry KSail would not write to, but only after a REST config has
+	// been resolved — so on a machine with no usable kubeconfig the "no-op" failed instead.
+	if !HasExternalRegistryCredentials(clusterCfg) {
+		return nil
+	}
+
 	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return err
@@ -72,10 +79,14 @@ func HasExternalRegistryCredentials(clusterCfg *v1alpha1.Cluster) bool {
 // answer a caller needs is a single bit, so a single bit is all it gets.
 //
 // It reports false — never an error — when there is nothing KSail may safely
-// compare against: the Secret does not exist, it holds no docker config, or it
-// is not labelled as KSail-managed. That last case is the ownership boundary: a
-// Secret supplied by an ExternalSecret must not be diffed into a change that
-// would have KSail overwrite it.
+// compare against: the Secret does not exist, or it is not labelled as
+// KSail-managed. That second case is the ownership boundary: a Secret supplied
+// by an ExternalSecret must not be diffed into a change that would have KSail
+// overwrite it.
+//
+// A KSail-managed Secret carrying no docker config is the opposite case and
+// reports true. It is KSail's own Secret, so writing it is in bounds, and
+// leaving it alone would leave Flux unable to authenticate indefinitely.
 //
 // kubeContext selects the cluster to read. It must be the same context the
 // subsequent credential write targets, or drift detected on one cluster would be
@@ -99,9 +110,20 @@ func RegistryCredentialDrifted(
 		return false, nil
 	}
 
-	currentConfig, err := currentRegistryDockerConfig(ctx, kubeconfig, kubeContext)
+	currentConfig, owned, err := currentRegistryDockerConfig(ctx, kubeconfig, kubeContext)
 	if err != nil {
 		return false, err
+	}
+
+	// Absent or externally managed: nothing KSail may safely compare against, so never drift.
+	if !owned {
+		return false, nil
+	}
+
+	// Owned but carrying no docker config. Suppressing here would leave Flux unable to authenticate
+	// with no path back — the Secret is KSail's own, so refreshing it is safe and is the repair.
+	if len(currentConfig) == 0 {
+		return true, nil
 	}
 
 	return dockerConfigsDiffer(currentConfig, desiredConfig), nil
@@ -123,19 +145,26 @@ func dockerConfigsDiffer(current, desired []byte) bool {
 }
 
 // currentRegistryDockerConfig reads the docker config from the KSail-managed
-// registry Secret, or returns nil when there is none KSail owns.
+// registry Secret.
+//
+// owned reports whether the Secret exists AND is labelled KSail-managed — the
+// question of whether KSail may write it at all. It is returned separately from
+// the bytes because the two answers differ: an owned Secret carrying no docker
+// config is malformed rather than off-limits, and collapsing both into an empty
+// slice made that case indistinguishable from an absent one, so it was silently
+// left unrepaired.
 func currentRegistryDockerConfig(
 	ctx context.Context,
 	kubeconfig, kubeContext string,
-) ([]byte, error) {
+) ([]byte, bool, error) {
 	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
-		return nil, fmt.Errorf("build REST config: %w", err)
+		return nil, false, fmt.Errorf("build REST config: %w", err)
 	}
 
 	k8sClient, err := newCoreV1Client(restConfig)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	secret := &corev1.Secret{}
@@ -146,16 +175,16 @@ func currentRegistryDockerConfig(
 
 	err = k8sClient.Get(ctx, key, secret)
 	if apierrors.IsNotFound(err) {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("get registry secret: %w", err)
+		return nil, false, fmt.Errorf("get registry secret: %w", err)
 	}
 
 	if secret.Labels[managedByLabel] != managedByKSail {
-		return nil, nil
+		return nil, false, nil
 	}
 
-	return secret.Data[corev1.DockerConfigJsonKey], nil
+	return secret.Data[corev1.DockerConfigJsonKey], true, nil
 }

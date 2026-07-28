@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // errStubREST stops the call before it reaches a real API server: this test is
@@ -114,6 +117,134 @@ func TestRegistryCredentialDriftedSkipsClusterWithoutCredentials(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, drifted)
+}
+
+// TestEnsureRegistryCredentialsSkipsClusterWithoutCredentials is the write-side
+// twin of the drift-check skip above. EnsureRegistryCredentials documents itself
+// as a no-op when the registry carries nothing KSail would write, but it used to
+// resolve a REST config first — so on a machine with no usable kubeconfig the
+// no-op failed. The stub fails any REST config build, so reaching for one at all
+// fails the test.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestEnsureRegistryCredentialsSkipsClusterWithoutCredentials(t *testing.T) {
+	restore := fluxinstaller.SetLoadRESTConfig(
+		func(_, _ string) (*rest.Config, error) { return nil, errStubREST },
+	)
+	defer restore()
+
+	err := fluxinstaller.EnsureRegistryCredentials(
+		context.Background(), "/tmp/kubeconfig", testKubeContext, v1alpha1.NewCluster(),
+	)
+
+	require.NoError(t, err, "a cluster with no external credential must be a no-op, not a failure")
+}
+
+// newFakeCoreV1Client returns a seam replacement serving the given objects, and
+// a restore func.
+func newFakeCoreV1Client(t *testing.T, objects ...client.Object) func() {
+	t.Helper()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	restoreREST := fluxinstaller.SetLoadRESTConfig(
+		func(_, _ string) (*rest.Config, error) { return &rest.Config{}, nil },
+	)
+	restoreClient := fluxinstaller.SetNewCoreV1Client(
+		func(*rest.Config) (client.Client, error) { return fakeClient, nil },
+	)
+
+	return func() {
+		restoreClient()
+		restoreREST()
+	}
+}
+
+// registrySecret builds a Secret at the name/namespace the drift check reads,
+// with the given ownership label and docker config.
+func registrySecret(owned bool, dockerConfig []byte) *corev1.Secret {
+	secret := &corev1.Secret{}
+	secret.Name = fluxinstaller.ExternalRegistrySecretName
+	secret.Namespace = "flux-system"
+	secret.Type = corev1.SecretTypeDockerConfigJson
+
+	if owned {
+		secret.Labels = map[string]string{"app.kubernetes.io/managed-by": "ksail"}
+	} else {
+		secret.Labels = map[string]string{"app.kubernetes.io/managed-by": "external-secrets"}
+	}
+
+	if dockerConfig != nil {
+		secret.Data = map[string][]byte{corev1.DockerConfigJsonKey: dockerConfig}
+	}
+
+	return secret
+}
+
+// TestRegistryCredentialDriftedRepairsAnOwnedSecretWithNoDockerConfig covers the
+// case the ownership suppression used to swallow: a Secret KSail owns but whose
+// docker config is missing or empty is malformed, not off-limits. Reporting no
+// drift there leaves Flux unable to authenticate with nothing to trigger a
+// repair, whereas the Secret is KSail's own so rewriting it is in bounds.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestRegistryCredentialDriftedRepairsAnOwnedSecretWithNoDockerConfig(t *testing.T) {
+	for name, dockerConfig := range map[string][]byte{
+		"missing key": nil,
+		"empty value": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			restore := newFakeCoreV1Client(t, registrySecret(true, dockerConfig))
+			defer restore()
+
+			drifted, err := fluxinstaller.RegistryCredentialDrifted(
+				context.Background(), "/tmp/kubeconfig", testKubeContext,
+				newExternalRegistryCluster("a-token"),
+			)
+
+			require.NoError(t, err)
+			assert.True(t, drifted,
+				"a KSail-owned Secret with no docker config must be refreshed, not suppressed")
+		})
+	}
+}
+
+// TestRegistryCredentialDriftedSuppressesSecretsKSailDoesNotOwn is the boundary
+// the case above must not erode: an absent Secret and one managed by something
+// else both stay suppressed, because writing either would have KSail overwrite a
+// Secret it does not own.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestRegistryCredentialDriftedSuppressesSecretsKSailDoesNotOwn(t *testing.T) {
+	t.Run("absent", func(t *testing.T) {
+		restore := newFakeCoreV1Client(t)
+		defer restore()
+
+		drifted, err := fluxinstaller.RegistryCredentialDrifted(
+			context.Background(), "/tmp/kubeconfig", testKubeContext,
+			newExternalRegistryCluster("a-token"),
+		)
+
+		require.NoError(t, err)
+		assert.False(t, drifted)
+	})
+
+	t.Run("externally managed and empty", func(t *testing.T) {
+		restore := newFakeCoreV1Client(t, registrySecret(false, nil))
+		defer restore()
+
+		drifted, err := fluxinstaller.RegistryCredentialDrifted(
+			context.Background(), "/tmp/kubeconfig", testKubeContext,
+			newExternalRegistryCluster("a-token"),
+		)
+
+		require.NoError(t, err)
+		assert.False(t, drifted,
+			"ownership, not emptiness, is what suppresses a Secret KSail did not write")
+	})
 }
 
 // TestHasExternalRegistryCredentials pins the cheap predicate that decides

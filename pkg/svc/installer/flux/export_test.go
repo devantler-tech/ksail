@@ -137,6 +137,17 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	}
 }
 
+// SetNewCoreV1Client allows tests to replace newCoreV1Client with a fake, so the registry-Secret
+// read paths can be exercised against a synthetic cluster state.
+func SetNewCoreV1Client(fn func(*rest.Config) (client.Client, error)) func() {
+	original := newCoreV1Client
+	newCoreV1Client = fn
+
+	return func() {
+		newCoreV1Client = original
+	}
+}
+
 // SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.
 func SetLoadRESTConfig(fn func(string, string) (*rest.Config, error)) func() {
 	original := loadRESTConfig
