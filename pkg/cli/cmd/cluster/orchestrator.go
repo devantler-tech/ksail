@@ -916,6 +916,9 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(o.cmd, o.ctx, diffEngine, diff)
 
+	// Check for registry credential drift (a rotated token behind an unchanged spec)
+	checkRegistryCredentialDrift(o.cmd, o.ctx, diffEngine, diff)
+
 	promoteUnsupportedInPlaceChanges(updater, diff)
 
 	return currentSpec, diff, nil
@@ -1198,6 +1201,61 @@ func checkFluxDistributionVersionDrift(
 		gitOpsEngine,
 		diff,
 	)
+}
+
+// checkRegistryCredentialDrift compares the credential held in the
+// KSail-managed registry Secret against the credential the resolved
+// configuration would write, and appends an in-place change when they differ.
+//
+// This is the only signal a credential-only rotation produces: registry
+// passwords are redacted from the structural diff, so rotating the environment
+// variable behind an otherwise identical configuration yields no field change
+// and the cluster keeps authenticating with the revoked value (issue #6107).
+// Flux only — the Secret is Flux's root pull Secret. Errors during cluster
+// queries are logged as warnings and skipped; they should not block the rest of
+// the update.
+func checkRegistryCredentialDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	if ctx.ClusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	desiredDigest, err := fluxinstaller.DesiredRegistryCredentialDigest(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve desired registry credentials for drift detection: %v", err)
+
+		return
+	}
+
+	// No external registry, or no credentials configured — nothing to refresh.
+	if desiredDigest == "" {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for registry credential drift detection: %v", err)
+
+		return
+	}
+
+	currentDigest, err := fluxinstaller.CurrentRegistryCredentialDigest(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx),
+	)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot query current registry credentials for drift detection: %v", err)
+
+		return
+	}
+
+	diffEngine.CheckRegistryCredential(currentDigest, desiredDigest, diff)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current

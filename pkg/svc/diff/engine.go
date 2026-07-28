@@ -15,6 +15,22 @@ import (
 // renames cannot silently disconnect detection from application.
 const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerController"
 
+// RegistryCredentialField is the diff key for the root registry pull credential
+// held in the KSail-managed registry Secret. Reconciliation uses the same
+// constant so field renames cannot silently disconnect detection from
+// application.
+const RegistryCredentialField = "cluster.localRegistry.credentials"
+
+// registryCredentialOldDisplay and registryCredentialNewDisplay are the values
+// rendered for a credential rotation. The resolved credential — and any digest
+// of it — is deliberately never placed in a Change: Change values are printed by
+// the update output, and a digest of a low-entropy password with a known
+// registry and username is guessable offline.
+const (
+	registryCredentialOldDisplay = "stale (redacted)"
+	registryCredentialNewDisplay = "rotated (redacted)"
+)
+
 // Engine computes configuration differences and classifies their impact.
 type Engine struct {
 	distribution v1alpha1.Distribution
@@ -107,6 +123,39 @@ func (e *Engine) CheckFluxDistributionVersion(
 		oldVersion, newVersion, "",
 		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
 		clusterupdate.ChangeCategoryInPlace)
+}
+
+// CheckRegistryCredential compares a digest of the credential currently held in
+// the KSail-managed registry Secret against a digest of the credential the
+// resolved configuration would write, and appends an in-place change when they
+// differ. This is what makes a credential-only rotation visible: the structural
+// diff redacts registry passwords, so a rotated token with otherwise identical
+// configuration produces no field change and would otherwise leave the cluster
+// authenticating with a revoked value.
+//
+// Both digests are computed by the caller and never rendered — see
+// registryCredentialOldDisplay. An empty currentDigest means the Secret is
+// absent or is not KSail-managed, which suppresses the change so KSail never
+// claims a Secret owned by something else (e.g. an ExternalSecret).
+func (e *Engine) CheckRegistryCredential(
+	currentDigest, desiredDigest string,
+	result *clusterupdate.UpdateResult,
+) {
+	if currentDigest == "" || desiredDigest == "" {
+		return
+	}
+
+	if currentDigest == desiredDigest {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    RegistryCredentialField,
+		OldValue: registryCredentialOldDisplay,
+		NewValue: registryCredentialNewDisplay,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "registry credentials can be refreshed in-place by re-writing the registry Secret",
+	})
 }
 
 // fieldRule describes how to diff a single scalar field.

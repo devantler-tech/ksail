@@ -146,6 +146,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
+	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -173,7 +174,8 @@ func isComponentReconcileField(field string) bool {
 		"cluster.gitOpsEngine",
 		"cluster.workload.tag",
 		"cluster.workload.flux.distributionVersion",
-		specdiff.EKSLoadBalancerControllerField:
+		specdiff.EKSLoadBalancerControllerField,
+		specdiff.RegistryCredentialField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -625,6 +627,31 @@ func (r *componentReconciler) reconcileFluxVersion(
 	)
 	if err != nil {
 		return fmt.Errorf("setup flux instance: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileRegistryCredentials re-writes the KSail-managed registry Secret so a
+// rotated pull credential reaches the cluster. The upsert is idempotent and
+// carries no other FluxInstance state, so it is safe to run whenever credential
+// drift is detected.
+func (r *componentReconciler) reconcileRegistryCredentials(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	err = fluxinstaller.EnsureRegistryCredentials(ctx, kubeconfigPath, r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("refresh registry credentials: %w", err)
 	}
 
 	return nil
