@@ -10,11 +10,16 @@
 # Policy: the allowlist is for UNPATCHABLE findings only. The moment an
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
-# Verified with `govulncheck ./...` against ksail main (re-validated 2026-07-22):
-#   the reachable advisories below, each "Fixed in: N/A" for the version
-#   pinned (transitively) in go.mod. Re-validate when bumping docker, k8s.io,
-#   or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT listed —
-#   it has an upstream fix (v0.43.0) and is bumped per policy, not allowlisted.
+# Verified with `govulncheck ./...` against ksail main (whole-file re-validation
+# 2026-07-22): the reachable advisories below, each "Fixed in: N/A" for the
+#   version pinned (transitively) in go.mod. Re-validate when bumping docker,
+#   k8s.io, or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT
+#   listed — it has an upstream fix (v0.43.0) and is bumped per policy, not
+#   allowlisted.
+#   That date covers the SET as a whole. An individual entry may carry a later
+#   measurement of its own — a targeted probe of one advisory, sometimes at a
+#   version main has not reached yet — and that does not re-date the sweep
+#   above. Read the per-entry date where one is given; otherwise this one.
 # ---------------------------------------------------------------------------
 
 # --- github.com/docker/docker (Moby) @ v28.5.2+incompatible -----------------
