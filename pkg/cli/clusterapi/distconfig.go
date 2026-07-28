@@ -119,7 +119,7 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		)
 	}
 
-	configPath, err := existingEKSConfigPath(name)
+	configPath, err := eksConfigPath(name, false)
 	if err != nil {
 		return nil, err
 	}
@@ -158,37 +158,18 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 	}, nil
 }
 
-// existingEKSConfigPath resolves the eks.yaml of an already-created cluster without creating any
-// directory, applying the same containment checks as the write path.
-func existingEKSConfigPath(name string) (string, error) {
-	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
-		return "", fmt.Errorf(
-			"%w: cluster name %q must be a single path segment", api.ErrInvalid, name,
-		)
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-
-	dir, err := canonicalClusterDir(filepath.Join(home, ".ksail", "clusters"), name)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(dir, scaffolder.EKSConfigFile), nil
-}
-
-// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path. The name must be
-// a single path segment, and the resolved directory is verified to stay under ~/.ksail/clusters even
-// after symlink resolution, so neither a crafted name nor a symlinked cluster directory can redirect
-// the write outside the intended tree.
-func writeEKSConfig(name, region string) (string, error) {
-	// The name becomes exactly one directory under ~/.ksail/clusters, so it must be a single path
-	// segment. filepath.IsLocal alone is insufficient — it still permits multi-segment names like
-	// "foo/bar" and ".", which would redirect the write into an unintended nested directory — so also
-	// require the name to equal its own base element and reject the "." / ".." specials.
+// eksConfigPath resolves ~/.ksail/clusters/<name>/eks.yaml.
+//
+// The name becomes exactly one directory under ~/.ksail/clusters, so it must be a single path
+// segment. filepath.IsLocal alone is insufficient — it still permits multi-segment names like
+// "foo/bar" and ".", which would redirect the path into an unintended nested directory — so the
+// name must also equal its own base element, and the "." / ".." specials are rejected. The resolved
+// directory is then verified to stay under ~/.ksail/clusters even after symlink resolution, so
+// neither a crafted name nor a symlinked cluster directory can redirect it out of the intended tree.
+//
+// createDir distinguishes the two callers: the write path creates the directory, while reading an
+// existing cluster's binding must not bring one into existence.
+func eksConfigPath(name string, createDir bool) (string, error) {
 	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
 		return "", fmt.Errorf(
 			"%w: cluster name %q must be a single path segment",
@@ -204,9 +185,11 @@ func writeEKSConfig(name, region string) (string, error) {
 
 	clustersRoot := filepath.Join(home, ".ksail", "clusters")
 
-	mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
-	if mkErr != nil {
-		return "", fmt.Errorf("create eks config directory: %w", mkErr)
+	if createDir {
+		mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
+		if mkErr != nil {
+			return "", fmt.Errorf("create eks config directory: %w", mkErr)
+		}
 	}
 
 	dir, err := canonicalClusterDir(clustersRoot, name)
@@ -214,11 +197,19 @@ func writeEKSConfig(name, region string) (string, error) {
 		return "", err
 	}
 
-	configPath := filepath.Join(dir, scaffolder.EKSConfigFile)
+	return filepath.Join(dir, scaffolder.EKSConfigFile), nil
+}
+
+// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path.
+func writeEKSConfig(name, region string) (string, error) {
+	configPath, err := eksConfigPath(name, true)
+	if err != nil {
+		return "", err
+	}
+
 	content := scaffolder.RenderEKSConfig(scaffolder.DefaultEKSConfigParams(name, region))
 
-	// dir is canonicalized and verified within ~/.ksail/clusters by canonicalClusterDir above.
-	//nolint:gosec // configPath is contained within ~/.ksail/clusters (see canonicalClusterDir)
+	//nolint:gosec // eksConfigPath canonicalizes and contains configPath within ~/.ksail/clusters.
 	writeErr := os.WriteFile(configPath, content, eksConfigFileMode)
 	if writeErr != nil {
 		return "", fmt.Errorf("write eks config: %w", writeErr)
