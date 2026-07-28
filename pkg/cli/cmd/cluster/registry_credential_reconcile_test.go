@@ -22,8 +22,13 @@ func TestRegistryCredentialFieldHasReconcileHandler(t *testing.T) {
 	clusterCfg := v1alpha1.NewCluster()
 	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
 
-	assert.True(t,
-		cluster.ExportHandlerForField(&cobra.Command{}, clusterCfg, specdiff.RegistryCredentialField),
+	assert.True(
+		t,
+		cluster.ExportHandlerForField(
+			&cobra.Command{},
+			clusterCfg,
+			specdiff.RegistryCredentialField,
+		),
 		"no reconcile handler is registered for %q, so detected credential drift would be silently skipped",
 		specdiff.RegistryCredentialField,
 	)

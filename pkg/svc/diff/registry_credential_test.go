@@ -12,6 +12,11 @@ import (
 // theSecretPassword is the credential a rotation moves away from. Every
 // assertion below checks it never reaches a Change, because Change values are
 // rendered by the cluster-update output.
+//
+// It is a fabricated literal that has never been a real credential — it exists
+// precisely so a test can prove this value does NOT escape into output.
+//
+//nolint:gosec // G101: an intentional fake credential, and the subject of the leak assertions.
 const theSecretPassword = "ghp_rotated_token_value_9f3a"
 
 func newCredentialEngine() *specdiff.Engine {

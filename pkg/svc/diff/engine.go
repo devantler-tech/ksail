@@ -19,6 +19,8 @@ const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerC
 // held in the KSail-managed registry Secret. Reconciliation uses the same
 // constant so field renames cannot silently disconnect detection from
 // application.
+//
+//nolint:gosec // G101 false positive: a diff key, not a credential.
 const RegistryCredentialField = "cluster.localRegistry.credentials"
 
 // registryCredentialOldDisplay and registryCredentialNewDisplay are the values
@@ -26,8 +28,12 @@ const RegistryCredentialField = "cluster.localRegistry.credentials"
 // of it — is deliberately never placed in a Change: Change values are printed by
 // the update output, and a digest of a low-entropy password with a known
 // registry and username is guessable offline.
+// These are exactly the strings a reader sees in place of a credential, so
+// G101 flagging them is the inverse of the truth.
 const (
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
 	registryCredentialOldDisplay = "stale (redacted)"
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
 	registryCredentialNewDisplay = "rotated (redacted)"
 )
 

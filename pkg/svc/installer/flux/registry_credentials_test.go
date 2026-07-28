@@ -33,6 +33,8 @@ func newExternalRegistryCluster(kubeContext, token string) *v1alpha1.Cluster {
 // written to whichever cluster the operator's kubeconfig happens to point at.
 // The threading is invisible to an end-to-end test that runs with a single
 // context, so assert the value the production call actually passes.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestEnsureRegistryCredentialsUsesTheGivenContext(t *testing.T) {
 	var gotContext string
 

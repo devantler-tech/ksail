@@ -44,10 +44,6 @@ func EnsureRegistryCredentials(
 		return errInvalidClusterConfig
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return err
@@ -92,10 +88,6 @@ func CurrentRegistryCredentialDigest(
 	ctx context.Context,
 	kubeconfig, kubeContext string,
 ) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return "", fmt.Errorf("build REST config: %w", err)
