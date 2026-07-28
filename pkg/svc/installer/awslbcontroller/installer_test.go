@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 type newInstallerCase struct {
@@ -452,13 +453,32 @@ func runBuildValuesCases(t *testing.T, tests []buildValuesCase) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := awslbcontrollerinstaller.BuildValuesYamlForTest(
+			got, err := awslbcontrollerinstaller.BuildValuesYamlForTest(
 				testCase.clusterName, testCase.region, testCase.serviceAccount, testCase.haEnabled,
 			)
 
-			assert.Equal(t, testCase.want, got)
+			require.NoError(t, err)
+			assert.YAMLEq(t, testCase.want, got)
 		})
 	}
+}
+
+func TestBuildValuesYaml_EscapesUntrustedScalars(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "prod-eks\nimage:\n  repository: attacker/controller"
+	region := "eu-north-1\nserviceAccount:\n  name: attacker"
+	values, err := awslbcontrollerinstaller.BuildValuesYamlForTest(clusterName, region, "", false)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(values), &parsed))
+	assert.Equal(t, map[string]any{
+		"clusterName":                 clusterName,
+		"enableServiceMutatorWebhook": false,
+		"region":                      region,
+		"replicaCount":                float64(1),
+	}, parsed)
 }
 
 func TestChartVersion(t *testing.T) {
