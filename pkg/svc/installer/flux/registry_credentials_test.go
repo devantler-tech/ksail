@@ -9,6 +9,7 @@ import (
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 )
 
@@ -59,40 +60,119 @@ func TestEnsureRegistryCredentialsUsesTheGivenContext(t *testing.T) {
 			"not the ambient current-context")
 }
 
-// TestDesiredRegistryCredentialDigestSeparatesRotations is the property the
-// drift check depends on: two different credentials must not produce the same
-// digest, and an unchanged credential must reproduce its digest exactly.
-func TestDesiredRegistryCredentialDigestSeparatesRotations(t *testing.T) {
-	t.Parallel()
+// TestRegistryCredentialDriftedReadsTheGivenContext is the read-side twin of the
+// test above. The drift check and the credential write must resolve the same
+// cluster: detecting a rotation on one and repairing it on another would leave
+// the rotated cluster authenticating with the revoked value while KSail reports
+// success.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestRegistryCredentialDriftedReadsTheGivenContext(t *testing.T) {
+	var gotContext string
 
-	before := newExternalRegistryCluster("admin@prod", "first-token")
+	restore := fluxinstaller.SetLoadRESTConfig(
+		func(_, kubeContext string) (*rest.Config, error) {
+			gotContext = kubeContext
 
-	firstDigest, err := fluxinstaller.DesiredRegistryCredentialDigest(before)
-	require.NoError(t, err)
-	require.NotEmpty(t, firstDigest, "an external registry with credentials must yield a digest")
+			return nil, errStubREST
+		},
+	)
+	defer restore()
 
-	repeatDigest, err := fluxinstaller.DesiredRegistryCredentialDigest(before)
-	require.NoError(t, err)
-	assert.Equal(t, firstDigest, repeatDigest,
-		"an unrotated credential must be stable, or every update reports false drift")
+	clusterCfg := newExternalRegistryCluster("admin@prod", "rotated-token")
 
-	after := newExternalRegistryCluster("admin@prod", "a-different-token")
+	_, err := fluxinstaller.RegistryCredentialDrifted(
+		context.Background(), "/tmp/kubeconfig", "admin@prod", clusterCfg,
+	)
 
-	rotatedDigest, err := fluxinstaller.DesiredRegistryCredentialDigest(after)
-	require.NoError(t, err)
-	assert.NotEqual(t, firstDigest, rotatedDigest,
-		"a rotated credential must change the digest, or the rotation is invisible")
+	require.ErrorIs(t, err, errStubREST)
+	assert.Equal(t, "admin@prod", gotContext,
+		"the drift check must read the context the credential write targets, "+
+			"not the ambient current-context")
 }
 
-// TestDesiredRegistryCredentialDigestEmptyWithoutCredentials keeps the drift
-// check inert when there is nothing for KSail to write.
-func TestDesiredRegistryCredentialDigestEmptyWithoutCredentials(t *testing.T) {
-	t.Parallel()
+// TestRegistryCredentialDriftedSkipsClusterWithoutCredentials keeps the drift
+// check inert — and off the network — when there is nothing for KSail to write.
+// The stub fails any REST config build, so reaching the cluster at all fails the
+// test.
+//
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestRegistryCredentialDriftedSkipsClusterWithoutCredentials(t *testing.T) {
+	restore := fluxinstaller.SetLoadRESTConfig(
+		func(_, _ string) (*rest.Config, error) { return nil, errStubREST },
+	)
+	defer restore()
 
-	clusterCfg := v1alpha1.NewCluster()
-
-	digest, err := fluxinstaller.DesiredRegistryCredentialDigest(clusterCfg)
+	drifted, err := fluxinstaller.RegistryCredentialDrifted(
+		context.Background(), "/tmp/kubeconfig", "admin@prod", v1alpha1.NewCluster(),
+	)
 
 	require.NoError(t, err)
-	assert.Empty(t, digest)
+	assert.False(t, drifted)
+}
+
+// TestHasExternalRegistryCredentials pins the cheap predicate that decides
+// whether the cluster is worth querying at all.
+func TestHasExternalRegistryCredentials(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, fluxinstaller.HasExternalRegistryCredentials(nil))
+	assert.False(t, fluxinstaller.HasExternalRegistryCredentials(v1alpha1.NewCluster()),
+		"a default cluster has no external registry")
+	assert.True(t,
+		fluxinstaller.HasExternalRegistryCredentials(
+			newExternalRegistryCluster("admin@prod", "a-token"),
+		),
+		"an external registry with inline credentials is worth a drift check")
+}
+
+// TestBuildRegistrySecretSeparatesRotations is the property the drift check
+// depends on: rotating the password must change the docker config KSail would
+// write, or the comparison has nothing to see.
+func TestBuildRegistrySecretSeparatesRotations(t *testing.T) {
+	t.Parallel()
+
+	before, err := fluxinstaller.BuildRegistrySecret(
+		newExternalRegistryCluster("admin@prod", "first-token"),
+	)
+	require.NoError(t, err)
+
+	repeat, err := fluxinstaller.BuildRegistrySecret(
+		newExternalRegistryCluster("admin@prod", "first-token"),
+	)
+	require.NoError(t, err)
+
+	after, err := fluxinstaller.BuildRegistrySecret(
+		newExternalRegistryCluster("admin@prod", "a-different-token"),
+	)
+	require.NoError(t, err)
+
+	firstConfig := before.Data[corev1.DockerConfigJsonKey]
+	require.NotEmpty(t, firstConfig, "an external registry with credentials must yield a docker config")
+
+	assert.False(t,
+		fluxinstaller.DockerConfigsDiffer(firstConfig, repeat.Data[corev1.DockerConfigJsonKey]),
+		"an unrotated credential must be stable, or every update reports false drift")
+	assert.True(t,
+		fluxinstaller.DockerConfigsDiffer(firstConfig, after.Data[corev1.DockerConfigJsonKey]),
+		"a rotated credential must be visible, or the rotation is invisible to the update")
+}
+
+// TestDockerConfigsDifferSuppressesAnAbsentSide is the ownership boundary: an
+// absent current config means the Secret does not exist or is not KSail-managed,
+// and reporting drift there would have KSail overwrite a Secret owned by
+// something else (an ExternalSecret, a platform bootstrap).
+func TestDockerConfigsDifferSuppressesAnAbsentSide(t *testing.T) {
+	t.Parallel()
+
+	present := []byte(`{"auths":{"ghcr.io":{"auth":"dXNlcjpwYXNz"}}}`)
+
+	assert.False(t, fluxinstaller.DockerConfigsDiffer(nil, present),
+		"an absent current config is not drift — KSail does not own that Secret")
+	assert.False(t, fluxinstaller.DockerConfigsDiffer([]byte{}, present),
+		"an empty current config is not drift either")
+	assert.False(t, fluxinstaller.DockerConfigsDiffer(present, nil),
+		"no desired credential means there is nothing to write")
+	assert.False(t, fluxinstaller.DockerConfigsDiffer(present, present),
+		"an unrotated credential must not produce a change every update")
 }

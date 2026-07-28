@@ -131,27 +131,22 @@ func (e *Engine) CheckFluxDistributionVersion(
 		clusterupdate.ChangeCategoryInPlace)
 }
 
-// CheckRegistryCredential compares a digest of the credential currently held in
-// the KSail-managed registry Secret against a digest of the credential the
-// resolved configuration would write, and appends an in-place change when they
-// differ. This is what makes a credential-only rotation visible: the structural
-// diff redacts registry passwords, so a rotated token with otherwise identical
-// configuration produces no field change and would otherwise leave the cluster
-// authenticating with a revoked value.
+// CheckRegistryCredential appends an in-place change when the credential in the
+// KSail-managed registry Secret has drifted from the one the resolved
+// configuration would write. This is what makes a credential-only rotation
+// visible: the structural diff redacts registry passwords, so a rotated token
+// with otherwise identical configuration produces no field change and would
+// otherwise leave the cluster authenticating with a revoked value.
 //
-// Both digests are computed by the caller and never rendered — see
-// registryCredentialOldDisplay. An empty currentDigest means the Secret is
-// absent or is not KSail-managed, which suppresses the change so KSail never
-// claims a Secret owned by something else (e.g. an ExternalSecret).
+// drifted is a single bit decided by the flux installer, which holds both
+// credentials and compares them in constant time. No credential — and nothing
+// derived from one — crosses into this package, so there is nothing here that
+// could reach a rendered Change value; see registryCredentialOldDisplay.
 func (e *Engine) CheckRegistryCredential(
-	currentDigest, desiredDigest string,
+	drifted bool,
 	result *clusterupdate.UpdateResult,
 ) {
-	if currentDigest == "" || desiredDigest == "" {
-		return
-	}
-
-	if currentDigest == desiredDigest {
+	if !drifted {
 		return
 	}
 

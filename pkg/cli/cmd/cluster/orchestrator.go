@@ -1237,16 +1237,8 @@ func checkRegistryCredentialDrift(
 		return
 	}
 
-	desiredDigest, err := fluxinstaller.DesiredRegistryCredentialDigest(ctx.ClusterCfg)
-	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
-			"Cannot resolve desired registry credentials for drift detection: %v", err)
-
-		return
-	}
-
 	// No external registry, or no credentials configured — nothing to refresh.
-	if desiredDigest == "" {
+	if !fluxinstaller.HasExternalRegistryCredentials(ctx.ClusterCfg) {
 		return
 	}
 
@@ -1258,17 +1250,17 @@ func checkRegistryCredentialDrift(
 		return
 	}
 
-	currentDigest, err := fluxinstaller.CurrentRegistryCredentialDigest(
-		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx),
+	drifted, err := fluxinstaller.RegistryCredentialDrifted(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
 	)
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
-			"Cannot query current registry credentials for drift detection: %v", err)
+			"Cannot compare registry credentials for drift detection: %v", err)
 
 		return
 	}
 
-	diffEngine.CheckRegistryCredential(currentDigest, desiredDigest, diff)
+	diffEngine.CheckRegistryCredential(drifted, diff)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current

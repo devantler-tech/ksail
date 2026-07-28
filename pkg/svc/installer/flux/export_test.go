@@ -58,6 +58,11 @@ func BuildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 	return buildRegistrySecret(clusterCfg)
 }
 
+// DockerConfigsDiffer exports dockerConfigsDiffer for testing.
+func DockerConfigsDiffer(current, desired []byte) bool {
+	return dockerConfigsDiffer(current, desired)
+}
+
 // IsTransientAPIError exports isTransientAPIError for testing.
 func IsTransientAPIError(err error) bool {
 	return isTransientAPIError(err)

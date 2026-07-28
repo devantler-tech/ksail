@@ -31,7 +31,7 @@ func TestCheckRegistryCredentialDetectsRotation(t *testing.T) {
 	t.Parallel()
 
 	result := clusterupdate.NewEmptyUpdateResult()
-	newCredentialEngine().CheckRegistryCredential("digest-old", "digest-new", result)
+	newCredentialEngine().CheckRegistryCredential(true, result)
 
 	if len(result.InPlaceChanges) != 1 {
 		t.Fatalf(
@@ -54,15 +54,14 @@ func TestCheckRegistryCredentialDetectsRotation(t *testing.T) {
 }
 
 // TestCheckRegistryCredentialNeverRendersTheCredential pins the redaction
-// property. A digest is not safe to render either: with a known registry and
-// username, a digest of a low-entropy password is guessable offline.
+// property. The engine is given a single bit rather than the credential or a
+// digest of it, so the only thing it can render is its own fixed placeholder —
+// this test is what proves that placeholder stayed placeholder.
 func TestCheckRegistryCredentialNeverRendersTheCredential(t *testing.T) {
 	t.Parallel()
 
-	digestOfSecret := "sha256-of-" + theSecretPassword
-
 	result := clusterupdate.NewEmptyUpdateResult()
-	newCredentialEngine().CheckRegistryCredential(digestOfSecret, "digest-new", result)
+	newCredentialEngine().CheckRegistryCredential(true, result)
 
 	if len(result.InPlaceChanges) != 1 {
 		t.Fatalf("expected one in-place change, got %d", len(result.InPlaceChanges))
@@ -73,59 +72,27 @@ func TestCheckRegistryCredentialNeverRendersTheCredential(t *testing.T) {
 		if strings.Contains(rendered, theSecretPassword) {
 			t.Errorf("rendered value %q leaks the credential", rendered)
 		}
-
-		if strings.Contains(rendered, digestOfSecret) {
-			t.Errorf("rendered value %q leaks a digest of the credential", rendered)
-		}
 	}
 }
 
+// TestCheckRegistryCredentialSuppressesNonDrift covers every reason the drift
+// check reports false: an unrotated credential, a Secret KSail does not own, and
+// a configuration with no credential to write. The flux installer collapses all
+// three into "not drifted" so no credential material reaches this package; the
+// per-reason coverage lives with that comparison, in the flux installer tests.
 func TestCheckRegistryCredentialSuppressesNonDrift(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name    string
-		current string
-		desired string
-		why     string
-	}{
-		{
-			name:    "unchanged credential",
-			current: "same-digest",
-			desired: "same-digest",
-			why:     "an unrotated credential must not produce a change every update",
-		},
-		{
-			name:    "secret absent or not ksail-managed",
-			current: "",
-			desired: "digest-new",
-			why: "an empty current digest means KSail does not own the Secret; " +
-				"claiming it would overwrite an ExternalSecret-managed credential",
-		},
-		{
-			name:    "no external registry credentials configured",
-			current: "digest-old",
-			desired: "",
-			why:     "there is no credential to write",
-		},
-	}
+	result := clusterupdate.NewEmptyUpdateResult()
+	newCredentialEngine().CheckRegistryCredential(false, result)
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := clusterupdate.NewEmptyUpdateResult()
-			newCredentialEngine().CheckRegistryCredential(testCase.current, testCase.desired, result)
-
-			total := len(result.InPlaceChanges) +
-				len(result.RecreateRequired) +
-				len(result.RebootRequired) +
-				len(result.WipeRequired) +
-				len(result.RollingRecreate) +
-				len(result.UnknownBaseline)
-			if total != 0 {
-				t.Errorf("expected no change (%s), got %d", testCase.why, total)
-			}
-		})
+	total := len(result.InPlaceChanges) +
+		len(result.RecreateRequired) +
+		len(result.RebootRequired) +
+		len(result.WipeRequired) +
+		len(result.RollingRecreate) +
+		len(result.UnknownBaseline)
+	if total != 0 {
+		t.Errorf("expected no change when the credential has not drifted, got %d", total)
 	}
 }

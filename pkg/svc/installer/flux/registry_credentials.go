@@ -2,8 +2,7 @@ package fluxinstaller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/subtle"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -52,50 +51,91 @@ func EnsureRegistryCredentials(
 	return ensureExternalRegistrySecret(ctx, restConfig, clusterCfg)
 }
 
-// DesiredRegistryCredentialDigest returns a digest of the docker config KSail
-// would write for the resolved configuration, or an empty string when the
-// registry is not external or carries no credentials.
-//
-// The digest never leaves the process: it exists so a rotation can be detected
-// without the caller ever handling — or rendering — the credential itself.
-func DesiredRegistryCredentialDigest(clusterCfg *v1alpha1.Cluster) (string, error) {
+// HasExternalRegistryCredentials reports whether the resolved configuration
+// carries a registry credential KSail would write. It reads only the shape of
+// the configuration, never the credential, so a caller can skip the cluster
+// query below without handling secret material.
+func HasExternalRegistryCredentials(clusterCfg *v1alpha1.Cluster) bool {
 	if clusterCfg == nil {
-		return "", nil
+		return false
 	}
 
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-	if !localRegistry.IsExternal() || !localRegistry.HasCredentials() {
-		return "", nil
-	}
 
-	secret, err := buildRegistrySecret(clusterCfg)
-	if err != nil {
-		return "", fmt.Errorf("build desired registry secret: %w", err)
-	}
-
-	return digestDockerConfig(secret.Data[corev1.DockerConfigJsonKey]), nil
+	return localRegistry.IsExternal() && localRegistry.HasCredentials()
 }
 
-// CurrentRegistryCredentialDigest reads the registry Secret from the cluster and
-// returns a digest of its docker config.
+// RegistryCredentialDrifted reports whether the credential held in the
+// KSail-managed registry Secret differs from the one the resolved configuration
+// would write. Both values are compared inside this package, in constant time,
+// and neither the credential nor anything derived from it is returned — the
+// answer a caller needs is a single bit, so a single bit is all it gets.
 //
-// It returns an empty digest — never an error — when there is nothing KSail may
-// safely compare against: the Secret does not exist, it holds no docker config,
-// or it is not labelled as KSail-managed. That last case is the ownership
-// boundary: a Secret supplied by an ExternalSecret must not be diffed into a
-// change that would have KSail overwrite it.
-func CurrentRegistryCredentialDigest(
+// It reports false — never an error — when there is nothing KSail may safely
+// compare against: the Secret does not exist, it holds no docker config, or it
+// is not labelled as KSail-managed. That last case is the ownership boundary: a
+// Secret supplied by an ExternalSecret must not be diffed into a change that
+// would have KSail overwrite it.
+//
+// kubeContext selects the cluster to read. It must be the same context the
+// subsequent credential write targets, or drift detected on one cluster would be
+// repaired on another.
+func RegistryCredentialDrifted(
 	ctx context.Context,
 	kubeconfig, kubeContext string,
-) (string, error) {
+	clusterCfg *v1alpha1.Cluster,
+) (bool, error) {
+	if !HasExternalRegistryCredentials(clusterCfg) {
+		return false, nil
+	}
+
+	desired, err := buildRegistrySecret(clusterCfg)
+	if err != nil {
+		return false, fmt.Errorf("build desired registry secret: %w", err)
+	}
+
+	desiredConfig := desired.Data[corev1.DockerConfigJsonKey]
+	if len(desiredConfig) == 0 {
+		return false, nil
+	}
+
+	currentConfig, err := currentRegistryDockerConfig(ctx, kubeconfig, kubeContext)
+	if err != nil {
+		return false, err
+	}
+
+	return dockerConfigsDiffer(currentConfig, desiredConfig), nil
+}
+
+// dockerConfigsDiffer compares two docker configs in constant time.
+//
+// An empty side is never drift: an absent current config means the Secret does
+// not exist or is not KSail-managed, and reporting drift there would have KSail
+// overwrite a Secret it does not own. Comparing the credentials directly — rather
+// than digests of them — keeps the secret material inside this package and leaves
+// nothing guessable for a caller to leak.
+func dockerConfigsDiffer(current, desired []byte) bool {
+	if len(current) == 0 || len(desired) == 0 {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare(current, desired) == 0
+}
+
+// currentRegistryDockerConfig reads the docker config from the KSail-managed
+// registry Secret, or returns nil when there is none KSail owns.
+func currentRegistryDockerConfig(
+	ctx context.Context,
+	kubeconfig, kubeContext string,
+) ([]byte, error) {
 	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
-		return "", fmt.Errorf("build REST config: %w", err)
+		return nil, fmt.Errorf("build REST config: %w", err)
 	}
 
 	k8sClient, err := newCoreV1Client(restConfig)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	secret := &corev1.Secret{}
@@ -106,36 +146,16 @@ func CurrentRegistryCredentialDigest(
 
 	err = k8sClient.Get(ctx, key, secret)
 	if apierrors.IsNotFound(err) {
-		return "", nil
+		return nil, nil
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("get registry secret: %w", err)
+		return nil, fmt.Errorf("get registry secret: %w", err)
 	}
 
 	if secret.Labels[managedByLabel] != managedByKSail {
-		return "", nil
+		return nil, nil
 	}
 
-	dockerConfig := secret.Data[corev1.DockerConfigJsonKey]
-	if len(dockerConfig) == 0 {
-		return "", nil
-	}
-
-	return digestDockerConfig(dockerConfig), nil
-}
-
-// digestDockerConfig reduces a docker config to a comparable digest. An empty
-// input yields an empty digest so "absent" never collides with a real value —
-// a digest of the empty string is a fixed constant, and returning it would make
-// a missing credential compare equal to another missing credential and, worse,
-// unequal to every real one.
-func digestDockerConfig(dockerConfig []byte) string {
-	if len(dockerConfig) == 0 {
-		return ""
-	}
-
-	sum := sha256.Sum256(dockerConfig)
-
-	return hex.EncodeToString(sum[:])
+	return secret.Data[corev1.DockerConfigJsonKey], nil
 }
