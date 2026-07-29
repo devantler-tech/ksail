@@ -175,18 +175,47 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		return nil, err
 	}
 
-	clustersRoot, err := eksClustersRoot()
+	region, found, err := boundEKSRegionFromConfig(name, configPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if !found {
+		return bindFromOwnershipRecord(name)
+	}
+
+	err = confirmConfigMatchesOwnership(name, configPath, region)
+	if err != nil {
+		return nil, err
+	}
+
+	return &clusterprovisioner.EKSConfig{
+		Name:       name,
+		Region:     region,
+		ConfigPath: configPath,
+	}, nil
+}
+
+// boundEKSRegionFromConfig reads the region out of the rendered eks config that binds the named
+// cluster to its target.
+//
+// found reports whether that config exists. It is false only when the file is absent, which leaves
+// the immutable ownership record as the sole surviving evidence of the original target; every other
+// unreadable or incomplete state is an error, because guessing a region is the redirect this
+// binding exists to prevent.
+func boundEKSRegionFromConfig(name, configPath string) (string, bool, error) {
+	clustersRoot, err := eksClustersRoot()
+	if err != nil {
+		return "", false, err
 	}
 
 	content, err := fsutil.ReadFileSafe(clustersRoot, configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return bindFromOwnershipRecord(name)
+			return "", false, nil
 		}
 
-		return nil, fmt.Errorf(
+		return "", false, fmt.Errorf(
 			"%w: read the eks config that binds cluster %q to its region: %w",
 			api.ErrInvalid, name, err,
 		)
@@ -196,30 +225,21 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 
 	err = yaml.Unmarshal(content, &parsed)
 	if err != nil {
-		return nil, fmt.Errorf(
+		return "", false, fmt.Errorf(
 			"%w: parse the eks config that binds cluster %q to its region: %w",
 			api.ErrInvalid, name, err,
 		)
 	}
 
 	if parsed.Metadata.Region == "" {
-		return nil, fmt.Errorf(
+		return "", false, fmt.Errorf(
 			"%w: the eks config for cluster %q records no region, so its target cannot be"+
 				" confirmed; set metadata.region in %s to the region the cluster was created in",
 			api.ErrInvalid, name, configPath,
 		)
 	}
 
-	err = confirmConfigMatchesOwnership(name, configPath, parsed.Metadata.Region)
-	if err != nil {
-		return nil, err
-	}
-
-	return &clusterprovisioner.EKSConfig{
-		Name:       name,
-		Region:     parsed.Metadata.Region,
-		ConfigPath: configPath,
-	}, nil
+	return parsed.Metadata.Region, true, nil
 }
 
 // confirmConfigMatchesOwnership refuses a config whose region the immutable ownership record
