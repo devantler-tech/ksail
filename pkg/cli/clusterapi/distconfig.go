@@ -82,15 +82,20 @@ func eksDistributionConfig(
 		return nil, err
 	}
 
-	// An empty region would be stamped into metadata.region, and boundEKSConfig rejects such a file
-	// permanently once persisted state exists — leaving a cluster that can never be deleted, started
-	// or stopped through KSail. Refuse while nothing has been written instead.
+	// Resolve the region HERE rather than letting the scaffolder substitute its default further
+	// down. Both paths would otherwise derive it independently: writeEKSConfig renders through
+	// scaffolder.DefaultEKSConfigParams, which replaces an empty region with its own default, so
+	// metadata.region would carry that default while the region bound into persisted state stayed
+	// empty. boundEKSConfig then compares the two and rejects the file permanently — a cluster that
+	// can never be deleted, started or stopped through KSail.
+	//
+	// Refusing the create instead would be the wrong fix for that: an unset AWS_REGION is a
+	// supported path (credentials or a named profile are enough for AWS discovery), and the empty
+	// region it was said to stamp could never reach the file. One resolved value, used by both
+	// sides, keeps the binding honest without removing the path.
 	region := os.Getenv(credentials.DefaultEnvVar(credentials.AWSRegion))
 	if region == "" {
-		return nil, fmt.Errorf(
-			"%w: no AWS region is selected for EKS cluster %q; set %s and create it again",
-			api.ErrInvalid, name, credentials.DefaultEnvVar(credentials.AWSRegion),
-		)
+		region = scaffolder.DefaultEKSConfigParams(name, "").Region
 	}
 
 	configPath, err := writeEKSConfig(name, region)

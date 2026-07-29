@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -1028,24 +1029,36 @@ func TestEKSConfigRejectsNonSegmentName(t *testing.T) {
 	}
 }
 
-// TestEKSCreateRefusesWhenNoRegionIsSelected covers the create-time trap: an unset AWS_REGION would
-// otherwise be stamped into metadata.region, and boundEKSConfig rejects such a file permanently once
-// persisted state exists — leaving a cluster that can never be deleted, started or stopped through
-// KSail. Nothing may be written on this path.
-func TestEKSCreateRefusesWhenNoRegionIsSelected(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("AWS_REGION", "")
+// TestEKSCreateBindsTheRegionItWrites is the invariant the removed refusal was reaching for, stated
+// directly. The hazard was never the empty environment variable: it was the bound region and
+// metadata.region disagreeing, because boundEKSConfig compares them and rejects the file
+// permanently once persisted state exists — a cluster that can never be deleted, started or
+// stopped through KSail.
+//
+// Refusing the create only avoided that by removing a supported path. Resolving one value and
+// using it on both sides prevents the disagreement outright, so this asserts the agreement in both
+// environments rather than the refusal in one.
+func TestEKSCreateBindsTheRegionItWrites(t *testing.T) {
+	for _, env := range []struct{ name, region string }{
+		{"region set", "eu-central-1"},
+		{"region unset", ""},
+	} {
+		t.Run(env.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("AWS_REGION", env.region)
 
-	const clusterName = "no-region-eks"
+			const clusterName = "bound-region-eks"
 
-	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
-	require.ErrorIs(t, err, api.ErrInvalid)
-	assert.Contains(t, err.Error(), "no AWS region is selected")
+			configPath, bound, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+			require.NoError(t, err)
+			require.NotEmpty(t, bound, "a bound region must never be empty")
 
-	home, homeErr := os.UserHomeDir()
-	require.NoError(t, homeErr)
-	assert.NoFileExists(t, filepath.Join(home, ".ksail", "clusters", clusterName, "eks.yaml"),
-		"a refused create must leave no region-less binding behind")
+			data, readErr := os.ReadFile(configPath)
+			require.NoError(t, readErr)
+			assert.Contains(t, string(data), "region: "+bound,
+				"metadata.region must equal the region bound into persisted state")
+		})
+	}
 }
 
 // TestEKSConfigReportsNameErrorAheadOfMissingRegion pins the precedence between the two create-time
@@ -1728,4 +1741,32 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				"a refused mutation must never reach the provisioner")
 		})
 	}
+}
+
+// TestEKSCreateFallsBackToTheScaffolderDefaultRegion is the regression Codex found: refusing the
+// create when AWS_REGION is unset broke the supported default-region path, on a premise that does
+// not hold. writeEKSConfig renders through scaffolder.DefaultEKSConfigParams, which substitutes its
+// own default for an empty region — so an empty AWS_REGION was never going to reach metadata.region,
+// and there was no region-less binding to protect against.
+//
+// What DOES matter for this PR is that the region bound into persisted state is the same one the
+// file carries. Resolving the fallback at the call site is what guarantees that: both sides now read
+// one value instead of deriving it independently.
+func TestEKSCreateFallsBackToTheScaffolderDefaultRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "")
+
+	const clusterName = "default-region-eks"
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err, "an unset AWS_REGION must not refuse the create")
+
+	expected := scaffolder.DefaultEKSConfigParams(clusterName, "").Region
+	require.NotEmpty(t, expected, "the scaffolder default must be a real region")
+	assert.Equal(t, expected, region, "the bound region must be the scaffolder default")
+
+	data, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "region: "+expected,
+		"the written metadata.region must equal the region bound into persisted state")
 }
