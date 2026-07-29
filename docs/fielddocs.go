@@ -236,7 +236,7 @@ func fieldTableRow(
 	return fmt.Sprintf(
 		"| `%s` | %s | %s | %s |\n",
 		fullName,
-		friendlyTypeName(field.Type),
+		mdxTableCell(friendlyTypeName(field.Type)),
 		defaultVal,
 		fieldDocs.describe(owner, field),
 	)
@@ -262,12 +262,37 @@ func friendlyTypeName(fieldType reflect.Type) string {
 	case reflect.Pointer:
 		return friendlyTypeName(fieldType.Elem())
 	case reflect.Slice:
-		return "[]" + friendlyTypeName(fieldType.Elem())
+		return sliceTypeName(fieldType)
 	case reflect.Map:
 		return "map[" + friendlyTypeName(fieldType.Key()) + "]" + friendlyTypeName(fieldType.Elem())
 	default:
 		return fieldType.Name()
 	}
+}
+
+// sliceTypeName labels a slice-typed field. A scalar-or-array union (see
+// [v1alpha1.ScalarOrList]) accepts either a single element or a list of them, so
+// both shapes are documented; every other slice is the array-only "[]<element>".
+func sliceTypeName(fieldType reflect.Type) string {
+	elem := friendlyTypeName(fieldType.Elem())
+	if implementsScalarOrList(fieldType) {
+		return elem + " | []" + elem
+	}
+
+	return "[]" + elem
+}
+
+// implementsScalarOrList reports whether fieldType is a scalar-or-array union —
+// a slice type that also accepts a single scalar element. Both the value and
+// pointer method sets are checked so a marker method with either receiver is
+// recognised.
+func implementsScalarOrList(fieldType reflect.Type) bool {
+	scalarOrList := reflect.TypeFor[v1alpha1.ScalarOrList]()
+	if fieldType.Implements(scalarOrList) {
+		return true
+	}
+
+	return reflect.PointerTo(fieldType).Implements(scalarOrList)
 }
 
 // RenderTypeSections renders an "### <path> (<TypeName>)" reference section

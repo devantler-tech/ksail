@@ -17,6 +17,31 @@ func normalizeKubernetesVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimSpace(version), "v")
 }
 
+// ParseVersionContract resolves a pinned Talos version to the machinery
+// contract used for config generation. An empty pin retains the conservative
+// Talos 1.12 contract used by the default Hetzner bootstrap ISO.
+func ParseVersionContract(pinnedVersion string) (*talosconfig.VersionContract, error) {
+	pinnedVersion = strings.TrimSpace(pinnedVersion)
+	if pinnedVersion == "" {
+		return talosconfig.TalosVersion1_12, nil
+	}
+
+	if !strings.HasPrefix(pinnedVersion, "v") {
+		pinnedVersion = "v" + pinnedVersion
+	}
+
+	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"parse Talos version contract for pinned version %q: %w",
+			pinnedVersion,
+			err,
+		)
+	}
+
+	return contract, nil
+}
+
 // ResolveKubernetesVersion determines the Kubernetes version a freshly generated
 // Talos machine config should target, given an optional explicit pin
 // (spec.cluster.kubernetesVersion) and an optional pinned Talos OS version
@@ -128,11 +153,13 @@ func KubernetesVersionFromProvider(provider talosconfig.Provider) string {
 		return ""
 	}
 
-	if cluster := provider.Cluster(); cluster != nil {
-		if apiServer := cluster.APIServer(); apiServer != nil {
-			if tag := extractImageTag(apiServer.Image()); tag != "" {
-				return normalizeKubernetesVersion(tag)
-			}
+	// Talos alpha.2 moved the kube-apiserver settings from cluster.apiServer to the
+	// K8sAPIServerConfig document; read the image tag from there. The bridge returns a
+	// non-nil config even for worker configs (defaulting the image), so the empty-tag
+	// check is what drives the kubelet fallback below, as before.
+	if apiServer := provider.K8sAPIServerConfig(); apiServer != nil {
+		if tag := extractImageTag(apiServer.Image()); tag != "" {
+			return normalizeKubernetesVersion(tag)
 		}
 	}
 

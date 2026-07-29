@@ -225,7 +225,8 @@ func warnOIDCDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.cluster.oidc is deprecated for Talos clusters. "+
 			"Configure OIDC via native Talos patches in talos/cluster/oidc.yaml instead "+
-			"(cluster.apiServer.extraArgs + machine.files).\n")
+			"(KubeAuthenticationConfig on Talos 1.14+; "+
+			"cluster.apiServer.extraArgs on older releases).\n")
 }
 
 func warnIngressFirewallDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {

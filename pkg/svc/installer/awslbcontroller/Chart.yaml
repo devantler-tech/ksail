@@ -1,0 +1,16 @@
+# This file is the source of truth for the aws-load-balancer-controller Helm chart
+# version used in Go code. Dependabot's helm ecosystem updates the dependency version
+# below, and Go code reads it via go:embed + parser.ParseChartVersionFromChartYaml.
+#
+# This is not a deployable chart - it exists solely so Dependabot can track the pinned
+# chart version. The chart version diverges from the controller image version history
+# (chart 1.x shipped controller 2.x for years), so it cannot be tracked via a
+# Dockerfile FROM directive like the image-pinned installers.
+apiVersion: v2
+name: ksail-awslbcontroller-pin
+description: Dependabot version pin for the aws-load-balancer-controller Helm chart (not a deployable chart).
+version: 0.0.0
+dependencies:
+  - name: aws-load-balancer-controller
+    version: 3.4.2
+    repository: https://aws.github.io/eks-charts

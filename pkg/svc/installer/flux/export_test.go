@@ -58,6 +58,11 @@ func BuildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 	return buildRegistrySecret(clusterCfg)
 }
 
+// DockerConfigsDiffer exports dockerConfigsDiffer for testing.
+func DockerConfigsDiffer(current, desired []byte) bool {
+	return dockerConfigsDiffer(current, desired)
+}
+
 // IsTransientAPIError exports isTransientAPIError for testing.
 func IsTransientAPIError(err error) bool {
 	return isTransientAPIError(err)
@@ -129,6 +134,17 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 
 	return func() {
 		newFluxResourcesClient = original
+	}
+}
+
+// SetNewCoreV1Client allows tests to replace newCoreV1Client with a fake, so the registry-Secret
+// read paths can be exercised against a synthetic cluster state.
+func SetNewCoreV1Client(fn func(*rest.Config) (client.Client, error)) func() {
+	original := newCoreV1Client
+	newCoreV1Client = fn
+
+	return func() {
+		newCoreV1Client = original
 	}
 }
 

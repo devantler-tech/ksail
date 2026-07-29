@@ -143,9 +143,26 @@ func warnDegradations(cmd *cobra.Command, degradations []render.Degradation) {
 			continue
 		}
 
+		content := "skipped Helm render for HelmRelease %s (validating the resource as-is): %s"
+
+		switch degradation.Kind {
+		case render.DegradationPartialValues:
+			content = "rendered HelmRelease %s with incomplete values — valuesFrom %s " +
+				"could not be resolved offline (cluster-managed or in another kustomization); " +
+				"validation/scan may differ from the cluster"
+		case render.DegradationMissingValuesKey:
+			// The referent IS in the repo, so pointing at cluster-managed sources
+			// would misdirect; the actionable cause is the key itself (often a typo).
+			content = "rendered HelmRelease %s with incomplete values — valuesFrom %s " +
+				"is in the repo but has no such key (Flux fails reconciliation on a " +
+				"missing valuesKey, even when the reference is optional); " +
+				"validation/scan may differ from the cluster"
+		case render.DegradationSkippedRender:
+		}
+
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "skipped Helm render for HelmRelease %s (validating the resource as-is): %s",
+			Content: content,
 			Args:    []any{degradation.HelmRelease, degradation.Reason},
 			Writer:  cmd.ErrOrStderr(),
 		})

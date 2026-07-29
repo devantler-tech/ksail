@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -40,16 +39,21 @@ func skipIfInterceptSignalUnsupported(t *testing.T) {
 	}
 }
 
-// experimentalInterceptCmd builds the intercept command with the --experimental
-// opt-in enabled, so these tests exercise the gated command's own behaviour
-// rather than the experimental.Guard rejection (which is covered in the
-// experimental package's own tests). intercept ships behind the experimental
-// gate (issue #5884), so a plain invocation is refused before it runs.
-func experimentalInterceptCmd() *cobra.Command {
-	cmd := workload.NewInterceptCmd()
-	cmd.Flags().Bool(flags.ExperimentalFlagName, true, "")
+// TestInterceptCmdIsStable locks the post-graduation contract: intercept is
+// visible without an experimental opt-in and reaches its own validation path.
+func TestInterceptCmdIsStable(t *testing.T) {
+	t.Parallel()
 
-	return cmd
+	cmd := workload.NewInterceptCmd()
+	cmd.SetArgs([]string{"echo", "--local-port", "0"})
+
+	assert.False(t, cmd.Hidden, "graduated intercept must be visible in help and tool surfaces")
+	require.ErrorIs(t, cmd.Execute(), workload.ErrInvalidInterceptLocalPort)
+}
+
+// interceptCmd builds the stable intercept command for command-behaviour tests.
+func interceptCmd() *cobra.Command {
+	return workload.NewInterceptCmd()
 }
 
 // interceptCall records what the stubbed steering session was invoked with, so
@@ -60,6 +64,7 @@ type interceptCall struct {
 	point        *mirror.TapPoint
 	steerCommand []string
 	localPort    int
+	keepalive    bool
 }
 
 // newSteerPod extends the shared running test pod with a steering container so
@@ -112,11 +117,13 @@ func stubInterceptSession(client kubernetes.Interface) (func(), *interceptCall) 
 			point *mirror.TapPoint,
 			steerCommand []string,
 			localPort int,
+			keepalive bool,
 		) error {
 			call.ran = true
 			call.point = point
 			call.steerCommand = steerCommand
 			call.localPort = localPort
+			call.keepalive = keepalive
 
 			return nil
 		},
@@ -151,6 +158,7 @@ func stubTerminatingInterceptSession(
 			_ *mirror.TapPoint,
 			_ []string,
 			_ int,
+			_ bool,
 		) error {
 			proc, err := os.FindProcess(os.Getpid())
 			if err != nil {
@@ -238,7 +246,7 @@ func TestInterceptCmdTerminationSignalsStopSessionCleanly(t *testing.T) {
 			restore := stubTerminatingInterceptSession(client, test.terminationSignal)
 			defer restore()
 
-			cmd := experimentalInterceptCmd()
+			cmd := interceptCmd()
 			cmd.SetArgs([]string{
 				mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
 			})
@@ -263,7 +271,7 @@ func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
 	restore := stubInterruptingInterceptSetup()
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy,
 		"--local-port", "8080",
@@ -285,7 +293,7 @@ func TestInterceptCmdInterruptDuringSetupStopsCleanly(t *testing.T) {
 func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 	t.Parallel()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{mirrorTestDeploy, "--steer-command", "ksail-steer"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -300,7 +308,7 @@ func TestInterceptCmdRequiresLocalPort(t *testing.T) {
 func TestInterceptCmdRequiresSteerOrServicePort(t *testing.T) {
 	t.Parallel()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{mirrorTestDeploy, "--local-port", "8080"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -314,7 +322,7 @@ func TestInterceptCmdRequiresSteerOrServicePort(t *testing.T) {
 func TestInterceptCmdRejectsServicePortCollidingWithInternalPort(t *testing.T) {
 	t.Parallel()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	// 19000 is the agent's internal listener port; steering it to itself loops.
 	cmd.SetArgs([]string{mirrorTestDeploy, "--local-port", "8080", "--service-port", "19000"})
 	cmd.SetOut(io.Discard)
@@ -329,7 +337,7 @@ func TestInterceptCmdRejectsServicePortCollidingWithInternalPort(t *testing.T) {
 func TestInterceptCmdRejectsInvalidLocalPort(t *testing.T) {
 	t.Parallel()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "70000", "--steer-command", "ksail-steer",
 	})
@@ -348,7 +356,7 @@ func TestInterceptCmdFailsForMissingDeployment(t *testing.T) {
 	restore, _ := stubInterceptSession(k8sfake.NewClientset())
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
 	})
@@ -369,7 +377,7 @@ func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080",
 		"--steer-command", "ksail-steer", "--steer-command", "--port=8080",
@@ -393,14 +401,20 @@ func TestInterceptCmdInjectsSteerAndRunsSession(t *testing.T) {
 // TestInterceptCmdDerivesSteerCommandFromServicePort verifies the default
 // steering-agent invocation when no custom command is supplied.
 //
-//nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
+//nolint:paralleltest // swaps package-level seams (newMirrorClients, DefaultSteerImage); unsafe with t.Parallel.
 func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
+	// Pin the steer image to a release-style ref: the test binary is an
+	// unstamped dev build whose :latest default deliberately never
+	// negotiates keepalives, and this test covers the negotiated path.
+	restoreImage := pinSteerImage("ghcr.io/devantler-tech/ksail-steer:v7.199.0")
+	defer restoreImage()
+
 	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
 
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
 	})
@@ -414,11 +428,67 @@ func TestInterceptCmdDerivesSteerCommandFromServicePort(t *testing.T) {
 
 	assert.True(t, call.ran, "the steering session must run")
 	// With no --steer-command, KSail derives the default `ksail steer-agent`
-	// invocation for the shipped steering image from --service-port.
+	// invocation for the shipped steering image from --service-port — plus
+	// the --expect-keepalives arming flag, since keepalives are negotiated
+	// against this build's own pinned image.
+	assert.Equal(t, []string{
+		"ksail", "steer-agent", "--service-port=9090", "--intercept-port=19000",
+		"--expect-keepalives",
+	}, call.steerCommand)
+	assert.Equal(t, 8080, call.localPort)
+	// Fresh injection of this build's own steer image: the agent provably
+	// speaks the keepalive protocol, so liveness pings are enabled.
+	assert.True(t, call.keepalive, "derived command against this build's image enables keepalives")
+}
+
+// pinSteerImage swaps the package-level default steer image and returns the
+// restore func. The intercept keepalive gate compares the live container
+// image against this default, so tests pin it to cover both the negotiated
+// (version-pinned) and refused (:latest dev fallback) states.
+func pinSteerImage(image string) func() {
+	previous := mirror.DefaultSteerImage
+	mirror.DefaultSteerImage = image
+
+	return func() { mirror.DefaultSteerImage = previous }
+}
+
+// TestInterceptCmdDisablesKeepalivesOnUnpinnedDevImage verifies the dev-build
+// guard: an unstamped build's default steer image is the mutable :latest tag,
+// where tag equality cannot prove the running agent binary speaks the
+// keepalive protocol (the tag may point at an older published image, or a
+// reused container may predate this build), so keepalives stay off and the
+// agent command carries no --expect-keepalives flag (ksail#6061 review).
+//
+//nolint:paralleltest // swaps package-level seams (newMirrorClients, DefaultSteerImage); unsafe with t.Parallel.
+func TestInterceptCmdDisablesKeepalivesOnUnpinnedDevImage(t *testing.T) {
+	restoreImage := pinSteerImage("ghcr.io/devantler-tech/ksail-steer:latest")
+	defer restoreImage()
+
+	client := k8sfake.NewClientset(newMirrorDeployment(), newSteerPod(false))
+
+	restore, call := stubInterceptSession(client)
+	defer restore()
+
+	cmd := interceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.True(t, call.ran, "the steering session must run")
 	assert.Equal(t, []string{
 		"ksail", "steer-agent", "--service-port=9090", "--intercept-port=19000",
 	}, call.steerCommand)
-	assert.Equal(t, 8080, call.localPort)
+	assert.False(
+		t, call.keepalive,
+		"a mutable :latest default must never negotiate keepalives",
+	)
 }
 
 // TestInterceptCmdExplicitSteerCommandOverridesServicePort verifies that the
@@ -431,7 +501,7 @@ func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	// Both flags set: the explicit --steer-command wins (the escape hatch),
 	// --service-port is ignored rather than derived.
 	cmd.SetArgs([]string{
@@ -448,6 +518,9 @@ func TestInterceptCmdExplicitSteerCommandOverridesServicePort(t *testing.T) {
 
 	assert.True(t, call.ran, "the steering session must run")
 	assert.Equal(t, []string{"custom-agent", "--flag"}, call.steerCommand)
+	// A custom agent's protocol support is unknown: keepalives stay off so
+	// an older decoder is never fed a frame type it would reject.
+	assert.False(t, call.keepalive, "a custom --steer-command disables keepalives")
 }
 
 // TestInterceptCmdReusesExistingSteer verifies that an injected ephemeral
@@ -460,7 +533,7 @@ func TestInterceptCmdReusesExistingSteer(t *testing.T) {
 	restore, call := stubInterceptSession(client)
 	defer restore()
 
-	cmd := experimentalInterceptCmd()
+	cmd := interceptCmd()
 	cmd.SetArgs([]string{
 		mirrorTestDeploy, "--local-port", "8080", "--steer-command", "ksail-steer",
 	})
@@ -474,4 +547,38 @@ func TestInterceptCmdReusesExistingSteer(t *testing.T) {
 
 	assert.True(t, call.ran, "the steering session must run")
 	assert.Contains(t, out.String(), "reusing the steering agent already injected")
+}
+
+// TestInterceptCmdDisablesKeepalivesOnReusedForeignImage verifies the
+// version-skew guard: a reused steering container from another release (its
+// live image differs from this build's pinned default) may run a
+// pre-keepalive agent, so the client must not send it keepalive frames its
+// decoder would reject (ksail#6040 / ksail#6061 review).
+//
+//nolint:paralleltest // swaps the package-level newMirrorClients seam; unsafe with t.Parallel.
+func TestInterceptCmdDisablesKeepalivesOnReusedForeignImage(t *testing.T) {
+	pod := newSteerPod(true)
+	pod.Spec.EphemeralContainers[0].Image = "ghcr.io/devantler-tech/ksail-steer:v0.0.1"
+	client := k8sfake.NewClientset(newMirrorDeployment(), pod)
+
+	restore, call := stubInterceptSession(client)
+	defer restore()
+
+	cmd := interceptCmd()
+	cmd.SetArgs([]string{
+		mirrorTestDeploy, "--local-port", "8080", "--service-port", "9090",
+	})
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.True(t, call.ran, "the steering session must run")
+	assert.False(
+		t, call.keepalive,
+		"a reused container from another release must not receive keepalive frames",
+	)
 }

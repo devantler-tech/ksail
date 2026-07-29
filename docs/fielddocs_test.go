@@ -112,6 +112,29 @@ func TestRenderTypeSectionsAutoscaler(t *testing.T) {
 	}
 }
 
+// TestRenderFieldTableScalarOrListUnion verifies that a scalar-or-array union
+// field (AutoscalerExpanderList, which accepts either a single expander or a
+// priority list) is documented as both shapes with the table pipe escaped,
+// rather than the array-only "[]enum" label.
+func TestRenderFieldTableScalarOrListUnion(t *testing.T) {
+	t.Parallel()
+
+	table := docs.RenderFieldTable(
+		reflect.TypeFor[v1alpha1.NodeAutoscalerConfig](), "", loadAPIFieldDocs(t),
+	)
+
+	if !strings.Contains(table, "| `expander` | enum \\| []enum |") {
+		t.Errorf(
+			"expander field must render as the escaped scalar-or-array union; got table:\n%s",
+			table,
+		)
+	}
+
+	if strings.Contains(table, "| `expander` | []enum |") {
+		t.Error("expander field must not render as the array-only []enum label")
+	}
+}
+
 func TestConfigReferenceProviderSections(t *testing.T) {
 	t.Parallel()
 
