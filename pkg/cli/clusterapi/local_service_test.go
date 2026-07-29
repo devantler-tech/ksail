@@ -2229,3 +2229,117 @@ func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T)
 	require.NotErrorIs(t, err, api.ErrNotFound,
 		"a cluster KSail holds an ownership record for is not missing; the selected region is")
 }
+
+// writeStateEKSConfig puts an eks.yaml under ~/.ksail/clusters/<name> carrying region, standing in
+// for a file an earlier KSail wrote from whatever region happened to be selected at the time.
+func writeStateEKSConfig(t *testing.T, name, region string) string {
+	t.Helper()
+
+	dir := filepath.Join(os.Getenv("HOME"), ".ksail", "clusters", name)
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+
+	path := filepath.Join(dir, "eks.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(
+		"apiVersion: eksctl.io/v1alpha5\nkind: ClusterConfig\nmetadata:\n  name: "+name+
+			"\n  region: "+region+"\n"), 0o600))
+
+	return path
+}
+
+func saveEKSClusterSpec(t *testing.T, name string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+}
+
+// TestBoundEKSConfigRefusesAStaleConfigTheOwnershipRecordContradicts is a destructive-path guard.
+//
+// eks.yaml is a RENDERED file: before this binding existed, every delete/start/stop re-rendered it
+// from the ambient AWS_REGION, so a file left by that behaviour can name a region the cluster was
+// never created in. Reading it without consulting the immutable ownership record left exactly the
+// redirect this binding exists to prevent — a delete aimed at a same-named cluster in the file's
+// region — for any cluster whose config predates the record.
+func TestBoundEKSConfigRefusesAStaleConfigTheOwnershipRecordContradicts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "stale-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "us-west-2")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "eu-north-1", "the error must name the recorded region")
+	assert.Contains(t, err.Error(), "us-west-2", "the error must name the config's region")
+}
+
+// TestBoundEKSConfigRefusesAmbiguousOwnershipWithAConfigPresent closes the same hole for the
+// multi-region case. Reading the config first meant a materialised eks.yaml silently answered a
+// question that has no answer: two records mean two same-named clusters, and the file's region is
+// not evidence of which one an operator meant.
+func TestBoundEKSConfigRefusesAmbiguousOwnershipWithAConfigPresent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "two-regions-with-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(
+			t,
+			state.SaveEKSOwnershipState(name, region, ownershipRecordFor(name, region)),
+		)
+	}
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "more than one region")
+}
+
+// TestBoundEKSConfigAcceptsAConfigTheOwnershipRecordAgreesWith is the over-tightening control for
+// both tests above: the ordinary case, where the record and the file say the same thing, must stay
+// silent. A guard that failed the normal path would be routed around rather than fixed.
+func TestBoundEKSConfigAcceptsAConfigTheOwnershipRecordAgreesWith(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "agreeing-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "an agreeing config still binds to the creation region")
+}
+
+// TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord is the second over-tightening control.
+// Clusters created before ownership records existed have only the config, and it remains their one
+// piece of binding evidence — requiring a record would break every one of them.
+func TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "legacy-config-only"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "the config alone still binds when no record exists")
+}

@@ -210,11 +210,80 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		)
 	}
 
+	err = confirmConfigMatchesOwnership(name, configPath, parsed.Metadata.Region)
+	if err != nil {
+		return nil, err
+	}
+
 	return &clusterprovisioner.EKSConfig{
 		Name:       name,
 		Region:     parsed.Metadata.Region,
 		ConfigPath: configPath,
 	}, nil
+}
+
+// confirmConfigMatchesOwnership refuses a config whose region the immutable ownership record
+// contradicts, and refuses either way when records exist for more than one region.
+//
+// The config is a RENDERED file: before this binding existed, every delete, start and stop
+// re-rendered it from the ambient AWS_REGION, so a stale one on disk can name a region the cluster
+// was never created in. The ownership record cannot drift that way — it is written once, after AWS
+// confirmed the create, and is scoped to the region it names. Reading the config without consulting
+// the record therefore left exactly the redirect this binding exists to prevent, for any cluster
+// whose file predates it: a delete would aim at a same-named cluster in the file's region.
+//
+// The disagreement is REFUSED rather than resolved in the record's favour, even though the record is
+// the more trustworthy source. Preferring it would mean re-rendering the config, and
+// writeEKSConfig writes a DEFAULT eksctl config — so silently overwriting a file an operator had
+// customised (node groups, addons, networking) would destroy real configuration to fix a region
+// field. Naming the conflict and stopping is the only non-destructive answer; the operator can
+// delete whichever artifact is wrong.
+//
+// Multiple records mean several same-named clusters in different regions. That is unanswerable here
+// whether or not a config exists, so the presence of a file must not suppress it — picking the
+// file's region would aim a destructive action at a cluster nobody named.
+func confirmConfigMatchesOwnership(name, configPath, configRegion string) error {
+	ownerships, err := state.ListEKSOwnershipStates(name)
+	if err != nil {
+		// No usable record: the config is the only binding evidence there is, and it is already
+		// validated above. A cluster created before ownership records existed still works.
+		return nil //nolint:nilerr // absence of a record is not an error; the config binds instead.
+	}
+
+	if len(ownerships) > 1 {
+		return multiRegionOwnershipError(name, ownerships)
+	}
+
+	if len(ownerships) == 1 && ownerships[0].Region != configRegion {
+		return fmt.Errorf(
+			"%w: cluster %q has an immutable ownership record for region %s, but %s says region %s."+
+				" The config is re-rendered by ordinary commands and can be stale, while the"+
+				" ownership record is written once after the cluster was created, so acting on the"+
+				" config could target a same-named cluster in the wrong region."+
+				" KSail will not guess: delete %s to rebind from the ownership record, or remove the"+
+				" ownership record if it is the one that is wrong",
+			api.ErrInvalid, name, ownerships[0].Region, configPath, configRegion, configPath,
+		)
+	}
+
+	return nil
+}
+
+// multiRegionOwnershipError reports same-named clusters recorded in several regions.
+func multiRegionOwnershipError(name string, ownerships []*state.EKSOwnershipState) error {
+	regions := make([]string, 0, len(ownerships))
+	for _, ownership := range ownerships {
+		regions = append(regions, ownership.Region)
+	}
+
+	return fmt.Errorf(
+		"%w: cluster %q has ownership records in more than one region (%s), so KSail cannot tell"+
+			" which cluster this action means; delete the records for the regions you do not mean"+
+			" before retrying",
+		api.ErrInvalid,
+		name,
+		strings.Join(regions, ", "),
+	)
 }
 
 // bindFromOwnershipRecord binds a cluster to its creation region using the immutable EKS ownership
@@ -247,19 +316,7 @@ func bindFromOwnershipRecord(name string) (*clusterprovisioner.EKSConfig, error)
 	}
 
 	if len(ownerships) > 1 {
-		regions := make([]string, 0, len(ownerships))
-		for _, ownership := range ownerships {
-			regions = append(regions, ownership.Region)
-		}
-
-		return nil, fmt.Errorf(
-			"%w: cluster %q has ownership records in more than one region (%s), so KSail cannot tell"+
-				" which cluster this action means; delete the records for the regions you do not mean"+
-				" before retrying",
-			api.ErrInvalid,
-			name,
-			strings.Join(regions, ", "),
-		)
+		return nil, multiRegionOwnershipError(name, ownerships)
 	}
 
 	region := ownerships[0].Region
