@@ -131,7 +131,7 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		return nil, nil //nolint:nilnil // no cluster to bind: discovery-time factory construction.
 	}
 
-	_, err := state.LoadClusterSpec(name)
+	spec, err := state.LoadClusterSpec(name)
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotFound) {
 			return nil, nil //nolint:nilnil // not created yet: caller renders from the ambient region.
@@ -139,6 +139,20 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 
 		return nil, fmt.Errorf(
 			"%w: read local KSail state for EKS cluster %q: %w", api.ErrInvalid, name, err,
+		)
+	}
+
+	// State is written for EVERY distribution, so its existence alone does not mean an EKS create
+	// completed — it may belong to a Kind or Talos cluster of the same name. Entering the bound path
+	// on that would look for an eks.yaml nothing wrote and report a missing-file read error, hiding
+	// the name collision the user actually has. Report the collision instead of treating it as a
+	// fresh create: two clusters would otherwise share one state directory, and the second create
+	// would overwrite the first record.
+	if spec != nil && spec.Distribution != v1alpha1.DistributionEKS {
+		return nil, fmt.Errorf(
+			"%w: local KSail state for cluster %q records the %s distribution, not EKS; "+
+				"delete that cluster or choose another name before creating it on EKS",
+			api.ErrInvalid, name, spec.Distribution,
 		)
 	}
 

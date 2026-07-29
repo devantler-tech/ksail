@@ -1770,3 +1770,29 @@ func TestEKSCreateFallsBackToTheScaffolderDefaultRegion(t *testing.T) {
 	assert.Contains(t, string(data), "region: "+expected,
 		"the written metadata.region must equal the region bound into persisted state")
 }
+
+// TestEKSCreateRejectsStateBelongingToAnotherDistribution covers the second finding on this PR:
+// LoadClusterSpec persists state for EVERY distribution, so treating the mere existence of
+// spec.json as proof that an EKS create completed misreads a Kind or Talos cluster of the same
+// name. The bound path then looks for an eks.yaml that was never written, and the user sees a
+// confusing read error instead of the name collision they actually have.
+//
+// A name collision is reported rather than silently treated as a fresh create: two clusters would
+// otherwise share one state directory, and the second create would overwrite the first's record.
+func TestEKSCreateRejectsStateBelongingToAnotherDistribution(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-central-1")
+
+	const clusterName = "not-an-eks-cluster"
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionVanilla,
+	}))
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "Vanilla",
+		"the error must name the distribution that actually owns the state")
+	assert.NotContains(t, err.Error(), "read the eks config",
+		"a name collision must not surface as a missing-eks.yaml read error")
+}
