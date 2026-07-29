@@ -1872,3 +1872,40 @@ func TestDeleteEKSRefusesLiveClusterWithoutOwnershipState(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 	assert.Empty(t, provisioner.deletedNames())
 }
+
+// TestDeleteFailedLocalCreateStillReachesTheProvisioner pins the distribution scope of the
+// failed-create clearing path. Clearing the job locally is right for EKS, where the ownership guard
+// stands between KSail and a remote account it cannot identify. It would be wrong for a local
+// distribution: a half-finished Kind or vCluster create leaves containers behind, and the
+// provisioner's Delete is what removes them. Local distributions must therefore still go through the
+// provisioner rather than having their job quietly dropped.
+func TestDeleteFailedLocalCreateStillReachesTheProvisioner(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "half-made"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionVanilla),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+
+	require.Eventually(t, func() bool {
+		return slices.Contains(provisioner.deletedNames(), clusterName)
+	}, eventuallyTimeout, eventuallyTick)
+}
