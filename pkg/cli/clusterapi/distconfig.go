@@ -116,6 +116,38 @@ type eksConfigMetadata struct {
 	} `json:"metadata"`
 }
 
+// eksCreateCompleted reports whether persisted state shows an EKS create completed for name.
+//
+// State is written for EVERY distribution, so its existence alone does not prove that: it may
+// belong to a Kind or Talos cluster of the same name. Entering the bound path on that would look
+// for an eks.yaml nothing wrote and report a missing-file read error, hiding the name collision the
+// user actually has. A collision is reported rather than treated as a fresh create, because two
+// clusters would otherwise share one state directory and the second create would overwrite the
+// first record.
+func eksCreateCompleted(name string) (bool, error) {
+	spec, err := state.LoadClusterSpec(name)
+	if err != nil {
+		if errors.Is(err, state.ErrStateNotFound) {
+			// Not created yet: the caller renders from the ambient region.
+			return false, nil
+		}
+
+		return false, fmt.Errorf(
+			"%w: read local KSail state for EKS cluster %q: %w", api.ErrInvalid, name, err,
+		)
+	}
+
+	if spec != nil && spec.Distribution != v1alpha1.DistributionEKS {
+		return false, fmt.Errorf(
+			"%w: local KSail state for cluster %q records the %s distribution, not EKS; "+
+				"delete that cluster or choose another name before creating it on EKS",
+			api.ErrInvalid, name, spec.Distribution,
+		)
+	}
+
+	return true, nil
+}
+
 // boundEKSConfig returns the EKS target recorded when the named cluster was created, or nil when
 // there is no such record and the caller should render a fresh config.
 //
@@ -131,29 +163,9 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 		return nil, nil //nolint:nilnil // no cluster to bind: discovery-time factory construction.
 	}
 
-	spec, err := state.LoadClusterSpec(name)
-	if err != nil {
-		if errors.Is(err, state.ErrStateNotFound) {
-			return nil, nil //nolint:nilnil // not created yet: caller renders from the ambient region.
-		}
-
-		return nil, fmt.Errorf(
-			"%w: read local KSail state for EKS cluster %q: %w", api.ErrInvalid, name, err,
-		)
-	}
-
-	// State is written for EVERY distribution, so its existence alone does not mean an EKS create
-	// completed — it may belong to a Kind or Talos cluster of the same name. Entering the bound path
-	// on that would look for an eks.yaml nothing wrote and report a missing-file read error, hiding
-	// the name collision the user actually has. Report the collision instead of treating it as a
-	// fresh create: two clusters would otherwise share one state directory, and the second create
-	// would overwrite the first record.
-	if spec != nil && spec.Distribution != v1alpha1.DistributionEKS {
-		return nil, fmt.Errorf(
-			"%w: local KSail state for cluster %q records the %s distribution, not EKS; "+
-				"delete that cluster or choose another name before creating it on EKS",
-			api.ErrInvalid, name, spec.Distribution,
-		)
+	created, err := eksCreateCompleted(name)
+	if err != nil || !created {
+		return nil, err
 	}
 
 	configPath, err := eksConfigPath(name, false)

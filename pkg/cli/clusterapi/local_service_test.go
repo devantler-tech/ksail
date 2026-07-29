@@ -1053,6 +1053,7 @@ func TestEKSCreateBindsTheRegionItWrites(t *testing.T) {
 			require.NoError(t, err)
 			require.NotEmpty(t, bound, "a bound region must never be empty")
 
+			//nolint:gosec // test-controlled path under a temp HOME.
 			data, readErr := os.ReadFile(configPath)
 			require.NoError(t, readErr)
 			assert.Contains(t, string(data), "region: "+bound,
@@ -1765,6 +1766,7 @@ func TestEKSCreateFallsBackToTheScaffolderDefaultRegion(t *testing.T) {
 	require.NotEmpty(t, expected, "the scaffolder default must be a real region")
 	assert.Equal(t, expected, region, "the bound region must be the scaffolder default")
 
+	//nolint:gosec // test-controlled path under a temp HOME.
 	data, readErr := os.ReadFile(configPath)
 	require.NoError(t, readErr)
 	assert.Contains(t, string(data), "region: "+expected,
