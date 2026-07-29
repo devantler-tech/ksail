@@ -1949,6 +1949,74 @@ func TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState(t *testing.T) {
 		"the job must still report why the stop failed")
 }
 
+// TestDeleteEKSRefusesJobReplacedDuringOwnershipRead is the third negative control, and it covers a
+// window the other two cannot reach. clearedFailedEKSCreate releases the lock to read ownership state
+// from disk, so the entry it validated before that read is not necessarily the entry it removes after
+// it: the job can be replaced in between — ownership state restored out of band, then a start/stop
+// registered and failed.
+//
+// Re-checking only the phase on the way out is therefore not enough. Create, delete and start/stop all
+// converge on Failed, so a replacement failed *stop* satisfies a phase-only re-check while describing
+// a cluster that may still be running in AWS. That is precisely the confusion `origin` was introduced
+// to prevent, and TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState pins it for the
+// steady-state case; this pins it across the unlocked window, where the check has to be repeated in
+// full rather than assumed to still hold.
+//
+// The replacement is driven through the ownership-read seam rather than a competing goroutine, so the
+// interleaving is exact and the test cannot flake.
+func TestDeleteEKSRefusesJobReplacedDuringOwnershipRead(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "replaced-during-read"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	// A create that fails, so the job really is a failed create: the pre-read check passes and the
+	// clearing path proceeds into the unlocked ownership read.
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Act inside the unlocked window: replace the failed create with a failed stop, then answer the
+	// read exactly as the real loader would for a cluster with no persisted state.
+	reads := 0
+
+	service.SetLoadClusterSpecForTest(func(name string) (*v1alpha1.ClusterSpec, error) {
+		reads++
+
+		service.ReplaceJobWithFailedStopForTest(name)
+
+		return nil, state.ErrStateNotFound
+	})
+
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	// Without the read actually happening the test would pass vacuously — it would be asserting the
+	// steady-state refusal, not the windowed one.
+	require.Equal(t, 1, reads,
+		"the unlocked ownership read must have run, or the window under test was never entered")
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"a job that became a failed stop during the read must not be cleared as a failed create")
+	assert.Empty(t, provisioner.deletedNames(),
+		"a refused delete must not have reached the provisioner")
+	assert.True(t, service.JobPresentForTest(clusterName),
+		"the replacement failed stop must survive: it is the only record of a cluster"+
+			" that may still be running")
+}
+
 // TestDeleteFailedLocalCreateStillReachesTheProvisioner pins the distribution scope of the
 // failed-create clearing path. Clearing the job locally is right for EKS, where the ownership guard
 // stands between KSail and a remote account it cannot identify. It would be wrong for a local

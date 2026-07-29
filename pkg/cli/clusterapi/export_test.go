@@ -2,6 +2,7 @@ package clusterapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
@@ -63,6 +64,43 @@ func (s *Service) SetDockerStatusForTest(
 	probe func(ctx context.Context, distribution v1alpha1.Distribution, name string) clusterdiscovery.RunState,
 ) {
 	s.discoverer.DockerStatus = probe
+}
+
+// SetLoadClusterSpecForTest overrides the ownership-state read that clearedFailedEKSCreate performs
+// with the lock released. A test substitutes a loader that mutates the service's job table, which
+// lands the mutation precisely inside the unlocked window and makes the race deterministic — no
+// goroutines, no sleeps, no flakiness.
+func (s *Service) SetLoadClusterSpecForTest(
+	load func(clusterName string) (*v1alpha1.ClusterSpec, error),
+) {
+	s.loadClusterSpec = load
+}
+
+// ReplaceJobWithFailedStopForTest swaps the tracked job for one that began as a stop and ended in
+// Failed, mirroring what a start/stop registration does. It is the state a failed-create clearing
+// path must refuse: the remote cluster may well still be running.
+func (s *Service) ReplaceJobWithFailedStopForTest(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jobs[name] = &job{
+		distribution: v1alpha1.DistributionEKS,
+		provider:     v1alpha1.ProviderAWS,
+		phase:        v1alpha1.ClusterPhaseFailed,
+		origin:       v1alpha1.ClusterPhaseStopped,
+		startedAt:    time.Now(),
+	}
+}
+
+// JobPresentForTest reports whether a job is still tracked for the cluster, so a test can assert the
+// refusal preserved the row rather than clearing it.
+func (s *Service) JobPresentForTest(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, found := s.jobs[name]
+
+	return found
 }
 
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can

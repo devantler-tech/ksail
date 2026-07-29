@@ -143,6 +143,12 @@ type Service struct {
 	// verification is unavailable, so an install carrying cosign material is rejected.
 	cosign cosignVerifier
 
+	// loadClusterSpec reads a cluster's persisted ownership state. clearedFailedEKSCreate drops the
+	// lock across this call, so it is the seam a test uses to act inside that window — substituting a
+	// loader that mutates s.jobs reproduces the interleaving deterministically, without goroutines or
+	// sleeps. The default is state.LoadClusterSpec.
+	loadClusterSpec func(clusterName string) (*v1alpha1.ClusterSpec, error)
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
@@ -155,6 +161,7 @@ func NewService() *Service {
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		plugins:           pluginStore{dir: defaultPluginsDir},
 		pluginCatalog:     defaultPluginCatalog(),
+		loadClusterSpec:   state.LoadClusterSpec,
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{
@@ -673,7 +680,7 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 
 	// Read ownership state outside the lock: it is disk I/O, and a create that has already failed
 	// will not begin writing state now.
-	_, err := state.LoadClusterSpec(name)
+	_, err := s.loadClusterSpec(name)
 	if !errors.Is(err, state.ErrStateNotFound) {
 		return false
 	}
@@ -681,8 +688,12 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	current, found := s.jobs[name]
-	if !found || current.phase != v1alpha1.ClusterPhaseFailed {
+	// Re-apply the predicate in FULL, not just the phase. The lock was released for the read above, so
+	// this is not necessarily the entry jobIsFailedEKS approved: ownership state can be restored out of
+	// band and a start/stop then registered and failed in that window. Such a replacement is also
+	// Failed, so a phase-only re-check would clear it — and a failed stop describes a cluster that may
+	// still be running, which is the case `origin` exists to distinguish.
+	if !s.jobIsFailedEKSLocked(name) {
 		return false
 	}
 
@@ -709,6 +720,14 @@ func (s *Service) jobIsFailedEKS(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.jobIsFailedEKSLocked(name)
+}
+
+// jobIsFailedEKSLocked is jobIsFailedEKS's predicate with the locking left to the caller, which must
+// hold s.mu. It exists so clearedFailedEKSCreate can re-apply the whole test after reacquiring the
+// lock instead of restating part of it — a partial restatement is what let a replacement failed stop
+// through, and keeping one definition is what stops the two copies drifting again.
+func (s *Service) jobIsFailedEKSLocked(name string) bool {
 	current, found := s.jobs[name]
 
 	return found &&
