@@ -44,7 +44,13 @@ type job struct {
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
 	phase        v1alpha1.ClusterPhase
-	err          error
+	// origin is the phase the job was registered in, and it never changes. `phase` does: create,
+	// delete and start/stop all converge on Failed, so once a job has failed `phase` can no longer
+	// say which operation failed. Anything scoped to one operation must read this instead —
+	// clearedFailedEKSCreate is scoped to a failed CREATE, and without `origin` it could not tell
+	// that from a failed stop whose cluster is still live in AWS.
+	origin v1alpha1.ClusterPhase
+	err    error
 	// startedAt is when the operation began; it drives the status condition's transition time so the
 	// UI can show how long a create/delete has been running or has been failed.
 	startedAt time.Time
@@ -388,6 +394,7 @@ func (s *Service) Create(
 		distribution: distribution,
 		provider:     provider,
 		phase:        v1alpha1.ClusterPhaseProvisioning,
+		origin:       v1alpha1.ClusterPhaseProvisioning,
 		startedAt:    time.Now(),
 	}
 	s.mu.Unlock()
@@ -550,6 +557,7 @@ func (s *Service) startJob(
 		distribution: distribution,
 		provider:     provider,
 		phase:        phase,
+		origin:       phase,
 		startedAt:    time.Now(),
 	}
 	s.mu.Unlock()
@@ -691,6 +699,12 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 
 // jobIsFailedEKS reports whether the tracked job for the cluster is an EKS create that ended in the
 // Failed phase. Split out so the ownership-state read in clearedFailedEKSCreate happens off the lock.
+//
+// `origin` is what makes this a CREATE test rather than merely a "failed EKS job" test. Delete and
+// start/stop also end in Failed, and a failed one of those describes a cluster the provisioner may
+// well have left running: clearing it locally would drop the row and report success while the AWS
+// cluster is still there. Only a create that never persisted state is safe to clear, because only
+// that job can be certain no confirmed cluster is being abandoned.
 func (s *Service) jobIsFailedEKS(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -699,6 +713,7 @@ func (s *Service) jobIsFailedEKS(name string) bool {
 
 	return found &&
 		current.phase == v1alpha1.ClusterPhaseFailed &&
+		current.origin == v1alpha1.ClusterPhaseProvisioning &&
 		current.distribution == v1alpha1.DistributionEKS
 }
 

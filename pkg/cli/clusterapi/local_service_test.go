@@ -1873,6 +1873,82 @@ func TestDeleteEKSRefusesLiveClusterWithoutOwnershipState(t *testing.T) {
 	assert.Empty(t, provisioner.deletedNames())
 }
 
+// TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState is the second negative control, and it
+// covers the case the first one cannot see. TestDeleteEKSRefusesLiveClusterWithoutOwnershipState has
+// no tracked job at all, so it never reaches the clearing path; this one arrives there with a job in
+// exactly the state that path inspects.
+//
+// Create, delete and start/stop all converge on Failed, so "failed EKS job with no ownership state"
+// does not mean "failed create". A stop that fails leaves the remote cluster running — the stop is
+// precisely the operation that did not take — and if its ownership state is then removed out of band,
+// a clearing path keyed only on phase and distribution would drop the row and answer Delete with
+// success while the AWS cluster is still there. That is worse than the refusal it replaced: the
+// operator is told the cluster is gone.
+//
+// The distinguishing fact is the job's `origin`, which is fixed at registration and never changes.
+func TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "stop-failed-eks"
+
+	provisioner := &fakeProvisioner{stopErr: errSimulatedDeleteFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	// A create that SUCCEEDS, so ownership state is persisted and the cluster is confirmed KSail's.
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	// A stop that fails. The job now sits in Failed — the same phase a failed create reaches, which
+	// is what makes phase alone insufficient to tell them apart.
+	require.NoError(t, service.Stop(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// The ownership state disappears underneath the failed job — removed out of band, or by a
+	// delete run from the CLI while the server holds this job in memory. Only now do the two cases
+	// look alike to a phase-and-distribution test.
+	require.NoError(t, state.DeleteClusterState(clusterName))
+
+	_, loadErr := state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
+
+	// Delete must still be refused: this was never a create, so KSail cannot claim no cluster was
+	// left behind, and it must not aim a delete at AWS on the strength of a name either.
+	err = service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames(),
+		"a refused delete must not have reached the provisioner")
+
+	// The failed job must survive the refusal. Clearing it would destroy the only record of why the
+	// stop did not take, which is the operator's route back to a working cluster.
+	list, listErr := service.List(context.Background())
+	require.NoError(t, listErr)
+
+	phase, present := phaseOf(list, clusterName)
+	assert.True(t, present, "the refused delete must not have cleared the failed job")
+	assert.Equal(t, v1alpha1.ClusterPhaseFailed, phase,
+		"the job must still report why the stop failed")
+}
+
 // TestDeleteFailedLocalCreateStillReachesTheProvisioner pins the distribution scope of the
 // failed-create clearing path. Clearing the job locally is right for EKS, where the ownership guard
 // stands between KSail and a remote account it cannot identify. It would be wrong for a local
