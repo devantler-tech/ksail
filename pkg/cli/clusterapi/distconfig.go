@@ -3,8 +3,10 @@ package clusterapi
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -180,6 +182,10 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 
 	content, err := fsutil.ReadFileSafe(clustersRoot, configPath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return bindFromOwnershipRecord(name)
+		}
+
 		return nil, fmt.Errorf(
 			"%w: read the eks config that binds cluster %q to its region: %w",
 			api.ErrInvalid, name, err,
@@ -207,6 +213,65 @@ func boundEKSConfig(name string) (*clusterprovisioner.EKSConfig, error) {
 	return &clusterprovisioner.EKSConfig{
 		Name:       name,
 		Region:     parsed.Metadata.Region,
+		ConfigPath: configPath,
+	}, nil
+}
+
+// bindFromOwnershipRecord binds a cluster to its creation region using the immutable EKS ownership
+// record, for a cluster whose eks.yaml is not in the state directory.
+//
+// `ksail cluster create` scaffolds eks.yaml into the PROJECT directory, while only the local API
+// backend writes one under ~/.ksail/clusters/<name>. Persisted cluster state is written by both, so
+// a CLI-created cluster reached the bound path and then failed reading a file nothing had put
+// there — breaking every start, stop and delete for exactly the clusters created the normal way.
+//
+// The ownership record is the better binding for both: it is the immutable, region-scoped identity
+// captured after AWS confirmed the create, so it cannot drift with the ambient region the way a
+// re-rendered config can. The config is materialised from that recorded region so the provisioner
+// still gets the on-disk file it requires.
+//
+// Several records mean several same-named clusters in different regions, which is a question only
+// the operator can answer. Picking one would aim a destructive action at a cluster nobody named, so
+// this refuses and lists them.
+func bindFromOwnershipRecord(name string) (*clusterprovisioner.EKSConfig, error) {
+	ownerships, err := state.ListEKSOwnershipStates(name)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: cluster %q has local KSail state but no eks config and no ownership record to bind"+
+				" it to a region; run `ksail cluster eks-bind` to record the region it was created"+
+				" in before starting, stopping or deleting it: %w",
+			api.ErrInvalid,
+			name,
+			err,
+		)
+	}
+
+	if len(ownerships) > 1 {
+		regions := make([]string, 0, len(ownerships))
+		for _, ownership := range ownerships {
+			regions = append(regions, ownership.Region)
+		}
+
+		return nil, fmt.Errorf(
+			"%w: cluster %q has ownership records in more than one region (%s), so KSail cannot tell"+
+				" which cluster this action means; delete the records for the regions you do not mean"+
+				" before retrying",
+			api.ErrInvalid,
+			name,
+			strings.Join(regions, ", "),
+		)
+	}
+
+	region := ownerships[0].Region
+
+	configPath, err := writeEKSConfig(name, region)
+	if err != nil {
+		return nil, err
+	}
+
+	return &clusterprovisioner.EKSConfig{
+		Name:       name,
+		Region:     region,
 		ConfigPath: configPath,
 	}, nil
 }

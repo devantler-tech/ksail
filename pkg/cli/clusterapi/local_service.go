@@ -501,10 +501,28 @@ func (s *Service) resolveCluster(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if current, ok := s.jobs[name]; ok {
+		s.mu.Unlock()
+
 		return current.distribution, current.provider, true
+	}
+
+	s.mu.Unlock()
+
+	// Persisted EKS ownership is the last resort, and it is what makes a bound cluster reachable at
+	// all. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
+	// region — or simply one the UI has been repointed away from since — disappears from the listing
+	// and every start, stop and delete reported "not found" before the ownership check could run.
+	// That is the same ambient-region redirect this binding exists to prevent, arriving as an
+	// absence rather than as a wrong target.
+	//
+	// Resolving here does NOT authorize the mutation: it only says KSail has a record of owning a
+	// cluster by this name. confirmEKSOwnership still runs, and still refuses anything it cannot
+	// account for.
+	_, ownershipErr := state.ListEKSOwnershipStates(name)
+	if ownershipErr == nil {
+		return v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true
 	}
 
 	return "", "", false

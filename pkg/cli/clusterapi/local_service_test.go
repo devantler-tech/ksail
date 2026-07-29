@@ -2105,3 +2105,117 @@ func TestDeleteEKSRefusesADifferentFailedCreateInTheSameWindow(t *testing.T) {
 	assert.True(t, service.JobPresentForTest(clusterName),
 		"the replacement create's failure must survive: clearing it discards the only record of it")
 }
+
+// ownershipRecordFor is the immutable identity AWS confirmed at create time, which is what binds a
+// cluster to a region once its create completed.
+func ownershipRecordFor(name, region string) *state.EKSOwnershipState {
+	return &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: name,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + name,
+		CreatedAt:   time.Date(2026, 7, 29, 8, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{ //nolint:gosec // G101: env-var NAMES, never credential values.
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "AWS_REGION",
+			AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+		},
+	}
+}
+
+// TestBoundEKSConfigBindsFromOwnershipWhenTheStateConfigIsAbsent covers clusters created the NORMAL
+// way. `ksail cluster create` writes persisted cluster state (which marks the create complete) but
+// scaffolds eks.yaml into the PROJECT directory, while only the local API backend writes one under
+// ~/.ksail/clusters/<name>. The bound path therefore entered on state it trusted and then failed
+// reading a file nothing had put there — breaking every start, stop and delete for exactly the
+// clusters created the ordinary way. The ownership record is the authoritative binding for both.
+func TestBoundEKSConfigBindsFromOwnershipWhenTheStateConfigIsAbsent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// A region that is NOT the recorded one: binding must come from the record, never the ambient
+	// environment, or this test would pass while the redirect it guards was still possible.
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "cli-created"
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "the creation region must come from the ownership record")
+	assert.FileExists(t, configPath, "the provisioner still needs the config on disk")
+}
+
+// TestBoundEKSConfigRefusesAmbiguousOwnership is the destructive-path guard on that binding. Two
+// ownership records mean two same-named clusters in different AWS regions, and nothing on disk says
+// which one an operator meant. Choosing either would aim a delete at a cluster nobody named, so the
+// only safe answer is to refuse and say what it found.
+func TestBoundEKSConfigRefusesAmbiguousOwnership(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "two-regions"
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(
+			t,
+			state.SaveEKSOwnershipState(name, region, ownershipRecordFor(name, region)),
+		)
+	}
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "more than one region")
+	assert.Contains(t, err.Error(), "eu-north-1")
+	assert.Contains(t, err.Error(), "us-east-1")
+}
+
+// TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion covers the other half of the same
+// binding. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
+// region — or one the UI has simply been repointed away from since, which is reproducible by
+// restarting it with a different AWS_REGION — vanished from the listing, and start/stop/delete
+// reported "not found" before the ownership check could run. The cluster is not missing; the ambient
+// region is just pointed elsewhere, and the persisted record says so.
+//
+// The assertion is deliberately about which ANSWER is reached, not about the mutation succeeding:
+// resolving must hand the request to confirmEKSOwnership rather than short-circuit it, so a target
+// KSail cannot account for is still refused — just never as an absence.
+func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "other-region"
+
+	// No provisioner lists this cluster: discovery in the currently-selected region cannot see it.
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+
+	// The control: with no record either, "not found" is the correct and expected answer.
+	require.ErrorIs(t,
+		service.Delete(context.Background(), "default", clusterName),
+		api.ErrNotFound,
+		"a cluster with no live listing and no ownership record really is unknown")
+
+	require.NoError(t, state.SaveEKSOwnershipState(
+		clusterName, "ap-southeast-2", ownershipRecordFor(clusterName, "ap-southeast-2"),
+	))
+
+	err := service.Delete(context.Background(), "default", clusterName)
+	require.NotErrorIs(t, err, api.ErrNotFound,
+		"a cluster KSail holds an ownership record for is not missing; the selected region is")
+}
