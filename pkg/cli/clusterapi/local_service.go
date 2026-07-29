@@ -715,23 +715,10 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 	return true
 }
 
-// jobIsFailedEKS reports whether the tracked job for the cluster is an EKS create that ended in the
-// Failed phase. Split out so the ownership-state read in clearedFailedEKSCreate happens off the lock.
-//
-// `origin` is what makes this a CREATE test rather than merely a "failed EKS job" test. Delete and
-// start/stop also end in Failed, and a failed one of those describes a cluster the provisioner may
-// well have left running: clearing it locally would drop the row and report success while the AWS
-// cluster is still there. Only a create that never persisted state is safe to clear, because only
-// that job can be certain no confirmed cluster is being abandoned.
-func (s *Service) jobIsFailedEKS(name string) bool {
-	_, ok := s.failedEKSCreate(name)
-
-	return ok
-}
-
-// failedEKSCreate returns the tracked job when it is a failed EKS create, so the caller can hold on
-// to the exact entry it approved rather than re-deriving it later from fields that a replacement may
-// also satisfy.
+// failedEKSCreate returns the tracked job when it is an EKS create that ended in the Failed phase.
+// Split out so the ownership-state read in clearedFailedEKSCreate happens off the lock, and it
+// returns the job itself so the caller can hold on to the exact entry it approved rather than
+// re-deriving it later from fields a replacement may also satisfy.
 func (s *Service) failedEKSCreate(name string) (*job, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -743,10 +730,14 @@ func (s *Service) failedEKSCreate(name string) (*job, bool) {
 	return s.jobs[name], true
 }
 
-// jobIsFailedEKSLocked is jobIsFailedEKS's predicate with the locking left to the caller, which must
-// hold s.mu. It exists so clearedFailedEKSCreate can re-apply the whole test after reacquiring the
-// lock instead of restating part of it — a partial restatement is what let a replacement failed stop
-// through, and keeping one definition is what stops the two copies drifting again.
+// jobIsFailedEKSLocked is the failed-EKS-create predicate with the locking left to the caller, which
+// must hold s.mu.
+//
+// `origin` is what makes this a CREATE test rather than merely a "failed EKS job" test. Delete and
+// start/stop also end in Failed, and a failed one of those describes a cluster the provisioner may
+// well have left running: clearing it locally would drop the row and report success while the AWS
+// cluster is still there. Only a create that never persisted state is safe to clear, because only
+// that job can be certain no confirmed cluster is being abandoned.
 func (s *Service) jobIsFailedEKSLocked(name string) bool {
 	current, found := s.jobs[name]
 
