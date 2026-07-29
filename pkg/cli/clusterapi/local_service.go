@@ -402,6 +402,10 @@ func (s *Service) Create(
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
+	if s.clearedFailedEKSCreate(name) {
+		return nil
+	}
+
 	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseDeleting)
 	if err != nil {
 		return err
@@ -611,32 +615,91 @@ func confirmEKSOwnership(
 // unconfirmedEKSRecovery returns the recovery step for a mutation KSail refused because it cannot
 // identify the remote cluster.
 //
-// `ksail cluster eks-bind` leads on every path: it re-establishes the missing binding from the
-// cluster the current AWS credentials select, and it never deletes or scales anything, so the
-// refused action can simply be retried afterwards. eksidentity.migrationRequiredError already points
-// at the same command for the same underlying condition, so the two agree.
+// `ksail cluster eks-bind` is deliberately NOT offered here, even though it is the obvious-looking
+// candidate. It writes the region-scoped immutable-identity record (eksidentity.Persist ->
+// state.SaveEKSOwnershipState), whereas this refusal comes from the missing create-time spec.json
+// that state.LoadClusterSpec reads. Those are different files, so eks-bind cannot satisfy this check:
+// naming it would send the operator round a loop ending in this same refusal.
+// eksidentity.migrationRequiredError does point at eks-bind, but for the identity record it actually
+// writes — a different condition, not this one.
 //
-// Deleting is offered only when deleting is what was asked for. Start and Stop are node-group
-// operations, so answering them with a destructive step — for a cluster KSail has just said it
-// cannot identify — would be actively wrong.
+// KSail has no command that rebuilds create-time ownership state for a cluster it did not create, so
+// the honest step is to act on the cluster through AWS directly. Deleting is spelled out only when
+// deleting is what was asked for: Start and Stop are node-group operations, so answering them with a
+// destructive step — for a cluster KSail has just said it cannot identify — would be actively wrong.
 func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
-	rebind := fmt.Sprintf(
-		"after confirming the current AWS credentials select the intended cluster, run"+
-			" `ksail cluster eks-bind --name %s --provider AWS --experimental` to restore the"+
-			" binding",
-		name,
-	)
+	const confirm = "KSail cannot rebuild the create-time ownership state for a cluster it did not" +
+		" create, so confirm which cluster the current AWS credentials select and act on it with the" +
+		" AWS tooling directly"
 
 	if phase == v1alpha1.ClusterPhaseDeleting {
 		return fmt.Sprintf(
-			"%s; or, if you intend to delete it, use the AWS tooling directly"+
-				" (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
+			"%s (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
 				" its region",
-			rebind, name,
+			confirm, name,
 		)
 	}
 
-	return rebind + ", then retry"
+	return confirm + " (`eksctl`)"
+}
+
+// clearedFailedEKSCreate removes the local job left by an EKS create that failed before persisting
+// ownership state, and reports whether it did.
+//
+// runCreate writes spec.json only after the provisioner succeeds, so such a job records a create that
+// never completed. Create refuses while any jobs entry exists and confirmEKSOwnership refuses the
+// delete, which together would leave the cluster neither clearable nor retryable until the server
+// restarts. TestDeleteClearsFailedClusterWithNoUnderlyingCluster pins the same "a failed create must
+// stay clearable" invariant for the local distributions; this keeps EKS to it.
+//
+// The removal is deliberately local-only, and narrow. The provisioner may have created the remote
+// cluster and failed afterwards — persisting the spec is itself a step that can fail — so KSail
+// cannot claim the cluster is absent, only that it never confirmed which cluster it was. Aiming a
+// delete at AWS on the strength of a name is the exact unconfirmed mutation the ownership guard
+// exists to prevent, so the operator is warned to check instead. A cluster that is merely missing its
+// state while live is not covered: that one is still refused.
+func (s *Service) clearedFailedEKSCreate(name string) bool {
+	if !s.jobIsFailedEKS(name) {
+		return false
+	}
+
+	// Read ownership state outside the lock: it is disk I/O, and a create that has already failed
+	// will not begin writing state now.
+	_, err := state.LoadClusterSpec(name)
+	if !errors.Is(err, state.ErrStateNotFound) {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, found := s.jobs[name]
+	if !found || current.phase != v1alpha1.ClusterPhaseFailed {
+		return false
+	}
+
+	delete(s.jobs, name)
+
+	slog.Warn(
+		"cleared a failed EKS create that never recorded ownership state; no AWS resources were"+
+			" deleted, so check the account for a partially created cluster",
+		"cluster", name,
+	)
+
+	return true
+}
+
+// jobIsFailedEKS reports whether the tracked job for the cluster is an EKS create that ended in the
+// Failed phase. Split out so the ownership-state read in clearedFailedEKSCreate happens off the lock.
+func (s *Service) jobIsFailedEKS(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, found := s.jobs[name]
+
+	return found &&
+		current.phase == v1alpha1.ClusterPhaseFailed &&
+		current.distribution == v1alpha1.DistributionEKS
 }
 
 // jobInProgress reports whether a lifecycle action is already running for the cluster. It is a

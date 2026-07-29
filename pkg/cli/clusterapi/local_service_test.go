@@ -1658,12 +1658,12 @@ func newReadyUnboundEKSService(
 }
 
 // assertUnconfirmedEKSGuidance checks one refusal message: it must be an api.ErrInvalid, address the
-// action the operator requested, always name the registered rebind command, and offer deletion only
-// on the delete path.
+// action the operator requested, point at recovery that can actually resolve this refusal, and offer
+// deletion only on the delete path.
 func assertUnconfirmedEKSGuidance(
 	t *testing.T,
 	err error,
-	clusterName string,
+	_ string,
 	wantMessage string,
 	wantDelete bool,
 ) {
@@ -1673,9 +1673,11 @@ func assertUnconfirmedEKSGuidance(
 		"an unconfirmable EKS target must be refused on every mutating path")
 	assert.Contains(t, err.Error(), wantMessage,
 		"the recovery guidance must address the action the operator requested")
-	assert.Contains(t, err.Error(),
-		"ksail cluster eks-bind --name "+clusterName+" --provider AWS --experimental",
-		"every path must name the registered command that restores the binding")
+	assert.Contains(t, err.Error(), "eksctl",
+		"every path must point at recovery that can actually resolve this refusal")
+	assert.NotContains(t, err.Error(), "ksail cluster eks-bind",
+		"eks-bind writes the immutable-identity record, not the create-time ownership state this "+
+			"refusal reads, so offering it here loops the operator back to this same refusal")
 
 	if !wantDelete {
 		assert.NotContains(t, err.Error(), "eksctl delete cluster",
@@ -1689,11 +1691,14 @@ func assertUnconfirmedEKSGuidance(
 // told an operator who asked to start a cluster to delete it instead. Deleting is suggested only on
 // the delete path.
 //
-// Every path must also lead with `ksail cluster eks-bind`, the registered command that restores the
-// missing binding without touching AWS resources. That assertion is deliberate: an earlier round on
-// this PR shipped guidance naming a command the CLI does not expose, and this round briefly claimed
-// no such command existed at all. Pinning the exact string makes both mistakes a test failure rather
-// than something only a reviewer catches.
+// Every path must also point at recovery that can actually clear the refusal, and must NOT offer
+// `ksail cluster eks-bind`. This assertion has been wrong twice in opposite directions, so it is
+// worth stating precisely: an earlier round named a command the CLI does not expose, the next round
+// claimed no such command existed, and the round after that named eks-bind — which does exist, but
+// writes the region-scoped immutable-identity record (state.SaveEKSOwnershipState) rather than the
+// create-time spec.json that state.LoadClusterSpec reads here. Naming an existing command is not the
+// same claim as naming one that resolves this refusal; asserting only that the string is present
+// pinned the second claim while testing the first.
 func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -1717,7 +1722,7 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				return s.Start(context.Background(), "default", cluster)
 			},
 			wantDelete:  false,
-			wantMessage: "then retry",
+			wantMessage: "act on it with the AWS tooling directly",
 		},
 		{
 			name: "stop",
@@ -1725,7 +1730,7 @@ func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
 				return s.Stop(context.Background(), "default", cluster)
 			},
 			wantDelete:  false,
-			wantMessage: "then retry",
+			wantMessage: "act on it with the AWS tooling directly",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1797,4 +1802,73 @@ func TestEKSCreateRejectsStateBelongingToAnotherDistribution(t *testing.T) {
 		"the error must name the distribution that actually owns the state")
 	assert.NotContains(t, err.Error(), "read the eks config",
 		"a name collision must not surface as a missing-eks.yaml read error")
+}
+
+// TestDeleteEKSClearsFailedCreateWithoutOwnershipState is the EKS analogue of
+// TestDeleteClearsFailedClusterWithNoUnderlyingCluster: a create that failed before persisting
+// ownership state must still be clearable. runCreate only writes spec.json once the provisioner
+// succeeded, so a failed EKS create leaves the job Failed with no state — and because Create rejects
+// any existing jobs entry, refusing the delete as well would strand the operator with a cluster they
+// can neither clear nor retry until the server restarts.
+//
+// Clearing is local only: KSail never confirmed which remote cluster this was, so it must not aim a
+// delete at AWS on the strength of a name.
+func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "failed-eks"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Precondition: the failed create left no ownership state behind.
+	_, loadErr := state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, present := phaseOf(list, clusterName)
+
+		return !present
+	}, eventuallyTimeout, eventuallyTick)
+
+	// The remote cluster was never confirmed, so no AWS mutation may have been attempted.
+	assert.Empty(t, provisioner.deletedNames())
+}
+
+// TestDeleteEKSRefusesLiveClusterWithoutOwnershipState is the negative control for the clearing path
+// above: the exemption is scoped to a *failed create*, not to "ownership state is missing". A live
+// EKS cluster whose state KSail cannot find is exactly the unconfirmed target the guard exists to
+// protect, so it must still be refused.
+func TestDeleteEKSRefusesLiveClusterWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "live-eks"
+
+	service, provisioner := newReadyUnboundEKSService(t, clusterName)
+
+	err := service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames())
 }
