@@ -2154,6 +2154,18 @@ func TestBoundEKSConfigBindsFromOwnershipWhenTheStateConfigIsAbsent(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, "eu-north-1", region, "the creation region must come from the ownership record")
 	assert.FileExists(t, configPath, "the provisioner still needs the config on disk")
+
+	// Assert the region inside the FILE, not just the returned one. eksctl reads the file, so a
+	// config written from the ambient region while the returned value carried the bound one would
+	// aim the action at us-west-2 and still satisfy every assertion above.
+	written, readErr := os.ReadFile(
+		configPath,
+	) //nolint:gosec // test-controlled path under a temp HOME.
+	require.NoError(t, readErr)
+	assert.Contains(t, string(written), "region: eu-north-1",
+		"the generated eks.yaml must carry the bound region, not the ambient one")
+	assert.NotContains(t, string(written), "us-west-2",
+		"the ambient region must not reach the file the provisioner reads")
 }
 
 // TestBoundEKSConfigRefusesAmbiguousOwnership is the destructive-path guard on that binding. Two
