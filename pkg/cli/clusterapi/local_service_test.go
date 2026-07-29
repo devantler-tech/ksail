@@ -2053,3 +2053,55 @@ func TestDeleteFailedLocalCreateStillReachesTheProvisioner(t *testing.T) {
 		return slices.Contains(provisioner.deletedNames(), clusterName)
 	}, eventuallyTimeout, eventuallyTick)
 }
+
+// TestDeleteEKSRefusesADifferentFailedCreateInTheSameWindow is the sharper half of the windowed race,
+// and the one a full re-check of the predicate does NOT catch. A replacement that is itself a failed
+// EKS create matches phase, origin and distribution exactly, so every field-based test passes while
+// the entry is a different operation's failure.
+//
+// Clearing it would report success for a delete that never inspected this create, and silently
+// discard the record of why the second create failed. Only the job's identity separates "the entry I
+// approved" from "an entry just like it".
+func TestDeleteEKSRefusesADifferentFailedCreateInTheSameWindow(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "replaced-by-a-twin"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	reads := 0
+
+	service.SetLoadClusterSpecForTest(func(name string) (*v1alpha1.ClusterSpec, error) {
+		reads++
+
+		service.ReplaceJobWithAnotherFailedEKSCreateForTest(name)
+
+		return nil, state.ErrStateNotFound
+	})
+
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	require.Equal(t, 1, reads,
+		"the unlocked ownership read must have run, or the window under test was never entered")
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"a delete must not clear a failed create it never approved, however alike the two look")
+	assert.True(t, service.JobPresentForTest(clusterName),
+		"the replacement create's failure must survive: clearing it discards the only record of it")
+}

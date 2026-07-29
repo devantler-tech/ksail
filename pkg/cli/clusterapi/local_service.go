@@ -674,7 +674,8 @@ func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
 // exists to prevent, so the operator is warned to check instead. A cluster that is merely missing its
 // state while live is not covered: that one is still refused.
 func (s *Service) clearedFailedEKSCreate(name string) bool {
-	if !s.jobIsFailedEKS(name) {
+	approved, ok := s.failedEKSCreate(name)
+	if !ok {
 		return false
 	}
 
@@ -688,12 +689,18 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Re-apply the predicate in FULL, not just the phase. The lock was released for the read above, so
-	// this is not necessarily the entry jobIsFailedEKS approved: ownership state can be restored out of
-	// band and a start/stop then registered and failed in that window. Such a replacement is also
-	// Failed, so a phase-only re-check would clear it — and a failed stop describes a cluster that may
-	// still be running, which is the case `origin` exists to distinguish.
-	if !s.jobIsFailedEKSLocked(name) {
+	// Delete the entry that was approved, not merely one that still looks like it. The lock was
+	// released for the read above, so the map may hold a different job now: ownership state can be
+	// restored out of band and a start/stop registered and failed in that window, and a replacement is
+	// also Failed — so a phase-only re-check would clear it, even though a failed stop describes a
+	// cluster that may still be running.
+	//
+	// Re-applying the full predicate is necessary but NOT sufficient, which is why this compares the
+	// pointer. A second failed EKS create of the same name satisfies every field the predicate tests,
+	// so a value comparison would clear the new job and hide its failure. Identity is the only test
+	// that distinguishes "the job I approved" from "a job just like it".
+	current, found := s.jobs[name]
+	if !found || current != approved {
 		return false
 	}
 
@@ -717,10 +724,23 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 // cluster is still there. Only a create that never persisted state is safe to clear, because only
 // that job can be certain no confirmed cluster is being abandoned.
 func (s *Service) jobIsFailedEKS(name string) bool {
+	_, ok := s.failedEKSCreate(name)
+
+	return ok
+}
+
+// failedEKSCreate returns the tracked job when it is a failed EKS create, so the caller can hold on
+// to the exact entry it approved rather than re-deriving it later from fields that a replacement may
+// also satisfy.
+func (s *Service) failedEKSCreate(name string) (*job, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.jobIsFailedEKSLocked(name)
+	if !s.jobIsFailedEKSLocked(name) {
+		return nil, false
+	}
+
+	return s.jobs[name], true
 }
 
 // jobIsFailedEKSLocked is jobIsFailedEKS's predicate with the locking left to the caller, which must

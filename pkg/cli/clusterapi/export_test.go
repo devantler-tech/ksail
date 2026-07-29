@@ -128,3 +128,20 @@ func ExportEKSConfigForCreate(name string) (string, string, error) {
 
 	return config.EKS.ConfigPath, config.EKS.Region, nil
 }
+
+// ReplaceJobWithAnotherFailedEKSCreateForTest swaps the tracked job for a DIFFERENT job that is also
+// a failed EKS create. Every field the failed-create predicate tests is identical, so only comparing
+// the entry's identity can tell the two apart — which is what stops a delete clearing (and hiding)
+// the failure of a create it never approved.
+func (s *Service) ReplaceJobWithAnotherFailedEKSCreateForTest(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jobs[name] = &job{
+		distribution: v1alpha1.DistributionEKS,
+		provider:     v1alpha1.ProviderAWS,
+		phase:        v1alpha1.ClusterPhaseFailed,
+		origin:       v1alpha1.ClusterPhaseProvisioning,
+		startedAt:    time.Now(),
+	}
+}
