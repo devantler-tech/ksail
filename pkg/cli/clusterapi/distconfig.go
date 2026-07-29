@@ -254,19 +254,24 @@ func confirmConfigMatchesOwnership(name, configPath, configRegion string) error 
 		return multiRegionOwnershipError(name, ownerships)
 	}
 
-	if len(ownerships) == 1 && ownerships[0].Region != configRegion {
-		return fmt.Errorf(
-			"%w: cluster %q has an immutable ownership record for region %s, but %s says region %s."+
-				" The config is re-rendered by ordinary commands and can be stale, while the"+
-				" ownership record is written once after the cluster was created, so acting on the"+
-				" config could target a same-named cluster in the wrong region."+
-				" KSail will not guess: delete %s to rebind from the ownership record, or remove the"+
-				" ownership record if it is the one that is wrong",
-			api.ErrInvalid, name, ownerships[0].Region, configPath, configRegion, configPath,
-		)
+	if len(ownerships) != 1 || ownerships[0].Region == configRegion {
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf(
+		"%w: cluster %q has an immutable ownership record for region %s, but %s says region %s."+
+			" The config is re-rendered by ordinary commands and can be stale, while the"+
+			" ownership record is written once after the cluster was created, so acting on the"+
+			" config could target a same-named cluster in the wrong region."+
+			" KSail will not guess: delete %s to rebind from the ownership record, or remove"+
+			" the ownership record if it is the one that is wrong",
+		api.ErrInvalid,
+		name,
+		ownerships[0].Region,
+		configPath,
+		configRegion,
+		configPath,
+	)
 }
 
 // multiRegionOwnershipError reports same-named clusters recorded in several regions.

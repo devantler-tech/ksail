@@ -2232,18 +2232,18 @@ func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T)
 
 // writeStateEKSConfig puts an eks.yaml under ~/.ksail/clusters/<name> carrying region, standing in
 // for a file an earlier KSail wrote from whatever region happened to be selected at the time.
-func writeStateEKSConfig(t *testing.T, name, region string) string {
+func writeStateEKSConfig(t *testing.T, name, region string) {
 	t.Helper()
 
 	dir := filepath.Join(os.Getenv("HOME"), ".ksail", "clusters", name)
+	//nolint:gosec // G703: test-controlled path under the temp HOME set by t.Setenv.
 	require.NoError(t, os.MkdirAll(dir, 0o750))
 
 	path := filepath.Join(dir, "eks.yaml")
+	//nolint:gosec // G703: test-controlled path under the temp HOME set by t.Setenv.
 	require.NoError(t, os.WriteFile(path, []byte(
 		"apiVersion: eksctl.io/v1alpha5\nkind: ClusterConfig\nmetadata:\n  name: "+name+
 			"\n  region: "+region+"\n"), 0o600))
-
-	return path
 }
 
 func saveEKSClusterSpec(t *testing.T, name string) {
