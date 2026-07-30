@@ -1447,7 +1447,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@6ed1f44e8f10e4a87746e99159e30b215b9fe8e6 # v11.0.2
+      - uses: devantler-tech/actions/aggregate-job-checks@625b7c0cd5ad4a04f9eb7494298c6d0fa44521ef # v11.0.4
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
