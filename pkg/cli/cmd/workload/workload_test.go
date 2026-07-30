@@ -243,6 +243,7 @@ func TestWriteWorkloadCommandsHaveWritePermission(t *testing.T) {
 		{name: "create", cmd: workload.NewCreateCmd()},
 		{name: "debug", cmd: workload.NewDebugCmd()},
 		{name: "delete", cmd: workload.NewDeleteCmd()},
+		{name: "export", cmd: workload.NewExportCmd()},
 		{name: "edit", cmd: workload.NewEditCmd()},
 		{name: "exec", cmd: workload.NewExecCmd()},
 		{name: "expose", cmd: workload.NewExposeCmd()},
@@ -292,7 +293,6 @@ func TestReadWorkloadCommandsDoNotHaveWritePermission(t *testing.T) {
 	}{
 		{name: "describe", cmd: workload.NewDescribeCmd()},
 		{name: "explain", cmd: workload.NewExplainCmd()},
-		{name: "export", cmd: workload.NewExportCmd()},
 		{name: "forward", cmd: workload.NewForwardCmd()},
 		{name: "get", cmd: workload.NewGetCmd()},
 		{name: "images", cmd: workload.NewImagesCmd()},
