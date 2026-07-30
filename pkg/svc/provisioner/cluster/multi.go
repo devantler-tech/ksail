@@ -185,7 +185,7 @@ func CreateMinimalProvisioner(
 
 	switch dist {
 	case v1alpha1.DistributionVanilla:
-		return createMinimalKindProvisioner(clusterName)
+		return createMinimalKindProvisioner(clusterName, kubeconfigPath)
 	case v1alpha1.DistributionK3s:
 		return createMinimalK3dProvisioner(clusterName), nil
 	case v1alpha1.DistributionTalos:
@@ -204,10 +204,27 @@ func CreateMinimalProvisioner(
 	}
 }
 
-func createMinimalKindProvisioner(clusterName string) (Provisioner, error) {
-	kindConfig := &v1alpha4.Cluster{Name: clusterName}
+// kindProvisionerFactory constructs the Kind provisioner for the minimal
+// multi-provisioner path. It is an indirected package var (rather than a direct
+// call) so tests can substitute a spy and assert the kindConfig and kubeconfig
+// arguments it receives, without reflecting over the provisioner's unexported
+// fields. Production always uses kindprovisioner.CreateProvisioner.
+//
+//nolint:gochecknoglobals // injected for testability; see SetKindProvisionerFactory in export_test.go
+var kindProvisionerFactory = kindprovisioner.CreateProvisioner
 
-	provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
+// createMinimalKindProvisioner builds the smallest valid Kind provisioner
+// while preserving the caller-owned kubeconfig path.
+func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provisioner, error) {
+	kindConfig := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+		},
+		Name: clusterName,
+	}
+
+	provisioner, err := kindProvisionerFactory(kindConfig, kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
 	}
@@ -215,6 +232,8 @@ func createMinimalKindProvisioner(clusterName string) (Provisioner, error) {
 	return provisioner, nil
 }
 
+// createMinimalK3dProvisioner builds a K3d provisioner from just a cluster
+// name, for lifecycle actions that need no full ksail config.
 func createMinimalK3dProvisioner(clusterName string) Provisioner {
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
 		ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
@@ -223,6 +242,9 @@ func createMinimalK3dProvisioner(clusterName string) Provisioner {
 	return k3dprovisioner.CreateProvisioner(k3dConfig, "")
 }
 
+// createMinimalTalosProvisioner builds a Talos provisioner from just a
+// cluster name and provider, for lifecycle actions that need no full ksail
+// config.
 func createMinimalTalosProvisioner(
 	clusterName string,
 	kubeconfigPath string,
@@ -247,6 +269,8 @@ func createMinimalTalosProvisioner(
 	return provisioner, nil
 }
 
+// createMinimalVClusterProvisioner builds a vCluster provisioner from just a
+// cluster name, for lifecycle actions that need no full ksail config.
 func createMinimalVClusterProvisioner(clusterName string) (Provisioner, error) {
 	provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "", false)
 	if err != nil {

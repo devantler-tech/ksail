@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"maps"
 	"sort"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
+	meta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -51,12 +53,39 @@ type Document struct {
 	Provenance Provenance
 }
 
-// Degradation records a HelmRelease that could not be rendered offline. The
-// caller falls back to validating/scanning the HelmRelease CR itself. Silent
-// degradations are expected in normal repos (e.g. a source object that lives in
-// a different Flux Kustomization) and should not be surfaced as warnings.
+// DegradationKind classifies why a HelmRelease's offline render is less than
+// full-fidelity, so callers can phrase an accurate warning.
+type DegradationKind int
+
+const (
+	// DegradationSkippedRender marks a HelmRelease whose chart could not be
+	// rendered offline at all; the caller falls back to validating/scanning the
+	// HelmRelease CR itself. This is the zero value, so a Degradation left
+	// without an explicit Kind keeps this meaning.
+	DegradationSkippedRender DegradationKind = iota
+	// DegradationPartialValues marks a HelmRelease that DID render, but with a
+	// non-optional valuesFrom reference that could not be resolved from the
+	// offline stream — so the rendered children may differ from what Flux applies
+	// with the real value present.
+	DegradationPartialValues
+	// DegradationMissingValuesKey marks a HelmRelease that DID render, but whose
+	// valuesFrom referent IS present in the stream while lacking the requested
+	// valuesKey — typically a valuesKey typo. It is a distinct kind because the
+	// remedy differs: the resource is in the repo, so the caller must not suggest
+	// the value is cluster-managed. Flux fails reconciliation on a missing
+	// valuesKey even when the reference is marked optional.
+	DegradationMissingValuesKey
+)
+
+// Degradation records a way a HelmRelease's offline render fell short of what
+// Flux would apply. For DegradationSkippedRender the caller falls back to
+// validating/scanning the HelmRelease CR itself; for DegradationPartialValues
+// the children were rendered but with incomplete values. Silent degradations
+// are expected in normal repos (e.g. a source object that lives in a different
+// Flux Kustomization) and should not be surfaced as warnings.
 type Degradation struct {
 	HelmRelease string // "namespace/name"
+	Kind        DegradationKind
 	Reason      string
 	Err         error
 	Silent      bool
@@ -191,6 +220,68 @@ func expandHelmRelease(
 			result.Documents,
 			newDocument(child, parseObjectMeta(child), provenance),
 		)
+	}
+
+	// The chart rendered, but a non-optional valuesFrom that could not be resolved
+	// offline means the children were produced with incomplete values — surface
+	// that so the shift-left gate is honest about its coverage.
+	result.Degradations = append(result.Degradations, unresolvedValueRefs(&helmRelease, index)...)
+}
+
+// unresolvedValueRefs returns a DegradationPartialValues for each valuesFrom
+// reference on the HelmRelease whose value the offline render could not obtain,
+// so the rendered output can diverge from what Flux applies with the real value
+// present. It mirrors helm-controller's own tolerance rule: "a not found error
+// for the values reference is ignored [when optional], but any ValuesKey,
+// TargetPath or transient error will still result in a reconciliation failure".
+// So only an ABSENT optional referent is silent (typically cluster-managed, or
+// defined in another Flux Kustomization); a referent that IS in the stream but
+// lacks the requested valuesKey fails in-cluster even when marked optional — a
+// `valuesKey` typo is exactly that case — and is always reported.
+func unresolvedValueRefs(helmRelease *helmv2.HelmRelease, sources SourceIndex) []Degradation {
+	key := helmRelease.Namespace + "/" + helmRelease.Name
+
+	var degradations []Degradation
+
+	for index := range helmRelease.Spec.ValuesFrom {
+		ref := helmRelease.Spec.ValuesFrom[index]
+
+		data, referentFound := lookupValuesSource(ref, helmRelease.Namespace, sources)
+		if !referentFound {
+			// Flux ignores a not-found optional referent; a missing required one
+			// means the chart rendered with incomplete values.
+			if ref.Optional {
+				continue
+			}
+
+			degradations = append(
+				degradations,
+				valuesDegradation(key, ref, DegradationPartialValues),
+			)
+
+			continue
+		}
+
+		// The referent is in the stream, so a missing valuesKey is a hard
+		// reconciliation failure in Flux regardless of `optional`.
+		if _, ok := data[ref.GetValuesKey()]; !ok {
+			degradations = append(
+				degradations,
+				valuesDegradation(key, ref, DegradationMissingValuesKey),
+			)
+		}
+	}
+
+	return degradations
+}
+
+// valuesDegradation builds the degradation entry naming the valuesFrom reference
+// whose value could not be obtained offline, under the given kind.
+func valuesDegradation(key string, ref meta.ValuesReference, kind DegradationKind) Degradation {
+	return Degradation{
+		HelmRelease: key,
+		Kind:        kind,
+		Reason:      fmt.Sprintf("%s %q (key %q)", ref.Kind, ref.Name, ref.GetValuesKey()),
 	}
 }
 
@@ -370,9 +461,10 @@ func extractStringData(doc []byte, secret bool) map[string]string {
 
 	maps.Copy(out, obj.StringData)
 
-	if len(out) == 0 {
-		return nil
-	}
-
+	// An EMPTY (but non-nil) map is returned deliberately for a referent that
+	// carries no data: the object still exists in the stream, and callers must be
+	// able to tell "present but has no such key" (a Flux reconciliation failure,
+	// even for an optional reference) from "absent" (which optional forgives).
+	// Only a parse failure yields nil, meaning "not a usable referent at all".
 	return out
 }

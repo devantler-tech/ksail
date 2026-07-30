@@ -133,7 +133,11 @@ func buildDistributionConfig(
 			cluster.Spec.Cluster.KubernetesVersion,
 		)
 
-		talosConfig, err := newTalosConfig(name, kubernetesVersion)
+		talosConfig, err := newTalosConfig(
+			name,
+			kubernetesVersion,
+			cluster.Spec.Cluster.Talos.Version,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -173,9 +177,24 @@ func buildDistributionConfig(
 // newTalosConfig builds a default Talos config bundle named after the provisioned cluster, at the
 // given Kubernetes version. The cluster name is baked into the PKI, so it must be set via WithName
 // (which regenerates the bundle).
-func newTalosConfig(name, kubernetesVersion string) (*talosconfigmanager.Configs, error) {
-	//nolint:wrapcheck // NewDefaultConfigsWithVersionAndName already wraps build/name errors
-	return talosconfigmanager.NewDefaultConfigsWithVersionAndName(kubernetesVersion, name)
+func newTalosConfig(
+	name, kubernetesVersion, talosVersion string,
+) (*talosconfigmanager.Configs, error) {
+	versionContract, err := talosconfigmanager.ParseVersionContract(talosVersion)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Talos version contract: %w", err)
+	}
+
+	config, err := talosconfigmanager.NewDefaultConfigsWithVersionContractAndName(
+		kubernetesVersion,
+		name,
+		versionContract,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build Talos config: %w", err)
+	}
+
+	return config, nil
 }
 
 // resolveEnvVar reads the environment variable named by envVar, falling back to

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
@@ -93,6 +95,13 @@ func newProvisioner(
 	t.Helper()
 
 	runner := &scriptedRunner{t: t, responses: responses}
+	configPath := filepath.Join(t.TempDir(), "eksctl.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: ksail-test
+  region: us-east-1
+`), 0o600))
 
 	client := eksctlclient.NewClient(
 		eksctlclient.WithBinary(testBinary),
@@ -100,8 +109,8 @@ func newProvisioner(
 	)
 
 	prov, err := eksprovisioner.NewProvisioner(
-		"ksail-test", "us-east-1", "/tmp/eksctl.yaml",
-		client, infra,
+		"ksail-test", "us-east-1", configPath,
+		client, infra, eksprovisioner.WithKubeconfigPath("/tmp/kubeconfig"),
 	)
 	require.NoError(t, err)
 
@@ -125,9 +134,14 @@ func TestCreate_ShellsOutWithConfig(t *testing.T) {
 	require.NoError(t, prov.Create(context.Background(), ""))
 
 	require.Len(t, runner.calls, 1)
+	require.Len(t, runner.calls[0], 6)
 	assert.Equal(
 		t,
-		[]string{"create", "cluster", "--config-file", "/tmp/eksctl.yaml", "--region", "us-east-1"},
+		[]string{
+			"create", "cluster",
+			"--config-file", runner.calls[0][3],
+			"--kubeconfig", "/tmp/kubeconfig",
+		},
 		runner.calls[0],
 	)
 }
@@ -146,7 +160,7 @@ func TestCreate_NoConfigPath_ReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, eksprovisioner.ErrConfigPathRequired)
 }
 
-func TestDelete_PrefersConfigFile(t *testing.T) {
+func TestDelete_UsesExactNameAndRegion(t *testing.T) {
 	t.Parallel()
 
 	prov, runner := newProvisioner(t, map[string][]response{
@@ -156,9 +170,17 @@ func TestDelete_PrefersConfigFile(t *testing.T) {
 	require.NoError(t, prov.Delete(context.Background(), ""))
 
 	require.Len(t, runner.calls, 1)
-	// DeleteCluster prefers --config-file over --name when configPath set.
-	assert.Contains(t, runner.calls[0], "--config-file")
-	assert.Contains(t, runner.calls[0], "--wait")
+	assert.Equal(
+		t,
+		[]string{
+			"delete", "cluster",
+			"--name", "ksail-test",
+			"--region", "us-east-1",
+			"--wait",
+		},
+		runner.calls[0],
+	)
+	assert.NotContains(t, runner.calls[0], "--config-file")
 }
 
 func TestStart_DelegatesToProvider(t *testing.T) {

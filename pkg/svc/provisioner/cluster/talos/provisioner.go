@@ -167,6 +167,14 @@ type Provisioner struct {
 	// reconciliation must wait for it. Defaults to a TCP dial loop; tests override
 	// it via export_test.go to avoid real network I/O.
 	nodeReachabilityCheck func(ctx context.Context, ip string) error
+	// apiEndpointReachabilityCheck reports when the Kubernetes API is accepting
+	// connections at ip:kubernetesAPIPort within timeout. It gates the endpoint
+	// adopted by cluster-secret sync and the endpoint persisted into the
+	// kubeconfig: a Hetzner floating IP is attached via the cloud API but only
+	// becomes reachable once the node claims it, so an unverified endpoint can
+	// be a dead address (ksail#6070). Defaults to a bounded TCP dial loop;
+	// tests override it via export_test.go to avoid real network I/O.
+	apiEndpointReachabilityCheck func(ctx context.Context, ip string, timeout time.Duration) error
 	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
 	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
 	// known running config without real Talos API connectivity (used by the per-node
@@ -224,7 +232,13 @@ func NewProvisioner(
 	}
 
 	prov.nodeReachabilityCheck = func(ctx context.Context, ip string) error {
-		return dialTCPUntilReachable(ctx, ip, talosAPIWaitTimeout, retryInterval)
+		return dialTCPUntilReachable(ctx, ip, talosAPIPort, talosAPIWaitTimeout, retryInterval)
+	}
+
+	prov.apiEndpointReachabilityCheck = func(
+		ctx context.Context, ip string, timeout time.Duration,
+	) error {
+		return dialTCPUntilReachable(ctx, ip, kubernetesAPIPort, timeout, retryInterval)
 	}
 
 	prov.nodeConfigFetcher = prov.fetchNodeConfig

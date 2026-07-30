@@ -227,7 +227,6 @@ type ociPushParams struct {
 	repository       string
 	registryEndpoint string
 	version          string
-	gitOpsEngine     v1alpha1.GitOpsEngine
 	username         string
 	password         string
 }
@@ -266,7 +265,6 @@ func resolveOCIPushParams(
 		repository:       repository,
 		registryEndpoint: registryEndpoint,
 		version:          ref,
-		gitOpsEngine:     opts.ClusterConfig.Spec.Cluster.GitOpsEngine,
 		username:         registryInfo.Username,
 		password:         registryInfo.Password,
 	}
@@ -286,7 +284,6 @@ func buildPushOptions(
 		RegistryEndpoint: params.registryEndpoint,
 		Repository:       params.repository,
 		Version:          params.version,
-		GitOpsEngine:     params.gitOpsEngine,
 		Username:         params.username,
 		Password:         params.password,
 	}
@@ -305,7 +302,6 @@ func buildEmptyPushOptions(
 		RegistryEndpoint: params.registryEndpoint,
 		Repository:       params.repository,
 		Version:          params.version,
-		GitOpsEngine:     params.gitOpsEngine,
 		Username:         params.username,
 		Password:         params.password,
 	}

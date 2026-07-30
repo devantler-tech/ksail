@@ -52,7 +52,7 @@ go install github.com/devantler-tech/ksail/v7@latest   # Go install
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), **KWOK** (kwokctl, simulated), and **EKS** (cluster lifecycle — create/delete/start/stop/list/info — supported via `eksctl`; KSail-managed component installation and `ksail cluster update` are still in progress). See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
+KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), **KWOK** (kwokctl, simulated), and **EKS** (cluster lifecycle and managed node-group capacity updates supported via `eksctl`; KSail-managed component installation is still in progress). See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
 
 ### Can I create multiple clusters?
 
@@ -101,13 +101,13 @@ LoadBalancer support varies by distribution and provider:
 - **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250); **Talos/Hetzner**: Hetzner Cloud Load Balancer
 - **VCluster**: delegates to host cluster (`spec.cluster.loadBalancer` has no effect)
 - **KWOK**: simulated via API (no real traffic routing)
-- **EKS**: built-in AWS Load Balancer Controller (planned)
+- **EKS**: in-tree `Service` type `LoadBalancer` support ships with the cluster; the AWS Load Balancer Controller is an experimental opt-in (`spec.cluster.eks.experimentalAWSLoadBalancerController`) that KSail does not install by default
 
 See the [Support Matrix](/support-matrix/#component--distribution-matrix) for the full compatibility table.
 
 ### Can I add nodes to an existing cluster?
 
-Node scaling support depends on the distribution: Talos supports both control-plane and worker nodes via `ksail cluster update`, K3s supports worker (agent) nodes only (server scaling requires recreation), and Vanilla (Kind) requires full recreation. See the [Update Behavior](/support-matrix/#update-behavior) table for details.
+Node scaling support depends on the distribution: Talos supports both control-plane and worker nodes via `ksail cluster update`, K3s supports worker (agent) nodes only (server scaling requires recreation), EKS supports in-place `desiredCapacity`, `minSize`, and `maxSize` updates for existing managed node groups, and Vanilla (Kind) requires full recreation. See the [Update Behavior](/support-matrix/#update-behavior) table for details.
 
 ### What does `ksail cluster update --dry-run` show?
 

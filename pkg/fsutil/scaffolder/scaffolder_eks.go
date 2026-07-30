@@ -40,7 +40,12 @@ func (s *Scaffolder) generateEKSConfig(output string, force bool) error {
 		return nil
 	}
 
-	content := RenderEKSConfig(DefaultEKSConfigParams(defaultEKSClusterName, defaultEKSRegion))
+	clusterName := defaultEKSClusterName
+	if s.ClusterName != "" {
+		clusterName = s.ClusterName
+	}
+
+	content := RenderEKSConfig(DefaultEKSConfigParams(clusterName, defaultEKSRegion))
 
 	err := os.WriteFile(configPath, content, filePerm)
 	if err != nil {

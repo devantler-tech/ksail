@@ -142,11 +142,18 @@ func assertValidHexID(t *testing.T, extensions []string) {
 func TestSchematicInstallerImage(t *testing.T) {
 	t.Parallel()
 
-	t.Run("constructs correct image reference", func(t *testing.T) {
+	t.Run("Talos 1.13 uses legacy factory installer", func(t *testing.T) {
 		t.Parallel()
 
-		image := talos.SchematicInstallerImage("abc123def456", "v1.11.2")
-		assert.Equal(t, "factory.talos.dev/installer/abc123def456:v1.11.2", image)
+		image := talos.SchematicInstallerImage("abc123def456", "v1.13.3")
+		assert.Equal(t, "factory.talos.dev/installer/abc123def456:v1.13.3", image)
+	})
+
+	t.Run("Talos 1.14 uses platform-specific metal installer", func(t *testing.T) {
+		t.Parallel()
+
+		image := talos.SchematicInstallerImage("abc123def456", "v1.14.0-alpha.2")
+		assert.Equal(t, "factory.talos.dev/metal-installer/abc123def456:v1.14.0-alpha.2", image)
 	})
 }
 
@@ -213,7 +220,7 @@ func loadWithExtensions(t *testing.T, extensions []string) *talos.Configs {
 
 func assertInstallerImage(t *testing.T, image, schematicID string) {
 	t.Helper()
-	assert.Contains(t, image, "factory.talos.dev/installer/")
+	assert.Contains(t, image, "factory.talos.dev/metal-installer/")
 	assert.Contains(t, image, schematicID)
 }
 

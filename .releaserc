@@ -3,6 +3,19 @@
     "main"
   ],
   "plugins": [
-    "@semantic-release/commit-analyzer"
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "parserOpts": {
+          "breakingHeaderPattern": "^(\\w*)(?:\\((.*)\\))?!: (.*)$"
+        },
+        "releaseRules": [
+          {
+            "breaking": true,
+            "release": "major"
+          }
+        ]
+      }
+    ]
   ]
 }

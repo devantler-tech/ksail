@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -142,6 +143,45 @@ func (r *ClusterReconciler) recordAppliedComponents(
 	updateErr := r.Update(ctx, updated)
 	if updateErr != nil {
 		return fmt.Errorf("record last-applied components: %w", updateErr)
+	}
+
+	cluster.Annotations = updated.Annotations
+	cluster.ResourceVersion = updated.ResourceVersion
+
+	return nil
+}
+
+// recordComponentOwnershipProgress persists only a controller release-identity change made before a
+// later component failed. The full component baseline deliberately remains unchanged so the next
+// reconcile retries the failed pass, while the narrow ownership marker survives the status update.
+func (r *ClusterReconciler) recordComponentOwnershipProgress(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	previousAnnotations map[string]string,
+) error {
+	previousValue, previousPresent := previousAnnotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation]
+	currentValue, currentPresent := cluster.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation]
+
+	if currentPresent == previousPresent && currentValue == previousValue {
+		return nil
+	}
+
+	updated := cluster.DeepCopy()
+
+	updated.Annotations = maps.Clone(previousAnnotations)
+	if currentPresent {
+		if updated.Annotations == nil {
+			updated.Annotations = map[string]string{}
+		}
+
+		updated.Annotations[v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation] = currentValue
+	} else {
+		delete(updated.Annotations, v1alpha1.AWSLoadBalancerControllerReleaseIdentityAnnotation)
+	}
+
+	updateErr := r.Update(ctx, updated)
+	if updateErr != nil {
+		return fmt.Errorf("record partial component ownership: %w", updateErr)
 	}
 
 	cluster.Annotations = updated.Annotations

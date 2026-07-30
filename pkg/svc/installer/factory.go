@@ -9,6 +9,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	argocdinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/argocd"
+	awslbcontrollerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/awslbcontroller"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/certmanager"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
@@ -34,6 +35,34 @@ type Factory struct {
 	kubecontext  string
 	timeout      time.Duration
 	distribution v1alpha1.Distribution
+	// eksClusterName is the provisioned EKS cluster name, required by the AWS
+	// Load Balancer Controller chart. Only callers that know the provisioned
+	// name (e.g. the operator) can supply it — see WithEKSClusterName.
+	eksClusterName string
+	// awsLoadBalancerControllerManaged is positive ownership evidence supplied
+	// by callers whose own baseline proves KSail installed the controller.
+	awsLoadBalancerControllerManaged bool
+}
+
+// Option configures optional Factory dependencies.
+type Option func(*Factory)
+
+// WithEKSClusterName supplies the provisioned EKS cluster name, which the AWS
+// Load Balancer Controller chart requires as its clusterName value.
+func WithEKSClusterName(name string) Option {
+	return func(f *Factory) {
+		f.eksClusterName = name
+	}
+}
+
+// WithAWSLoadBalancerControllerManaged supplies positive KSail ownership
+// evidence for lifecycle paths that rebuild an installer from their own
+// last-applied baseline. The default remains false so ordinary discovery can
+// never infer ownership from a live Helm release alone.
+func WithAWSLoadBalancerControllerManaged(managed bool) Option {
+	return func(f *Factory) {
+		f.awsLoadBalancerControllerManaged = managed
+	}
 }
 
 // NewFactory creates a new installer factory with the required dependencies.
@@ -43,8 +72,9 @@ func NewFactory(
 	kubeconfig, kubecontext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
+	opts ...Option,
 ) *Factory {
-	return &Factory{
+	factory := &Factory{
 		helmClient:   helmClient,
 		dockerClient: dockerClient,
 		kubeconfig:   kubeconfig,
@@ -52,6 +82,12 @@ func NewFactory(
 		timeout:      timeout,
 		distribution: distribution,
 	}
+
+	for _, opt := range opts {
+		opt(factory)
+	}
+
+	return factory
 }
 
 // CreateInstallersForConfig creates installers for all components specified in the cluster config.
@@ -67,9 +103,13 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]I
 	f.addCertManagerInstaller(installers, spec, haEnabled)
 	f.addMetricsServerInstaller(installers, spec, haEnabled)
 	f.addCSIInstallers(installers, cfg, haEnabled)
-	f.addLoadBalancerInstaller(installers, cfg, haEnabled)
 
-	err := f.addClusterAutoscalerInstaller(installers, spec, cfg.Spec.Provider.Hetzner, haEnabled)
+	err := f.addLoadBalancerInstaller(installers, cfg, haEnabled)
+	if err != nil {
+		return nil, err
+	}
+
+	err = f.addClusterAutoscalerInstaller(installers, spec, cfg.Spec.Provider.Hetzner, haEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +289,7 @@ func (f *Factory) addLoadBalancerInstaller(
 	installers map[string]Installer,
 	cfg *v1alpha1.Cluster,
 	haEnabled bool,
-) {
+) error {
 	spec := cfg.Spec.Cluster
 
 	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
@@ -284,6 +324,49 @@ func (f *Factory) addLoadBalancerInstaller(
 			haEnabled,
 		)
 	}
+
+	if f.needsAWSLBController(spec) {
+		// Fail loud rather than silently skipping: the user explicitly opted
+		// in, so an unknowable cluster name (a wiring bug — construct the
+		// factory with WithEKSClusterName) or an invalid pre-created service
+		// account name is an error, not a no-op.
+		awslbc, err := awslbcontrollerinstaller.NewInstaller(
+			f.helmClient,
+			f.timeout,
+			f.eksClusterName,
+			"", // region: rely on the chart's own discovery
+			spec.EKS.AWSLoadBalancerControllerServiceAccount,
+			haEnabled,
+			f.awsLoadBalancerControllerManaged,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"experimental AWS Load Balancer Controller is enabled but unusable: %w",
+				err,
+			)
+		}
+
+		installers["aws-load-balancer-controller"] = awslbc
+	}
+
+	return nil
+}
+
+// needsAWSLBController determines if the AWS Load Balancer Controller is
+// needed. It is an experimental opt-in for EKS clusters: LoadBalancer must be
+// explicitly Enabled AND spec.cluster.eks.experimentalAWSLoadBalancerController
+// set, otherwise EKS keeps its default in-tree Classic Load Balancer path and
+// nothing is installed.
+func (f *Factory) needsAWSLBController(spec v1alpha1.ClusterSpec) bool {
+	if spec.Distribution != v1alpha1.DistributionEKS {
+		return false
+	}
+
+	if spec.LoadBalancer != v1alpha1.LoadBalancerEnabled {
+		return false
+	}
+
+	return spec.EKS.ExperimentalAWSLoadBalancerController
 }
 
 // needsLocalPathStorage determines if local-path-storage is needed.

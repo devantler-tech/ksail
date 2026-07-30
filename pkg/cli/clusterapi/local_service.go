@@ -24,6 +24,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -516,6 +517,16 @@ func (s *Service) startJob(
 	}
 
 	s.mu.Lock()
+	if current, found := s.jobs[name]; found && jobIsInProgress(current.phase) {
+		s.mu.Unlock()
+
+		return v1alpha1.Spec{}, fmt.Errorf(
+			"%w: operation already in progress for %q",
+			api.ErrAlreadyExists,
+			name,
+		)
+	}
+
 	s.jobs[name] = &job{
 		distribution: distribution,
 		provider:     provider,
@@ -527,6 +538,12 @@ func (s *Service) startJob(
 	return v1alpha1.Spec{
 		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
 	}, nil
+}
+
+func jobIsInProgress(phase v1alpha1.ClusterPhase) bool {
+	return phase == v1alpha1.ClusterPhaseProvisioning ||
+		phase == v1alpha1.ClusterPhaseDeleting ||
+		phase == v1alpha1.ClusterPhaseUpdating
 }
 
 // runLifecycle marks a resolved cluster Updating, then runs the supplied provisioner action (Start or
@@ -588,6 +605,12 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 			return p.Create(actionCtx, name)
 		},
 	)
+	if err == nil && spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		err = state.SaveClusterSpec(name, &spec.Cluster)
+		if err != nil {
+			err = fmt.Errorf("persist local EKS cluster ownership state: %w", err)
+		}
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -619,6 +642,18 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 			return p.Delete(actionCtx, name)
 		},
 	)
+	if spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		(err == nil || errors.Is(err, clustererr.ErrClusterNotFound)) {
+		cleanupErr := state.DeleteClusterState(name)
+		if cleanupErr != nil {
+			// The cloud cluster is already gone, so the deletion itself succeeded. Turning a
+			// local-state cleanup failure (read-only home, permissions) into a job failure would
+			// pin an undismissable Failed row for a cluster that no longer exists — exactly the
+			// trap the idempotency note below describes. Warn, but still clear the job.
+			slog.Warn("failed to clean up local EKS cluster state after deletion",
+				"cluster", name, "error", cleanupErr)
+		}
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
