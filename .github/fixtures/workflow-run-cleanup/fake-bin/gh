@@ -33,10 +33,21 @@ case "$*" in
 	printf '%s\n' '{"id":1007,"head_branch":"deleted-feature","pull_request_count":0}'
 	;;
 *"api --method DELETE repos/devantler-tech/ksail/actions/runs/1005"*)
+	if [[ "${scenario}" == delete-failure ]]; then
+		printf 'fixture deletion failure\n' >&2
+		exit 42
+	fi
 	printf '1005\n' >>"${state_dir}/deleted"
 	;;
 *"api --method DELETE repos/devantler-tech/ksail/actions/runs/1006"*)
 	printf '1006\n' >>"${state_dir}/deleted"
+	;;
+*"api --method DELETE repos/devantler-tech/ksail/actions/runs/1007"*)
+	if [[ "${scenario}" != delete-failure ]]; then
+		printf 'unexpected deletion: %s\n' "$*" >&2
+		exit 90
+	fi
+	printf '1007\n' >>"${state_dir}/deleted"
 	;;
 *"api --method DELETE repos/devantler-tech/ksail/actions/runs/"*)
 	printf 'unexpected deletion: %s\n' "$*" >&2

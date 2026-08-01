@@ -47,3 +47,24 @@ if [[ -e "${failure_state}/deleted" ]]; then
 	exit 1
 fi
 printf 'PASS: cleanup fails closed before deletion on an API error\n'
+
+delete_failure_state="${tmp_dir}/delete-failure"
+mkdir -p "${delete_failure_state}"
+if PATH="${fake_bin}:${PATH}" \
+	GH_TOKEN=fixture \
+	FAKE_GH_SCENARIO=delete-failure \
+	FAKE_GH_STATE_DIR="${delete_failure_state}" \
+	KSAIL_MAINTENANCE_CUTOFF_DATE=2026-07-02 \
+	"${cleanup}" \
+	--repository devantler-tech/ksail \
+	--retain-days 30 \
+	--keep-minimum-runs 2 \
+	--max-deletions 3 >"${tmp_dir}/delete-failure-output" 2>&1; then
+	printf 'FAIL: cleanup hid a workflow-run deletion failure\n' >&2
+	exit 1
+fi
+printf '1006\n1007\n' >"${tmp_dir}/expected-delete-failure-deletions"
+diff -u "${tmp_dir}/expected-delete-failure-deletions" "${delete_failure_state}/deleted"
+grep -Fq 'ERROR: failed to delete workflow run 1005 (101)' "${tmp_dir}/delete-failure-output"
+grep -Fq 'Cleanup completed with 1 failed deletion attempt(s)' "${tmp_dir}/delete-failure-output"
+printf 'PASS: cleanup continues its bounded batch and reports deletion failures\n'

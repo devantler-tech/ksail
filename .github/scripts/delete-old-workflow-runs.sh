@@ -16,8 +16,8 @@ preserved. Orphan runs from deleted or organization-required workflows are
 deliberately outside this cleanup boundary.
 
 GH_TOKEN must contain actions:write for OWNER/REPO. COUNT for
---max-deletions is capped at 750 so one execution stays within the
-repository-scoped GITHUB_TOKEN API budget.
+--max-deletions is capped at 750 and counts every deletion attempt so one
+execution stays within the repository-scoped GITHUB_TOKEN API budget.
 EOF
 }
 
@@ -122,6 +122,8 @@ while IFS= read -r workflow_id; do
 	fi
 done <<<"${workflow_output}"
 
+deletion_attempts=0
+deletion_failures=0
 deletions=0
 for workflow_id in "${workflow_ids[@]}"; do
 	keep_output="$(
@@ -161,15 +163,27 @@ for workflow_id in "${workflow_ids[@]}"; do
 			continue
 		fi
 
-		gh api --method DELETE "repos/${repository}/actions/runs/${run_id}"
-		((deletions += 1))
-		printf 'Deleted workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
+		((deletion_attempts += 1))
+		if gh api --method DELETE "repos/${repository}/actions/runs/${run_id}"; then
+			((deletions += 1))
+			printf 'Deleted workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
+		else
+			((deletion_failures += 1))
+			printf 'ERROR: failed to delete workflow run %s (%s)\n' \
+				"${run_id}" "${workflow_id}" >&2
+		fi
 
-		if ((deletions == max_deletions)); then
+		if ((deletion_attempts == max_deletions)); then
 			printf 'Deletion limit reached: %s\n' "${max_deletions}"
-			exit 0
+			break 2
 		fi
 	done <<<"${candidate_output}"
 done
+
+if ((deletion_failures > 0)); then
+	printf 'ERROR: Cleanup completed with %s failed deletion attempt(s)\n' \
+		"${deletion_failures}" >&2
+	exit 1
+fi
 
 printf 'Cleanup complete: %s workflow run(s) deleted\n' "${deletions}"
