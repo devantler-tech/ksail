@@ -120,6 +120,38 @@ func TestBuildNodeUserDataMultiNodeOrderRolesAndJoin(t *testing.T) {
 	assert.Equal(t, "3", nodes[3].Labels[hetzner.LabelNodeIndex])
 }
 
+func TestBuildNodeUserDataIgnoresDeprecatedServerJoinFiles(t *testing.T) {
+	t.Parallel()
+
+	const (
+		legacyPath    = "/etc/kubernetes/pki/legacy-private.key"
+		legacyContent = "legacy-private-key-material"
+	)
+
+	input := kubeadmhetzner.Input{
+		ClusterName: testClusterName,
+		Plan: kubeadmbootstrap.PlanInput{
+			Token:             testToken,
+			KubernetesVersion: testVersion,
+			ControlPlaneCount: 2,
+			AgentCount:        0,
+			APIServerEndpoint: testEndpoint,
+			CACertHashes:      []string{testCACertHash},
+		},
+		ServerJoinFiles: []cloudinitbootstrap.File{{
+			Path:    legacyPath,
+			Content: legacyContent,
+		}},
+	}
+
+	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	require.Equal(t, kubeadmbootstrap.RoleServer, nodes[1].Role)
+	assert.NotContains(t, nodes[1].UserData, legacyPath)
+	assert.NotContains(t, nodes[1].UserData, legacyContent)
+}
+
 func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {
 	t.Parallel()
 
