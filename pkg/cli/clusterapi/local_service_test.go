@@ -1812,7 +1812,14 @@ func TestEKSCreateRejectsStateBelongingToAnotherDistribution(t *testing.T) {
 // can neither clear nor retry until the server restarts.
 //
 // Clearing is local only: KSail never confirmed which remote cluster this was, so it must not aim a
-// delete at AWS on the strength of a name.
+// delete at AWS on the strength of a name. That is exactly why the caller must not be answered with
+// success. runCreate marks the job Failed when the state write fails *after* the provisioner
+// returned, so a billable cluster can exist behind a Failed row; answering Delete with 204 tells the
+// operator the cluster is gone when KSail has established no such thing.
+//
+// The two halves are asserted together on purpose. Clearing without reporting hides the remote
+// resources, and reporting without clearing strands the retry — so this test fails if either is
+// dropped, and the negative controls below fail if the report is widened into a refusal.
 func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -1842,7 +1849,13 @@ func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
 	_, loadErr := state.LoadClusterSpec(clusterName)
 	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
 
-	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	// Reported, not silently succeeded: the create may have left resources in AWS that KSail cannot
+	// see, and the caller is the only party who can go and look.
+	require.ErrorIs(t, err, clusterapi.ErrEKSCreateClearedLocally)
+	assert.Contains(t, err.Error(), clusterName,
+		"the operator has to know which cluster name to search the account for")
 
 	require.Eventually(t, func() bool {
 		list, listErr := service.List(context.Background())
@@ -1855,6 +1868,18 @@ func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
 
 	// The remote cluster was never confirmed, so no AWS mutation may have been attempted.
 	assert.Empty(t, provisioner.deletedNames())
+
+	// The report must not have cost the operator the retry. Create rejects any existing jobs entry,
+	// so this only succeeds if the failed job was genuinely dropped — which is what distinguishes
+	// this path from the refusals below, and what a fix that merely returned an error would break.
+	provisioner.createErr = nil
+
+	_, retryErr := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, retryErr,
+		"clearing the job is what makes the create retryable; reporting must not undo it")
 }
 
 // TestDeleteEKSRefusesLiveClusterWithoutOwnershipState is the negative control for the clearing path

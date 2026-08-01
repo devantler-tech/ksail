@@ -413,11 +413,33 @@ func (s *Service) Create(
 	return &created, nil
 }
 
+// ErrEKSCreateClearedLocally reports a Delete that dropped a failed EKS create's job without
+// deleting anything in AWS. The create failed before persisting ownership state, so KSail never
+// confirmed which remote cluster the name referred to and must not aim a delete at an account on the
+// strength of a name alone.
+//
+// Clearing the job is still correct — Create rejects an existing entry, so keeping it would strand
+// the operator with a cluster they can neither remove nor retry. Reporting it is what changed:
+// runCreate marks the job Failed when the state write fails *after* the provisioner returned, so a
+// billable cluster can exist behind that Failed row. Answering the caller with success asserts the
+// cluster is gone, which is precisely what KSail has not established. It carries no api sentinel, so
+// clientErrorStatus maps it to 500 and writeError surfaces the whole message — the actionable half
+// is the message, not the code.
+var ErrEKSCreateClearedLocally = errors.New(
+	"cleared a failed EKS create without deleting remote resources",
+)
+
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
 	if s.clearedFailedEKSCreate(name) {
-		return nil
+		return fmt.Errorf(
+			"%w: %q never recorded ownership state, so KSail could not identify the remote cluster."+
+				" Check the AWS account for a partially created cluster of that name and delete it"+
+				" there. The failed job has been cleared, so create can be retried",
+			ErrEKSCreateClearedLocally,
+			name,
+		)
 	}
 
 	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseDeleting)
