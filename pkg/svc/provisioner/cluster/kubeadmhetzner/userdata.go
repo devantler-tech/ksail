@@ -50,6 +50,13 @@ type Input struct {
 	// ServerInitPrelude are commands run on the cluster-initialising control
 	// plane before its install commands. Optional; ignored on joining nodes.
 	ServerInitPrelude []string
+	// ServerJoinFiles is retained for source compatibility with earlier v7
+	// releases. Private cluster PKI from this field is ignored and is never
+	// delivered through provider user-data.
+	//
+	// Deprecated: additional kubeadm control planes are refused until their
+	// private PKI can be transferred outside provider user-data.
+	ServerJoinFiles []cloudinitbootstrap.File
 	// JoinPrelude are commands run on every joining node before its install
 	// commands — e.g. pinning the stable join name to the init control plane's
 	// resolved private address in /etc/hosts, which must happen before `kubeadm
