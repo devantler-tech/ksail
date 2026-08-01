@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -219,6 +222,28 @@ func phaseOf(list *v1alpha1.ClusterList, name string) (v1alpha1.ClusterPhase, bo
 	}
 
 	return "", false
+}
+
+// requireEventuallyPhase waits for a cluster to reach a phase. Create and Delete are asynchronous, so
+// a test that stops at the call has not observed the operation — and, because the service writes
+// state under HOME, one that returns while a goroutine is still running lets that write land after
+// t.Setenv and t.TempDir have unwound, i.e. under the real home directory.
+func requireEventuallyPhase(
+	t *testing.T,
+	service *clusterapi.Service,
+	name string,
+	want v1alpha1.ClusterPhase,
+) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, name)
+
+		return ok && phase == want
+	}, eventuallyTimeout, eventuallyTick)
 }
 
 func TestListMapsExistingClusters(t *testing.T) {
@@ -584,7 +609,8 @@ func saveEKSCapacitySnapshot(t *testing.T, clusterName string) {
 // an undismissable row in the web UI for a cluster that no longer exists — the very trap the
 // idempotent-delete behaviour exists to avoid. The cleanup failure is a warning, not a job failure.
 func TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
 	const clusterName = "cleanup-fails"
 
@@ -605,10 +631,23 @@ func TestDeleteEKSClearsJobWhenOnlyLocalStateCleanupFails(t *testing.T) {
 		return found && phase == v1alpha1.ClusterPhaseReady
 	}, eventuallyTimeout, eventuallyTick)
 
-	// Force local state cleanup to fail deterministically: with no resolvable home directory the
-	// state layer cannot locate — and therefore cannot remove — the cluster's state directory. The
-	// provisioner still reports a clean deletion.
-	t.Setenv("HOME", "")
+	// Force local state cleanup to fail deterministically while leaving the state itself readable:
+	// dropping write permission on the parent directory keeps the ownership state loadable (delete
+	// binds its target from it) but makes removing the cluster's state directory fail. Blanking HOME
+	// would instead make the state unreadable, which the EKS mutation guard rejects up front — a
+	// different failure than the cleanup-only one this test pins.
+	if rootcheck.IsRootUser() {
+		t.Skip("root bypasses directory permissions, so cleanup cannot be made to fail")
+	}
+
+	clustersDir := filepath.Join(home, ".ksail", "clusters")
+	//nolint:gosec // 0500 is a directory mode: it keeps the state readable while removing write.
+	require.NoError(t, os.Chmod(clustersDir, 0o500))
+
+	t.Cleanup(func() {
+		//nolint:gosec // 0700 is a directory mode: restores write so TempDir cleanup can remove it.
+		_ = os.Chmod(clustersDir, 0o700)
+	})
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
 	require.Eventually(t, func() bool {
@@ -1006,8 +1045,59 @@ func TestEKSConfigRejectsNonSegmentName(t *testing.T) {
 
 			_, _, err := clusterapi.ExportEKSConfigForCreate(name)
 			require.ErrorIs(t, err, api.ErrInvalid)
+			assert.NotContains(t, err.Error(), "no AWS region is selected",
+				"the name must be what is rejected, not the ambient region")
 		})
 	}
+}
+
+// TestEKSCreateBindsTheRegionItWrites is the invariant the removed refusal was reaching for, stated
+// directly. The hazard was never the empty environment variable: it was the bound region and
+// metadata.region disagreeing, because boundEKSConfig compares them and rejects the file
+// permanently once persisted state exists — a cluster that can never be deleted, started or
+// stopped through KSail.
+//
+// Refusing the create only avoided that by removing a supported path. Resolving one value and
+// using it on both sides prevents the disagreement outright, so this asserts the agreement in both
+// environments rather than the refusal in one.
+func TestEKSCreateBindsTheRegionItWrites(t *testing.T) {
+	for _, env := range []struct{ name, region string }{
+		{"region set", "eu-central-1"},
+		{"region unset", ""},
+	} {
+		t.Run(env.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("AWS_REGION", env.region)
+
+			const clusterName = "bound-region-eks"
+
+			configPath, bound, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+			require.NoError(t, err)
+			require.NotEmpty(t, bound, "a bound region must never be empty")
+
+			//nolint:gosec // test-controlled path under a temp HOME.
+			data, readErr := os.ReadFile(configPath)
+			require.NoError(t, readErr)
+			assert.Contains(t, string(data), "region: "+bound,
+				"metadata.region must equal the region bound into persisted state")
+		})
+	}
+}
+
+// TestEKSConfigReportsNameErrorAheadOfMissingRegion pins the precedence between the two create-time
+// preconditions. Both are api.ErrInvalid, so without this the region check could silently take over
+// every rejection in TestEKSConfigRejectsNonSegmentName and make that guard vacuous whenever the
+// environment happens to carry no region.
+func TestEKSConfigReportsNameErrorAheadOfMissingRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "")
+
+	// "." is the discriminating case: unlike "foo/bar" it survives the state store's own name
+	// validation, so the segment check added ahead of the region check is what must reject it.
+	_, _, err := clusterapi.ExportEKSConfigForCreate(".")
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "single path segment")
+	assert.NotContains(t, err.Error(), "no AWS region is selected")
 }
 
 // TestCreatePassesProviderToFactory is the Phase 4 regression guard: the create path must route the
@@ -1290,4 +1380,1063 @@ func TestListWithoutKubeconfigSurfacesNoUnmanaged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list.Items, 1)
 	assert.False(t, list.Items[0].IsUnmanaged())
+}
+
+// TestEKSConfigResolutionAfterCreateBindsToCreationRegion pins the resolution half of #6203: once a
+// cluster exists, resolving its EKS config yields the region that created it rather than the one
+// selected now. TestDeleteEKSReachesProvisionerBoundToCreationRegion covers the lifecycle half —
+// that a successful action actually runs against that resolved region.
+func TestEKSConfigResolutionAfterCreateBindsToCreationRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const clusterName = "bound-eks"
+
+	createPath, createRegion, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err)
+	require.Equal(t, "eu-north-1", createRegion)
+
+	// Persisted cluster state is what marks the create as complete, turning every later resolution
+	// into a mutation of an existing remote cluster.
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	// The operator now picks a different region in Settings.
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	mutatePath, mutateRegion, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", mutateRegion,
+		"a post-create action must target the region the cluster was created in")
+	assert.Equal(t, createPath, mutatePath)
+
+	// The binding is also the only local evidence of the original target, so it must survive rather
+	// than be rewritten with the newly selected region.
+	data, err := os.ReadFile(createPath) //nolint:gosec // test-controlled path under a temp HOME.
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "region: eu-north-1")
+	assert.NotContains(t, string(data), "us-east-1")
+}
+
+// TestEKSConfigFollowsCurrentRegionUntilCreateCompletes pins the other side of the discriminator: a
+// first create — and a retry after a failed one, which leaves no persisted state — must honour the
+// region selected now, so a corrected region is not ignored.
+func TestEKSConfigFollowsCurrentRegionUntilCreateCompletes(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const clusterName = "retried-eks"
+
+	_, region, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err)
+	require.Equal(t, "eu-north-1", region)
+
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	_, retryRegion, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", retryRegion,
+		"with no completed create, the region selected now must still apply")
+}
+
+// TestEKSConfigRefusesWhenBindingEvidenceIsMissing covers the fail-closed path: the cluster
+// completed creation but its region evidence is gone, so the target cannot be confirmed. Falling
+// back to the ambient region here is exactly the redirect this change prevents.
+func TestEKSConfigRefusesWhenBindingEvidenceIsMissing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const clusterName = "evidence-gone"
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
+// regionRecorder collects the region each named EKS factory build resolved, in order.
+type regionRecorder struct {
+	mu      sync.Mutex
+	regions []string
+}
+
+func (r *regionRecorder) record(region string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.regions = append(r.regions, region)
+}
+
+// since returns the regions recorded at or after index n, so a test can assert about one phase
+// without the earlier phase's resolutions bleeding into it.
+func (r *regionRecorder) since(n int) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.regions[min(n, len(r.regions)):])
+}
+
+func (r *regionRecorder) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return len(r.regions)
+}
+
+// newRegionRecordingEKSService wires a Service whose factory resolves the EKS distribution config
+// exactly as the production defaultFactory does — from the cluster name alone — and records the
+// region that resolution produced. That is what makes the region observable in a test: the region
+// never travels in the action's Spec, it is read back from the on-disk eks.yaml when the provisioner
+// is built.
+func newRegionRecordingEKSService(
+	t *testing.T,
+	provisioner *fakeProvisioner,
+	recorder *regionRecorder,
+) *clusterapi.Service {
+	t.Helper()
+
+	// Only EKS gets the cluster-bearing provisioner. Handing the same one to every distribution
+	// would let discovery find the cluster under Vanilla first, so the action would resolve as a
+	// Vanilla cluster and never take the EKS path this test exists to exercise.
+	empty := &fakeProvisioner{}
+
+	return clusterapi.NewTestService(func(
+		distribution v1alpha1.Distribution,
+		name string,
+	) (clusterprovisioner.Factory, error) {
+		if distribution != v1alpha1.DistributionEKS {
+			return fakeFactory{provisioner: empty}, nil
+		}
+
+		// Discovery builds a factory with no cluster name; only a named build resolves a config.
+		if name != "" {
+			_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+			if err != nil {
+				return nil, fmt.Errorf("resolve EKS config for %q: %w", name, err)
+			}
+
+			recorder.record(region)
+		}
+
+		return fakeFactory{provisioner: provisioner}, nil
+	})
+}
+
+// TestDeleteEKSReachesProvisionerBoundToCreationRegion is the lifecycle guard #6203 needs: a
+// *successful* delete must reach the provisioner, and the config resolved to build that provisioner
+// must carry the creation region even though a different one is selected now. The refusal tests
+// below only prove that unconfirmed targets are blocked; without this one, a regression that bound
+// the happy path to the current region would pass the whole suite.
+func TestDeleteEKSReachesProvisionerBoundToCreationRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const clusterName = "lifecycle-eks"
+
+	recorder := &regionRecorder{}
+	provisioner := &fakeProvisioner{}
+	service := newRegionRecordingEKSService(t, provisioner, recorder)
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.Equal(t, []string{"eu-north-1"}, recorder.since(0),
+		"create must bind to the region selected at create time")
+
+	// The operator selects a different region before deleting.
+	beforeDelete := recorder.count()
+
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		return slices.Equal(provisioner.deletedNames(), []string{clusterName})
+	}, eventuallyTimeout, eventuallyTick)
+
+	deleteRegions := recorder.since(beforeDelete)
+	require.NotEmpty(t, deleteRegions, "the delete must have built a provisioner for this cluster")
+
+	for _, region := range deleteRegions {
+		assert.Equal(t, "eu-north-1", region,
+			"a successful delete must run against the creation region, not the one selected now")
+	}
+}
+
+// TestDeleteEKSRefusesWithoutPersistedOwnershipState guards the destructive path directly: with no
+// ownership state the backend cannot confirm which remote cluster it would delete, so it must
+// refuse rather than proceed against an ambient target.
+func TestDeleteEKSRefusesWithoutPersistedOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "unbound-eks"
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, state.DeleteClusterState(clusterName))
+
+	err = service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames(),
+		"an unconfirmed target must never reach the provisioner")
+}
+
+// TestDeleteEKSRefusesWhenPersistedOwnershipStateDisagrees covers the inconsistent case: state that
+// records a different backend than the cluster resolved as cannot describe this target.
+func TestDeleteEKSRefusesWhenPersistedOwnershipStateDisagrees(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "mismatched-eks"
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderDocker,
+	}))
+
+	err = service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames())
+}
+
+// newReadyUnboundEKSService creates an EKS cluster, waits for it to settle, then removes the
+// ownership state — the state an operator is in when KSail can no longer identify the remote target.
+func newReadyUnboundEKSService(
+	t *testing.T,
+	clusterName string,
+) (*clusterapi.Service, *fakeProvisioner) {
+	t.Helper()
+
+	provisioner := &fakeProvisioner{}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, state.DeleteClusterState(clusterName))
+
+	return service, provisioner
+}
+
+// assertUnconfirmedEKSGuidance checks one refusal message: it must be an api.ErrInvalid, address the
+// action the operator requested, point at recovery that can actually resolve this refusal, and offer
+// deletion only on the delete path.
+func assertUnconfirmedEKSGuidance(
+	t *testing.T,
+	err error,
+	_ string,
+	wantMessage string,
+	wantDelete bool,
+) {
+	t.Helper()
+
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"an unconfirmable EKS target must be refused on every mutating path")
+	assert.Contains(t, err.Error(), wantMessage,
+		"the recovery guidance must address the action the operator requested")
+	assert.Contains(t, err.Error(), "eksctl",
+		"every path must point at recovery that can actually resolve this refusal")
+	assert.NotContains(t, err.Error(), "ksail cluster eks-bind",
+		"eks-bind writes the immutable-identity record, not the create-time ownership state this "+
+			"refusal reads, so offering it here loops the operator back to this same refusal")
+
+	if !wantDelete {
+		assert.NotContains(t, err.Error(), "eksctl delete cluster",
+			"a non-destructive action must not be answered with a destructive recovery step")
+	}
+}
+
+// TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction pins the recovery guidance to the
+// action the operator actually asked for. All three mutating entry points reach the same refusal —
+// Delete as ClusterPhaseDeleting, Start and Stop as ClusterPhaseUpdating — so a single shared message
+// told an operator who asked to start a cluster to delete it instead. Deleting is suggested only on
+// the delete path.
+//
+// Every path must also point at recovery that can actually clear the refusal, and must NOT offer
+// `ksail cluster eks-bind`. This assertion has been wrong twice in opposite directions, so it is
+// worth stating precisely: an earlier round named a command the CLI does not expose, the next round
+// claimed no such command existed, and the round after that named eks-bind — which does exist, but
+// writes the region-scoped immutable-identity record (state.SaveEKSOwnershipState) rather than the
+// create-time spec.json that state.LoadClusterSpec reads here. Naming an existing command is not the
+// same claim as naming one that resolves this refusal; asserting only that the string is present
+// pinned the second claim while testing the first.
+func TestUnconfirmedEKSMutationGuidanceMatchesTheRequestedAction(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	for _, testCase := range []struct {
+		name        string
+		invoke      func(*clusterapi.Service, string) error
+		wantDelete  bool
+		wantMessage string
+	}{
+		{
+			name: "delete",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Delete(context.Background(), "default", cluster)
+			},
+			wantDelete:  true,
+			wantMessage: "eksctl delete cluster",
+		},
+		{
+			name: "start",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Start(context.Background(), "default", cluster)
+			},
+			wantDelete:  false,
+			wantMessage: "act on it with the AWS tooling directly",
+		},
+		{
+			name: "stop",
+			invoke: func(s *clusterapi.Service, cluster string) error {
+				return s.Stop(context.Background(), "default", cluster)
+			},
+			wantDelete:  false,
+			wantMessage: "act on it with the AWS tooling directly",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+
+			clusterName := "unbound-eks-" + testCase.name
+			service, provisioner := newReadyUnboundEKSService(t, clusterName)
+
+			err := testCase.invoke(service, clusterName)
+
+			assertUnconfirmedEKSGuidance(t, err, clusterName, testCase.wantMessage,
+				testCase.wantDelete)
+			assert.Empty(t, provisioner.deletedNames(),
+				"a refused mutation must never reach the provisioner")
+		})
+	}
+}
+
+// TestEKSCreateFallsBackToTheScaffolderDefaultRegion is the regression Codex found: refusing the
+// create when AWS_REGION is unset broke the supported default-region path, on a premise that does
+// not hold. writeEKSConfig renders through scaffolder.DefaultEKSConfigParams, which substitutes its
+// own default for an empty region — so an empty AWS_REGION was never going to reach metadata.region,
+// and there was no region-less binding to protect against.
+//
+// What DOES matter for this PR is that the region bound into persisted state is the same one the
+// file carries. Resolving the fallback at the call site is what guarantees that: both sides now read
+// one value instead of deriving it independently.
+func TestEKSCreateFallsBackToTheScaffolderDefaultRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "")
+
+	const clusterName = "default-region-eks"
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.NoError(t, err, "an unset AWS_REGION must not refuse the create")
+
+	expected := scaffolder.DefaultEKSConfigParams(clusterName, "").Region
+	require.NotEmpty(t, expected, "the scaffolder default must be a real region")
+	assert.Equal(t, expected, region, "the bound region must be the scaffolder default")
+
+	//nolint:gosec // test-controlled path under a temp HOME.
+	data, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "region: "+expected,
+		"the written metadata.region must equal the region bound into persisted state")
+}
+
+// TestEKSCreateRejectsStateBelongingToAnotherDistribution covers the second finding on this PR:
+// LoadClusterSpec persists state for EVERY distribution, so treating the mere existence of
+// spec.json as proof that an EKS create completed misreads a Kind or Talos cluster of the same
+// name. The bound path then looks for an eks.yaml that was never written, and the user sees a
+// confusing read error instead of the name collision they actually have.
+//
+// A name collision is reported rather than silently treated as a fresh create: two clusters would
+// otherwise share one state directory, and the second create would overwrite the first's record.
+func TestEKSCreateRejectsStateBelongingToAnotherDistribution(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-central-1")
+
+	const clusterName = "not-an-eks-cluster"
+
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionVanilla,
+	}))
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "Vanilla",
+		"the error must name the distribution that actually owns the state")
+	assert.NotContains(t, err.Error(), "read the eks config",
+		"a name collision must not surface as a missing-eks.yaml read error")
+}
+
+// TestDeleteEKSClearsFailedCreateWithoutOwnershipState is the EKS analogue of
+// TestDeleteClearsFailedClusterWithNoUnderlyingCluster: a create that failed before persisting
+// ownership state must still be clearable. runCreate only writes spec.json once the provisioner
+// succeeded, so a failed EKS create leaves the job Failed with no state — and because Create rejects
+// any existing jobs entry, refusing the delete as well would strand the operator with a cluster they
+// can neither clear nor retry until the server restarts.
+//
+// Clearing is local only: KSail never confirmed which remote cluster this was, so it must not aim a
+// delete at AWS on the strength of a name. That is exactly why the caller must not be answered with
+// success. runCreate marks the job Failed when the state write fails *after* the provisioner
+// returned, so a billable cluster can exist behind a Failed row; answering Delete with 204 tells the
+// operator the cluster is gone when KSail has established no such thing.
+//
+// The two halves are asserted together on purpose. Clearing without reporting hides the remote
+// resources, and reporting without clearing strands the retry — so this test fails if either is
+// dropped, and the negative controls below fail if the report is widened into a refusal.
+func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "failed-eks"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	requireEventuallyPhase(t, service, clusterName, v1alpha1.ClusterPhaseFailed)
+
+	// Precondition: the failed create left no ownership state behind.
+	_, loadErr := state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
+
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	// Reported, not silently succeeded: the create may have left resources in AWS that KSail cannot
+	// see, and the caller is the only party who can go and look.
+	require.ErrorIs(t, err, clusterapi.ErrEKSCreateClearedLocally)
+	assert.Contains(t, err.Error(), clusterName,
+		"the operator has to know which cluster name to search the account for")
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, present := phaseOf(list, clusterName)
+
+		return !present
+	}, eventuallyTimeout, eventuallyTick)
+
+	// The remote cluster was never confirmed, so no AWS mutation may have been attempted.
+	assert.Empty(t, provisioner.deletedNames())
+
+	// The report must not have cost the operator the retry. Create rejects any existing jobs entry,
+	// so this only succeeds if the failed job was genuinely dropped — which is what distinguishes
+	// this path from the refusals below, and what a fix that merely returned an error would break.
+	provisioner.createErr = nil
+
+	_, retryErr := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, retryErr,
+		"clearing the job is what makes the create retryable; reporting must not undo it")
+
+	// The retry must be allowed to finish inside the test — see requireEventuallyPhase.
+	requireEventuallyPhase(t, service, clusterName, v1alpha1.ClusterPhaseReady)
+}
+
+// TestDeleteEKSRefusesLiveClusterWithoutOwnershipState is the negative control for the clearing path
+// above: the exemption is scoped to a *failed create*, not to "ownership state is missing". A live
+// EKS cluster whose state KSail cannot find is exactly the unconfirmed target the guard exists to
+// protect, so it must still be refused.
+func TestDeleteEKSRefusesLiveClusterWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "live-eks"
+
+	service, provisioner := newReadyUnboundEKSService(t, clusterName)
+
+	err := service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames())
+}
+
+// TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState is the second negative control, and it
+// covers the case the first one cannot see. TestDeleteEKSRefusesLiveClusterWithoutOwnershipState has
+// no tracked job at all, so it never reaches the clearing path; this one arrives there with a job in
+// exactly the state that path inspects.
+//
+// Create, delete and start/stop all converge on Failed, so "failed EKS job with no ownership state"
+// does not mean "failed create". A stop that fails leaves the remote cluster running — the stop is
+// precisely the operation that did not take — and if its ownership state is then removed out of band,
+// a clearing path keyed only on phase and distribution would drop the row and answer Delete with
+// success while the AWS cluster is still there. That is worse than the refusal it replaced: the
+// operator is told the cluster is gone.
+//
+// The distinguishing fact is the job's `origin`, which is fixed at registration and never changes.
+func TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "stop-failed-eks"
+
+	provisioner := &fakeProvisioner{stopErr: errSimulatedDeleteFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	// A create that SUCCEEDS, so ownership state is persisted and the cluster is confirmed KSail's.
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	// A stop that fails. The job now sits in Failed — the same phase a failed create reaches, which
+	// is what makes phase alone insufficient to tell them apart.
+	require.NoError(t, service.Stop(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// The ownership state disappears underneath the failed job — removed out of band, or by a
+	// delete run from the CLI while the server holds this job in memory. Only now do the two cases
+	// look alike to a phase-and-distribution test.
+	require.NoError(t, state.DeleteClusterState(clusterName))
+
+	_, loadErr := state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, loadErr, state.ErrStateNotFound)
+
+	// Delete must still be refused: this was never a create, so KSail cannot claim no cluster was
+	// left behind, and it must not aim a delete at AWS on the strength of a name either.
+	err = service.Delete(context.Background(), "default", clusterName)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Empty(t, provisioner.deletedNames(),
+		"a refused delete must not have reached the provisioner")
+
+	// The failed job must survive the refusal. Clearing it would destroy the only record of why the
+	// stop did not take, which is the operator's route back to a working cluster.
+	list, listErr := service.List(context.Background())
+	require.NoError(t, listErr)
+
+	phase, present := phaseOf(list, clusterName)
+	assert.True(t, present, "the refused delete must not have cleared the failed job")
+	assert.Equal(t, v1alpha1.ClusterPhaseFailed, phase,
+		"the job must still report why the stop failed")
+}
+
+// TestDeleteEKSRefusesJobReplacedDuringOwnershipRead is the third negative control, and it covers a
+// window the other two cannot reach. clearedFailedEKSCreate releases the lock to read ownership state
+// from disk, so the entry it validated before that read is not necessarily the entry it removes after
+// it: the job can be replaced in between — ownership state restored out of band, then a start/stop
+// registered and failed.
+//
+// Re-checking only the phase on the way out is therefore not enough. Create, delete and start/stop all
+// converge on Failed, so a replacement failed *stop* satisfies a phase-only re-check while describing
+// a cluster that may still be running in AWS. That is precisely the confusion `origin` was introduced
+// to prevent, and TestDeleteEKSRefusesFailedLifecycleJobWithoutOwnershipState pins it for the
+// steady-state case; this pins it across the unlocked window, where the check has to be repeated in
+// full rather than assumed to still hold.
+//
+// The replacement is driven through the ownership-read seam rather than a competing goroutine, so the
+// interleaving is exact and the test cannot flake.
+func TestDeleteEKSRefusesJobReplacedDuringOwnershipRead(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "replaced-during-read"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	// A create that fails, so the job really is a failed create: the pre-read check passes and the
+	// clearing path proceeds into the unlocked ownership read.
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Act inside the unlocked window: replace the failed create with a failed stop, then answer the
+	// read exactly as the real loader would for a cluster with no persisted state.
+	reads := 0
+
+	service.SetLoadClusterSpecForTest(func(name string) (*v1alpha1.ClusterSpec, error) {
+		reads++
+
+		service.ReplaceJobWithFailedStopForTest(name)
+
+		return nil, state.ErrStateNotFound
+	})
+
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	// Without the read actually happening the test would pass vacuously — it would be asserting the
+	// steady-state refusal, not the windowed one.
+	require.Equal(t, 1, reads,
+		"the unlocked ownership read must have run, or the window under test was never entered")
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"a job that became a failed stop during the read must not be cleared as a failed create")
+	assert.Empty(t, provisioner.deletedNames(),
+		"a refused delete must not have reached the provisioner")
+	assert.True(t, service.JobPresentForTest(clusterName),
+		"the replacement failed stop must survive: it is the only record of a cluster"+
+			" that may still be running")
+}
+
+// TestDeleteFailedLocalCreateStillReachesTheProvisioner pins the distribution scope of the
+// failed-create clearing path. Clearing the job locally is right for EKS, where the ownership guard
+// stands between KSail and a remote account it cannot identify. It would be wrong for a local
+// distribution: a half-finished Kind or vCluster create leaves containers behind, and the
+// provisioner's Delete is what removes them. Local distributions must therefore still go through the
+// provisioner rather than having their job quietly dropped.
+func TestDeleteFailedLocalCreateStillReachesTheProvisioner(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "half-made"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionVanilla),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+
+	require.Eventually(t, func() bool {
+		return slices.Contains(provisioner.deletedNames(), clusterName)
+	}, eventuallyTimeout, eventuallyTick)
+}
+
+// TestDeleteEKSRefusesADifferentFailedCreateInTheSameWindow is the sharper half of the windowed race,
+// and the one a full re-check of the predicate does NOT catch. A replacement that is itself a failed
+// EKS create matches phase, origin and distribution exactly, so every field-based test passes while
+// the entry is a different operation's failure.
+//
+// Clearing it would report success for a delete that never inspected this create, and silently
+// discard the record of why the second create failed. Only the job's identity separates "the entry I
+// approved" from "an entry just like it".
+func TestDeleteEKSRefusesADifferentFailedCreateInTheSameWindow(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "replaced-by-a-twin"
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, clusterName)
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	reads := 0
+
+	service.SetLoadClusterSpecForTest(func(name string) (*v1alpha1.ClusterSpec, error) {
+		reads++
+
+		service.ReplaceJobWithAnotherFailedEKSCreateForTest(name)
+
+		return nil, state.ErrStateNotFound
+	})
+
+	err = service.Delete(context.Background(), "default", clusterName)
+
+	require.Equal(t, 1, reads,
+		"the unlocked ownership read must have run, or the window under test was never entered")
+	require.ErrorIs(t, err, api.ErrInvalid,
+		"a delete must not clear a failed create it never approved, however alike the two look")
+	assert.True(t, service.JobPresentForTest(clusterName),
+		"the replacement create's failure must survive: clearing it discards the only record of it")
+}
+
+// ownershipRecordFor is the immutable identity AWS confirmed at create time, which is what binds a
+// cluster to a region once its create completed.
+func ownershipRecordFor(name, region string) *state.EKSOwnershipState {
+	return &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: name,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + name,
+		CreatedAt:   time.Date(2026, 7, 29, 8, 0, 0, 0, time.UTC),
+		AWSOptions: v1alpha1.OptionsAWS{ //nolint:gosec // G101: env-var NAMES, never credential values.
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "AWS_REGION",
+			AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+		},
+	}
+}
+
+// TestBoundEKSConfigBindsFromOwnershipWhenTheStateConfigIsAbsent covers clusters created the NORMAL
+// way. `ksail cluster create` writes persisted cluster state (which marks the create complete) but
+// scaffolds eks.yaml into the PROJECT directory, while only the local API backend writes one under
+// ~/.ksail/clusters/<name>. The bound path therefore entered on state it trusted and then failed
+// reading a file nothing had put there — breaking every start, stop and delete for exactly the
+// clusters created the ordinary way. The ownership record is the authoritative binding for both.
+func TestBoundEKSConfigBindsFromOwnershipWhenTheStateConfigIsAbsent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// A region that is NOT the recorded one: binding must come from the record, never the ambient
+	// environment, or this test would pass while the redirect it guards was still possible.
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "cli-created"
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "the creation region must come from the ownership record")
+	assert.FileExists(t, configPath, "the provisioner still needs the config on disk")
+
+	// Assert the region inside the FILE, not just the returned one. eksctl reads the file, so a
+	// config written from the ambient region while the returned value carried the bound one would
+	// aim the action at us-west-2 and still satisfy every assertion above.
+	data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path under a temp HOME.
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "region: eu-north-1",
+		"the generated eks.yaml must carry the bound region, not the ambient one")
+	assert.NotContains(t, string(data), "us-west-2",
+		"the ambient region must not reach the file the provisioner reads")
+}
+
+// TestBoundEKSConfigRefusesAmbiguousOwnership is the destructive-path guard on that binding. Two
+// ownership records mean two same-named clusters in different AWS regions, and nothing on disk says
+// which one an operator meant. Choosing either would aim a delete at a cluster nobody named, so the
+// only safe answer is to refuse and say what it found.
+func TestBoundEKSConfigRefusesAmbiguousOwnership(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "two-regions"
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(
+			t,
+			state.SaveEKSOwnershipState(name, region, ownershipRecordFor(name, region)),
+		)
+	}
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "more than one region")
+	assert.Contains(t, err.Error(), "eu-north-1")
+	assert.Contains(t, err.Error(), "us-east-1")
+}
+
+// TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion covers the other half of the same
+// binding. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
+// region — or one the UI has simply been repointed away from since, which is reproducible by
+// restarting it with a different AWS_REGION — vanished from the listing, and start/stop/delete
+// reported "not found" before the ownership check could run. The cluster is not missing; the ambient
+// region is just pointed elsewhere, and the persisted record says so.
+//
+// The assertion is deliberately about which ANSWER is reached, not about the mutation succeeding:
+// resolving must hand the request to confirmEKSOwnership rather than short-circuit it, so a target
+// KSail cannot account for is still refused — just never as an absence.
+func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "other-region"
+
+	// No provisioner lists this cluster: discovery in the currently-selected region cannot see it.
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+
+	// The control: with no record either, "not found" is the correct and expected answer.
+	require.ErrorIs(t,
+		service.Delete(context.Background(), "default", clusterName),
+		api.ErrNotFound,
+		"a cluster with no live listing and no ownership record really is unknown")
+
+	require.NoError(t, state.SaveEKSOwnershipState(
+		clusterName, "ap-southeast-2", ownershipRecordFor(clusterName, "ap-southeast-2"),
+	))
+
+	err := service.Delete(context.Background(), "default", clusterName)
+	require.NotErrorIs(t, err, api.ErrNotFound,
+		"a cluster KSail holds an ownership record for is not missing; the selected region is")
+}
+
+// writeStateEKSConfig puts an eks.yaml under ~/.ksail/clusters/<name> carrying region, standing in
+// for a file an earlier KSail wrote from whatever region happened to be selected at the time.
+func writeStateEKSConfig(t *testing.T, name, region string) {
+	t.Helper()
+
+	dir := filepath.Join(os.Getenv("HOME"), ".ksail", "clusters", name)
+	//nolint:gosec // G703: test-controlled path under the temp HOME set by t.Setenv.
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+
+	path := filepath.Join(dir, "eks.yaml")
+	//nolint:gosec // G703: test-controlled path under the temp HOME set by t.Setenv.
+	require.NoError(t, os.WriteFile(path, []byte(
+		"apiVersion: eksctl.io/v1alpha5\nkind: ClusterConfig\nmetadata:\n  name: "+name+
+			"\n  region: "+region+"\n"), 0o600))
+}
+
+func saveEKSClusterSpec(t *testing.T, name string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+}
+
+// TestBoundEKSConfigRefusesAStaleConfigTheOwnershipRecordContradicts is a destructive-path guard.
+//
+// eks.yaml is a RENDERED file: before this binding existed, every delete/start/stop re-rendered it
+// from the ambient AWS_REGION, so a file left by that behaviour can name a region the cluster was
+// never created in. Reading it without consulting the immutable ownership record left exactly the
+// redirect this binding exists to prevent — a delete aimed at a same-named cluster in the file's
+// region — for any cluster whose config predates the record.
+func TestBoundEKSConfigRefusesAStaleConfigTheOwnershipRecordContradicts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "stale-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "us-west-2")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "eu-north-1", "the error must name the recorded region")
+	assert.Contains(t, err.Error(), "us-west-2", "the error must name the config's region")
+}
+
+// TestBoundEKSConfigRefusesAmbiguousOwnershipWithAConfigPresent closes the same hole for the
+// multi-region case. Reading the config first meant a materialised eks.yaml silently answered a
+// question that has no answer: two records mean two same-named clusters, and the file's region is
+// not evidence of which one an operator meant.
+func TestBoundEKSConfigRefusesAmbiguousOwnershipWithAConfigPresent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "two-regions-with-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(
+			t,
+			state.SaveEKSOwnershipState(name, region, ownershipRecordFor(name, region)),
+		)
+	}
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.Contains(t, err.Error(), "more than one region")
+}
+
+// TestBoundEKSConfigAcceptsAConfigTheOwnershipRecordAgreesWith is the over-tightening control for
+// both tests above: the ordinary case, where the record and the file say the same thing, must stay
+// silent. A guard that failed the normal path would be routed around rather than fixed.
+func TestBoundEKSConfigAcceptsAConfigTheOwnershipRecordAgreesWith(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "agreeing-config"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "an agreeing config still binds to the creation region")
+}
+
+// TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord is the second over-tightening control.
+// Clusters created before ownership records existed have only the config, and it remains their one
+// piece of binding evidence — requiring a record would break every one of them.
+func TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "legacy-config-only"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region, "the config alone still binds when no record exists")
+}
+
+// TestCreateRefusesANameWhoseEKSCreateStateRemains covers the CREATE half of the region binding.
+//
+// The binding that makes delete/start/stop follow the creation region must never steer a create.
+// A cluster removed out of band leaves spec.json and eks.yaml behind while discovery stops
+// reporting it, so Create accepts the name again — and resolving the stale binding there would
+// provision NEW cloud resources into the old region while the operator believes they selected a
+// different one.
+//
+// Refusing is the fail-closed answer rather than rendering a fresh config: per-provider discovery
+// failures are logged and skipped, so a name missing from the live set is not proof the remote
+// cluster is gone. Re-rendering would overwrite the only local evidence binding a cluster that may
+// still be running, leaving it unreachable by KSail in its real region.
+func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "recreated-eks"
+
+	// A completed create: state plus the config and record binding it to eu-north-1.
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	// The cluster is then removed out of band and the operator selects a different region.
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+
+	_, err := service.Create(context.Background(), clusterFor(name, v1alpha1.DistributionEKS))
+	require.ErrorIs(t, err, api.ErrAlreadyExists,
+		"a create for a name that still carries a completed EKS create's state must be refused")
+	assert.Contains(
+		t,
+		err.Error(),
+		"cluster delete",
+		"the refusal must name the command that clears the stale state, or it just moves the surprise",
+	)
+
+	// Deterministic discriminator: Create registers the job synchronously before spawning the
+	// background provisioner, so an unrefused create leaves a tracked job behind.
+	assert.False(t, service.JobPresentForTest(name),
+		"the refusal must happen before a job is registered, so nothing is provisioned")
+
+	// Control: the refusal must leave the binding evidence intact, not consume it.
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region,
+		"a refused create must preserve the original region binding")
 }

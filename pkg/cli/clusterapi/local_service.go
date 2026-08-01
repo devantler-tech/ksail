@@ -44,7 +44,13 @@ type job struct {
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
 	phase        v1alpha1.ClusterPhase
-	err          error
+	// origin is the phase the job was registered in, and it never changes. `phase` does: create,
+	// delete and start/stop all converge on Failed, so once a job has failed `phase` can no longer
+	// say which operation failed. Anything scoped to one operation must read this instead —
+	// clearedFailedEKSCreate is scoped to a failed CREATE, and without `origin` it could not tell
+	// that from a failed stop whose cluster is still live in AWS.
+	origin v1alpha1.ClusterPhase
+	err    error
 	// startedAt is when the operation began; it drives the status condition's transition time so the
 	// UI can show how long a create/delete has been running or has been failed.
 	startedAt time.Time
@@ -137,6 +143,12 @@ type Service struct {
 	// verification is unavailable, so an install carrying cosign material is rejected.
 	cosign cosignVerifier
 
+	// loadClusterSpec reads a cluster's persisted ownership state. clearedFailedEKSCreate drops the
+	// lock across this call, so it is the seam a test uses to act inside that window — substituting a
+	// loader that mutates s.jobs reproduces the interleaving deterministically, without goroutines or
+	// sleeps. The default is state.LoadClusterSpec.
+	loadClusterSpec func(clusterName string) (*v1alpha1.ClusterSpec, error)
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
@@ -149,6 +161,7 @@ func NewService() *Service {
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		plugins:           pluginStore{dir: defaultPluginsDir},
 		pluginCatalog:     defaultPluginCatalog(),
+		loadClusterSpec:   state.LoadClusterSpec,
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{
@@ -371,26 +384,14 @@ func (s *Service) Create(
 	// returned cluster all agree on the backend that will actually be provisioned.
 	cluster.Spec.Cluster.Provider = provider
 
-	live := s.enumerate(ctx)
+	// Read the on-disk create state before reserving the name (it is keyed by name and needs no
+	// shared state). reserveCreateJob decides when to apply it.
+	staleStateErr := refuseEKSCreateOverCompletedState(distribution, name)
 
-	s.mu.Lock()
-
-	_, inLive := live[name]
-	_, inJobs := s.jobs[name]
-
-	if inLive || inJobs {
-		s.mu.Unlock()
-
-		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
+	err = s.reserveCreateJob(s.enumerate(ctx), name, distribution, provider, staleStateErr)
+	if err != nil {
+		return nil, err
 	}
-
-	s.jobs[name] = &job{
-		distribution: distribution,
-		provider:     provider,
-		phase:        v1alpha1.ClusterPhaseProvisioning,
-		startedAt:    time.Now(),
-	}
-	s.mu.Unlock()
 
 	go s.runCreate(context.WithoutCancel(ctx), name, cluster.Spec)
 
@@ -399,9 +400,35 @@ func (s *Service) Create(
 	return &created, nil
 }
 
+// ErrEKSCreateClearedLocally reports a Delete that dropped a failed EKS create's job without
+// deleting anything in AWS. The create failed before persisting ownership state, so KSail never
+// confirmed which remote cluster the name referred to and must not aim a delete at an account on the
+// strength of a name alone.
+//
+// Clearing the job is still correct — Create rejects an existing entry, so keeping it would strand
+// the operator with a cluster they can neither remove nor retry. Reporting it is what changed:
+// runCreate marks the job Failed when the state write fails *after* the provisioner returned, so a
+// billable cluster can exist behind that Failed row. Answering the caller with success asserts the
+// cluster is gone, which is precisely what KSail has not established. It carries no api sentinel, so
+// clientErrorStatus maps it to 500 and writeError surfaces the whole message — the actionable half
+// is the message, not the code.
+var ErrEKSCreateClearedLocally = errors.New(
+	"cleared a failed EKS create without deleting remote resources",
+)
+
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
+	if s.clearedFailedEKSCreate(name) {
+		return fmt.Errorf(
+			"%w: %q never recorded ownership state, so KSail could not identify the remote cluster."+
+				" Check the AWS account for a partially created cluster of that name and delete it"+
+				" there. The failed job has been cleared, so create can be retried",
+			ErrEKSCreateClearedLocally,
+			name,
+		)
+	}
+
 	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseDeleting)
 	if err != nil {
 		return err
@@ -483,10 +510,28 @@ func (s *Service) resolveCluster(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if current, ok := s.jobs[name]; ok {
+		s.mu.Unlock()
+
 		return current.distribution, current.provider, true
+	}
+
+	s.mu.Unlock()
+
+	// Persisted EKS ownership is the last resort, and it is what makes a bound cluster reachable at
+	// all. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
+	// region — or simply one the UI has been repointed away from since — disappears from the listing
+	// and every start, stop and delete reported "not found" before the ownership check could run.
+	// That is the same ambient-region redirect this binding exists to prevent, arriving as an
+	// absence rather than as a wrong target.
+	//
+	// Resolving here does NOT authorize the mutation: it only says KSail has a record of owning a
+	// cluster by this name. confirmEKSOwnership still runs, and still refuses anything it cannot
+	// account for.
+	_, ownershipErr := state.ListEKSOwnershipStates(name)
+	if ownershipErr == nil {
+		return v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true
 	}
 
 	return "", "", false
@@ -516,28 +561,232 @@ func (s *Service) startJob(
 		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
 
+	// Reject an overlapping operation before reading ownership state. A create that is still in
+	// flight has not written its state yet, so binding first would report that absence instead of
+	// the accurate "already in progress". The authoritative check is repeated under the lock below.
+	if s.jobInProgress(name) {
+		return v1alpha1.Spec{}, overlappingJobError(name)
+	}
+
+	target := v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider}
+
+	// EKS mutations reach a remote AWS account, so refuse one whose target KSail cannot confirm it
+	// owns. Checking before the job is registered keeps a refused mutation from leaving an in-flight
+	// job behind.
+	if distribution == v1alpha1.DistributionEKS {
+		bindErr := confirmEKSOwnership(name, distribution, provider, phase)
+		if bindErr != nil {
+			return v1alpha1.Spec{}, bindErr
+		}
+	}
+
 	s.mu.Lock()
 	if current, found := s.jobs[name]; found && jobIsInProgress(current.phase) {
 		s.mu.Unlock()
 
-		return v1alpha1.Spec{}, fmt.Errorf(
-			"%w: operation already in progress for %q",
-			api.ErrAlreadyExists,
-			name,
-		)
+		return v1alpha1.Spec{}, overlappingJobError(name)
 	}
 
 	s.jobs[name] = &job{
 		distribution: distribution,
 		provider:     provider,
 		phase:        phase,
+		origin:       phase,
 		startedAt:    time.Now(),
 	}
 	s.mu.Unlock()
 
-	return v1alpha1.Spec{
-		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
-	}, nil
+	return v1alpha1.Spec{Cluster: target}, nil
+}
+
+// confirmEKSOwnership reports whether KSail can confirm it owns the named EKS cluster, so a
+// delete/start/stop is refused rather than aimed at a remote cluster it cannot account for. State
+// persisted at create time is the evidence: its presence marks the create as complete, and the
+// distribution/provider it records must match how the cluster resolved now.
+//
+// It deliberately does NOT supply the action's target spec. The region binding is carried by the
+// on-disk eks.yaml, which the provisioner factory reads back through distributionConfig for the
+// cluster name — the spec never conveys it. Persisted state is also a sanitized snapshot (registry
+// credentials are redacted on the way in), so promoting it to the runtime target would hand the
+// provisioner values that were never meant to be replayed, while binding nothing extra.
+//
+// Missing or inconsistent state fails the mutation rather than falling back to ambient settings:
+// delete is destructive, and a same-named cluster in another reachable region is the exact outcome
+// the fallback would produce.
+//
+// The phase selects the recovery guidance, because this refusal is reached from every mutating entry
+// point: Delete arrives as ClusterPhaseDeleting, while Start and Stop both arrive as
+// ClusterPhaseUpdating. Only the delete path may suggest deleting the cluster — an operator who asked
+// to start or stop one must never be handed a destructive recovery step for a cluster KSail has just
+// said it cannot identify.
+func confirmEKSOwnership(
+	name string,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	phase v1alpha1.ClusterPhase,
+) error {
+	persisted, err := state.LoadClusterSpec(name)
+	if err != nil {
+		if errors.Is(err, state.ErrStateNotFound) {
+			return fmt.Errorf(
+				"%w: no local KSail ownership state for EKS cluster %q, so KSail cannot confirm"+
+					" which remote cluster this would act on; %s",
+				api.ErrInvalid, name, unconfirmedEKSRecovery(name, phase),
+			)
+		}
+
+		return fmt.Errorf(
+			"%w: read local KSail ownership state for EKS cluster %q: %w",
+			api.ErrInvalid, name, err,
+		)
+	}
+
+	if persisted.Distribution != distribution || persisted.Provider != provider {
+		return fmt.Errorf(
+			"%w: local KSail ownership state for EKS cluster %q records %s/%s but the cluster"+
+				" resolved as %s/%s; refusing to mutate an unconfirmed target",
+			api.ErrInvalid, name,
+			persisted.Distribution, persisted.Provider,
+			distribution, provider,
+		)
+	}
+
+	return nil
+}
+
+// unconfirmedEKSRecovery returns the recovery step for a mutation KSail refused because it cannot
+// identify the remote cluster.
+//
+// `ksail cluster eks-bind` is deliberately NOT offered here, even though it is the obvious-looking
+// candidate. It writes the region-scoped immutable-identity record (eksidentity.Persist ->
+// state.SaveEKSOwnershipState), whereas this refusal comes from the missing create-time spec.json
+// that state.LoadClusterSpec reads. Those are different files, so eks-bind cannot satisfy this check:
+// naming it would send the operator round a loop ending in this same refusal.
+// eksidentity.migrationRequiredError does point at eks-bind, but for the identity record it actually
+// writes — a different condition, not this one.
+//
+// KSail has no command that rebuilds create-time ownership state for a cluster it did not create, so
+// the honest step is to act on the cluster through AWS directly. Deleting is spelled out only when
+// deleting is what was asked for: Start and Stop are node-group operations, so answering them with a
+// destructive step — for a cluster KSail has just said it cannot identify — would be actively wrong.
+func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
+	const confirm = "KSail cannot rebuild the create-time ownership state for a cluster it did not" +
+		" create, so confirm which cluster the current AWS credentials select and act on it with the" +
+		" AWS tooling directly"
+
+	if phase == v1alpha1.ClusterPhaseDeleting {
+		return fmt.Sprintf(
+			"%s (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
+				" its region",
+			confirm, name,
+		)
+	}
+
+	return confirm + " (`eksctl`)"
+}
+
+// clearedFailedEKSCreate removes the local job left by an EKS create that failed before persisting
+// ownership state, and reports whether it did.
+//
+// runCreate writes spec.json only after the provisioner succeeds, so such a job records a create that
+// never completed. Create refuses while any jobs entry exists and confirmEKSOwnership refuses the
+// delete, which together would leave the cluster neither clearable nor retryable until the server
+// restarts. TestDeleteClearsFailedClusterWithNoUnderlyingCluster pins the same "a failed create must
+// stay clearable" invariant for the local distributions; this keeps EKS to it.
+//
+// The removal is deliberately local-only, and narrow. The provisioner may have created the remote
+// cluster and failed afterwards — persisting the spec is itself a step that can fail — so KSail
+// cannot claim the cluster is absent, only that it never confirmed which cluster it was. Aiming a
+// delete at AWS on the strength of a name is the exact unconfirmed mutation the ownership guard
+// exists to prevent, so the operator is warned to check instead. A cluster that is merely missing its
+// state while live is not covered: that one is still refused.
+func (s *Service) clearedFailedEKSCreate(name string) bool {
+	approved, ok := s.failedEKSCreate(name)
+	if !ok {
+		return false
+	}
+
+	// Read ownership state outside the lock: it is disk I/O, and a create that has already failed
+	// will not begin writing state now.
+	_, err := s.loadClusterSpec(name)
+	if !errors.Is(err, state.ErrStateNotFound) {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Delete the entry that was approved, not merely one that still looks like it. The lock was
+	// released for the read above, so the map may hold a different job now: ownership state can be
+	// restored out of band and a start/stop registered and failed in that window, and a replacement is
+	// also Failed — so a phase-only re-check would clear it, even though a failed stop describes a
+	// cluster that may still be running.
+	//
+	// Re-applying the full predicate is necessary but NOT sufficient, which is why this compares the
+	// pointer. A second failed EKS create of the same name satisfies every field the predicate tests,
+	// so a value comparison would clear the new job and hide its failure. Identity is the only test
+	// that distinguishes "the job I approved" from "a job just like it".
+	current, found := s.jobs[name]
+	if !found || current != approved {
+		return false
+	}
+
+	delete(s.jobs, name)
+
+	slog.Warn(
+		"cleared a failed EKS create that never recorded ownership state; no AWS resources were"+
+			" deleted, so check the account for a partially created cluster",
+		"cluster", name,
+	)
+
+	return true
+}
+
+// failedEKSCreate returns the tracked job when it is an EKS create that ended in the Failed phase.
+// Split out so the ownership-state read in clearedFailedEKSCreate happens off the lock, and it
+// returns the job itself so the caller can hold on to the exact entry it approved rather than
+// re-deriving it later from fields a replacement may also satisfy.
+func (s *Service) failedEKSCreate(name string) (*job, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.jobIsFailedEKSLocked(name) {
+		return nil, false
+	}
+
+	return s.jobs[name], true
+}
+
+// jobIsFailedEKSLocked is the failed-EKS-create predicate with the locking left to the caller, which
+// must hold s.mu.
+//
+// `origin` is what makes this a CREATE test rather than merely a "failed EKS job" test. Delete and
+// start/stop also end in Failed, and a failed one of those describes a cluster the provisioner may
+// well have left running: clearing it locally would drop the row and report success while the AWS
+// cluster is still there. Only a create that never persisted state is safe to clear, because only
+// that job can be certain no confirmed cluster is being abandoned.
+func (s *Service) jobIsFailedEKSLocked(name string) bool {
+	current, found := s.jobs[name]
+
+	return found &&
+		current.phase == v1alpha1.ClusterPhaseFailed &&
+		current.origin == v1alpha1.ClusterPhaseProvisioning &&
+		current.distribution == v1alpha1.DistributionEKS
+}
+
+// jobInProgress reports whether a lifecycle action is already running for the cluster. It is a
+// point-in-time probe used to order startJob's error cases; registration re-checks under the lock.
+func (s *Service) jobInProgress(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, found := s.jobs[name]
+
+	return found && jobIsInProgress(current.phase)
+}
+
+func overlappingJobError(name string) error {
+	return fmt.Errorf("%w: operation already in progress for %q", api.ErrAlreadyExists, name)
 }
 
 func jobIsInProgress(phase v1alpha1.ClusterPhase) bool {
@@ -594,6 +843,45 @@ func (s *Service) runLifecycleAction(
 	}
 
 	delete(s.jobs, name)
+}
+
+// reserveCreateJob claims name for a create by registering its Provisioning job, or reports why the
+// name is unavailable.
+//
+// staleStateErr is the already-evaluated verdict on the name's on-disk EKS create state. It is
+// applied only after the live/in-flight check so a cluster that genuinely exists still reports the
+// plain already-exists error: the stale-state message tells the operator to delete the cluster to
+// clear its state, which is the wrong instruction for one that is running fine.
+func (s *Service) reserveCreateJob(
+	live map[string]clusterdiscovery.Cluster,
+	name string,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	staleStateErr error,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, inLive := live[name]
+	_, inJobs := s.jobs[name]
+
+	if inLive || inJobs {
+		return fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
+	}
+
+	if staleStateErr != nil {
+		return staleStateErr
+	}
+
+	s.jobs[name] = &job{
+		distribution: distribution,
+		provider:     provider,
+		phase:        v1alpha1.ClusterPhaseProvisioning,
+		origin:       v1alpha1.ClusterPhaseProvisioning,
+		startedAt:    time.Now(),
+	}
+
+	return nil
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
