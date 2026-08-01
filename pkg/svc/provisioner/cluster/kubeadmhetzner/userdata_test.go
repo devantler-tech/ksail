@@ -120,6 +120,8 @@ func TestBuildNodeUserDataMultiNodeOrderRolesAndJoin(t *testing.T) {
 	assert.Equal(t, "3", nodes[3].Labels[hetzner.LabelNodeIndex])
 }
 
+// TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles pins the fail-fast
+// boundary that prevents legacy joining-node PKI from being silently dropped.
 func TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles(t *testing.T) {
 	t.Parallel()
 
@@ -150,6 +152,8 @@ func TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles(t *testing.T) {
 	assert.Nil(t, nodes)
 }
 
+// TestBuildNodeUserDataRejectsDeprecatedServerInitFiles pins the fail-fast
+// boundary that prevents legacy init-node PKI from being silently dropped.
 func TestBuildNodeUserDataRejectsDeprecatedServerInitFiles(t *testing.T) {
 	t.Parallel()
 
