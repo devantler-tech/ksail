@@ -15,8 +15,8 @@ import (
 
 const (
 	// caCommonName is the subject common name kubeadm gives its cluster CA; the
-	// pre-seeded CA mirrors it so an operator inspecting the certificate sees the
-	// same identity kubeadm would have minted itself.
+	// generator mirrors it for callers that need kubeadm-compatible test or
+	// migration material.
 	caCommonName = "kubernetes"
 	// frontProxyCACommonName is the subject common name kubeadm gives the CA that
 	// signs the API aggregation layer's front-proxy client certificates.
@@ -24,9 +24,8 @@ const (
 	// etcdCACommonName is the subject common name kubeadm gives the CA that signs
 	// etcd's serving and peer certificates.
 	etcdCACommonName = "etcd-ca"
-	// caKeyBits is the RSA modulus size of the pre-seeded cluster CA. kubeadm's own
-	// default CA is RSA-2048, so matching it keeps the pre-seeded CA
-	// indistinguishable from a kubeadm-minted one.
+	// caKeyBits is the RSA modulus size of generated CA material. kubeadm's own
+	// default CA is RSA-2048, so matching it keeps the output compatible.
 	caKeyBits = 2048
 	// caValidityYears is how long the cluster CA stays valid. kubeadm mints its CA
 	// with a ten-year lifetime, matched here.
@@ -43,24 +42,11 @@ const (
 	caBackdate = time.Minute
 )
 
-// ClusterCA is a self-signed kubeadm cluster certificate authority the multi-node
-// Hetzner bring-up pre-seeds onto the cluster-initialising control plane, together
-// with the token-discovery hash the joining nodes pin.
-//
-// # Why pre-seed a CA
-//
-// kubeadm normally mints the cluster CA itself during `kubeadm init`, so its
-// identity — and therefore the `--discovery-token-ca-cert-hash` a joining node
-// pins — is not known until the first control plane is already up. The two-phase
-// Hetzner bring-up composes every node's cloud-init before any server boots and
-// derives the join endpoint only at run time, so it cannot read a kubeadm-minted
-// hash back in time to pin it. Pre-seeding a CA the provisioner generated fixes
-// the CA identity up front: [GenerateClusterCA] returns the cert and key to write
-// into the init node's PKI directory (so kubeadm reuses them instead of minting
-// its own) and the discovery hash to thread into the joining nodes'
-// JoinConfiguration. This keeps the safe, pinned discovery path working under the
-// run-time two-phase model — kubeadmbootstrap requires it, the alternative being
-// the insecure unsafeSkipCAVerification mode.
+// ClusterCA is a self-signed kubeadm-compatible cluster certificate authority
+// together with the token-discovery hash joining nodes pin. The active Hetzner
+// bring-up does not transport this private material: kubeadm mints its CA on the
+// initial control plane and the provisioner derives the same public discovery
+// hash from admin.conf after bring-up.
 type ClusterCA struct {
 	// CertPEM is the CA certificate in PEM form, written to
 	// /etc/kubernetes/pki/ca.crt on the cluster-initialising control plane.
@@ -78,31 +64,46 @@ type ClusterCA struct {
 }
 
 // GenerateClusterCA generates a fresh self-signed RSA cluster CA and the kubeadm
-// token-discovery hash of its public key. The returned material is pre-seeded onto
-// the cluster-initialising control plane (cert and key) and pinned by the joining
-// nodes (hash), so the two-phase bring-up can fix the CA identity before any node
-// boots. It reaches no network and touches no filesystem; its only external
-// dependency is the cryptographic random source.
+// token-discovery hash of its public key. It reaches no network and touches no
+// filesystem; its only external dependency is the cryptographic random source.
 func GenerateClusterCA() (ClusterCA, error) {
 	pair, caCert, err := mintCA(caCommonName)
 	if err != nil {
 		return ClusterCA{}, err
 	}
 
-	// kubeadm pins SHA-256 over the certificate's DER SubjectPublicKeyInfo (its
-	// pubkeypin algorithm), so hashing the parsed cert's RawSubjectPublicKeyInfo
-	// yields exactly the value a joining node computes and compares.
-	spkiDigest := sha256.Sum256(caCert.RawSubjectPublicKeyInfo)
-
 	return ClusterCA{
 		CertPEM:       pair.CertPEM,
 		KeyPEM:        pair.KeyPEM,
-		DiscoveryHash: caCertHashPrefix + hex.EncodeToString(spkiDigest[:]),
+		DiscoveryHash: discoveryHashFromParsedCertificate(caCert),
 	}, nil
 }
 
-// CertKeyPair is a PEM-encoded certificate and its private key — the form the
-// auxiliary pre-seeded CAs (front-proxy, etcd) are carried in.
+// discoveryHashFromCertificate returns kubeadm's token-discovery public-key
+// pin for a PEM-encoded CA certificate.
+func discoveryHashFromCertificate(certPEM []byte) (string, error) {
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", errInvalidCAPEM
+	}
+
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("parse CA certificate: %w", err)
+	}
+
+	return discoveryHashFromParsedCertificate(certificate), nil
+}
+
+// discoveryHashFromParsedCertificate mirrors kubeadm's pubkeypin algorithm:
+// SHA-256 over the certificate's DER SubjectPublicKeyInfo.
+func discoveryHashFromParsedCertificate(certificate *x509.Certificate) string {
+	spkiDigest := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
+
+	return caCertHashPrefix + hex.EncodeToString(spkiDigest[:])
+}
+
+// CertKeyPair is a PEM-encoded certificate and its private key.
 type CertKeyPair struct {
 	// CertPEM is the certificate in PEM form.
 	CertPEM []byte
@@ -122,13 +123,9 @@ type ServiceAccountKeys struct {
 	PubPEM []byte
 }
 
-// ClusterPKI is the full set of PKI material kubeadm shares between control
-// planes, pre-generated at compose time so the whole cluster identity — not
-// just the cluster CA — is fixed before any node boots. kubeadm reuses every
-// piece it finds at its canonical paths instead of minting its own, which is
-// what lets a later high-availability increment seed the same material onto
-// additional control planes (kubeadm's manual certificate distribution) with
-// no `--upload-certs` channel.
+// ClusterPKI is the full set of kubeadm-compatible PKI material shared between
+// control planes. It remains available for compatibility and tests; the active
+// Hetzner flow deliberately does not place it in provider user-data.
 type ClusterPKI struct {
 	// CA is the cluster CA plus the token-discovery hash the joining nodes pin.
 	CA ClusterCA

@@ -44,13 +44,17 @@ type MultiNodeComposer interface {
 	// control plane reachable at joinAddress — the init node's private-network
 	// IPv4. For every distribution that means the agents; a distribution that
 	// also implements [HAControlPlaneComposer] composes its additional control
-	// planes here too. The distribution forms its own registration URL from joinAddress
-	// (both k3s and kubeadm serve the API on the standard secure port). The
-	// returned specs carry their global bootstrap indices (>= 1) so their server
-	// names stay distinct from the init node's.
+	// planes here too. initKubeconfig is the admin kubeconfig retrieved over the
+	// authenticated bootstrap SSH connection; a composer may use its public
+	// cluster data when building secure join configuration. The distribution
+	// forms its own registration URL from joinAddress (both k3s and kubeadm serve
+	// the API on the standard secure port). The returned specs carry their global
+	// bootstrap indices (>= 1) so their server names stay distinct from the init
+	// node's.
 	ComposeJoiningNodes(
 		clusterName, token string,
 		joinAddress net.IP,
+		initKubeconfig []byte,
 		material BootstrapMaterial,
 	) ([]NodeSpec, error)
 }
@@ -139,6 +143,7 @@ func (b *Base) RunCreateMultiNode(
 		material,
 		composer,
 		initResult.Server,
+		initResult.Kubeconfig,
 	)
 	if err != nil {
 		return err
@@ -204,13 +209,16 @@ func (b *Base) createJoiningNodes(
 	material BootstrapMaterial,
 	composer MultiNodeComposer,
 	initServer *hcloud.Server,
+	initKubeconfig []byte,
 ) error {
 	joinAddress, err := privateIPv4(initServer)
 	if err != nil {
 		return b.cleanUpFailedBringUp(ctx, clusterName, err)
 	}
 
-	joinNodes, err := composer.ComposeJoiningNodes(clusterName, token, joinAddress, material)
+	joinNodes, err := composer.ComposeJoiningNodes(
+		clusterName, token, joinAddress, initKubeconfig, material,
+	)
 	if err != nil {
 		return b.cleanUpFailedBringUp(ctx, clusterName, err)
 	}
