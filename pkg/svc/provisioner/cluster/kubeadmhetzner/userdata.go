@@ -170,11 +170,7 @@ func buildNodeCloudInit(
 		if len(input.ServerInitPrelude) > 0 {
 			commands = append(slices.Clone(input.ServerInitPrelude), commands...)
 		}
-	case kubeadmbootstrap.RoleServer:
-		if len(input.JoinPrelude) > 0 {
-			commands = append(slices.Clone(input.JoinPrelude), commands...)
-		}
-	case kubeadmbootstrap.RoleAgent:
+	case kubeadmbootstrap.RoleServer, kubeadmbootstrap.RoleAgent:
 		if len(input.JoinPrelude) > 0 {
 			commands = append(slices.Clone(input.JoinPrelude), commands...)
 		}
