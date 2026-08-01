@@ -1,6 +1,8 @@
 package kubeadmhetzner_test
 
 import (
+	"encoding/base64"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -25,13 +27,13 @@ func composeBootstrapMaterial() hetznerbase.BootstrapMaterial {
 // node's certificate carries it as a SAN and the joining nodes dial it.
 const testJoinName = "test-cluster-api.ksail.internal"
 
-// TestComposeInitNodeSeedsClusterIdentity pins the init compose contract of the
+// TestComposeInitNodeKeepsPKIOutOfUserData pins the init compose contract of the
 // kubeadm two-phase flow: exactly the cluster-initialising control plane
 // (bootstrap index 0) is composed regardless of the agent count, its cloud-init
-// seeds the pre-generated cluster CA at kubeadm's canonical PKI paths (fixing
-// the cluster identity before boot), its certificate SAN list carries the
-// stable join name, and it runs `kubeadm init` — never a join.
-func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
+// carries no cluster PKI material, its certificate SAN list carries the stable
+// join name, and it runs `kubeadm init` — never a join. kubeadm must mint the PKI
+// on the node because provider user-data is not a private-key transport.
+func TestComposeInitNodeKeepsPKIOutOfUserData(t *testing.T) {
 	t.Parallel()
 
 	prov := newProvisioner(&fakeInfra{}, 1, 2)
@@ -48,64 +50,58 @@ func TestComposeInitNodeSeedsClusterIdentity(t *testing.T) {
 	assert.Contains(t, spec.UserData, "kubeadm init")
 	assert.NotContains(t, spec.UserData, "kubeadm join")
 
-	// The full shared PKI — not just the cluster CA — lands at kubeadm's
-	// canonical paths, so the whole cluster identity is fixed before boot and a
-	// later HA increment can seed the same material onto additional control
-	// planes (kubeadm's manual certificate distribution). Each path is tied to
-	// its own write_files entry's mode and PEM block type, so a field swap in
-	// pkiSeedFiles (a key under a cert path, or a world-readable private key)
-	// fails here rather than on the booted node.
-	for _, seeded := range []struct {
-		path        string
-		permissions string
-		pemHeader   string
-	}{
-		{"/etc/kubernetes/pki/ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/front-proxy-ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/etcd/ca.crt", "0644", "BEGIN CERTIFICATE"},
-		{"/etc/kubernetes/pki/sa.pub", "0644", "BEGIN PUBLIC KEY"},
-	} {
-		entry := writeFilesEntry(t, spec.UserData, seeded.path)
-		assert.Contains(t, entry, seeded.permissions, seeded.path)
-		assert.Contains(t, entry, seeded.pemHeader, seeded.path)
-	}
-
-	for _, privatePath := range []string{
+	for _, pkiPath := range []string{
+		"/etc/kubernetes/pki/ca.crt",
 		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.crt",
 		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.crt",
 		"/etc/kubernetes/pki/etcd/ca.key",
 		"/etc/kubernetes/pki/sa.key",
+		"/etc/kubernetes/pki/sa.pub",
 	} {
-		assert.NotContains(t, spec.UserData, privatePath)
+		assert.NotContains(t, spec.UserData, pkiPath)
 	}
 
+	assert.NotContains(t, spec.UserData, "BEGIN CERTIFICATE")
 	assert.NotContains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
 }
 
-// writeFilesEntry extracts the single write_files entry for path from the
-// rendered cloud-init user data: the slice from its `path:` line up to the
-// next entry's `path:` line (or the document end). Field order within an
-// entry is path → permissions → content, so the slice carries exactly that
-// entry's mode and content.
-func writeFilesEntry(t *testing.T, userData, path string) string {
+// adminKubeconfig returns a kubeadm-shaped admin.conf with a generated CA and
+// the exact discovery hash joining nodes must pin.
+func adminKubeconfig(t *testing.T) ([]byte, string) {
 	t.Helper()
 
-	start := strings.Index(userData, "path: "+path)
-	require.NotEqual(t, -1, start, "write_files entry for %s not found", path)
+	clusterCA, err := kubeadmhetzner.GenerateClusterCA()
+	require.NoError(t, err)
 
-	entry := userData[start:]
-	if next := strings.Index(entry[1:], "path: /"); next != -1 {
-		entry = entry[:next+1]
-	}
+	encodedCA := base64.StdEncoding.EncodeToString(clusterCA.CertPEM)
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: %s
+    server: https://127.0.0.1:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+users:
+- name: kubernetes-admin
+  user: {}
+`, encodedCA)
 
-	return entry
+	return []byte(kubeconfig), clusterCA.DiscoveryHash
 }
 
 // TestComposeJoiningNodesPinsJoinNameAndCA pins the join compose contract:
 // only the joining nodes come back (global bootstrap indices preserved, the
 // init node at 0 dropped), each dials the stable join name — pinned to the
 // resolved private address in /etc/hosts BEFORE `kubeadm join` runs — and each
-// pins the pre-seeded CA's sha256 discovery hash instead of skipping CA
+// pins the kubeadm-minted CA's sha256 discovery hash instead of skipping CA
 // verification.
 func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 	t.Parallel()
@@ -117,9 +113,11 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	initKubeconfig, wantDiscoveryHash := adminKubeconfig(t)
+
 	specs, err := prov.ComposeJoiningNodes(
 		testClusterName, "abcdef.0123456789abcdef",
-		net.ParseIP("10.0.1.5"), composeBootstrapMaterial(),
+		net.ParseIP("10.0.1.5"), initKubeconfig, composeBootstrapMaterial(),
 	)
 	require.NoError(t, err)
 	require.Len(t, specs, 2)
@@ -130,7 +128,8 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 		assert.Equal(t, index+1, spec.Index)
 		assert.Equal(t, hetzner.NodeTypeWorker, spec.NodeType)
 		assert.Contains(t, spec.UserData, testJoinName+":6443")
-		assert.Contains(t, spec.UserData, "sha256:")
+		assert.Contains(t, spec.UserData, wantDiscoveryHash)
+		assert.NotContains(t, spec.UserData, "unsafeSkipCAVerification")
 		assert.Contains(t, spec.UserData, hostsPin)
 
 		pinAt := strings.Index(spec.UserData, hostsPin)
@@ -138,8 +137,8 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 		require.NotEqual(t, -1, joinAt)
 		assert.Less(t, pinAt, joinAt, "the /etc/hosts pin must precede `kubeadm join`")
 
-		// The private PKI material is seeded onto the init control plane only;
-		// a worker carrying any of it would leak the cluster identity.
+		// The private PKI material stays on the init control plane; a worker
+		// carrying any of it would leak the cluster identity.
 		for _, path := range []string{
 			"/etc/kubernetes/pki/ca.key",
 			"/etc/kubernetes/pki/front-proxy-ca.key",
@@ -195,23 +194,22 @@ func TestComposeJoiningNodesRejectsAdditionalControlPlanes(t *testing.T) {
 
 	specs, err := prov.ComposeJoiningNodes(
 		testClusterName, "abcdef.0123456789abcdef",
-		net.ParseIP("10.0.1.5"), composeBootstrapMaterial(),
+		net.ParseIP("10.0.1.5"), nil, composeBootstrapMaterial(),
 	)
 	require.ErrorIs(t, err, kubeadmhetzner.ErrHAControlPlaneNotImplemented)
 	assert.Nil(t, specs)
 }
 
-// TestComposeJoiningNodesRequiresInitFirst pins that composing joining nodes
-// without a prior init compose is refused: the joiners pin the CA minted during
-// the init compose, so out-of-order composition has no identity to pin.
-func TestComposeJoiningNodesRequiresInitFirst(t *testing.T) {
+// TestComposeJoiningNodesRequiresAdminKubeconfig pins that join composition
+// fails closed when the initial control plane did not yield a usable public CA.
+func TestComposeJoiningNodesRequiresAdminKubeconfig(t *testing.T) {
 	t.Parallel()
 
 	prov := newProvisioner(&fakeInfra{}, 1, 2)
 
 	_, err := prov.ComposeJoiningNodes(
 		testClusterName, "abcdef.0123456789abcdef",
-		net.ParseIP("10.0.1.5"), composeBootstrapMaterial(),
+		net.ParseIP("10.0.1.5"), nil, composeBootstrapMaterial(),
 	)
-	require.ErrorIs(t, err, kubeadmhetzner.ErrJoiningNodesComposedFirst)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrInvalidAdminKubeconfig)
 }

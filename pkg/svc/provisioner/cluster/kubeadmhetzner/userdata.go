@@ -43,9 +43,11 @@ type Input struct {
 	// the bootstrap SSH dial can pin the host key instead of trusting first use.
 	// Optional; nil lets the node generate its own host keys at first boot.
 	HostKeys *cloudinitbootstrap.HostKeys
-	// ServerInitFiles are extra files delivered only to the cluster-initialising
-	// control plane — e.g. the pre-seeded cluster CA ([ClusterCA]) the two-phase
-	// multi-node flow fixes the cluster identity with. Optional.
+	// ServerInitFiles is retained for source compatibility with earlier v7
+	// releases. Private cluster PKI from this field is ignored and is never
+	// delivered through provider user-data.
+	//
+	// Deprecated: kubeadm mints the initial control plane's PKI on the node.
 	ServerInitFiles []cloudinitbootstrap.File
 	// ServerInitPrelude are commands run on the cluster-initialising control
 	// plane before its install commands. Optional; ignored on joining nodes.
@@ -166,14 +168,12 @@ func buildNodeCloudInit(
 	files := append(toCloudInitFiles(install.Files), containerdFile)
 	commands := install.Commands
 
-	// The per-role extras: the init control plane receives the pre-seeded cluster
-	// identity files (and any init prelude); every joining node runs the join
-	// prelude (e.g. the /etc/hosts pin of the stable join name) before its
-	// install commands reach `kubeadm join`. Additional control planes are not
-	// given private cluster PKI through cloud-init user-data.
+	// The per-role extras are command-only: the init control plane can receive an
+	// init prelude, and every joining node runs the join prelude (e.g. the
+	// /etc/hosts pin of the stable join name) before its install commands reach
+	// `kubeadm join`. Cluster PKI is never supplied through provider user-data.
 	switch node.Config.Role {
 	case kubeadmbootstrap.RoleServerInit:
-		files = append(files, input.ServerInitFiles...)
 		if len(input.ServerInitPrelude) > 0 {
 			commands = append(slices.Clone(input.ServerInitPrelude), commands...)
 		}

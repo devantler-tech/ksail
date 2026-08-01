@@ -152,6 +152,28 @@ func TestBuildNodeUserDataIgnoresDeprecatedServerJoinFiles(t *testing.T) {
 	assert.NotContains(t, nodes[1].UserData, legacyContent)
 }
 
+func TestBuildNodeUserDataIgnoresDeprecatedServerInitFiles(t *testing.T) {
+	t.Parallel()
+
+	const (
+		legacyPath    = "/etc/kubernetes/pki/legacy-init-private.key"
+		legacyContent = "legacy-init-private-key-material"
+	)
+
+	input := singleControlPlaneInput()
+	input.ServerInitFiles = []cloudinitbootstrap.File{{
+		Path:    legacyPath,
+		Content: legacyContent,
+	}}
+
+	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, kubeadmbootstrap.RoleServerInit, nodes[0].Role)
+	assert.NotContains(t, nodes[0].UserData, legacyPath)
+	assert.NotContains(t, nodes[0].UserData, legacyContent)
+}
+
 func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {
 	t.Parallel()
 
