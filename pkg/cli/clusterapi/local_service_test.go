@@ -224,6 +224,28 @@ func phaseOf(list *v1alpha1.ClusterList, name string) (v1alpha1.ClusterPhase, bo
 	return "", false
 }
 
+// requireEventuallyPhase waits for a cluster to reach a phase. Create and Delete are asynchronous, so
+// a test that stops at the call has not observed the operation — and, because the service writes
+// state under HOME, one that returns while a goroutine is still running lets that write land after
+// t.Setenv and t.TempDir have unwound, i.e. under the real home directory.
+func requireEventuallyPhase(
+	t *testing.T,
+	service *clusterapi.Service,
+	name string,
+	want v1alpha1.ClusterPhase,
+) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, name)
+
+		return ok && phase == want
+	}, eventuallyTimeout, eventuallyTick)
+}
+
 func TestListMapsExistingClusters(t *testing.T) {
 	t.Parallel()
 
@@ -1835,15 +1857,7 @@ func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
 		clusterFor(clusterName, v1alpha1.DistributionEKS),
 	)
 	require.NoError(t, err)
-
-	require.Eventually(t, func() bool {
-		list, listErr := service.List(context.Background())
-		require.NoError(t, listErr)
-
-		phase, ok := phaseOf(list, clusterName)
-
-		return ok && phase == v1alpha1.ClusterPhaseFailed
-	}, eventuallyTimeout, eventuallyTick)
+	requireEventuallyPhase(t, service, clusterName, v1alpha1.ClusterPhaseFailed)
 
 	// Precondition: the failed create left no ownership state behind.
 	_, loadErr := state.LoadClusterSpec(clusterName)
@@ -1880,6 +1894,9 @@ func TestDeleteEKSClearsFailedCreateWithoutOwnershipState(t *testing.T) {
 	)
 	require.NoError(t, retryErr,
 		"clearing the job is what makes the create retryable; reporting must not undo it")
+
+	// The retry must be allowed to finish inside the test — see requireEventuallyPhase.
+	requireEventuallyPhase(t, service, clusterName, v1alpha1.ClusterPhaseReady)
 }
 
 // TestDeleteEKSRefusesLiveClusterWithoutOwnershipState is the negative control for the clearing path
