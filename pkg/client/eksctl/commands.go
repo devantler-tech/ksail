@@ -15,6 +15,9 @@ const flagOutput = "--output"
 // subcommandGet is the eksctl "get" subcommand, shared by every read-only listing call in this file.
 const subcommandGet = "get"
 
+// subcommandCluster is the eksctl cluster resource shared by cluster commands.
+const subcommandCluster = "cluster"
+
 // outputFormatJSON is the eksctl --output value requesting JSON, shared by every listing call.
 const outputFormatJSON = "json"
 
@@ -51,15 +54,32 @@ type NodegroupSummary struct {
 }
 
 // CreateCluster invokes `eksctl create cluster -f <configPath>`.
-// Pass "" for region unless overriding what the config file specifies.
-func (c *Client) CreateCluster(ctx context.Context, configPath, region string) error {
+// The retained region parameter is ignored because eksctl requires the config
+// file to be the sole region source for config-driven creates.
+func (c *Client) CreateCluster(ctx context.Context, configPath, _ string) error {
+	return c.createCluster(ctx, configPath, "")
+}
+
+// CreateClusterWithKubeconfig invokes eksctl create while pinning the output
+// kubeconfig path used by subsequent KSail setup.
+func (c *Client) CreateClusterWithKubeconfig(
+	ctx context.Context,
+	configPath, _, kubeconfigPath string,
+) error {
+	return c.createCluster(ctx, configPath, kubeconfigPath)
+}
+
+func (c *Client) createCluster(
+	ctx context.Context,
+	configPath, kubeconfigPath string,
+) error {
 	if strings.TrimSpace(configPath) == "" {
 		return ErrEmptyConfigPath
 	}
 
-	args := []string{"create", "cluster", "--config-file", configPath}
-	if region != "" {
-		args = append(args, "--region", region)
+	args := []string{"create", subcommandCluster, "--config-file", configPath}
+	if path := strings.TrimSpace(kubeconfigPath); path != "" {
+		args = append(args, "--kubeconfig", path)
 	}
 
 	_, _, err := c.Exec(ctx, args...)
@@ -75,7 +95,7 @@ func (c *Client) DeleteCluster(
 	name, region, configPath string,
 	wait bool,
 ) error {
-	args := []string{"delete", "cluster"}
+	args := []string{"delete", subcommandCluster}
 
 	switch {
 	case strings.TrimSpace(configPath) != "":
@@ -110,7 +130,7 @@ func (c *Client) GetCluster(
 
 	stdout, err := c.runGetJSON(
 		ctx,
-		[]string{subcommandGet, "cluster", "--name", name, flagOutput, outputFormatJSON},
+		[]string{subcommandGet, subcommandCluster, "--name", name, flagOutput, outputFormatJSON},
 		region,
 	)
 	if err != nil {
@@ -135,7 +155,7 @@ func (c *Client) GetCluster(
 func (c *Client) ListClusters(ctx context.Context, region string) ([]ClusterSummary, error) {
 	stdout, err := c.runGetJSON(
 		ctx,
-		[]string{subcommandGet, "cluster", flagOutput, outputFormatJSON},
+		[]string{subcommandGet, subcommandCluster, flagOutput, outputFormatJSON},
 		region,
 	)
 	if err != nil {
@@ -252,7 +272,7 @@ func (c *Client) UpgradeCluster(
 		return ErrEmptyConfigPath
 	}
 
-	args := []string{"upgrade", "cluster", "--config-file", configPath}
+	args := []string{"upgrade", subcommandCluster, "--config-file", configPath}
 	if approve {
 		args = append(args, "--approve")
 	}

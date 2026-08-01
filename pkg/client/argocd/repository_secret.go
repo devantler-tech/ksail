@@ -1,6 +1,7 @@
 package argocd
 
 import (
+	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -12,10 +13,11 @@ const (
 
 // repositorySecretOptions contains options for building the ArgoCD repository secret.
 type repositorySecretOptions struct {
-	repositoryURL string
-	username      string
-	password      string
-	insecure      bool
+	repositoryURL       string
+	username            string
+	password            string
+	pullOnlyCredentials bool
+	insecure            bool
 }
 
 func buildRepositorySecret(opts repositorySecretOptions) *corev1.Secret {
@@ -38,11 +40,19 @@ func buildRepositorySecret(opts repositorySecretOptions) *corev1.Secret {
 		data["insecureOCIForceHttp"] = "true"
 	}
 
+	annotations := map[string]string(nil)
+	if opts.pullOnlyCredentials {
+		annotations = map[string]string{
+			registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
+		}
+	}
+
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      repositorySecretName,
-			Namespace: DefaultNamespace,
-			Labels:    map[string]string{"argocd.argoproj.io/secret-type": "repository"},
+			Name:        repositorySecretName,
+			Namespace:   DefaultNamespace,
+			Labels:      map[string]string{"argocd.argoproj.io/secret-type": "repository"},
+			Annotations: annotations,
 		},
 		StringData: data,
 	}

@@ -85,9 +85,22 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 			return nil, nil
 		}
 
-		client := eksctlclient.NewClient()
+		_, eksctlOptions, providerOptions := credentials.ResolveAWSClientOptions(
+			d.resolver(),
+			os.Environ(),
+			eksctlclient.WithEnvironment,
+			eksctlclient.RequireCredentialValues,
+			awsprovider.WithCredentialValues,
+			awsprovider.RequireCredentialValues,
+		)
 
-		provider, err := awsprovider.NewProvider(client, d.resolver().Value(credentials.AWSRegion))
+		client := eksctlclient.NewClient(eksctlOptions...)
+
+		provider, err := awsprovider.NewProvider(
+			client,
+			d.resolver().Value(credentials.AWSRegion),
+			providerOptions...,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("create AWS provider: %w", err)
 		}

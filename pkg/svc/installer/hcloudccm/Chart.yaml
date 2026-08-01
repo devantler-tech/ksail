@@ -11,5 +11,5 @@ description: Dependabot version pin for the hcloud-cloud-controller-manager Helm
 version: 0.0.0
 dependencies:
   - name: hcloud-cloud-controller-manager
-    version: 1.33.0
+    version: 1.34.0
     repository: https://charts.hetzner.cloud

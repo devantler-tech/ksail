@@ -48,11 +48,12 @@ var (
 	// more than one control-plane node when the distribution's strategy does not
 	// implement the [HAControlPlaneComposer] capability: additional control planes
 	// join the cluster's etcd, whose distribution-specific mechanics (kubeadm's
-	// manual certificate distribution vs k3s' embedded etcd) each distribution
-	// lifts in its own increment of devantler-tech/ksail#5796 (epic #3983).
+	// manual certificate distribution vs k3s' embedded etcd) must transfer private
+	// joining material without exposing it in provider user-data. Kubeadm's safe
+	// transfer is tracked by devantler-tech/ksail#6428 (epic #3983).
 	ErrHAControlPlaneNotImplemented = errors.New(
 		"hetzner: high-availability (multi-control-plane) bring-up is not yet implemented" +
-			" for this distribution (tracked by #5796)",
+			" for this distribution (tracked by https://github.com/devantler-tech/ksail/issues/6428)",
 	)
 )
 
@@ -428,8 +429,8 @@ func (b *Base) RunCreate(
 // nodes runs the two-phase multi-node bring-up ([Base.RunCreateMultiNode]) when
 // the strategy implements [MultiNodeComposer] (k3s and kubeadm both do), and is
 // rejected otherwise. A multi-control-plane (high-availability) topology
-// additionally requires the [HAControlPlaneComposer] capability (kubeadm only)
-// and is rejected per-distribution otherwise.
+// additionally requires the [HAControlPlaneComposer] capability and is rejected
+// per-distribution otherwise.
 // Each provisioner gets this method by embedding *Base; the distro-specific
 // pieces come from the Strategy it sets at construction.
 func (b *Base) Create(ctx context.Context, name string) error {
