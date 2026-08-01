@@ -2422,8 +2422,12 @@ func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
 	_, err := service.Create(context.Background(), clusterFor(name, v1alpha1.DistributionEKS))
 	require.ErrorIs(t, err, api.ErrAlreadyExists,
 		"a create for a name that still carries a completed EKS create's state must be refused")
-	assert.Contains(t, err.Error(), "cluster delete",
-		"the refusal must name the command that clears the stale state, or it just moves the surprise")
+	assert.Contains(
+		t,
+		err.Error(),
+		"cluster delete",
+		"the refusal must name the command that clears the stale state, or it just moves the surprise",
+	)
 
 	// Deterministic discriminator: Create registers the job synchronously before spawning the
 	// background provisioner, so an unrefused create leaves a tracked job behind.

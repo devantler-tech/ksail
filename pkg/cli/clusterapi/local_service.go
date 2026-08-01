@@ -384,46 +384,14 @@ func (s *Service) Create(
 	// returned cluster all agree on the backend that will actually be provisioned.
 	cluster.Spec.Cluster.Provider = provider
 
-	live := s.enumerate(ctx)
+	// Read the on-disk create state before reserving the name (it is keyed by name and needs no
+	// shared state). reserveCreateJob decides when to apply it.
+	staleStateErr := refuseEKSCreateOverCompletedState(distribution, name)
 
-	s.mu.Lock()
-
-	_, inLive := live[name]
-	_, inJobs := s.jobs[name]
-
-	if inLive || inJobs {
-		s.mu.Unlock()
-
-		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
-	}
-
-	s.mu.Unlock()
-
-	err = refuseEKSCreateOverCompletedState(distribution, name)
+	err = s.reserveCreateJob(s.enumerate(ctx), name, distribution, provider, staleStateErr)
 	if err != nil {
 		return nil, err
 	}
-
-	s.mu.Lock()
-
-	// Re-check under the reacquired lock: the state read above released it, so a concurrent Create
-	// for the same name may have registered its job in the meantime. Without this the two would both
-	// proceed and the second would overwrite the first's job record.
-	_, inJobs = s.jobs[name]
-	if inJobs {
-		s.mu.Unlock()
-
-		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
-	}
-
-	s.jobs[name] = &job{
-		distribution: distribution,
-		provider:     provider,
-		phase:        v1alpha1.ClusterPhaseProvisioning,
-		origin:       v1alpha1.ClusterPhaseProvisioning,
-		startedAt:    time.Now(),
-	}
-	s.mu.Unlock()
 
 	go s.runCreate(context.WithoutCancel(ctx), name, cluster.Spec)
 
@@ -875,6 +843,45 @@ func (s *Service) runLifecycleAction(
 	}
 
 	delete(s.jobs, name)
+}
+
+// reserveCreateJob claims name for a create by registering its Provisioning job, or reports why the
+// name is unavailable.
+//
+// staleStateErr is the already-evaluated verdict on the name's on-disk EKS create state. It is
+// applied only after the live/in-flight check so a cluster that genuinely exists still reports the
+// plain already-exists error: the stale-state message tells the operator to delete the cluster to
+// clear its state, which is the wrong instruction for one that is running fine.
+func (s *Service) reserveCreateJob(
+	live map[string]clusterdiscovery.Cluster,
+	name string,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	staleStateErr error,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, inLive := live[name]
+	_, inJobs := s.jobs[name]
+
+	if inLive || inJobs {
+		return fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
+	}
+
+	if staleStateErr != nil {
+		return staleStateErr
+	}
+
+	s.jobs[name] = &job{
+		distribution: distribution,
+		provider:     provider,
+		phase:        v1alpha1.ClusterPhaseProvisioning,
+		origin:       v1alpha1.ClusterPhaseProvisioning,
+		startedAt:    time.Now(),
+	}
+
+	return nil
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
