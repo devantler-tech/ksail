@@ -65,7 +65,12 @@ func eksDistributionConfig(
 	// A cluster that finished creating already has its region recorded in the eks.yaml written at
 	// create time. Re-rendering that file from the ambient AWS_REGION for a later delete/start/stop
 	// would point the action at a same-named cluster in whichever region is selected now, and would
-	// overwrite the only local evidence of the original target, so an existing binding always wins.
+	// overwrite the only local evidence of the original target, so an existing binding wins here.
+	//
+	// This is a lifecycle-only rule, and Create is what enforces that: it refuses a name whose
+	// completed create state remains (refuseEKSCreateOverCompletedState), so a create only ever
+	// reaches this function with no such state — the case boundEKSConfig answers with nil. Letting a
+	// binding steer a create would provision new cloud resources into the old region instead.
 	bound, err := boundEKSConfig(name)
 	if err != nil {
 		return nil, err
@@ -148,6 +153,49 @@ func eksCreateCompleted(name string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// refuseEKSCreateOverCompletedState rejects a create for a name whose completed EKS create state is
+// still on disk.
+//
+// Create otherwise gates only on live discovery and in-flight jobs, so a cluster removed out of band
+// — spec.json and eks.yaml left behind while discovery no longer reports it — lets the same name
+// through. The region binding below would then resolve against the region that cluster was created
+// in and provision new cloud resources there, while the operator believes they selected a different
+// one. This guard is what keeps the binding a lifecycle-only rule: a create can only proceed when no
+// completed state remains, and boundEKSConfig returns nil in exactly that case.
+//
+// Refusing is fail-closed rather than re-rendering the config from the ambient region. Per-provider
+// discovery failures are logged and skipped, so absence from the live set is not proof the remote
+// cluster is gone; re-rendering would overwrite the only local evidence binding a cluster that may
+// still be running, leaving it unreachable through KSail in its real region. Clearing the state is
+// therefore the operator's explicit act — and the delete path already performs it, resolving the
+// cluster from its ownership state and cleaning up when the provisioner reports nothing to delete.
+func refuseEKSCreateOverCompletedState(distribution v1alpha1.Distribution, name string) error {
+	if distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	// Positive evidence only. An error here means the state store could not be read at all (an
+	// unreadable home, a name whose state records another distribution), which is not evidence that a
+	// create completed — and turning every such read into a synchronous create refusal would change a
+	// path that already has its own handling: the real factory resolves the same predicate a moment
+	// later and fails the job with the underlying error, which is where that failure is reported.
+	// Swallowing it here therefore narrows this guard to the case it exists for and leaves every
+	// other outcome exactly as it was.
+	completed, err := eksCreateCompleted(name)
+	if err != nil || !completed {
+		//nolint:nilerr // an undeterminable read is not proof of a completed create; see above.
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: %q still has local state from a completed EKS create, which binds it to the region it"+
+			" was created in. Creating it again would provision new resources in that region rather"+
+			" than the one selected now. Run `ksail cluster delete --name %s` to remove the cluster"+
+			" and clear that state — it succeeds even when the cluster is already gone — then retry",
+		api.ErrAlreadyExists, name, name,
+	)
 }
 
 // boundEKSConfig returns the EKS target recorded when the named cluster was created, or nil when

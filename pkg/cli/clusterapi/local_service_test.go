@@ -2385,3 +2385,54 @@ func TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "eu-north-1", region, "the config alone still binds when no record exists")
 }
+
+// TestCreateRefusesANameWhoseEKSCreateStateRemains covers the CREATE half of the region binding.
+//
+// The binding that makes delete/start/stop follow the creation region must never steer a create.
+// A cluster removed out of band leaves spec.json and eks.yaml behind while discovery stops
+// reporting it, so Create accepts the name again — and resolving the stale binding there would
+// provision NEW cloud resources into the old region while the operator believes they selected a
+// different one.
+//
+// Refusing is the fail-closed answer rather than rendering a fresh config: per-provider discovery
+// failures are logged and skipped, so a name missing from the live set is not proof the remote
+// cluster is gone. Re-rendering would overwrite the only local evidence binding a cluster that may
+// still be running, leaving it unreachable by KSail in its real region.
+func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const name = "recreated-eks"
+
+	// A completed create: state plus the config and record binding it to eu-north-1.
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "eu-north-1")
+	require.NoError(
+		t,
+		state.SaveEKSOwnershipState(name, "eu-north-1", ownershipRecordFor(name, "eu-north-1")),
+	)
+
+	// The cluster is then removed out of band and the operator selects a different region.
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+
+	_, err := service.Create(context.Background(), clusterFor(name, v1alpha1.DistributionEKS))
+	require.ErrorIs(t, err, api.ErrAlreadyExists,
+		"a create for a name that still carries a completed EKS create's state must be refused")
+	assert.Contains(t, err.Error(), "cluster delete",
+		"the refusal must name the command that clears the stale state, or it just moves the surprise")
+
+	// Deterministic discriminator: Create registers the job synchronously before spawning the
+	// background provisioner, so an unrefused create leaves a tracked job behind.
+	assert.False(t, service.JobPresentForTest(name),
+		"the refusal must happen before a job is registered, so nothing is provisioned")
+
+	// Control: the refusal must leave the binding evidence intact, not consume it.
+	_, region, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-north-1", region,
+		"a refused create must preserve the original region binding")
+}

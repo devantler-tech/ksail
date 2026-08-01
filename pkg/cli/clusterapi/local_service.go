@@ -397,6 +397,25 @@ func (s *Service) Create(
 		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
 	}
 
+	s.mu.Unlock()
+
+	err = refuseEKSCreateOverCompletedState(distribution, name)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+
+	// Re-check under the reacquired lock: the state read above released it, so a concurrent Create
+	// for the same name may have registered its job in the meantime. Without this the two would both
+	// proceed and the second would overwrite the first's job record.
+	_, inJobs = s.jobs[name]
+	if inJobs {
+		s.mu.Unlock()
+
+		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
+	}
+
 	s.jobs[name] = &job{
 		distribution: distribution,
 		provider:     provider,
