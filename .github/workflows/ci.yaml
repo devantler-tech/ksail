@@ -353,7 +353,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@2cc7273ad32c52a9f8820af59d33918de196fc24 # v10.2.9
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@625b7c0cd5ad4a04f9eb7494298c6d0fa44521ef # v11.0.4
     permissions:
       contents: write
       issues: write
@@ -1220,7 +1220,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@06fb636fac595d6fb4b28a5dfcb21a6f5091859c # v4.5.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -1447,7 +1447,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@2cc7273ad32c52a9f8820af59d33918de196fc24 # v10.2.9
+      - uses: devantler-tech/actions/aggregate-job-checks@625b7c0cd5ad4a04f9eb7494298c6d0fa44521ef # v11.0.4
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
