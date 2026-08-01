@@ -14,7 +14,7 @@ permissions:
 jobs:
   delete-old-workflow-runs:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 360
     permissions:
       actions: write
       contents: read
@@ -31,7 +31,7 @@ jobs:
 
   delete-old-images:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     permissions:
       packages: write
     steps:
