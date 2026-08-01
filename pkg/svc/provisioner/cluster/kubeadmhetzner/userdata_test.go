@@ -120,7 +120,7 @@ func TestBuildNodeUserDataMultiNodeOrderRolesAndJoin(t *testing.T) {
 	assert.Equal(t, "3", nodes[3].Labels[hetzner.LabelNodeIndex])
 }
 
-func TestBuildNodeUserDataIgnoresDeprecatedServerJoinFiles(t *testing.T) {
+func TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -145,14 +145,12 @@ func TestBuildNodeUserDataIgnoresDeprecatedServerJoinFiles(t *testing.T) {
 	}
 
 	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
-	require.NoError(t, err)
-	require.Len(t, nodes, 2)
-	require.Equal(t, kubeadmbootstrap.RoleServer, nodes[1].Role)
-	assert.NotContains(t, nodes[1].UserData, legacyPath)
-	assert.NotContains(t, nodes[1].UserData, legacyContent)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrDeprecatedPKIFiles)
+	require.ErrorContains(t, err, "ServerJoinFiles")
+	assert.Nil(t, nodes)
 }
 
-func TestBuildNodeUserDataIgnoresDeprecatedServerInitFiles(t *testing.T) {
+func TestBuildNodeUserDataRejectsDeprecatedServerInitFiles(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -167,11 +165,9 @@ func TestBuildNodeUserDataIgnoresDeprecatedServerInitFiles(t *testing.T) {
 	}}
 
 	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
-	require.NoError(t, err)
-	require.Len(t, nodes, 1)
-	require.Equal(t, kubeadmbootstrap.RoleServerInit, nodes[0].Role)
-	assert.NotContains(t, nodes[0].UserData, legacyPath)
-	assert.NotContains(t, nodes[0].UserData, legacyContent)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrDeprecatedPKIFiles)
+	require.ErrorContains(t, err, "ServerInitFiles")
+	assert.Nil(t, nodes)
 }
 
 func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {

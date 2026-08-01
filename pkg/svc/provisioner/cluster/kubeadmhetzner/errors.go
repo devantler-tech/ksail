@@ -27,4 +27,11 @@ var ErrInvalidAdminKubeconfig = errors.New(
 	"kubeadm × Hetzner: init control-plane admin kubeconfig is invalid",
 )
 
+// ErrDeprecatedPKIFiles is returned by [BuildNodeUserData] when a caller tries
+// to deliver cluster PKI through the legacy ServerInitFiles or ServerJoinFiles
+// fields. Provider user-data is not a permitted transport for cluster identity.
+var ErrDeprecatedPKIFiles = errors.New(
+	"kubeadm × Hetzner: deprecated cluster PKI files are not supported",
+)
+
 var errInvalidCAPEM = errors.New("CA data is not a PEM certificate")

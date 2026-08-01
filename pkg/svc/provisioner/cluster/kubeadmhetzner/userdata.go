@@ -44,8 +44,8 @@ type Input struct {
 	// Optional; nil lets the node generate its own host keys at first boot.
 	HostKeys *cloudinitbootstrap.HostKeys
 	// ServerInitFiles is retained for source compatibility with earlier v7
-	// releases. Private cluster PKI from this field is ignored and is never
-	// delivered through provider user-data.
+	// releases. A non-empty value is rejected so private cluster PKI can never be
+	// delivered through provider user-data or silently ignored.
 	//
 	// Deprecated: kubeadm mints the initial control plane's PKI on the node.
 	ServerInitFiles []cloudinitbootstrap.File
@@ -53,8 +53,8 @@ type Input struct {
 	// plane before its install commands. Optional; ignored on joining nodes.
 	ServerInitPrelude []string
 	// ServerJoinFiles is retained for source compatibility with earlier v7
-	// releases. Private cluster PKI from this field is ignored and is never
-	// delivered through provider user-data.
+	// releases. A non-empty value is rejected so private cluster PKI can never be
+	// delivered through provider user-data or silently ignored.
 	//
 	// Deprecated: additional kubeadm control planes are refused until their
 	// private PKI can be transferred outside provider user-data.
@@ -102,6 +102,14 @@ type NodeUserData struct {
 // a missing Kubernetes version, a malformed sandbox image) is reported instead. The
 // containerd config is identical for every node, so it is rendered once and shared.
 func BuildNodeUserData(input Input) ([]NodeUserData, error) {
+	if len(input.ServerInitFiles) > 0 {
+		return nil, fmt.Errorf("%w: ServerInitFiles", ErrDeprecatedPKIFiles)
+	}
+
+	if len(input.ServerJoinFiles) > 0 {
+		return nil, fmt.Errorf("%w: ServerJoinFiles", ErrDeprecatedPKIFiles)
+	}
+
 	nodes, err := kubeadmbootstrap.Plan(input.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("plan kubeadm nodes: %w", err)
