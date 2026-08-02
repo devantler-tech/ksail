@@ -180,9 +180,49 @@ func applyEKSMutationGuard(
 	return guardable.WithEKSMutationGuard(&guard.resolution, guard.verifier), nil
 }
 
-// eksCaptureFunc records the immutable AWS identity of a just-created EKS cluster. It is a seam so
-// tests exercise the create wiring without AWS.
-type eksCaptureFunc func(ctx context.Context, name string) error
+// eksCreateIdentity is the exact AWS identity an EKS create runs under: one frozen credential
+// snapshot, the region it was frozen for, and the variable names it was resolved through.
+//
+// It exists because the create provisioner and the capture that follows it used to resolve AWS
+// independently. The provisioner resolves from the cluster spec's own variable names
+// (resolveEKSCredentialOptions, over spec.Provider.AWS); the capture resolved from this backend's
+// ambient resolver, which reads the canonical AWS_* names. Those are different sources whenever a
+// spec names custom variables, so they can select different accounts with no Settings change at
+// all — and the eksctl create is asynchronous, so the ambient selection can also change underneath
+// a create that is still running.
+//
+// Getting this wrong does not fail closed. A capture resolved against the wrong account finds
+// whatever same-named cluster lives there and records it as this cluster's immutable identity, so
+// every later guarded delete, start or stop verifies successfully against an unrelated incarnation
+// and mutates it. Pinning one snapshot before the create and reusing it for the capture is what
+// makes the recorded identity the identity the create actually produced.
+type eksCreateIdentity struct {
+	selection  credentials.AWSResolution
+	awsOptions v1alpha1.OptionsAWS
+}
+
+// newEKSCreateIdentity snapshots the AWS selection a create is about to run under.
+//
+// It resolves through the cluster spec's own variable names — the exact source
+// resolveEKSCredentialOptions uses inside the provisioner — so the capture that follows records
+// under the credentials the create actually used rather than under an independently resolved set.
+//
+// Taking the snapshot BEFORE the create is what closes the timing half of the problem: eksctl runs
+// asynchronously, so an operator changing Settings while it works would otherwise move the values
+// the capture later reads. This is a pure read of the process environment; it deliberately does not
+// freeze, because freezing forces concrete credential retrieval (profile chain, IMDS) and a create
+// is entitled to rely on eksctl resolving its own credentials. The freeze happens at capture time,
+// against this snapshot.
+func newEKSCreateIdentity(awsOptions v1alpha1.OptionsAWS) *eksCreateIdentity {
+	return &eksCreateIdentity{
+		selection:  credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOptions)),
+		awsOptions: awsOptions,
+	}
+}
+
+// eksCaptureFunc records the immutable AWS identity of a just-created EKS cluster, under the
+// identity that create was pinned to. It is a seam so tests exercise the create wiring without AWS.
+type eksCaptureFunc func(ctx context.Context, name string, identity *eksCreateIdentity) error
 
 // captureEKSOwnership records the immutable identity of a cluster this backend just created.
 //
@@ -193,16 +233,24 @@ type eksCaptureFunc func(ctx context.Context, name string) error
 // that blocks the path it is meant to protect.
 //
 // Capture performs read-only AWS queries and writes local state only; it mutates nothing in AWS.
-func (s *Service) captureEKSOwnership(ctx context.Context, name string) error {
+func (s *Service) captureEKSOwnership(
+	ctx context.Context,
+	name string,
+	identity *eksCreateIdentity,
+) error {
 	ctx, cancel := context.WithTimeout(ctx, s.eksOwnershipTimeout)
 	defer cancel()
 
-	return s.captureEKSIdentity(ctx, name)
+	return s.captureEKSIdentity(ctx, name, identity)
 }
 
-// defaultEKSCapture resolves the just-written binding, freezes one credential snapshot for its
-// region, and records the live identity under that region.
-func (s *Service) defaultEKSCapture(ctx context.Context, name string) error {
+// defaultEKSCapture resolves the just-written binding and records the live identity under the exact
+// credential snapshot the create was pinned to.
+func (s *Service) defaultEKSCapture(
+	ctx context.Context,
+	name string,
+	identity *eksCreateIdentity,
+) error {
 	bound, err := boundEKSConfig(name)
 	if err != nil {
 		return err
@@ -216,7 +264,25 @@ func (s *Service) defaultEKSCapture(ctx context.Context, name string) error {
 		)
 	}
 
-	client, _, err := s.eksIdentityClient(ctx, bound.Region)
+	// Refuse rather than fall back to an ambient resolution. Re-resolving here is the divergence
+	// eksCreateIdentity exists to remove, and a capture recorded under credentials the create never
+	// used is precisely the confident-but-wrong record that makes later guards authorize a mutation
+	// against an unrelated cluster.
+	if identity == nil {
+		return fmt.Errorf(
+			"%w for %q: the create pinned no AWS identity to record this cluster under",
+			ErrEKSOwnershipEvidenceMissing, name,
+		)
+	}
+
+	// Freeze the create's own selection, for the region the create actually bound to. This is the
+	// single resolution the recorded identity is read under.
+	resolution, err := credentials.FreezeAWS(ctx, identity.selection, bound.Region)
+	if err != nil {
+		return fmt.Errorf("freeze AWS credentials for EKS ownership: %w", err)
+	}
+
+	client, err := s.eksIdentityClientFor(ctx, bound.Region, resolution)
 	if err != nil {
 		return err
 	}
@@ -226,10 +292,10 @@ func (s *Service) defaultEKSCapture(ctx context.Context, name string) error {
 		client,
 		name,
 		bound.Region,
-		// The canonical mapping: this backend resolves AWS values through the Settings-backed
-		// credential overlay, which populates the standard AWS_* names. Recording those is what
-		// lets a later verification resolve the same identity this capture observed.
-		credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{}),
+		// Record the variable names the create actually resolved through, so a later verification
+		// resolves the same identity this capture observed. Recording the canonical defaults instead
+		// would misdescribe every cluster whose spec names custom variables.
+		credentials.AWSOptionsWithDefaults(identity.awsOptions),
 	)
 	if err != nil {
 		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
@@ -300,6 +366,24 @@ func (s *Service) eksIdentityClient(
 		)
 	}
 
+	client, err := s.eksIdentityClientFor(ctx, region, resolution)
+	if err != nil {
+		return nil, credentials.AWSResolution{}, err
+	}
+
+	return client, resolution, nil
+}
+
+// eksIdentityClientFor builds the read-only identity client against an already-frozen snapshot.
+//
+// Capture uses this directly with the snapshot its create was pinned to, so the recorded identity
+// is read under the credentials that made the cluster rather than under a second, independently
+// resolved selection.
+func (s *Service) eksIdentityClientFor(
+	ctx context.Context,
+	region string,
+	resolution credentials.AWSResolution,
+) (eksidentity.Client, error) {
 	client, err := eksclient.NewClient(ctx, region, credentials.OptionsForFrozenAWSConfig(
 		resolution,
 		eksclient.WithAWSConfig,
@@ -307,10 +391,8 @@ func (s *Service) eksIdentityClient(
 		eksclient.RequireCredentialValues,
 	)...)
 	if err != nil {
-		return nil, credentials.AWSResolution{}, fmt.Errorf(
-			"create EKS identity client for ownership: %w", err,
-		)
+		return nil, fmt.Errorf("create EKS identity client for ownership: %w", err)
 	}
 
-	return client, resolution, nil
+	return client, nil
 }

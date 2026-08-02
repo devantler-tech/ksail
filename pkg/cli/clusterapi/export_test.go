@@ -118,7 +118,7 @@ func NewTestService(factory FactoryFunc) *Service {
 	service.kubeconfigPath = func() string { return "" }
 	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
 	// about the guard itself override it with SetEKSOwnershipGuardForTest.
-	service.captureEKSIdentity = func(context.Context, string) error { return nil }
+	service.captureEKSIdentity = func(context.Context, string, *eksCreateIdentity) error { return nil }
 	service.resolveEKSGuard = func(
 		context.Context,
 		string,
@@ -131,10 +131,41 @@ func NewTestService(factory FactoryFunc) *Service {
 
 // SetEKSOwnershipCaptureForTest overrides the create-time identity capture, so a test can drive a
 // failing capture without AWS.
+// The pinned create identity is deliberately not exposed here: it is an internal type, and the
+// tests that assert it reaches the capture live in the internal test package.
 func (s *Service) SetEKSOwnershipCaptureForTest(
 	capture func(ctx context.Context, name string) error,
 ) {
-	s.captureEKSIdentity = capture
+	s.captureEKSIdentity = func(ctx context.Context, name string, _ *eksCreateIdentity) error {
+		return capture(ctx, name)
+	}
+}
+
+// SetEKSOwnershipCaptureRecorderForTest overrides the create-time identity capture and reports the
+// identity the create pinned for it: whether one was supplied at all, the AWS variable-name options
+// it carries, and the region its snapshot resolved to.
+//
+// The pinned identity is an internal type, so it is reported as plain values rather than exposed. A
+// test asserting on these is asserting the property that matters — that the capture records under
+// the credentials the create actually ran with, not an independently resolved set.
+func (s *Service) SetEKSOwnershipCaptureRecorderForTest(
+	record func(name string, pinned bool, awsOptions v1alpha1.OptionsAWS, selectionRegion string),
+) {
+	s.captureEKSIdentity = func(
+		_ context.Context,
+		name string,
+		identity *eksCreateIdentity,
+	) error {
+		if identity == nil {
+			record(name, false, v1alpha1.OptionsAWS{}, "")
+
+			return nil
+		}
+
+		record(name, true, identity.awsOptions, identity.selection.Region)
+
+		return nil
+	}
 }
 
 // SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a

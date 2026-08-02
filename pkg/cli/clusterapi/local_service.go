@@ -900,6 +900,18 @@ func (s *Service) reserveCreateJob(
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
+	isEKS := spec.Cluster.Distribution == v1alpha1.DistributionEKS
+
+	// Snapshot the AWS selection BEFORE the create starts, so the capture afterwards records under
+	// the credentials this create ran with. Re-resolving it after an asynchronous create — from a
+	// different source, and after Settings may have moved — is what let a create in one account be
+	// recorded as a same-named cluster in another.
+	var identity *eksCreateIdentity
+
+	if isEKS {
+		identity = newEKSCreateIdentity(spec.Provider.AWS)
+	}
+
 	err := s.runProvisioner(
 		ctx,
 		name,
@@ -908,7 +920,7 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 			return p.Create(actionCtx, name)
 		},
 	)
-	if err == nil && spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+	if err == nil && isEKS {
 		err = state.SaveClusterSpec(name, &spec.Cluster)
 		if err != nil {
 			err = fmt.Errorf("persist local EKS cluster ownership state: %w", err)
@@ -923,7 +935,7 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 		// the remote cluster exists either way, and reporting success while leaving it unoperatable
 		// would hide the problem until the first delete.
 		if err == nil {
-			err = s.captureEKSOwnership(ctx, name)
+			err = s.captureEKSOwnership(ctx, name, identity)
 			if err != nil {
 				err = fmt.Errorf(
 					"record immutable EKS ownership identity for %q (the cluster was created;"+
