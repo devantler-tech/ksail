@@ -2,6 +2,7 @@ package backup_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,4 +111,70 @@ func TestExtractBackupArchive_ContainsWritesToDestDir(t *testing.T) {
 			)
 		})
 	}
+}
+
+// tarWithEntry builds an in-memory tar containing a single regular-file entry.
+func tarWithEntry(t *testing.T, name string, content []byte) *tar.Reader {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	writer := tar.NewWriter(&buf)
+	require.NoError(t, writer.WriteHeader(&tar.Header{
+		Name:     name,
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(content)),
+		Mode:     0o600,
+	}))
+	_, err := writer.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	return tar.NewReader(&buf)
+}
+
+// TestExtractTarEntries_DoesNotFollowSymlinkInDestDir covers the case the
+// traversal test above structurally cannot: an entry whose path is entirely
+// legitimate.
+//
+// "resources/evidence" contains no "..", is not absolute, and resolves inside
+// the destination, so validateTarEntry accepts it. If "resources" is a symlink
+// pointing outside the destination, a plain os.MkdirAll/os.OpenFile pair follows
+// it and writes through — lexical validation cannot see this, because the path
+// is only dangerous once the filesystem resolves it. Extracting through a root
+// refuses to cross the symlink.
+//
+// This is what pins the root: every traversal vector above is rejected by
+// validateTarEntry before extraction runs, so removing the root would leave them
+// all still passing.
+func TestExtractTarEntries_DoesNotFollowSymlinkInDestDir(t *testing.T) {
+	t.Parallel()
+
+	destDir := t.TempDir()
+	outside := t.TempDir()
+
+	// A pre-existing symlink inside the destination, aimed out of it.
+	require.NoError(t, os.Symlink(outside, filepath.Join(destDir, "resources")))
+
+	const marker = "evidence"
+
+	entry := filepath.Join("resources", marker)
+	reader := tarWithEntry(t, entry, []byte("escaped"))
+
+	// The entry itself must be one lexical validation accepts, or this test
+	// would prove nothing beyond what the traversal cases already cover.
+	_, err := backup.ValidateTarEntry(
+		&tar.Header{Name: entry, Typeflag: tar.TypeReg}, destDir,
+	)
+	require.NoError(t, err, "precondition: the entry must pass lexical validation")
+
+	extractErr := backup.ExtractTarEntries(reader, destDir)
+
+	// Whether extraction reports an error is not the assertion: what matters is
+	// that nothing was written through the symlink.
+	_, statErr := os.Lstat(filepath.Join(outside, marker))
+	require.Truef(t, os.IsNotExist(statErr),
+		"entry %q was written through a symlink to outside the destination (extract err: %v)",
+		entry, extractErr,
+	)
 }
