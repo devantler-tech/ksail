@@ -652,6 +652,11 @@ jobs:
       # Commits through the GitHub API rather than the git CLI, because the repository
       # requires signed commits and API-created commits are signed by GitHub automatically.
       # A CLI commit here is unsigned and makes the pull request permanently unmergeable.
+      #
+      # Limitation: the API's FileAddition carries only a path and its contents, so file
+      # modes are not expressible. Everything this pipeline generates is a regular 0644
+      # file and the repository tracks no symlinks, so this is inert today; a generated
+      # executable or symlink would need a different mechanism.
       - name: 📤 Commit and push generated changes (PR branch)
         if: github.event_name == 'pull_request'
         env:
@@ -661,39 +666,57 @@ jobs:
         run: |
           set -euo pipefail
 
-          additions='[]'
-          deletions='[]'
-          changed=0
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          additions="$workdir/additions.ndjson"
+          deletions="$workdir/deletions.ndjson"
+          : >"$additions"
+          : >"$deletions"
+
+          # Written to a file rather than read through process substitution: a process
+          # substitution's exit status is invisible to both `set -e` and `pipefail`, so a
+          # failing `git status` would otherwise look exactly like "nothing to commit" and
+          # leave the branch silently stale with a green build.
+          # -uall lists untracked files individually; without it git collapses a new
+          # directory into a single "dir/" entry, which is not a file we can encode.
+          git status --porcelain -z --no-renames -uall >"$workdir/status"
+
           while IFS= read -r -d '' entry; do
             entry_status="${entry:0:2}"
             entry_path="${entry:3}"
             [ -n "$entry_path" ] || continue
-            changed=1
             case "$entry_status" in
               *D*)
-                deletions="$(jq -c --arg p "$entry_path" '. + [{path: $p}]' <<<"$deletions")"
+                jq -n --arg p "$entry_path" '{path: $p}' >>"$deletions"
                 ;;
               *)
-                contents="$(base64 -w0 <"$entry_path")"
-                additions="$(jq -c --arg p "$entry_path" --arg c "$contents" \
-                  '. + [{path: $p, contents: $c}]' <<<"$additions")"
+                # File content must never reach argv. Linux caps a single argv entry at
+                # MAX_ARG_STRLEN (128 KiB) independently of ARG_MAX, and generated files
+                # here run to hundreds of KiB (pkg/svc/chat/docs_generated.go alone is
+                # ~0.5 MB, ~0.67 MB once base64-encoded). Passing it with --arg fails with
+                # E2BIG on exactly the pull requests this step exists to serve. --rawfile
+                # reads it from disk instead, and base64 output is ASCII so binary inputs
+                # survive the round trip.
+                base64 -w0 <"$entry_path" >"$workdir/content.b64"
+                jq -n --arg p "$entry_path" --rawfile c "$workdir/content.b64" \
+                  '{path: $p, contents: ($c | gsub("\\s"; ""))}' >>"$additions"
                 ;;
             esac
-          # -uall lists untracked files individually; without it git collapses a new
-          # directory into a single "dir/" entry, which is not a file we can encode.
-          done < <(git status --porcelain -z --no-renames -uall)
+          done <"$workdir/status"
 
-          if [ "$changed" -eq 0 ]; then
+          if [ ! -s "$additions" ] && [ ! -s "$deletions" ]; then
             echo "No generated changes to commit."
             exit 0
           fi
 
+          # --slurpfile keeps the aggregate off argv too: the combined payload is bounded
+          # by total changed content, which routinely exceeds the same 128 KiB cap.
           jq -n \
             --arg repo "$REPO" \
             --arg branch "$BRANCH" \
             --arg oid "$(git rev-parse HEAD)" \
-            --argjson additions "$additions" \
-            --argjson deletions "$deletions" \
+            --slurpfile additions "$additions" \
+            --slurpfile deletions "$deletions" \
             '{
               query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
               variables: {
@@ -707,9 +730,17 @@ jobs:
                   fileChanges: { additions: $additions, deletions: $deletions }
                 }
               }
-            }' >/tmp/create-commit.json
+            }' >"$workdir/mutation.json"
 
-          response="$(gh api graphql --input /tmp/create-commit.json)"
+          # `gh api graphql` exits non-zero on a GraphQL error, so the assignment itself
+          # would abort under `set -e` and skip these diagnostics. Handle the failure
+          # inline so the operator gets a labelled annotation instead of one stderr line.
+          if ! response="$(gh api graphql --input "$workdir/mutation.json" 2>"$workdir/stderr")"; then
+            echo "::error::createCommitOnBranch failed"
+            cat "$workdir/stderr" >&2
+            jq '.errors // .' <<<"$response" 2>/dev/null || printf '%s\n' "$response"
+            exit 1
+          fi
           if jq -e 'has("errors")' >/dev/null <<<"$response"; then
             echo "::error::createCommitOnBranch failed"
             jq '.errors' <<<"$response"
