@@ -741,13 +741,25 @@ jobs:
             jq '.errors // .' <<<"$response" 2>/dev/null || printf '%s\n' "$response"
             exit 1
           fi
-          if jq -e 'has("errors")' >/dev/null <<<"$response"; then
+          # Capture first, then assert with a builtin. `jq -e` as the if-condition cannot
+          # distinguish "the filter was false" (exit 1) from "jq itself failed" (exit 4 on
+          # empty input, 5 on malformed), so a truncated or non-JSON response would take
+          # the no-errors path and continue. Capturing instead puts jq's failure where
+          # `set -e` catches it, so a bad response stops here rather than surfacing later
+          # as an unrelated error against a commit id of "null".
+          errors="$(jq -c '.errors // empty' <<<"$response")"
+          if [ -n "$errors" ]; then
             echo "::error::createCommitOnBranch failed"
-            jq '.errors' <<<"$response"
+            printf '%s\n' "$errors"
             exit 1
           fi
 
-          oid="$(jq -r '.data.createCommitOnBranch.commit.oid' <<<"$response")"
+          oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$response")"
+          if [ -z "$oid" ]; then
+            echo "::error::createCommitOnBranch returned no commit oid"
+            printf '%s\n' "$response"
+            exit 1
+          fi
           echo "Committed generated changes as ${oid}."
 
           # The whole point of using the API is that the commit is signed, so prove it
