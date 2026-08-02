@@ -1003,6 +1003,9 @@ func (s *Service) runProvisioner(
 	return s.runProvisionerWithGuard(ctx, name, spec, nil, action)
 }
 
+// runProvisionerWithGuard is the shared body of the guarded and unguarded paths. A nil guard is the
+// unguarded case and leaves the factory exactly as it was, so a create and every non-EKS action
+// reach the provisioner they always did.
 func (s *Service) runProvisionerWithGuard(
 	ctx context.Context,
 	name string,
