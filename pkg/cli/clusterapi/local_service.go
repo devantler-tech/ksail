@@ -100,6 +100,10 @@ type Service struct {
 	// deadline path without waiting the real budget.
 	eksOwnershipTimeout time.Duration
 
+	// captureEKSIdentity records the immutable AWS identity of a cluster this backend just created,
+	// so the guard above has something to verify against. Injectable alongside resolveEKSGuard.
+	captureEKSIdentity eksCaptureFunc
+
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
 	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
 	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
@@ -180,6 +184,7 @@ func NewService() *Service {
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard
 	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
+	service.captureEKSIdentity = service.defaultEKSCapture
 	service.useDefaultClients()
 
 	return service
@@ -907,6 +912,25 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 		err = state.SaveClusterSpec(name, &spec.Cluster)
 		if err != nil {
 			err = fmt.Errorf("persist local EKS cluster ownership state: %w", err)
+		}
+
+		// Record the immutable AWS identity while we still know the cluster is ours. Without this
+		// the guard on every later delete/start/stop has nothing to verify against, so a cluster
+		// created here could not be operated here — the operator would have to run
+		// `ksail cluster eks-bind` by hand after every create.
+		//
+		// A capture failure fails the job, matching the SaveClusterSpec handling directly above:
+		// the remote cluster exists either way, and reporting success while leaving it unoperatable
+		// would hide the problem until the first delete.
+		if err == nil {
+			err = s.captureEKSOwnership(ctx, name)
+			if err != nil {
+				err = fmt.Errorf(
+					"record immutable EKS ownership identity for %q (the cluster was created;"+
+						" run `ksail cluster eks-bind --name %s` to record it): %w",
+					name, name, err,
+				)
+			}
 		}
 	}
 

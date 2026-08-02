@@ -118,6 +118,7 @@ func NewTestService(factory FactoryFunc) *Service {
 	service.kubeconfigPath = func() string { return "" }
 	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
 	// about the guard itself override it with SetEKSOwnershipGuardForTest.
+	service.captureEKSIdentity = func(context.Context, string) error { return nil }
 	service.resolveEKSGuard = func(
 		context.Context,
 		string,
@@ -126,6 +127,14 @@ func NewTestService(factory FactoryFunc) *Service {
 	}
 
 	return service
+}
+
+// SetEKSOwnershipCaptureForTest overrides the create-time identity capture, so a test can drive a
+// failing capture without AWS.
+func (s *Service) SetEKSOwnershipCaptureForTest(
+	capture func(ctx context.Context, name string) error,
+) {
+	s.captureEKSIdentity = capture
 }
 
 // SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a

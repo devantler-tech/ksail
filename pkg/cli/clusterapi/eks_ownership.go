@@ -76,8 +76,7 @@ func (s *Service) resolveEKSMutationGuard(
 
 	// Bound every network call this guard makes. The caller's context is deliberately
 	// uncancellable (see defaultEKSOwnershipTimeout), so without this a hung AWS endpoint pins the
-	// job forever. The verifier handed onward is NOT closed over this context — it takes one at
-	// call time, so the provisioner re-checks under its own deadline at the mutation boundary.
+	// job forever.
 	ctx, cancel := context.WithTimeout(ctx, s.eksOwnershipTimeout)
 	defer cancel()
 
@@ -105,7 +104,22 @@ func (s *Service) resolveEKSMutationGuard(
 		return nil, fmt.Errorf("verify immutable EKS ownership identity for %q: %w", name, err)
 	}
 
-	return &eksMutationGuard{resolution: resolution, verifier: verifier}, nil
+	// Bound the carried verifier too, per invocation.
+	//
+	// This deadline ends with this function, and the provisioner re-checks identity at its own
+	// mutation boundary using the context IT was given — which is the same uncancellable background
+	// context. Handing the raw verifier onward would leave that second check unbounded, so a hung
+	// STS or EKS endpoint could still pin the job in Deleting/Updating even though the first check
+	// succeeded quickly. Wrapping is what makes the guarantee hold at both boundaries rather than
+	// only at the first one.
+	bounded := func(callCtx context.Context) error {
+		callCtx, callCancel := context.WithTimeout(callCtx, s.eksOwnershipTimeout)
+		defer callCancel()
+
+		return verifier(callCtx)
+	}
+
+	return &eksMutationGuard{resolution: resolution, verifier: bounded}, nil
 }
 
 // applyEKSMutationGuard returns the factory the action should use, carrying the guard when one was
@@ -124,6 +138,64 @@ func applyEKSMutationGuard(
 	}
 
 	return guardable.WithEKSMutationGuard(&guard.resolution, guard.verifier), nil
+}
+
+// eksCaptureFunc records the immutable AWS identity of a just-created EKS cluster. It is a seam so
+// tests exercise the create wiring without AWS.
+type eksCaptureFunc func(ctx context.Context, name string) error
+
+// captureEKSOwnership records the immutable identity of a cluster this backend just created.
+//
+// Without it the guard is unusable on the very clusters this API creates: runCreate persists only
+// spec.json, and the EKS provisioner just runs eksctl, so nothing writes the ownership record
+// NewVerifier requires. Every later delete/start/stop would then fail with the rebind error and the
+// operator would have to run `ksail cluster eks-bind` by hand after every single create — a guard
+// that blocks the path it is meant to protect.
+//
+// Capture performs read-only AWS queries and writes local state only; it mutates nothing in AWS.
+func (s *Service) captureEKSOwnership(ctx context.Context, name string) error {
+	ctx, cancel := context.WithTimeout(ctx, s.eksOwnershipTimeout)
+	defer cancel()
+
+	return s.captureEKSIdentity(ctx, name)
+}
+
+// defaultEKSCapture resolves the just-written binding, freezes one credential snapshot for its
+// region, and records the live identity under that region.
+func (s *Service) defaultEKSCapture(ctx context.Context, name string) error {
+	bound, err := boundEKSConfig(name)
+	if err != nil {
+		return err
+	}
+
+	if bound == nil {
+		return fmt.Errorf(
+			"%w for %q: the create completed but wrote no target binding to record an identity"+
+				" against",
+			ErrEKSOwnershipEvidenceMissing, name,
+		)
+	}
+
+	client, _, err := s.eksIdentityClient(ctx, bound.Region)
+	if err != nil {
+		return err
+	}
+
+	_, err = eksidentity.Capture(
+		ctx,
+		client,
+		name,
+		bound.Region,
+		// The canonical mapping: this backend resolves AWS values through the Settings-backed
+		// credential overlay, which populates the standard AWS_* names. Recording those is what
+		// lets a later verification resolve the same identity this capture observed.
+		credentials.AWSOptionsWithDefaults(v1alpha1.OptionsAWS{}),
+	)
+	if err != nil {
+		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
+	}
+
+	return nil
 }
 
 // defaultEKSGuard reads the target the cluster was bound to when it was created, freezes one AWS
@@ -156,27 +228,10 @@ func (s *Service) defaultEKSGuard(
 	}
 
 	region := bound.Region
-	selection := credentials.ResolveAWS(s.discoverer.Resolver)
 
-	resolution, err := credentials.FreezeAWS(ctx, selection, region)
+	client, resolution, err := s.eksIdentityClient(ctx, region)
 	if err != nil {
-		return credentials.AWSResolution{}, nil, fmt.Errorf(
-			"freeze AWS credentials for EKS ownership verification: %w", err,
-		)
-	}
-
-	options := credentials.OptionsForFrozenAWSConfig(
-		resolution,
-		eksclient.WithAWSConfig,
-		eksclient.WithCredentialValues,
-		eksclient.RequireCredentialValues,
-	)
-
-	client, err := eksclient.NewClient(ctx, region, options...)
-	if err != nil {
-		return credentials.AWSResolution{}, nil, fmt.Errorf(
-			"create EKS identity client for ownership verification: %w", err,
-		)
+		return credentials.AWSResolution{}, nil, err
 	}
 
 	verifier, err := eksidentity.NewVerifier(client, name, region)
@@ -187,4 +242,35 @@ func (s *Service) defaultEKSGuard(
 	}
 
 	return resolution, verifier, nil
+}
+
+// eksIdentityClient freezes one AWS credential snapshot for a region and builds the read-only
+// identity client against it. Capture and verification share this so both run under exactly the same
+// resolved identity — a capture recorded under one and verified under another would fail forever.
+func (s *Service) eksIdentityClient(
+	ctx context.Context,
+	region string,
+) (eksidentity.Client, credentials.AWSResolution, error) {
+	selection := credentials.ResolveAWS(s.discoverer.Resolver)
+
+	resolution, err := credentials.FreezeAWS(ctx, selection, region)
+	if err != nil {
+		return nil, credentials.AWSResolution{}, fmt.Errorf(
+			"freeze AWS credentials for EKS ownership: %w", err,
+		)
+	}
+
+	client, err := eksclient.NewClient(ctx, region, credentials.OptionsForFrozenAWSConfig(
+		resolution,
+		eksclient.WithAWSConfig,
+		eksclient.WithCredentialValues,
+		eksclient.RequireCredentialValues,
+	)...)
+	if err != nil {
+		return nil, credentials.AWSResolution{}, fmt.Errorf(
+			"create EKS identity client for ownership: %w", err,
+		)
+	}
+
+	return client, resolution, nil
 }

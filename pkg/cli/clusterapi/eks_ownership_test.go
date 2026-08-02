@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -365,4 +366,156 @@ func TestEKSOwnershipVerificationIsBounded(t *testing.T) {
 		"the ownership guard ran without a deadline, so a hung AWS endpoint would pin the job")
 	assert.Empty(t, provisioner.deletedNames(),
 		"a delete proceeded despite ownership verification never completing")
+}
+
+// TestCarriedVerifierIsBoundedPerInvocation pins the deadline on the verifier handed to the
+// provisioner, not only on this package's own first check.
+//
+// The provisioner re-checks identity at its own mutation boundary using the context IT was given —
+// which is the same uncancellable background context. Handing the raw verifier onward would leave
+// that second check unbounded, so a hung STS or EKS endpoint could still pin the job even though the
+// first check returned quickly. The guarantee has to hold at both boundaries.
+func TestCarriedVerifierIsBoundedPerInvocation(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "carried-verifier-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, nil)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	service.SetEKSOwnershipTimeoutForTest(50 * time.Millisecond)
+	// This is the exact scenario the finding describes: the FIRST check succeeds quickly, so a
+	// guard is built and carried onward, and only the later mutation-boundary check hangs. A
+	// verifier that hung immediately would fail the first check and never reach the factory at all.
+	var calls atomic.Int32
+
+	service.SetEKSOwnershipGuardForTest(
+		func(
+			_ context.Context,
+			_ string,
+		) (credentials.AWSResolution, eksidentity.Verifier, error) {
+			return credentials.AWSResolution{}, func(ctx context.Context) error {
+				if calls.Add(1) == 1 {
+					return nil
+				}
+
+				<-ctx.Done()
+
+				return ctx.Err()
+			}, nil
+		},
+	)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		return recorder.recordedVerifier() != nil
+	}, eventuallyTimeout, eventuallyTick)
+
+	carried := recorder.recordedVerifier()
+	require.NotNil(t, carried)
+
+	// Invoke it exactly as the provisioner does: with the uncancellable background context.
+	done := make(chan error, 1)
+
+	go func() { done <- carried(context.WithoutCancel(context.Background())) }()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "a hung verifier returned success")
+	case <-time.After(2 * time.Second):
+		t.Fatal("the carried verifier ran unbounded — a hung AWS endpoint would pin the job here")
+	}
+}
+
+// TestCreateEKSCapturesOwnershipIdentity pins that a successful create records the identity the
+// guard later verifies against. Without it the guard blocks the very clusters this API creates.
+func TestCreateEKSCapturesOwnershipIdentity(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "captured-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, nil)
+
+	captured := make(chan string, 1)
+
+	service.SetEKSOwnershipCaptureForTest(func(_ context.Context, name string) error {
+		captured <- name
+
+		return nil
+	})
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	select {
+	case got := <-captured:
+		assert.Equal(t, clusterName, got)
+	default:
+		t.Fatal("a successful EKS create recorded no ownership identity, so every later " +
+			"delete/start/stop would fail with the rebind error")
+	}
+}
+
+// TestCreateEKSFailsWhenOwnershipCannotBeCaptured is the fail-loud half: the remote cluster exists
+// either way, so reporting success while leaving it unoperatable would hide the problem until the
+// first delete. This mirrors how a SaveClusterSpec failure is already handled.
+func TestCreateEKSFailsWhenOwnershipCannotBeCaptured(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "uncapturable-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, nil)
+
+	service.SetEKSOwnershipCaptureForTest(func(_ context.Context, _ string) error {
+		return errGuardRefused
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+}
+
+// TestNonEKSCreateCapturesNothing is the scope control: capture is an AWS identity concern.
+func TestNonEKSCreateCapturesNothing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionVanilla, provisioner, recorder, nil)
+
+	service.SetEKSOwnershipCaptureForTest(func(_ context.Context, _ string) error {
+		t.Error("a non-EKS create attempted an AWS ownership capture")
+
+		return nil
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("plain-cluster", v1alpha1.DistributionVanilla),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, "plain-cluster")
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
 }
