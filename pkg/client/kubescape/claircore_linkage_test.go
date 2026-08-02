@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -36,15 +37,18 @@ func auditedClaircoreModules() map[string]claircoreModuleAudit {
 	return map[string]claircoreModuleAudit{
 		"root": {
 			versions: map[string]string{
-				claircoreModulePath:        "v1.5.35",
-				claircoreToolkitModulePath: "v1.2.4",
+				claircoreModulePath:        "v1.5.53",
+				claircoreToolkitModulePath: "v1.6.1",
 			},
 			inertPackages: map[string]bool{
 				"github.com/quay/claircore":                   true,
 				"github.com/quay/claircore/indexer":           true,
+				"github.com/quay/claircore/internal/filterfs": true,
 				"github.com/quay/claircore/osrelease":         true,
 				"github.com/quay/claircore/pkg/cpe":           true,
 				"github.com/quay/claircore/pkg/tarfs":         true,
+				"github.com/quay/claircore/toolkit/log":       true,
+				"github.com/quay/claircore/toolkit/types":     true,
 				"github.com/quay/claircore/toolkit/types/cpe": true,
 			},
 		},
@@ -126,10 +130,12 @@ func TestAuditedClaircoreVersionsIncludeToolkit(t *testing.T) {
 // TestClaircoreLinkedPackagesStayInert pins the reachability verdict of the
 // Claircore manifest-URI SSRF (issue #6008): the advisory's sink is
 // claircore's remote fetching code (libindex and its fetcher packages), which
-// is NOT linked into ksail — only the inert packages above are. Until a
-// patched claircore release ships and is adopted, any new claircore package
-// entering the dependency graph (for example via a kubescape bump) must fail
-// this test so the verdict is re-established instead of silently trusted.
+// is NOT linked into ksail — only the inert packages above are. Every shipped
+// module now runs a claircore release outside the advisory's affected range,
+// so the sink is patched as well as unlinked; this guard keeps both properties
+// true. Any new claircore package entering a module's dependency graph (for
+// example via a kubescape bump), or a move away from an audited release, must
+// fail this test so the verdict is re-established instead of silently trusted.
 func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 	t.Parallel()
 
@@ -353,20 +359,74 @@ func TestInertClaircorePackagesExcludesRemoteFetchingCode(t *testing.T) {
 }
 
 // TestRootClaircoreAuditExcludesDesktopOnlyPackages prevents a package already
-// audited for desktop from silently entering the root dependency graph.
+// audited for desktop from silently entering the root audit. Root may admit
+// such a package only once root itself links it and the #6008 reachability
+// verdict has been re-established against root's own dependency graph. Admitting
+// one that root does not link is inheriting desktop's verdict, which the
+// per-module audit exists to prevent.
 func TestRootClaircoreAuditExcludesDesktopOnlyPackages(t *testing.T) {
 	t.Parallel()
 
+	_, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go toolchain not available on PATH")
+	}
+
 	rootAudit := auditedClaircoreModules()["root"]
-	for _, pkg := range []string{
-		"github.com/quay/claircore/internal/filterfs",
-		"github.com/quay/claircore/toolkit/log",
-		"github.com/quay/claircore/toolkit/types",
-	} {
-		if rootAudit.inertPackages[pkg] {
-			t.Errorf("root audit unexpectedly admits desktop-only package %q", pkg)
+	desktopAudit := auditedClaircoreModules()["desktop"]
+	rootLinked := linkedClaircorePackages(t, moduleRoot(t))
+
+	inherited := make([]string, 0, len(desktopAudit.inertPackages))
+
+	for pkg := range desktopAudit.inertPackages {
+		if rootAudit.inertPackages[pkg] && !rootLinked[pkg] {
+			inherited = append(inherited, pkg)
 		}
 	}
+
+	sort.Strings(inherited)
+
+	for _, pkg := range inherited {
+		t.Errorf(
+			"root audit admits desktop-audited package %q that root does not link; "+
+				"remove it rather than inheriting desktop's #6008 verdict",
+			pkg,
+		)
+	}
+}
+
+// linkedClaircorePackages returns the Claircore packages a module's dependency
+// graph actually links, so an audit can be checked against reality rather than
+// against another module's audit.
+func linkedClaircorePackages(t *testing.T, moduleDir string) map[string]bool {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "./...")
+	cmd.Dir = moduleDir
+
+	out, err := cmd.Output()
+	if err != nil {
+		var stderr string
+
+		exitErr := new(exec.ExitError)
+		if errors.As(err, &exitErr) {
+			stderr = string(exitErr.Stderr)
+		}
+
+		t.Fatalf("go list -deps ./... in module %q failed: %v\n%s", moduleDir, err, stderr)
+	}
+
+	linked := map[string]bool{}
+
+	for pkg := range strings.FieldsSeq(string(out)) {
+		isClaircore := pkg == "github.com/quay/claircore" ||
+			strings.HasPrefix(pkg, "github.com/quay/claircore/")
+		if isClaircore {
+			linked[pkg] = true
+		}
+	}
+
+	return linked
 }
 
 // TestValidateClaircoreModuleVersionRejectsReplacement prevents a fork or
