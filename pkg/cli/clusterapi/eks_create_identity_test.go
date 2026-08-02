@@ -99,13 +99,16 @@ func recordCaptureForCreate(
 	_, err := service.Create(context.Background(), cluster)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
+	// EventuallyWithT, not Eventually: the condition runs on its own goroutine, and only CollectT
+	// can carry an assertion failure back out of it. Asserting on the outer t there fails the tick
+	// by exiting its goroutine, which costs the underlying error its place in the report.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		list, listErr := service.List(context.Background())
-		require.NoError(t, listErr)
+		require.NoError(collect, listErr)
 
 		phase, found := phaseOf(list, clusterName)
-
-		return found && phase == v1alpha1.ClusterPhaseReady
+		require.True(collect, found, "the cluster is not listed yet")
+		require.Equal(collect, v1alpha1.ClusterPhaseReady, phase)
 	}, eventuallyTimeout, eventuallyTick)
 
 	select {
