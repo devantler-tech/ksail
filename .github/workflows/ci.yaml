@@ -704,8 +704,31 @@ jobs:
             esac
           done <"$workdir/status"
 
+          # The whole point of using the API is that the commit is signed, so prove it
+          # rather than assuming it: an unsigned commit here blocks the pull request.
+          verify_signed() {
+            local sha="$1"
+            local verified
+            verified="$(gh api "repos/${REPO}/commits/${sha}" --jq '.commit.verification.verified')"
+            if [ "$verified" != "true" ]; then
+              echo "::error::Generated commit ${sha} is not signed (verified=${verified})."
+              exit 1
+            fi
+            echo "Verified signature on ${sha}."
+          }
+
           if [ ! -s "$additions" ] && [ ! -s "$deletions" ]; then
             echo "No generated changes to commit."
+            # Committing below pushes to the PR branch, which raises `synchronize`. That new
+            # run shares this workflow's concurrency group with cancel-in-progress, so it can
+            # cancel the committing run before it verifies. The replacement run then lands
+            # here, with the work already committed and nothing left to do — so verify the
+            # head instead of exiting blind, or a signing regression escapes unreported and
+            # silently re-creates the unmergeable-PR condition this step exists to prevent.
+            if [ "$(git log -1 --format=%s)" = "chore: sync modules and update generated files" ]; then
+              echo "Head is a generated commit; verifying it here in case the run that created it was cancelled."
+              verify_signed "$(git rev-parse HEAD)"
+            fi
             exit 0
           fi
 
@@ -761,15 +784,7 @@ jobs:
             exit 1
           fi
           echo "Committed generated changes as ${oid}."
-
-          # The whole point of using the API is that the commit is signed, so prove it
-          # rather than assuming it: an unsigned commit here blocks the pull request.
-          verified="$(gh api "repos/${REPO}/commits/${oid}" --jq '.commit.verification.verified')"
-          if [ "$verified" != "true" ]; then
-            echo "::error::Generated commit ${oid} is not signed (verified=${verified})."
-            exit 1
-          fi
-          echo "Verified signature on ${oid}."
+          verify_signed "$oid"
 
       - name: 📤 Open PR for generated changes (protected branch)
         if: github.event_name != 'pull_request'
