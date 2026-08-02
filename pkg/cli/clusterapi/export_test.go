@@ -6,6 +6,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -114,8 +116,27 @@ func NewTestService(factory FactoryFunc) *Service {
 	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
 	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
 	service.kubeconfigPath = func() string { return "" }
+	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
+	// about the guard itself override it with SetEKSOwnershipGuardForTest.
+	service.resolveEKSGuard = func(
+		context.Context,
+		string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error) {
+		return credentials.AWSResolution{}, func(context.Context) error { return nil }, nil
+	}
 
 	return service
+}
+
+// SetEKSOwnershipGuardForTest overrides the AWS-touching half of the EKS mutation guard, so a test
+// can drive a refusing or accepting immutable-identity check without AWS credentials.
+func (s *Service) SetEKSOwnershipGuardForTest(
+	guard func(
+		ctx context.Context,
+		name string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error),
+) {
+	s.resolveEKSGuard = guard
 }
 
 // ExportEKSConfigForCreate exposes eksDistributionConfig for testing the generated eks.yaml. It

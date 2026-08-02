@@ -92,6 +92,10 @@ type Service struct {
 
 	newFactory FactoryFunc
 
+	// resolveEKSGuard resolves the frozen AWS credential snapshot and immutable-ownership verifier
+	// every EKS mutation must carry. Injectable so tests exercise the guard wiring without AWS.
+	resolveEKSGuard eksGuardFunc
+
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
 	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
 	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
@@ -170,6 +174,7 @@ func NewService() *Service {
 		ProbeRunState: true,
 	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
+	service.resolveEKSGuard = service.defaultEKSGuard
 	service.useDefaultClients()
 
 	return service
@@ -822,7 +827,7 @@ func (s *Service) runLifecycleAction(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) {
-	err := s.runProvisioner(ctx, name, spec, action)
+	err := s.runGuardedProvisioner(ctx, name, spec, action)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -922,7 +927,7 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 }
 
 func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
-	err := s.runProvisioner(
+	err := s.runGuardedProvisioner(
 		ctx,
 		name,
 		spec,
@@ -967,6 +972,26 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 	delete(s.jobs, name)
 }
 
+// runGuardedProvisioner runs a mutating action (delete, start, stop) behind the EKS ownership
+// guard. Resolving the guard first means an unverifiable target is refused before any provisioner
+// is built, and the same verified identity travels into the provisioner for its own re-check.
+//
+// Create deliberately does not take this path: it has no prior incarnation to verify and no
+// persisted identity yet, so demanding a guard there would refuse every first EKS create.
+func (s *Service) runGuardedProvisioner(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+) error {
+	guard, err := s.resolveEKSMutationGuard(ctx, spec.Cluster.Distribution, name)
+	if err != nil {
+		return err
+	}
+
+	return s.runProvisionerWithGuard(ctx, name, spec, guard, action)
+}
+
 // runProvisioner builds a provisioner for the requested spec and runs the supplied action against
 // it. The spec carries the provider (so Talos routes to Hetzner/Omni/Docker) and node counts.
 func (s *Service) runProvisioner(
@@ -975,7 +1000,17 @@ func (s *Service) runProvisioner(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
-	provisioner, err := s.buildProvisioner(ctx, spec, name)
+	return s.runProvisionerWithGuard(ctx, name, spec, nil, action)
+}
+
+func (s *Service) runProvisionerWithGuard(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	guard *eksMutationGuard,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+) error {
+	provisioner, err := s.buildProvisioner(ctx, spec, name, guard)
 	if err != nil {
 		return err
 	}
@@ -1010,10 +1045,16 @@ func (s *Service) buildProvisioner(
 	ctx context.Context,
 	spec v1alpha1.Spec,
 	name string,
+	guard *eksMutationGuard,
 ) (clusterprovisioner.Provisioner, error) {
 	distribution := spec.Cluster.Distribution
 
 	factory, err := s.newFactory(distribution, name)
+	if err != nil {
+		return nil, err
+	}
+
+	factory, err = applyEKSMutationGuard(factory, guard)
 	if err != nil {
 		return nil, err
 	}

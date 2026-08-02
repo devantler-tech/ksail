@@ -188,6 +188,24 @@ type DefaultFactory struct {
 	AWSOwnershipVerifier eksidentity.Verifier
 }
 
+// WithEKSMutationGuard returns a copy of the factory pinned to one frozen credential snapshot and
+// the ownership verifier that snapshot authorized. The value receiver is what makes it a copy: a
+// caller that guards one mutation must not leave a shared factory carrying that identity for the
+// next, unrelated action.
+//
+// The two arguments belong together and are set together. A verifier without its frozen resolution
+// is refused downstream, because proving one identity while the provisioner independently
+// re-resolves another would authorize a mutation nothing actually checked.
+func (f DefaultFactory) WithEKSMutationGuard(
+	resolution *credentials.AWSResolution,
+	verifier eksidentity.Verifier,
+) Factory {
+	f.AWSResolution = resolution
+	f.AWSOwnershipVerifier = verifier
+
+	return f
+}
+
 // Create selects the correct distribution provisioner for the KSail cluster configuration.
 // It requires DistributionConfig to be set with the appropriate pre-loaded config.
 func (f DefaultFactory) Create(
