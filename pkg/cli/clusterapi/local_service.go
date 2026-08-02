@@ -96,6 +96,10 @@ type Service struct {
 	// every EKS mutation must carry. Injectable so tests exercise the guard wiring without AWS.
 	resolveEKSGuard eksGuardFunc
 
+	// eksOwnershipTimeout bounds that resolution's network calls. Injectable so a test can drive the
+	// deadline path without waiting the real budget.
+	eksOwnershipTimeout time.Duration
+
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
 	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
 	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
@@ -175,6 +179,7 @@ func NewService() *Service {
 	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard
+	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
 	service.useDefaultClients()
 
 	return service

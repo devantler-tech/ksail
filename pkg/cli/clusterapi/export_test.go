@@ -128,6 +128,12 @@ func NewTestService(factory FactoryFunc) *Service {
 	return service
 }
 
+// SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a
+// test can drive the deadline path without waiting the production budget.
+func (s *Service) SetEKSOwnershipTimeoutForTest(d time.Duration) {
+	s.eksOwnershipTimeout = d
+}
+
 // SetEKSOwnershipGuardForTest overrides the AWS-touching half of the EKS mutation guard, so a test
 // can drive a refusing or accepting immutable-identity check without AWS credentials.
 func (s *Service) SetEKSOwnershipGuardForTest(

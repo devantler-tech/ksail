@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
@@ -21,6 +22,19 @@ var ErrEKSOwnershipEvidenceMissing = errors.New("no local KSail EKS target bindi
 // fails the mutation rather than proceeding unguarded: a factory that silently drops the verifier
 // would leave VerifyBeforeMutation a no-op, which is the gap this guard exists to close.
 var ErrUnguardableFactory = errors.New("provisioner factory cannot carry the EKS ownership guard")
+
+// defaultEKSOwnershipTimeout bounds the whole ownership resolution: the AWS config load, the STS
+// caller-identity query and the EKS DescribeCluster behind it.
+//
+// It exists because the mutation paths deliberately run on a context.WithoutCancel background
+// context, so the request that triggered the action can never cancel this work. The AWS SDK applies
+// no overall per-operation deadline of its own, so an unresponsive STS or EKS endpoint would
+// otherwise leave the job pinned in Deleting/Updating with no way to dismiss it — the exact
+// undismissable-row failure runDelete's idempotency handling already exists to avoid.
+//
+// 60s is generous enough for the SDK's default retries on a slow-but-working endpoint, and short
+// enough that a wedged one surfaces as a failed job an operator can retry.
+const defaultEKSOwnershipTimeout = 60 * time.Second
 
 // eksGuardFunc resolves the evidence-reading half of an EKS mutation guard: the region the cluster
 // was bound to at create time, one frozen credential snapshot for it, and a verifier closed over
@@ -59,6 +73,13 @@ func (s *Service) resolveEKSMutationGuard(
 	if distribution != v1alpha1.DistributionEKS {
 		return nil, nil //nolint:nilnil // no guard needed is a normal, non-error outcome.
 	}
+
+	// Bound every network call this guard makes. The caller's context is deliberately
+	// uncancellable (see defaultEKSOwnershipTimeout), so without this a hung AWS endpoint pins the
+	// job forever. The verifier handed onward is NOT closed over this context — it takes one at
+	// call time, so the provisioner re-checks under its own deadline at the mutation boundary.
+	ctx, cancel := context.WithTimeout(ctx, s.eksOwnershipTimeout)
+	defer cancel()
 
 	resolution, verifier, err := s.resolveEKSGuard(ctx, name)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
@@ -309,4 +310,59 @@ func createEKSClusterForTest(t *testing.T, service *clusterapi.Service, name str
 
 		return found && phase == v1alpha1.ClusterPhaseReady
 	}, eventuallyTimeout, eventuallyTick)
+}
+
+// TestEKSOwnershipVerificationIsBounded pins the deadline on the guard's network calls.
+//
+// The mutation paths run on a context.WithoutCancel background context, so the HTTP request that
+// triggered the action can never cancel this work, and the AWS SDK applies no overall per-operation
+// deadline of its own. Without an explicit bound, an unresponsive STS or EKS endpoint leaves the job
+// pinned in Deleting with no way to dismiss it — the undismissable-row failure runDelete's
+// idempotency handling already exists to avoid. A hung guard must therefore fail the job, not hang.
+func TestEKSOwnershipVerificationIsBounded(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "hung-endpoint-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, nil)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	// A guard that never answers, exactly as an unresponsive AWS endpoint behaves.
+	sawDeadline := make(chan bool, 1)
+
+	service.SetEKSOwnershipTimeoutForTest(50 * time.Millisecond)
+	service.SetEKSOwnershipGuardForTest(
+		func(
+			ctx context.Context,
+			_ string,
+		) (credentials.AWSResolution, eksidentity.Verifier, error) {
+			_, hasDeadline := ctx.Deadline()
+			select {
+			case sawDeadline <- hasDeadline:
+			default:
+			}
+
+			<-ctx.Done()
+
+			return credentials.AWSResolution{}, nil, ctx.Err()
+		},
+	)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.True(t, <-sawDeadline,
+		"the ownership guard ran without a deadline, so a hung AWS endpoint would pin the job")
+	assert.Empty(t, provisioner.deletedNames(),
+		"a delete proceeded despite ownership verification never completing")
 }
