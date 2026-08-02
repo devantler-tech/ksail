@@ -189,6 +189,53 @@ func (r AWSOptionsResolver) Value(key Key) string {
 	return resolveEnvValue(key, r.EnvVar(key))
 }
 
+// RecordedAWSResolver resolves a cluster's lifecycle credentials through the variable names its own
+// immutable ownership record captured, while still honoring a base resolver's resolved values.
+//
+// A recorded cluster is the one case where the variable names are not a matter of current
+// configuration: capture persisted the names the create actually resolved through, so a later Delete,
+// Start, or Stop must read the same aliases or it resolves a different identity — or none at all.
+// A base resolver alone cannot do that, because it reports names from current settings and knows
+// nothing about the record.
+//
+// Values stay base-first, so this is strictly additive: a credential the base already resolves keeps
+// resolving exactly as before (including a secure-store value, which is name-independent operator
+// intent), and the recorded alias is consulted only where the base resolves nothing. Names, by
+// contrast, come from the record, because the frozen resolution carries them onward to scrub child
+// process environments — reporting a canonical name for a value read from an alias would leave the
+// alias in place for the provisioner to re-resolve.
+//
+// This narrows, and never widens, what a mutation may act on: where both the base and the record
+// resolve credentials for different accounts, the ownership verifier still fails closed on the
+// mismatch. The resolver owns its map and is safe for concurrent use.
+type RecordedAWSResolver struct {
+	base     Resolver
+	recorded AWSOptionsResolver
+}
+
+// NewRecordedAWSResolver layers one ownership record's captured variable names over base. A nil base
+// resolves from the canonical process environment.
+func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) RecordedAWSResolver {
+	if base == nil {
+		base = EnvResolver{}
+	}
+
+	return RecordedAWSResolver{base: base, recorded: NewAWSOptionsResolver(recorded)}
+}
+
+// EnvVar returns the variable name the ownership record captured for key.
+func (r RecordedAWSResolver) EnvVar(key Key) string { return r.recorded.EnvVar(key) }
+
+// Value returns the base resolver's value for key, falling back to the recorded alias when the base
+// resolves nothing.
+func (r RecordedAWSResolver) Value(key Key) string {
+	if value := r.base.Value(key); value != "" {
+		return value
+	}
+
+	return r.recorded.Value(key)
+}
+
 // AWSResolution is an immutable snapshot of an AWS credential selection. ResolveFrozenAWS upgrades
 // it to one concrete credential tuple for identity-sensitive operations. Source variable names are
 // retained privately so child process environments can remove both stale canonical values and

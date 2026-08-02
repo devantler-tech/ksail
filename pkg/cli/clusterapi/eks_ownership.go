@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
 // ErrEKSOwnershipEvidenceMissing reports a local API EKS mutation for a cluster with no target
@@ -335,7 +336,7 @@ func (s *Service) defaultEKSGuard(
 
 	region := bound.Region
 
-	client, resolution, err := s.eksIdentityClient(ctx, region)
+	client, resolution, err := s.eksIdentityClient(ctx, name, region)
 	if err != nil {
 		return credentials.AWSResolution{}, nil, err
 	}
@@ -353,11 +354,16 @@ func (s *Service) defaultEKSGuard(
 // eksIdentityClient freezes one AWS credential snapshot for a region and builds the read-only
 // identity client against it. Capture and verification share this so both run under exactly the same
 // resolved identity — a capture recorded under one and verified under another would fail forever.
+//
+// The snapshot resolves through the cluster's own ownership record where one exists, because capture
+// persisted the variable names the create resolved through. Resolving the current selection instead
+// would read a different identity — or no credentials at all — whenever the credentials that made
+// the cluster are reachable only under those recorded aliases.
 func (s *Service) eksIdentityClient(
 	ctx context.Context,
-	region string,
+	name, region string,
 ) (eksidentity.Client, credentials.AWSResolution, error) {
-	selection := credentials.ResolveAWS(s.discoverer.Resolver)
+	selection := credentials.ResolveAWS(s.eksOwnershipResolver(name, region))
 
 	resolution, err := credentials.FreezeAWS(ctx, selection, region)
 	if err != nil {
@@ -372,6 +378,22 @@ func (s *Service) eksIdentityClient(
 	}
 
 	return client, resolution, nil
+}
+
+// eksOwnershipResolver returns the resolver one cluster's lifecycle credentials must resolve through:
+// the injected resolver layered under the variable names its ownership record captured.
+//
+// A record that is missing or predates the mapping schema falls back to the injected resolver
+// untouched, deliberately. That keeps the injection seam intact for every unrecorded cluster, and it
+// leaves eksidentity.NewVerifier's migration error as the authoritative, actionable failure for a
+// legacy record rather than shadowing it with an opaque credential error here.
+func (s *Service) eksOwnershipResolver(name, region string) credentials.Resolver {
+	ownership, err := state.LoadEKSOwnershipState(name, region)
+	if err != nil {
+		return s.discoverer.Resolver
+	}
+
+	return credentials.NewRecordedAWSResolver(s.discoverer.Resolver, ownership.AWSOptions)
 }
 
 // eksIdentityClientFor builds the read-only identity client against an already-frozen snapshot.
