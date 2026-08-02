@@ -649,14 +649,84 @@ jobs:
             fi
           done
 
+      # Commits through the GitHub API rather than the git CLI, because the repository
+      # requires signed commits and API-created commits are signed by GitHub automatically.
+      # A CLI commit here is unsigned and makes the pull request permanently unmergeable.
       - name: 📤 Commit and push generated changes (PR branch)
         if: github.event_name == 'pull_request'
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
-        with:
-          commit_message: "chore: sync modules and update generated files"
-          commit_user_name: generator-bot
-          commit_user_email: generator-bot@users.noreply.github.com
-          branch: ${{ github.head_ref }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          BRANCH: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          additions='[]'
+          deletions='[]'
+          changed=0
+          while IFS= read -r -d '' entry; do
+            entry_status="${entry:0:2}"
+            entry_path="${entry:3}"
+            [ -n "$entry_path" ] || continue
+            changed=1
+            case "$entry_status" in
+              *D*)
+                deletions="$(jq -c --arg p "$entry_path" '. + [{path: $p}]' <<<"$deletions")"
+                ;;
+              *)
+                contents="$(base64 -w0 <"$entry_path")"
+                additions="$(jq -c --arg p "$entry_path" --arg c "$contents" \
+                  '. + [{path: $p, contents: $c}]' <<<"$additions")"
+                ;;
+            esac
+          # -uall lists untracked files individually; without it git collapses a new
+          # directory into a single "dir/" entry, which is not a file we can encode.
+          done < <(git status --porcelain -z --no-renames -uall)
+
+          if [ "$changed" -eq 0 ]; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+
+          jq -n \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg oid "$(git rev-parse HEAD)" \
+            --argjson additions "$additions" \
+            --argjson deletions "$deletions" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {
+                input: {
+                  branch: {
+                    repositoryNameWithOwner: $repo,
+                    branchName: $branch
+                  },
+                  message: { headline: "chore: sync modules and update generated files" },
+                  expectedHeadOid: $oid,
+                  fileChanges: { additions: $additions, deletions: $deletions }
+                }
+              }
+            }' >/tmp/create-commit.json
+
+          response="$(gh api graphql --input /tmp/create-commit.json)"
+          if jq -e 'has("errors")' >/dev/null <<<"$response"; then
+            echo "::error::createCommitOnBranch failed"
+            jq '.errors' <<<"$response"
+            exit 1
+          fi
+
+          oid="$(jq -r '.data.createCommitOnBranch.commit.oid' <<<"$response")"
+          echo "Committed generated changes as ${oid}."
+
+          # The whole point of using the API is that the commit is signed, so prove it
+          # rather than assuming it: an unsigned commit here blocks the pull request.
+          verified="$(gh api "repos/${REPO}/commits/${oid}" --jq '.commit.verification.verified')"
+          if [ "$verified" != "true" ]; then
+            echo "::error::Generated commit ${oid} is not signed (verified=${verified})."
+            exit 1
+          fi
+          echo "Verified signature on ${oid}."
 
       - name: 📤 Open PR for generated changes (protected branch)
         if: github.event_name != 'pull_request'
