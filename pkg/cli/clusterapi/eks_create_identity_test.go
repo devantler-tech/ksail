@@ -14,11 +14,11 @@ import (
 // The names a spec can point AWS resolution at. They are deliberately not the canonical AWS_* ones,
 // because the whole point is to tell the two sources apart.
 const (
-	customRegionEnvVar  = "KSAIL_TEST_CUSTOM_AWS_REGION"
-	customRegionValue   = "eu-west-9"
-	canonicalRegionEnv  = "AWS_REGION"
-	canonicalRegionVal  = "us-east-1"
-	rebindingRegionVal  = "ap-south-7"
+	customRegionEnvVar = "KSAIL_TEST_CUSTOM_AWS_REGION"
+	customRegionValue  = "eu-west-9"
+	canonicalRegionEnv = "AWS_REGION"
+	canonicalRegionVal = "us-east-1"
+	rebindingRegionVal = "ap-south-7"
 )
 
 // midCreateProvisioner runs onCreate from inside Create, so a test can act at a point that is
