@@ -102,27 +102,10 @@ func (s *Service) resolveEKSMutationGuard(
 	// standalone CLI path, which also verifies during its guard and reuses the verifier afterwards.
 	err = verifier(ctx)
 	if err != nil {
-		// Absence is the one verification failure that must not fail closed. This guard exists to
-		// stop a mutation reaching an unrelated incarnation of the name; when no live cluster
-		// answers to it there is no incarnation to reach, so refusing protects nothing and costs
-		// the caller its idempotency. Reporting it as clustererr.ErrClusterNotFound lets runDelete's
-		// existing state-cleanup and idempotent-success branches run, instead of pinning a Failed
-		// row that cannot be dismissed and retaining completed-create state that then blocks
-		// recreating the name — the trap runDelete's own idempotency handling was written to avoid.
-		//
-		// A mismatch is the opposite case and stays fail-closed: a different live cluster answering
-		// to this name is exactly what must not be mutated.
-		if errors.Is(err, eksclient.ErrClusterNotFound) {
-			return nil, fmt.Errorf(
-				"%w: %q has no live EKS cluster to verify ownership against: %w",
-				clustererr.ErrClusterNotFound, name, err,
-			)
-		}
-
-		return nil, fmt.Errorf("verify immutable EKS ownership identity for %q: %w", name, err)
+		return nil, normalizeEKSVerificationError(err, name)
 	}
 
-	// Bound the carried verifier too, per invocation.
+	// Bound the carried verifier too, per invocation, and normalize its result the same way.
 	//
 	// This deadline ends with this function, and the provisioner re-checks identity at its own
 	// mutation boundary using the context IT was given — which is the same uncancellable background
@@ -130,14 +113,53 @@ func (s *Service) resolveEKSMutationGuard(
 	// STS or EKS endpoint could still pin the job in Deleting/Updating even though the first check
 	// succeeded quickly. Wrapping is what makes the guarantee hold at both boundaries rather than
 	// only at the first one.
+	//
+	// The normalization has to happen here as well, not only at the call above: a cluster can be
+	// present when this guard verifies and gone by the time the provisioner re-checks — which is the
+	// very race the second check exists to catch. Normalizing only the first boundary would leave
+	// that window returning a raw eksclient error runDelete does not recognize, reaching the same
+	// undismissable Failed row one boundary later.
 	bounded := func(callCtx context.Context) error {
 		callCtx, callCancel := context.WithTimeout(callCtx, s.eksOwnershipTimeout)
 		defer callCancel()
 
-		return verifier(callCtx)
+		callErr := verifier(callCtx)
+		if callErr == nil {
+			return nil
+		}
+
+		return normalizeEKSVerificationError(callErr, name)
 	}
 
 	return &eksMutationGuard{resolution: resolution, verifier: bounded}, nil
+}
+
+// normalizeEKSVerificationError maps a verification failure caused by the cluster's absence onto
+// clustererr.ErrClusterNotFound, and leaves every other failure exactly as it was.
+//
+// Absence is the one verification failure that must not fail closed. The guard exists to stop a
+// mutation reaching an unrelated incarnation of the name; when no live cluster answers to it there
+// is no incarnation to reach, so refusing protects nothing and costs the caller its idempotency.
+// Reporting it as clustererr.ErrClusterNotFound lets runDelete's existing state-cleanup and
+// idempotent-success branches run, instead of pinning a Failed row that cannot be dismissed and
+// retaining completed-create state that then blocks recreating the name — the trap runDelete's own
+// idempotency handling was written to avoid.
+//
+// A mismatch is the opposite case and stays fail-closed: a different live cluster answering to this
+// name is exactly what must not be mutated.
+//
+// This is shared by both verification boundaries deliberately. Applying it at only one of them
+// leaves the other reporting an error runDelete cannot recognize, which is the same failure the
+// mapping exists to prevent.
+func normalizeEKSVerificationError(err error, name string) error {
+	if errors.Is(err, eksclient.ErrClusterNotFound) {
+		return fmt.Errorf(
+			"%w: %q has no live EKS cluster to verify ownership against: %w",
+			clustererr.ErrClusterNotFound, name, err,
+		)
+	}
+
+	return fmt.Errorf("verify immutable EKS ownership identity for %q: %w", name, err)
 }
 
 // applyEKSMutationGuard returns the factory the action should use, carrying the guard when one was

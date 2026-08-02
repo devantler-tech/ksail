@@ -630,3 +630,174 @@ func TestDeleteEKSStillRefusesAnIdentityMismatch(t *testing.T) {
 	assert.Empty(t, provisioner.deletedNames(),
 		"a delete reached the provisioner despite an ownership identity mismatch")
 }
+
+// carriedVerifierFactory hands the recorded verifier to a provisioner that actually CALLS it, so a
+// test can exercise the second verification boundary. The real EKS provisioner re-checks ownership
+// at its own mutation boundary via VerifyBeforeMutation and returns whatever that yields; the fakes
+// used elsewhere in this file only record the verifier, so they cannot reach this path at all.
+type carriedVerifierFactory struct {
+	provisioner *fakeProvisioner
+	recorder    *guardRecorder
+}
+
+func (f carriedVerifierFactory) Create(
+	_ context.Context,
+	_ *v1alpha1.Cluster,
+) (clusterprovisioner.Provisioner, any, error) {
+	return &carriedVerifierProvisioner{
+		inner:    f.provisioner,
+		verifier: f.recorder.recordedVerifier(),
+	}, nil, nil
+}
+
+func (f carriedVerifierFactory) WithEKSMutationGuard(
+	_ *credentials.AWSResolution,
+	verifier eksidentity.Verifier,
+) clusterprovisioner.Factory {
+	f.recorder.record(verifier)
+
+	return f
+}
+
+// carriedVerifierProvisioner re-checks ownership before delegating, exactly as the real provisioner
+// does at its mutation boundary.
+type carriedVerifierProvisioner struct {
+	inner    *fakeProvisioner
+	verifier eksidentity.Verifier
+}
+
+func (p *carriedVerifierProvisioner) Create(ctx context.Context, name string) error {
+	return p.inner.Create(ctx, name)
+}
+
+func (p *carriedVerifierProvisioner) Delete(ctx context.Context, name string) error {
+	if p.verifier != nil {
+		err := p.verifier(ctx)
+		if err != nil {
+			return fmt.Errorf("verify before mutation: %w", err)
+		}
+	}
+
+	return p.inner.Delete(ctx, name)
+}
+
+func (p *carriedVerifierProvisioner) Start(ctx context.Context, name string) error {
+	return p.inner.Start(ctx, name)
+}
+
+func (p *carriedVerifierProvisioner) Stop(ctx context.Context, name string) error {
+	return p.inner.Stop(ctx, name)
+}
+
+func (p *carriedVerifierProvisioner) List(ctx context.Context) ([]string, error) {
+	return p.inner.List(ctx)
+}
+
+func (p *carriedVerifierProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	return p.inner.Exists(ctx, name)
+}
+
+// newCarriedVerifierService wires a service whose provisioner calls the CARRIED verifier, with a
+// verifier that succeeds on its first call (the guard's own check) and fails on the second (the
+// provisioner's mutation-boundary re-check).
+func newCarriedVerifierService(
+	t *testing.T,
+	provisioner *fakeProvisioner,
+	recorder *guardRecorder,
+	secondCallErr error,
+) *clusterapi.Service {
+	t.Helper()
+
+	empty := &fakeProvisioner{}
+	service := clusterapi.NewTestService(func(
+		distribution v1alpha1.Distribution,
+		_ string,
+	) (clusterprovisioner.Factory, error) {
+		if distribution != v1alpha1.DistributionEKS {
+			return fakeFactory{provisioner: empty}, nil
+		}
+
+		return carriedVerifierFactory{provisioner: provisioner, recorder: recorder}, nil
+	})
+
+	var calls atomic.Int32
+
+	service.SetEKSOwnershipGuardForTest(
+		func(
+			_ context.Context,
+			_ string,
+		) (credentials.AWSResolution, eksidentity.Verifier, error) {
+			return credentials.AWSResolution{}, func(context.Context) error {
+				if calls.Add(1) == 1 {
+					return nil
+				}
+
+				return secondCallErr
+			}, nil
+		},
+	)
+
+	return service
+}
+
+// TestDeleteEKSStaysIdempotentWhenTheClusterVanishesBeforeTheCarriedCheck covers the window the
+// carried verifier exists for: the cluster is present when the guard verifies and gone by the time
+// the provisioner re-checks at its own mutation boundary.
+//
+// Normalizing absence only at the guard's own call would leave this second boundary returning a raw
+// eksclient error that runDelete does not recognize — the same undismissable Failed row and retained
+// state, reached one boundary later.
+func TestDeleteEKSStaysIdempotentWhenTheClusterVanishesBeforeTheCarriedCheck(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "vanished-late-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newCarriedVerifierService(t, provisioner, recorder,
+		fmt.Errorf("describe EKS cluster for ownership verification: %w",
+			fmt.Errorf("%w: %s", eksclient.ErrClusterNotFound, clusterName)))
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, found := phaseOf(list, clusterName)
+
+		return !found
+	}, eventuallyTimeout, eventuallyTick,
+		"a cluster that vanished before the carried verification stayed pinned Failed")
+}
+
+// TestDeleteEKSStillRefusesALateIdentityMismatch is the other direction at the same boundary: a
+// mismatch discovered by the carried verifier must still fail closed.
+func TestDeleteEKSStillRefusesALateIdentityMismatch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "mismatched-late-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newCarriedVerifierService(t, provisioner, recorder,
+		fmt.Errorf("%w: live cluster ARN does not match persisted ARN",
+			eksidentity.ErrIdentityMismatch))
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick,
+		"a late identity mismatch did not fail closed")
+
+	assert.Empty(t, provisioner.deletedNames(),
+		"a delete was delegated despite the carried verifier reporting a mismatch")
+}
