@@ -603,7 +603,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: 📥 Download patches
@@ -654,9 +654,8 @@ jobs:
       # A CLI commit here is unsigned and makes the pull request permanently unmergeable.
       #
       # Limitation: the API's FileAddition carries only a path and its contents, so file
-      # modes are not expressible. Everything this pipeline generates is a regular 0644
-      # file and the repository tracks no symlinks, so this is inert today; a generated
-      # executable or symlink would need a different mechanism.
+      # modes are not expressible. Reject anything other than a regular 0644 file below
+      # rather than dereferencing a symlink or silently losing an executable bit.
       - name: 📤 Commit and push generated changes (PR branch)
         if: github.event_name == 'pull_request'
         env:
@@ -690,6 +689,13 @@ jobs:
                 jq -n --arg p "$entry_path" '{path: $p}' >>"$deletions"
                 ;;
               *)
+                # FileAddition cannot represent symlinks, special files, or executable
+                # modes. In particular, reading a symlink here would dereference it and
+                # could publish sensitive runner files as an ordinary repository file.
+                if [ -L "$entry_path" ] || [ ! -f "$entry_path" ] || [ -x "$entry_path" ]; then
+                  echo "::error file=${entry_path}::Generated change is not a regular non-executable file"
+                  exit 1
+                fi
                 # File content must never reach argv. Linux caps a single argv entry at
                 # MAX_ARG_STRLEN (128 KiB) independently of ARG_MAX, and generated files
                 # here run to hundreds of KiB (pkg/svc/chat/docs_generated.go alone is
