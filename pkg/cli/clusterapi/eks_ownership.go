@@ -65,12 +65,23 @@ func (s *Service) resolveEKSMutationGuard(
 		return nil, err
 	}
 
+	// A nil verifier is refused rather than carried. eksidentity.VerifyBeforeMutation reads nil as
+	// "nothing to check" — correct for creates and non-EKS callers, and a silent fail-open here,
+	// because the guard would travel into the provisioner and authorize the mutation while checking
+	// nothing. The absence of a check is not a passing check.
+	if verifier == nil {
+		return nil, fmt.Errorf(
+			"%w for %q: ownership resolution returned no verifier",
+			ErrEKSOwnershipEvidenceMissing, name,
+		)
+	}
+
 	// Verify once here so the refusal surfaces before any provisioner work starts, and hand the
 	// same verifier onward so the provisioner re-checks at the narrowest boundary. This mirrors the
 	// standalone CLI path, which also verifies during its guard and reuses the verifier afterwards.
-	err = eksidentity.VerifyBeforeMutation(ctx, verifier)
+	err = verifier(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("verify immutable EKS ownership identity for %q: %w", name, err)
 	}
 
 	return &eksMutationGuard{resolution: resolution, verifier: verifier}, nil

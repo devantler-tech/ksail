@@ -151,7 +151,9 @@ func TestDeleteEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
 
 	provisioner := &fakeProvisioner{}
 	recorder := &guardRecorder{}
-	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused)
+	service := newGuardRecordingService(
+		t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused,
+	)
 
 	createEKSClusterForTest(t, service, clusterName)
 
@@ -169,6 +171,44 @@ func TestDeleteEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
 		"an unverifiable EKS target was deleted anyway")
 }
 
+// TestDeleteEKSRefusesWhenOwnershipResolutionReturnsNoVerifier pins the fail-open this guard is
+// most likely to acquire by accident: resolution succeeding but yielding no verifier. Downstream a
+// nil verifier reads as "nothing to check", so carrying it would produce a mutation that looks
+// guarded at every layer and checks nothing.
+func TestDeleteEKSRefusesWhenOwnershipResolutionReturnsNoVerifier(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "verifierless-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, nil)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	service.SetEKSOwnershipGuardForTest(
+		func(
+			_ context.Context,
+			_ string,
+		) (credentials.AWSResolution, eksidentity.Verifier, error) {
+			return credentials.AWSResolution{}, nil, nil
+		},
+	)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.Empty(t, provisioner.deletedNames(),
+		"a nil ownership verifier was carried into the mutation instead of refusing it")
+}
+
 // TestStopEKSRefusesWhenOwnershipCannotBeVerified covers the nodegroup-scaling boundary: stop scales
 // managed nodegroups to zero, so it is a mutation and carries the same guard as delete.
 func TestStopEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
@@ -178,7 +218,9 @@ func TestStopEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
 
 	provisioner := &fakeProvisioner{}
 	recorder := &guardRecorder{}
-	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused)
+	service := newGuardRecordingService(
+		t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused,
+	)
 
 	createEKSClusterForTest(t, service, clusterName)
 
@@ -206,7 +248,9 @@ func TestCreateEKSDoesNotRequireOwnershipVerification(t *testing.T) {
 
 	provisioner := &fakeProvisioner{}
 	recorder := &guardRecorder{}
-	service := newGuardRecordingService(t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused)
+	service := newGuardRecordingService(
+		t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused,
+	)
 
 	createEKSClusterForTest(t, service, clusterName)
 
