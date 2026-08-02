@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -518,4 +520,113 @@ func TestNonEKSCreateCapturesNothing(t *testing.T) {
 
 		return found && phase == v1alpha1.ClusterPhaseReady
 	}, eventuallyTimeout, eventuallyTick)
+}
+
+// newGuardRecordingServiceWithVerifierErr wires a service whose ownership resolution succeeds but
+// whose verifier fails. Resolution and verification fail for different reasons — resolution fails
+// when the evidence cannot be read, verification when the live cluster contradicts it — so a test
+// about verification outcomes has to drive the verifier itself.
+func newGuardRecordingServiceWithVerifierErr(
+	t *testing.T,
+	provisioner *fakeProvisioner,
+	recorder *guardRecorder,
+	verifyErr error,
+) *clusterapi.Service {
+	t.Helper()
+
+	empty := &fakeProvisioner{}
+	service := clusterapi.NewTestService(func(
+		distribution v1alpha1.Distribution,
+		_ string,
+	) (clusterprovisioner.Factory, error) {
+		if distribution != v1alpha1.DistributionEKS {
+			return fakeFactory{provisioner: empty}, nil
+		}
+
+		return guardObservingFactory{provisioner: provisioner, recorder: recorder}, nil
+	})
+	service.SetEKSOwnershipGuardForTest(
+		func(
+			_ context.Context,
+			_ string,
+		) (credentials.AWSResolution, eksidentity.Verifier, error) {
+			return credentials.AWSResolution{}, func(context.Context) error {
+				return verifyErr
+			}, nil
+		},
+	)
+
+	return service
+}
+
+// TestDeleteEKSStaysIdempotentWhenTheClusterIsAlreadyGone pins the distinction the guard has to
+// draw: a cluster that is absent is not a cluster that is wrong.
+//
+// Verification cannot succeed against a cluster that no longer exists, so a guard that treats every
+// verification failure alike turns the ordinary out-of-band-deletion case into a permanent Failed
+// row plus retained completed-create state, which then blocks recreating the same name. That is the
+// undismissable-row trap runDelete's idempotency handling exists to avoid — reintroduced one layer
+// above it.
+func TestDeleteEKSStaysIdempotentWhenTheClusterIsAlreadyGone(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "vanished-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingServiceWithVerifierErr(
+		t, provisioner, recorder,
+		// The shape production produces: eksidentity wraps whatever DescribeCluster returned.
+		fmt.Errorf("describe EKS cluster for ownership verification: %w",
+			fmt.Errorf("%w: %s", eksclient.ErrClusterNotFound, clusterName)),
+	)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, found := phaseOf(list, clusterName)
+
+		return !found
+	}, eventuallyTimeout, eventuallyTick,
+		"an EKS delete for an already-absent cluster stayed pinned instead of clearing")
+
+	assert.Empty(t, provisioner.deletedNames(),
+		"a delete was issued against a cluster the guard had established was gone")
+}
+
+// TestDeleteEKSStillRefusesAnIdentityMismatch is the other direction, and the reason the test above
+// cannot simply relax the guard: an identity mismatch means a DIFFERENT live cluster answers to this
+// name, so the mutation must still be refused. Absence and mismatch must not collapse into one case.
+func TestDeleteEKSStillRefusesAnIdentityMismatch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "mismatched-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingServiceWithVerifierErr(
+		t, provisioner, recorder,
+		fmt.Errorf("%w: live cluster ARN does not match persisted ARN",
+			eksidentity.ErrIdentityMismatch),
+	)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick,
+		"an identity mismatch did not fail closed")
+
+	assert.Empty(t, provisioner.deletedNames(),
+		"a delete reached the provisioner despite an ownership identity mismatch")
 }

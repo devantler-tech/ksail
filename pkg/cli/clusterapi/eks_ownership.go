@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 )
 
 // ErrEKSOwnershipEvidenceMissing reports a local API EKS mutation for a cluster with no target
@@ -101,6 +102,23 @@ func (s *Service) resolveEKSMutationGuard(
 	// standalone CLI path, which also verifies during its guard and reuses the verifier afterwards.
 	err = verifier(ctx)
 	if err != nil {
+		// Absence is the one verification failure that must not fail closed. This guard exists to
+		// stop a mutation reaching an unrelated incarnation of the name; when no live cluster
+		// answers to it there is no incarnation to reach, so refusing protects nothing and costs
+		// the caller its idempotency. Reporting it as clustererr.ErrClusterNotFound lets runDelete's
+		// existing state-cleanup and idempotent-success branches run, instead of pinning a Failed
+		// row that cannot be dismissed and retaining completed-create state that then blocks
+		// recreating the name — the trap runDelete's own idempotency handling was written to avoid.
+		//
+		// A mismatch is the opposite case and stays fail-closed: a different live cluster answering
+		// to this name is exactly what must not be mutated.
+		if errors.Is(err, eksclient.ErrClusterNotFound) {
+			return nil, fmt.Errorf(
+				"%w: %q has no live EKS cluster to verify ownership against: %w",
+				clustererr.ErrClusterNotFound, name, err,
+			)
+		}
+
 		return nil, fmt.Errorf("verify immutable EKS ownership identity for %q: %w", name, err)
 	}
 
