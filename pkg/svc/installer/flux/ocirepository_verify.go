@@ -12,7 +12,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
+
+// newUnstructuredClient builds the client used to read the live OCIRepository. It is
+// a package-level var, like loadRESTConfig, so tests can inject a fake and
+// exercise the real read-and-compare path instead of stubbing its result.
+//
+//nolint:gochecknoglobals // Allows mocking for tests
+var newUnstructuredClient = func(restConfig *rest.Config) (dynamic.Interface, error) {
+	return dynamic.NewForConfig(restConfig)
+}
 
 // VerifyDrifted reports whether the live flux-system OCIRepository is missing
 // the spec.verify block that spec.workload.flux.verify configures.
@@ -76,7 +86,7 @@ func currentOCIRepositoryVerify(
 		return nil, false, fmt.Errorf("build REST config: %w", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	dynamicClient, err := newUnstructuredClient(restConfig)
 	if err != nil {
 		return nil, false, fmt.Errorf("create dynamic client: %w", err)
 	}

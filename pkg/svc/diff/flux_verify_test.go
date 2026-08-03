@@ -8,8 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
-const fluxVerifyField = "cluster.workload.flux.verify"
-
 func newVerifyEngine() *specdiff.Engine {
 	return specdiff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 }
@@ -34,8 +32,8 @@ func TestCheckFluxVerifySurfacesAnUnverifiedCluster(t *testing.T) {
 	}
 
 	change := result.InPlaceChanges[0]
-	if change.Field != fluxVerifyField {
-		t.Errorf("field = %q, want %q", change.Field, fluxVerifyField)
+	if change.Field != specdiff.FluxVerifyField {
+		t.Errorf("field = %q, want %q", change.Field, specdiff.FluxVerifyField)
 	}
 
 	if change.Category != clusterupdate.ChangeCategoryInPlace {

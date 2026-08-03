@@ -144,10 +144,10 @@ func (r *componentReconciler) handlerForField(
 		"cluster.gitOpsEngine":                      r.reconcileGitOpsEngine,
 		"cluster.workload.tag":                      r.reconcileWorkloadTag,
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
-		"cluster.workload.flux.verify":              r.reconcileFluxVerify,
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
+	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -175,9 +175,9 @@ func isComponentReconcileField(field string) bool {
 		"cluster.gitOpsEngine",
 		"cluster.workload.tag",
 		"cluster.workload.flux.distributionVersion",
-		"cluster.workload.flux.verify",
 		specdiff.EKSLoadBalancerControllerField,
-		specdiff.RegistryCredentialField:
+		specdiff.RegistryCredentialField,
+		specdiff.FluxVerifyField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")

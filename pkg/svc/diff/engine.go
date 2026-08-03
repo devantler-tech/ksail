@@ -23,6 +23,11 @@ const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerC
 //nolint:gosec // G101 false positive: a diff key, not a credential.
 const RegistryCredentialField = "cluster.localRegistry.credentials"
 
+// FluxVerifyField is the diff key for artifact signature verification on the
+// flux-system OCIRepository. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const FluxVerifyField = "cluster.workload.flux.verify"
+
 // registryCredentialOldDisplay and registryCredentialNewDisplay are the values
 // rendered for a credential rotation. The resolved credential — and any digest
 // of it — is deliberately never placed in a Change: Change values are printed by
@@ -157,7 +162,7 @@ func (e *Engine) CheckFluxVerify(
 		return
 	}
 
-	appendChange(result, "cluster.workload.flux.verify",
+	appendChange(result, FluxVerifyField,
 		"absent", "configured", "",
 		"artifact signature verification can be re-asserted in-place on the OCIRepository",
 		clusterupdate.ChangeCategoryInPlace)

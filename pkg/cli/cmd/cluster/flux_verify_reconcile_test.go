@@ -5,13 +5,11 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
-
-// fluxVerifyField is the diff field name for artifact-verification drift.
-const fluxVerifyField = "cluster.workload.flux.verify"
 
 // TestFluxVerifyFieldHasReconcileHandler pins the wiring between detection and
 // application, which is the half platform#2922 was actually missing. The verify
@@ -26,9 +24,9 @@ func TestFluxVerifyFieldHasReconcileHandler(t *testing.T) {
 
 	assert.True(
 		t,
-		cluster.ExportHandlerForField(&cobra.Command{}, clusterCfg, fluxVerifyField),
+		cluster.ExportHandlerForField(&cobra.Command{}, clusterCfg, specdiff.FluxVerifyField),
 		"no reconcile handler is registered for %q, so detected verify drift would be silently skipped",
-		fluxVerifyField,
+		specdiff.FluxVerifyField,
 	)
 }
 
@@ -44,7 +42,7 @@ func TestFluxVerifyDriftStaysInPlace(t *testing.T) {
 	diff := clusterupdate.NewEmptyUpdateResult()
 	diff.InPlaceChanges = []clusterupdate.Change{
 		{
-			Field:    fluxVerifyField,
+			Field:    specdiff.FluxVerifyField,
 			Category: clusterupdate.ChangeCategoryInPlace,
 		},
 	}
