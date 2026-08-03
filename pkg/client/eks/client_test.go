@@ -509,3 +509,38 @@ func assertTokenCredentialPrefix(t *testing.T, token, expected string) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(signedURL.Query().Get("X-Amz-Credential"), expected))
 }
+
+func TestDescribeClusterMapsResourceNotFoundToSentinel(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(
+		t,
+		fakeDescriber{
+			out: nil,
+			err: &ekstypes.ResourceNotFoundException{
+				Message: aws.String("No cluster found for name: eks-default."),
+			},
+		},
+		fakePresigner{request: nil, err: nil},
+	)
+
+	_, err := client.DescribeCluster(t.Context(), "eks-default")
+	require.ErrorIs(t, err, eksclient.ErrClusterNotFound)
+}
+
+func TestDescribeClusterKeepsOtherAPIErrorsDistinctFromAbsence(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(
+		t,
+		fakeDescriber{
+			out: nil,
+			err: &ekstypes.ServerException{Message: aws.String("internal failure")},
+		},
+		fakePresigner{request: nil, err: nil},
+	)
+
+	_, err := client.DescribeCluster(t.Context(), "eks-default")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, eksclient.ErrClusterNotFound)
+}

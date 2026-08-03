@@ -92,6 +92,18 @@ type Service struct {
 
 	newFactory FactoryFunc
 
+	// resolveEKSGuard resolves the frozen AWS credential snapshot and immutable-ownership verifier
+	// every EKS mutation must carry. Injectable so tests exercise the guard wiring without AWS.
+	resolveEKSGuard eksGuardFunc
+
+	// eksOwnershipTimeout bounds that resolution's network calls. Injectable so a test can drive the
+	// deadline path without waiting the real budget.
+	eksOwnershipTimeout time.Duration
+
+	// captureEKSIdentity records the immutable AWS identity of a cluster this backend just created,
+	// so the guard above has something to verify against. Injectable alongside resolveEKSGuard.
+	captureEKSIdentity eksCaptureFunc
+
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
 	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
 	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
@@ -170,6 +182,9 @@ func NewService() *Service {
 		ProbeRunState: true,
 	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
+	service.resolveEKSGuard = service.defaultEKSGuard
+	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
+	service.captureEKSIdentity = service.defaultEKSCapture
 	service.useDefaultClients()
 
 	return service
@@ -822,7 +837,7 @@ func (s *Service) runLifecycleAction(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) {
-	err := s.runProvisioner(ctx, name, spec, action)
+	err := s.runGuardedProvisioner(ctx, name, spec, action)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -885,6 +900,18 @@ func (s *Service) reserveCreateJob(
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
+	isEKS := spec.Cluster.Distribution == v1alpha1.DistributionEKS
+
+	// Snapshot the AWS selection BEFORE the create starts, so the capture afterwards records under
+	// the credentials this create ran with. Re-resolving it after an asynchronous create — from a
+	// different source, and after Settings may have moved — is what let a create in one account be
+	// recorded as a same-named cluster in another.
+	var identity *eksCreateIdentity
+
+	if isEKS {
+		identity = newEKSCreateIdentity(spec.Provider.AWS)
+	}
+
 	err := s.runProvisioner(
 		ctx,
 		name,
@@ -893,10 +920,29 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 			return p.Create(actionCtx, name)
 		},
 	)
-	if err == nil && spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+	if err == nil && isEKS {
 		err = state.SaveClusterSpec(name, &spec.Cluster)
 		if err != nil {
 			err = fmt.Errorf("persist local EKS cluster ownership state: %w", err)
+		}
+
+		// Record the immutable AWS identity while we still know the cluster is ours. Without this
+		// the guard on every later delete/start/stop has nothing to verify against, so a cluster
+		// created here could not be operated here — the operator would have to run
+		// `ksail cluster eks-bind` by hand after every create.
+		//
+		// A capture failure fails the job, matching the SaveClusterSpec handling directly above:
+		// the remote cluster exists either way, and reporting success while leaving it unoperatable
+		// would hide the problem until the first delete.
+		if err == nil {
+			err = s.captureEKSOwnership(ctx, name, identity)
+			if err != nil {
+				err = fmt.Errorf(
+					"record immutable EKS ownership identity for %q (the cluster was created;"+
+						" run `ksail cluster eks-bind --name %s` to record it): %w",
+					name, name, err,
+				)
+			}
 		}
 	}
 
@@ -922,7 +968,7 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 }
 
 func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
-	err := s.runProvisioner(
+	err := s.runGuardedProvisioner(
 		ctx,
 		name,
 		spec,
@@ -967,6 +1013,26 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 	delete(s.jobs, name)
 }
 
+// runGuardedProvisioner runs a mutating action (delete, start, stop) behind the EKS ownership
+// guard. Resolving the guard first means an unverifiable target is refused before any provisioner
+// is built, and the same verified identity travels into the provisioner for its own re-check.
+//
+// Create deliberately does not take this path: it has no prior incarnation to verify and no
+// persisted identity yet, so demanding a guard there would refuse every first EKS create.
+func (s *Service) runGuardedProvisioner(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+) error {
+	guard, err := s.resolveEKSMutationGuard(ctx, spec.Cluster.Distribution, name)
+	if err != nil {
+		return err
+	}
+
+	return s.runProvisionerWithGuard(ctx, name, spec, guard, action)
+}
+
 // runProvisioner builds a provisioner for the requested spec and runs the supplied action against
 // it. The spec carries the provider (so Talos routes to Hetzner/Omni/Docker) and node counts.
 func (s *Service) runProvisioner(
@@ -975,7 +1041,20 @@ func (s *Service) runProvisioner(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
-	provisioner, err := s.buildProvisioner(ctx, spec, name)
+	return s.runProvisionerWithGuard(ctx, name, spec, nil, action)
+}
+
+// runProvisionerWithGuard is the shared body of the guarded and unguarded paths. A nil guard is the
+// unguarded case and leaves the factory exactly as it was, so a create and every non-EKS action
+// reach the provisioner they always did.
+func (s *Service) runProvisionerWithGuard(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	guard *eksMutationGuard,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+) error {
+	provisioner, err := s.buildProvisioner(ctx, spec, name, guard)
 	if err != nil {
 		return err
 	}
@@ -1010,10 +1089,16 @@ func (s *Service) buildProvisioner(
 	ctx context.Context,
 	spec v1alpha1.Spec,
 	name string,
+	guard *eksMutationGuard,
 ) (clusterprovisioner.Provisioner, error) {
 	distribution := spec.Cluster.Distribution
 
 	factory, err := s.newFactory(distribution, name)
+	if err != nil {
+		return nil, err
+	}
+
+	factory, err = applyEKSMutationGuard(factory, guard)
 	if err != nil {
 		return nil, err
 	}

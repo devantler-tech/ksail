@@ -6,6 +6,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -114,8 +116,73 @@ func NewTestService(factory FactoryFunc) *Service {
 	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
 	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
 	service.kubeconfigPath = func() string { return "" }
+	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
+	// about the guard itself override it with SetEKSOwnershipGuardForTest.
+	service.captureEKSIdentity = func(context.Context, string, *eksCreateIdentity) error { return nil }
+	service.resolveEKSGuard = func(
+		context.Context,
+		string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error) {
+		return credentials.AWSResolution{}, func(context.Context) error { return nil }, nil
+	}
 
 	return service
+}
+
+// SetEKSOwnershipCaptureForTest overrides the create-time identity capture, so a test can drive a
+// failing capture without AWS.
+// The pinned create identity is deliberately not exposed here: it is an internal type, and the
+// tests that assert it reaches the capture live in the internal test package.
+func (s *Service) SetEKSOwnershipCaptureForTest(
+	capture func(ctx context.Context, name string) error,
+) {
+	s.captureEKSIdentity = func(ctx context.Context, name string, _ *eksCreateIdentity) error {
+		return capture(ctx, name)
+	}
+}
+
+// SetEKSOwnershipCaptureRecorderForTest overrides the create-time identity capture and reports the
+// identity the create pinned for it: whether one was supplied at all, the AWS variable-name options
+// it carries, and the region its snapshot resolved to.
+//
+// The pinned identity is an internal type, so it is reported as plain values rather than exposed. A
+// test asserting on these is asserting the property that matters — that the capture records under
+// the credentials the create actually ran with, not an independently resolved set.
+func (s *Service) SetEKSOwnershipCaptureRecorderForTest(
+	record func(name string, pinned bool, awsOptions v1alpha1.OptionsAWS, selectionRegion string),
+) {
+	s.captureEKSIdentity = func(
+		_ context.Context,
+		name string,
+		identity *eksCreateIdentity,
+	) error {
+		if identity == nil {
+			record(name, false, v1alpha1.OptionsAWS{}, "")
+
+			return nil
+		}
+
+		record(name, true, identity.awsOptions, identity.selection.Region)
+
+		return nil
+	}
+}
+
+// SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a
+// test can drive the deadline path without waiting the production budget.
+func (s *Service) SetEKSOwnershipTimeoutForTest(d time.Duration) {
+	s.eksOwnershipTimeout = d
+}
+
+// SetEKSOwnershipGuardForTest overrides the AWS-touching half of the EKS mutation guard, so a test
+// can drive a refusing or accepting immutable-identity check without AWS credentials.
+func (s *Service) SetEKSOwnershipGuardForTest(
+	guard func(
+		ctx context.Context,
+		name string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error),
+) {
+	s.resolveEKSGuard = guard
 }
 
 // ExportEKSConfigForCreate exposes eksDistributionConfig for testing the generated eks.yaml. It

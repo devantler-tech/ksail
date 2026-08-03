@@ -16,6 +16,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -186,6 +188,15 @@ func (f fakeFactory) Create(
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.Provisioner, any, error) {
 	return f.provisioner, nil, nil
+}
+
+// WithEKSMutationGuard satisfies the guard-carrying interface an EKS mutation requires. The fake
+// ignores the guard because it never reaches AWS; refusing to carry one would fail the mutation.
+func (f fakeFactory) WithEKSMutationGuard(
+	_ *credentials.AWSResolution,
+	_ eksidentity.Verifier,
+) clusterprovisioner.Factory {
+	return f
 }
 
 // newTestService wires a Service whose factory routes each distribution to a supplied provisioner.
