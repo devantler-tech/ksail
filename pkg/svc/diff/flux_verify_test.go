@@ -59,6 +59,13 @@ func TestCheckFluxVerifyDoesNotClaimAKnownLiveState(t *testing.T) {
 	result := clusterupdate.NewEmptyUpdateResult()
 	newVerifyEngine().CheckFluxVerify(true, v1alpha1.GitOpsEngineFlux, result)
 
+	// Check the length before indexing: a detector that emitted nothing is the
+	// very regression this test exists to catch, and an unguarded index reports
+	// it as a panic in the harness rather than as this test's own failure.
+	if len(result.InPlaceChanges) != 1 {
+		t.Fatalf("expected exactly one in-place change, got %d", len(result.InPlaceChanges))
+	}
+
 	old := result.InPlaceChanges[0].OldValue
 
 	// The specific state a live differing block would contradict. Named
