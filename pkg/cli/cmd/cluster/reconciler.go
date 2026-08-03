@@ -57,6 +57,15 @@ type componentReconciler struct {
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
 	loadBalancerErr        error
+	// fluxReasserted coalesces every Flux field that shares reassertFluxInstance
+	// as its repair — currently distributionVersion and verify — when more than
+	// one of them drifts in a single update pass. They map to one FluxInstance
+	// upsert, so without this a two-field drift resolves the registry host and
+	// runs SetupInstance twice for one cluster state.
+	// fluxReassertErr preserves the error from the first attempt so that
+	// subsequent calls surface the same failure instead of silently succeeding.
+	fluxReasserted  bool
+	fluxReassertErr error
 	// eksLoadBalancerOwnershipUpdated is set only after this update pass actually
 	// installs/upgrades or uninstalls the EKS controller. If untouched, final state
 	// persistence preserves the prior exact-region ownership marker.
@@ -147,6 +156,7 @@ func (r *componentReconciler) handlerForField(
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
+	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -175,7 +185,8 @@ func isComponentReconcileField(field string) bool {
 		"cluster.workload.tag",
 		"cluster.workload.flux.distributionVersion",
 		specdiff.EKSLoadBalancerControllerField,
-		specdiff.RegistryCredentialField:
+		specdiff.RegistryCredentialField,
+		specdiff.FluxVerifyField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -612,14 +623,29 @@ func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
 	return kubeconfigPath, true, nil
 }
 
-// reconcileFluxVersion re-asserts the FluxInstance so a changed
-// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
-// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
-// distribution version.
-func (r *componentReconciler) reconcileFluxVersion(
-	ctx context.Context,
-	_ clusterupdate.Change,
-) error {
+// reassertFluxInstance re-runs SetupInstance, which upserts the FluxInstance and
+// re-applies the OCIRepository settings KSail owns. It is the single in-place
+// repair for every Flux field whose desired state is expressed in configuration
+// but applied to the cluster only by setup, so each such field's handler is a
+// thin wrapper naming what it repairs. A no-op on non-Flux clusters.
+//
+// Runs at most once per update pass. Those wrappers are separate diff fields, so
+// a single update that reports both of them drifting would otherwise resolve the
+// registry host and upsert the FluxInstance twice for one cluster state. The
+// outcome is memoized rather than merely skipped, so a second field sharing this
+// repair reports the first attempt's failure instead of silently succeeding.
+func (r *componentReconciler) reassertFluxInstance(ctx context.Context) error {
+	if r.fluxReasserted {
+		return r.fluxReassertErr
+	}
+
+	r.fluxReasserted = true
+	r.fluxReassertErr = r.applyFluxInstance(ctx)
+
+	return r.fluxReassertErr
+}
+
+func (r *componentReconciler) applyFluxInstance(ctx context.Context) error {
 	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
 	if err != nil || !isFlux {
 		return err
@@ -642,6 +668,30 @@ func (r *componentReconciler) reconcileFluxVersion(
 	}
 
 	return nil
+}
+
+// reconcileFluxVersion re-asserts the FluxInstance so a changed
+// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
+// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
+// distribution version.
+func (r *componentReconciler) reconcileFluxVersion(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	return r.reassertFluxInstance(ctx)
+}
+
+// reconcileFluxVerify re-asserts the OCIRepository's spec.verify block so a
+// configured spec.workload.flux.verify reaches a cluster that is already
+// bootstrapped. Without this the block is applied only at create time, or
+// incidentally when another field's change re-asserts the FluxInstance, so
+// enabling verification on a live cluster silently did nothing (platform#2922).
+// Flux only — ArgoCD has no equivalent artifact-signature gate.
+func (r *componentReconciler) reconcileFluxVerify(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	return r.reassertFluxInstance(ctx)
 }
 
 // reconcileRegistryCredentials re-writes the KSail-managed registry Secret so a

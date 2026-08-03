@@ -11,6 +11,7 @@ import (
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -146,6 +147,26 @@ func SetNewCoreV1Client(fn func(*rest.Config) (client.Client, error)) func() {
 	return func() {
 		newCoreV1Client = original
 	}
+}
+
+// SetNewUnstructuredClient allows tests to replace newUnstructuredClient with a fake, so
+// the live OCIRepository read in VerifyDrifted runs against synthetic cluster
+// state rather than a real API server.
+func SetNewUnstructuredClient(fn func(*rest.Config) (dynamic.Interface, error)) func() {
+	original := newUnstructuredClient
+	newUnstructuredClient = fn
+
+	return func() {
+		newUnstructuredClient = original
+	}
+}
+
+// CurrentOCIRepositoryVerify exports currentOCIRepositoryVerify for testing.
+func CurrentOCIRepositoryVerify(
+	ctx context.Context,
+	kubeconfig, kubeContext string,
+) (map[string]any, bool, error) {
+	return currentOCIRepositoryVerify(ctx, kubeconfig, kubeContext)
 }
 
 // SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.

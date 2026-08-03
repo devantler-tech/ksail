@@ -793,3 +793,28 @@ func ExportGuardUpdateTargetManaged(
 
 	return err
 }
+
+// ExportFluxReassertMemoized runs both Flux handlers on ONE reconciler, flipping
+// the GitOps engine to Flux between the calls.
+//
+// The flip is what makes the result meaningful: the first call is a non-Flux
+// no-op, and a second call that recomputed would take the Flux path and attempt
+// the real upsert against a cancelled context. A nil second result therefore
+// proves the reassertion was memoized rather than merely that it succeeded.
+func ExportFluxReassertMemoized(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+) (error, error) {
+	reconciler := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+
+	first := reconciler.reconcileFluxVersion(context.Background(), clusterupdate.Change{})
+
+	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	second := reconciler.reconcileFluxVerify(ctx, clusterupdate.Change{})
+
+	return first, second
+}

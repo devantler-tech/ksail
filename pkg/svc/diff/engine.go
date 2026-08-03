@@ -23,6 +23,17 @@ const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerC
 //nolint:gosec // G101 false positive: a diff key, not a credential.
 const RegistryCredentialField = "cluster.localRegistry.credentials"
 
+// FluxVerifyField is the diff key for artifact signature verification on the
+// flux-system OCIRepository. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const FluxVerifyField = "cluster.workload.flux.verify"
+
+// fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
+// detector receives a single boolean covering both an absent spec.verify block
+// and one that is present but differs, so this names the disjunction rather than
+// asserting either state.
+const fluxVerifyDriftedDisplay = "absent or mismatched"
+
 // registryCredentialOldDisplay and registryCredentialNewDisplay are the values
 // rendered for a credential rotation. The resolved credential — and any digest
 // of it — is deliberately never placed in a Change: Change values are printed by
@@ -128,6 +139,43 @@ func (e *Engine) CheckFluxDistributionVersion(
 	appendChange(result, "cluster.workload.flux.distributionVersion",
 		oldVersion, newVersion, "",
 		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+// CheckFluxVerify appends an in-place change when the live flux-system
+// OCIRepository is missing the spec.verify block the configuration asks for.
+//
+// Like a rotated registry credential, this drift is invisible to the structural
+// diff: it compares the old cluster spec against the new one, so configuring
+// verify shows up exactly once and never again — while nothing on the update
+// path applies the block unless some other field's change happens to trigger a
+// handler that re-asserts the FluxInstance. The result was a green deploy
+// against a root source Flux was not verifying at all (platform#2922).
+//
+// drifted is decided by the flux installer, which reads the live resource and
+// compares it with the same function the patcher uses to decide it is already
+// in place.
+//
+// drifted collapses two live states — spec.verify absent, and spec.verify
+// present but different from the configured block — so the old value reported
+// here must name both. A bare "absent" would tell an operator whose live source
+// verifies with another provider something false about their own cluster.
+func (e *Engine) CheckFluxVerify(
+	drifted bool,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	if !drifted {
+		return
+	}
+
+	appendChange(result, FluxVerifyField,
+		fluxVerifyDriftedDisplay, "configured", "",
+		"artifact signature verification can be re-asserted in-place on the OCIRepository",
 		clusterupdate.ChangeCategoryInPlace)
 }
 
