@@ -1,6 +1,7 @@
 package diff_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -40,6 +41,41 @@ func TestCheckFluxVerifySurfacesAnUnverifiedCluster(t *testing.T) {
 		t.Errorf(
 			"category = %q, want in-place — re-asserting verify must never demand recreation",
 			change.Category,
+		)
+	}
+}
+
+// TestCheckFluxVerifyDoesNotClaimAKnownLiveState pins the reported old value
+// against the one thing the detector cannot know.
+//
+// VerifyDrifted returns a single boolean for two different live states: no
+// spec.verify block at all, and a block that is present but differs from the
+// configured one. The update plan is read by an operator against their own
+// cluster, so an old value naming just one of those states is a false statement
+// for everyone in the other. The label must therefore cover both.
+func TestCheckFluxVerifyDoesNotClaimAKnownLiveState(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	newVerifyEngine().CheckFluxVerify(true, v1alpha1.GitOpsEngineFlux, result)
+
+	old := result.InPlaceChanges[0].OldValue
+
+	// The specific state a live differing block would contradict. Named
+	// explicitly so a revert to it fails here rather than only shifting a
+	// string somewhere.
+	if old == "absent" {
+		t.Fatalf(
+			"old value = %q, which is false for a cluster whose live spec.verify "+
+				"is present but uses another provider",
+			old,
+		)
+	}
+
+	if !strings.Contains(old, "absent") || !strings.Contains(old, "mismatched") {
+		t.Errorf(
+			"old value = %q, want a label naming both drift causes (absent, mismatched)",
+			old,
 		)
 	}
 }

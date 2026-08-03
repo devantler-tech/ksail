@@ -28,6 +28,12 @@ const RegistryCredentialField = "cluster.localRegistry.credentials"
 // renames cannot silently disconnect detection from application.
 const FluxVerifyField = "cluster.workload.flux.verify"
 
+// fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
+// detector receives a single boolean covering both an absent spec.verify block
+// and one that is present but differs, so this names the disjunction rather than
+// asserting either state.
+const fluxVerifyDriftedDisplay = "absent or mismatched"
+
 // registryCredentialOldDisplay and registryCredentialNewDisplay are the values
 // rendered for a credential rotation. The resolved credential — and any digest
 // of it — is deliberately never placed in a Change: Change values are printed by
@@ -149,6 +155,11 @@ func (e *Engine) CheckFluxDistributionVersion(
 // drifted is decided by the flux installer, which reads the live resource and
 // compares it with the same function the patcher uses to decide it is already
 // in place.
+//
+// drifted collapses two live states — spec.verify absent, and spec.verify
+// present but different from the configured block — so the old value reported
+// here must name both. A bare "absent" would tell an operator whose live source
+// verifies with another provider something false about their own cluster.
 func (e *Engine) CheckFluxVerify(
 	drifted bool,
 	gitOpsEngine v1alpha1.GitOpsEngine,
@@ -163,7 +174,7 @@ func (e *Engine) CheckFluxVerify(
 	}
 
 	appendChange(result, FluxVerifyField,
-		"absent", "configured", "",
+		fluxVerifyDriftedDisplay, "configured", "",
 		"artifact signature verification can be re-asserted in-place on the OCIRepository",
 		clusterupdate.ChangeCategoryInPlace)
 }

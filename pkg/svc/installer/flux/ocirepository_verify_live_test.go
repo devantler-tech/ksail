@@ -30,7 +30,12 @@ import (
 var errUnexpectedClusterRead = errors.New("cluster must not be read")
 
 const (
-	fluxSystemNamespace  = "flux-system"
+	fluxSystemNamespace = "flux-system"
+	// ociRepositoryName is the root source's RESOURCE name, which production
+	// derives separately from the namespace. The two values coincide today, so
+	// spelling them apart is what keeps a future divergence a visible test
+	// change rather than a lookup that silently misses.
+	ociRepositoryName    = "flux-system"
 	ociRepositoriesRsrc  = "ocirepositories"
 	sourceGroup          = "source.toolkit.fluxcd.io"
 	sourceVersion        = "v1"
@@ -57,7 +62,7 @@ func newFakeOCIRepository(verify map[string]any) *unstructured.Unstructured {
 		Version: sourceVersion,
 		Kind:    "OCIRepository",
 	})
-	repo.SetName(fluxSystemNamespace)
+	repo.SetName(ociRepositoryName)
 	repo.SetNamespace(fluxSystemNamespace)
 
 	spec := map[string]any{"url": "oci://ghcr.io/devantler-tech/platform"}
