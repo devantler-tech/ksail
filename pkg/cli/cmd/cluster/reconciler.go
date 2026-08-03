@@ -57,6 +57,15 @@ type componentReconciler struct {
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
 	loadBalancerErr        error
+	// fluxReasserted coalesces every Flux field that shares reassertFluxInstance
+	// as its repair — currently distributionVersion and verify — when more than
+	// one of them drifts in a single update pass. They map to one FluxInstance
+	// upsert, so without this a two-field drift resolves the registry host and
+	// runs SetupInstance twice for one cluster state.
+	// fluxReassertErr preserves the error from the first attempt so that
+	// subsequent calls surface the same failure instead of silently succeeding.
+	fluxReasserted  bool
+	fluxReassertErr error
 	// eksLoadBalancerOwnershipUpdated is set only after this update pass actually
 	// installs/upgrades or uninstalls the EKS controller. If untouched, final state
 	// persistence preserves the prior exact-region ownership marker.
@@ -619,7 +628,24 @@ func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
 // repair for every Flux field whose desired state is expressed in configuration
 // but applied to the cluster only by setup, so each such field's handler is a
 // thin wrapper naming what it repairs. A no-op on non-Flux clusters.
+//
+// Runs at most once per update pass. Those wrappers are separate diff fields, so
+// a single update that reports both of them drifting would otherwise resolve the
+// registry host and upsert the FluxInstance twice for one cluster state. The
+// outcome is memoized rather than merely skipped, so a second field sharing this
+// repair reports the first attempt's failure instead of silently succeeding.
 func (r *componentReconciler) reassertFluxInstance(ctx context.Context) error {
+	if r.fluxReasserted {
+		return r.fluxReassertErr
+	}
+
+	r.fluxReasserted = true
+	r.fluxReassertErr = r.applyFluxInstance(ctx)
+
+	return r.fluxReassertErr
+}
+
+func (r *componentReconciler) applyFluxInstance(ctx context.Context) error {
 	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
 	if err != nil || !isFlux {
 		return err

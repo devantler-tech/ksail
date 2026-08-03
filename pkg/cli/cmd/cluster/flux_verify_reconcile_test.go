@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestFluxVerifyFieldHasReconcileHandler pins the wiring between detection and
@@ -66,5 +67,30 @@ func TestFluxVerifyDriftStaysInPlace(t *testing.T) {
 		diff.InPlaceChanges,
 		1,
 		"the verify change must survive promotion as an in-place change",
+	)
+}
+
+// TestFluxReassertRunsOncePerUpdatePass pins the coalescing of the two Flux
+// handlers.
+//
+// spec.workload.flux.distributionVersion and spec.workload.flux.verify are
+// separate diff fields with separate handlers, but both repair themselves
+// through the same SetupInstance upsert. An update reporting both would
+// otherwise run that upsert twice — the same duplication the autoscaler and
+// load-balancer flags already prevent for their own fields.
+func TestFluxReassertRunsOncePerUpdatePass(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := v1alpha1.NewCluster()
+	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineNone
+
+	first, second := cluster.ExportFluxReassertMemoized(&cobra.Command{}, clusterCfg)
+
+	require.NoError(t, first, "a non-Flux cluster must reassert cleanly as a no-op")
+	require.NoError(
+		t,
+		second,
+		"the second Flux handler must reuse the first reassertion; recomputing would "+
+			"have attempted the upsert against a cancelled context",
 	)
 }
