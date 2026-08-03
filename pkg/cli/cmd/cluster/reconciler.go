@@ -614,14 +614,12 @@ func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
 	return kubeconfigPath, true, nil
 }
 
-// reconcileFluxVersion re-asserts the FluxInstance so a changed
-// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
-// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
-// distribution version.
-func (r *componentReconciler) reconcileFluxVersion(
-	ctx context.Context,
-	_ clusterupdate.Change,
-) error {
+// reassertFluxInstance re-runs SetupInstance, which upserts the FluxInstance and
+// re-applies the OCIRepository settings KSail owns. It is the single in-place
+// repair for every Flux field whose desired state is expressed in configuration
+// but applied to the cluster only by setup, so each such field's handler is a
+// thin wrapper naming what it repairs. A no-op on non-Flux clusters.
+func (r *componentReconciler) reassertFluxInstance(ctx context.Context) error {
 	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
 	if err != nil || !isFlux {
 		return err
@@ -646,6 +644,17 @@ func (r *componentReconciler) reconcileFluxVersion(
 	return nil
 }
 
+// reconcileFluxVersion re-asserts the FluxInstance so a changed
+// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
+// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
+// distribution version.
+func (r *componentReconciler) reconcileFluxVersion(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	return r.reassertFluxInstance(ctx)
+}
+
 // reconcileFluxVerify re-asserts the OCIRepository's spec.verify block so a
 // configured spec.workload.flux.verify reaches a cluster that is already
 // bootstrapped. Without this the block is applied only at create time, or
@@ -656,28 +665,7 @@ func (r *componentReconciler) reconcileFluxVerify(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {
-	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
-	if err != nil || !isFlux {
-		return err
-	}
-
-	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
-	if err != nil {
-		return fmt.Errorf("resolve registry host for flux: %w", err)
-	}
-
-	err = fluxinstaller.SetupInstance(
-		ctx,
-		kubeconfigPath,
-		r.clusterCfg,
-		r.clusterName,
-		registryHost,
-	)
-	if err != nil {
-		return fmt.Errorf("setup flux instance: %w", err)
-	}
-
-	return nil
+	return r.reassertFluxInstance(ctx)
 }
 
 // reconcileRegistryCredentials re-writes the KSail-managed registry Secret so a
