@@ -144,6 +144,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.gitOpsEngine":                      r.reconcileGitOpsEngine,
 		"cluster.workload.tag":                      r.reconcileWorkloadTag,
 		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
+		"cluster.workload.flux.verify":              r.reconcileFluxVerify,
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
@@ -174,6 +175,7 @@ func isComponentReconcileField(field string) bool {
 		"cluster.gitOpsEngine",
 		"cluster.workload.tag",
 		"cluster.workload.flux.distributionVersion",
+		"cluster.workload.flux.verify",
 		specdiff.EKSLoadBalancerControllerField,
 		specdiff.RegistryCredentialField:
 		return true
@@ -617,6 +619,40 @@ func (r *componentReconciler) fluxKubeconfigPath() (string, bool, error) {
 // takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
 // distribution version.
 func (r *componentReconciler) reconcileFluxVersion(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	kubeconfigPath, isFlux, err := r.fluxKubeconfigPath()
+	if err != nil || !isFlux {
+		return err
+	}
+
+	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
+	if err != nil {
+		return fmt.Errorf("resolve registry host for flux: %w", err)
+	}
+
+	err = fluxinstaller.SetupInstance(
+		ctx,
+		kubeconfigPath,
+		r.clusterCfg,
+		r.clusterName,
+		registryHost,
+	)
+	if err != nil {
+		return fmt.Errorf("setup flux instance: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileFluxVerify re-asserts the OCIRepository's spec.verify block so a
+// configured spec.workload.flux.verify reaches a cluster that is already
+// bootstrapped. Without this the block is applied only at create time, or
+// incidentally when another field's change re-asserts the FluxInstance, so
+// enabling verification on a live cluster silently did nothing (platform#2922).
+// Flux only — ArgoCD has no equivalent artifact-signature gate.
+func (r *componentReconciler) reconcileFluxVerify(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {

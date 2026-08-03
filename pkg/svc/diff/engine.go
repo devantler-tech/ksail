@@ -131,6 +131,38 @@ func (e *Engine) CheckFluxDistributionVersion(
 		clusterupdate.ChangeCategoryInPlace)
 }
 
+// CheckFluxVerify appends an in-place change when the live flux-system
+// OCIRepository is missing the spec.verify block the configuration asks for.
+//
+// Like a rotated registry credential, this drift is invisible to the structural
+// diff: it compares the old cluster spec against the new one, so configuring
+// verify shows up exactly once and never again — while nothing on the update
+// path applies the block unless some other field's change happens to trigger a
+// handler that re-asserts the FluxInstance. The result was a green deploy
+// against a root source Flux was not verifying at all (platform#2922).
+//
+// drifted is decided by the flux installer, which reads the live resource and
+// compares it with the same function the patcher uses to decide it is already
+// in place.
+func (e *Engine) CheckFluxVerify(
+	drifted bool,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	if !drifted {
+		return
+	}
+
+	appendChange(result, "cluster.workload.flux.verify",
+		"absent", "configured", "",
+		"artifact signature verification can be re-asserted in-place on the OCIRepository",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
 // CheckRegistryCredential appends an in-place change when the credential in the
 // KSail-managed registry Secret has drifted from the one the resolved
 // configuration would write. This is what makes a credential-only rotation

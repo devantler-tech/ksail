@@ -932,6 +932,10 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	// Check for registry credential drift (a rotated token behind an unchanged spec)
 	checkRegistryCredentialDrift(o.cmd, o.ctx, diffEngine, diff)
 
+	// Check for artifact-verification drift (configured spec.workload.flux.verify
+	// that never reached the live OCIRepository)
+	checkFluxVerifyDrift(o.cmd, o.ctx, diffEngine, diff)
+
 	promoteUnsupportedInPlaceChanges(updater, diff)
 
 	return currentSpec, diff, nil
@@ -1261,6 +1265,55 @@ func checkRegistryCredentialDrift(
 	}
 
 	diffEngine.CheckRegistryCredential(drifted, diff)
+}
+
+// checkFluxVerifyDrift compares the live flux-system OCIRepository's spec.verify
+// against the block spec.workload.flux.verify configures, and appends an
+// in-place change when the cluster is missing it.
+//
+// This is the only signal a verify-only change produces: the structural diff
+// compares cluster specs, so configuring verification registers once and never
+// again, while the block reaches the cluster only via SetupInstance — which
+// cluster update calls solely from handlers that some *other* field's change
+// triggers. Enabling verification on a live cluster therefore deployed green and
+// left the root source unverified (platform#2922). Flux only. Errors during
+// cluster queries are logged as warnings and skipped — they should not block the
+// rest of the update.
+func checkFluxVerifyDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// Not configured — nothing to assert, and no cluster query worth spending.
+	if !ctx.ClusterCfg.Spec.Workload.Flux.Verify.Enabled() {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for Flux verify drift detection: %v", err)
+
+		return
+	}
+
+	drifted, err := fluxinstaller.VerifyDrifted(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot compare Flux artifact verification for drift detection: %v", err)
+
+		return
+	}
+
+	diffEngine.CheckFluxVerify(drifted, gitOpsEngine, diff)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current
