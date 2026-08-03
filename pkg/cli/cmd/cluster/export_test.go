@@ -805,16 +805,16 @@ func ExportFluxReassertMemoized(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 ) (error, error) {
-	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+	reconciler := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
-	first := r.reconcileFluxVersion(context.Background(), clusterupdate.Change{})
+	first := reconciler.reconcileFluxVersion(context.Background(), clusterupdate.Change{})
 
 	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	second := r.reconcileFluxVerify(ctx, clusterupdate.Change{})
+	second := reconciler.reconcileFluxVerify(ctx, clusterupdate.Change{})
 
 	return first, second
 }
