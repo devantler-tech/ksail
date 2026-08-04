@@ -190,8 +190,9 @@ func (r AWSOptionsResolver) Value(key Key) string {
 }
 
 // ExplicitResolver is the optional half of Resolver that separates a credential the operator set
-// deliberately — a secure-store entry, a Settings override — from one a resolver merely read out of
-// the ambient process environment.
+// deliberately — a secure-store entry — from one a resolver merely read out of the ambient process
+// environment. A Settings entry is not deliberate in this sense: it names the variable to read, but
+// the value still comes from the environment, so it ranks as ambient.
 //
 // Resolver alone cannot express that difference: Value returns a string either way. The distinction
 // only matters where something more authoritative than current configuration exists to compare
@@ -214,9 +215,10 @@ type ExplicitResolver interface {
 // nothing about the record.
 //
 // Values rank deliberate operator intent first, the record second, and the ambient environment last
-// — see Value. A secure-store credential or Settings override still resolves exactly as before,
-// because it is name-independent intent; a base's environment fall-through does not, because that is
-// the ambient identity the record exists to pin. Names, by contrast, always come from the record,
+// — see Value. A secure-store credential still resolves exactly as before, because it is a stored
+// value rather than a name to read; a base's environment fall-through does not, because that is the
+// ambient identity the record exists to pin — and that includes a value read under a Settings-
+// configured name, which selects the variable but not its contents. Names always come from the record,
 // because the frozen resolution carries them onward to scrub child process environments — reporting
 // a canonical name for a value read from an alias would leave the alias in place for the provisioner
 // to re-resolve.
