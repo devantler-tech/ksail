@@ -33,8 +33,11 @@ func TestVerifyDriftUnverifiedRepositoryIsDrift(t *testing.T) {
 
 	drifted := fluxinstaller.VerifyDrift(nil, true, keylessVerifySpec())
 
-	assert.True(t, drifted,
-		"a configured verification policy over a live OCIRepository with no spec.verify must be drift")
+	assert.True(
+		t,
+		drifted,
+		"a configured verification policy over a live OCIRepository with no spec.verify must be drift",
+	)
 }
 
 // TestVerifyDriftMatchingBlockIsNotDrift is the discriminating control for the
@@ -64,13 +67,13 @@ func TestVerifyDriftChangedMatcherIsDrift(t *testing.T) {
 	live := fluxinstaller.BuildVerifyPatch(spec)
 
 	// Same shape, different signer subject — the live policy trusts someone else.
-	matchers, ok := live["matchOIDCIdentity"].([]any)
-	if !ok || len(matchers) == 0 {
+	matchers, isSlice := live["matchOIDCIdentity"].([]any)
+	if !isSlice || len(matchers) == 0 {
 		t.Fatalf("expected rendered matchOIDCIdentity, got %#v", live["matchOIDCIdentity"])
 	}
 
-	matcher, ok := matchers[0].(map[string]any)
-	if !ok {
+	matcher, isMap := matchers[0].(map[string]any)
+	if !isMap {
 		t.Fatalf("expected matcher map, got %#v", matchers[0])
 	}
 
@@ -91,4 +94,53 @@ func TestVerifyDriftAbsentRepositoryIsNotDrift(t *testing.T) {
 
 	assert.False(t, drifted,
 		"an OCIRepository that does not exist yet is a bootstrap gap, not drift")
+}
+
+// TestVerifyDriftAgreesWithApplyVerify pins the two halves of the loop against
+// each other.
+//
+// The detector decides whether cluster update reports a change; applyVerify
+// decides whether the resulting patch actually writes anything. They compare the
+// same two values today, and nothing but this test stops them drifting apart. If
+// the detector ever calls drift on a block applyVerify considers settled, every
+// update reports a verification change forever and the handler quietly no-ops —
+// a permanently dirty diff that no amount of reconciling clears.
+//
+// The states are asserted in both directions, so a detector hardwired to either
+// answer fails.
+func TestVerifyDriftAgreesWithApplyVerify(t *testing.T) {
+	t.Parallel()
+
+	spec := keylessVerifySpec()
+
+	for name, live := range map[string]map[string]any{
+		"already verified": fluxinstaller.BuildVerifyPatch(spec),
+		"unverified":       nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := map[string]any{"spec": map[string]any{}}
+			if live != nil {
+				obj["spec"] = map[string]any{"verify": live}
+			}
+
+			settled, err := fluxinstaller.ApplyVerify(obj, fluxinstaller.BuildVerifyPatch(spec))
+			if err != nil {
+				t.Fatalf("applyVerify: %v", err)
+			}
+
+			drifted := fluxinstaller.VerifyDrift(live, true, spec)
+
+			assert.Equal(
+				t,
+				settled,
+				!drifted,
+				"detector and patcher disagree on %q: applyVerify settled=%v, VerifyDrift drifted=%v",
+				name,
+				settled,
+				drifted,
+			)
+		})
+	}
 }
