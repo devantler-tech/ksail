@@ -189,6 +189,22 @@ func (r AWSOptionsResolver) Value(key Key) string {
 	return resolveEnvValue(key, r.EnvVar(key))
 }
 
+// ExplicitResolver is the optional half of Resolver that separates a credential the operator set
+// deliberately — a secure-store entry — from one a resolver merely read out of the ambient process
+// environment. A Settings entry is not deliberate in this sense: it names the variable to read, but
+// the value still comes from the environment, so it ranks as ambient.
+//
+// Resolver alone cannot express that difference: Value returns a string either way. The distinction
+// only matters where something more authoritative than current configuration exists to compare
+// against, which today is an EKS ownership record. Implement it on any resolver that has both
+// halves; a resolver whose values are all deliberate may return Value, and one with no deliberate
+// half should not implement it at all.
+type ExplicitResolver interface {
+	// ExplicitValue returns the deliberately-configured value for key, or "" when the resolver holds
+	// none — including when it could still resolve one from the ambient environment.
+	ExplicitValue(key Key) string
+}
+
 // RecordedAWSResolver resolves a cluster's lifecycle credentials through the variable names its own
 // immutable ownership record captured, while still honoring a base resolver's resolved values.
 //
@@ -198,23 +214,27 @@ func (r AWSOptionsResolver) Value(key Key) string {
 // A base resolver alone cannot do that, because it reports names from current settings and knows
 // nothing about the record.
 //
-// Values stay base-first, so this is strictly additive: a credential the base already resolves keeps
-// resolving exactly as before (including a secure-store value, which is name-independent operator
-// intent), and the recorded alias is consulted only where the base resolves nothing. Names, by
-// contrast, come from the record, because the frozen resolution carries them onward to scrub child
-// process environments — reporting a canonical name for a value read from an alias would leave the
-// alias in place for the provisioner to re-resolve.
+// Values rank deliberate operator intent first, the record second, and the ambient environment last
+// — see Value. A secure-store credential still resolves exactly as before, because it is a stored
+// value rather than a name to read; a base's environment fall-through does not, because that is the
+// ambient identity the record exists to pin — and that includes a value read under a Settings-
+// configured name, which selects the variable but not its contents. Names always come from the record,
+// because the frozen resolution carries them onward to scrub child process environments — reporting
+// a canonical name for a value read from an alias would leave the alias in place for the provisioner
+// to re-resolve.
 //
-// This narrows, and never widens, what a mutation may act on: where both the base and the record
-// resolve credentials for different accounts, the ownership verifier still fails closed on the
-// mismatch. The resolver owns its map and is safe for concurrent use.
+// This narrows, and never widens, what a mutation may act on: where the base and the record resolve
+// credentials for different accounts, the ownership verifier still fails closed on the mismatch.
+// Ranking the record above the ambient environment turns one such case from a refused mutation into
+// a working one, and never the reverse. The resolver owns its map and is safe for concurrent use.
 type RecordedAWSResolver struct {
 	base     Resolver
 	recorded AWSOptionsResolver
 }
 
 // NewRecordedAWSResolver layers one ownership record's captured variable names over base. A nil base
-// resolves from the canonical process environment.
+// resolves from the canonical process environment — which, carrying no deliberate operator intent,
+// now ranks behind the record rather than ahead of it.
 func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) RecordedAWSResolver {
 	if base == nil {
 		base = EnvResolver{}
@@ -223,17 +243,62 @@ func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) Recorde
 	return RecordedAWSResolver{base: base, recorded: NewAWSOptionsResolver(recorded)}
 }
 
-// EnvVar returns the variable name the ownership record captured for key.
-func (r RecordedAWSResolver) EnvVar(key Key) string { return r.recorded.EnvVar(key) }
-
-// Value returns the base resolver's value for key, falling back to the recorded alias when the base
-// resolves nothing.
-func (r RecordedAWSResolver) Value(key Key) string {
-	if value := r.base.Value(key); value != "" {
-		return value
+// EnvVar returns the variable name the ownership record captured for key, or the base's name when
+// the record captured none.
+//
+// The captured name is checked directly rather than through recorded.EnvVar, which resolves an
+// absent mapping to the canonical default (see AWSOptionsResolver.EnvVar). Returning that default
+// would report a canonical name for a value the base resolved through its own alias, so the frozen
+// resolution would scrub the wrong variable and leave the alias in place.
+func (r RecordedAWSResolver) EnvVar(key Key) string {
+	if name := r.recorded.envVars[key]; name != "" {
+		return name
 	}
 
-	return r.recorded.Value(key)
+	if r.base == nil {
+		return DefaultEnvVar(key)
+	}
+
+	return r.base.EnvVar(key)
+}
+
+// Value resolves key as deliberate operator intent first, the ownership record second, and the
+// ambient environment last.
+//
+// Only a base that declares ExplicitResolver can outrank the record, and only with a value it holds
+// deliberately (a secure-store credential). A base's ambient fall-through must not, because that is
+// precisely the identity the record exists to pin: resolving it would hand a mutation whatever
+// AWS_ACCESS_KEY_ID happens to be exported, under a cluster whose create ran through a different
+// alias entirely. A Settings entry is ambient by this test — it selects the variable to read, not
+// its contents.
+//
+// The record only outranks the base for a key it actually captured. Consulting it for an unrecorded
+// key would resolve AWSOptionsResolver.EnvVar's canonical default and hand back the plain ambient
+// value — an opinion the record does not hold — which would beat the base's own Settings-selected
+// alias. So the captured name gates the lookup, not the resolved value.
+//
+// A base that declares no explicit channel is treated as ambient in full. That is the fail-closed
+// direction: a resolver that forgets to distinguish its two halves loses to the record rather than
+// silently overriding it.
+func (r RecordedAWSResolver) Value(key Key) string {
+	if explicit, ok := r.base.(ExplicitResolver); ok {
+		if value := explicit.ExplicitValue(key); value != "" {
+			return value
+		}
+	}
+
+	if r.recorded.envVars[key] != "" {
+		if value := r.recorded.Value(key); value != "" {
+			return value
+		}
+	}
+
+	// Defensive: the constructor never leaves base nil, but the zero value can.
+	if r.base == nil {
+		return ""
+	}
+
+	return r.base.Value(key)
 }
 
 // AWSResolution is an immutable snapshot of an AWS credential selection. ResolveFrozenAWS upgrades

@@ -26,6 +26,11 @@ func (s stubResolver) EnvVar(key credentials.Key) string {
 
 func (s stubResolver) Value(key credentials.Key) string { return s.values[key] }
 
+// ExplicitValue marks these values as deliberate operator intent — the secure-store half this stub
+// stands in for — rather than an ambient environment fall-through. Only that half may outrank an
+// ownership record; see credentials.ExplicitResolver.
+func (s stubResolver) ExplicitValue(key credentials.Key) string { return s.values[key] }
+
 func recordedOptions() v1alpha1.OptionsAWS {
 	return v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "RECORDED_PROFILE",
