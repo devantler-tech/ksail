@@ -46,6 +46,13 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		"cluster.autoscaler.node.expander",
 		"cluster.autoscaler.node.scaleDownUnneededTime",
 		"cluster.autoscaler.node.pools[my-pool]",
+		"cluster.workload.tag",
+		"cluster.workload.flux.distributionVersion",
+		// Signature verification sits in the same FluxConfig struct as
+		// distributionVersion and is applied by the same re-assert. Without a
+		// handler the diff is reported and then silently dropped, so a configured
+		// spec.verify never reaches the live OCIRepository (platform#2922).
+		"cluster.workload.flux.verify",
 	}
 
 	for _, field := range knownFields {

@@ -73,6 +73,11 @@ func BuildVerifyPatch(cfg v1alpha1.FluxVerifySpec) map[string]any {
 	return buildVerifyPatch(cfg)
 }
 
+// VerifyDrift exports verifyDrift for testing.
+func VerifyDrift(current map[string]any, repoFound bool, cfg v1alpha1.FluxVerifySpec) bool {
+	return verifyDrift(current, repoFound, cfg)
+}
+
 // ApplyVerify exports applyVerify for testing.
 func ApplyVerify(obj map[string]any, desired map[string]any) (bool, error) {
 	return applyVerify(obj, desired)

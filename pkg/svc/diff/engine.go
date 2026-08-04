@@ -23,6 +23,20 @@ const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerC
 //nolint:gosec // G101 false positive: a diff key, not a credential.
 const RegistryCredentialField = "cluster.localRegistry.credentials"
 
+// FluxVerifyField is the diff key for signature verification on the flux-system
+// OCIRepository KSail generates. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const FluxVerifyField = "cluster.workload.flux.verify"
+
+// fluxVerifyOldDisplay and fluxVerifyNewDisplay are the values rendered for a
+// verification drift. The configured matchers are a policy, not a secret, but
+// they are long multi-line regexes: rendering them inline would bury the change
+// in the update output, so the change is reported as a state transition.
+const (
+	fluxVerifyOldDisplay = "unverified or stale"
+	fluxVerifyNewDisplay = "configured verification"
+)
+
 // registryCredentialOldDisplay and registryCredentialNewDisplay are the values
 // rendered for a credential rotation. The resolved credential — and any digest
 // of it — is deliberately never placed in a Change: Change values are printed by
@@ -156,6 +170,41 @@ func (e *Engine) CheckRegistryCredential(
 		NewValue: registryCredentialNewDisplay,
 		Category: clusterupdate.ChangeCategoryInPlace,
 		Reason:   "registry credentials can be refreshed in-place by re-writing the registry Secret",
+	})
+}
+
+// CheckFluxVerify appends an in-place change when signature verification on the
+// live flux-system OCIRepository has drifted from what the resolved configuration
+// would render. Flux only.
+//
+// This is the only signal a verification change produces. spec.workload.flux.verify
+// is applied by patching the OCIRepository the flux-operator generates, not by any
+// field the structural diff walks, so configuring it produces no field change of its
+// own — leaving the configured policy inert and the infrastructure source
+// unverified indefinitely (platform#2922).
+//
+// drifted is a single bit decided by the flux installer, which reads the live
+// resource and compares it against the rendered block.
+func (e *Engine) CheckFluxVerify(
+	drifted bool,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	if !drifted {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    FluxVerifyField,
+		OldValue: fluxVerifyOldDisplay,
+		NewValue: fluxVerifyNewDisplay,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason: "artifact signature verification can be applied in-place by " +
+			"re-asserting the FluxInstance",
 	})
 }
 

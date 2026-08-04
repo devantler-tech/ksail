@@ -147,6 +147,10 @@ func (r *componentReconciler) handlerForField(
 	}
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
+	// Re-asserting the FluxInstance also re-applies spec.verify to the generated
+	// OCIRepository, so signature-verification drift is repaired by the same
+	// handler that repairs a distribution-version change.
+	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVersion
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
