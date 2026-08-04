@@ -140,3 +140,27 @@ func TestRecordedAWSResolverOverARealManager(t *testing.T) {
 	assert.Equal(t, "from-secure-store", resolver.Value(credentials.AWSAccessKeyID),
 		"a stored secure-store credential stopped outranking the ownership record")
 }
+
+// TestRecordedAWSResolverKeepsTheBaseAliasForAnUnrecordedKey pins a precedence gap that ranking the
+// record above the ambient environment introduced. The record captures a name for AccessKeyID only;
+// for every other key AWSOptionsResolver.EnvVar resolves the absent mapping to the CANONICAL
+// default, so consulting the record for an unrecorded key fabricated an opinion it does not hold —
+// the plain ambient value — and that outranked the base's own Settings-selected alias, which had
+// won before. Gating the lookup on the captured NAME rather than the resolved value is the fix.
+//
+// TestRecordedAWSResolverFallsBackToAmbientForAnUnrecordedKey cannot catch this: its stub configures
+// no alias, so the base and the record's canonical fallback read the same variable and agree.
+func TestRecordedAWSResolverKeepsTheBaseAliasForAnUnrecordedKey(t *testing.T) {
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-canonical")
+	t.Setenv("SETTINGS_SESSION", "settings-alias")
+
+	base := explicitStubResolver{names: map[credentials.Key]string{
+		credentials.AWSSessionToken: "SETTINGS_SESSION",
+	}}
+	resolver := credentials.NewRecordedAWSResolver(base, aliasedOptions())
+
+	assert.Equal(t, "settings-alias", resolver.Value(credentials.AWSSessionToken),
+		"the record has no mapping here, so its canonical fallback must not beat the base alias")
+	assert.Equal(t, "SETTINGS_SESSION", resolver.EnvVar(credentials.AWSSessionToken),
+		"name and value must agree, or the frozen resolution scrubs the wrong variable")
+}

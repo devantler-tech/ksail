@@ -243,17 +243,39 @@ func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) Recorde
 	return RecordedAWSResolver{base: base, recorded: NewAWSOptionsResolver(recorded)}
 }
 
-// EnvVar returns the variable name the ownership record captured for key.
-func (r RecordedAWSResolver) EnvVar(key Key) string { return r.recorded.EnvVar(key) }
+// EnvVar returns the variable name the ownership record captured for key, or the base's name when
+// the record captured none.
+//
+// The captured name is checked directly rather than through recorded.EnvVar, which resolves an
+// absent mapping to the canonical default (see AWSOptionsResolver.EnvVar). Returning that default
+// would report a canonical name for a value the base resolved through its own alias, so the frozen
+// resolution would scrub the wrong variable and leave the alias in place.
+func (r RecordedAWSResolver) EnvVar(key Key) string {
+	if name := r.recorded.envVars[key]; name != "" {
+		return name
+	}
+
+	if r.base == nil {
+		return DefaultEnvVar(key)
+	}
+
+	return r.base.EnvVar(key)
+}
 
 // Value resolves key as deliberate operator intent first, the ownership record second, and the
 // ambient environment last.
 //
 // Only a base that declares ExplicitResolver can outrank the record, and only with a value it holds
-// deliberately (a secure-store credential or a Settings override). A base's ambient fall-through
-// must not, because that is precisely the identity the record exists to pin: resolving it would
-// hand a mutation whatever AWS_ACCESS_KEY_ID happens to be exported, under a cluster whose create
-// ran through a different alias entirely.
+// deliberately (a secure-store credential). A base's ambient fall-through must not, because that is
+// precisely the identity the record exists to pin: resolving it would hand a mutation whatever
+// AWS_ACCESS_KEY_ID happens to be exported, under a cluster whose create ran through a different
+// alias entirely. A Settings entry is ambient by this test — it selects the variable to read, not
+// its contents.
+//
+// The record only outranks the base for a key it actually captured. Consulting it for an unrecorded
+// key would resolve AWSOptionsResolver.EnvVar's canonical default and hand back the plain ambient
+// value — an opinion the record does not hold — which would beat the base's own Settings-selected
+// alias. So the captured name gates the lookup, not the resolved value.
 //
 // A base that declares no explicit channel is treated as ambient in full. That is the fail-closed
 // direction: a resolver that forgets to distinguish its two halves loses to the record rather than
@@ -265,8 +287,10 @@ func (r RecordedAWSResolver) Value(key Key) string {
 		}
 	}
 
-	if value := r.recorded.Value(key); value != "" {
-		return value
+	if r.recorded.envVars[key] != "" {
+		if value := r.recorded.Value(key); value != "" {
+			return value
+		}
 	}
 
 	// Defensive: the constructor never leaves base nil, but the zero value can.
