@@ -12,5 +12,5 @@ description: Dependabot version pin for the aws-load-balancer-controller Helm ch
 version: 0.0.0
 dependencies:
   - name: aws-load-balancer-controller
-    version: 3.4.3
+    version: 3.5.0
     repository: https://aws.github.io/eks-charts
