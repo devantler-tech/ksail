@@ -189,6 +189,21 @@ func (r AWSOptionsResolver) Value(key Key) string {
 	return resolveEnvValue(key, r.EnvVar(key))
 }
 
+// ExplicitResolver is the optional half of Resolver that separates a credential the operator set
+// deliberately — a secure-store entry, a Settings override — from one a resolver merely read out of
+// the ambient process environment.
+//
+// Resolver alone cannot express that difference: Value returns a string either way. The distinction
+// only matters where something more authoritative than current configuration exists to compare
+// against, which today is an EKS ownership record. Implement it on any resolver that has both
+// halves; a resolver whose values are all deliberate may return Value, and one with no deliberate
+// half should not implement it at all.
+type ExplicitResolver interface {
+	// ExplicitValue returns the deliberately-configured value for key, or "" when the resolver holds
+	// none — including when it could still resolve one from the ambient environment.
+	ExplicitValue(key Key) string
+}
+
 // RecordedAWSResolver resolves a cluster's lifecycle credentials through the variable names its own
 // immutable ownership record captured, while still honoring a base resolver's resolved values.
 //
@@ -214,7 +229,8 @@ type RecordedAWSResolver struct {
 }
 
 // NewRecordedAWSResolver layers one ownership record's captured variable names over base. A nil base
-// resolves from the canonical process environment.
+// resolves from the canonical process environment — which, carrying no deliberate operator intent,
+// now ranks behind the record rather than ahead of it.
 func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) RecordedAWSResolver {
 	if base == nil {
 		base = EnvResolver{}
@@ -226,14 +242,35 @@ func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) Recorde
 // EnvVar returns the variable name the ownership record captured for key.
 func (r RecordedAWSResolver) EnvVar(key Key) string { return r.recorded.EnvVar(key) }
 
-// Value returns the base resolver's value for key, falling back to the recorded alias when the base
-// resolves nothing.
+// Value resolves key as deliberate operator intent first, the ownership record second, and the
+// ambient environment last.
+//
+// Only a base that declares ExplicitResolver can outrank the record, and only with a value it holds
+// deliberately (a secure-store credential or a Settings override). A base's ambient fall-through
+// must not, because that is precisely the identity the record exists to pin: resolving it would
+// hand a mutation whatever AWS_ACCESS_KEY_ID happens to be exported, under a cluster whose create
+// ran through a different alias entirely.
+//
+// A base that declares no explicit channel is treated as ambient in full. That is the fail-closed
+// direction: a resolver that forgets to distinguish its two halves loses to the record rather than
+// silently overriding it.
 func (r RecordedAWSResolver) Value(key Key) string {
-	if value := r.base.Value(key); value != "" {
+	if explicit, ok := r.base.(ExplicitResolver); ok {
+		if value := explicit.ExplicitValue(key); value != "" {
+			return value
+		}
+	}
+
+	if value := r.recorded.Value(key); value != "" {
 		return value
 	}
 
-	return r.recorded.Value(key)
+	// Defensive: the constructor never leaves base nil, but the zero value can.
+	if r.base == nil {
+		return ""
+	}
+
+	return r.base.Value(key)
 }
 
 // AWSResolution is an immutable snapshot of an AWS credential selection. ResolveFrozenAWS upgrades
