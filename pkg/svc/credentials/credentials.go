@@ -213,16 +213,18 @@ type ExplicitResolver interface {
 // A base resolver alone cannot do that, because it reports names from current settings and knows
 // nothing about the record.
 //
-// Values stay base-first, so this is strictly additive: a credential the base already resolves keeps
-// resolving exactly as before (including a secure-store value, which is name-independent operator
-// intent), and the recorded alias is consulted only where the base resolves nothing. Names, by
-// contrast, come from the record, because the frozen resolution carries them onward to scrub child
-// process environments — reporting a canonical name for a value read from an alias would leave the
-// alias in place for the provisioner to re-resolve.
+// Values rank deliberate operator intent first, the record second, and the ambient environment last
+// — see Value. A secure-store credential or Settings override still resolves exactly as before,
+// because it is name-independent intent; a base's environment fall-through does not, because that is
+// the ambient identity the record exists to pin. Names, by contrast, always come from the record,
+// because the frozen resolution carries them onward to scrub child process environments — reporting
+// a canonical name for a value read from an alias would leave the alias in place for the provisioner
+// to re-resolve.
 //
-// This narrows, and never widens, what a mutation may act on: where both the base and the record
-// resolve credentials for different accounts, the ownership verifier still fails closed on the
-// mismatch. The resolver owns its map and is safe for concurrent use.
+// This narrows, and never widens, what a mutation may act on: where the base and the record resolve
+// credentials for different accounts, the ownership verifier still fails closed on the mismatch.
+// Ranking the record above the ambient environment turns one such case from a refused mutation into
+// a working one, and never the reverse. The resolver owns its map and is safe for concurrent use.
 type RecordedAWSResolver struct {
 	base     Resolver
 	recorded AWSOptionsResolver
