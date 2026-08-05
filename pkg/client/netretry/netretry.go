@@ -40,11 +40,25 @@ var httpStatusCodePattern = regexp.MustCompile(`\b(429|5\d{2})\b`)
 // (e.g., "stopped after 10 redirects").
 var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
 
+// bareEOFPattern matches a plain io.EOF surfacing as an error detail. A
+// truncated schema-registry fetch can end as io.EOF ("EOF") rather than
+// io.ErrUnexpectedEOF ("unexpected EOF"), and the "unexpected EOF" substring
+// above does not cover it — which reds a whole validation run on a transient
+// fetch (CI - KSail on main, a9849b6d30).
+//
+// Anchoring on start-or-": " keeps this to a detail-position EOF (the shape
+// produced by error wrapping and by the kubeconform client's per-resource
+// formatting) so prose that merely mentions EOF, and words such as "EOFError",
+// stay non-retryable. A trailing \b rather than $ keeps it matching when a
+// suffix follows, e.g. kubeconform's " (from <source>)" attribution.
+var bareEOFPattern = regexp.MustCompile(`(?:^|: )EOF\b`)
+
 // IsRetryable returns true if the error indicates a transient network error
 // that should be retried. This covers HTTP 429 and 5xx status codes, TCP-level
-// errors such as connection resets, timeouts, and unexpected EOF, and a
-// truncated/malformed downloaded document (e.g. a partially-served Helm
-// repository index) surfaced as a YAML->JSON conversion failure.
+// errors such as connection resets, timeouts, and unexpected EOF, a bare io.EOF
+// surfacing as an error detail (a truncated fetch), and a truncated/malformed
+// downloaded document (e.g. a partially-served Helm repository index) surfaced
+// as a YAML->JSON conversion failure.
 // Callers that need to handle additional domain-specific transient errors (e.g.,
 // Copilot auth "fetch failed") should augment this function with a local helper.
 func IsRetryable(err error) bool {
@@ -64,6 +78,11 @@ func IsRetryable(err error) bool {
 	// Match HTTP 429/5xx numeric codes at word boundaries to avoid false positives
 	// on port numbers like ":5000". Uses regexp for precise matching.
 	if httpStatusCodePattern.MatchString(errMsg) {
+		return true
+	}
+
+	// Match a bare io.EOF surfacing as an error detail (truncated fetch).
+	if bareEOFPattern.MatchString(errMsg) {
 		return true
 	}
 
