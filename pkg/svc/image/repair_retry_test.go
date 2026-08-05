@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -105,14 +106,44 @@ func wrapInDockerCopyTar(t *testing.T, content []byte) []byte {
 	return buf.Bytes()
 }
 
+// isCtrContentFetch reports whether cmd is a `ctr content fetch` invocation. It matches the
+// verb prefix that buildCtrContentFetchCommand emits rather than a fully-built command, so
+// the check stays valid regardless of which image reference the repair ends up fetching —
+// the assertion is about how many refreshes happen, not which ref each one names.
+func isCtrContentFetch(cmd []string) bool {
+	fetchPrefix := buildCtrContentFetchCommand("linux/amd64", "example:latest")[:4]
+	if len(cmd) < len(fetchPrefix) {
+		return false
+	}
+
+	for i, want := range fetchPrefix {
+		if cmd[i] != want {
+			return false
+		}
+	}
+
+	return true
+}
+
 // allowAnyExec makes every ContainerExec* call succeed with empty output, any number of
 // times. The retry path issues a variable number of repair commands (images rm, pull,
-// content fetch, re-export, cleanup); this test pins the observable outcome and the
-// export-command count rather than an exact transcript of every exec.
-func allowAnyExec(ctx context.Context, mockClient *docker.MockAPIClient) {
+// content fetch, re-export, cleanup), so an exact transcript would be brittle.
+//
+// It returns a reader for the number of `ctr content fetch` execs observed. Counting those
+// is what stops the surrounding tests passing vacuously: CopyFromContainer.Twice() pins the
+// number of re-exports, but without this a repair that refreshed the content store several
+// times before re-exporting would satisfy every other assertion, and "repair once" is
+// precisely the property these tests exist to hold.
+func allowAnyExec(ctx context.Context, mockClient *docker.MockAPIClient) func() int {
+	var contentFetches atomic.Int64
+
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _ string, _ container.ExecOptions) (container.ExecCreateResponse, error) {
+		RunAndReturn(func(_ context.Context, _ string, opts container.ExecOptions) (container.ExecCreateResponse, error) {
+			if isCtrContentFetch(opts.Cmd) {
+				contentFetches.Add(1)
+			}
+
 			return container.ExecCreateResponse{ID: "exec-any"}, nil
 		})
 
@@ -125,6 +156,8 @@ func allowAnyExec(ctx context.Context, mockClient *docker.MockAPIClient) {
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, mock.Anything).
 		Return(container.ExecInspect{ExitCode: 0}, nil)
+
+	return func() int { return int(contentFetches.Load()) }
 }
 
 func setupSingleNodeList(ctx context.Context, mockClient *docker.MockAPIClient) {
@@ -150,7 +183,7 @@ func TestExportRepairsAndRetriesAfterIntegrityFailure(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "images.tar")
 
 	setupSingleNodeList(ctx, mockClient)
-	allowAnyExec(ctx, mockClient)
+	contentFetches := allowAnyExec(ctx, mockClient)
 
 	// First copy delivers the silently-truncated archive, second the repaired one.
 	corrupt := wrapInDockerCopyTar(t, corruptOCITar(t))
@@ -178,6 +211,10 @@ func TestExportRepairsAndRetriesAfterIntegrityFailure(t *testing.T) {
 
 	require.NoError(t, err, "a repairable content-store truncation must not fail the export")
 
+	assert.Equal(t, 1, contentFetches(),
+		"the content store must be refreshed exactly once; more than one refresh means the "+
+			"repair looped, which the single re-export assertion alone cannot detect")
+
 	// Both copies must have been consumed — that is what proves the retry ran rather than
 	// the first archive somehow passing validation.
 	mockClient.AssertExpectations(t)
@@ -194,7 +231,7 @@ func TestExportFailsWhenIntegrityStillBrokenAfterRepair(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "images.tar")
 
 	setupSingleNodeList(ctx, mockClient)
-	allowAnyExec(ctx, mockClient)
+	contentFetches := allowAnyExec(ctx, mockClient)
 
 	corrupt := wrapInDockerCopyTar(t, corruptOCITar(t))
 
@@ -227,6 +264,10 @@ func TestExportFailsWhenIntegrityStillBrokenAfterRepair(t *testing.T) {
 		"persisted after content repair",
 		"the error must say the repair was attempted, so the next reader is not sent hunting for a cause already ruled out",
 	)
+
+	assert.Equal(t, 1, contentFetches(),
+		"the terminal case must attempt exactly one refresh before giving up; a second refresh "+
+			"would be the loop this path exists to prevent")
 
 	mockClient.AssertExpectations(t)
 }

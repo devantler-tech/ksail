@@ -12,6 +12,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 // File permission constant.
@@ -76,6 +77,20 @@ func (e *Exporter) Export(
 	// Set default output path
 	if opts.OutputPath == "" {
 		opts.OutputPath = "images.tar"
+	}
+
+	// Canonicalize the user-supplied destination once, before any write. The archive is
+	// written twice on the repair path (initial copy, then the post-repair re-export), so
+	// resolving it here is what guarantees both writes land on the same file rather than
+	// re-resolving a symlink that moved in between.
+	err = os.MkdirAll(filepath.Dir(opts.OutputPath), dirPerm)
+	if err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	opts.OutputPath, err = fsutil.EvalCanonicalPath(opts.OutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve export output path: %w", err)
 	}
 
 	// Find a suitable node for export
