@@ -1023,6 +1023,12 @@ func computeSpecOnlyDiff(
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
 
+	// Check for artifact-verification drift (configured spec.workload.flux.verify that never
+	// reached the live OCIRepository). This path backs `ksail cluster diff` and every
+	// provisioner without an Updater, so omitting it made a preview disagree with the apply
+	// it previews, and left verification drift undetectable on those provisioners entirely.
+	checkFluxVerifyDrift(cmd, ctx, diffEngine, diff)
+
 	return diff
 }
 

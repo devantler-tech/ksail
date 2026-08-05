@@ -485,6 +485,16 @@ func ExportIsDowngrade(current, target string) bool {
 // ErrMetricsServerDisableUnsupported exports the sentinel error for testing.
 var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
 
+// ExportComputeSpecOnlyDiff exposes computeSpecOnlyDiff for unit testing. This is the diff
+// path behind `ksail cluster diff` and behind every provisioner with no Updater, so it is
+// the path whose drift-check coverage has to be assertable independently of the update path.
+func ExportComputeSpecOnlyDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+) *clusterupdate.UpdateResult {
+	return computeSpecOnlyDiff(cmd, ctx)
+}
+
 // ExportHandlerForField reports whether a registered handler exists for the given field name.
 func ExportHandlerForField(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
 	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
