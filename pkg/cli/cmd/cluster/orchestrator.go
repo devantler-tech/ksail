@@ -176,7 +176,7 @@ func (o *updateOrchestrator) reconcileClusterVersions(
 		return false, fmt.Errorf("failed to get current versions: %w", err)
 	}
 
-	resolver := versionresolver.NewOCIResolver()
+	resolver := versionresolver.NewPromotionAwareResolver(versionresolver.NewOCIResolver())
 
 	// Distribution version first (the runtime must support the target K8s version).
 	recreated, err := o.reconcileDistributionVersion(upgrader, resolver, currentVersions)
