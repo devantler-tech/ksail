@@ -391,6 +391,58 @@ runs:
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
+    - name: 🔖 Resolve Kubernetes version pin for update
+      id: k8s-version-pin
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: |
+        set -euo pipefail
+        # `cluster create` provisions from the node image KSail pins in
+        # pkg/fsutil/configmanager/<dist>/Dockerfile, but an *unpinned*
+        # `cluster update` resolves the newest version live from the registry.
+        # Those are two different sources for one version, so the moment upstream
+        # publishes a newer patch they disagree and a no-op update correctly
+        # reports "recreation required" — reddening every build for a reason that
+        # has nothing to do with the change under test.
+        #
+        # Pin the update to the tag create used, read from the very Dockerfile
+        # KSail parses, so a Renovate/Dependabot bump moves both sides together
+        # and the two sources cannot silently diverge again.
+        #
+        # Only distributions whose Kubernetes version comes from a pinned node
+        # image are covered. Talos pins an OS version on a separate axis,
+        # VCluster bakes its Kubernetes version into the SDK image, and KWOK/EKS
+        # have no pinned node image — those keep today's unpinned behaviour.
+        case "$DISTRIBUTION" in
+          K3s)     dockerfile="pkg/fsutil/configmanager/k3d/Dockerfile";  repo="rancher/k3s" ;;
+          Vanilla) dockerfile="pkg/fsutil/configmanager/kind/Dockerfile"; repo="kindest/node" ;;
+          *)
+            echo "ℹ️ $DISTRIBUTION has no pinned Kubernetes node image — leaving the update unpinned"
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            exit 0
+            ;;
+        esac
+
+        if [[ ! -f "$dockerfile" ]]; then
+          echo "❌ ERROR: expected $dockerfile to exist for $DISTRIBUTION"
+          exit 1
+        fi
+
+        # Mirror KSail's own parse (image/parser.ParseImageFromDockerfile):
+        # FROM <repo>:<tag>[@sha256:<digest>] — take the tag, drop the digest.
+        # The tag must be passed WHOLE: KSail compares pinned vs running version
+        # by semver including the suffix, so "v1.36.2" would NOT match a running
+        # "v1.36.2-k3s1" — it would be read as a downgrade instead of a no-op.
+        version=$(sed -nE "s|^FROM[[:space:]]+${repo}:([^[:space:]@]+).*|\1|p" "$dockerfile" | head -1)
+        if [[ -z "$version" ]]; then
+          echo "❌ ERROR: could not read a $repo tag from $dockerfile"
+          exit 1
+        fi
+
+        echo "🔖 Pinning cluster update to $DISTRIBUTION Kubernetes version $version (from $dockerfile)"
+        echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+
     - name: 🧪 ksail cluster update --dry-run
       id: cluster-update-dry-run
       shell: bash
@@ -398,12 +450,13 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
@@ -420,12 +473,13 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update.log
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update.log
         # Fail early if the update detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -q "No changes detected" /tmp/ksail-system-test-logs/cluster-update.log; then
