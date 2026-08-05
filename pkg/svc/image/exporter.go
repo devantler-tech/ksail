@@ -179,22 +179,59 @@ func (e *Exporter) exportImagesFromNode(
 		}
 	}
 
-	// Copy the tar file from container to host
-	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to copy export file from container: %w", err)
-	}
-
-	// Validate blob integrity in the exported OCI tar archive.
-	// Catches truncated or corrupted blobs that ctr export may silently produce
-	// when the containerd content store has incomplete data.
-	err = ValidateExportedTar(outputPath)
+	err = e.collectExportedArchive(
+		ctx,
+		nodeName,
+		tmpPath,
+		outputPath,
+		platform,
+		exportImages,
+		repairImages,
+	)
 	if err != nil {
 		return err
 	}
 
 	// Clean up temporary file in container
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
+
+	return nil
+}
+
+// collectExportedArchive copies the exported archive to the host and validates it,
+// repairing and re-exporting once if the archive turns out to be truncated.
+//
+// An incomplete containerd content store surfaces two ways: ctr export exits non-zero
+// (handled by tryExportImagesWithRepair), or it exits zero and silently writes a truncated
+// archive, which only this validation sees. Both have the same remedy, so the validation
+// failure refreshes the content store and re-exports once as well.
+func (e *Exporter) collectExportedArchive(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	outputPath string,
+	platform string,
+	exportImages []string,
+	repairImages []string,
+) error {
+	err := e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to copy export file from container: %w", err)
+	}
+
+	err = ValidateExportedTar(outputPath)
+	if err != nil {
+		return e.repairAndReExport(
+			ctx,
+			nodeName,
+			tmpPath,
+			outputPath,
+			platform,
+			exportImages,
+			repairImages,
+			err,
+		)
+	}
 
 	return nil
 }
