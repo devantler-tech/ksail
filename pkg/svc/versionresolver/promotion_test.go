@@ -197,6 +197,51 @@ func TestK3sChannelSource_PromotedTags(t *testing.T) {
 	}
 }
 
+// TestK3sChannelSource_ExcludesPreReleases pins that a channel pointing at a
+// pre-release is not promotion evidence. k3s publishes "testing" channels whose
+// latest is a release candidate (live index, 2026-08-05: testing and
+// v1.18-testing both point at v1.18.2-rc3+k3s1), so a plain union across every
+// channel would offer a cluster an upgrade onto an rc build.
+func TestK3sChannelSource_ExcludesPreReleases(t *testing.T) {
+	t.Parallel()
+
+	body := `{"data":[
+		{"name":"stable","latest":"v1.36.2+k3s1"},
+		{"name":"v1.18","latest":"v1.18.20+k3s1"},
+		{"name":"testing","latest":"v1.18.2-rc3+k3s1"},
+		{"name":"v1.18-testing","latest":"v1.18.2-rc3+k3s1"}
+	]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	source := versionresolver.NewK3sChannelSourceWithClient(channelClientFor(t, server))
+
+	tags, err := source.PromotedTags(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := tags["v1.18.2-rc3-k3s1"]; ok {
+		t.Errorf("release candidate v1.18.2-rc3-k3s1 was read as promoted, got %v", tags)
+	}
+
+	// The stable streams either side of it must still be offered — excluding
+	// pre-releases must not also exclude a minor stream's real release.
+	for _, want := range []string{"v1.36.2-k3s1", "v1.18.20-k3s1"} {
+		if _, ok := tags[want]; !ok {
+			t.Errorf("expected promoted release %q to survive, got %v", want, tags)
+		}
+	}
+
+	if len(tags) != 2 {
+		t.Fatalf("expected exactly 2 promoted tags, got %d (%v)", len(tags), tags)
+	}
+}
+
 // TestK3sChannelSource_EmptyIsAnError pins that an index listing nothing is
 // reported rather than read as "no upgrades available".
 func TestK3sChannelSource_EmptyIsAnError(t *testing.T) {

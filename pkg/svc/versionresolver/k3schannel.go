@@ -58,9 +58,16 @@ type k3sChannelsResponse struct {
 }
 
 // PromotedTags returns the registry tags k3s has promoted, taken from the
-// "latest" pointer of every channel it publishes. Each channel names the newest
-// promoted release for its stream, so the union across channels is the set of
-// releases k3s considers out.
+// "latest" pointer of every channel it publishes that names a final release.
+// Each channel names the newest promoted release for its stream, so the union
+// across channels is the set of releases k3s considers out.
+//
+// Pre-releases are excluded. k3s publishes "testing" channels alongside the
+// stable ones, and their latest is a release candidate rather than a release, so
+// an unfiltered union would offer a cluster an upgrade onto an rc build — the
+// same class of unreleased-version upgrade this source exists to prevent. The
+// test is the version's own semver pre-release segment rather than the channel
+// name, so a differently-named pre-release channel is caught too.
 func (s *K3sChannelSource) PromotedTags(ctx context.Context) (map[string]struct{}, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, K3sChannelsURL, nil)
 	if err != nil {
@@ -90,7 +97,7 @@ func (s *K3sChannelSource) PromotedTags(ctx context.Context) (map[string]struct{
 	tags := make(map[string]struct{}, len(parsed.Data))
 
 	for _, channel := range parsed.Data {
-		if channel.Latest == "" {
+		if channel.Latest == "" || k3sVersionIsPreRelease(channel.Latest) {
 			continue
 		}
 
@@ -104,6 +111,19 @@ func (s *K3sChannelSource) PromotedTags(ctx context.Context) (map[string]struct{
 	}
 
 	return tags, nil
+}
+
+// k3sVersionIsPreRelease reports whether a channel version names a pre-release
+// ("v1.18.2-rc3+k3s1") rather than a final release ("v1.36.2+k3s1").
+//
+// In semver the pre-release segment sits between the version core and the "+"
+// build metadata, and k3s puts its "k3s1" suffix in that build metadata. The
+// version core is digits and dots only, so a "-" anywhere before the "+" is a
+// pre-release marker and nothing else.
+func k3sVersionIsPreRelease(version string) bool {
+	core, _, _ := strings.Cut(version, "+")
+
+	return strings.Contains(core, "-")
 }
 
 // K3sChannelVersionToTag converts a k3s channel version to its registry tag.
