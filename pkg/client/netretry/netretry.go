@@ -49,9 +49,15 @@ var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
 // Anchoring on start-or-": " keeps this to a detail-position EOF (the shape
 // produced by error wrapping and by the kubeconform client's per-resource
 // formatting) so prose that merely mentions EOF, and words such as "EOFError",
-// stay non-retryable. A trailing \b rather than $ keeps it matching when a
-// suffix follows, e.g. kubeconform's " (from <source>)" attribution.
-var bareEOFPattern = regexp.MustCompile(`(?:^|: )EOF\b`)
+// stay non-retryable.
+//
+// The trailing alternation requires EOF to END its detail segment, which is what
+// a bare io.EOF looks like once stringified. Prose keeps going ("invalid values:
+// EOF is not allowed"), so requiring a terminator is what separates the two. The
+// three terminators are the only ways a detail segment ends here: end of message,
+// kubeconform's "; " join between failing resources (processResults), and its
+// " (from <source>)" attribution suffix (formatFailure).
+var bareEOFPattern = regexp.MustCompile(`(?:^|: )EOF(?:$|; | \(from )`)
 
 // IsRetryable returns true if the error indicates a transient network error
 // that should be retried. This covers HTTP 429 and 5xx status codes, TCP-level
