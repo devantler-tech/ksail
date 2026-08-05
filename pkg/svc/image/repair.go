@@ -43,6 +43,69 @@ func (e *Exporter) tryExportImagesWithRepair(
 	)
 }
 
+// repairAndReExport refreshes the node's containerd content store and re-exports once
+// after the exported archive failed its integrity validation.
+//
+// A silent truncation and a "content digest not found" export failure share one cause —
+// an incomplete content store — so this reuses the same refresh-and-re-export remedy that
+// tryExportImagesWithRepair applies to the non-zero-exit form.
+//
+// The refresh is deliberately scoped to repairImages, exactly like the existing repair
+// path: those are populated only when the caller named specific images. Without that
+// scope a validation failure on a whole-cluster export would re-pull every image in the
+// cluster, so the original validation error is returned unchanged instead.
+//
+// validationErr is the failure that triggered the retry. It is returned when no repair is
+// possible, so the caller's error is never replaced by a less specific one.
+func (e *Exporter) repairAndReExport(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	outputPath string,
+	platform string,
+	exportImages []string,
+	repairImages []string,
+	validationErr error,
+) error {
+	if len(repairImages) == 0 {
+		return validationErr
+	}
+
+	successfulRepairRefs, refreshErr := e.refreshImageContent(
+		ctx,
+		nodeName,
+		platform,
+		repairImages,
+	)
+	if refreshErr != nil && len(successfulRepairRefs) == 0 {
+		return validationErr
+	}
+
+	retryImages := preferSuccessfulRepairRefs(exportImages, successfulRepairRefs)
+
+	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, retryImages)
+	if err != nil {
+		return fmt.Errorf("%w (re-export after content repair also failed: %w)", validationErr, err)
+	}
+
+	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to copy export file from container after content repair: %w",
+			err,
+		)
+	}
+
+	// A second failure is terminal: the content store did not recover, and retrying again
+	// would loop on the same cause.
+	err = ValidateExportedTar(outputPath)
+	if err != nil {
+		return fmt.Errorf("%w (persisted after content repair and re-export)", err)
+	}
+
+	return nil
+}
+
 func (e *Exporter) fallbackExportImages(
 	ctx context.Context,
 	nodeName string,
