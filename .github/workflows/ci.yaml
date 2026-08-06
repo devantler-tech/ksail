@@ -25,8 +25,16 @@ env:
   GOMEMLIMIT: "6GiB"
 
 concurrency:
-  group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  # On main each run is its own verification record, so it gets a run-unique
+  # group. Sharing a group there is not made safe by cancel-in-progress alone: a
+  # group holds one running plus one pending run, and a third merge cancels the
+  # pending one — so the second merge's checks would still be lost. A unique key
+  # means nothing on main ever queues behind, or evicts, anything else.
+  #
+  # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
+  # runs there still cancel exactly as before.
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
 
