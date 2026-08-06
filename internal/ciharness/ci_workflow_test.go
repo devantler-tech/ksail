@@ -41,6 +41,18 @@ func TestCIWorkflowKeepsDefaultBranchRunsAlive(t *testing.T) {
 	// queue entry its own gh-readonly-queue ref.
 	assert.Contains(t, workflow.Concurrency.Group, "github.ref")
 
+	// On main the group must be run-unique. cancel-in-progress alone does not
+	// make a shared group safe there: a concurrency group holds one running plus
+	// one pending run, and a third push cancels the pending one — so the second
+	// push's checks are lost even with cancellation disabled.
+	assert.Containsf(
+		t,
+		workflow.Concurrency.Group,
+		"github.run_id",
+		"main must get a run-unique concurrency group, else a queued run is evicted by the next push",
+	)
+	assert.Contains(t, workflow.Concurrency.Group, "refs/heads/main")
+
 	// A ref-keyed group gives every push to main the same key, so cancelling
 	// unconditionally evicts the previous merge's checks mid-flight. main then
 	// reports green on verification that never finished.
