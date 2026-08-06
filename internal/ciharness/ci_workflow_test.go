@@ -201,7 +201,10 @@ func runsOnDefaultBranch(on map[string]any) bool {
 	}
 
 	if ignore := patternList(filters["branches-ignore"]); len(ignore) > 0 {
-		return !matchesDefaultBranch(ignore)
+		// Inverted sense: a pattern we cannot read must NOT be taken to exclude
+		// main, or an unreadable ignore-pattern would skip the workflow — the
+		// same silent hole, arrived at from the other side.
+		return !matchesDefaultBranch(ignore, false)
 	}
 
 	branches := patternList(filters["branches"])
@@ -216,7 +219,7 @@ func runsOnDefaultBranch(on map[string]any) bool {
 		return !tagOnly
 	}
 
-	return matchesDefaultBranch(branches)
+	return matchesDefaultBranch(branches, true)
 }
 
 func patternList(raw any) []string {
@@ -233,7 +236,11 @@ func patternList(raw any) []string {
 	return patterns
 }
 
-func matchesDefaultBranch(patterns []string) bool {
+// matchesDefaultBranch reports whether any pattern selects main. whenUnparseable
+// is the answer for a pattern Go's matcher rejects, and differs by caller: an
+// inclusion list should assume it matches, an exclusion list should assume it
+// does not, so that either way the workflow stays in the checked set.
+func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 	for _, pattern := range patterns {
 		if pattern == "main" || strings.Contains(pattern, "**") {
 			return true
@@ -241,8 +248,21 @@ func matchesDefaultBranch(patterns []string) bool {
 
 		// filepath.Match covers *, ? and character classes; branch names here
 		// carry no slash, so its separator handling does not matter.
+		//
+		// A malformed pattern, or one using syntax GitHub accepts and Go does
+		// not, errors here. Treat that as a match: this function fails open
+		// toward inclusion, and silently skipping a pattern we cannot read is
+		// precisely the hole this matcher exists to close.
 		matched, err := filepath.Match(pattern, "main")
-		if err == nil && matched {
+		if err != nil {
+			if whenUnparseable {
+				return true
+			}
+
+			continue
+		}
+
+		if matched {
 			return true
 		}
 	}
@@ -268,6 +288,14 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		"ignore other":     {yaml: "on:\n  push:\n    branches-ignore: [develop]\n", want: true},
 		"ignore main":      {yaml: "on:\n  push:\n    branches-ignore: [main]\n", want: false},
 		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n", want: false},
+
+		// A pattern Go's matcher cannot parse must not silently skip the
+		// workflow; inclusion is the safe direction.
+		"unparseable pattern": {yaml: "on:\n  push:\n    branches: ['[main']\n", want: true},
+		"unparseable ignore": {
+			yaml: "on:\n  push:\n    branches-ignore: ['[main']\n",
+			want: true,
+		},
 	}
 
 	for name, testCase := range tests {
