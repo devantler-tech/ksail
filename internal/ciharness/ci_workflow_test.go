@@ -59,20 +59,16 @@ func TestCIWorkflowKeepsDefaultBranchRunsAlive(t *testing.T) {
 		"main must be bound to the run-unique key; an inverted condition gives main the shared ref key",
 	)
 
-	// A ref-keyed group gives every push to main the same key, so cancelling
-	// unconditionally evicts the previous merge's checks mid-flight. main then
-	// reports green on verification that never finished.
-	cancel, isExpression := workflow.Concurrency.CancelInProgress.(string)
-	require.Truef(
+	// Hold cancel-in-progress to the same allowlist the repo-wide test uses.
+	// Substring checks would be misleading here for exactly the reason they were
+	// wrong there: `${{ github.ref != 'refs/heads/main' || true }}` contains
+	// "github.ref", "refs/heads/main" and "!=" while still cancelling on main.
+	assert.Equalf(
 		t,
-		isExpression,
-		"cancel-in-progress must be an expression excluding the default branch, got %#v",
+		approvedCancelExpression,
 		workflow.Concurrency.CancelInProgress,
+		"cancel-in-progress must be exactly the approved expression",
 	)
-
-	assert.Contains(t, cancel, "github.ref")
-	assert.Contains(t, cancel, "refs/heads/main")
-	assert.Contains(t, cancel, "!=")
 }
 
 func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
