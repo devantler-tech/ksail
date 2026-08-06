@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,11 +17,7 @@ import (
 //
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type concurrencyWorkflow struct {
-	On struct {
-		Push struct {
-			Branches []string `yaml:"branches"`
-		} `yaml:"push"`
-	} `yaml:"on"`
+	On          map[string]any `yaml:"on"`
 	Concurrency struct {
 		Group            string `yaml:"group"`
 		CancelInProgress any    `yaml:"cancel-in-progress"`
@@ -37,26 +32,17 @@ func TestCIWorkflowKeepsDefaultBranchRunsAlive(t *testing.T) {
 	var workflow concurrencyWorkflow
 	require.NoError(t, yaml.Unmarshal(contents, &workflow))
 
-	// The group stays ref-keyed so superseded pull-request runs still cancel:
-	// each pull request carries its own refs/pull/<n>/merge ref, and each merge
-	// queue entry its own gh-readonly-queue ref.
-	assert.Contains(t, workflow.Concurrency.Group, "github.ref")
-
-	// On main the group must be run-unique. cancel-in-progress alone does not
-	// make a shared group safe there: a concurrency group holds one running plus
-	// one pending run, and a third push cancels the pending one — so the second
-	// push's checks are lost even with cancellation disabled.
-	//
-	// Assert the whole conditional rather than the tokens separately. Checking
-	// "github.run_id", "refs/heads/main" and "github.ref" as independent
-	// substrings also passes for the INVERTED expression
-	//   github.ref != 'refs/heads/main' && github.run_id || github.ref
-	// which hands main the shared ref key and reinstates the eviction.
-	assert.Containsf(
+	// Assert the whole group expression, not fragments of it. Every partial form
+	// tried here has admitted a bypass: independent substrings admit the inverted
+	// conditional, and asserting only the true-branch admits
+	//   github.ref == 'refs/heads/main' && github.run_id || github.run_id
+	// whose fallback gives pull-request and merge-queue runs unique groups too,
+	// so superseded runs there can no longer cancel each other.
+	assert.Equalf(
 		t,
+		approvedGroupExpression,
 		workflow.Concurrency.Group,
-		"github.ref == 'refs/heads/main' && github.run_id",
-		"main must be bound to the run-unique key; an inverted condition gives main the shared ref key",
+		"concurrency group must be exactly the approved expression",
 	)
 
 	// Hold cancel-in-progress to the same allowlist the repo-wide test uses.
@@ -88,7 +74,7 @@ func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
 		var workflow concurrencyWorkflow
 		require.NoErrorf(t, yaml.Unmarshal(contents, &workflow), "parsing %s", path)
 
-		if !slices.Contains(workflow.On.Push.Branches, "main") {
+		if !runsOnDefaultBranch(workflow.On) {
 			continue
 		}
 
@@ -105,9 +91,11 @@ func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
 	}
 
 	// Guard the guard: were the glob or the trigger shape to stop matching, the
-	// loop above would pass over an empty set and assert nothing at all. Five
-	// workflows push to main today (ci, desktop, release, todos, web-ui); the
-	// floor stays low so removing one does not fail this test spuriously.
+	// loop above would pass over an empty set and assert nothing at all. Six
+	// workflows can run on main today — ci, desktop, release, todos and web-ui
+	// name it literally, and copilot-setup-steps.yml reaches it through an
+	// unfiltered push, which a literal-name check silently skipped. The floor
+	// stays low so removing one does not fail this test spuriously.
 	assert.GreaterOrEqualf(
 		t,
 		checked,
@@ -181,6 +169,114 @@ func TestMayCancelDefaultBranchRuns(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, testCase.want, mayCancelDefaultBranchRuns(testCase.value))
+		})
+	}
+}
+
+// approvedGroupExpression is the only concurrency group allowed for ci.yaml. It
+// gives main a run-unique key while leaving every other ref — pull requests and
+// merge-queue entries — sharing the ref-keyed group so superseded runs cancel.
+const approvedGroupExpression = "ci-ksail-${{ github.workflow }}-" +
+	"${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+
+// runsOnDefaultBranch reports whether a workflow's triggers admit a push to
+// main. It FAILS OPEN toward inclusion: anything that might run there is
+// checked, because a workflow wrongly skipped is a silent hole, while a
+// workflow wrongly included merely has to satisfy the same cancellation rule.
+//
+// A literal branch list is not sufficient to decide this. An `on: push` with no
+// branch filter runs on every branch; `branches-ignore` selects by exclusion;
+// and both filters accept glob patterns, so `main` can be matched by `ma*n`,
+// `*` or `**` without appearing literally.
+func runsOnDefaultBranch(on map[string]any) bool {
+	raw, present := on["push"]
+	if !present {
+		return false
+	}
+
+	filters, isMapping := raw.(map[string]any)
+	if !isMapping {
+		// `push:` with no body runs on every branch.
+		return true
+	}
+
+	if ignore := patternList(filters["branches-ignore"]); len(ignore) > 0 {
+		return !matchesDefaultBranch(ignore)
+	}
+
+	branches := patternList(filters["branches"])
+	if len(branches) == 0 {
+		// Only tag filters, or none at all. A tag-only push never targets a
+		// branch; anything else reaches every branch.
+		_, tagOnly := filters["tags"]
+		if !tagOnly {
+			_, tagOnly = filters["tags-ignore"]
+		}
+
+		return !tagOnly
+	}
+
+	return matchesDefaultBranch(branches)
+}
+
+func patternList(raw any) []string {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	patterns := make([]string, 0, len(items))
+	for _, item := range items {
+		patterns = append(patterns, fmt.Sprintf("%v", item))
+	}
+
+	return patterns
+}
+
+func matchesDefaultBranch(patterns []string) bool {
+	for _, pattern := range patterns {
+		if pattern == "main" || strings.Contains(pattern, "**") {
+			return true
+		}
+
+		// filepath.Match covers *, ? and character classes; branch names here
+		// carry no slash, so its separator handling does not matter.
+		matched, err := filepath.Match(pattern, "main")
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	return false
+}
+
+func TestRunsOnDefaultBranch(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		yaml string
+		want bool
+	}{
+		"literal main":     {yaml: "on:\n  push:\n    branches: [main]\n", want: true},
+		"no push trigger":  {yaml: "on:\n  pull_request:\n", want: false},
+		"tags only":        {yaml: "on:\n  push:\n    tags: ['v*']\n", want: false},
+		"other branch":     {yaml: "on:\n  push:\n    branches: [develop]\n", want: false},
+		"unfiltered push":  {yaml: "on:\n  push:\n", want: true},
+		"glob star":        {yaml: "on:\n  push:\n    branches: ['*']\n", want: true},
+		"glob doublestar":  {yaml: "on:\n  push:\n    branches: ['**']\n", want: true},
+		"glob prefix":      {yaml: "on:\n  push:\n    branches: ['ma*n']\n", want: true},
+		"ignore other":     {yaml: "on:\n  push:\n    branches-ignore: [develop]\n", want: true},
+		"ignore main":      {yaml: "on:\n  push:\n    branches-ignore: [main]\n", want: false},
+		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n", want: false},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var workflow concurrencyWorkflow
+			require.NoError(t, yaml.Unmarshal([]byte(testCase.yaml), &workflow))
+			assert.Equal(t, testCase.want, runsOnDefaultBranch(workflow.On))
 		})
 	}
 }
