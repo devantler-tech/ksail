@@ -26,7 +26,11 @@ env:
 
 concurrency:
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  # Superseded pull-request and merge-queue runs still cancel: each carries its
+  # own ref, so the group key is unique per subject. Every push to main shares
+  # one ref, so cancelling there would evict the previous merge's checks
+  # mid-flight and settle main on verification that never completed.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
 
