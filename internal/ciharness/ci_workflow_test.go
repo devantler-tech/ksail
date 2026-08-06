@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,10 +80,13 @@ func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
 
 		checked++
 
-		assert.NotEqualf(
+		// Both the YAML boolean and a quoted "true" are truthy to GitHub, so
+		// compare on the rendered value rather than the parsed type.
+		cancels := fmt.Sprintf("%v", workflow.Concurrency.CancelInProgress) == "true"
+
+		assert.Falsef(
 			t,
-			true,
-			workflow.Concurrency.CancelInProgress,
+			cancels,
 			"%s runs on main and cancels in progress unconditionally, so one merge evicts "+
 				"the previous merge's checks before they complete",
 			filepath.Base(path),
