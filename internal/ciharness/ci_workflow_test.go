@@ -100,10 +100,11 @@ func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
 
 		assert.Falsef(
 			t,
-			cancelsUnconditionally(workflow.Concurrency.CancelInProgress),
-			"%s runs on main and cancels in progress unconditionally, so one merge evicts "+
-				"the previous merge's checks before they complete",
+			mayCancelDefaultBranchRuns(workflow.Concurrency.CancelInProgress),
+			"%s runs on main and may cancel in progress there, so one merge evicts the "+
+				"previous merge's checks before they complete (allowed: absent, false, or %s)",
 			filepath.Base(path),
+			approvedCancelExpression,
 		)
 	}
 
@@ -120,23 +121,70 @@ func TestNoDefaultBranchWorkflowCancelsRunsInProgress(t *testing.T) {
 	)
 }
 
-// cancelsUnconditionally reports whether a cancel-in-progress value cancels runs
-// on every branch. A literal `true` is the obvious form, but GitHub also accepts
-// an expression, and YAML hands those back as strings — so `${{ true }}` renders
-// as a non-"true" string while still cancelling everything. An expression that
-// never mentions github.ref cannot be branch-conditional either, so it is
-// treated as unconditional rather than assumed safe.
-func cancelsUnconditionally(value any) bool {
-	rendered := strings.TrimSpace(fmt.Sprintf("%v", value))
-	if rendered == "true" {
-		return true
-	}
+// approvedCancelExpression is the only expression form allowed to gate
+// cancellation on a workflow that runs on the default branch.
+const approvedCancelExpression = "${{ github.ref != 'refs/heads/main' }}"
 
-	if !strings.HasPrefix(rendered, "${{") || !strings.HasSuffix(rendered, "}}") {
+// mayCancelDefaultBranchRuns reports whether a cancel-in-progress value could
+// cancel a run on main. It FAILS CLOSED: only an absent value, an explicit
+// false, or the exact approved expression are accepted.
+//
+// Inspecting the tokens of an arbitrary expression does not work, because what
+// matters is the value it evaluates to when github.ref is refs/heads/main —
+// which a substring check cannot tell. Both `${{ github.ref && true }}` and
+// `${{ github.ref != 'refs/heads/main' || true }}` mention github.ref and look
+// branch-conditional, yet both evaluate true on main and cancel the previous
+// run. Evaluating GitHub expressions here would mean shipping an interpreter
+// that itself needs testing, so an allowlist is the honest guard: a new form is
+// added deliberately, with its behaviour on main reasoned about once.
+func mayCancelDefaultBranchRuns(value any) bool {
+	if value == nil {
 		return false
 	}
 
-	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(rendered, "${{"), "}}"))
+	switch strings.TrimSpace(fmt.Sprintf("%v", value)) {
+	case "false", approvedCancelExpression:
+		return false
+	default:
+		return true
+	}
+}
 
-	return inner == "true" || !strings.Contains(inner, "github.ref")
+func TestMayCancelDefaultBranchRuns(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		value any
+		want  bool
+	}{
+		"absent":              {value: nil, want: false},
+		"explicit false":      {value: false, want: false},
+		"approved expression": {value: approvedCancelExpression, want: false},
+
+		"literal true":    {value: true, want: true},
+		"quoted true":     {value: "true", want: true},
+		"expression true": {value: "${{ true }}", want: true},
+
+		// Both mention github.ref and read as branch-conditional, yet each
+		// evaluates true when github.ref is refs/heads/main.
+		"truthy ref conjunction": {value: "${{ github.ref && true }}", want: true},
+		"disjunction with true": {
+			value: "${{ github.ref != 'refs/heads/main' || true }}",
+			want:  true,
+		},
+
+		// Fail closed on anything not explicitly approved, including forms that
+		// may well be correct — adding one is a deliberate act.
+		"unreviewed variant": {
+			value: "${{ github.ref != format('refs/heads/{0}', 'main') }}",
+			want:  true,
+		},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testCase.want, mayCancelDefaultBranchRuns(testCase.value))
+		})
+	}
 }
