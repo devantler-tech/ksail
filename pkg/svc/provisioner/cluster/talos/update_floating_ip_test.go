@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -15,12 +16,14 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1372,4 +1375,66 @@ func TestBuildDesiredNodeConfig_PreservesReconciledFloatingIPEndpoint(t *testing
 				"the in-place push must preserve the reconciled floating-IP endpoint")
 		})
 	}
+}
+
+// TestAllControlPlanesHaveHetznerFloatingIPConfig_LegacyEth0FormIsDrift pins the
+// migration path for clusters created before ksail#6070.
+//
+// Those clusters carry the HCloud VIP on a device addressed as `interface: eth0`
+// — a link Talos never creates under predictable naming, so the VIP was never
+// claimed and the floating IP stayed attached-but-unbound. That config satisfies
+// the endpoint and VIP checks, so before this fix it read as fully configured:
+// `cluster update` emitted no reconciliation and the dead endpoint survived every
+// run. The legacy form must therefore be reported as drift, not as configured.
+//
+// The legacy fixture is derived from the real configured one minus the delta (the
+// deviceSelector swapped back to a link name), so it cannot drift into testing
+// some other shape.
+func TestAllControlPlanesHaveHetznerFloatingIPConfig_LegacyEth0FormIsDrift(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	hzProvider := newFipUpdateProvider(server.URL)
+
+	configuredProvisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	})
+	require.NoError(t, configuredProvisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(), hzProvider, "fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(11, "fip-cluster-cp-0", "203.0.113.5")},
+	))
+
+	configured := configuredProvisioner.TalosConfigsForTest().ControlPlane()
+
+	configuredYAML, err := configured.EncodeString()
+	require.NoError(t, err)
+	// Source-minus-delta: rewrite ONLY the network selector back to the pre-#6070
+	// form. Matched by pattern rather than a literal, because re-encoding picks its
+	// own indentation and quoting — a literal silently no-ops, and the test would
+	// then "prove" drift detection against an unmodified fixture. The nested
+	// `\n\s+` prefix is what keeps this off the unrelated install-disk `busPath`.
+	legacySelector := regexp.MustCompile(
+		`deviceSelector:\n\s+busPath: "?` +
+			regexp.QuoteMeta(talosconfigmanager.HetznerPublicNICBusPath) + `"?`,
+	)
+	require.True(t, legacySelector.MatchString(configuredYAML),
+		"fixture precondition: the current form must address the NIC by bus path")
+
+	legacyYAML := legacySelector.ReplaceAllString(configuredYAML, "interface: eth0")
+	require.NotEqual(t, configuredYAML, legacyYAML,
+		"fixture precondition: the legacy rewrite must actually have applied")
+
+	legacy, err := configloader.NewFromBytes([]byte(legacyYAML))
+	require.NoError(t, err)
+
+	assert.True(t, talosprovisioner.AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+		[]talosconfig.Provider{configured}, "192.0.2.10",
+	), "the current bus-path form is configured")
+
+	assert.False(t, talosprovisioner.AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+		[]talosconfig.Provider{legacy}, "192.0.2.10",
+	), "the legacy eth0 form must read as drift so deployed clusters get migrated")
 }

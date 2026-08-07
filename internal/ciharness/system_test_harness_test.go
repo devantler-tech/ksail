@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,10 +75,217 @@ type compositeAction struct {
 	} `yaml:"runs"`
 }
 
+//nolint:tagliatelle // GitHub Actions defines this external key in kebab-case.
 type ciWorkflow struct {
+	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
-		Steps []harnessStep `yaml:"steps"`
+		TimeoutMinutes int               `yaml:"timeout-minutes"`
+		Permissions    map[string]string `yaml:"permissions"`
+		Steps          []harnessStep     `yaml:"steps"`
+		If             string            `yaml:"if"`
+		Needs          []string          `yaml:"needs"`
+		Uses           string            `yaml:"uses"`
 	} `yaml:"jobs"`
+}
+
+func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	changesJob, found := workflow.Jobs["changes"]
+	require.True(t, found, "changes job is missing")
+	filterStep := findHarnessStep(t, changesJob.Steps, "🔍 Filter paths")
+	filters := stringValue(filterStep.With["filters"])
+	assert.Contains(t, filters, "govuln-allowlist:\n  - '.govulncheck-allow.txt'")
+
+	validateJob, found := workflow.Jobs["ci-go"]
+	require.True(t, found, "ci-go job is missing")
+	assert.Contains(t, validateJob.Needs, "changes")
+	assert.Contains(t, validateJob.If, "github.event_name == 'pull_request'")
+	assert.Contains(
+		t,
+		validateJob.If,
+		"github.event.pull_request.head.repo.full_name == github.repository",
+	)
+	assert.Contains(t, validateJob.If, "needs.changes.outputs.govuln-allowlist == 'true'")
+	assert.Contains(t, validateJob.Uses, "validate-go-project.yaml")
+}
+
+func TestEKSSmokeDeclaresOIDCRoleWithoutSecret(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := ".github/workflows/system-test-eks.yaml"
+	workflow := readCIWorkflow(t, workflowPath)
+
+	roleARN := workflow.Env["AWS_OIDC_ROLE_ARN"]
+	require.Regexp(t, `^arn:aws:iam::[0-9]{12}:role/eks-ci$`, roleARN)
+
+	preflightJob, found := workflow.Jobs["preflight"]
+	require.True(t, found, "preflight job is missing")
+	preflightStep := findHarnessStep(t, preflightJob.Steps, "🔎 Check required AWS OIDC role")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", preflightStep.Env["AWS_OIDC_ROLE_ARN"])
+
+	preflightOutput, diagnostics, err := executeOIDCPreflight(t, preflightStep.Run, "")
+	require.Error(t, err, "empty checked-in OIDC role must fail the dispatch")
+	assert.Empty(t, preflightOutput)
+	assert.Contains(t, diagnostics, "AWS_OIDC_ROLE_ARN is required")
+
+	preflightOutput, diagnostics, err = executeOIDCPreflight(t, preflightStep.Run, roleARN)
+	require.NoErrorf(t, err, "declared OIDC role was rejected:\n%s", diagnostics)
+	assert.Equal(t, "available=true\n", preflightOutput)
+
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
+	configureStep := findHarnessStep(t, smokeJob.Steps, "🔐 Configure AWS credentials (OIDC)")
+	assert.Equal(t, "${{ env.AWS_OIDC_ROLE_ARN }}", configureStep.With["role-to-assume"])
+
+	workflowSource := readRepoFile(t, workflowPath)
+	assert.NotContains(t, string(workflowSource), "secrets.AWS_OIDC_ROLE_ARN")
+}
+
+func TestEKSSmokePreparesCloudGitOpsAndBoundsCleanup(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, found := workflow.Jobs["smoke-test"]
+	require.True(t, found, "smoke-test job is missing")
+	assert.Equal(t, "write", smokeJob.Permissions["packages"])
+
+	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
+	assert.Equal(t, "${{ github.actor }}", initStep.Env["GHCR_USER"])
+	assert.Equal(t, "${{ github.token }}", initStep.Env["GHCR_TOKEN"])
+	gitopsGuardIndex := strings.Index(
+		initStep.Run,
+		`if [ "$GITOPS_ENGINE" != "None" ]; then`,
+	)
+	registryIndex := strings.Index(
+		initStep.Run,
+		"${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/devantler-tech/ksail/system-test-manifests",
+	)
+
+	require.NotEqual(t, -1, gitopsGuardIndex, "GitOps engine guard is missing")
+	require.NotEqual(t, -1, registryIndex, "GitOps registry argument is missing")
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_USER:-}" ]`)
+	assert.Contains(t, initStep.Run, `[ -z "${GHCR_TOKEN:-}" ]`)
+
+	gitopsEndIndex := strings.Index(initStep.Run[gitopsGuardIndex:], "\nfi")
+	require.NotEqual(t, -1, gitopsEndIndex, "GitOps engine guard is unterminated")
+	assert.Greater(t, registryIndex, gitopsGuardIndex)
+	assert.Less(t, registryIndex, gitopsGuardIndex+gitopsEndIndex)
+
+	createStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster create")
+	assert.Equal(t, "create", createStep.ID)
+	attemptIndex := strings.Index(createStep.Run, `echo "attempted=true" >> "$GITHUB_OUTPUT"`)
+	createIndex := strings.Index(createStep.Run, "ksail cluster create")
+
+	require.NotEqual(t, -1, attemptIndex, "cluster create must record its attempt")
+	require.NotEqual(t, -1, createIndex, "cluster create command is missing")
+	assert.Less(t, attemptIndex, createIndex)
+
+	assertCleanupSkipsTeardownBeforeCreate(t, smokeJob.Steps)
+}
+
+// assertCleanupSkipsTeardownBeforeCreate locks the one safety property the
+// teardown path exists for: when creation never started, nothing is deleted.
+func assertCleanupSkipsTeardownBeforeCreate(t *testing.T, steps []harnessStep) {
+	t.Helper()
+
+	cleanupStep := findHarnessStep(t, steps, "🧹 Delete EKS smoke cluster")
+	assert.Equal(
+		t,
+		"${{ steps.create.outputs.attempted }}",
+		cleanupStep.Env["EKS_CREATE_ATTEMPTED"],
+	)
+	// The teardown logic lives in .github/scripts/delete-eks-smoke-cluster.sh
+	// (extracted in #6363 so it is testable). The step's job is to hand the
+	// create-attempted signal to that script; the guard itself is proven below.
+	// Assert the contract where each half actually lives — pinning the guard's
+	// text to the step's inline Run is what silently rotted when the logic
+	// moved out.
+	require.Contains(
+		t, cleanupStep.Run, "delete-eks-smoke-cluster.sh",
+		"cleanup step must delegate to the extracted teardown script",
+	)
+	require.Contains(
+		t, cleanupStep.Run, `--create-attempted "${EKS_CREATE_ATTEMPTED:-false}"`,
+		"cleanup step must forward the create-attempted signal to the script",
+	)
+
+	cleanupScript := string(readRepoFile(t, ".github/scripts/delete-eks-smoke-cluster.sh"))
+	require.Contains(
+		t, cleanupScript, "ksail cluster delete",
+		"cluster delete command is missing",
+	)
+
+	// Prove the property behaviourally rather than by source ordering. A
+	// guard-before-delete text check passes even if the guard's `exit 0` is
+	// removed, which is the only thing that actually stops the delete — so run the
+	// script for real with --create-attempted false and assert that no teardown
+	// tool is ever invoked.
+	diagnostics, invoked := runCleanupScriptWithoutCreate(t)
+	assert.Empty(
+		t, invoked,
+		"nothing may be invoked when creation never started, but the script ran: %v",
+		invoked,
+	)
+	assert.Contains(t, diagnostics, "nothing to clean up")
+}
+
+// runCleanupScriptWithoutCreate executes the teardown script on the
+// create-never-attempted path with every teardown binary replaced by a recorder,
+// and returns the script's output plus the names of any binaries it invoked.
+func runCleanupScriptWithoutCreate(t *testing.T) (string, []string) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	callLog := filepath.Join(tempDir, "invoked")
+
+	require.NoError(t, os.MkdirAll(binDir, 0o700))
+
+	// Any of these running at all means the guard let execution through.
+	for _, name := range []string{"ksail", "eksctl", "aws"} {
+		stub := "#!/bin/sh\nprintf '%s\\n' '" + name + "' >> \"$KSAIL_CLEANUP_CALL_LOG\"\nexit 0\n"
+		stubPath := filepath.Join(binDir, name)
+
+		require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o600))
+		//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
+		require.NoError(t, os.Chmod(stubPath, 0o700))
+	}
+
+	scriptPath := filepath.Join("..", "..", ".github", "scripts", "delete-eks-smoke-cluster.sh")
+	//nolint:gosec // scriptPath is a repository-owned constant path, not user input.
+	command := exec.CommandContext(t.Context(), "bash", scriptPath,
+		"--cluster-name", "fixture-cluster",
+		"--region", "us-east-1",
+		"--workdir", tempDir,
+		"--create-attempted", "false",
+	)
+
+	command.Env = append(
+		os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"KSAIL_CLEANUP_CALL_LOG="+callLog,
+	)
+
+	diagnostics, err := command.CombinedOutput()
+	// Deliberately assert, not require: a fall-through past the guard shows up
+	// both as a non-zero exit and as an invoked teardown binary, and reporting
+	// both makes the failure name the property rather than just the exit code.
+	//nolint:testifylint // assert, not require: a fall-through must report the invoked binaries too.
+	assert.NoErrorf(
+		t, err,
+		"cleanup script must exit 0 when creation never started:\n%s", diagnostics,
+	)
+
+	recorded, readErr := os.ReadFile(callLog) //nolint:gosec // Test-owned temporary path.
+	if os.IsNotExist(readErr) {
+		return string(diagnostics), nil
+	}
+
+	require.NoError(t, readErr)
+
+	return string(diagnostics), strings.Fields(string(recorded))
 }
 
 //nolint:funlen // One test locks the cross-file action/workflow contract end to end.
@@ -156,13 +365,13 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
 	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
 
-	diagnosticUploadIndex := findHarnessStepIndex(
+	diagnosticUploadIndex := harnessStepIndex(
 		t,
 		dockerJob.Steps,
 		"📤 Upload system test diagnostics",
 	)
-	cleanupIndex := findHarnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
-	logUploadIndex := findHarnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
+	cleanupIndex := harnessStepIndex(t, dockerJob.Steps, "🧪 Cleanup KSail System Test")
+	logUploadIndex := harnessStepIndex(t, dockerJob.Steps, "📤 Upload system test logs")
 	assert.Less(t, diagnosticUploadIndex, cleanupIndex)
 	assert.Less(t, cleanupIndex, logUploadIndex)
 	assertBoundedWorkflowUpload(
@@ -368,6 +577,173 @@ func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
 	}
 }
 
+// assertStepTimeoutCoversRetryBudget pins the RELATIONSHIP between the scaling
+// step's timeout and the retry loop inside it, rather than pinning each as its
+// own magic number. wait_for_capacity polls on a bounded loop and runs twice; if
+// those two calls can outlast the step, GitHub kills the step before the loop
+// prints why capacity was never reached, and a capacity failure becomes an
+// opaque timeout. Deriving the budget from the loop keeps the two in step when
+// either is retuned.
+func assertStepTimeoutCoversRetryBudget(t *testing.T, step harnessStep) {
+	t.Helper()
+
+	bound := regexp.MustCompile(`for _ in \{1\.\.(\d+)\}`).FindStringSubmatch(step.Run)
+	require.Len(t, bound, 2, "wait_for_capacity retry bound not found in step")
+
+	iterations, err := strconv.Atoi(bound[1])
+	require.NoError(t, err)
+	require.Positive(t, iterations)
+
+	// Derive the sleep interval and the call count from the script too. Hard-coding
+	// either lets a workflow retune (a longer sleep, a third scaling assertion)
+	// leave this guard passing while the real budget has outgrown the timeout.
+	sleeps := regexp.MustCompile(`(?m)^\s*sleep\s+(\d+)\s*$`).FindAllStringSubmatch(step.Run, -1)
+	require.NotEmpty(t, sleeps, "wait_for_capacity poll interval not found in step")
+
+	sleepSeconds, err := strconv.Atoi(sleeps[0][1])
+	require.NoError(t, err)
+	require.Positive(t, sleepSeconds)
+
+	for _, sleep := range sleeps {
+		require.Equal(
+			t, sleeps[0][1], sleep[1],
+			"step mixes poll intervals (%s vs %s); the budget below assumes one",
+			sleeps[0][1], sleep[1],
+		)
+	}
+
+	// Count invocations, not the function definition — a call always passes args.
+	waitForCapacityRuns := len(
+		regexp.MustCompile(`(?m)^\s*wait_for_capacity\s+\d`).FindAllString(step.Run, -1),
+	)
+	require.Positive(t, waitForCapacityRuns, "no wait_for_capacity invocations found in step")
+
+	pollMinutes := iterations * sleepSeconds * waitForCapacityRuns / 60
+
+	assert.Greater(
+		t, step.TimeoutMinutes, pollMinutes,
+		"step timeout (%dm) must exceed its own worst-case polling budget (%d x %ds x %d = %dm), "+
+			"or the step timeout masks wait_for_capacity's diagnostic",
+		step.TimeoutMinutes, iterations, sleepSeconds, waitForCapacityRuns, pollMinutes,
+	)
+}
+
+func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	updateStep := findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	assertStepTimeoutCoversRetryBudget(t, updateStep)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, "ksail cluster update --yes"))
+	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
+	assert.Contains(t, updateStep.Run, `assert_same_cluster`)
+	assert.Equal(t, 2, strings.Count(updateStep.Run, `assert_same_cluster "$cluster_identity"`))
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 2 1 2`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 2 1 2 2`)
+	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 1 1 1`)
+	assert.Contains(t, updateStep.Run, `wait_for_capacity 1 1 1 1`)
+	assert.Contains(t, updateStep.Run, `eksctl get nodegroup`)
+	assert.Contains(t, updateStep.Run, `.Status == "ACTIVE"`)
+	assert.Contains(t, updateStep.Run, `kubectl get nodes -o json`)
+	assert.Contains(t, updateStep.Run, `type == "Ready"`)
+	assert.NotContains(t, updateStep.Run, "experimentalInPlaceUpdates")
+
+	infoIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster info")
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, infoIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+}
+
+//nolint:funlen // One test locks the complete job-budget and credential-refresh contract.
+func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+	assert.Equal(t, 210, smokeJob.TimeoutMinutes)
+
+	boundedStepNames := []string{
+		"📄 Checkout",
+		"🔐 Configure AWS credentials (OIDC)",
+		"🔐 Resolve EKS permissions boundary",
+		"⚙️ Setup Go",
+		"📦 Cache KSail Binary",
+		"📥 Install eksctl",
+		"🔧 Initialize EKS project",
+		"🧪 ksail cluster create",
+		"🧪 ksail cluster info",
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+		"🧪 ksail cluster update scales EKS nodes",
+		"🧪 ksail workload reconcile",
+		"🧹 Delete EKS smoke cluster",
+	}
+
+	boundedMinutes := 0
+
+	for _, name := range boundedStepNames {
+		step := findHarnessStep(t, smokeJob.Steps, name)
+		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
+		boundedMinutes += step.TimeoutMinutes
+	}
+
+	assert.LessOrEqual(t, boundedMinutes+15, smokeJob.TimeoutMinutes)
+
+	initialCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Configure AWS credentials (OIDC)",
+	)
+	refreshCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	assert.Equal(t, initialCredentials.Uses, refreshCredentials.Uses)
+	assert.Equal(
+		t,
+		initialCredentials.With["role-to-assume"],
+		refreshCredentials.With["role-to-assume"],
+	)
+	assert.Equal(t, 7200, refreshCredentials.With["role-duration-seconds"])
+	assert.Contains(t, refreshCredentials.If, "always()")
+
+	refreshIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS update and cleanup",
+	)
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
+	assert.Less(t, refreshIndex, updateIndex)
+	assert.Less(t, updateIndex, deleteIndex)
+
+	postRefreshMinutes := 0
+	for _, name := range boundedStepNames[10:] {
+		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
+	}
+
+	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
+}
+
+func harnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
+	t.Helper()
+
+	for index, step := range steps {
+		if step.Name == name {
+			return index
+		}
+	}
+
+	t.Fatalf("step %q is missing", name)
+
+	return -1
+}
+
 func requireTestExecutable(t *testing.T, name string) {
 	t.Helper()
 
@@ -443,6 +819,33 @@ esac
 	require.NoError(t, err)
 
 	return string(boundaryOutput), string(diagnostics), commandErr
+}
+
+func executeOIDCPreflight(
+	t *testing.T,
+	workflowRun string,
+	roleARN string,
+) (string, string, error) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "github-output")
+	require.NoError(t, os.WriteFile(outputPath, nil, 0o600))
+
+	// The shell source is repository-owned workflow content.
+	command := exec.CommandContext(t.Context(), "bash", "-c", workflowRun) //nolint:gosec
+
+	command.Env = append(
+		os.Environ(),
+		"AWS_OIDC_ROLE_ARN="+roleARN,
+		"GITHUB_OUTPUT="+outputPath,
+	)
+	diagnostics, commandErr := command.CombinedOutput()
+
+	preflightOutput, err := os.ReadFile(outputPath) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+
+	return string(preflightOutput), string(diagnostics), commandErr
 }
 
 func assertEKSSmokeMutation(t *testing.T, config map[string]any) {
@@ -594,32 +997,12 @@ func readRepoFile(t *testing.T, path string) []byte {
 	return contents
 }
 
+// findHarnessStep returns the named step, delegating the lookup to
+// harnessStepIndex so a single linear search backs every step accessor.
 func findHarnessStep(t *testing.T, steps []harnessStep, name string) harnessStep {
 	t.Helper()
 
-	for _, step := range steps {
-		if step.Name == name {
-			return step
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return harnessStep{}
-}
-
-func findHarnessStepIndex(t *testing.T, steps []harnessStep, name string) int {
-	t.Helper()
-
-	for index, step := range steps {
-		if step.Name == name {
-			return index
-		}
-	}
-
-	t.Fatalf("step %q is missing", name)
-
-	return -1
+	return steps[harnessStepIndex(t, steps, name)]
 }
 
 func assertBoundedWorkflowUpload(

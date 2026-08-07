@@ -158,6 +158,12 @@ func TestResolveName(t *testing.T) {
 	assert.Equal(t, "explicit", base.ResolveName("explicit"))
 }
 
+func TestHAControlPlaneNotImplementedPointsToSafeTransferTracker(t *testing.T) {
+	t.Parallel()
+
+	assert.ErrorContains(t, hetznerbase.ErrHAControlPlaneNotImplemented, "issues/6428")
+}
+
 func TestEnsureInfrastructureUsesResolvedNameAndSSHKey(t *testing.T) {
 	t.Parallel()
 

@@ -4,10 +4,37 @@ set -euo pipefail
 
 scenario="${FAKE_GH_SCENARIO:-valid}"
 command_line="$*"
+state_dir="${FAKE_GH_STATE_DIR:-}"
 
-if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
+merged_scenario=false
+if [[ "${scenario}" == merged* ]]; then
+	merged_scenario=true
+fi
+
+if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/43" ]]; then
+	if [[ "${scenario}" == merged-newest-invalid ]]; then
+		printf 'simulated invalid newest candidate\n' >&2
+		exit 1
+	fi
+	printf 'unexpected candidate 43 lookup\n' >&2
+	exit 2
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
 	[[ "${scenario}" == pr-failure ]] && exit 1
-	printf '%s\n' '{
+	if [[ "${merged_scenario}" == true ]]; then
+		printf '%s\n' '{
+    "state":"closed",
+    "draft":false,
+    "merged":true,
+    "merged_at":"2026-07-18T19:58:28Z",
+    "merge_commit_sha":"4444444444444444444444444444444444444444",
+    "user":{"login":"devantler"},
+    "head":{"ref":"goreleaser/ksail","sha":"1111111111111111111111111111111111111111","repo":{"full_name":"devantler-tech/homebrew-tap"}},
+    "base":{"ref":"main","repo":{"full_name":"devantler-tech/homebrew-tap"}},
+    "title":"chore(cask): update ksail to v7.166.0",
+    "labels":[{"name":"automation"},{"name":"dependencies"}]
+  }'
+	else
+		printf '%s\n' '{
     "state":"open",
     "draft":true,
     "user":{"login":"devantler"},
@@ -16,12 +43,15 @@ if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; 
     "title":"chore(cask): update ksail to v7.166.1",
     "labels":[{"name":"automation"},{"name":"dependencies"}]
   }'
+	fi
 elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100" ]]; then
 	[[ "${scenario}" == files-failure ]] && exit 1
 	if [[ "${scenario}" == malformed-files ]]; then
 		printf '%s\n' '{}'
 	elif [[ "${scenario}" == paginated-files ]]; then
 		printf '%s\n' '[[{"filename":"Casks/ksail.rb"}],[{"filename":"README.md"}]]'
+	elif [[ "${merged_scenario}" == true ]]; then
+		printf '%s\n' '[[{"filename":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222"}]]'
 	else
 		printf '%s\n' '[[{"filename":"Casks/ksail.rb"}]]'
 	fi
@@ -44,7 +74,47 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Cas
 	if [[ "${scenario}" == malformed-contents ]]; then
 		printf '%s\n' '{"path":"Casks/ksail.rb"}'
 	else
-		printf '%s\n' '{"path":"Casks/ksail.rb","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+		printf '%s\n' '{"path":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/git/ref/heads/main" ]]; then
+	[[ "${scenario}" == merged-main-ref-failure ]] && exit 1
+	if [[ "${scenario}" == merged-moving-main && -n "${state_dir}" ]]; then
+		if [[ -f "${state_dir}/main-ref-read" ]]; then
+			printf '%s\n' '{"object":{"sha":"7777777777777777777777777777777777777777"}}'
+		else
+			touch "${state_dir}/main-ref-read"
+			printf '%s\n' '{"object":{"sha":"5555555555555555555555555555555555555555"}}'
+		fi
+	else
+		printf '%s\n' '{"object":{"sha":"5555555555555555555555555555555555555555"}}'
+	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=4444444444444444444444444444444444444444" ]]; then
+	[[ "${scenario}" == merged-merge-file-failure ]] && exit 1
+	printf '%s\n' '{"path":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=5555555555555555555555555555555555555555" ]]; then
+	[[ "${scenario}" == merged-main-file-failure ]] && exit 1
+	if [[ "${scenario}" == merged-malformed-main-file ]]; then
+		printf '%s\n' '{"path":"Casks/ksail.rb"}'
+	else
+		printf '%s\n' '{"path":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
+	fi
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/compare/4444444444444444444444444444444444444444...5555555555555555555555555555555555555555" ]]; then
+	[[ "${scenario}" == merged-comparison-failure ]] && exit 1
+	printf '%s\n' '{"status":"ahead","behind_by":0,"merge_base_commit":{"sha":"4444444444444444444444444444444444444444"}}'
+elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls?state=closed&head=devantler-tech:goreleaser/ksail&per_page=100" ]]; then
+	[[ "${scenario}" == merged-list-failure ]] && exit 1
+	author="devantler"
+	merged_at='"2026-07-18T19:58:28Z"'
+	[[ "${scenario}" == merged-wrong-list-author ]] && author="someone-else"
+	[[ "${scenario}" == merged-closed-unmerged ]] && merged_at=null
+	candidate="{\"number\":42,\"merged_at\":${merged_at},\"user\":{\"login\":\"${author}\"},\"head\":{\"ref\":\"goreleaser/ksail\",\"repo\":{\"full_name\":\"devantler-tech/homebrew-tap\"}},\"base\":{\"ref\":\"main\",\"repo\":{\"full_name\":\"devantler-tech/homebrew-tap\"}}}"
+	if [[ "${scenario}" == merged-later-page ]]; then
+		printf '[[],[%s]]\n' "${candidate}"
+	elif [[ "${scenario}" == merged-newest-invalid ]]; then
+		newest="{\"number\":43,\"merged_at\":\"2026-07-18T20:58:28Z\",\"user\":{\"login\":\"devantler\"},\"head\":{\"ref\":\"goreleaser/ksail\",\"repo\":{\"full_name\":\"devantler-tech/homebrew-tap\"}},\"base\":{\"ref\":\"main\",\"repo\":{\"full_name\":\"devantler-tech/homebrew-tap\"}}}"
+		printf '[[%s,%s]]\n' "${candidate}" "${newest}"
+	else
+		printf '[[%s]]\n' "${candidate}"
 	fi
 else
 	printf 'unexpected fake gh invocation: %s\n' "${command_line}" >&2

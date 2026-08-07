@@ -38,9 +38,10 @@ func TestBaseInstallSuccess(t *testing.T) {
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, nil)
 
-	err := base.Install(context.Background())
+	mutated, err := base.InstallWithResult(context.Background())
 
 	require.NoError(t, err)
+	assert.True(t, mutated)
 }
 
 func TestBaseInstallProceedsWhenNoReleaseSecrets(t *testing.T) {
@@ -76,9 +77,10 @@ func TestBaseInstallSkipsWhenFluxManaged(t *testing.T) {
 		}, nil)
 
 	// AddRepository and InstallOrUpgradeChart should NOT be called.
-	err := base.Install(context.Background())
+	mutated, err := base.InstallWithResult(context.Background())
 
 	require.NoError(t, err)
+	assert.False(t, mutated)
 }
 
 func TestBaseInstallSkipsWhenArgoCDManaged(t *testing.T) {

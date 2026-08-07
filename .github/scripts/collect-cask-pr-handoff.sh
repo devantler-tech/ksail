@@ -7,12 +7,17 @@ usage() {
 Usage:
   collect-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER
                              --source-repo OWNER/REPO --tag TAG --output FILE
+                             [--include-main]
 
 Collect a stable normalized snapshot of a generated Homebrew cask pull request:
 REST PR identity, every paginated changed file, the repository label inventory,
 the source release's asset digests for TAG, and — when exactly one file changed —
 that file's content at the PR head, so the validator can prove the cask actually
 pins the release (and the exact artifacts) being handed off.
+With --include-main, require a closed merged PR and also capture the cask at its
+immutable merge commit, the cask at a pinned tap-main SHA, and ancestry evidence.
+The tap-main ref is read again before publishing the snapshot; movement fails
+collection instead of mixing evidence from two main revisions.
 Any API or response-shape failure exits non-zero without publishing partial output.
 EOF
 }
@@ -22,6 +27,7 @@ pr=""
 source_repo=""
 tag=""
 output=""
+include_main=false
 
 while (($# > 0)); do
 	case "$1" in
@@ -44,6 +50,10 @@ while (($# > 0)); do
 	--output)
 		output="${2:-}"
 		shift 2
+		;;
+	--include-main)
+		include_main=true
+		shift
 		;;
 	--help | -h)
 		usage
@@ -110,18 +120,83 @@ if [[ -n "${head_sha}" && -n "${single_file}" ]]; then
   ' "${work}/head-file.json" >/dev/null
 fi
 
+# Merged fallback evidence is deliberately opt-in so the normal open-PR handoff does not gain
+# extra mutable-main API dependencies. For a coalesced release, bind the PR's one changed cask to
+# both its immutable merge result and a pinned current-main snapshot, and prove the merge commit is
+# in that main history. Re-read main before publishing so a concurrent tap merge cannot mix refs.
+printf 'null\n' >"${work}/merge-file.json"
+printf 'null\n' >"${work}/main-ref.json"
+printf 'null\n' >"${work}/main-file.json"
+printf 'null\n' >"${work}/merge-comparison.json"
+if [[ "${include_main}" == true ]]; then
+	jq -e '
+    .state == "closed"
+    and .merged == true
+    and (.merged_at | type == "string" and length > 0)
+    and (.merge_commit_sha | type == "string" and test("^[0-9a-fA-F]{40}$"))
+  ' "${work}/pr.json" >/dev/null
+	if [[ -z "${single_file}" ]]; then
+		printf 'ERROR: --include-main requires exactly one changed PR file\n' >&2
+		exit 1
+	fi
+
+	gh api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-raw.json"
+	jq -e '
+    .object.sha
+    | type == "string" and test("^[0-9a-fA-F]{40}$")
+  ' "${work}/main-ref-raw.json" >/dev/null
+	merge_commit_sha="$(jq -r '.merge_commit_sha' "${work}/pr.json")"
+	main_sha="$(jq -r '.object.sha' "${work}/main-ref-raw.json")"
+
+	gh api "repos/${tap}/contents/${single_file}?ref=${merge_commit_sha}" \
+		>"${work}/merge-file.json"
+	gh api "repos/${tap}/contents/${single_file}?ref=${main_sha}" \
+		>"${work}/main-file.json"
+	gh api "repos/${tap}/compare/${merge_commit_sha}...${main_sha}" \
+		>"${work}/merge-comparison.json"
+	for content_file in merge-file main-file; do
+		jq -e --arg path "${single_file}" '
+      type == "object"
+      and .path == $path
+      and (.sha | type == "string" and test("^[0-9a-fA-F]{40}$"))
+      and (.content | type == "string")
+    ' "${work}/${content_file}.json" >/dev/null
+	done
+	jq -e '
+    type == "object"
+    and (.status | type == "string")
+    and (.behind_by | type == "number")
+    and (.merge_base_commit.sha | type == "string")
+  ' "${work}/merge-comparison.json" >/dev/null
+
+	gh api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-after.json"
+	if [[ "$(jq -r '.object.sha // empty' "${work}/main-ref-after.json")" != "${main_sha}" ]]; then
+		printf 'ERROR: tap main moved while merged handoff evidence was collected\n' >&2
+		exit 1
+	fi
+	jq -n --arg sha "${main_sha}" '{sha: $sha}' >"${work}/main-ref.json"
+fi
+
 jq -n \
 	--slurpfile pr "${work}/pr.json" \
 	--slurpfile pages "${work}/file-pages.json" \
 	--slurpfile label_pages "${work}/label-pages.json" \
 	--slurpfile release_assets "${work}/release-assets.json" \
-	--slurpfile head_file "${work}/head-file.json" '
+	--slurpfile head_file "${work}/head-file.json" \
+	--slurpfile merge_file "${work}/merge-file.json" \
+	--slurpfile main_ref "${work}/main-ref.json" \
+	--slurpfile main_file "${work}/main-file.json" \
+	--slurpfile merge_comparison "${work}/merge-comparison.json" '
     {
       pr: $pr[0],
       files: [$pages[0][][]],
       availableLabels: [$label_pages[0][][]],
       releaseAssets: $release_assets[0],
-      headFile: $head_file[0]
+      headFile: $head_file[0],
+      mergeFile: $merge_file[0],
+      mainRef: $main_ref[0],
+      mainFile: $main_file[0],
+      mergeComparison: $merge_comparison[0]
     }
   ' >"${work}/evidence.json"
 

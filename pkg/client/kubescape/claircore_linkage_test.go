@@ -1,28 +1,74 @@
 package kubescape_test
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
 
-const auditedClaircoreVersion = "v1.5.35"
+const (
+	claircoreModulePath        = "github.com/quay/claircore"
+	claircoreToolkitModulePath = "github.com/quay/claircore/toolkit"
+)
 
-// inertClaircorePackages is the full set of claircore packages the ksail
-// binary may link. They are parsing/type/local-filesystem code only — none
-// performs the remote layer/manifest fetching behind the Claircore
-// manifest-URI SSRF advisory (issue #6008, Dependabot alerts #165/#166).
-func inertClaircorePackages() map[string]bool {
-	return map[string]bool{
-		"github.com/quay/claircore":                   true,
-		"github.com/quay/claircore/indexer":           true,
-		"github.com/quay/claircore/osrelease":         true,
-		"github.com/quay/claircore/pkg/cpe":           true,
-		"github.com/quay/claircore/pkg/tarfs":         true,
-		"github.com/quay/claircore/toolkit/types/cpe": true,
+type claircoreModuleAudit struct {
+	versions      map[string]string
+	inertPackages map[string]bool
+}
+
+// goListModule mirrors the Go command's exported JSON field names.
+type goListModule struct {
+	Path    string        `json:"Path"`    //nolint:tagliatelle // Go command output contract.
+	Version string        `json:"Version"` //nolint:tagliatelle // Go command output contract.
+	Replace *goListModule `json:"Replace"` //nolint:tagliatelle // Go command output contract.
+}
+
+// auditedClaircoreModules pins the independently selected Claircore modules
+// and exact linked package set in every shipped KSail Go module. A toolkit-only
+// upgrade or a package entering only one dependency graph must invalidate that
+// module's reachability verdict without inheriting another module's audit.
+func auditedClaircoreModules() map[string]claircoreModuleAudit {
+	return map[string]claircoreModuleAudit{
+		"root": {
+			versions: map[string]string{
+				claircoreModulePath:        "v1.5.53",
+				claircoreToolkitModulePath: "v1.6.1",
+			},
+			inertPackages: map[string]bool{
+				"github.com/quay/claircore":                   true,
+				"github.com/quay/claircore/indexer":           true,
+				"github.com/quay/claircore/internal/filterfs": true,
+				"github.com/quay/claircore/osrelease":         true,
+				"github.com/quay/claircore/pkg/cpe":           true,
+				"github.com/quay/claircore/pkg/tarfs":         true,
+				"github.com/quay/claircore/toolkit/log":       true,
+				"github.com/quay/claircore/toolkit/types":     true,
+				"github.com/quay/claircore/toolkit/types/cpe": true,
+			},
+		},
+		"desktop": {
+			versions: map[string]string{
+				claircoreModulePath:        "v1.5.53",
+				claircoreToolkitModulePath: "v1.6.1",
+			},
+			inertPackages: map[string]bool{
+				"github.com/quay/claircore":                   true,
+				"github.com/quay/claircore/indexer":           true,
+				"github.com/quay/claircore/internal/filterfs": true,
+				"github.com/quay/claircore/osrelease":         true,
+				"github.com/quay/claircore/pkg/cpe":           true,
+				"github.com/quay/claircore/pkg/tarfs":         true,
+				"github.com/quay/claircore/toolkit/log":       true,
+				"github.com/quay/claircore/toolkit/types":     true,
+				"github.com/quay/claircore/toolkit/types/cpe": true,
+			},
+		},
 	}
 }
 
@@ -46,13 +92,50 @@ func TestClaircoreModuleDirsIncludesDesktop(t *testing.T) {
 	}
 }
 
+// TestAuditedClaircoreVersionsIncludeToolkit prevents the independently
+// versioned toolkit module from dropping out of the fail-closed audit.
+func TestAuditedClaircoreVersionsIncludeToolkit(t *testing.T) {
+	t.Parallel()
+
+	wantModulePaths := []string{claircoreModulePath, claircoreToolkitModulePath}
+
+	for _, moduleName := range []string{"root", "desktop"} {
+		t.Run(moduleName, func(t *testing.T) {
+			t.Parallel()
+
+			audit, ok := auditedClaircoreModules()[moduleName]
+			if !ok {
+				t.Fatalf("module %q has no audited Claircore module versions", moduleName)
+			}
+
+			if len(audit.versions) != len(wantModulePaths) {
+				t.Fatalf(
+					"module %q must audit %d Claircore modules, got %d: %v",
+					moduleName,
+					len(wantModulePaths),
+					len(audit.versions),
+					audit.versions,
+				)
+			}
+
+			for _, modulePath := range wantModulePaths {
+				if audit.versions[modulePath] == "" {
+					t.Errorf("module %q has no audited version for %q", moduleName, modulePath)
+				}
+			}
+		})
+	}
+}
+
 // TestClaircoreLinkedPackagesStayInert pins the reachability verdict of the
 // Claircore manifest-URI SSRF (issue #6008): the advisory's sink is
 // claircore's remote fetching code (libindex and its fetcher packages), which
-// is NOT linked into ksail — only the inert packages above are. Until a
-// patched claircore release ships and is adopted, any new claircore package
-// entering the dependency graph (for example via a kubescape bump) must fail
-// this test so the verdict is re-established instead of silently trusted.
+// is NOT linked into ksail — only the inert packages above are. Every shipped
+// module now runs a claircore release outside the advisory's affected range,
+// so the sink is patched as well as unlinked; this guard keeps both properties
+// true. Any new claircore package entering a module's dependency graph (for
+// example via a kubescape bump), or a move away from an audited release, must
+// fail this test so the verdict is re-established instead of silently trusted.
 func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 	t.Parallel()
 
@@ -72,8 +155,13 @@ func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			assertClaircoreVersion(t, moduleDir)
-			assertClaircorePackagesStayInert(t, moduleDir)
+			audit, ok := auditedClaircoreModules()[name]
+			if !ok {
+				t.Fatalf("module %q has no Claircore audit", name)
+			}
+
+			assertClaircoreVersions(t, moduleDir, audit.versions)
+			assertClaircorePackagesStayInert(t, moduleDir, audit.inertPackages)
 		})
 	}
 }
@@ -85,42 +173,98 @@ func claircoreModuleDirs(root string) []string {
 	return []string{root, filepath.Join(root, "desktop")}
 }
 
-// assertClaircoreVersion invalidates the reachability verdict whenever either
-// module moves away from the audited Claircore release, even if its package
-// paths remain within the existing allow-list.
-func assertClaircoreVersion(t *testing.T, moduleDir string) {
+// assertClaircoreVersions invalidates the reachability verdict whenever a
+// shipped module moves away from either audited Claircore release, even if its
+// package paths remain within the existing allow-list.
+func assertClaircoreVersions(
+	t *testing.T,
+	moduleDir string,
+	auditedVersions map[string]string,
+) {
 	t.Helper()
 
-	cmd := exec.CommandContext(
-		t.Context(),
-		"go",
-		"list",
-		"-m",
-		"-f",
-		"{{.Version}}",
-		"github.com/quay/claircore",
-	)
-	cmd.Dir = moduleDir
+	for modulePath, auditedVersion := range auditedVersions {
+		//nolint:gosec // modulePath is selected only from the fixed audited-version map above.
+		cmd := exec.CommandContext(
+			t.Context(),
+			"go",
+			"list",
+			"-m",
+			"-json",
+			modulePath,
+		)
+		cmd.Dir = moduleDir
 
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("read Claircore version from module %q: %v\n%s", moduleDir, err, out)
+		out, err := cmd.Output()
+		if err != nil {
+			var stderr string
+
+			exitErr := new(exec.ExitError)
+			if errors.As(err, &exitErr) {
+				stderr = string(exitErr.Stderr)
+			}
+
+			t.Fatalf(
+				"read %q version from module %q: %v\n%s",
+				modulePath,
+				moduleDir,
+				err,
+				stderr,
+			)
+		}
+
+		actual := goListModule{}
+
+		decodeErr := json.Unmarshal(out, &actual)
+		if decodeErr != nil {
+			t.Fatalf("decode %q module metadata from %q: %v", modulePath, moduleDir, decodeErr)
+		}
+
+		validationFailure := validateClaircoreModuleVersion(modulePath, auditedVersion, actual)
+		if validationFailure != "" {
+			t.Fatalf("module %q: %s", moduleDir, validationFailure)
+		}
 	}
+}
 
-	if got := strings.TrimSpace(string(out)); got != auditedClaircoreVersion {
-		t.Fatalf(
-			"module %q uses Claircore %q; re-establish the #6008 SSRF reachability verdict "+
-				"before updating auditedClaircoreVersion %q",
-			moduleDir,
-			got,
-			auditedClaircoreVersion,
+func validateClaircoreModuleVersion(
+	modulePath string,
+	auditedVersion string,
+	actual goListModule,
+) string {
+	if actual.Replace != nil {
+		return fmt.Sprintf(
+			"%s %q is replaced by %s %q; re-establish the #6008 SSRF reachability verdict",
+			modulePath,
+			actual.Version,
+			actual.Replace.Path,
+			actual.Replace.Version,
 		)
 	}
+
+	if actual.Path != modulePath {
+		return fmt.Sprintf("requested %s but go list returned %s", modulePath, actual.Path)
+	}
+
+	if actual.Version != auditedVersion {
+		return fmt.Sprintf(
+			"uses %s %q; re-establish the #6008 SSRF reachability verdict before updating the audited version %q",
+			modulePath,
+			actual.Version,
+			auditedVersion,
+		)
+	}
+
+	return ""
 }
 
 // assertClaircorePackagesStayInert fails when a module links any Claircore
 // package outside the audited set.
-func assertClaircorePackagesStayInert(t *testing.T, moduleDir string) {
+func assertClaircorePackagesStayInert(
+	t *testing.T,
+	moduleDir string,
+	inertPackages map[string]bool,
+) {
 	t.Helper()
 
 	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "./...")
@@ -143,7 +287,7 @@ func assertClaircorePackagesStayInert(t *testing.T, moduleDir string) {
 	for pkg := range strings.FieldsSeq(string(out)) {
 		isClaircore := pkg == "github.com/quay/claircore" ||
 			strings.HasPrefix(pkg, "github.com/quay/claircore/")
-		if isClaircore && !inertClaircorePackages()[pkg] {
+		if isClaircore && !inertPackages[pkg] {
 			unexpected = append(unexpected, pkg)
 		}
 	}
@@ -198,14 +342,107 @@ func TestInertClaircorePackagesExcludesRemoteFetchingCode(t *testing.T) {
 		"github.com/quay/claircore/pkg/distlock",
 	}
 
-	inert := inertClaircorePackages()
+	for moduleName, audit := range auditedClaircoreModules() {
+		t.Run(moduleName, func(t *testing.T) {
+			t.Parallel()
 
-	for _, pkg := range sensitive {
-		if inert[pkg] {
-			t.Errorf(
-				"expected %q to be absent from the inert allow-list; it performs remote fetching",
-				pkg,
-			)
+			for _, pkg := range sensitive {
+				if audit.inertPackages[pkg] {
+					t.Errorf(
+						"expected %q to be absent from the inert allow-list; it performs remote fetching",
+						pkg,
+					)
+				}
+			}
+		})
+	}
+}
+
+// TestRootClaircoreAuditExcludesDesktopOnlyPackages prevents a package already
+// audited for desktop from silently entering the root audit. Root may admit
+// such a package only once root itself links it and the #6008 reachability
+// verdict has been re-established against root's own dependency graph. Admitting
+// one that root does not link is inheriting desktop's verdict, which the
+// per-module audit exists to prevent.
+func TestRootClaircoreAuditExcludesDesktopOnlyPackages(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go toolchain not available on PATH")
+	}
+
+	rootAudit := auditedClaircoreModules()["root"]
+	desktopAudit := auditedClaircoreModules()["desktop"]
+	rootLinked := linkedClaircorePackages(t, moduleRoot(t))
+
+	inherited := make([]string, 0, len(desktopAudit.inertPackages))
+
+	for pkg := range desktopAudit.inertPackages {
+		if rootAudit.inertPackages[pkg] && !rootLinked[pkg] {
+			inherited = append(inherited, pkg)
 		}
+	}
+
+	sort.Strings(inherited)
+
+	for _, pkg := range inherited {
+		t.Errorf(
+			"root audit admits desktop-audited package %q that root does not link; "+
+				"remove it rather than inheriting desktop's #6008 verdict",
+			pkg,
+		)
+	}
+}
+
+// linkedClaircorePackages returns the Claircore packages a module's dependency
+// graph actually links, so an audit can be checked against reality rather than
+// against another module's audit.
+func linkedClaircorePackages(t *testing.T, moduleDir string) map[string]bool {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "./...")
+	cmd.Dir = moduleDir
+
+	out, err := cmd.Output()
+	if err != nil {
+		var stderr string
+
+		exitErr := new(exec.ExitError)
+		if errors.As(err, &exitErr) {
+			stderr = string(exitErr.Stderr)
+		}
+
+		t.Fatalf("go list -deps ./... in module %q failed: %v\n%s", moduleDir, err, stderr)
+	}
+
+	linked := map[string]bool{}
+
+	for pkg := range strings.FieldsSeq(string(out)) {
+		isClaircore := pkg == "github.com/quay/claircore" ||
+			strings.HasPrefix(pkg, "github.com/quay/claircore/")
+		if isClaircore {
+			linked[pkg] = true
+		}
+	}
+
+	return linked
+}
+
+// TestValidateClaircoreModuleVersionRejectsReplacement prevents a fork or
+// local replacement from inheriting the selected release's reachability
+// verdict.
+func TestValidateClaircoreModuleVersionRejectsReplacement(t *testing.T) {
+	t.Parallel()
+
+	actual := goListModule{
+		Path:    claircoreModulePath,
+		Version: "v1.5.35",
+		Replace: &goListModule{Path: "example.com/claircore-fork", Version: "v1.5.35"},
+	}
+
+	validationFailure := validateClaircoreModuleVersion(claircoreModulePath, "v1.5.35", actual)
+	if validationFailure == "" {
+		t.Fatal("expected a replacement module to invalidate the Claircore audit")
 	}
 }

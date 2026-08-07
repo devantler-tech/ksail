@@ -65,7 +65,6 @@ func (o BuildOptions) Validate() (ValidatedBuildOptions, error) {
 		RegistryEndpoint: endpoint,
 		Repository:       repository,
 		Version:          version,
-		GitOpsEngine:     o.GitOpsEngine,
 		Username:         o.Username,
 		Password:         o.Password,
 	}, nil
@@ -200,7 +199,6 @@ func (o EmptyBuildOptions) Validate() (ValidatedEmptyBuildOptions, error) {
 		RegistryEndpoint: endpoint,
 		Repository:       repository,
 		Version:          version,
-		GitOpsEngine:     o.GitOpsEngine,
 		Username:         o.Username,
 		Password:         o.Password,
 	}, nil

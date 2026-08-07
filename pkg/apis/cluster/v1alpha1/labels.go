@@ -36,6 +36,13 @@ const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 // user cannot forge it.
 const LastAppliedComponentsAnnotation = "ksail.io/last-applied-components"
 
+// AWSLoadBalancerControllerReleaseIdentityAnnotation stores the Kubernetes UID
+// of a Helm storage object created or upgraded by the operator for the AWS Load
+// Balancer Controller. The operator requires this positive, concrete ownership
+// evidence before removing the release; the desired-spec baseline alone is not
+// ownership because an install may have preserved a GitOps-managed release.
+const AWSLoadBalancerControllerReleaseIdentityAnnotation = "ksail.io/aws-load-balancer-controller-release-identity"
+
 // UnmanagedAnnotation marks a Cluster that ksail surfaces from the user's kubeconfig but does not
 // manage: it was found as a kubeconfig context that no ksail infrastructure provider discovered, so
 // ksail never provisioned it and has no spec to drive it. Its value is the string "true". It lets

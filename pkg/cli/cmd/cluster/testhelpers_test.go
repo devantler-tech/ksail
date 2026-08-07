@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
@@ -16,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -28,9 +30,15 @@ import (
 // disableTraefikArg is the K3s argument to disable the built-in Traefik ingress controller.
 const disableTraefikArg = "--disable=traefik"
 
-type fakeProvisioner struct{}
+type fakeProvisioner struct{ createName *string }
 
-func (*fakeProvisioner) Create(context.Context, string) error { return nil }
+func (p *fakeProvisioner) Create(_ context.Context, name string) error {
+	if p.createName != nil {
+		*p.createName = name
+	}
+
+	return nil
+}
 
 func (*fakeProvisioner) Delete(context.Context, string) error { return nil }
 
@@ -44,15 +52,15 @@ func (*fakeProvisioner) List(context.Context) ([]string, error) {
 
 func (*fakeProvisioner) Exists(context.Context, string) (bool, error) { return true, nil }
 
-type fakeFactory struct{}
+type fakeFactory struct{ createName *string }
 
-func (fakeFactory) Create(
+func (f fakeFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
-	return &fakeProvisioner{}, cfg, nil
+	return &fakeProvisioner{createName: f.createName}, cfg, nil
 }
 
 type fakeInstaller struct{ called bool }
@@ -251,4 +259,27 @@ var errClusterPureTalosConfigEmpty = errors.New("talos config file is empty")
 const (
 	testFieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
 	testFieldClusterCNI          = "cluster.cni"
+	testEKSComponentAccountID    = "123456789012"
 )
+
+func saveTestEKSOwnership(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		AccountID:   testEKSComponentAccountID,
+		ClusterARN: "arn:aws:eks:" + region + ":" + testEKSComponentAccountID +
+			":cluster/" + clusterName,
+		CreatedAt: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC),
+		//nolint:gosec // G101: environment-variable names, never credential values.
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "AWS_REGION",
+			AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+		},
+	}))
+}

@@ -9,7 +9,9 @@ import (
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -62,6 +64,9 @@ type DistributionConfig struct {
 type EKSConfig struct {
 	// Name is the cluster name (mirrors eksctl.yaml metadata.name).
 	Name string
+	// NameFromConfig reports that Name was parsed from metadata.name in the actual eksctl config,
+	// rather than synthesized from a kubeconfig context or default.
+	NameFromConfig bool
 	// Region is the AWS region.
 	Region string
 	// ConfigPath is the path to the declarative eksctl.yaml.
@@ -172,6 +177,33 @@ type DefaultFactory struct {
 	// for installed components. When non-nil it is injected into provisioners
 	// so that GetCurrentConfig returns accurate live state instead of defaults.
 	ComponentDetector *detector.ComponentDetector
+
+	// AWSResolution optionally pins one concrete credential snapshot across an EKS ownership guard
+	// and the provisioner it authorizes. Non-nil values must be frozen; nil preserves normal factory
+	// resolution for consumers outside the guarded CLI mutation path.
+	AWSResolution *credentials.AWSResolution
+
+	// AWSOwnershipVerifier rechecks the exact EKS incarnation inside the provisioner immediately
+	// before each AWS mutation. It is nil for creates and non-EKS consumers.
+	AWSOwnershipVerifier eksidentity.Verifier
+}
+
+// WithEKSMutationGuard returns a copy of the factory pinned to one frozen credential snapshot and
+// the ownership verifier that snapshot authorized. The value receiver is what makes it a copy: a
+// caller that guards one mutation must not leave a shared factory carrying that identity for the
+// next, unrelated action.
+//
+// The two arguments belong together and are set together. A verifier without its frozen resolution
+// is refused downstream, because proving one identity while the provisioner independently
+// re-resolves another would authorize a mutation nothing actually checked.
+func (f DefaultFactory) WithEKSMutationGuard(
+	resolution *credentials.AWSResolution,
+	verifier eksidentity.Verifier,
+) Factory {
+	f.AWSResolution = resolution
+	f.AWSOwnershipVerifier = verifier
+
+	return f
 }
 
 // Create selects the correct distribution provisioner for the KSail cluster configuration.

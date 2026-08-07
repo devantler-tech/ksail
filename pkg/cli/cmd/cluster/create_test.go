@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,7 +17,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -24,6 +27,12 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	errSTSUnavailable       = errors.New("STS unavailable")
+	errRequiredStateFailure = errors.New("required state write failed")
+	errTTLCleanupFailure    = errors.New("TTL cleanup failed")
 )
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -252,54 +261,20 @@ func TestCreate_EKS_GitOps_UsesEksctlContext(t *testing.T) {
 		{name: "Flux", engine: v1alpha1.GitOpsEngineFlux, arg: "Flux"},
 	}
 
-	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
-
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			workingDir := t.TempDir()
 			t.Chdir(workingDir)
 			setupMockRegistryBackend(t)
-
-			writeFile(t, workingDir, "ksail.yaml", `apiVersion: ksail.io/v1alpha1
-kind: Cluster
-metadata:
-  name: st-eks
-spec:
-  cluster:
-    distribution: EKS
-    provider: AWS
-    distributionConfig: eks.yaml
-    metricsServer: Disabled
-    localRegistry:
-      registry: ""
-    connection:
-      kubeconfig: ./kubeconfig
-`)
-			writeFile(t, workingDir, "eks.yaml", `apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
-metadata:
-  name: st-eks
-  region: eu-west-1
-`)
-			writeFile(t, workingDir, "kubeconfig", `apiVersion: v1
-kind: Config
-current-context: `+eksctlContext+`
-clusters:
-  - cluster:
-      server: https://example.invalid
-    name: `+eksctlContext+`
-contexts:
-  - context:
-      cluster: `+eksctlContext+`
-      user: `+eksctlContext+`
-    name: `+eksctlContext+`
-users:
-  - name: `+eksctlContext+`
-    user:
-      token: fake
-`)
+			eksctlContext := writeEKSCreateTestFiles(t, workingDir)
 
 			setupGitOpsTestMocks(t, testCase.engine)
+			setEKSIdentityClient(t, &fakeEKSIdentityClient{
+				accountID: "123456789012",
+				cluster: immutableEKSClusterInRegion(
+					"st-eks", "eu-west-1", immutableIdentityTime(),
+				),
+			})
 
 			capturedContext := ""
 
@@ -331,8 +306,235 @@ users:
 			err := cmd.Execute()
 			require.NoError(t, err)
 			assert.Equal(t, eksctlContext, capturedContext)
+
+			ownership, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
+			require.NoError(t, loadErr)
+			assert.Equal(t, "123456789012", ownership.AccountID)
+			assert.Equal(t, immutableIdentityTime(), ownership.CreatedAt)
 		})
 	}
+}
+
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSCaptureFailureStopsPostCreateWorkflow(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupMockRegistryBackend(t)
+	writeEKSCreateTestFiles(t, workingDir)
+	require.NoError(t, state.DeleteClusterState("st-eks"))
+
+	fake, ensureCalled := setupGitOpsTestMocks(t, v1alpha1.GitOpsEngineArgoCD)
+	setEKSIdentityClient(t, &fakeEKSIdentityClient{
+		accountErr: errSTSUnavailable,
+	})
+
+	cmd := cluster.NewCreateCmd()
+
+	var output bytes.Buffer
+
+	cmd.SetContext(context.Background())
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--gitops-engine", "ArgoCD"})
+
+	err := cmd.Execute()
+	require.ErrorContains(t, err, "capture immutable EKS ownership identity")
+	assert.Contains(t, output.String(), "cluster created")
+	assert.False(t, *ensureCalled)
+	assert.Nil(t, fake())
+
+	_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
+	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound)
+}
+
+func TestFinishCreateWithTTL_CleansUpWithoutWaitingAfterPersistenceFailure(t *testing.T) {
+	t.Parallel()
+
+	cleanupCalled := false
+	waitCalled := false
+
+	err := cluster.ExportFinishCreateWithTTL(
+		errRequiredStateFailure,
+		func() error {
+			cleanupCalled = true
+
+			return errTTLCleanupFailure
+		},
+		func() error {
+			waitCalled = true
+
+			return nil
+		},
+	)
+
+	assert.True(
+		t,
+		cleanupCalled,
+		"a TTL cluster must be deleted after required state persistence fails",
+	)
+	assert.False(t, waitCalled, "a known-fatal state error must not enter the normal TTL wait")
+	require.ErrorIs(t, err, errRequiredStateFailure)
+	require.ErrorIs(t, err, errTTLCleanupFailure)
+}
+
+//nolint:paralleltest // mutates process environment, working directory, and shared hooks.
+func TestCreate_EKSProfileRegionFeedsIdentityCapture(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupMockRegistryBackend(t)
+	writeEKSProfileRegionCreateTestFiles(t, workingDir)
+	configureEKSProfileRegionCredentials(t, workingDir)
+
+	setupGitOpsTestMocks(t, v1alpha1.GitOpsEngineArgoCD)
+
+	var capturedRegion string
+
+	setEKSIdentityClientWithResolutionObserver(
+		t,
+		&fakeEKSIdentityClient{
+			accountID: "123456789012",
+			cluster: immutableEKSClusterInRegion(
+				"st-eks", "eu-north-1", immutableIdentityTime(),
+			),
+		},
+		func(region string, _ credentials.AWSResolution) {
+			capturedRegion = region
+		},
+	)
+
+	cmd := cluster.NewCreateCmd()
+	cmd.SetContext(t.Context())
+	cmd.SetArgs([]string{"--gitops-engine", "ArgoCD"})
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "eu-north-1", capturedRegion)
+
+	ownership, err := state.LoadEKSOwnershipState("st-eks", "eu-north-1")
+	require.NoError(t, err)
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	assert.Equal(t, v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "KSAIL_PROFILE",
+		RegionEnvVar:          "AWS_REGION",
+		AccessKeyIDEnvVar:     "AWS_ACCESS_KEY_ID",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}, ownership.AWSOptions)
+}
+
+func writeEKSProfileRegionCreateTestFiles(t *testing.T, workingDir string) {
+	t.Helper()
+
+	writeFile(t, workingDir, "ksail.yaml", `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: st-eks
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eks.yaml
+    metricsServer: Disabled
+    localRegistry:
+      registry: ""
+    connection:
+      kubeconfig: ./kubeconfig
+  provider:
+    aws:
+      profileEnvVar: KSAIL_PROFILE
+`)
+	writeFile(t, workingDir, "eks.yaml", `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: st-eks
+`)
+	writeFile(t, workingDir, "kubeconfig", `apiVersion: v1
+kind: Config
+current-context: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+clusters:
+  - cluster:
+      server: https://example.invalid
+    name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+contexts:
+  - context:
+      cluster: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+      user: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+    name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+users:
+  - name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+    user:
+      token: fake
+`)
+}
+
+func configureEKSProfileRegionCredentials(t *testing.T, workingDir string) {
+	t.Helper()
+
+	credentialsFile := filepath.Join(workingDir, "aws-credentials")
+	configFile := filepath.Join(workingDir, "aws-config")
+	writeFile(t, workingDir, "aws-credentials", `[selected-profile]
+aws_access_key_id = profile-access
+aws_secret_access_key = profile-secret
+`)
+	writeFile(t, workingDir, "aws-config", `[profile selected-profile]
+region = eu-north-1
+`)
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("KSAIL_PROFILE", "selected-profile")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credentialsFile)
+	t.Setenv("AWS_CONFIG_FILE", configFile)
+}
+
+func writeEKSCreateTestFiles(t *testing.T, workingDir string) string {
+	t.Helper()
+
+	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+
+	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+
+	writeFile(t, workingDir, "ksail.yaml", `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: st-eks
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eks.yaml
+    metricsServer: Disabled
+    localRegistry:
+      registry: ""
+    connection:
+      kubeconfig: ./kubeconfig
+`)
+	writeFile(t, workingDir, "eks.yaml", `apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: st-eks
+  region: eu-west-1
+`)
+	writeFile(t, workingDir, "kubeconfig", `apiVersion: v1
+kind: Config
+current-context: `+eksctlContext+`
+clusters:
+  - cluster:
+      server: https://example.invalid
+    name: `+eksctlContext+`
+contexts:
+  - context:
+      cluster: `+eksctlContext+`
+      user: `+eksctlContext+`
+    name: `+eksctlContext+`
+users:
+  - name: `+eksctlContext+`
+    user:
+      token: fake
+`)
+
+	return eksctlContext
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -513,6 +715,79 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	output := out.String()
 	// The cluster lifecycle stages should have executed.
 	require.Contains(t, output, "Create cluster", "output should contain cluster lifecycle text")
+}
+
+// TestCreate_NonEKSNameOverrideReachesProvisioner guards the shared mutation path: rejecting EKS
+// source-name drift must not suppress explicit --name overrides for other distributions.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_NonEKSNameOverrideReachesProvisioner(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: source-kind-name\nnodes: []\n",
+	)
+	writeFile(t, workingDir, "kubeconfig", "apiVersion: v1\nkind: Config\n")
+	setupMockRegistryBackend(t)
+
+	var createdName string
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(t.Context())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "explicit-kind-name",
+		"--kubeconfig", "./kubeconfig",
+	})
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "explicit-kind-name", createdName)
+}
+
+// TestCreateRejectsWhitespaceOnlyName preserves explicit-flag validation: whitespace is not an
+// absent override and must not silently fall back to the distribution config target.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreateRejectsWhitespaceOnlyName(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: source-kind-name\nnodes: []\n",
+	)
+	writeFile(t, workingDir, "kubeconfig", "apiVersion: v1\nkind: Config\n")
+	setupMockRegistryBackend(t)
+
+	var createdName string
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(t.Context())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "   ",
+		"--kubeconfig", "./kubeconfig",
+	})
+
+	err := cmd.Execute()
+	require.ErrorContains(t, err, "invalid cluster name")
+	assert.Empty(t, createdName)
 }
 
 // TestCreate_NoConfigFile_WithComponentFlags verifies that component flags

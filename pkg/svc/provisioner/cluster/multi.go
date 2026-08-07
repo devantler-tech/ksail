@@ -204,6 +204,15 @@ func CreateMinimalProvisioner(
 	}
 }
 
+// kindProvisionerFactory constructs the Kind provisioner for the minimal
+// multi-provisioner path. It is an indirected package var (rather than a direct
+// call) so tests can substitute a spy and assert the kindConfig and kubeconfig
+// arguments it receives, without reflecting over the provisioner's unexported
+// fields. Production always uses kindprovisioner.CreateProvisioner.
+//
+//nolint:gochecknoglobals // injected for testability; see SetKindProvisionerFactory in export_test.go
+var kindProvisionerFactory = kindprovisioner.CreateProvisioner
+
 // createMinimalKindProvisioner builds the smallest valid Kind provisioner
 // while preserving the caller-owned kubeconfig path.
 func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provisioner, error) {
@@ -215,7 +224,7 @@ func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provision
 		Name: clusterName,
 	}
 
-	provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, kubeconfigPath)
+	provisioner, err := kindProvisionerFactory(kindConfig, kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
 	}

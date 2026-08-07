@@ -53,4 +53,8 @@ exclude_path = [
 #     from the lychee runner.
 #   - ksail.local: placeholder OIDC redirect/ingress host in chart template
 #     permutations; an unresolvable .local address, not a real link.
-exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'git\.k8s\.io', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0']
+#   - img.shields.io: README badge images. shields.io rate-limits/degrades
+#     requests from shared GitHub Actions runner IPs (503 through all retries
+#     while returning 200 elsewhere — see #6272); badges are rendered images,
+#     not navigation targets, so their availability is not a docs defect.
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'starlight\.astro\.build', 'git\.k8s\.io', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0', 'img\.shields\.io']

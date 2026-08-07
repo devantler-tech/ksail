@@ -488,9 +488,13 @@ export interface KSailClusterConfiguration {
        */
       eks?: {
         /**
-         * Experimental: apply managed node-group scaling changes in-place via 'eksctl scale nodegroup' during 'cluster update' instead of recreating the cluster. Default false. Diff coverage is limited to node-group scaling and instanceType; other managed-node-group fields are not diffed.
+         * Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create.
          */
-        experimentalInPlaceUpdates?: boolean;
+        experimentalAWSLoadBalancerController?: boolean;
+        /**
+         * Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController.
+         */
+        awsLoadBalancerControllerServiceAccount?: string;
       };
     };
     /**

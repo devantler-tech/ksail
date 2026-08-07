@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+state_dir="${FAKE_GH_STATE_DIR:?FAKE_GH_STATE_DIR is required}"
+scenario="${FAKE_GH_SCENARIO:-bounded}"
+mkdir -p "${state_dir}"
+
+if [[ "${scenario}" == api-failure && "$*" == *"actions/workflows?per_page=100"* ]]; then
+	printf 'fixture workflow API failure\n' >&2
+	exit 1
+fi
+
+case "$*" in
+*"api repos/devantler-tech/ksail --jq .default_branch"*)
+	printf 'main\n'
+	;;
+*"api --paginate repos/devantler-tech/ksail/branches?per_page=100"*)
+	printf 'main\nactive-feature\n'
+	;;
+*"actions/workflows?per_page=100"*)
+	printf '101\n'
+	;;
+*"api --method GET repos/devantler-tech/ksail/actions/workflows/101/runs -f per_page=2 --jq .workflow_runs[].id"*)
+	printf '1001\n1002\n'
+	;;
+*"api --method GET repos/devantler-tech/ksail/actions/workflows/101/runs -f per_page=100 -f created=<2026-07-02"*)
+	printf '%s\n' '{"id":1001,"head_branch":"deleted-feature","pull_request_count":0}'
+	printf '%s\n' '{"id":1003,"head_branch":"active-feature","pull_request_count":0}'
+	printf '%s\n' '{"id":1004,"head_branch":"deleted-feature","pull_request_count":1}'
+	printf '%s\n' '{"id":1005,"head_branch":"deleted-feature","pull_request_count":0}'
+	printf '%s\n' '{"id":1006,"head_branch":"","pull_request_count":0}'
+	printf '%s\n' '{"id":1007,"head_branch":"deleted-feature","pull_request_count":0}'
+	;;
+*"api --method DELETE repos/devantler-tech/ksail/actions/runs/1005"*)
+	if [[ "${scenario}" == delete-failure ]]; then
+		printf 'fixture deletion failure\n' >&2
+		exit 42
+	fi
+	printf '1005\n' >>"${state_dir}/deleted"
+	;;
+*"api --method DELETE repos/devantler-tech/ksail/actions/runs/1006"*)
+	printf '1006\n' >>"${state_dir}/deleted"
+	;;
+*"api --method DELETE repos/devantler-tech/ksail/actions/runs/1007"*)
+	if [[ "${scenario}" != delete-failure ]]; then
+		printf 'unexpected deletion: %s\n' "$*" >&2
+		exit 90
+	fi
+	printf '1007\n' >>"${state_dir}/deleted"
+	;;
+*"api --method DELETE repos/devantler-tech/ksail/actions/runs/"*)
+	printf 'unexpected deletion: %s\n' "$*" >&2
+	exit 90
+	;;
+*)
+	printf 'unexpected gh invocation: %s\n' "$*" >&2
+	exit 91
+	;;
+esac
