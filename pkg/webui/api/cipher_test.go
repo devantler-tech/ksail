@@ -3,6 +3,8 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
@@ -78,6 +80,24 @@ func TestSecretDecryptEndpoint(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), "password: s3cret")
+}
+
+func TestSecretDecryptRejectsNonJSONContentType(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: cipherStub{}}
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/secrets/decrypt",
+		strings.NewReader(`{"encrypted":"data: ENC[sops]"}`),
+	)
+	request.Header.Set("Content-Type", "text/plain")
+	recorder := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
 }
 
 func TestSecretEncryptBlockedWhenReadOnly(t *testing.T) {
