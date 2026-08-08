@@ -289,6 +289,10 @@ func buildInstance(
 	}
 
 	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}
+	syncKustomize, err := buildSyncKustomize(clusterCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	return &FluxInstance{
 		TypeMeta: metav1.TypeMeta{
@@ -313,6 +317,7 @@ func buildInstance(
 				Provider:   "generic",
 				Interval:   intervalPtr,
 				PullSecret: pullSecret,
+				Kustomize:  syncKustomize,
 			},
 		},
 	}, nil

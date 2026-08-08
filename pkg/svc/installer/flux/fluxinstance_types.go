@@ -138,6 +138,24 @@ type Sync struct {
 	Path       string           `json:"path"`
 	PullSecret string           `json:"pullSecret,omitempty"`
 	Provider   string           `json:"provider,omitempty"`
+	Kustomize  *SyncKustomize   `json:"kustomize,omitempty"`
+}
+
+// SyncKustomize configures patches applied by the Flux Operator while rendering sync resources.
+type SyncKustomize struct {
+	Patches []SyncKustomizePatch `json:"patches,omitempty"`
+}
+
+// SyncKustomizePatch is a strategic or JSON6902 patch applied to a generated Flux sync resource.
+type SyncKustomizePatch struct {
+	Target SyncKustomizePatchTarget `json:"target"`
+	Patch  string                   `json:"patch"`
+}
+
+// SyncKustomizePatchTarget selects the generated Flux sync resource to patch.
+type SyncKustomizePatchTarget struct {
+	Kind string `json:"kind,omitempty"`
+	Name string `json:"name,omitempty"`
 }
 
 // DeepCopyInto copies all properties into another Sync.
@@ -146,6 +164,20 @@ func (in *Sync) DeepCopyInto(out *Sync) {
 	if in.Interval != nil {
 		intervalCopy := *in.Interval
 		out.Interval = &intervalCopy
+	}
+
+	if in.Kustomize != nil {
+		out.Kustomize = new(SyncKustomize)
+		in.Kustomize.DeepCopyInto(out.Kustomize)
+	}
+}
+
+// DeepCopyInto copies all properties into another SyncKustomize.
+func (in *SyncKustomize) DeepCopyInto(out *SyncKustomize) {
+	*out = *in
+	if in.Patches != nil {
+		out.Patches = make([]SyncKustomizePatch, len(in.Patches))
+		copy(out.Patches, in.Patches)
 	}
 }
 
