@@ -92,9 +92,11 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 		command = []string{"/bin/sh"}
 	}
 
-	// CheckOrigin allows any origin: the endpoint is already behind the auth guard (when OIDC is on)
-	// and the read-only check above, and the desktop connects cross-origin (wails:// → loopback).
-	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
+	// Use gorilla/websocket's default origin policy: requests without an Origin header are allowed,
+	// and browser requests must be same-origin (Origin host equals Host). The local UI is
+	// unauthenticated and bound to loopback, so allowing arbitrary browser origins would let a
+	// malicious page drive pod exec through a victim's local kubeconfig.
+	upgrader := websocket.Upgrader{}
 
 	conn, err := upgrader.Upgrade(writer, request, nil)
 	if err != nil {
