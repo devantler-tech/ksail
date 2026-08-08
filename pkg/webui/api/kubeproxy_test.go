@@ -17,9 +17,10 @@ import (
 type kubeProxyStub struct {
 	stubClusterService
 
-	body     string
-	gotPath  string
-	gotQuery string
+	body        string
+	contentType string
+	gotPath     string
+	gotQuery    string
 }
 
 func (k *kubeProxyStub) ProxyKubeGet(
@@ -32,7 +33,7 @@ func (k *kubeProxyStub) ProxyKubeGet(
 
 	return api.KubeProxyResponse{
 		Status:      http.StatusOK,
-		ContentType: "application/json",
+		ContentType: k.contentType,
 		Body:        io.NopCloser(strings.NewReader(k.body)),
 	}, nil
 }
@@ -64,6 +65,35 @@ func TestKubeProxyStreamsResponseAndForwardsPathQuery(t *testing.T) {
 
 	if stub.gotQuery != "labelSelector=app%3Dx" {
 		t.Errorf("forwarded query = %q, want labelSelector=app%%3Dx", stub.gotQuery)
+	}
+}
+
+func TestKubeProxyForcesJSONContentTypeForUpstreamActiveContent(t *testing.T) {
+	t.Parallel()
+
+	stub := &kubeProxyStub{
+		body:        `<!doctype html><script src="/api/v1/clusters/default/kind/proxy/api/v1/namespaces/default/services/http:evil/proxy/pwn.js"></script>`,
+		contentType: "text/html; charset=utf-8",
+	}
+	server := &api.Server{Service: stub}
+
+	target := "/api/v1/clusters/default/kind/proxy/api/v1/namespaces/default/services/http:evil/proxy/"
+	recorder := doRequest(server.Handler(), http.MethodGet, target, "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("proxy status = %d, want 200", recorder.Code)
+	}
+
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("content type = %q, want application/json", got)
+	}
+
+	if got := recorder.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("x-content-type-options = %q, want nosniff", got)
+	}
+
+	if got := recorder.Body.String(); !strings.Contains(got, "<!doctype html>") {
+		t.Errorf("proxy body = %q, want streamed upstream body", got)
 	}
 }
 
