@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -73,6 +76,10 @@ type PluginService interface {
 type PluginInstallRequest struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256,omitempty"`
+	// Trusted is the server-enforced acknowledgement that the caller understands the plugin will run
+	// unsandboxed as same-origin JavaScript with access to this UI's cluster APIs. The SPA sets it only
+	// after the explicit consent checkbox is checked; direct callers must opt in too.
+	Trusted bool `json:"trusted"`
 	// Signature is an optional base64-encoded ed25519 detached signature over the downloaded tarball
 	// bytes. When set, the install verifies it against KSAIL_PLUGIN_SIGNING_PUBKEY and rejects the
 	// install when no trusted key is configured (a claimed signature is never silently ignored).
@@ -249,10 +256,30 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 		return
 	}
 
+	err := requirePluginInstallRequestGuards(request)
+	if err != nil {
+		status := http.StatusForbidden
+		if errors.Is(err, errUnsupportedContentType) {
+			status = http.StatusUnsupportedMediaType
+		}
+		writeError(writer, status, err)
+
+		return
+	}
+
 	var req PluginInstallRequest
 
-	err := decodeJSON(writer, request, &req)
+	err = decodeJSON(writer, request, &req)
 	if err != nil {
+		return
+	}
+
+	if !req.Trusted {
+		writeClientError(
+			writer,
+			fmt.Errorf("%w: plugin install requires explicit trust acknowledgement", ErrInvalid),
+		)
+
 		return
 	}
 
@@ -266,6 +293,35 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 	}
 
 	writeJSON(writer, http.StatusCreated, info)
+}
+
+var errUnsupportedContentType = errors.New("unsupported content type: expected application/json")
+
+func requirePluginInstallRequestGuards(request *http.Request) error {
+	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/json" {
+		return errUnsupportedContentType
+	}
+
+	if isCrossSiteBrowserRequest(request) {
+		return errors.New("cross-site plugin install request rejected")
+	}
+
+	return nil
+}
+
+func isCrossSiteBrowserRequest(request *http.Request) bool {
+	switch request.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "none":
+		return true
+	}
+
+	origin := request.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+
+	return origin != "http://"+request.Host && origin != "https://"+request.Host
 }
 
 // handleUninstallPlugin removes an installed plugin by id. The id is validated here (and again in the
