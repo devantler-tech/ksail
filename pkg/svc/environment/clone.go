@@ -25,6 +25,11 @@ var ErrSourceOverlayMissing = errors.New("source overlay directory not found")
 // repoRoot/srcConfigRel does not exist or is not a regular file.
 var ErrSourceConfigMissing = errors.New("source environment config not found")
 
+// ErrDestinationEscapesRepository is returned when a clone destination would
+// write outside repoRoot, including through an existing symlinked parent or
+// destination file.
+var ErrDestinationEscapesRepository = errors.New("destination escapes repository root")
+
 // CloneOverlay clones every file under repoRoot/srcRelDir into the destination
 // overlay implied by rewrites, applying the structured path+content rewrites to
 // each regular file and copying SOPS-encrypted *.enc.yaml files byte-for-byte
@@ -153,15 +158,8 @@ func CloneEnvironmentConfig(
 func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
 	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
 
-	// Lexical containment on the cleaned destination: filepath.Join collapses any
-	// ".." segments, so a rewritten path that escapes repoRoot yields a relative
-	// path starting with "..". (The destination's parents may not exist yet, so the
-	// symlink-resolving EvalCanonicalPath can't be used here; the source overlay was
-	// already canonicalised and contained above.)
-	rel, relErr := filepath.Rel(repoRoot, dest)
-	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return false, fmt.Errorf("destination %s escapes the repository root: %w",
-			newRelPath, fsutil.ErrPathOutsideBase)
+	if err := validateCloneDestination(repoRoot, dest, newRelPath); err != nil {
+		return false, err
 	}
 
 	// TryWriteFile returns the content (not a write-status), so decide up front
@@ -177,12 +175,59 @@ func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) 
 		}
 	}
 
+	if err := validateCloneDestination(repoRoot, dest, newRelPath); err != nil {
+		return false, err
+	}
+
 	_, writeErr := fsutil.TryWriteFile(content, dest, force)
 	if writeErr != nil {
 		return false, fmt.Errorf("writing %s: %w", newRelPath, writeErr)
 	}
 
 	return true, nil
+}
+
+func validateCloneDestination(repoRoot, dest, displayPath string) error {
+	rel, relErr := filepath.Rel(repoRoot, dest)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination %s escapes the repository root: %w",
+			displayPath, ErrDestinationEscapesRepository)
+	}
+
+	if err := rejectSymlinkPath(repoRoot, dest); err != nil {
+		return fmt.Errorf("destination %s escapes the repository root: %w",
+			displayPath, err)
+	}
+
+	return nil
+}
+
+func rejectSymlinkPath(repoRoot, dest string) error {
+	rel, err := filepath.Rel(repoRoot, dest)
+	if err != nil {
+		return ErrDestinationEscapesRepository
+	}
+
+	current := repoRoot
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+
+		current = filepath.Join(current, part)
+		info, lstatErr := os.Lstat(current)
+		if errors.Is(lstatErr, os.ErrNotExist) {
+			return nil
+		}
+		if lstatErr != nil {
+			return lstatErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrDestinationEscapesRepository
+		}
+	}
+
+	return nil
 }
 
 // cloneFile reads one source file and returns its destination repo-relative path
