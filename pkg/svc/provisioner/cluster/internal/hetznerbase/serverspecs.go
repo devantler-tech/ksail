@@ -1,10 +1,18 @@
 package hetznerbase
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
+	"regexp"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultImageName is the stock OS image every cloud-init-bootstrapped node
@@ -14,6 +22,20 @@ import (
 // ([hetzner.CreateServerOpts.ImageName]), so no client-side image lookup is
 // needed.
 const DefaultImageName = "ubuntu-24.04"
+
+const maxDecodedUserDataBytes = 1 << 20
+
+// ErrPrivateKeyInUserData is returned when a server spec would deliver private
+// key material through provider-readable user-data. The cloud-init ssh_keys
+// module is the deliberate exception: it carries the per-node SSH host identity
+// used to pin the bootstrap connection, never cluster-signing PKI.
+var ErrPrivateKeyInUserData = errors.New(
+	"hetzner: provider user-data contains private key material",
+)
+
+var privateKeyPEMHeader = regexp.MustCompile(
+	`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----`,
+)
 
 // NodeSpec pairs a planned node's identity with the cloud-init user_data that
 // bootstraps it — the distribution-agnostic per-node shape both the k3s and
@@ -70,6 +92,11 @@ func DeriveServerSpecs(
 	specs := make([]hetzner.CreateServerOpts, 0, len(nodes))
 
 	for _, node := range nodes {
+		err := validateProviderUserData(node.UserData)
+		if err != nil {
+			return nil, fmt.Errorf("validate user-data for node %d: %w", node.Index, err)
+		}
+
 		name, err := hetzner.NodeName(clusterName, node.NodeType, node.Index)
 		if err != nil {
 			return nil, fmt.Errorf("derive server name for node %d: %w", node.Index, err)
@@ -90,6 +117,144 @@ func DeriveServerSpecs(
 	}
 
 	return specs, nil
+}
+
+// validateProviderUserData rejects raw or encoded PEM private keys anywhere in
+// the cloud-init document except its top-level ssh_keys module. That module is
+// the intentional per-node host identity; every other private key would be
+// retained in Hetzner's provider-readable user-data.
+func validateProviderUserData(userData string) error {
+	var document yaml.Node
+
+	err := yaml.Unmarshal([]byte(userData), &document)
+	if err != nil {
+		return fmt.Errorf("parse cloud-init user-data: %w", err)
+	}
+
+	if yamlNodeContainsPrivateKey(&document, true) {
+		return ErrPrivateKeyInUserData
+	}
+
+	return nil
+}
+
+// yamlNodeContainsPrivateKey walks scalar values while exempting only the
+// top-level cloud-init ssh_keys value. Nested keys with the same name are not
+// identities and remain subject to inspection.
+func yamlNodeContainsPrivateKey(node *yaml.Node, topLevel bool) bool {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		return yamlChildrenContainPrivateKey(node.Content, true)
+	case yaml.MappingNode:
+		return yamlMappingContainsPrivateKey(node.Content, topLevel)
+	case yaml.SequenceNode:
+		return yamlChildrenContainPrivateKey(node.Content, false)
+	case yaml.ScalarNode:
+		return containsPrivateKeyMaterial(node.Value)
+	case yaml.AliasNode:
+		return node.Alias != nil && yamlNodeContainsPrivateKey(node.Alias, false)
+	}
+
+	return false
+}
+
+func yamlChildrenContainPrivateKey(children []*yaml.Node, topLevel bool) bool {
+	for _, child := range children {
+		if yamlNodeContainsPrivateKey(child, topLevel) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func yamlMappingContainsPrivateKey(content []*yaml.Node, topLevel bool) bool {
+	for index := 0; index+1 < len(content); index += 2 {
+		key := content[index]
+		value := content[index+1]
+
+		if topLevel && key.Value == "ssh_keys" {
+			continue
+		}
+
+		if yamlNodeContainsPrivateKey(value, false) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsPrivateKeyMaterial(value string) bool {
+	if containsPrivateKeyPEM(value) {
+		return true
+	}
+
+	decoded, ok := decodeBase64(value)
+	if !ok {
+		return false
+	}
+
+	return decodedContainsPrivateKey(decoded)
+}
+
+func decodeBase64(value string) ([]byte, bool) {
+	compact := strings.Map(func(character rune) rune {
+		if character == ' ' || character == '\n' || character == '\r' || character == '\t' {
+			return -1
+		}
+
+		return character
+	}, value)
+
+	decoded, err := base64.StdEncoding.DecodeString(compact)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(compact)
+	}
+
+	if err != nil || len(decoded) == 0 {
+		return nil, false
+	}
+
+	return decoded, true
+}
+
+func decodedContainsPrivateKey(decoded []byte) bool {
+	if containsPrivateKeyPEM(string(decoded)) {
+		return true
+	}
+
+	if len(decoded) < 2 || decoded[0] != 0x1f || decoded[1] != 0x8b {
+		return false
+	}
+
+	return gzipContainsPrivateKey(decoded)
+}
+
+func gzipContainsPrivateKey(compressed []byte) bool {
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return false
+	}
+
+	decompressed, readErr := io.ReadAll(io.LimitReader(reader, maxDecodedUserDataBytes+1))
+
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		return false
+	}
+
+	// Provider user-data is small. An encoded scalar expanding beyond this bound
+	// is refused rather than allowed to hide a marker past the inspected prefix.
+	if len(decompressed) > maxDecodedUserDataBytes {
+		return true
+	}
+
+	return containsPrivateKeyPEM(string(decompressed))
+}
+
+func containsPrivateKeyPEM(value string) bool {
+	return privateKeyPEMHeader.MatchString(value)
 }
 
 // nodeServerType selects the configured Hetzner server type for a node's role.
