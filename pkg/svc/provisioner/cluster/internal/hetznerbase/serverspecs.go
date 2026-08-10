@@ -120,47 +120,73 @@ func DeriveServerSpecs(
 }
 
 // validateProviderUserData rejects raw or encoded PEM private keys anywhere in
-// the cloud-init document except its top-level ssh_keys module. That module is
-// the intentional per-node host identity; every other private key would be
-// retained in Hetzner's provider-readable user-data.
+// the cloud-init YAML stream except a document's top-level ssh_keys module.
+// That module is the intentional per-node host identity; every other private
+// key would be retained in Hetzner's provider-readable user-data.
 func validateProviderUserData(userData string) error {
-	var document yaml.Node
+	decoder := yaml.NewDecoder(strings.NewReader(userData))
 
-	err := yaml.Unmarshal([]byte(userData), &document)
-	if err != nil {
-		return fmt.Errorf("parse cloud-init user-data: %w", err)
+	for {
+		var document yaml.Node
+
+		err := decoder.Decode(&document)
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+
+		if err != nil {
+			return fmt.Errorf("parse cloud-init user-data: %w", err)
+		}
+
+		if yamlNodeContainsPrivateKey(&document, true, make(map[*yaml.Node]struct{})) {
+			return ErrPrivateKeyInUserData
+		}
 	}
-
-	if yamlNodeContainsPrivateKey(&document, true) {
-		return ErrPrivateKeyInUserData
-	}
-
-	return nil
 }
 
-// yamlNodeContainsPrivateKey walks scalar values while exempting only the
-// top-level cloud-init ssh_keys value. Nested keys with the same name are not
-// identities and remain subject to inspection.
-func yamlNodeContainsPrivateKey(node *yaml.Node, topLevel bool) bool {
+// yamlNodeContainsPrivateKey walks scalar mapping keys and values while
+// exempting only the top-level cloud-init ssh_keys value. Nested keys with the
+// same name are not identities and remain subject to inspection. Active nodes
+// stop recursive aliases from cycling without suppressing later sibling paths.
+func yamlNodeContainsPrivateKey(
+	node *yaml.Node,
+	topLevel bool,
+	active map[*yaml.Node]struct{},
+) bool {
+	if node == nil {
+		return false
+	}
+
+	if _, visited := active[node]; visited {
+		return false
+	}
+
+	active[node] = struct{}{}
+	defer delete(active, node)
+
 	switch node.Kind {
 	case yaml.DocumentNode:
-		return yamlChildrenContainPrivateKey(node.Content, true)
+		return yamlChildrenContainPrivateKey(node.Content, true, active)
 	case yaml.MappingNode:
-		return yamlMappingContainsPrivateKey(node.Content, topLevel)
+		return yamlMappingContainsPrivateKey(node.Content, topLevel, active)
 	case yaml.SequenceNode:
-		return yamlChildrenContainPrivateKey(node.Content, false)
+		return yamlChildrenContainPrivateKey(node.Content, false, active)
 	case yaml.ScalarNode:
 		return containsPrivateKeyMaterial(node.Value)
 	case yaml.AliasNode:
-		return node.Alias != nil && yamlNodeContainsPrivateKey(node.Alias, false)
+		return yamlNodeContainsPrivateKey(node.Alias, false, active)
 	}
 
 	return false
 }
 
-func yamlChildrenContainPrivateKey(children []*yaml.Node, topLevel bool) bool {
+func yamlChildrenContainPrivateKey(
+	children []*yaml.Node,
+	topLevel bool,
+	active map[*yaml.Node]struct{},
+) bool {
 	for _, child := range children {
-		if yamlNodeContainsPrivateKey(child, topLevel) {
+		if yamlNodeContainsPrivateKey(child, topLevel, active) {
 			return true
 		}
 	}
@@ -168,16 +194,24 @@ func yamlChildrenContainPrivateKey(children []*yaml.Node, topLevel bool) bool {
 	return false
 }
 
-func yamlMappingContainsPrivateKey(content []*yaml.Node, topLevel bool) bool {
+func yamlMappingContainsPrivateKey(
+	content []*yaml.Node,
+	topLevel bool,
+	active map[*yaml.Node]struct{},
+) bool {
 	for index := 0; index+1 < len(content); index += 2 {
 		key := content[index]
 		value := content[index+1]
 
-		if topLevel && key.Value == "ssh_keys" {
+		if yamlNodeContainsPrivateKey(key, false, active) {
+			return true
+		}
+
+		if topLevel && key.Kind == yaml.ScalarNode && key.Value == "ssh_keys" {
 			continue
 		}
 
-		if yamlNodeContainsPrivateKey(value, false) {
+		if yamlNodeContainsPrivateKey(value, false, active) {
 			return true
 		}
 	}

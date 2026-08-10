@@ -194,3 +194,63 @@ write_files:
 		})
 	}
 }
+
+func TestDeriveServerSpecsRejectsPrivateKeyInMappingKey(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+? |-
+  -----BEGIN PRIVATE KEY-----
+  AAAA
+  -----END PRIVATE KEY-----
+: harmless
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.ErrorIs(t, err, hetznerbase.ErrPrivateKeyInUserData)
+	assert.Nil(t, specs)
+}
+
+func TestDeriveServerSpecsRejectsPrivateKeyInLaterYAMLDocument(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+hostname: worker
+---
+write_files:
+  - path: /etc/kubernetes/pki/ca.key
+    content: |-
+      -----BEGIN PRIVATE KEY-----
+      AAAA
+      -----END PRIVATE KEY-----
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.ErrorIs(t, err, hetznerbase.ErrPrivateKeyInUserData)
+	assert.Nil(t, specs)
+}
+
+func TestDeriveServerSpecsHandlesCyclicYAMLAlias(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+loop: &loop
+  again: *loop
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.NoError(t, err)
+	assert.Len(t, specs, len(nodes))
+}
