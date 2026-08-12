@@ -336,6 +336,54 @@ func TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation(t *testing.T) {
 		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
 }
 
+// TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation guards the
+// ownership boundary across updates: once KSail has rendered an annotation from
+// its patch set, removing that key from the patch must remain an intentional
+// deletion while unrelated live-only annotations stay preserved.
+func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testing.T) {
+	t.Parallel()
+
+	ownedPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: old\n")
+	running := runningFromPatches(t, ownedPatch)
+	running, err := running.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations["example.com/external"] = "preserved"
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	trackedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{ownedPatch},
+	)
+	require.NoError(t, err)
+
+	tracked, err := talosprovisioner.NewProvisioner(trackedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			running, running, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	removedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	desired, err := talosprovisioner.NewProvisioner(removedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			tracked, tracked, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(tracked, desired)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "example.com/owned",
+		"removing a previously desired annotation must remain visible as drift")
+	assert.NotContains(t,
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations,
+		"example.com/owned",
+		"a previously desired annotation must not be reclassified as external")
+	assert.Equal(t, "preserved",
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
+}
+
 // TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors reproduces the Docker
 // system-test scenario: the running config carries registry mirrors injected at
 // create (which a regenerate lacks). An unchanged config must still report no
