@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	sysctlRmemMax  = "net.core.rmem_max"
-	sysctlKptr     = "kernel.kptr_restrict"
-	mirrorEndpoint = "http://talos-default-docker.io:5000"
+	sysctlRmemMax            = "net.core.rmem_max"
+	sysctlKptr               = "kernel.kptr_restrict"
+	mirrorEndpoint           = "http://talos-default-docker.io:5000"
+	managedNodeAnnotationKey = "ksail.devantler.tech/managed-node-annotation-keys"
 )
 
 // wrapConfig wraps a v1alpha1.Config as a full Talos config provider.
@@ -382,6 +383,46 @@ func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testin
 		"a previously desired annotation must not be reclassified as external")
 	assert.Equal(t, "preserved",
 		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
+}
+
+// TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys guards the
+// ownership boundary against a malformed marker that would otherwise erase
+// KSail's prior ownership set and restore intentionally removed annotations.
+func TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys(t *testing.T) {
+	t.Parallel()
+
+	ownedPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: old\n")
+	running := runningFromPatches(t, ownedPatch)
+
+	trackedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{ownedPatch},
+	)
+	require.NoError(t, err)
+
+	tracked, err := talosprovisioner.NewProvisioner(trackedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			running, running, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	malformed, err := tracked.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations[managedNodeAnnotationKey] = "null"
+		delete(cfg.MachineConfig.MachineNodeAnnotations, "example.com/owned")
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	removedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	_, err = talosprovisioner.NewProvisioner(removedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			malformed, malformed, talosprovisioner.RoleControlPlane,
+		)
+	require.EqualError(t, err,
+		"graft node-managed config sections: "+
+			"decode managed node-annotation keys: expected JSON array")
 }
 
 // TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors reproduces the Docker

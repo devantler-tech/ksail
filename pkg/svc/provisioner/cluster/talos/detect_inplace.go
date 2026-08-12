@@ -564,6 +564,9 @@ func previousNodeAnnotationKeys(
 	if err != nil {
 		return nil, true, fmt.Errorf("decode managed node-annotation keys: %w", err)
 	}
+	if keys == nil {
+		return nil, true, errors.New("decode managed node-annotation keys: expected JSON array")
+	}
 
 	keySet := make(map[string]struct{}, len(keys))
 	for _, key := range keys {
