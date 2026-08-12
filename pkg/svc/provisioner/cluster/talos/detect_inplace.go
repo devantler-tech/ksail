@@ -570,6 +570,7 @@ func previousNodeAnnotationKeys(
 	if err != nil {
 		return nil, true, fmt.Errorf("decode managed node-annotation keys: %w", err)
 	}
+
 	if keys == nil {
 		return nil, true, errManagedNodeAnnotationKeysExpectedJSONArray
 	}
