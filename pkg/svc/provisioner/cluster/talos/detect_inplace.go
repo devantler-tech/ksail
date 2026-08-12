@@ -415,10 +415,10 @@ func (p *Provisioner) alignKubernetesVersion(
 	return updated, nil
 }
 
-// graftNodeManagedSections copies the machine-config sections that ksail injects
-// post-generation — registry mirrors/auth, cert SANs, and the Hetzner HCloud VIP
-// endpoint — from the running config into the desired config, so they don't read
-// as removable drift. These are node/setup-managed rather than user patch content.
+// graftNodeManagedSections copies machine-config state that must survive a
+// regeneration — registry mirrors/auth, cert SANs, externally managed node
+// annotations, and the Hetzner HCloud VIP endpoint — from the running config
+// into the desired config, so it does not read as removable drift.
 //
 // If ksail gains another post-generation machine-config transform, graft its
 // section here too (otherwise it will surface as phantom drift). The per-node
@@ -446,6 +446,11 @@ func graftNodeManagedSections(
 		if len(cfg.MachineConfig.MachineCertSANs) == 0 {
 			cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
 		}
+		// machine.nodeAnnotations is a shared extension map. KSail owns keys present
+		// in its rendered desired config; preserve live-only keys so another
+		// controller can annotate nodes without making every KSail update delete
+		// those entries and re-apply the whole machine config (#6549).
+		graftExternalNodeAnnotations(cfg.MachineConfig, runningRaw.MachineConfig)
 
 		graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
 
@@ -456,6 +461,28 @@ func graftNodeManagedSections(
 	}
 
 	return grafted, nil
+}
+
+// graftExternalNodeAnnotations merges live-only node-annotation keys into the
+// desired config. Desired values win on collisions, keeping KSail authoritative
+// for every key explicitly declared by its current Talos patch set.
+func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) {
+	if len(running.MachineNodeAnnotations) == 0 {
+		return
+	}
+
+	if desired.MachineNodeAnnotations == nil {
+		desired.MachineNodeAnnotations = make(
+			map[string]string,
+			len(running.MachineNodeAnnotations),
+		)
+	}
+
+	for key, value := range running.MachineNodeAnnotations {
+		if _, owned := desired.MachineNodeAnnotations[key]; !owned {
+			desired.MachineNodeAnnotations[key] = value
+		}
+	}
 }
 
 // graftHCloudVIP preserves the runtime-injected Hetzner VIP on its network
