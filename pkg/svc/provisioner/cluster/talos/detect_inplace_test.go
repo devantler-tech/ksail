@@ -423,6 +423,11 @@ func TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys(t *testing.
 	require.EqualError(t, err,
 		"graft node-managed config sections: "+
 			"decode managed node-annotation keys: expected JSON array")
+	require.ErrorIs(
+		t,
+		err,
+		talosprovisioner.ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest,
+	)
 }
 
 // TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors reproduces the Docker

@@ -61,6 +61,12 @@ var errMissingControlPlanePKI = errors.New(
 		"a control-plane node's config is required to realign worker configs",
 )
 
+// errManagedNodeAnnotationKeysExpectedJSONArray is returned when the persisted
+// ownership marker is valid JSON but not an array (for example, JSON null).
+var errManagedNodeAnnotationKeysExpectedJSONArray = errors.New(
+	"decode managed node-annotation keys: expected JSON array",
+)
+
 // detectInPlaceMachineConfigDrift reports whether the desired Talos machine
 // config (base config + current patch files) differs from what is running on the
 // cluster, returning one in-place change per role (control-plane, worker) that
@@ -565,7 +571,7 @@ func previousNodeAnnotationKeys(
 		return nil, true, fmt.Errorf("decode managed node-annotation keys: %w", err)
 	}
 	if keys == nil {
-		return nil, true, errors.New("decode managed node-annotation keys: expected JSON array")
+		return nil, true, errManagedNodeAnnotationKeysExpectedJSONArray
 	}
 
 	keySet := make(map[string]struct{}, len(keys))
