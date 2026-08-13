@@ -1,6 +1,7 @@
 package talosprovisioner_test
 
 import (
+	"strings"
 	"testing"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -14,10 +15,11 @@ import (
 )
 
 const (
-	sysctlRmemMax            = "net.core.rmem_max"
-	sysctlKptr               = "kernel.kptr_restrict"
-	mirrorEndpoint           = "http://talos-default-docker.io:5000"
-	managedNodeAnnotationKey = "ksail.devantler.tech/managed-node-annotation-keys"
+	sysctlRmemMax              = "net.core.rmem_max"
+	sysctlKptr                 = "kernel.kptr_restrict"
+	mirrorEndpoint             = "http://talos-default-docker.io:5000"
+	managedNodeAnnotationKey   = "ksail.devantler.tech/managed-node-annotation-keys"
+	bootstrapNodeAnnotationKey = "ksail.devantler.tech/bootstrap-managed-node-annotation-keys"
 )
 
 // wrapConfig wraps a v1alpha1.Config as a full Talos config provider.
@@ -383,6 +385,85 @@ func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testin
 		"a previously desired annotation must not be reclassified as external")
 	assert.Equal(t, "preserved",
 		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
+}
+
+// TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval verifies the
+// explicit migration path for a cluster created before KSail persisted annotation
+// ownership. A bootstrap directive seeds the previous ownership set once; KSail
+// strips it, persists the current set, and preserves unrelated live-only keys.
+func TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				bootstrapNodeAnnotationKey: `["example.com/owned"]`,
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				"example.com/owned":    "removed",
+				"example.com/external": "preserved",
+			},
+		},
+	})
+
+	grafted, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.NoError(t, err)
+
+	annotations := grafted.RawV1Alpha1().MachineConfig.MachineNodeAnnotations
+	assert.NotContains(t, annotations, "example.com/owned",
+		"the explicit legacy ownership seed must keep the removed key removable")
+	assert.Equal(t, "preserved", annotations["example.com/external"],
+		"the migration seed must not absorb unrelated live-only annotations")
+	assert.Equal(t, "[]", annotations[managedNodeAnnotationKey],
+		"the one-time seed must be replaced by the current ownership set")
+}
+
+// TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision guards
+// the reserved annotation key at patch-loading time. An arbitrary user value
+// must fail before it can be applied and poison every subsequent update.
+func TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				managedNodeAnnotationKey: `[]`,
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{MachineConfig: &v1alpha1.MachineConfig{}})
+
+	_, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ownership key is reserved by KSail")
+}
+
+// TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit proves
+// KSail accounts for its metadata before returning a config for Talos to apply.
+// The user's annotation map is valid at the Kubernetes 256 KiB ceiling by itself,
+// but adding the ownership marker must return a clear preflight error.
+func TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit(t *testing.T) {
+	t.Parallel()
+
+	const annotationSizeLimit = 256 * 1024
+
+	key := "example.com/owned"
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				key: strings.Repeat("x", annotationSizeLimit-len(key)),
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{MachineConfig: &v1alpha1.MachineConfig{}})
+
+	_, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "node annotations exceed 256 KiB after ownership metadata")
 }
 
 // TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys guards the

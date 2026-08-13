@@ -42,6 +42,17 @@ const maxDriftDiffLines = 60
 // live-only key owned by another controller.
 const managedNodeAnnotationKeys = "ksail.devantler.tech/managed-node-annotation-keys"
 
+// bootstrapManagedNodeAnnotationKeys is an explicit, one-time migration input
+// for clusters that predate ownership tracking. It is consumed from the desired
+// patch and never applied to a node; operators list legacy KSail-owned keys here
+// when removing them during the first update after upgrading KSail.
+const bootstrapManagedNodeAnnotationKeys = "ksail.devantler.tech/bootstrap-managed-node-annotation-keys"
+
+// maxNodeAnnotationBytes matches Kubernetes' aggregate annotation key/value
+// limit. Ownership metadata is stored in the same map, so KSail must account for
+// its bytes before returning a config that Talos would later reject on apply.
+const maxNodeAnnotationBytes = 256 * 1024
+
 // MachineConfigField is the change field reported when the desired Talos machine
 // config differs from what is running on the nodes.
 const MachineConfigField = "machine.config"
@@ -65,6 +76,14 @@ var errMissingControlPlanePKI = errors.New(
 // ownership marker is valid JSON but not an array (for example, JSON null).
 var errManagedNodeAnnotationKeysExpectedJSONArray = errors.New(
 	"decode managed node-annotation keys: expected JSON array",
+)
+
+var errManagedNodeAnnotationKeysReserved = errors.New(
+	"managed node-annotation ownership key is reserved by KSail",
+)
+
+var errNodeAnnotationOwnershipMetadataLimit = errors.New(
+	"node annotations exceed 256 KiB after ownership metadata",
 )
 
 // detectInPlaceMachineConfigDrift reports whether the desired Talos machine
@@ -488,15 +507,16 @@ func graftNodeManagedSections(
 // marker prevents a key removed from KSail's patch set from being reclassified
 // as external and copied back.
 func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) error {
-	currentOwnedKeys := nodeAnnotationKeys(desired.MachineNodeAnnotations)
-	sort.Strings(currentOwnedKeys)
-
-	previousOwnedKeys, hasMarker, err := previousNodeAnnotationKeys(
+	previousOwnedKeys, hasMarker, err := resolvePreviousNodeAnnotationKeys(
+		desired.MachineNodeAnnotations,
 		running.MachineNodeAnnotations,
 	)
 	if err != nil {
 		return err
 	}
+
+	currentOwnedKeys := nodeAnnotationKeys(desired.MachineNodeAnnotations)
+	sort.Strings(currentOwnedKeys)
 
 	if desired.MachineNodeAnnotations == nil &&
 		(len(running.MachineNodeAnnotations) > 0 || hasMarker) {
@@ -512,16 +532,80 @@ func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) erro
 		previousOwnedKeys,
 	)
 
+	return persistNodeAnnotationOwnership(
+		desired.MachineNodeAnnotations,
+		currentOwnedKeys,
+		hasMarker,
+	)
+}
+
+func resolvePreviousNodeAnnotationKeys(
+	desired, running map[string]string,
+) (map[string]struct{}, bool, error) {
+	if _, claimsOwnershipMarker := desired[managedNodeAnnotationKeys]; claimsOwnershipMarker {
+		return nil, false, errManagedNodeAnnotationKeysReserved
+	}
+
+	bootstrapOwnedKeys, hasBootstrapMarker, err := previousNodeAnnotationKeys(
+		desired,
+		bootstrapManagedNodeAnnotationKeys,
+	)
+	if err != nil {
+		return nil, false, fmt.Errorf("decode bootstrap managed node-annotation keys: %w", err)
+	}
+
+	// The bootstrap directive is input only. Strip it before deriving the current
+	// ownership set and before returning a config that Talos can apply.
+	delete(desired, bootstrapManagedNodeAnnotationKeys)
+
+	previousOwnedKeys, hasRunningMarker, err := previousNodeAnnotationKeys(
+		running,
+		managedNodeAnnotationKeys,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !hasRunningMarker && hasBootstrapMarker {
+		previousOwnedKeys = bootstrapOwnedKeys
+	}
+
+	return previousOwnedKeys, hasRunningMarker || hasBootstrapMarker, nil
+}
+
+func persistNodeAnnotationOwnership(
+	annotations map[string]string,
+	currentOwnedKeys []string,
+	hasMarker bool,
+) error {
 	if hasMarker || len(currentOwnedKeys) > 0 {
 		encodedKeys, err := json.Marshal(currentOwnedKeys)
 		if err != nil {
 			return fmt.Errorf("encode managed node-annotation keys: %w", err)
 		}
 
-		desired.MachineNodeAnnotations[managedNodeAnnotationKeys] = string(encodedKeys)
+		annotations[managedNodeAnnotationKeys] = string(encodedKeys)
+
+		annotationBytes := nodeAnnotationBytes(annotations)
+		if annotationBytes > maxNodeAnnotationBytes {
+			return fmt.Errorf(
+				"%w: %d bytes",
+				errNodeAnnotationOwnershipMetadataLimit,
+				annotationBytes,
+			)
+		}
 	}
 
 	return nil
+}
+
+func nodeAnnotationBytes(annotations map[string]string) int {
+	total := 0
+	for key, value := range annotations {
+		total += len(key) + len(value)
+	}
+
+	return total
 }
 
 func mergeExternalNodeAnnotations(
@@ -548,7 +632,7 @@ func mergeExternalNodeAnnotations(
 func nodeAnnotationKeys(annotations map[string]string) []string {
 	keys := make([]string, 0, len(annotations))
 	for key := range annotations {
-		if key != managedNodeAnnotationKeys {
+		if key != managedNodeAnnotationKeys && key != bootstrapManagedNodeAnnotationKeys {
 			keys = append(keys, key)
 		}
 	}
@@ -558,8 +642,9 @@ func nodeAnnotationKeys(annotations map[string]string) []string {
 
 func previousNodeAnnotationKeys(
 	annotations map[string]string,
+	markerKey string,
 ) (map[string]struct{}, bool, error) {
-	markerValue, hasMarker := annotations[managedNodeAnnotationKeys]
+	markerValue, hasMarker := annotations[markerKey]
 	if !hasMarker {
 		return nil, false, nil
 	}
