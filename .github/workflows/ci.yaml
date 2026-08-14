@@ -360,7 +360,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
-      && needs.changes.outputs.govuln-allowlist == 'true')
+      && needs.changes.outputs.code == 'true')
     uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@61d9c87b302523778789c7cf09655b87b6716e87 # v13.0.4
     # Both inputs make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
