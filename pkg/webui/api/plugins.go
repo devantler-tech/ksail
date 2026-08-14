@@ -264,6 +264,7 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 		if errors.Is(err, errUnsupportedContentType) {
 			status = http.StatusUnsupportedMediaType
 		}
+
 		writeError(writer, status, err)
 
 		return
