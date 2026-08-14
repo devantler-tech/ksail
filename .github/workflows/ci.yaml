@@ -356,6 +356,26 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     needs: [changes]
+    # The two arms below cover what the ORG-REQUIRED workflow does not, and nothing
+    # more. validate-go-project.yaml carries its own `pull_request:` / `merge_group:`
+    # triggers alongside its `workflow_call` interface, so GitHub already runs the
+    # complete Go suite directly on every pull request here, with no help from this
+    # file. That direct run publishes its checks WITHOUT the `✅ Validate Go Project /`
+    # prefix, which is why a prefix-filtered read of a pull request shows "skipped"
+    # over a suite that has in fact passed (ksail#6563, ksail#6564 — both closed as
+    # measurement errors of exactly that shape).
+    #
+    #   * push to main — the required workflow is pull-request scoped and never runs
+    #     on the default branch, so this arm is the ONLY Go validation main gets.
+    #
+    #   * pull_request, gated on govuln-allowlist — DELIBERATELY NARROW. The required
+    #     run takes `scan-default-branch`'s default of false, so it will not scan a
+    #     pull request that edits only a .govulncheck-allow.txt; this arm exists so a
+    #     risk acceptance is validated by the scanner it applies to. Do NOT widen this
+    #     to `code`: .govulncheck-allow.txt is already a member of the `code` filter,
+    #     so `code` is a strict superset whose extra region is precisely where the
+    #     required workflow already runs the identical nine jobs. Widening it buys no
+    #     coverage and doubles the Go suite on every Go pull request.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
       || (github.event_name == 'pull_request'
