@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/desktop
 
-go 1.26.5
+go 1.26.6
 
 replace github.com/devantler-tech/ksail/v7 => ../
 
