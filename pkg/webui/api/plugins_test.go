@@ -66,7 +66,16 @@ func doPluginInstall(
 		"/api/v1/plugins",
 		strings.NewReader(body),
 	)
+
 	for name, value := range headers {
+		// Host is not a normal header on an inbound request — net/http lifts it onto Request.Host — so
+		// it must be assigned there for a test to control what the handler sees.
+		if strings.EqualFold(name, "Host") {
+			request.Host = value
+
+			continue
+		}
+
 		request.Header.Set(name, value)
 	}
 
@@ -107,6 +116,58 @@ func TestInstallPluginRequiresTrustedConsent(t *testing.T) {
 	}
 	if installer.installCalled {
 		t.Fatal("InstallPlugin was called without trusted consent")
+	}
+}
+
+// TestInstallPluginRejectsRebindingOriginMatchingHost pins the DNS-rebinding case that a Host-derived
+// origin comparison cannot catch: the attacker's name has been rebound to loopback, so Origin and Host
+// agree and the browser reports Sec-Fetch-Site: same-origin. Only anchoring on the loopback identity
+// rejects it, and the installer must never be reached.
+func TestInstallPluginRejectsRebindingOriginMatchingHost(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type":   "application/json",
+		"Host":           "attacker.example",
+		"Origin":         "http://attacker.example",
+		"Sec-Fetch-Site": "same-origin",
+	})
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("install status = %d, want 403", recorder.Code)
+	}
+
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a DNS-rebound cross-site request")
+	}
+}
+
+// TestInstallPluginAcceptsLoopbackOrigin pins the everyday path: the SPA served from the loopback
+// listener still installs, so the hardening costs the local operator nothing.
+func TestInstallPluginAcceptsLoopbackOrigin(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type":   "application/json",
+		"Host":           "127.0.0.1:8080",
+		"Origin":         "http://127.0.0.1:8080",
+		"Sec-Fetch-Site": "same-origin",
+	})
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201", recorder.Code)
+	}
+
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for a loopback-origin request")
 	}
 }
 

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 )
@@ -310,6 +312,16 @@ func requirePluginInstallRequestGuards(request *http.Request) error {
 	return nil
 }
 
+// isCrossSiteBrowserRequest reports whether a browser request came from somewhere other than the local
+// UI. The install endpoint is registered only when the service implements PluginInstaller — which only
+// the loopback-bound local backend does — and installing a plugin runs unsandboxed same-origin
+// JavaScript against the cluster, so a browser origin is trusted only when the page was itself served
+// from loopback.
+//
+// The trusted origin is deliberately NOT derived from the request: Host is client-controlled, so
+// comparing Origin against it accepts a DNS-rebinding attacker, whose page on a name rebound to
+// 127.0.0.1 presents a matching Origin/Host pair and a same-origin Sec-Fetch-Site. Anchoring on the
+// loopback identity closes that, because a browser sets Origin from the page's real URL.
 func isCrossSiteBrowserRequest(request *http.Request) bool {
 	switch request.Header.Get("Sec-Fetch-Site") {
 	case "cross-site", "none":
@@ -318,10 +330,36 @@ func isCrossSiteBrowserRequest(request *http.Request) bool {
 
 	origin := request.Header.Get("Origin")
 	if origin == "" {
+		// Non-browser client (CLI tooling, tests). Browsers always send Origin on a cross-origin POST,
+		// and the JSON content-type guard above already blocks a simple form-based cross-site post.
 		return false
 	}
 
-	return origin != "http://"+request.Host && origin != "https://"+request.Host
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return true
+	}
+
+	// The desktop shell serves the SPA from the fixed wails:// origin; a remote page can never carry
+	// that scheme, so it is trusted like loopback.
+	if strings.EqualFold(parsed.Scheme, "wails") {
+		return false
+	}
+
+	return !isLoopbackOriginHost(parsed.Hostname())
+}
+
+// isLoopbackOriginHost reports whether a URL hostname names this machine's loopback interface.
+// "localhost" is included: an attacker can rebind their own name to 127.0.0.1, but cannot make a
+// browser report "localhost" as the origin of a page they serve.
+func isLoopbackOriginHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // handleUninstallPlugin removes an installed plugin by id. The id is validated here (and again in the
