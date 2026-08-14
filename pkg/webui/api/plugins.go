@@ -344,13 +344,29 @@ func isCrossSiteBrowserRequest(request *http.Request) bool {
 		return true
 	}
 
-	// The desktop shell serves the SPA from the fixed wails:// origin; a remote page can never carry
-	// that scheme, so it is trusted like loopback.
-	if strings.EqualFold(parsed.Scheme, "wails") {
+	// The desktop shell serves the SPA from the fixed wails://wails origin (see desktop/main.go), so
+	// that one origin is trusted like loopback.
+	if isWailsDesktopOrigin(parsed) {
 		return false
 	}
 
 	return !isLoopbackOriginHost(parsed.Hostname())
+}
+
+// isWailsDesktopOrigin reports whether a parsed origin is exactly the desktop shell's `wails://wails`
+// origin. Matching the scheme alone is not enough: it would also admit `wails://attacker`, and since
+// the scheme is the only thing standing between this branch and plugin installation, any other
+// authority under it must be rejected. A browser-sent Origin carries scheme and authority and nothing
+// else, so a non-empty user, path, query or fragment marks a crafted header rather than a real one.
+func isWailsDesktopOrigin(parsed *url.URL) bool {
+	// Host, not Hostname, so a port (`wails://wails:8080`) fails the comparison rather than being
+	// stripped away before it.
+	return strings.EqualFold(parsed.Scheme, "wails") &&
+		strings.EqualFold(parsed.Host, "wails") &&
+		parsed.User == nil &&
+		parsed.Path == "" &&
+		parsed.RawQuery == "" &&
+		parsed.Fragment == ""
 }
 
 // isLoopbackOriginHost reports whether a URL hostname names this machine's loopback interface.

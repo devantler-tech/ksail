@@ -387,3 +387,59 @@ func TestPluginContentType(t *testing.T) {
 		}
 	}
 }
+
+// TestInstallPluginRejectsForeignWailsOrigin pins that the desktop carve-out matches ONE origin. The
+// check previously trusted the `wails` scheme alone, which also admits `wails://attacker` — and the
+// scheme is the only thing standing between this branch and plugin installation.
+func TestInstallPluginRejectsForeignWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"wails://attacker",
+		"wails://wails:8080",
+		"wails://user@wails",
+		"wails://wails/path",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			installer := &pluginInstallerStub{}
+			server := &api.Server{Service: installer}
+
+			recorder := doPluginInstall(t, server, trustedInstallBody, map[string]string{
+				"Content-Type": "application/json",
+				"Origin":       origin,
+			})
+
+			if recorder.Code != http.StatusForbidden {
+				t.Fatalf("install status = %d, want 403 for Origin %q", recorder.Code, origin)
+			}
+
+			if installer.installCalled {
+				t.Fatalf("InstallPlugin was called for Origin %q", origin)
+			}
+		})
+	}
+}
+
+// TestInstallPluginAcceptsDesktopWailsOrigin pins the everyday desktop path, so tightening the check
+// above cannot silently break the shell it exists to allow (see desktop/main.go).
+func TestInstallPluginAcceptsDesktopWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+
+	recorder := doPluginInstall(t, server, trustedInstallBody, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "wails://wails",
+	})
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201; body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for the desktop wails://wails origin")
+	}
+}
