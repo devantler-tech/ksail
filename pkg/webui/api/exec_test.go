@@ -192,6 +192,11 @@ func TestExecRejectsForeignWailsAuthority(t *testing.T) {
 		"wails://wails/path",
 		"wails://wails?x=1",
 		"wails://wails#frag",
+		// An empty delimiter parses away to nothing — RawQuery and Fragment are both "" here — so a
+		// field-by-field comparison accepts these while the raw header is not the desktop origin.
+		"wails://wails?",
+		"wails://wails#",
+		"wails://wails?#",
 	} {
 		t.Run(origin, func(t *testing.T) {
 			t.Parallel()

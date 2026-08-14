@@ -139,16 +139,14 @@ func execCheckOrigin(request *http.Request) bool {
 	// The desktop shell serves the SPA from the fixed wails://wails origin (see desktop/main.go) through
 	// the Wails AssetServer, with no TCP listener at all, so that one origin is trusted like loopback.
 	// The scheme alone is not enough: it would also admit wails://attacker, and on this path the check is
-	// the only thing between the caller and a shell in the cluster. A browser-sent Origin carries scheme
-	// and authority and nothing else, so a non-empty user, path, query or fragment marks a crafted header.
+	// the only thing between the caller and a shell in the cluster.
 	if strings.EqualFold(parsed.Scheme, "wails") {
-		// Host, not Hostname, so a port (wails://wails:8080) fails the comparison rather than being
-		// stripped away before it.
-		return strings.EqualFold(parsed.Host, "wails") &&
-			parsed.User == nil &&
-			parsed.Path == "" &&
-			parsed.RawQuery == "" &&
-			parsed.Fragment == ""
+		// Compare the raw header, not the parsed fields. A browser-sent Origin is scheme and authority
+		// and nothing else, and an empty delimiter parses away to nothing: "wails://wails?" and
+		// "wails://wails#" both leave RawQuery and Fragment empty, so a field-by-field comparison
+		// accepts them. Matching the whole string rejects every such variant, and any port, user info
+		// or path along with them.
+		return strings.EqualFold(origin, "wails://wails")
 	}
 
 	return isLoopbackHost(parsed.Hostname())
