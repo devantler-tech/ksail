@@ -111,6 +111,17 @@ func runImagesCommand(
 	}
 
 	// Use Factory to get images dynamically from Helm charts
+	var factoryOpts []installer.Option
+
+	// The AWS Load Balancer Controller installer requires the EKS cluster
+	// name; Load cached the parsed eksctl metadata on the config manager.
+	if cfgManager.DistributionConfig != nil && cfgManager.DistributionConfig.EKS != nil {
+		factoryOpts = append(
+			factoryOpts,
+			installer.WithEKSClusterName(cfgManager.DistributionConfig.EKS.Name),
+		)
+	}
+
 	factory := installer.NewFactory(
 		helmClient,
 		nil, // dockerClient not needed for image extraction
@@ -118,6 +129,7 @@ func runImagesCommand(
 		"",  // kubecontext not needed for image extraction
 		0,
 		clusterCfg.Spec.Cluster.Distribution,
+		factoryOpts...,
 	)
 
 	images, err := factory.GetImagesForCluster(cmd.Context(), clusterCfg)

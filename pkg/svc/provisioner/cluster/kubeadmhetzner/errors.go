@@ -20,11 +20,18 @@ var (
 	ErrHAControlPlaneNotImplemented = hetznerbase.ErrHAControlPlaneNotImplemented
 )
 
-// ErrJoiningNodesComposedFirst is returned by
-// [Provisioner.ComposeJoiningNodes] when it is called before
-// [Provisioner.ComposeInitNode] has minted the cluster PKI — the two-phase flow
-// guarantees the init compose runs first, so hitting this means the composer
-// was driven outside that flow.
-var ErrJoiningNodesComposedFirst = errors.New(
-	"kubeadm × Hetzner: joining nodes composed before the init control plane",
+// ErrInvalidAdminKubeconfig is returned by [Provisioner.ComposeJoiningNodes]
+// when the kubeconfig retrieved from the initial control plane does not carry a
+// usable CA certificate for kubeadm's pinned token discovery.
+var ErrInvalidAdminKubeconfig = errors.New(
+	"kubeadm × Hetzner: init control-plane admin kubeconfig is invalid",
 )
+
+// ErrDeprecatedPKIFiles is returned by [BuildNodeUserData] when a caller tries
+// to deliver cluster PKI through the legacy ServerInitFiles or ServerJoinFiles
+// fields. Provider user-data is not a permitted transport for cluster identity.
+var ErrDeprecatedPKIFiles = errors.New(
+	"kubeadm × Hetzner: deprecated cluster PKI files are not supported",
+)
+
+var errInvalidCAPEM = errors.New("CA data is not a PEM certificate")

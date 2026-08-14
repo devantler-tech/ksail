@@ -36,9 +36,10 @@ var newEphemeralHelmClient = func(kubeconfigPath, kubeContext string) (helm.Inte
 // to install is a hard error — the run promised cluster-backed coverage for
 // it and silently skipping would be a silent no-op.
 //
-// Installs do not wait for workload readiness (Wait stays false): the point
-// is registering the operators' CRDs and admission surface, and on a KWOK
-// backend real controller pods never run to completion anyway.
+// Installs do not yet wait for workload readiness (Wait stays false): this
+// slice registers the operators' CRDs and admission surface. The following
+// Phase 3b-3 slice owns waiting for real controller reconciliation before it
+// inventories operator-rendered children from the Kind cluster.
 func installDeclaredCharts(
 	ctx context.Context,
 	cmd *cobra.Command,

@@ -37,6 +37,14 @@ func TestBuildExternalRegistryURL_Formats(t *testing.T) {
 			wantSecret: "",
 		},
 		{
+			name: "password-only registry does not reference an empty auth secret",
+			registry: v1alpha1.LocalRegistry{
+				Registry: ":pass@ghcr.io/myorg/myrepo",
+			},
+			wantURL:    "oci://ghcr.io/myorg/myrepo",
+			wantSecret: "",
+		},
+		{
 			name: "bare host with path",
 			registry: v1alpha1.LocalRegistry{
 				Registry: "gcr.io/my-project/images",

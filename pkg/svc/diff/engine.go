@@ -10,6 +10,44 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
+// EKSLoadBalancerControllerField is the diff key for the EKS AWS Load
+// Balancer Controller opt-in. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const EKSLoadBalancerControllerField = "cluster.eks.experimentalAWSLoadBalancerController"
+
+// RegistryCredentialField is the diff key for the root registry pull credential
+// held in the KSail-managed registry Secret. Reconciliation uses the same
+// constant so field renames cannot silently disconnect detection from
+// application.
+//
+//nolint:gosec // G101 false positive: a diff key, not a credential.
+const RegistryCredentialField = "cluster.localRegistry.credentials"
+
+// FluxVerifyField is the diff key for artifact signature verification on the
+// flux-system OCIRepository. Reconciliation uses the same constant so field
+// renames cannot silently disconnect detection from application.
+const FluxVerifyField = "cluster.workload.flux.verify"
+
+// fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
+// detector receives a single boolean covering both an absent spec.verify block
+// and one that is present but differs, so this names the disjunction rather than
+// asserting either state.
+const fluxVerifyDriftedDisplay = "absent or mismatched"
+
+// registryCredentialOldDisplay and registryCredentialNewDisplay are the values
+// rendered for a credential rotation. The resolved credential — and any digest
+// of it — is deliberately never placed in a Change: Change values are printed by
+// the update output, and a digest of a low-entropy password with a known
+// registry and username is guessable offline.
+// These are exactly the strings a reader sees in place of a credential, so
+// G101 flagging them is the inverse of the truth.
+const (
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
+	registryCredentialOldDisplay = "stale (redacted)"
+	//nolint:gosec // G101 false positive: a redaction label, not a credential.
+	registryCredentialNewDisplay = "rotated (redacted)"
+)
+
 // Engine computes configuration differences and classifies their impact.
 type Engine struct {
 	distribution v1alpha1.Distribution
@@ -102,6 +140,71 @@ func (e *Engine) CheckFluxDistributionVersion(
 		oldVersion, newVersion, "",
 		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
 		clusterupdate.ChangeCategoryInPlace)
+}
+
+// CheckFluxVerify appends an in-place change when the live flux-system
+// OCIRepository is missing the spec.verify block the configuration asks for.
+//
+// Like a rotated registry credential, this drift is invisible to the structural
+// diff: it compares the old cluster spec against the new one, so configuring
+// verify shows up exactly once and never again — while nothing on the update
+// path applies the block unless some other field's change happens to trigger a
+// handler that re-asserts the FluxInstance. The result was a green deploy
+// against a root source Flux was not verifying at all (platform#2922).
+//
+// drifted is decided by the flux installer, which reads the live resource and
+// compares it with the same function the patcher uses to decide it is already
+// in place.
+//
+// drifted collapses two live states — spec.verify absent, and spec.verify
+// present but different from the configured block — so the old value reported
+// here must name both. A bare "absent" would tell an operator whose live source
+// verifies with another provider something false about their own cluster.
+func (e *Engine) CheckFluxVerify(
+	drifted bool,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	if !drifted {
+		return
+	}
+
+	appendChange(result, FluxVerifyField,
+		fluxVerifyDriftedDisplay, "configured", "",
+		"artifact signature verification can be re-asserted in-place on the OCIRepository",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+// CheckRegistryCredential appends an in-place change when the credential in the
+// KSail-managed registry Secret has drifted from the one the resolved
+// configuration would write. This is what makes a credential-only rotation
+// visible: the structural diff redacts registry passwords, so a rotated token
+// with otherwise identical configuration produces no field change and would
+// otherwise leave the cluster authenticating with a revoked value.
+//
+// drifted is a single bit decided by the flux installer, which holds both
+// credentials and compares them in constant time. No credential — and nothing
+// derived from one — crosses into this package, so there is nothing here that
+// could reach a rendered Change value; see registryCredentialOldDisplay.
+func (e *Engine) CheckRegistryCredential(
+	drifted bool,
+	result *clusterupdate.UpdateResult,
+) {
+	if !drifted {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    RegistryCredentialField,
+		OldValue: registryCredentialOldDisplay,
+		NewValue: registryCredentialNewDisplay,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "registry credentials can be refreshed in-place by re-writing the registry Secret",
+	})
 }
 
 // fieldRule describes how to diff a single scalar field.
@@ -235,6 +338,23 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			},
 		},
 		{
+			field:    EKSLoadBalancerControllerField,
+			category: clusterupdate.ChangeCategoryInPlace,
+			reason:   "AWS Load Balancer Controller can be installed/uninstalled via Helm",
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				if e.distribution != v1alpha1.DistributionEKS ||
+					e.provider != v1alpha1.ProviderAWS {
+					return strconv.FormatBool(false)
+				}
+
+				if e.componentBaselineUnknown(spec) {
+					return clusterupdate.UnknownBaselineValue
+				}
+
+				return eksLoadBalancerControllerValue(spec)
+			},
+		},
+		{
 			field:      "cluster.certManager",
 			category:   clusterupdate.ChangeCategoryInPlace,
 			reason:     "cert-manager can be installed/uninstalled via Helm",
@@ -256,6 +376,21 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			defaultVal: string(v1alpha1.GitOpsEngineNone),
 		},
 	}
+}
+
+func eksLoadBalancerControllerValue(spec *v1alpha1.ClusterSpec) string {
+	active := spec.EKS.ExperimentalAWSLoadBalancerController &&
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+	if !active {
+		return strconv.FormatBool(false)
+	}
+
+	serviceAccount := strings.TrimSpace(spec.EKS.AWSLoadBalancerControllerServiceAccount)
+	if serviceAccount == "" {
+		return strconv.FormatBool(true)
+	}
+
+	return strconv.FormatBool(true) + ":" + serviceAccount
 }
 
 // appendChange appends a single diff change to the appropriate category slice in result.

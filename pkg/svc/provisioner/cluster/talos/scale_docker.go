@@ -403,7 +403,7 @@ func (p *Provisioner) createTalosContainer(
 		Image:    p.options.TalosImage,
 		Env:      env,
 		Labels: map[string]string{
-			LabelTalosOwned:       "true",
+			LabelTalosOwned:       labelValueTrue,
 			LabelTalosClusterName: clusterName,
 			"talos.type":          talosTypeFromRole(role),
 		},
@@ -498,7 +498,7 @@ func (p *Provisioner) listDockerNodesByRole(
 	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
 		All: true,
 		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosOwned+"="+labelValueTrue),
 			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
 			filters.Arg("label", "talos.type="+talosTypeFromRole(role)),
 		),

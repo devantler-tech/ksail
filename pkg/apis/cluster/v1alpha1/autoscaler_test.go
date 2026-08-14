@@ -827,9 +827,14 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			// the baseline. With baseline 6 + poolCapacity 10, the old logic computed
 			// 6 + min(10,10) = 16 and wrongly rejected, even though MaxNodesTotal(10)
 			// equals serverLimit(10). reachableTotal = min(16, 10) = 10 → valid.
-			name: "capacity guard: maxNodesTotal equal to serverLimit is valid despite large pools",
+			//
+			// Distribution is deliberately NOT Talos: only the Talos Hetzner path builds
+			// a snapshot, so only it reserves a slot (#6171). Every other distribution is
+			// entitled to the full serverLimit, which is what this case pins.
+			name: "capacity guard: maxNodesTotal equal to serverLimit is valid for a non-Talos distribution",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,
+				Distribution:  v1alpha1.DistributionK3s,
 				ControlPlanes: 3,
 				Workers:       3,
 				Autoscaler: v1alpha1.AutoscalerConfig{
@@ -845,6 +850,89 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 								Max:        10,
 							},
 						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
+			// #6171: the Talos Hetzner path builds the autoscaler's node image by booting
+			// ONE temporary server, so a cluster that can reach serverLimit leaves that
+			// server nowhere to go. It fails LATE — fine while the pinned version's
+			// snapshot exists, then every deploy dies on resource_limit_exceeded after a
+			// Talos bump. Reject it as a config error instead.
+			name: "snapshot slot: Talos reachableTotal equal to serverLimit is rejected",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				Distribution:  v1alpha1.DistributionTalos,
+				ControlPlanes: 3,
+				Workers:       3,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 10,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        10,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: v1alpha1.ErrAutoscalerLeavesNoSnapshotSlot,
+		},
+		{
+			// One below the limit leaves exactly the reserved slot free → valid. Pins the
+			// boundary so the reserve can't silently grow or vanish.
+			name: "snapshot slot: Talos reachableTotal one below serverLimit is valid",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				Distribution:  v1alpha1.DistributionTalos,
+				ControlPlanes: 3,
+				Workers:       3,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 9,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        10,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
+			// The reserve must not fire when the autoscaler is off: no autoscaler secret
+			// means no snapshot build, so there is no temporary server to make room for.
+			name: "snapshot slot: Talos at serverLimit with autoscaler disabled is valid",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				Distribution:  v1alpha1.DistributionTalos,
+				ControlPlanes: 3,
+				Workers:       7,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: v1alpha1.NodeAutoscalerEnabledDisabled,
 					},
 				},
 			},

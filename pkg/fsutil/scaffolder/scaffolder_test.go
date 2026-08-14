@@ -1619,6 +1619,42 @@ func TestScaffoldTalos_SetsCorrectDistribution(t *testing.T) {
 	assert.Contains(t, string(ksailContent), "distribution: Talos")
 }
 
+func TestBuildTalosGeneratorConfigUsesPinnedVersionPatchShape(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		version        string
+		expectMultiDoc bool
+	}{
+		{name: "Talos 1.13 uses legacy patches", version: "v1.13.5"},
+		{
+			name:           "Talos 1.14 uses multi-document patches",
+			version:        "1.14.0-alpha.2",
+			expectMultiDoc: true,
+		},
+		{name: "unpinned Talos uses conservative legacy patches"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := createTalosCluster("talos-patch-shape-test")
+			cluster.Spec.Cluster.Talos.Version = testCase.version
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+			config := scaffolder.BuildTalosGeneratorConfigForTest(scaffolderInstance)
+
+			require.Equal(
+				t,
+				testCase.expectMultiDoc,
+				config.MultiDocumentKubernetesConfig,
+			)
+		})
+	}
+}
+
 func TestScaffoldVCluster_CreatesConfigFile(t *testing.T) {
 	t.Parallel()
 

@@ -2,9 +2,12 @@ package clusterapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -65,6 +68,43 @@ func (s *Service) SetDockerStatusForTest(
 	s.discoverer.DockerStatus = probe
 }
 
+// SetLoadClusterSpecForTest overrides the ownership-state read that clearedFailedEKSCreate performs
+// with the lock released. A test substitutes a loader that mutates the service's job table, which
+// lands the mutation precisely inside the unlocked window and makes the race deterministic — no
+// goroutines, no sleeps, no flakiness.
+func (s *Service) SetLoadClusterSpecForTest(
+	load func(clusterName string) (*v1alpha1.ClusterSpec, error),
+) {
+	s.loadClusterSpec = load
+}
+
+// ReplaceJobWithFailedStopForTest swaps the tracked job for one that began as a stop and ended in
+// Failed, mirroring what a start/stop registration does. It is the state a failed-create clearing
+// path must refuse: the remote cluster may well still be running.
+func (s *Service) ReplaceJobWithFailedStopForTest(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jobs[name] = &job{
+		distribution: v1alpha1.DistributionEKS,
+		provider:     v1alpha1.ProviderAWS,
+		phase:        v1alpha1.ClusterPhaseFailed,
+		origin:       v1alpha1.ClusterPhaseStopped,
+		startedAt:    time.Now(),
+	}
+}
+
+// JobPresentForTest reports whether a job is still tracked for the cluster, so a test can assert the
+// refusal preserved the row rather than clearing it.
+func (s *Service) JobPresentForTest(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, found := s.jobs[name]
+
+	return found
+}
+
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can
 // substitute fake provisioners without touching the real Docker-backed factory. Discovery is
 // restricted to the Docker provider so tests stay hermetic — they never reach out to cloud
@@ -76,8 +116,73 @@ func NewTestService(factory FactoryFunc) *Service {
 	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
 	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
 	service.kubeconfigPath = func() string { return "" }
+	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
+	// about the guard itself override it with SetEKSOwnershipGuardForTest.
+	service.captureEKSIdentity = func(context.Context, string, *eksCreateIdentity) error { return nil }
+	service.resolveEKSGuard = func(
+		context.Context,
+		string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error) {
+		return credentials.AWSResolution{}, func(context.Context) error { return nil }, nil
+	}
 
 	return service
+}
+
+// SetEKSOwnershipCaptureForTest overrides the create-time identity capture, so a test can drive a
+// failing capture without AWS.
+// The pinned create identity is deliberately not exposed here: it is an internal type, and the
+// tests that assert it reaches the capture live in the internal test package.
+func (s *Service) SetEKSOwnershipCaptureForTest(
+	capture func(ctx context.Context, name string) error,
+) {
+	s.captureEKSIdentity = func(ctx context.Context, name string, _ *eksCreateIdentity) error {
+		return capture(ctx, name)
+	}
+}
+
+// SetEKSOwnershipCaptureRecorderForTest overrides the create-time identity capture and reports the
+// identity the create pinned for it: whether one was supplied at all, the AWS variable-name options
+// it carries, and the region its snapshot resolved to.
+//
+// The pinned identity is an internal type, so it is reported as plain values rather than exposed. A
+// test asserting on these is asserting the property that matters — that the capture records under
+// the credentials the create actually ran with, not an independently resolved set.
+func (s *Service) SetEKSOwnershipCaptureRecorderForTest(
+	record func(name string, pinned bool, awsOptions v1alpha1.OptionsAWS, selectionRegion string),
+) {
+	s.captureEKSIdentity = func(
+		_ context.Context,
+		name string,
+		identity *eksCreateIdentity,
+	) error {
+		if identity == nil {
+			record(name, false, v1alpha1.OptionsAWS{}, "")
+
+			return nil
+		}
+
+		record(name, true, identity.awsOptions, identity.selection.Region)
+
+		return nil
+	}
+}
+
+// SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a
+// test can drive the deadline path without waiting the production budget.
+func (s *Service) SetEKSOwnershipTimeoutForTest(d time.Duration) {
+	s.eksOwnershipTimeout = d
+}
+
+// SetEKSOwnershipGuardForTest overrides the AWS-touching half of the EKS mutation guard, so a test
+// can drive a refusing or accepting immutable-identity check without AWS credentials.
+func (s *Service) SetEKSOwnershipGuardForTest(
+	guard func(
+		ctx context.Context,
+		name string,
+	) (credentials.AWSResolution, eksidentity.Verifier, error),
+) {
+	s.resolveEKSGuard = guard
 }
 
 // ExportEKSConfigForCreate exposes eksDistributionConfig for testing the generated eks.yaml. It
@@ -89,4 +194,21 @@ func ExportEKSConfigForCreate(name string) (string, string, error) {
 	}
 
 	return config.EKS.ConfigPath, config.EKS.Region, nil
+}
+
+// ReplaceJobWithAnotherFailedEKSCreateForTest swaps the tracked job for a DIFFERENT job that is also
+// a failed EKS create. Every field the failed-create predicate tests is identical, so only comparing
+// the entry's identity can tell the two apart — which is what stops a delete clearing (and hiding)
+// the failure of a create it never approved.
+func (s *Service) ReplaceJobWithAnotherFailedEKSCreateForTest(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jobs[name] = &job{
+		distribution: v1alpha1.DistributionEKS,
+		provider:     v1alpha1.ProviderAWS,
+		phase:        v1alpha1.ClusterPhaseFailed,
+		origin:       v1alpha1.ClusterPhaseProvisioning,
+		startedAt:    time.Now(),
+	}
 }

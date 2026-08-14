@@ -43,21 +43,21 @@ type Input struct {
 	// the bootstrap SSH dial can pin the host key instead of trusting first use.
 	// Optional; nil lets the node generate its own host keys at first boot.
 	HostKeys *cloudinitbootstrap.HostKeys
-	// ServerInitFiles are extra files delivered only to the cluster-initialising
-	// control plane — e.g. the pre-seeded cluster CA ([ClusterCA]) the two-phase
-	// multi-node flow fixes the cluster identity with. Optional.
+	// ServerInitFiles is retained for source compatibility with earlier v7
+	// releases. A non-empty value is rejected so private cluster PKI can never be
+	// delivered through provider user-data or silently ignored.
+	//
+	// Deprecated: kubeadm mints the initial control plane's PKI on the node.
 	ServerInitFiles []cloudinitbootstrap.File
 	// ServerInitPrelude are commands run on the cluster-initialising control
-	// plane before its install commands — e.g. pinning the cluster's stable join
-	// name locally so a ClusterConfiguration.controlPlaneEndpoint carrying that
-	// name resolves before `kubeadm init` writes it into the node's kubeconfigs.
-	// Optional; ignored on joining nodes.
+	// plane before its install commands. Optional; ignored on joining nodes.
 	ServerInitPrelude []string
-	// ServerJoinFiles are extra files delivered only to the additional
-	// control-plane joiners (RoleServer) — the pre-seeded shared PKI kubeadm's
-	// manual certificate distribution requires on every control plane before
-	// `kubeadm join --control-plane`. Optional; never delivered to agents, which
-	// must not carry private cluster-identity material.
+	// ServerJoinFiles is retained for source compatibility with earlier v7
+	// releases. A non-empty value is rejected so private cluster PKI can never be
+	// delivered through provider user-data or silently ignored.
+	//
+	// Deprecated: additional kubeadm control planes are refused until their
+	// private PKI can be transferred outside provider user-data.
 	ServerJoinFiles []cloudinitbootstrap.File
 	// JoinPrelude are commands run on every joining node before its install
 	// commands — e.g. pinning the stable join name to the init control plane's
@@ -102,6 +102,14 @@ type NodeUserData struct {
 // a missing Kubernetes version, a malformed sandbox image) is reported instead. The
 // containerd config is identical for every node, so it is rendered once and shared.
 func BuildNodeUserData(input Input) ([]NodeUserData, error) {
+	if len(input.ServerInitFiles) > 0 {
+		return nil, fmt.Errorf("%w: ServerInitFiles", ErrDeprecatedPKIFiles)
+	}
+
+	if len(input.ServerJoinFiles) > 0 {
+		return nil, fmt.Errorf("%w: ServerJoinFiles", ErrDeprecatedPKIFiles)
+	}
+
 	nodes, err := kubeadmbootstrap.Plan(input.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("plan kubeadm nodes: %w", err)
@@ -168,24 +176,16 @@ func buildNodeCloudInit(
 	files := append(toCloudInitFiles(install.Files), containerdFile)
 	commands := install.Commands
 
-	// The per-role extras: the init control plane receives the pre-seeded cluster
-	// identity files (and any init prelude, e.g. the local join-name pin its
-	// controlPlaneEndpoint needs); an additional control-plane joiner additionally
-	// receives the shared PKI (kubeadm's manual certificate distribution); every
-	// joining node runs the join prelude (e.g. the /etc/hosts pin of the stable
-	// join name) before its install commands reach `kubeadm join`.
+	// The per-role extras are command-only: the init control plane can receive an
+	// init prelude, and every joining node runs the join prelude (e.g. the
+	// /etc/hosts pin of the stable join name) before its install commands reach
+	// `kubeadm join`. Cluster PKI is never supplied through provider user-data.
 	switch node.Config.Role {
 	case kubeadmbootstrap.RoleServerInit:
-		files = append(files, input.ServerInitFiles...)
 		if len(input.ServerInitPrelude) > 0 {
 			commands = append(slices.Clone(input.ServerInitPrelude), commands...)
 		}
-	case kubeadmbootstrap.RoleServer:
-		files = append(files, input.ServerJoinFiles...)
-		if len(input.JoinPrelude) > 0 {
-			commands = append(slices.Clone(input.JoinPrelude), commands...)
-		}
-	case kubeadmbootstrap.RoleAgent:
+	case kubeadmbootstrap.RoleServer, kubeadmbootstrap.RoleAgent:
 		if len(input.JoinPrelude) > 0 {
 			commands = append(slices.Clone(input.JoinPrelude), commands...)
 		}

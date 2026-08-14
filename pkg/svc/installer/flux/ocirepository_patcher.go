@@ -107,12 +107,21 @@ func buildVerifyPatch(cfg v1alpha1.FluxVerifySpec) map[string]any {
 	return verify
 }
 
+// verifyMatches reports whether a live spec.verify block already equals the
+// desired one. It is the single definition of "verify is in place": the patcher
+// uses it to skip a needless update, and VerifyDrifted uses it to decide whether
+// cluster update must re-assert the block. Keeping one comparison means the
+// drift check can never disagree with what the patch would actually do.
+func verifyMatches(current map[string]any, desired map[string]any) bool {
+	return reflect.DeepEqual(current, desired)
+}
+
 // applyVerify sets spec.verify on the OCIRepository object to the desired block.
 // It reports done=true when the field already matches, so re-bootstrapping an
 // already-verified OCIRepository performs no needless update.
 func applyVerify(obj map[string]any, desired map[string]any) (bool, error) {
 	current, found, err := unstructured.NestedMap(obj, "spec", "verify")
-	if err == nil && found && reflect.DeepEqual(current, desired) {
+	if err == nil && found && verifyMatches(current, desired) {
 		return true, nil
 	}
 

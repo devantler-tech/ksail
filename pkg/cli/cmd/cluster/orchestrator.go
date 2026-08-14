@@ -176,7 +176,7 @@ func (o *updateOrchestrator) reconcileClusterVersions(
 		return false, fmt.Errorf("failed to get current versions: %w", err)
 	}
 
-	resolver := versionresolver.NewOCIResolver()
+	resolver := versionresolver.NewPromotionAwareResolver(versionresolver.NewOCIResolver())
 
 	// Distribution version first (the runtime must support the target K8s version).
 	recreated, err := o.reconcileDistributionVersion(upgrader, resolver, currentVersions)
@@ -689,6 +689,18 @@ func createAndVerifyProvisioner(
 		}
 	}
 
+	// EKS contexts are identity- and region-qualified. When the config leaves the
+	// context implicit, bind the exact context written by eksctl before building
+	// Helm or Kubernetes clients; an empty Helm context would otherwise use the
+	// kubeconfig's unrelated ambient current-context.
+	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) == "" {
+		err = resolveEKSPostCreateContext(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve exact EKS kubeconfig context: %w", err)
+		}
+	}
+
 	// Build a ComponentDetector scoped to the running cluster.
 	// Now that kubeconfig is ensured, the detector can connect.
 	componentDetector := buildComponentDetector(cmd, ctx)
@@ -846,18 +858,32 @@ func resolveKubeContext(ctx *localregistry.Context) string {
 	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
 	// context must resolve to the same value the guard validated, otherwise it
 	// would pass the guard yet break the REST clients the probes build.
-	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) != "" {
+		return kubeContextFor(ctx.ClusterCfg, "")
+	}
+
+	return kubeContextFor(ctx.ClusterCfg, resolveClusterNameFromContext(ctx))
+}
+
+// kubeContextFor resolves the kubeconfig context for a cluster from its pinned
+// spec.cluster.connection.context, falling back to the distribution's derived
+// context name for clusterName. Callers that hold a resolved cluster name but
+// not the full localregistry.Context use this directly, so a cluster read and
+// the write that follows it always target the same context — writing to the
+// ambient current-context instead would land the change on another cluster.
+func kubeContextFor(clusterCfg *v1alpha1.Cluster, clusterName string) string {
+	k8sContext := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 	if k8sContext == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+		k8sContext = clusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
 	}
 
 	return k8sContext
 }
 
 // computeUpdateDiff retrieves current config and computes the full diff.
-// Returns an error if current config could not be retrieved; the caller should
-// surface the error rather than silently recreating the cluster.
+// Returns an error if current config or the provisioner diff could not be
+// retrieved; the caller should surface the error rather than silently
+// recreating the cluster or reporting no changes.
 func (o *updateOrchestrator) computeUpdateDiff(
 	updater clusterprovisioner.Updater,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
@@ -866,6 +892,16 @@ func (o *updateOrchestrator) computeUpdateDiff(
 		return nil, nil, fmt.Errorf(
 			"could not retrieve current cluster configuration: %w", err,
 		)
+	}
+
+	err = overlayOwnedEKSControllerCleanupBaseline(
+		currentSpec,
+		&o.ctx.ClusterCfg.Spec.Cluster,
+		o.clusterName,
+		o.eksRegion(),
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	diffEngine := specdiff.NewEngine(
@@ -881,9 +917,11 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	provisionerDiff, diffErr := updater.DiffConfig(
 		o.cmd.Context(), o.clusterName, currentSpec, &o.ctx.ClusterCfg.Spec.Cluster,
 	)
-	if diffErr == nil {
-		specdiff.MergeProvisionerDiff(diff, provisionerDiff)
+	if diffErr != nil {
+		return nil, nil, fmt.Errorf("could not compute provisioner configuration diff: %w", diffErr)
 	}
+
+	specdiff.MergeProvisionerDiff(diff, provisionerDiff)
 
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(o.cmd, o.ctx, diffEngine, diff)
@@ -891,7 +929,58 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(o.cmd, o.ctx, diffEngine, diff)
 
+	// Check for registry credential drift (a rotated token behind an unchanged spec)
+	checkRegistryCredentialDrift(o.cmd, o.ctx, diffEngine, diff)
+
+	// Check for artifact-verification drift (configured spec.workload.flux.verify
+	// that never reached the live OCIRepository)
+	checkFluxVerifyDrift(o.cmd, o.ctx, diffEngine, diff)
+
+	promoteUnsupportedInPlaceChanges(updater, diff)
+
 	return currentSpec, diff, nil
+}
+
+func promoteUnsupportedInPlaceChanges(
+	updater clusterprovisioner.Updater,
+	diff *clusterupdate.UpdateResult,
+) {
+	fieldSupport, declaresSupport := updater.(clusterprovisioner.InPlaceFieldSupport)
+	if !declaresSupport || diff == nil {
+		return
+	}
+
+	supported := make([]clusterupdate.Change, 0, len(diff.InPlaceChanges))
+	for _, change := range diff.InPlaceChanges {
+		if isComponentReconcileChange(change) ||
+			fieldSupport.SupportsInPlaceField(change.Field) {
+			supported = append(supported, change)
+
+			continue
+		}
+
+		change.Category = clusterupdate.ChangeCategoryRecreateRequired
+		change.Reason = "the selected provisioner cannot apply this field in-place"
+		diff.RecreateRequired = append(diff.RecreateRequired, change)
+	}
+
+	diff.InPlaceChanges = supported
+}
+
+func isComponentReconcileChange(change clusterupdate.Change) bool {
+	if change.Field == "cluster.cni" {
+		// Distinct CNI choices use distinct Helm releases, and the component
+		// reconciler cannot yet remove the old release safely. Recreate until a
+		// transition can prove both installation and cleanup.
+		return false
+	}
+
+	if change.Field == "cluster.metricsServer" &&
+		v1alpha1.MetricsServer(change.NewValue) == v1alpha1.MetricsServerDisabled {
+		return false
+	}
+
+	return isComponentReconcileField(change.Field)
 }
 
 // computeSpecOnlyDiff computes a spec-level diff using default values as
@@ -933,6 +1022,12 @@ func computeSpecOnlyDiff(
 
 	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
 	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
+
+	// Check for artifact-verification drift (configured spec.workload.flux.verify that never
+	// reached the live OCIRepository). This path backs `ksail cluster diff` and every
+	// provisioner without an Updater, so omitting it made a preview disagree with the apply
+	// it previews, and left verification drift undetectable on those provisioners entirely.
+	checkFluxVerifyDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
 }
@@ -1050,7 +1145,7 @@ func checkWorkloadTagDrift(
 
 	var currentTag string
 
-	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
+	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
 		currentTag, err = fluxinstaller.GetCurrentSyncRef(
 			cmd.Context(), kubeconfigPath, kubeContext,
@@ -1059,6 +1154,8 @@ func checkWorkloadTagDrift(
 		currentTag, err = getCurrentArgoCDTargetRevision(
 			cmd.Context(), kubeconfigPath, kubeContext,
 		)
+	case v1alpha1.GitOpsEngineNone:
+		return
 	default:
 		return
 	}
@@ -1129,6 +1226,102 @@ func checkFluxDistributionVersionDrift(
 	)
 }
 
+// checkRegistryCredentialDrift compares the credential held in the
+// KSail-managed registry Secret against the credential the resolved
+// configuration would write, and appends an in-place change when they differ.
+//
+// This is the only signal a credential-only rotation produces: registry
+// passwords are redacted from the structural diff, so rotating the environment
+// variable behind an otherwise identical configuration yields no field change
+// and the cluster keeps authenticating with the revoked value (issue #6107).
+// Flux only — the Secret is Flux's root pull Secret. Errors during cluster
+// queries are logged as warnings and skipped; they should not block the rest of
+// the update.
+func checkRegistryCredentialDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	if ctx.ClusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// No external registry, or no credentials configured — nothing to refresh.
+	if !fluxinstaller.HasExternalRegistryCredentials(ctx.ClusterCfg) {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for registry credential drift detection: %v", err)
+
+		return
+	}
+
+	drifted, err := fluxinstaller.RegistryCredentialDrifted(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot compare registry credentials for drift detection: %v", err)
+
+		return
+	}
+
+	diffEngine.CheckRegistryCredential(drifted, diff)
+}
+
+// checkFluxVerifyDrift compares the live flux-system OCIRepository's spec.verify
+// against the block spec.workload.flux.verify configures, and appends an
+// in-place change when the cluster is missing it.
+//
+// This is the only signal a verify-only change produces: the structural diff
+// compares cluster specs, so configuring verification registers once and never
+// again, while the block reaches the cluster only via SetupInstance — which
+// cluster update calls solely from handlers that some *other* field's change
+// triggers. Enabling verification on a live cluster therefore deployed green and
+// left the root source unverified (platform#2922). Flux only. Errors during
+// cluster queries are logged as warnings and skipped — they should not block the
+// rest of the update.
+func checkFluxVerifyDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// Not configured — nothing to assert, and no cluster query worth spending.
+	if !ctx.ClusterCfg.Spec.Workload.Flux.Verify.Enabled() {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for Flux verify drift detection: %v", err)
+
+		return
+	}
+
+	drifted, err := fluxinstaller.VerifyDrifted(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot compare Flux artifact verification for drift detection: %v", err)
+
+		return
+	}
+
+	diffEngine.CheckFluxVerify(drifted, gitOpsEngine, diff)
+}
+
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current
 // targetRevision. Returns empty string if the Application does not exist.
 func getCurrentArgoCDTargetRevision(
@@ -1165,6 +1358,11 @@ func (o *updateOrchestrator) applyOrReportChanges(
 	}
 
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
+		err := o.repairEKSComponentState()
+		if err != nil {
+			return err
+		}
+
 		reportNoApplicableChanges(o.cmd, diff)
 
 		return nil
@@ -1177,12 +1375,43 @@ func (o *updateOrchestrator) applyOrReportChanges(
 		return nil
 	}
 
-	reconciler := newComponentReconciler(o.cmd, o.ctx.ClusterCfg, o.clusterName)
+	reconciler := newComponentReconciler(
+		o.cmd, o.ctx.ClusterCfg, o.clusterName, o.eksRegion(),
+	)
 
 	return applyInPlaceChanges(
 		o.cmd, updater, reconciler, o.clusterName,
 		currentSpec, o.ctx, diff, outputTimer, o.forceDrain, allowRolling,
 	)
+}
+
+func (o *updateOrchestrator) eksRegion() string {
+	if o.ctx.EKSConfig == nil {
+		return ""
+	}
+
+	return o.ctx.EKSConfig.Region
+}
+
+// repairEKSComponentState restores verified controller ownership when an
+// earlier state write failed after Helm had already converged. Non-EKS updates
+// have no component state to repair.
+func (o *updateOrchestrator) repairEKSComponentState() error {
+	if o.ctx == nil || o.ctx.ClusterCfg == nil ||
+		o.ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return nil
+	}
+
+	err := persistCreatedEKSComponentState(
+		o.cmd.Context(),
+		o.ctx,
+		o.clusterName,
+	)
+	if err != nil {
+		return fmt.Errorf("repair EKS component state after no-change update: %w", err)
+	}
+
+	return nil
 }
 
 // handleRecreateRequired warns about recreate-required changes and proceeds
@@ -1227,6 +1456,14 @@ func applyInPlaceChanges(
 	forceDrain bool,
 	allowRolling bool,
 ) error {
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before update apply: %w", err)
+	}
+
 	updateOpts := clusterupdate.UpdateOptions{
 		DryRun:               false,
 		RollingReboot:        true,
@@ -1248,6 +1485,14 @@ func applyInPlaceChanges(
 		return fmt.Errorf("failed to apply updates: %w", err)
 	}
 
+	err = lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before component reconciliation: %w", err)
+	}
+
 	// Apply component-level changes (CNI, CSI, cert-manager, etc.)
 	componentErr := reconciler.reconcileComponents(cmd.Context(), diff, result)
 
@@ -1261,38 +1506,60 @@ func applyInPlaceChanges(
 
 	reportFailedChanges(cmd, result)
 
-	return finalizeInPlaceApply(cmd, ctx, clusterName, result, componentErr)
+	return finalizeInPlaceApply(cmd, ctx, reconciler, clusterName, result, componentErr)
 }
 
 // finalizeInPlaceApply reports the apply outcome: a non-empty FailedChanges set
 // means the apply was partial or fully failed, so it returns a non-nil error so
-// cobra exits non-zero (issue #4935) and skips the state save (a partial apply no
-// longer matches the desired spec). Otherwise it persists the updated spec as the
-// next update baseline.
+// cobra exits non-zero (issue #4935) and skips the desired ClusterSpec save. An
+// EKS controller mutation that already succeeded still persists its narrower
+// ownership state. Otherwise it persists the updated spec as the next baseline.
 func finalizeInPlaceApply(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
+	reconciler *componentReconciler,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 	componentErr error,
 ) error {
+	var (
+		componentStateErr       error
+		componentStatePersisted bool
+	)
+
+	// Component reconciliation can continue after an unrelated failure. Persist
+	// a controller mutation that already succeeded before reporting the partial
+	// apply, otherwise a later disable loses the only safe ownership evidence.
+	if reconciler.hasEKSLoadBalancerOwnershipUpdate() {
+		componentStateErr = persistReconciledEKSComponentState(ctx, clusterName, reconciler)
+		componentStatePersisted = componentStateErr == nil
+	}
+
 	// A non-empty FailedChanges set means the apply was partial or fully failed.
 	// Provisioner-level failures (e.g. a rejected Talos config) are recorded in
 	// result.FailedChanges with a nil Update error, and reconcileComponents
 	// appends component-level failures there too. Return a non-nil error so cobra
 	// exits non-zero — otherwise automation gating on the exit code treats a
-	// failed update as success (issue #4935). Skip the state save: a partial apply
-	// no longer matches the desired spec, so it must not become the saved baseline.
+	// failed update as success (issue #4935). Skip the desired ClusterSpec save: a
+	// partial apply no longer matches the desired spec, so it must not become the
+	// saved baseline.
 	if result.HasFailedChanges() {
-		if componentErr != nil {
-			return fmt.Errorf("%w: %w", errUpdateChangesFailed, componentErr)
-		}
+		return errors.Join(errUpdateChangesFailed, componentErr, componentStateErr)
+	}
 
-		return errUpdateChangesFailed
+	if componentStateErr != nil {
+		return componentStateErr
 	}
 
 	// Persist the updated ClusterSpec for future update baselines now that every
 	// change applied successfully.
+	if !componentStatePersisted {
+		err := persistReconciledEKSComponentState(ctx, clusterName, reconciler)
+		if err != nil {
+			return err
+		}
+	}
+
 	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
 	if saveErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
@@ -1309,6 +1576,14 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return nil
 	}
 
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		o.cmd.Context(),
+		o.ctx.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership before cluster recreation: %w", err)
+	}
+
 	// Create provisioner for delete
 	factory := newProvisionerFactory(o.ctx)
 
@@ -1317,16 +1592,7 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// Disconnect registries from Docker network before deletion.
-	// Required for distributions like VCluster and Talos because their provisioners
-	// destroy the Docker network during deletion, which fails if containers are
-	// still connected. Registries are reused on recreate, so only disconnect is needed.
-	if o.ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-		disconnectRegistriesBeforeDelete(o.cmd, &clusterdetector.Info{
-			Distribution: o.ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ClusterName:  o.clusterName,
-		})
-	}
+	o.disconnectRegistriesBeforeRecreate()
 
 	// Execute delete
 	notify.WriteMessage(notify.Message{
@@ -1340,6 +1606,11 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("failed to delete existing cluster: %w", err)
 	}
 
+	err = clearDeletedEKSState(o.ctx, o.clusterName)
+	if err != nil {
+		return err
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cluster deleted",
@@ -1347,6 +1618,68 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		Writer:  o.cmd.OutOrStdout(),
 	})
 
-	// Execute create using shared workflow
-	return runClusterCreationWorkflow(o.cmd, o.cfgManager, o.ctx, o.deps)
+	// Execute create using shared workflow.
+	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(
+		o.cmd,
+		o.cfgManager,
+		o.ctx,
+		o.deps,
+	)
+
+	return finishRecreateFlow(
+		o.cmd.Context(),
+		o.ctx,
+		o.clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
+}
+
+// disconnectRegistriesBeforeRecreate releases Docker network attachments that
+// would otherwise prevent the provisioner from deleting the network. The
+// registries remain available for reuse by the create half of the workflow.
+func (o *updateOrchestrator) disconnectRegistriesBeforeRecreate() {
+	if o.ctx.ClusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderDocker {
+		return
+	}
+
+	clusterInfo := &clusterdetector.Info{
+		Distribution: o.ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ClusterName:  o.clusterName,
+	}
+	// Discover first: the disconnect is scoped to THIS cluster's registries, because a
+	// network name does not identify a single cluster (see DisconnectRegistriesByInfo).
+	disconnectRegistriesBeforeDelete(
+		o.cmd,
+		clusterInfo,
+		discoverRegistriesBeforeDelete(o.cmd, clusterInfo),
+	)
+}
+
+// finishRecreateFlow keeps successful recreation finalization separate from the
+// destructive delete/create orchestration so its required state is testable.
+func finishRecreateFlow(
+	goCtx context.Context,
+	ctx *localregistry.Context,
+	clusterName string,
+	creationErr error,
+	controllerReconciliationStarted bool,
+) error {
+	err := persistCreatedEKSComponentStateAfterWorkflow(
+		goCtx,
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if err != nil {
+		return fmt.Errorf("persist recreated cluster state: %w", err)
+	}
+
+	return nil
 }
