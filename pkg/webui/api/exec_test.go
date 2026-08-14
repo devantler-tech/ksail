@@ -154,6 +154,66 @@ func TestExecAllowsLocalhostOrigin(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 }
 
+// TestExecAllowsDesktopWailsOrigin pins the desktop shell's path: the SPA is served from the fixed
+// wails://wails origin through the Wails AssetServer (see desktop/main.go), with no TCP listener at
+// all, so that one origin upgrades even though it is not loopback.
+func TestExecAllowsDesktopWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "wails://wails")
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.NoError(t, err)
+
+	if response != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
+
+	defer func() { _ = conn.Close() }()
+}
+
+// TestExecRejectsForeignWailsAuthority pins that the desktop carve-out is the single wails://wails
+// origin and not the scheme. Trusting the scheme alone would admit any authority under it, and on this
+// path that check is the only thing between the caller and a shell in the cluster. A browser-sent
+// Origin carries scheme and authority and nothing else, so a port, user info, path, query or fragment
+// marks a crafted header rather than a real one.
+func TestExecRejectsForeignWailsAuthority(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"wails://attacker",
+		"wails://wails:8080",
+		"wails://user@wails",
+		"wails://wails/path",
+		"wails://wails?x=1",
+		"wails://wails#frag",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+			defer server.Close()
+
+			url := execWebSocketURL(server.URL)
+			header := http.Header{}
+			header.Set("Origin", origin)
+
+			_, response, err := websocket.DefaultDialer.Dial(url, header)
+			require.Error(t, err)
+			require.NotNil(t, response)
+
+			defer func() { _ = response.Body.Close() }()
+
+			assert.Equal(t, http.StatusForbidden, response.StatusCode)
+		})
+	}
+}
+
 func TestExecBlockedWhenReadOnly(t *testing.T) {
 	t.Parallel()
 
