@@ -88,7 +88,7 @@ type ciWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
+func TestGoValidationRunsOnGoCodeAndAllowlistChanges(t *testing.T) {
 	t.Parallel()
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
@@ -96,7 +96,11 @@ func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
 	require.True(t, found, "changes job is missing")
 	filterStep := findHarnessStep(t, changesJob.Steps, "🔍 Filter paths")
 	filters := stringValue(filterStep.With["filters"])
-	assert.Contains(t, filters, "govuln-allowlist:\n  - '.govulncheck-allow.txt'")
+	assert.Contains(
+		t,
+		filters,
+		"code:\n  - '**/*.go'\n  - 'go.mod'\n  - 'go.sum'\n  - '.govulncheck-allow.txt'",
+	)
 
 	validateJob, found := workflow.Jobs["ci-go"]
 	require.True(t, found, "ci-go job is missing")
@@ -107,7 +111,7 @@ func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
 		validateJob.If,
 		"github.event.pull_request.head.repo.full_name == github.repository",
 	)
-	assert.Contains(t, validateJob.If, "needs.changes.outputs.govuln-allowlist == 'true'")
+	assert.Contains(t, validateJob.If, "needs.changes.outputs.code == 'true'")
 	assert.Contains(t, validateJob.Uses, "validate-go-project.yaml")
 }
 
