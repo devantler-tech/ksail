@@ -10,7 +10,10 @@ package credentials
 
 import (
 	"os"
+	"runtime"
+	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
@@ -126,9 +129,42 @@ type Resolver interface {
 	EnvVar(key Key) string
 }
 
-// EnvResolver resolves purely from the process environment using the default variable names. It is
-// the zero-config resolver used when no secure store / Settings overrides are configured.
+// EnvResolver resolves purely from the process environment using canonical
+// variable names. Its zero value remains the default resolver.
 type EnvResolver struct{}
+
+// AWSOptionsResolver resolves from immutable per-cluster AWS variable-name
+// overrides without mutating the process environment.
+type AWSOptionsResolver struct {
+	envVars map[Key]string
+}
+
+// NewAWSOptionsResolver returns an environment-only resolver honoring the
+// variable names configured on one AWS provider spec. Empty names retain their
+// canonical defaults. The resolver owns its map and is safe for concurrent use.
+func NewAWSOptionsResolver(options v1alpha1.OptionsAWS) AWSOptionsResolver {
+	return AWSOptionsResolver{envVars: map[Key]string{
+		AWSRegion:          options.RegionEnvVar,
+		AWSProfile:         options.ProfileEnvVar,
+		AWSAccessKeyID:     options.AccessKeyIDEnvVar,
+		AWSSecretAccessKey: options.SecretAccessKeyEnvVar,
+		AWSSessionToken:    options.SessionTokenEnvVar,
+	}}
+}
+
+// AWSOptionsWithDefaults returns a complete set of AWS environment-variable names without
+// resolving or persisting any credential values.
+func AWSOptionsWithDefaults(options v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
+	resolver := NewAWSOptionsResolver(options)
+
+	return v1alpha1.OptionsAWS{
+		ProfileEnvVar:         resolver.EnvVar(AWSProfile),
+		RegionEnvVar:          resolver.EnvVar(AWSRegion),
+		AccessKeyIDEnvVar:     resolver.EnvVar(AWSAccessKeyID),
+		SecretAccessKeyEnvVar: resolver.EnvVar(AWSSecretAccessKey),
+		SessionTokenEnvVar:    resolver.EnvVar(AWSSessionToken),
+	}
+}
 
 // EnvVar returns the default environment-variable name for key.
 func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
@@ -136,6 +172,435 @@ func (EnvResolver) EnvVar(key Key) string { return DefaultEnvVar(key) }
 // Value returns the process-environment value for key's default variable, or "".
 func (EnvResolver) Value(key Key) string {
 	return resolveEnvValue(key, DefaultEnvVar(key))
+}
+
+// EnvVar returns the configured environment-variable name for key, falling
+// back to its canonical default.
+func (r AWSOptionsResolver) EnvVar(key Key) string {
+	if name := r.envVars[key]; name != "" {
+		return name
+	}
+
+	return DefaultEnvVar(key)
+}
+
+// Value returns the process-environment value for key's configured variable, or "".
+func (r AWSOptionsResolver) Value(key Key) string {
+	return resolveEnvValue(key, r.EnvVar(key))
+}
+
+// ExplicitResolver is the optional half of Resolver that separates a credential the operator set
+// deliberately — a secure-store entry — from one a resolver merely read out of the ambient process
+// environment. A Settings entry is not deliberate in this sense: it names the variable to read, but
+// the value still comes from the environment, so it ranks as ambient.
+//
+// Resolver alone cannot express that difference: Value returns a string either way. The distinction
+// only matters where something more authoritative than current configuration exists to compare
+// against, which today is an EKS ownership record. Implement it on any resolver that has both
+// halves; a resolver whose values are all deliberate may return Value, and one with no deliberate
+// half should not implement it at all.
+type ExplicitResolver interface {
+	// ExplicitValue returns the deliberately-configured value for key, or "" when the resolver holds
+	// none — including when it could still resolve one from the ambient environment.
+	ExplicitValue(key Key) string
+}
+
+// RecordedAWSResolver resolves a cluster's lifecycle credentials through the variable names its own
+// immutable ownership record captured, while still honoring a base resolver's resolved values.
+//
+// A recorded cluster is the one case where the variable names are not a matter of current
+// configuration: capture persisted the names the create actually resolved through, so a later Delete,
+// Start, or Stop must read the same aliases or it resolves a different identity — or none at all.
+// A base resolver alone cannot do that, because it reports names from current settings and knows
+// nothing about the record.
+//
+// Values rank deliberate operator intent first, the record second, and the ambient environment last
+// — see Value. A secure-store credential still resolves exactly as before, because it is a stored
+// value rather than a name to read; a base's environment fall-through does not, because that is the
+// ambient identity the record exists to pin — and that includes a value read under a Settings-
+// configured name, which selects the variable but not its contents. Names always come from the record,
+// because the frozen resolution carries them onward to scrub child process environments — reporting
+// a canonical name for a value read from an alias would leave the alias in place for the provisioner
+// to re-resolve.
+//
+// This narrows, and never widens, what a mutation may act on: where the base and the record resolve
+// credentials for different accounts, the ownership verifier still fails closed on the mismatch.
+// Ranking the record above the ambient environment turns one such case from a refused mutation into
+// a working one, and never the reverse. The resolver owns its map and is safe for concurrent use.
+type RecordedAWSResolver struct {
+	base     Resolver
+	recorded AWSOptionsResolver
+}
+
+// NewRecordedAWSResolver layers one ownership record's captured variable names over base. A nil base
+// resolves from the canonical process environment — which, carrying no deliberate operator intent,
+// now ranks behind the record rather than ahead of it.
+func NewRecordedAWSResolver(base Resolver, recorded v1alpha1.OptionsAWS) RecordedAWSResolver {
+	if base == nil {
+		base = EnvResolver{}
+	}
+
+	return RecordedAWSResolver{base: base, recorded: NewAWSOptionsResolver(recorded)}
+}
+
+// EnvVar returns the variable name the ownership record captured for key, or the base's name when
+// the record captured none.
+//
+// The captured name is checked directly rather than through recorded.EnvVar, which resolves an
+// absent mapping to the canonical default (see AWSOptionsResolver.EnvVar). Returning that default
+// would report a canonical name for a value the base resolved through its own alias, so the frozen
+// resolution would scrub the wrong variable and leave the alias in place.
+func (r RecordedAWSResolver) EnvVar(key Key) string {
+	if name := r.recorded.envVars[key]; name != "" {
+		return name
+	}
+
+	if r.base == nil {
+		return DefaultEnvVar(key)
+	}
+
+	return r.base.EnvVar(key)
+}
+
+// Value resolves key as deliberate operator intent first, the ownership record second, and the
+// ambient environment last.
+//
+// Only a base that declares ExplicitResolver can outrank the record, and only with a value it holds
+// deliberately (a secure-store credential). A base's ambient fall-through must not, because that is
+// precisely the identity the record exists to pin: resolving it would hand a mutation whatever
+// AWS_ACCESS_KEY_ID happens to be exported, under a cluster whose create ran through a different
+// alias entirely. A Settings entry is ambient by this test — it selects the variable to read, not
+// its contents.
+//
+// The record only outranks the base for a key it actually captured. Consulting it for an unrecorded
+// key would resolve AWSOptionsResolver.EnvVar's canonical default and hand back the plain ambient
+// value — an opinion the record does not hold — which would beat the base's own Settings-selected
+// alias. So the captured name gates the lookup, not the resolved value.
+//
+// A base that declares no explicit channel is treated as ambient in full. That is the fail-closed
+// direction: a resolver that forgets to distinguish its two halves loses to the record rather than
+// silently overriding it.
+func (r RecordedAWSResolver) Value(key Key) string {
+	if explicit, ok := r.base.(ExplicitResolver); ok {
+		if value := explicit.ExplicitValue(key); value != "" {
+			return value
+		}
+	}
+
+	if r.recorded.envVars[key] != "" {
+		if value := r.recorded.Value(key); value != "" {
+			return value
+		}
+	}
+
+	// Defensive: the constructor never leaves base nil, but the zero value can.
+	if r.base == nil {
+		return ""
+	}
+
+	return r.base.Value(key)
+}
+
+// AWSResolution is an immutable snapshot of an AWS credential selection. ResolveFrozenAWS upgrades
+// it to one concrete credential tuple for identity-sensitive operations. Source variable names are
+// retained privately so child process environments can remove both stale canonical values and
+// custom aliases.
+type AWSResolution struct {
+	Region          string
+	Profile         string
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+
+	sourceEnvVars          [4]string
+	sourceRegionEnvVar     string
+	hasCustomCredentialEnv bool
+	frozen                 bool
+	sdkConfig              *aws.Config
+}
+
+// ResolveAWS snapshots all AWS credential values and their configured source
+// names from resolver. A nil resolver uses the canonical process environment.
+func ResolveAWS(resolver Resolver) AWSResolution {
+	if resolver == nil {
+		resolver = EnvResolver{}
+	}
+
+	// Resolve every value before constructing the child environment. No parent
+	// environment mutation is needed, so concurrent invocations remain isolated.
+	resolution := AWSResolution{
+		Region:          resolver.Value(AWSRegion),
+		Profile:         resolver.Value(AWSProfile),
+		AccessKeyID:     resolver.Value(AWSAccessKeyID),
+		SecretAccessKey: resolver.Value(AWSSecretAccessKey),
+		SessionToken:    resolver.Value(AWSSessionToken),
+	}
+	resolution.sourceRegionEnvVar = resolver.EnvVar(AWSRegion)
+
+	credentialSources := [...]struct {
+		key           Key
+		canonicalName string
+	}{
+		{key: AWSProfile, canonicalName: defaultAWSProfileEnvVar},
+		{key: AWSAccessKeyID, canonicalName: defaultAWSAccessKeyIDEnvVar},
+		{key: AWSSecretAccessKey, canonicalName: defaultAWSSecretAccessEnvVar},
+		{key: AWSSessionToken, canonicalName: defaultAWSSessionTokenEnvVar},
+	}
+	for index, source := range credentialSources {
+		sourceName := resolver.EnvVar(source.key)
+		resolution.sourceEnvVars[index] = sourceName
+
+		if sourceName != "" && sourceName != source.canonicalName {
+			resolution.hasCustomCredentialEnv = true
+		}
+	}
+
+	return resolution
+}
+
+// HasCustomCredentialSources reports whether at least one credential is
+// configured to resolve from a non-canonical variable name. Callers use this
+// to fail closed instead of letting an SDK read stale canonical credentials
+// when every configured custom source is unset.
+func (r AWSResolution) HasCustomCredentialSources() bool {
+	return r.hasCustomCredentialEnv
+}
+
+// IsFrozen reports whether the selection was resolved to one concrete static credential tuple.
+func (r AWSResolution) IsFrozen() bool {
+	return r.frozen
+}
+
+// OptionsForAWSResolution maps a resolved AWS identity into a consumer's
+// option type. Custom source names add the consumer's fail-closed option so an
+// unset alias cannot silently fall back to an unrelated ambient identity.
+func OptionsForAWSResolution[T any](
+	resolution AWSResolution,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) T,
+	requireCredentialValues func() T,
+) []T {
+	option := withCredentialValues(
+		resolution.Profile,
+		resolution.AccessKeyID,
+		resolution.SecretAccessKey,
+		resolution.SessionToken,
+	)
+
+	return optionsWithCredentialRequirement(
+		option,
+		resolution.requiresCredentialValues(),
+		requireCredentialValues,
+	)
+}
+
+// OptionsForFrozenAWSConfig maps a frozen resolution's complete SDK configuration snapshot when
+// available, preserving resolved non-credential settings while pinning the concrete credentials.
+// Mutable/non-frozen resolutions retain the value-based compatibility path.
+func OptionsForFrozenAWSConfig[T any](
+	resolution AWSResolution,
+	withAWSConfig func(config aws.Config) T,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) T,
+	requireCredentialValues func() T,
+) []T {
+	if resolution.sdkConfig == nil {
+		return OptionsForAWSResolution(
+			resolution,
+			withCredentialValues,
+			requireCredentialValues,
+		)
+	}
+
+	option := withAWSConfig(cloneAWSConfig(*resolution.sdkConfig))
+
+	return optionsWithCredentialRequirement(
+		option,
+		resolution.requiresCredentialValues(),
+		requireCredentialValues,
+	)
+}
+
+// OptionsForAWSChildEnvironment maps an AWS resolution's isolated child
+// environment into a consumer's option type and adds its fail-closed option
+// when credential aliases are custom.
+func OptionsForAWSChildEnvironment[T any](
+	resolution AWSResolution,
+	parent []string,
+	withEnvironment func(environment []string) T,
+	requireCredentialValues func() T,
+) []T {
+	return optionsWithCredentialRequirement(
+		withEnvironment(resolution.ChildEnvironment(parent)),
+		resolution.requiresCredentialValues(),
+		requireCredentialValues,
+	)
+}
+
+// ResolveAWSClientOptions snapshots one AWS identity and builds the paired
+// option sets that isolate an environment-based client and pin an SDK-backed
+// client to that same identity. Both option sets inherit the same fail-closed
+// custom-source requirement, preventing call sites from wiring only half of
+// the credential boundary. The returned resolution can feed additional AWS
+// consumers without re-reading mutable process state.
+func ResolveAWSClientOptions[EnvironmentOption, CredentialOption any](
+	resolver Resolver,
+	parentEnvironment []string,
+	withEnvironment func(environment []string) EnvironmentOption,
+	requireEnvironmentCredentialValues func() EnvironmentOption,
+	withCredentialValues func(profile, accessKeyID, secretAccessKey, sessionToken string) CredentialOption,
+	requireCredentialValues func() CredentialOption,
+) (AWSResolution, []EnvironmentOption, []CredentialOption) {
+	resolution := ResolveAWS(resolver)
+
+	return resolution,
+		OptionsForAWSChildEnvironment(
+			resolution,
+			parentEnvironment,
+			withEnvironment,
+			requireEnvironmentCredentialValues,
+		),
+		OptionsForAWSResolution(
+			resolution,
+			withCredentialValues,
+			requireCredentialValues,
+		)
+}
+
+// optionsWithCredentialRequirement appends the fail-closed option only when custom credential sources require it.
+func optionsWithCredentialRequirement[T any](
+	option T,
+	required bool,
+	requireCredentialValues func() T,
+) []T {
+	options := []T{option}
+	if required {
+		options = append(options, requireCredentialValues())
+	}
+
+	return options
+}
+
+func cloneAWSConfig(config aws.Config) aws.Config {
+	config.ConfigSources = append(config.ConfigSources[:0:0], config.ConfigSources...)
+	config.APIOptions = append(config.APIOptions[:0:0], config.APIOptions...)
+
+	return config
+}
+
+// ChildEnvironment returns a copy of parent with AWS credential aliases and
+// stale canonical values removed, followed by the non-empty resolved values
+// under the canonical names eksctl understands. When a custom credential source
+// is configured, competing environment-based identity providers are also
+// removed so they cannot override the explicit selection. Unrelated entries
+// such as PATH, HOME, and AWS_CONFIG_FILE are preserved.
+func (r AWSResolution) ChildEnvironment(parent []string) []string {
+	caseInsensitiveNames := runtime.GOOS == "windows"
+	strippedNames := r.strippedEnvironmentNames(caseInsensitiveNames)
+	child := filterEnvironment(parent, strippedNames, caseInsensitiveNames)
+
+	for _, binding := range []struct {
+		name  string
+		value string
+	}{
+		{name: defaultAWSProfileEnvVar, value: r.Profile},
+		{name: defaultAWSAccessKeyIDEnvVar, value: r.AccessKeyID},
+		{name: defaultAWSSecretAccessEnvVar, value: r.SecretAccessKey},
+		{name: defaultAWSSessionTokenEnvVar, value: r.SessionToken},
+	} {
+		if binding.value != "" {
+			child = append(child, binding.name+"="+binding.value)
+		}
+	}
+
+	if r.frozen && r.Region != "" {
+		child = append(child, defaultAWSRegionEnvVar+"="+r.Region)
+	}
+
+	return child
+}
+
+func (r AWSResolution) requiresCredentialValues() bool {
+	return r.HasCustomCredentialSources() || r.IsFrozen()
+}
+
+// strippedEnvironmentNames returns normalized aliases and competing provider
+// names that must not reach the child process.
+func (r AWSResolution) strippedEnvironmentNames(caseInsensitive bool) map[string]struct{} {
+	strippedNames := make(map[string]struct{})
+	for _, name := range []string{
+		defaultAWSProfileEnvVar,
+		defaultAWSAccessKeyIDEnvVar,
+		defaultAWSSecretAccessEnvVar,
+		defaultAWSSessionTokenEnvVar,
+	} {
+		strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+	}
+
+	for _, name := range r.sourceEnvVars {
+		if name != "" {
+			strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+		}
+	}
+
+	if r.hasCustomCredentialEnv || r.frozen {
+		for _, name := range []string{
+			"AWS_DEFAULT_PROFILE",
+			"AWS_ACCESS_KEY",
+			"AWS_SECRET_KEY",
+			"AWS_WEB_IDENTITY_TOKEN_FILE",
+			"AWS_ROLE_ARN",
+			"AWS_ROLE_SESSION_NAME",
+			"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+			"AWS_CONTAINER_CREDENTIALS_FULL_URI",
+			"AWS_CONTAINER_AUTHORIZATION_TOKEN",
+			"AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+		} {
+			strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+		}
+	}
+
+	if r.frozen {
+		for _, name := range []string{
+			defaultAWSRegionEnvVar,
+			"AWS_DEFAULT_REGION",
+			r.sourceRegionEnvVar,
+		} {
+			if name != "" {
+				strippedNames[normalizeEnvironmentName(name, caseInsensitive)] = struct{}{}
+			}
+		}
+	}
+
+	return strippedNames
+}
+
+// filterEnvironment copies parent entries whose normalized names are not marked for removal.
+func filterEnvironment(
+	parent []string,
+	strippedNames map[string]struct{},
+	caseInsensitive bool,
+) []string {
+	child := make([]string, 0, len(parent))
+	for _, entry := range parent {
+		name, _, found := strings.Cut(entry, "=")
+		if found {
+			if _, stripped := strippedNames[normalizeEnvironmentName(name, caseInsensitive)]; stripped {
+				continue
+			}
+		}
+
+		child = append(child, entry)
+	}
+
+	return child
+}
+
+// normalizeEnvironmentName folds case only when the target platform treats environment names case-insensitively.
+func normalizeEnvironmentName(name string, caseInsensitive bool) string {
+	if caseInsensitive {
+		return strings.ToUpper(name)
+	}
+
+	return name
 }
 
 // resolveEnvValue reads key's value from the process environment under envVar, applying the Copilot
@@ -160,3 +625,6 @@ func resolveEnvValue(key Key, envVar string) string {
 
 // Ensure EnvResolver satisfies Resolver.
 var _ Resolver = EnvResolver{}
+
+// Ensure AWSOptionsResolver satisfies Resolver.
+var _ Resolver = AWSOptionsResolver{}

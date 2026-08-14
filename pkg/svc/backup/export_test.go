@@ -127,3 +127,8 @@ func ClassifyRestoreError(err error, stderr, policy string) error {
 func AllLinesContain(output, substr string) bool {
 	return allLinesContain(output, substr)
 }
+
+// ExtractTarEntries exposes extractTarEntries for testing.
+func ExtractTarEntries(tarReader *tar.Reader, destDir string) error {
+	return extractTarEntries(tarReader, destDir)
+}

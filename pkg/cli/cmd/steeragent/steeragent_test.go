@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"slices"
 	"sync"
 	"testing"
@@ -354,5 +355,95 @@ func TestNewSteerAgentCmd(t *testing.T) {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing --%s flag", name)
 		}
+	}
+}
+
+// TestStdioTransport_CloseInterruptsBlockedWrite pins the liveness-expiry
+// teardown contract (ksail#6040): when the watchdog closes the session, the
+// stdio transport's Close must interrupt a pump goroutine already blocked in
+// Write against a dead client — a no-op Close would park that writer forever
+// and leave the REDIRECT rule orphaned.
+func TestStdioTransport_CloseInterruptsBlockedWrite(t *testing.T) {
+	t.Parallel()
+
+	inRead, inWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = inWrite.Close() })
+
+	outRead, outWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = outRead.Close() })
+
+	transport := steeragent.NewStdioTransportForTest(inRead, outWrite)
+
+	writeErr := make(chan error, 1)
+
+	go func() {
+		// Nobody drains outRead, so the pipe buffer fills and Write blocks —
+		// the backpressured-pump scenario the watchdog must be able to end.
+		payload := make([]byte, 64*1024)
+
+		for {
+			_, err := transport.Write(payload)
+			if err != nil {
+				writeErr <- err
+
+				return
+			}
+		}
+	}()
+
+	// Give the writer time to fill the pipe and park in Write.
+	time.Sleep(100 * time.Millisecond)
+
+	require.NoError(t, transport.Close())
+
+	select {
+	case err := <-writeErr:
+		require.Error(t, err)
+	case <-time.After(waitTimeout):
+		t.Fatal("Close did not interrupt the blocked Write")
+	}
+}
+
+// TestStdioTransport_CloseInterruptsBlockedRead pins the matching read half:
+// the demux loop parks in Read between frames, and session teardown must be
+// able to unblock it through the transport's Close.
+func TestStdioTransport_CloseInterruptsBlockedRead(t *testing.T) {
+	t.Parallel()
+
+	inRead, inWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = inWrite.Close() })
+
+	outRead, outWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = outRead.Close() })
+
+	transport := steeragent.NewStdioTransportForTest(inRead, outWrite)
+
+	readErr := make(chan error, 1)
+
+	go func() {
+		buf := make([]byte, 1)
+
+		_, err := transport.Read(buf)
+		readErr <- err
+	}()
+
+	// Give the reader time to park in Read on the empty pipe.
+	time.Sleep(100 * time.Millisecond)
+
+	require.NoError(t, transport.Close())
+
+	select {
+	case err := <-readErr:
+		require.Error(t, err)
+	case <-time.After(waitTimeout):
+		t.Fatal("Close did not interrupt the blocked Read")
 	}
 }

@@ -5,6 +5,7 @@ package fluxinstaller_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -382,6 +383,69 @@ func TestBuildRegistrySecret(t *testing.T) {
 			assert.NotEmpty(t, secret.Data[".dockerconfigjson"])
 		})
 	}
+}
+
+func TestBuildRegistrySecret_UsesConfiguredClusterTokenEnvVar(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user:push-token@ghcr.io/example/repo",
+					//nolint:gosec // G101: this is an environment variable name, not a credential.
+					Credentials: v1alpha1.RegistryCredentials{
+						ClusterTokenEnvVar: "GHCR_PULL_TOKEN",
+					},
+				},
+			},
+		},
+	}
+
+	secret, err := fluxinstaller.BuildRegistrySecret(clusterCfg)
+	require.NoError(t, err)
+
+	var dockerConfig struct {
+		Auths map[string]struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"auths"`
+	}
+	require.NoError(t, json.Unmarshal(secret.Data[".dockerconfigjson"], &dockerConfig))
+
+	auth := dockerConfig.Auths["ghcr.io"]
+	assert.Equal(t, "user", auth.Username)
+	assert.Equal(t, "pull-token", auth.Password)
+	assert.Equal(
+		t,
+		"pull",
+		secret.Annotations["ksail.io/credential-purpose"],
+	)
+}
+
+func TestBuildRegistrySecret_MarksCommonPullTokenWhenCLIOverrideDiffers(t *testing.T) {
+	t.Setenv("KSAIL_TEST_REGISTRY_TOKEN", "pull-token")
+	t.Setenv("KSAIL_TEST_REGISTRY_CLI_TOKEN", "push-token")
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user@registry.example.com/example/repo",
+					//nolint:gosec // G101: these are environment variable names, not credentials.
+					Credentials: v1alpha1.RegistryCredentials{
+						TokenEnvVar:    "KSAIL_TEST_REGISTRY_TOKEN",
+						CLITokenEnvVar: "KSAIL_TEST_REGISTRY_CLI_TOKEN",
+					},
+				},
+			},
+		},
+	}
+
+	secret, err := fluxinstaller.BuildRegistrySecret(clusterCfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, "pull", secret.Annotations["ksail.io/credential-purpose"])
 }
 
 func TestIsTransientAPIError(t *testing.T) {

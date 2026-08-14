@@ -23,11 +23,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"google.golang.org/protobuf/encoding/protojson"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
+
+var errInvalidEKSConfig = errors.New("invalid EKS config file")
 
 // loadKindConfig loads the Kind distribution configuration if it exists.
 // Returns ErrDistributionConfigNotFound if the file doesn't exist.
@@ -109,6 +110,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		m.resolveTalosKubernetesVersion(),
 		"", // Use default network CIDR
 	)
+	talosManager.WithEnvLookup(m.Config.Spec.Cluster.LocalRegistry.PullEnvLookup(nil))
 
 	// Align the version contract with the pinned Talos version so that
 	// generated machine configs only use fields the target version supports.
@@ -449,8 +451,15 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		// no scaffolded talos/ dir, this fallback must still honor a pin or cap the
 		// default to the pinned Talos version — otherwise a pinned older Talos would
 		// be paired with an incompatible default Kubernetes version.
-		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
-			m.resolveTalosKubernetesVersion(), patches,
+		versionContract, contractErr := talosconfigmanager.ParseVersionContract(
+			m.Config.Spec.Cluster.Talos.Version,
+		)
+		if contractErr != nil {
+			return fmt.Errorf("resolve pinned Talos version contract: %w", contractErr)
+		}
+
+		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+			m.resolveTalosKubernetesVersion(), versionContract, patches,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create default Talos config: %w", err)
@@ -508,7 +517,7 @@ func disableDefaultCNIPatch() talosconfigmanager.Patch {
 	return talosconfigmanager.Patch{
 		Path:    "disable-default-cni",
 		Scope:   talosconfigmanager.PatchScopeCluster,
-		Content: []byte(talosgenerator.DisableDefaultCNIPatchYAML),
+		Content: []byte(talosconfigmanager.DisableDefaultCNIPatchYAML(false)),
 	}
 }
 
@@ -670,14 +679,17 @@ func (m *ConfigManager) cacheEKSConfig() error {
 		return err
 	}
 
+	nameFromConfig := strings.TrimSpace(name) != ""
+
 	if name == "" {
 		name = m.resolveEKSNameFromContext()
 	}
 
 	m.DistributionConfig.EKS = &clusterprovisioner.EKSConfig{
-		Name:       name,
-		Region:     region,
-		ConfigPath: resolvedPath,
+		Name:           name,
+		NameFromConfig: nameFromConfig,
+		Region:         region,
+		ConfigPath:     resolvedPath,
 	}
 
 	return nil
@@ -686,7 +698,9 @@ func (m *ConfigManager) cacheEKSConfig() error {
 // readEKSConfigMetadata reads the eksctl config file at configPath (if it
 // exists) and returns its canonical path plus the parsed metadata.name /
 // metadata.region fields. A missing file returns empty strings and no error
-// so callers can fall back to context-based defaults.
+// so callers can fall back to context-based defaults. A present file must be
+// the supported eksctl ClusterConfig shape before its metadata can establish
+// lifecycle ownership provenance.
 func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 	_, err := os.Stat(configPath)
 	if err != nil {
@@ -707,26 +721,111 @@ func readEKSConfigMetadata(configPath string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("failed to read EKS config file: %w", err)
 	}
 
-	var meta struct {
-		Metadata struct {
-			Name   string `json:"name"`
-			Region string `json:"region"`
-		} `json:"metadata"`
-	}
-
-	err = yaml.Unmarshal(data, &meta)
+	name, region, err := parseEKSConfigMetadata(data)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
+		return "", "", "", err
 	}
 
-	return canonical, meta.Metadata.Name, meta.Metadata.Region, nil
+	return canonical, name, region, nil
+}
+
+type eksConfigMetadata struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name   string `json:"name"`
+		Region string `json:"region"`
+	} `json:"metadata"`
+}
+
+func parseEKSConfigMetadata(data []byte) (string, string, error) {
+	var meta eksConfigMetadata
+
+	err := yaml.Unmarshal(data, &meta)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
+	}
+
+	const (
+		eksConfigAPIVersion = "eksctl.io/v1alpha5"
+		eksConfigKind       = "ClusterConfig"
+	)
+
+	if meta.APIVersion != eksConfigAPIVersion || meta.Kind != eksConfigKind {
+		return "", "", fmt.Errorf(
+			"%w: expected apiVersion %q and kind %q, got %q and %q",
+			errInvalidEKSConfig,
+			eksConfigAPIVersion,
+			eksConfigKind,
+			meta.APIVersion,
+			meta.Kind,
+		)
+	}
+
+	name := meta.Metadata.Name
+	if name != "" {
+		if name != strings.TrimSpace(name) {
+			return "", "", fmt.Errorf(
+				"%w: metadata.name %q has leading or trailing whitespace",
+				errInvalidEKSConfig,
+				name,
+			)
+		}
+
+		err = v1alpha1.ValidateClusterName(name)
+		if err != nil {
+			return "", "", fmt.Errorf(
+				"%w: metadata.name: %w",
+				errInvalidEKSConfig,
+				err,
+			)
+		}
+	}
+
+	return name, meta.Metadata.Region, nil
+}
+
+// ResolveEKSClusterMetadata resolves the EKS cluster name and file-declared
+// region the same way the config manager does when caching the distribution
+// config: from the eksctl config file named by spec.cluster.distributionConfig
+// (defaulting to eks.yaml), falling back to the kubeconfig context for the
+// name. nameFromConfig reports whether the name came from the file itself —
+// callers that reuse the file's region (lifecycle.ResolveAWSRegion) need it to
+// decide whether that region is target-bound. It exists for callers that hold
+// only the cluster config (e.g. the post-creation component setup) and need
+// the chart-facing cluster identity without a ConfigManager.
+func ResolveEKSClusterMetadata(
+	cluster *v1alpha1.Cluster,
+) (string, string, bool, error) {
+	configPath := strings.TrimSpace(cluster.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = v1alpha1.DefaultEKSDistributionConfig
+	}
+
+	_, name, region, err := readEKSConfigMetadata(configPath)
+	if err != nil {
+		return "", "", false, err
+	}
+
+	nameFromConfig := strings.TrimSpace(name) != ""
+	if name == "" {
+		name = eksNameFromContext(cluster.Spec.Cluster.Connection.Context)
+	}
+
+	return name, region, nameFromConfig, nil
 }
 
 // resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig
 // context of the form "<iam-identity>@<name>.<region>.eksctl.io", falling
 // back to "eks-default".
 func (m *ConfigManager) resolveEKSNameFromContext() string {
-	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	return eksNameFromContext(m.Config.Spec.Cluster.Connection.Context)
+}
+
+// eksNameFromContext is the pure context-parsing half of
+// resolveEKSNameFromContext, shared with ResolveEKSClusterMetadata.
+func eksNameFromContext(kubeContext string) string {
+	ctx := strings.TrimSpace(kubeContext)
 	if ctx == "" {
 		return "eks-default"
 	}
@@ -1033,30 +1132,19 @@ func ingressFirewallPatches(
 
 // applyPinnedVersionContract sets the version contract on the Talos config manager
 // when a pinned Talos version is specified. Returns an error if the version cannot
-// be parsed. Does nothing when pinnedVersion is empty.
+// be parsed. An empty pin retains the conservative Talos 1.12 default contract.
 func applyPinnedVersionContract(
 	pinnedVersion string,
 	talosManager *talosconfigmanager.ConfigManager,
 ) error {
-	pinnedVersion = strings.TrimSpace(pinnedVersion)
-	if pinnedVersion == "" {
-		return nil
-	}
-
-	if !strings.HasPrefix(pinnedVersion, "v") {
-		pinnedVersion = "v" + pinnedVersion
-	}
-
-	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
+	contract, err := talosconfigmanager.ParseVersionContract(pinnedVersion)
 	if err != nil {
-		return fmt.Errorf(
-			"parse Talos version contract for pinned version %q: %w",
-			pinnedVersion,
-			err,
-		)
+		return fmt.Errorf("resolve pinned Talos version contract: %w", err)
 	}
 
-	talosManager.WithVersionContract(contract)
+	if contract != nil {
+		talosManager.WithVersionContract(contract)
+	}
 
 	return nil
 }

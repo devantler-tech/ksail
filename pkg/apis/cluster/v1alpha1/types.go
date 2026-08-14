@@ -189,6 +189,8 @@ type ClusterSpec struct {
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	// Talos holds options specific to the Talos distribution.
 	Talos OptionsTalos `json:"talos,omitzero"`
+	// EKS holds options specific to the EKS distribution.
+	EKS OptionsEKS `json:"eks,omitzero"`
 }
 
 // TotalNodeCount returns the total number of nodes (control-plane + workers).

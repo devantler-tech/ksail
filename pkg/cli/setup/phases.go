@@ -162,18 +162,33 @@ func InstallPostCNIComponents(
 		}
 	}
 
-	err := installComponentsInPhases(ctx, cmd, clusterCfg, factories, tmr, reqs, cniInstalled)
-	if err != nil {
-		return err
-	}
-
-	return configureGitOpsResources(
+	return runWithReservedSandboxMonitor(
 		ctx,
-		cmd,
 		clusterCfg,
 		factories,
-		reqs,
-		gitOpsKubeconfig,
+		func(runCtx context.Context) error {
+			err := installComponentsInPhases(
+				runCtx,
+				cmd,
+				clusterCfg,
+				factories,
+				tmr,
+				reqs,
+				cniInstalled,
+			)
+			if err != nil {
+				return err
+			}
+
+			return configureGitOpsResources(
+				runCtx,
+				cmd,
+				clusterCfg,
+				factories,
+				reqs,
+				gitOpsKubeconfig,
+			)
+		},
 	)
 }
 

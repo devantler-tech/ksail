@@ -11,6 +11,17 @@ var (
 	// ErrNodeNoReachableAddress is returned when a Hetzner server has neither a public
 	// IPv4 nor a private-network IP, so KSail has no address to reach its Talos API.
 	ErrNodeNoReachableAddress = errors.New("hetzner node has no reachable address")
+	// ErrHetznerServerMissingFromInventory is returned when the infrastructure
+	// inventory names a server that the authoritative Hetzner lookup cannot find.
+	ErrHetznerServerMissingFromInventory = errors.New(
+		"hetzner server disappeared from authoritative inventory",
+	)
+	// ErrFloatingIPMissingForControlPlaneConfig is returned when floating-IP
+	// enablement requires a first-boot control-plane config refresh but the
+	// previously reconciled, cluster-owned address cannot be found.
+	ErrFloatingIPMissingForControlPlaneConfig = errors.New(
+		"cluster-owned floating IP missing before control-plane config apply",
+	)
 	// ErrPrivateNetworkUnreachable is returned when KSail cannot reach an IPv4-less
 	// Hetzner node's Talos API over the private network — typically because KSail has
 	// no route into the private network or the node lacks egress.

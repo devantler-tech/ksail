@@ -1,6 +1,10 @@
 package hetznerbase_test
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -136,4 +140,117 @@ func TestDeriveServerSpecsNameTooLong(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, hetzner.ErrNodeNameTooLong)
 	assert.Nil(t, specs)
+}
+
+func TestDeriveServerSpecsRejectsPrivateKeyMaterial(t *testing.T) {
+	t.Parallel()
+
+	privateKey := "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"
+
+	var compressed bytes.Buffer
+
+	zipper := gzip.NewWriter(&compressed)
+	_, err := zipper.Write([]byte(privateKey))
+	require.NoError(t, err)
+	require.NoError(t, zipper.Close())
+
+	// These deliberately invalid synthetic bodies exercise only the PEM
+	// envelopes; no credential is present in the fixture.
+	//nolint:gosec // Synthetic PEM markers test the private-key rejection boundary.
+	tests := map[string]string{
+		"PKCS8": privateKey,
+		"RSA":   "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----",
+		"EC":    "-----BEGIN EC PRIVATE KEY-----\nAAAA\n-----END EC PRIVATE KEY-----",
+		"OpenSSH": "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n" +
+			"-----END OPENSSH PRIVATE KEY-----",
+		"encrypted": "-----BEGIN ENCRYPTED PRIVATE KEY-----\nAAAA\n" +
+			"-----END ENCRYPTED PRIVATE KEY-----",
+		"embedded": "printf '%s' '-----BEGIN PRIVATE KEY-----' > /tmp/cluster.key",
+		"base64":   base64.StdEncoding.EncodeToString([]byte(privateKey)),
+		"base64 without padding": base64.RawStdEncoding.EncodeToString(
+			[]byte(privateKey),
+		),
+		"gzip plus base64": base64.StdEncoding.EncodeToString(compressed.Bytes()),
+	}
+
+	for name, content := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes := twoNodeSpecs()
+			nodes[1].UserData = fmt.Sprintf(`#cloud-config
+write_files:
+  - path: /etc/kubernetes/pki/ca.key
+    content: |-
+      %s
+`, strings.ReplaceAll(content, "\n", "\n      "))
+
+			specs, err := hetznerbase.DeriveServerSpecs(
+				specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+			)
+
+			require.ErrorIs(t, err, hetznerbase.ErrPrivateKeyInUserData)
+			assert.Nil(t, specs)
+		})
+	}
+}
+
+func TestDeriveServerSpecsRejectsPrivateKeyInMappingKey(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+? |-
+  -----BEGIN PRIVATE KEY-----
+  AAAA
+  -----END PRIVATE KEY-----
+: harmless
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.ErrorIs(t, err, hetznerbase.ErrPrivateKeyInUserData)
+	assert.Nil(t, specs)
+}
+
+func TestDeriveServerSpecsRejectsPrivateKeyInLaterYAMLDocument(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+hostname: worker
+---
+write_files:
+  - path: /etc/kubernetes/pki/ca.key
+    content: |-
+      -----BEGIN PRIVATE KEY-----
+      AAAA
+      -----END PRIVATE KEY-----
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.ErrorIs(t, err, hetznerbase.ErrPrivateKeyInUserData)
+	assert.Nil(t, specs)
+}
+
+func TestDeriveServerSpecsHandlesCyclicYAMLAlias(t *testing.T) {
+	t.Parallel()
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = `#cloud-config
+loop: &loop
+  again: *loop
+`
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.NoError(t, err)
+	assert.Len(t, specs, len(nodes))
 }

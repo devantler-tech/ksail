@@ -120,6 +120,60 @@ func TestBuildNodeUserDataMultiNodeOrderRolesAndJoin(t *testing.T) {
 	assert.Equal(t, "3", nodes[3].Labels[hetzner.LabelNodeIndex])
 }
 
+// TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles pins the fail-fast
+// boundary that prevents legacy joining-node PKI from being silently dropped.
+func TestBuildNodeUserDataRejectsDeprecatedServerJoinFiles(t *testing.T) {
+	t.Parallel()
+
+	const (
+		legacyPath    = "/etc/kubernetes/pki/legacy-private.key"
+		legacyContent = "legacy-private-key-material"
+	)
+
+	input := kubeadmhetzner.Input{
+		ClusterName: testClusterName,
+		Plan: kubeadmbootstrap.PlanInput{
+			Token:             testToken,
+			KubernetesVersion: testVersion,
+			ControlPlaneCount: 2,
+			AgentCount:        0,
+			APIServerEndpoint: testEndpoint,
+			CACertHashes:      []string{testCACertHash},
+		},
+		ServerJoinFiles: []cloudinitbootstrap.File{{
+			Path:    legacyPath,
+			Content: legacyContent,
+		}},
+	}
+
+	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrDeprecatedPKIFiles)
+	require.ErrorContains(t, err, "ServerJoinFiles")
+	assert.Nil(t, nodes)
+}
+
+// TestBuildNodeUserDataRejectsDeprecatedServerInitFiles pins the fail-fast
+// boundary that prevents legacy init-node PKI from being silently dropped.
+func TestBuildNodeUserDataRejectsDeprecatedServerInitFiles(t *testing.T) {
+	t.Parallel()
+
+	const (
+		legacyPath    = "/etc/kubernetes/pki/legacy-init-private.key"
+		legacyContent = "legacy-init-private-key-material"
+	)
+
+	input := singleControlPlaneInput()
+	input.ServerInitFiles = []cloudinitbootstrap.File{{
+		Path:    legacyPath,
+		Content: legacyContent,
+	}}
+
+	nodes, err := kubeadmhetzner.BuildNodeUserData(input)
+	require.ErrorIs(t, err, kubeadmhetzner.ErrDeprecatedPKIFiles)
+	require.ErrorContains(t, err, "ServerInitFiles")
+	assert.Nil(t, nodes)
+}
+
 func TestBuildNodeUserDataDeliversSSHAuthorizedKeys(t *testing.T) {
 	t.Parallel()
 

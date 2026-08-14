@@ -3,11 +3,13 @@ package scaffolder
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
 
 const talosClusterDir = "cluster"
@@ -88,9 +90,33 @@ func (s *Scaffolder) buildTalosGeneratorConfig() (*talosgenerator.Config, bool) 
 		OIDCGroupsClaim:             s.KSailConfig.Spec.Cluster.OIDC.GroupsClaim,
 		OIDCGroupsPrefix:            s.KSailConfig.Spec.Cluster.OIDC.GroupsPrefix,
 		OIDCCAFile:                  s.KSailConfig.Spec.Cluster.OIDC.CAFile,
+		MultiDocumentKubernetesConfig: usesMultiDocumentKubernetesConfig(
+			s.KSailConfig.Spec.Cluster.Talos.Version,
+		),
 	}
 
 	return config, clusterHasPatches
+}
+
+// usesMultiDocumentKubernetesConfig reports whether a pinned Talos version uses
+// the v1.14 multi-document Kubernetes configuration resources. Unpinned clusters
+// retain legacy patches because the config manager uses its conservative contract.
+func usesMultiDocumentKubernetesConfig(version string) bool {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return false
+	}
+
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+
+	contract, err := talosconfig.ParseContractFromVersion(version)
+	if err != nil {
+		return false
+	}
+
+	return contract.MultidocKubernetesConfigSupported()
 }
 
 // notifyTalosGenerated sends notifications about generated Talos files.
