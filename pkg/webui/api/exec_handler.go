@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,9 +95,7 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 		command = []string{"/bin/sh"}
 	}
 
-	// CheckOrigin allows any origin: the endpoint is already behind the auth guard (when OIDC is on)
-	// and the read-only check above, and the desktop connects cross-origin (wails:// → loopback).
-	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
+	upgrader := websocket.Upgrader{CheckOrigin: execCheckOrigin}
 
 	conn, err := upgrader.Upgrade(writer, request, nil)
 	if err != nil {
@@ -109,6 +110,52 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 		Container: query.Get("container"),
 		Command:   command,
 	})
+}
+
+// execCheckOrigin decides whether a WebSocket upgrade may proceed. The exec endpoint is served only by
+// the loopback-bound local backend (the operator's service does not implement ExecService, so the route
+// is never registered there) and is unauthenticated, so a browser origin is trusted only when the page
+// was itself served from loopback.
+//
+// gorilla/websocket's default policy is not enough here: it only requires the Origin host to equal the
+// request Host, and under DNS rebinding an attacker controls both. A page on attacker.example whose name
+// has been rebound to 127.0.0.1 sends Origin: http://attacker.example and Host: attacker.example, which
+// the default policy accepts — handing a remote page a shell in the victim's cluster. Anchoring on the
+// loopback identity closes that: a browser sets Origin from the page's real URL, so only a page actually
+// served from loopback can present a loopback origin.
+func execCheckOrigin(request *http.Request) bool {
+	origin := request.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser client (CLI tooling, tests). Browsers always send Origin on a WebSocket upgrade,
+		// so an absent header is not a cross-site request.
+		return true
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	// The desktop shell serves the SPA from the fixed wails:// origin through the Wails AssetServer, with
+	// no TCP listener at all. A remote page can never carry that scheme, so it is trusted like loopback.
+	if strings.EqualFold(parsed.Scheme, "wails") {
+		return true
+	}
+
+	return isLoopbackHost(parsed.Hostname())
+}
+
+// isLoopbackHost reports whether a URL hostname names this machine's loopback interface. "localhost" is
+// included: an attacker can rebind their own name to 127.0.0.1, but cannot make a browser report
+// "localhost" as the origin of a page they serve.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // runExecSession bridges the WebSocket connection to the ExecService: client frames feed stdin/resize,

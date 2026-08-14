@@ -34,8 +34,12 @@ func (execStub) Exec(
 	return nil
 }
 
-func execWebSocketURL(httpURL, path string) string {
-	return "ws" + strings.TrimPrefix(httpURL, "http") + path
+// execPath is the exec endpoint every exec test drives; it is fixed so the tests differ only in the
+// headers they present.
+const execPath = "/api/v1/clusters/default/c1/exec?pod=p1"
+
+func execWebSocketURL(httpURL string) string {
+	return "ws" + strings.TrimPrefix(httpURL, "http") + execPath
 }
 
 func TestConfigReportsWorkloadExec(t *testing.T) {
@@ -55,9 +59,12 @@ func TestExecWebSocketBridge(t *testing.T) {
 	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
 	defer server.Close()
 
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	url := execWebSocketURL(server.URL)
 
-	conn, response, err := websocket.DefaultDialer.Dial(url, nil)
+	header := http.Header{}
+	header.Set("Origin", server.URL)
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
 	require.NoError(t, err)
 
 	if response != nil {
@@ -80,13 +87,80 @@ func TestExecWebSocketBridge(t *testing.T) {
 	assert.Equal(t, "hello", msg.Data)
 }
 
+func TestExecRejectsCrossOriginWebSocket(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "https://attacker.example")
+
+	_, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.Error(t, err)
+	require.NotNil(t, response)
+
+	defer func() { _ = response.Body.Close() }()
+
+	assert.Equal(t, http.StatusForbidden, response.StatusCode)
+}
+
+// TestExecRejectsRebindingOriginMatchingHost pins the DNS-rebinding case, which a same-origin policy
+// cannot catch: the attacker's hostname has been rebound to loopback, so Origin and Host agree and
+// gorilla's default CheckOrigin would accept the upgrade. Only anchoring on the loopback identity
+// rejects it.
+func TestExecRejectsRebindingOriginMatchingHost(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	// gorilla's Dialer promotes a "Host" header into the request's Host field, so this reproduces a
+	// rebound name resolving to the loopback listener with a self-consistent Origin/Host pair.
+	header.Set("Host", "attacker.example")
+	header.Set("Origin", "http://attacker.example")
+
+	_, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.Error(t, err)
+	require.NotNil(t, response)
+
+	defer func() { _ = response.Body.Close() }()
+
+	assert.Equal(t, http.StatusForbidden, response.StatusCode)
+}
+
+// TestExecAllowsLocalhostOrigin pins the everyday path: the SPA served from the loopback listener under
+// the "localhost" spelling still upgrades, so the hardening costs the operator nothing.
+func TestExecAllowsLocalhostOrigin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "http://localhost:8080")
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.NoError(t, err)
+
+	if response != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
+
+	defer func() { _ = conn.Close() }()
+}
+
 func TestExecBlockedWhenReadOnly(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer((&api.Server{Service: execStub{}, ReadOnly: true}).Handler())
 	defer server.Close()
 
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	url := execWebSocketURL(server.URL)
 
 	_, response, err := websocket.DefaultDialer.Dial(url, nil)
 	require.Error(t, err) // upgrade refused before switching protocols
