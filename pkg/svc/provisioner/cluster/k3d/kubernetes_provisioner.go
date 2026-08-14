@@ -739,7 +739,10 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardPolicy(
 				ResourceRules: []admissionv1.NamedRuleWithOperations{
 					{
 						RuleWithOperations: admissionv1.RuleWithOperations{
-							Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
+							Operations: []admissionv1.OperationType{
+								admissionv1.Create,
+								admissionv1.Update,
+							},
 							Rule: admissionv1.Rule{
 								APIGroups:   []string{""},
 								APIVersions: []string{"v1"},

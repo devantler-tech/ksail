@@ -93,7 +93,11 @@ func TestEnsureNamespace_ScopesPrivilegedPodSecurity(t *testing.T) {
 		context.Background(), "ksail-k3k-nested-k3s-pod-security", metav1.GetOptions{},
 	)
 	require.NoError(t, err)
-	assert.Contains(t, policy.Spec.Validations[0].Expression, "object.metadata.name.startsWith('k3k-nested-k3s-server-')")
+	assert.Contains(
+		t,
+		policy.Spec.Validations[0].Expression,
+		"object.metadata.name.startsWith('k3k-nested-k3s-server-')",
+	)
 
 	binding, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(
 		context.Background(), "ksail-k3k-nested-k3s-pod-security", metav1.GetOptions{},
@@ -102,7 +106,11 @@ func TestEnsureNamespace_ScopesPrivilegedPodSecurity(t *testing.T) {
 	assert.Equal(t, policy.Name, binding.Spec.PolicyName)
 	require.NotNil(t, binding.Spec.MatchResources)
 	require.NotNil(t, binding.Spec.MatchResources.NamespaceSelector)
-	assert.Equal(t, "nested-k3s", binding.Spec.MatchResources.NamespaceSelector.MatchLabels["ksail.io/cluster"])
+	assert.Equal(
+		t,
+		"nested-k3s",
+		binding.Spec.MatchResources.NamespaceSelector.MatchLabels["ksail.io/cluster"],
+	)
 }
 
 func TestBuildClusterCR_Version(t *testing.T) {
