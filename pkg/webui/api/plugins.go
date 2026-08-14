@@ -297,7 +297,10 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 	writeJSON(writer, http.StatusCreated, info)
 }
 
-var errUnsupportedContentType = errors.New("unsupported content type: expected application/json")
+var (
+	errUnsupportedContentType = errors.New("unsupported content type: expected application/json")
+	errCrossSitePluginInstall = errors.New("cross-site plugin install request rejected")
+)
 
 func requirePluginInstallRequestGuards(request *http.Request) error {
 	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
@@ -306,7 +309,7 @@ func requirePluginInstallRequestGuards(request *http.Request) error {
 	}
 
 	if isCrossSiteBrowserRequest(request) {
-		return errors.New("cross-site plugin install request rejected")
+		return errCrossSitePluginInstall
 	}
 
 	return nil

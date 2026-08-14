@@ -11,6 +11,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
 
+// trustedInstallBody is the install request every trust-gate test posts; the tests differ only in the
+// headers they present, so the body is fixed to keep that the single variable.
+const trustedInstallBody = `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz",` +
+	`"trusted":true}`
+
 // pluginStub is a ClusterService that also implements api.PluginService, returning canned plugin
 // metadata and asset bytes so the plugin routes and capability can be exercised without a filesystem.
 type pluginStub struct {
@@ -90,7 +95,7 @@ func TestInstallPluginRequiresJSONContentType(t *testing.T) {
 
 	installer := &pluginInstallerStub{}
 	server := &api.Server{Service: installer}
-	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+	body := trustedInstallBody
 
 	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "text/plain"})
 
@@ -128,7 +133,7 @@ func TestInstallPluginRejectsRebindingOriginMatchingHost(t *testing.T) {
 
 	installer := &pluginInstallerStub{}
 	server := &api.Server{Service: installer}
-	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+	body := trustedInstallBody
 
 	recorder := doPluginInstall(t, server, body, map[string]string{
 		"Content-Type":   "application/json",
@@ -153,7 +158,7 @@ func TestInstallPluginAcceptsLoopbackOrigin(t *testing.T) {
 
 	installer := &pluginInstallerStub{}
 	server := &api.Server{Service: installer}
-	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+	body := trustedInstallBody
 
 	recorder := doPluginInstall(t, server, body, map[string]string{
 		"Content-Type":   "application/json",
@@ -176,7 +181,7 @@ func TestInstallPluginRejectsCrossSiteBrowserRequest(t *testing.T) {
 
 	installer := &pluginInstallerStub{}
 	server := &api.Server{Service: installer}
-	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+	body := trustedInstallBody
 
 	recorder := doPluginInstall(t, server, body, map[string]string{
 		"Content-Type": "application/json",
@@ -196,7 +201,7 @@ func TestInstallPluginAcceptsTrustedJSONRequest(t *testing.T) {
 
 	installer := &pluginInstallerStub{}
 	server := &api.Server{Service: installer}
-	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz","trusted":true}`
+	body := trustedInstallBody
 
 	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "application/json"})
 
