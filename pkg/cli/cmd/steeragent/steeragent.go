@@ -17,6 +17,7 @@ package steeragent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -40,10 +41,11 @@ import (
 // (non-REDIRECTed) hits on the intercept port.
 const listenHost = "0.0.0.0"
 
-// options carries the steering agent's port configuration.
+// options carries the steering agent's port and liveness configuration.
 type options struct {
-	servicePort   int
-	interceptPort int
+	servicePort      int
+	interceptPort    int
+	expectKeepalives bool
 }
 
 // deps are the injectable seams that keep [run] unit-testable without a live
@@ -102,6 +104,13 @@ rather than run directly.`,
 		0,
 		"The port the agent listens on and redirects the service port to",
 	)
+	cmd.Flags().BoolVar(
+		&opts.expectKeepalives,
+		mirror.SteerExpectKeepalivesFlag,
+		false,
+		"Arm the client-liveness watchdog from session start"+
+			" (set by intercept clients that will send keepalive pings)",
+	)
 
 	return cmd
 }
@@ -128,6 +137,7 @@ func run(ctx context.Context, opts options, dependencies deps) error {
 		dependencies.listen,
 		redirect,
 		dependencies.runner,
+		opts.expectKeepalives,
 	)
 	if err != nil {
 		return fmt.Errorf("running the steering agent: %w", err)
@@ -139,7 +149,7 @@ func run(ctx context.Context, opts options, dependencies deps) error {
 // defaultDeps wires the concrete production seams.
 func defaultDeps() deps {
 	return deps{
-		transport: stdioTransport{},
+		transport: stdioTransport{in: os.Stdin, out: os.Stdout},
 		listen:    listenIntercept,
 		runner:    execRunner,
 	}
@@ -181,11 +191,19 @@ func execRunner(ctx context.Context, name string, args ...string) error {
 // stdioTransport bridges the process's stdin and stdout into the
 // io.ReadWriteCloser the tunnel expects: when the agent is the steering
 // container's process, its stdin/stdout ARE the exec channel to the ksail side.
-// Close is a no-op — process exit closes the streams.
-type stdioTransport struct{}
+// Close really closes both files: the liveness watchdog's session teardown
+// relies on it to interrupt a pump goroutine blocked in Read/Write against a
+// dead client (ksail#6040) — a no-op Close would leave that writer parked and
+// the REDIRECT teardown unreachable.
+type stdioTransport struct {
+	in  *os.File
+	out *os.File
+}
 
-func (stdioTransport) Read(p []byte) (int, error) {
-	count, err := os.Stdin.Read(p)
+// Read reads inbound tunnel bytes from the process's stdin — the ksail side of
+// the exec channel.
+func (t stdioTransport) Read(p []byte) (int, error) {
+	count, err := t.in.Read(p)
 	if err != nil {
 		return count, fmt.Errorf("reading the exec channel: %w", err)
 	}
@@ -193,8 +211,10 @@ func (stdioTransport) Read(p []byte) (int, error) {
 	return count, nil
 }
 
-func (stdioTransport) Write(p []byte) (int, error) {
-	count, err := os.Stdout.Write(p)
+// Write sends outbound tunnel bytes to the process's stdout — the ksail side
+// of the exec channel.
+func (t stdioTransport) Write(p []byte) (int, error) {
+	count, err := t.out.Write(p)
 	if err != nil {
 		return count, fmt.Errorf("writing the exec channel: %w", err)
 	}
@@ -202,4 +222,15 @@ func (stdioTransport) Write(p []byte) (int, error) {
 	return count, nil
 }
 
-func (stdioTransport) Close() error { return nil }
+// Close closes the stdio streams. The exec channel's ends are pipes, which are
+// pollable, so closing them interrupts I/O already blocked in Read or Write —
+// exactly what [mirror.TunnelSession.Close] needs when the liveness watchdog
+// expires a dead client while a pump is backpressured on stdout.
+func (t stdioTransport) Close() error {
+	err := errors.Join(t.in.Close(), t.out.Close())
+	if err != nil {
+		return fmt.Errorf("closing the exec channel: %w", err)
+	}
+
+	return nil
+}

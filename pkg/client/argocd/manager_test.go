@@ -76,6 +76,32 @@ func TestManagerEnsure_CreatesRepositorySecret(t *testing.T) {
 	require.Equal(t, "true", secretValue(secret, "insecureOCIForceHttp"))
 }
 
+func TestManagerEnsure_AnnotatesPullOnlyRepositoryCredentials(t *testing.T) {
+	t.Parallel()
+
+	testMgr := newTestManager(t)
+
+	opts := argocd.EnsureOptions{
+		RepositoryURL:       "oci://ghcr.io/example/private-repo",
+		ApplicationName:     "ksail",
+		TargetRevision:      "v1",
+		Username:            "user",
+		Password:            "pull-token",
+		PullOnlyCredentials: true,
+	}
+
+	err := testMgr.mgr.Ensure(context.Background(), opts)
+	require.NoError(t, err)
+
+	secret, err := testMgr.clientset.CoreV1().Secrets("argocd").Get(
+		context.Background(),
+		"ksail-local-registry-repo",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "pull", secret.Annotations["ksail.io/credential-purpose"])
+}
+
 func TestManagerEnsure_CreatesApplication(t *testing.T) {
 	t.Parallel()
 

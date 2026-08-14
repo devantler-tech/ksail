@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -16,7 +17,9 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -32,6 +35,9 @@ var (
 	ErrClusterNameRequired = errors.New(
 		"cluster name is required: use --name flag, create a ksail.yaml config, or set a kubeconfig context",
 	)
+	// ErrAWSTargetConfigMismatch indicates that a resolved EKS target would inherit the region
+	// from a local EKS config describing a different cluster.
+	ErrAWSTargetConfigMismatch = errors.New("resolved EKS target does not match local config")
 )
 
 const (
@@ -111,44 +117,78 @@ func BindNameAndProviderFlags(
 
 // ResolvedClusterInfo contains the resolved cluster name, provider, and kubeconfig path.
 type ResolvedClusterInfo struct {
-	ClusterName    string
-	Provider       v1alpha1.Provider
-	KubeconfigPath string
-	OmniOpts       v1alpha1.OptionsOmni
-	KubernetesOpts v1alpha1.OptionsKubernetes
-	// AWSRegion is the resolved AWS region for read-only EKS status lookups.
+	ClusterName       string
+	ConfigClusterName string
+	// ConfigSource reports that a real ksail.yaml was loaded. Empty AWS option names from a loaded
+	// config deliberately select canonical defaults and must not be overwritten by persisted aliases.
+	ConfigSource bool
+	// EKSConfigSource reports that ConfigClusterName came from an actual loaded eks.yaml, rather
+	// than another distribution config or a synthetic fallback.
+	EKSConfigSource bool
+	Provider        v1alpha1.Provider
+	KubeconfigPath  string
+	OmniOpts        v1alpha1.OptionsOmni
+	KubernetesOpts  v1alpha1.OptionsKubernetes
+	// AWSRegion is the resolved AWS region for EKS operations.
 	// Empty defers region resolution to eksctl (AWS_REGION env / active profile).
 	AWSRegion string
+	// AWSRegionFromConfig reports that AWSRegion came from the loaded EKS config rather than the
+	// configured region environment variable. Mutating standalone commands use this provenance to
+	// avoid applying one config's region to a different resolved target.
+	AWSRegionFromConfig bool
+	// AWSOpts retains the credential environment-variable mappings from the loaded cluster config.
+	AWSOpts v1alpha1.OptionsAWS
+	// AWSResolution pins the concrete credentials selected by the EKS ownership guard for the
+	// provisioner that performs the authorized mutation. It is never persisted.
+	AWSResolution *credentials.AWSResolution
+	// AWSOwnershipVerifier rechecks the persisted/live EKS incarnation immediately before mutation.
+	AWSOwnershipVerifier AWSOwnershipVerifier
 }
+
+// AWSOwnershipVerifier is a read-only immutable EKS identity check captured by the initial guard.
+type AWSOwnershipVerifier = eksidentity.Verifier
 
 // awsRegionEnvVarDefault is the fallback environment variable name for the AWS
 // region when spec.provider.aws.regionEnvVar is unset (mirrors the OptionsAWS
 // default so the info path resolves the region the same way create does).
 const awsRegionEnvVarDefault = "AWS_REGION"
 
-// resolveAWSRegion determines the AWS region for read-only EKS status lookups,
+// ResolveAWSRegion determines the AWS region for EKS operations,
 // honoring the documented precedence from OptionsAWS: the environment variable
 // named by RegionEnvVar (default AWS_REGION) overrides the region declared in
 // eks.yaml. An empty result tells eksctl to fall back to its own resolution, so
 // this never regresses the previous always-empty behavior.
-func resolveAWSRegion(
+func ResolveAWSRegion(
 	awsOpts v1alpha1.OptionsAWS,
 	distCfg *clusterprovisioner.DistributionConfig,
 ) string {
+	region, _ := resolveAWSRegion(awsOpts, distCfg)
+
+	return region
+}
+
+// resolveAWSRegion returns the resolved region together with whether it came from eks.yaml.
+func resolveAWSRegion(
+	awsOpts v1alpha1.OptionsAWS,
+	distCfg *clusterprovisioner.DistributionConfig,
+) (string, bool) {
 	envVar := awsOpts.RegionEnvVar
 	if envVar == "" {
 		envVar = awsRegionEnvVarDefault
 	}
 
 	if region := os.Getenv(envVar); region != "" {
-		return region
+		return region, false
 	}
 
-	if distCfg != nil && distCfg.EKS != nil {
-		return distCfg.EKS.Region
+	// A declarative region is safe to reuse only when the same actual eks.yaml also named the
+	// cluster it describes. ConfigManager can load a nameless file and synthesize a target name;
+	// treating that file's region as target-bound could redirect a standalone mutation.
+	if distCfg != nil && distCfg.EKS != nil && distCfg.EKS.NameFromConfig {
+		return distCfg.EKS.Region, distCfg.EKS.Region != ""
 	}
 
-	return ""
+	return "", false
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
@@ -157,76 +197,119 @@ func resolveAWSRegion(
 // Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
 //
 // When cmd is non-nil, the --config persistent flag is honored for config loading.
+//
+// A config that is present but unreadable is tolerated: resolution falls back to flags and the
+// kubeconfig context so read-only commands (cluster info, diagnose, connect) keep working while
+// local project configuration is broken. Callers that are about to MUTATE a cluster must use
+// ResolveClusterInfoStrict instead, so a malformed config can never silently drop credential
+// aliases or region bindings ahead of a destructive operation.
 func ResolveClusterInfo(
 	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
 	kubeconfigFlag string,
 ) (*ResolvedClusterInfo, error) {
-	clusterName := nameFlag
-	provider := providerFlag
-	kubeconfigPath := kubeconfigFlag
+	return resolveClusterInfo(cmd, nameFlag, providerFlag, kubeconfigFlag, false)
+}
 
-	// Always load config to fill missing fields and extract Omni/Kubernetes options.
-	// Even when --name is provided, we still need Omni endpoint from config.
-	var (
-		omniOpts       v1alpha1.OptionsOmni
-		kubernetesOpts v1alpha1.OptionsKubernetes
-		awsRegion      string
-	)
+// ResolveClusterInfoStrict resolves cluster info like ResolveClusterInfo but fails closed when a
+// present config cannot be loaded. Mutating lifecycle commands use it so a malformed ksail.yaml or
+// distribution config aborts before any cluster is changed, rather than proceeding on partially
+// resolved identity.
+func ResolveClusterInfoStrict(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
+) (*ResolvedClusterInfo, error) {
+	return resolveClusterInfo(cmd, nameFlag, providerFlag, kubeconfigFlag, true)
+}
 
-	resolveFromConfig(
-		cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts, &awsRegion,
-	)
-
-	// Fall back to kubeconfig context detection
-	if clusterName == "" {
-		resolveFromKubecontext(commandContext(cmd), &clusterName, &provider, kubeconfigPath)
+func resolveClusterInfo(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
+	strict bool,
+) (*ResolvedClusterInfo, error) {
+	resolved := ResolvedClusterInfo{
+		ClusterName:    nameFlag,
+		Provider:       providerFlag,
+		KubeconfigPath: kubeconfigFlag,
 	}
 
-	if clusterName == "" {
+	// Always load config to fill missing fields and extract provider options: even when --name is
+	// provided, provider-specific settings are still needed.
+	err := resolveFromConfig(cmd, &resolved)
+	if err != nil {
+		if strict {
+			return nil, err
+		}
+
+		slog.Warn(
+			"ignoring unreadable configuration; resolving from flags and kubeconfig instead",
+			"error", err,
+		)
+	}
+
+	// Fall back to kubeconfig context detection
+	if resolved.ClusterName == "" {
+		resolveFromKubecontext(
+			commandContext(cmd),
+			&resolved.ClusterName,
+			&resolved.Provider,
+			resolved.KubeconfigPath,
+		)
+	}
+
+	if resolved.ClusterName == "" {
 		return nil, ErrClusterNameRequired
 	}
 
-	if provider == "" {
-		provider = v1alpha1.ProviderDocker
+	if resolved.Provider == "" {
+		resolved.Provider = v1alpha1.ProviderDocker
 	}
 
-	resolvedPath, err := clusterdetector.ResolveKubeconfigPath(kubeconfigPath)
+	resolvedPath, err := clusterdetector.ResolveKubeconfigPath(resolved.KubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
-	return &ResolvedClusterInfo{
-		ClusterName:    clusterName,
-		Provider:       provider,
-		KubeconfigPath: resolvedPath,
-		OmniOpts:       omniOpts,
-		KubernetesOpts: kubernetesOpts,
-		AWSRegion:      awsRegion,
-	}, nil
+	resolved.KubeconfigPath = resolvedPath
+
+	return &resolved, nil
 }
 
-// loadConfig loads the ksail.yaml config, honoring the --config flag when cmd is non-nil.
-// Returns nil if no config is found or loading fails.
-func loadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig) {
+// loadConfig loads the ksail.yaml config, honoring the --config flag when cmd is non-nil. A
+// genuinely absent default config is a supported standalone-command case; a present, explicit, or
+// discovered config that cannot be loaded is returned as an error so destructive callers fail
+// closed instead of falling back to ambient provider credentials.
+func loadConfig(
+	cmd *cobra.Command,
+) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig, error) {
 	var configFile string
 
 	if cmd != nil {
 		cfgPath, err := flags.GetConfigPath(cmd)
-		if err == nil {
-			configFile = cfgPath
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve config path: %w", err)
 		}
+
+		configFile = cfgPath
 	}
 
 	cfgManager := ksailconfigmanager.NewConfigManager(nil, configFile)
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
-	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
-		return nil, nil
+	if err != nil {
+		return nil, nil, fmt.Errorf("load cluster config: %w", err)
 	}
 
-	return cfg, cfgManager.DistributionConfig
+	if cfg == nil || !cfgManager.IsConfigFileFound() {
+		return nil, nil, nil
+	}
+
+	return cfg, cfgManager.DistributionConfig, nil
 }
 
 // resolveFromConfig fills missing cluster info and provider options from the ksail.yaml config.
@@ -234,39 +317,142 @@ func loadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.Dist
 // Fields that already have values (from flags) are not overwritten.
 func resolveFromConfig(
 	cmd *cobra.Command,
-	clusterName *string,
-	provider *v1alpha1.Provider,
-	kubeconfigPath *string,
-	omniOpts *v1alpha1.OptionsOmni,
-	kubernetesOpts *v1alpha1.OptionsKubernetes,
-	awsRegion *string,
-) {
-	cfg, distCfg := loadConfig(cmd)
+	resolved *ResolvedClusterInfo,
+) error {
+	cfg, distCfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+
 	if cfg == nil {
-		return
+		return nil
 	}
 
-	if *clusterName == "" && cfg.Name != "" {
-		if v1alpha1.ValidateClusterName(cfg.Name) == nil {
-			*clusterName = cfg.Name
+	resolved.ConfigSource = true
+	resolveClusterIdentityFromConfig(resolved, cfg, distCfg)
+
+	resolved.OmniOpts = cfg.Spec.Provider.Omni
+	resolved.KubernetesOpts = cfg.Spec.Provider.Kubernetes
+	resolved.AWSOpts = cfg.Spec.Provider.AWS
+	resolved.AWSRegion, resolved.AWSRegionFromConfig = resolveAWSRegion(
+		cfg.Spec.Provider.AWS,
+		distCfg,
+	)
+
+	return nil
+}
+
+func resolveClusterIdentityFromConfig(
+	resolved *ResolvedClusterInfo,
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+) {
+	resolved.ConfigClusterName = resolveConfigClusterName(cfg, distCfg)
+	resolved.EKSConfigSource = hasLoadedEKSConfigSource(cfg, distCfg, resolved.ConfigClusterName)
+	resolved.ClusterName = resolveClusterNameFromConfig(
+		resolved.ClusterName,
+		resolved.ConfigClusterName,
+		resolved.EKSConfigSource,
+		cfg,
+		distCfg,
+	)
+
+	if resolved.Provider == "" && cfg.Spec.Cluster.Provider != "" {
+		resolved.Provider = cfg.Spec.Cluster.Provider
+	}
+
+	if resolved.KubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
+		resolved.KubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+	}
+}
+
+func hasLoadedEKSConfigSource(
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+	configClusterName string,
+) bool {
+	return cfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		distCfg != nil && distCfg.EKS != nil &&
+		distCfg.EKS.NameFromConfig &&
+		strings.TrimSpace(distCfg.EKS.ConfigPath) != "" &&
+		strings.TrimSpace(configClusterName) != ""
+}
+
+func resolveClusterNameFromConfig(
+	currentName, configClusterName string,
+	eksConfigSource bool,
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+) string {
+	if currentName != "" {
+		return currentName
+	}
+
+	// eksctl creates and deletes the name encoded in the actual eks.yaml source. ConfigManager may
+	// synthesize "eks-default" when the file is absent, so only grant this priority when ConfigPath
+	// proved the source exists.
+	if eksConfigSource {
+		return configClusterName
+	}
+
+	if cfg.Name != "" && v1alpha1.ValidateClusterName(cfg.Name) == nil {
+		return cfg.Name
+	}
+
+	return ClusterNameFromDistributionConfig(distCfg)
+}
+
+// resolveConfigClusterName returns the distribution config's name when available because it is the
+// source of any fallback AWS region. The top-level metadata name is the safe fallback.
+func resolveConfigClusterName(
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+) string {
+	if cfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		distCfg != nil && distCfg.EKS != nil {
+		if strings.TrimSpace(distCfg.EKS.ConfigPath) == "" || !distCfg.EKS.NameFromConfig {
+			return ""
 		}
+
+		return strings.TrimSpace(distCfg.EKS.Name)
 	}
 
-	if *clusterName == "" {
-		*clusterName = ClusterNameFromDistributionConfig(distCfg)
+	if name := ClusterNameFromDistributionConfig(distCfg); name != "" {
+		return name
 	}
 
-	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
-		*provider = cfg.Spec.Cluster.Provider
+	if v1alpha1.ValidateClusterName(cfg.Name) == nil {
+		return cfg.Name
 	}
 
-	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
-		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+	return ""
+}
+
+// ValidateStandaloneAWSTarget rejects the ambiguous destructive case where the resolved target
+// differs from the cluster described by the local EKS config while the only resolved region came
+// from that config. Requiring the configured region environment variable makes the target pair
+// deliberate and prevents delete/start/stop from mutating a same-named cluster in the wrong region.
+func ValidateStandaloneAWSTarget(resolved *ResolvedClusterInfo) error {
+	if resolved == nil || resolved.Provider != v1alpha1.ProviderAWS ||
+		!resolved.AWSRegionFromConfig ||
+		resolved.ConfigClusterName == "" || resolved.ConfigClusterName == resolved.ClusterName {
+		return nil
 	}
 
-	*omniOpts = cfg.Spec.Provider.Omni
-	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
-	*awsRegion = resolveAWSRegion(cfg.Spec.Provider.AWS, distCfg)
+	regionEnvVar := resolved.AWSOpts.RegionEnvVar
+	if regionEnvVar == "" {
+		regionEnvVar = awsRegionEnvVarDefault
+	}
+
+	return fmt.Errorf(
+		"resolved EKS target %q does not match EKS config cluster %q: "+
+			"refusing to reuse region %q from that config; set %s to select the target explicitly: %w",
+		resolved.ClusterName,
+		resolved.ConfigClusterName,
+		resolved.AWSRegion,
+		regionEnvVar,
+		ErrAWSTargetConfigMismatch,
+	)
 }
 
 // commandContext returns cmd's context, falling back to context.Background()
@@ -308,9 +494,15 @@ func runSimpleLifecycleAction(
 	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 	cmd.SetOut(stageWriter)
 
-	// Resolve cluster info from flags, config, or kubeconfig
+	// Resolve cluster info from flags, config, or kubeconfig. These commands mutate the cluster, so a
+	// present-but-unreadable config must abort before any change.
 	// Empty kubeconfig flag - simple lifecycle commands don't need kubeconfig cleanup
-	resolved, err := ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
+	resolved, err := ResolveClusterInfoStrict(cmd, nameFlag, providerFlag, "")
+	if err != nil {
+		return err
+	}
+
+	err = ValidateStandaloneAWSTarget(resolved)
 	if err != nil {
 		return err
 	}
@@ -358,13 +550,24 @@ func provisionAndAct(
 	}
 
 	provisioner, err := CreateMinimalProvisionerForProvider(
+		cmd.Context(),
 		clusterInfo,
-		resolved.OmniOpts,
-		resolved.KubernetesOpts,
-		false,
+		MinimalProvisionerOptions{
+			OmniOpts:             resolved.OmniOpts,
+			KubernetesOpts:       resolved.KubernetesOpts,
+			AWSOpts:              resolved.AWSOpts,
+			AWSRegion:            resolved.AWSRegion,
+			AWSResolution:        resolved.AWSResolution,
+			AWSOwnershipVerifier: resolved.AWSOwnershipVerifier,
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
+	err = VerifyAWSOwnershipBeforeMutation(cmd.Context(), resolved.AWSOwnershipVerifier)
+	if err != nil {
+		return err
 	}
 
 	err = config.Action(cmd.Context(), provisioner, resolved.ClusterName)
@@ -401,14 +604,39 @@ func CreateMinimalProvisioner(
 	return provisioner, nil
 }
 
+// MinimalProvisionerOptions contains the provider-specific context needed to
+// construct a standalone lifecycle provisioner from only a resolved target.
+type MinimalProvisionerOptions struct {
+	OmniOpts             v1alpha1.OptionsOmni
+	KubernetesOpts       v1alpha1.OptionsKubernetes
+	AWSOpts              v1alpha1.OptionsAWS
+	AWSRegion            string
+	AWSResolution        *credentials.AWSResolution
+	AWSOwnershipVerifier AWSOwnershipVerifier
+	DeleteStorage        bool
+}
+
+// VerifyAWSOwnershipBeforeMutation invokes the EKS identity boundary when present. Non-EKS
+// lifecycle operations carry a nil verifier and remain unchanged.
+func VerifyAWSOwnershipBeforeMutation(
+	ctx context.Context,
+	verifier AWSOwnershipVerifier,
+) error {
+	err := eksidentity.VerifyBeforeMutation(ctx, verifier)
+	if err != nil {
+		return fmt.Errorf("verify AWS ownership before lifecycle mutation: %w", err)
+	}
+
+	return nil
+}
+
 // CreateMinimalProvisionerForProvider creates provisioners for all distributions
 // that support the given provider, and returns the first one that can operate on the cluster.
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
+	ctx context.Context,
 	info *clusterdetector.Info,
-	omniOpts v1alpha1.OptionsOmni,
-	kubernetesOpts v1alpha1.OptionsKubernetes,
-	deleteStorage bool,
+	options MinimalProvisionerOptions,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
@@ -422,7 +650,7 @@ func CreateMinimalProvisionerForProvider(
 		// Pass info.KubeconfigPath as the nested cluster's kubeconfig for context cleanup.
 		return newKubernetesCleanupProvisioner(
 			info.ClusterName,
-			kubernetesOpts,
+			options.KubernetesOpts,
 			info.KubeconfigPath,
 		)
 
@@ -443,21 +671,23 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
-			omniOpts,
+			options.OmniOpts,
 			false,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
 		}
 
-		provisioner.WithDeleteStorage(deleteStorage)
+		provisioner.WithDeleteStorage(options.DeleteStorage)
 
 		return provisioner, nil
 
-	case v1alpha1.ProviderAWS, v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
-		// AWS, GCP, and Azure only support their managed distributions
-		// (EKS/GKE/AKS), which are not docker-based and cannot be produced by
-		// the minimal multi-provisioner path; their lifecycle goes through the factory.
+	case v1alpha1.ProviderAWS:
+		return createMinimalEKSProvisioner(ctx, info, options)
+
+	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
+		// GCP and Azure only support their managed distributions (GKE/AKS),
+		// which are not yet wired into this standalone lifecycle path.
 		return nil, fmt.Errorf(
 			"%w: %s provider is only supported via its managed distribution",
 			clusterprovisioner.ErrUnsupportedProvider,
@@ -471,6 +701,42 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 		)
 	}
+}
+
+// createMinimalEKSProvisioner builds the name-and-region-only EKS configuration
+// needed by standalone delete/start/stop commands, while reusing the default
+// factory's credential-isolated eksctl and AWS provider wiring. ConfigPath is
+// deliberately empty: an explicit/resolved cluster name must never be replaced
+// by a possibly unrelated local eks.yaml during a destructive delete.
+func createMinimalEKSProvisioner(
+	ctx context.Context,
+	info *clusterdetector.Info,
+	options MinimalProvisionerOptions,
+) (clusterprovisioner.Provisioner, error) {
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Name = info.ClusterName
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	clusterCfg.Spec.Provider.AWS = options.AWSOpts
+
+	factory := clusterprovisioner.DefaultFactory{
+		AWSResolution:        options.AWSResolution,
+		AWSOwnershipVerifier: options.AWSOwnershipVerifier,
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{
+				Name:           info.ClusterName,
+				Region:         options.AWSRegion,
+				KubeconfigPath: info.KubeconfigPath,
+			},
+		},
+	}
+
+	provisioner, _, err := factory.Create(ctx, clusterCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
+	}
+
+	return provisioner, nil
 }
 
 // kubernetesCleanupProvisioner deletes nested clusters on a Kubernetes provider

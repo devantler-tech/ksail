@@ -39,16 +39,17 @@ func IsGitOpsManaged(labels map[string]string) (string, bool) {
 	return "", false
 }
 
-// SkipIfGitOpsManaged reports whether a component's Helm install should be
-// skipped because the release Secret is already owned by a GitOps controller
-// (Flux or ArgoCD). It queries the release storage labels, tolerating
+// SkipIfGitOpsManaged reports whether a component's Helm lifecycle mutation
+// should be skipped because the release Secret is already owned by a GitOps
+// controller (Flux or ArgoCD). It queries the release storage labels, tolerating
 // [helm.ErrNoReleaseStorage] (no release yet), and when ownership is detected
 // it prints a skip notice to stderr and returns true.
 //
 // name identifies the component in the skip message and error wrapping (e.g.
 // "cilium", "flux-operator"); releaseName and namespace identify the Helm
 // release Secret to inspect. This single-sources the ownership-skip sequence
-// shared by Base.Install, the CNI installers, and the Flux installer.
+// shared by Base.Install, the CNI installers, the Flux installer, and the AWS
+// Load Balancer Controller's guarded uninstall path.
 func SkipIfGitOpsManaged(
 	ctx context.Context,
 	client helm.Interface,
@@ -66,7 +67,7 @@ func SkipIfGitOpsManaged(
 
 	fmt.Fprintf(
 		os.Stderr,
-		"%s: skipping install — release %q is managed by %s\n",
+		"%s: skipping KSail-managed Helm change — release %q is managed by %s\n",
 		name,
 		releaseName,
 		controller,

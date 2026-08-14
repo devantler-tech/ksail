@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
@@ -66,7 +67,13 @@ func clusterPatchSpecs() []patchSpec {
 			when:     func(cfg *Config) bool { return cfg.DisableDefaultCNI },
 			subdir:   subdirCluster,
 			filename: disableCNIFileName,
-			content:  staticContent(DisableDefaultCNIPatchYAML),
+			content: func(cfg *Config) (string, error) {
+				content := talosconfigmanager.DisableDefaultCNIPatchYAML(
+					cfg.MultiDocumentKubernetesConfig,
+				)
+
+				return content, nil
+			},
 		},
 		{
 			when:     func(cfg *Config) bool { return cfg.ClusterName != "" },
@@ -204,19 +211,47 @@ func clusterNameContent(cfg *Config) (string, error) {
 `, cfg.ClusterName), nil
 }
 
-// oidcContent builds the OIDC API server configuration patch, embedding the CA
-// certificate via machine.files when OIDCCAFile is set.
+// oidcContent builds the version-appropriate OIDC configuration. Talos 1.14
+// uses KubeAuthenticationConfig; older contracts retain API-server flags and a
+// machine.files CA mount.
 func oidcContent(cfg *Config) (string, error) {
 	var builder strings.Builder
 
-	if cfg.OIDCCAFile != "" {
+	if !cfg.MultiDocumentKubernetesConfig && cfg.OIDCCAFile != "" {
 		err := writeOIDCCAMachineFiles(&builder, cfg.OIDCCAFile)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	writeOIDCAPIServerArgs(&builder, cfg)
+	if !cfg.MultiDocumentKubernetesConfig {
+		writeOIDCAPIServerArgs(&builder, cfg)
+
+		return builder.String(), nil
+	}
+
+	var caContent string
+
+	if cfg.OIDCCAFile != "" {
+		content, err := readOIDCCAFile(cfg.OIDCCAFile)
+		if err != nil {
+			return "", err
+		}
+
+		caContent = string(content)
+	}
+
+	builder.Write(talosconfigmanager.StructuredOIDCPatchYAML(
+		talosconfigmanager.OIDCPatchConfig{
+			IssuerURL:            cfg.OIDCIssuerURL,
+			ClientID:             cfg.OIDCClientID,
+			UsernameClaim:        cfg.OIDCUsernameClaim,
+			UsernamePrefix:       cfg.OIDCUsernamePrefix,
+			GroupsClaim:          cfg.OIDCGroupsClaim,
+			GroupsPrefix:         cfg.OIDCGroupsPrefix,
+			CertificateAuthority: caContent,
+		},
+	))
 
 	return builder.String(), nil
 }

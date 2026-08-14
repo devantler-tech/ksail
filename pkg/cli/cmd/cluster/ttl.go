@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +28,7 @@ func waitForTTLAndDelete(
 	cmd *cobra.Command,
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
 	ttl time.Duration,
 ) error {
 	notify.Infof(cmd.OutOrStdout(),
@@ -39,7 +43,7 @@ func waitForTTLAndDelete(
 
 	select {
 	case <-timer.C:
-		return autoDeleteCluster(cmd, clusterName, clusterCfg)
+		return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
 	case <-ctx.Done():
 		notify.Infof(cmd.OutOrStdout(),
 			"TTL wait cancelled; cluster %q will remain running", clusterName)
@@ -55,25 +59,38 @@ func autoDeleteCluster(
 	cmd *cobra.Command,
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
+	clusterName, err := ttlAutoDeleteTargetName(clusterName, clusterCfg, eksConfig)
+	if err != nil {
+		return fmt.Errorf("TTL auto-delete: resolve target: %w", err)
+	}
+
 	notify.Infof(cmd.OutOrStdout(),
 		"TTL expired; auto-destroying cluster %q...", clusterName)
 
-	info := &clusterdetector.Info{
-		ClusterName:  clusterName,
-		Distribution: clusterCfg.Spec.Cluster.Distribution,
-		Provider:     clusterCfg.Spec.Cluster.Provider,
+	info, options, err := ttlDeleteProvisionerInputs(
+		cmd.Context(), clusterName, clusterCfg, eksConfig,
+	)
+	if err != nil {
+		return err
 	}
 
-	provisioner, err := createDeleteProvisioner(
-		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
-	)
+	provisioner, err := createDeleteProvisioner(cmd.Context(), info, options)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
 
 	deleteCtx, cancel := context.WithTimeout(cmd.Context(), deleteTimeout)
 	defer cancel()
+
+	err = lifecycle.VerifyAWSOwnershipBeforeMutation(
+		deleteCtx,
+		options.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("TTL auto-delete: %w", err)
+	}
 
 	err = provisioner.Delete(deleteCtx, clusterName)
 	if err != nil {
@@ -82,7 +99,7 @@ func autoDeleteCluster(
 
 	// Clean up persisted state (spec + TTL).
 	// Best-effort: warn on failure rather than blocking success.
-	stateErr := state.DeleteClusterState(clusterName)
+	stateErr := deleteTTLClusterState(clusterName, clusterCfg, eksConfig)
 	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to clean up cluster state: %v", stateErr)
@@ -92,4 +109,108 @@ func autoDeleteCluster(
 		"cluster %q auto-destroyed after TTL expiry", clusterName)
 
 	return nil
+}
+
+func deleteTTLClusterState(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	if clusterCfg != nil &&
+		clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if eksConfig == nil || strings.TrimSpace(eksConfig.Region) == "" {
+			return fmt.Errorf("delete exact-region EKS TTL state: %w", state.ErrInvalidRegion)
+		}
+
+		err := state.DeleteEKSRegionState(clusterName, eksConfig.Region)
+		if err != nil {
+			return fmt.Errorf("delete exact-region EKS TTL state: %w", err)
+		}
+
+		return nil
+	}
+
+	err := state.DeleteClusterState(clusterName)
+	if err != nil {
+		return fmt.Errorf("delete TTL cluster state: %w", err)
+	}
+
+	return nil
+}
+
+func ttlDeleteProvisionerInputs(
+	ctx context.Context,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) (*clusterdetector.Info, lifecycle.MinimalProvisionerOptions, error) {
+	info := &clusterdetector.Info{
+		ClusterName:    clusterName,
+		Distribution:   clusterCfg.Spec.Cluster.Distribution,
+		Provider:       clusterCfg.Spec.Cluster.Provider,
+		KubeconfigPath: clusterCfg.Spec.Cluster.Connection.Kubeconfig,
+	}
+	options := lifecycle.MinimalProvisionerOptions{
+		OmniOpts:       clusterCfg.Spec.Provider.Omni,
+		KubernetesOpts: clusterCfg.Spec.Provider.Kubernetes,
+		AWSOpts:        clusterCfg.Spec.Provider.AWS,
+	}
+
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if strings.TrimSpace(eksConfig.KubeconfigPath) != "" {
+			info.KubeconfigPath = strings.TrimSpace(eksConfig.KubeconfigPath)
+		}
+
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: clusterName,
+			EKSConfigSource: eksConfig.NameFromConfig &&
+				strings.TrimSpace(eksConfig.ConfigPath) != "",
+			Provider:       v1alpha1.ProviderAWS,
+			KubeconfigPath: info.KubeconfigPath,
+			AWSOpts:        clusterCfg.Spec.Provider.AWS,
+			// EKSConfig.Region was pinned before creation. Do not re-read a mutable region
+			// environment variable after the TTL wait.
+			AWSRegion: strings.TrimSpace(eksConfig.Region),
+		}
+
+		err := ensureAWSClusterManaged(ctx, resolved)
+		if err != nil {
+			return nil, lifecycle.MinimalProvisionerOptions{}, fmt.Errorf(
+				"TTL auto-delete: verify EKS ownership: %w",
+				err,
+			)
+		}
+
+		eksConfig.Region = resolved.AWSRegion
+		options.AWSRegion = resolved.AWSRegion
+		options.AWSResolution = resolved.AWSResolution
+		options.AWSOwnershipVerifier = resolved.AWSOwnershipVerifier
+	}
+
+	return info, options, nil
+}
+
+// ttlAutoDeleteTargetName returns the exact target the provisioner created. EKS creation consumes
+// EKSConfig.Name rather than the lifecycle action's name argument, so TTL cleanup must use that same
+// immutable identity and fail closed when it is unavailable.
+func ttlAutoDeleteTargetName(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) (string, error) {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
+		return clusterName, nil
+	}
+
+	if eksConfig == nil {
+		return "", errEKSConfigurationUnavailable
+	}
+
+	actualName := strings.TrimSpace(eksConfig.Name)
+	if actualName == "" {
+		return "", errEKSClusterNameRequired
+	}
+
+	return actualName, nil
 }

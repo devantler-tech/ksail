@@ -3,6 +3,7 @@ package workload
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -40,6 +41,9 @@ func NewExportCmd() *cobra.Command {
 		Long:         exportCmdLong,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: permissionWrite,
+		},
 	}
 
 	// Create config manager during command setup to register flags

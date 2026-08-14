@@ -491,3 +491,66 @@ func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateEKSConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cluster *v1alpha1.ClusterSpec
+		wantErr error
+	}{
+		{
+			name:    "nil cluster is valid",
+			cluster: nil,
+		},
+		{
+			name: "non-EKS distribution ignores the field",
+			cluster: &v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				EKS: v1alpha1.OptionsEKS{
+					AWSLoadBalancerControllerServiceAccount: "Not_A_Valid_SA!",
+				},
+			},
+		},
+		{
+			name: "empty service account is valid",
+			cluster: &v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionEKS,
+			},
+		},
+		{
+			name: "valid service account",
+			cluster: &v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionEKS,
+				EKS: v1alpha1.OptionsEKS{
+					AWSLoadBalancerControllerServiceAccount: "aws-load-balancer-controller",
+				},
+			},
+		},
+		{
+			name: "invalid service account fails before provisioning",
+			cluster: &v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionEKS,
+				EKS: v1alpha1.OptionsEKS{
+					AWSLoadBalancerControllerServiceAccount: "Not_A_Valid_SA!",
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidEKSConfig,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateEKSConfig(testCase.cluster)
+
+			if testCase.wantErr != nil {
+				require.ErrorIs(t, err, testCase.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

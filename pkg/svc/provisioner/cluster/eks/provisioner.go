@@ -2,31 +2,46 @@ package eksprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"sigs.k8s.io/yaml"
+)
+
+var (
+	errEKSCreateConfigMetadataRequired = errors.New("metadata is required")
+	errEKSCreateConfigMetadataType     = errors.New("metadata must be an object")
 )
 
 // Provisioner manages Amazon EKS clusters via the eksctl CLI.
 //
 // All operations delegate to pkg/client/eksctl.Client, which in turn shells
 // out to the eksctl binary. The provisioner holds the declarative
-// eksctl.yaml path so Create/Delete can be driven from the same source of
-// truth scaffolded by ksail project init.
+// eksctl.yaml path so Create can be driven from the source of truth
+// scaffolded by ksail project init.
 type Provisioner struct {
 	// name is the cluster name derived from the ksail.yaml / eksctl.yaml.
 	name string
 	// region is the AWS region. Cached here so operations that accept
-	// --region without a --config-file (e.g. GetCluster on a deleted
+	// --region without a --config-file (e.g. Delete or GetCluster on a deleted
 	// cluster) still work.
 	region string
 	// configPath is the path to the declarative eksctl ClusterConfig.
-	// Required for Create; preferred over --name/--region for Delete and
-	// Upgrade because it keeps CloudFormation stack naming consistent.
+	// Required for Create.
 	configPath string
+	// kubeconfigPath is the exact file eksctl writes and KSail reads after create.
+	kubeconfigPath string
 	// client is the eksctl binary wrapper.
 	client *eksctl.Client
 	// infraProvider is the AWS provider used for Start/Stop semantics
@@ -36,6 +51,13 @@ type Provisioner struct {
 	// minting via the AWS SDK). Injected in tests; lazily resolved from the
 	// operator's AWS credentials otherwise.
 	awsClient AWSClusterAPI
+	// eksClientOptions pins the credential selection used when awsClient is
+	// resolved lazily for the Connector capability.
+	eksClientOptions []eksclient.Option
+	// requireCredentialValues prevents ambient fallback when custom sources are unset.
+	requireCredentialValues bool
+	// ownershipVerifier rechecks immutable identity immediately before EKS mutations.
+	ownershipVerifier eksidentity.Verifier
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -48,6 +70,47 @@ type Option func(*Provisioner)
 func WithAWSClusterAPI(api AWSClusterAPI) Option {
 	return func(p *Provisioner) {
 		p.awsClient = api
+	}
+}
+
+// WithCredentialValues pins the credentials used by the provisioner's lazy
+// AWS-SDK DescribeCluster/STS client without mutating process environment.
+func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
+	return func(p *Provisioner) {
+		p.eksClientOptions = []eksclient.Option{
+			eksclient.WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken),
+		}
+	}
+}
+
+// WithAWSConfig pins the complete frozen SDK configuration used by the provisioner's lazy EKS/STS
+// client, retaining non-credential endpoint and transport settings from the ownership guard.
+func WithAWSConfig(config aws.Config) Option {
+	return func(p *Provisioner) {
+		p.eksClientOptions = []eksclient.Option{eksclient.WithAWSConfig(config)}
+	}
+}
+
+// RequireCredentialValues prevents the lazy connector SDK client from falling
+// back to ambient canonical credentials when custom sources resolved no values.
+func RequireCredentialValues() Option {
+	return func(p *Provisioner) {
+		p.requireCredentialValues = true
+	}
+}
+
+// WithOwnershipVerifier injects the immutable EKS identity boundary used immediately before
+// delete. Nodegroup mutations receive the same verifier through the AWS provider.
+func WithOwnershipVerifier(verifier eksidentity.Verifier) Option {
+	return func(p *Provisioner) {
+		p.ownershipVerifier = verifier
+	}
+}
+
+// WithKubeconfigPath pins where eksctl writes the created cluster context.
+func WithKubeconfigPath(path string) Option {
+	return func(p *Provisioner) {
+		p.kubeconfigPath = path
 	}
 }
 
@@ -64,13 +127,16 @@ func NewProvisioner(
 	}
 
 	provisioner := &Provisioner{
-		name:          name,
-		region:        region,
-		configPath:    configPath,
-		client:        client,
-		infraProvider: infraProvider,
-		awsClient:     nil,
-		awsMu:         sync.Mutex{},
+		name:                    name,
+		region:                  region,
+		configPath:              configPath,
+		client:                  client,
+		infraProvider:           infraProvider,
+		awsClient:               nil,
+		eksClientOptions:        nil,
+		requireCredentialValues: false,
+		ownershipVerifier:       nil,
+		awsMu:                   sync.Mutex{},
 	}
 
 	for _, opt := range opts {
@@ -99,7 +165,18 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
-	err = p.client.CreateCluster(ctx, p.configPath, p.region)
+	effectiveConfigPath, cleanup, err := p.effectiveCreateConfig()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	err = p.client.CreateClusterWithKubeconfig(
+		ctx,
+		effectiveConfigPath,
+		p.region,
+		p.kubeconfigPath,
+	)
 	if err != nil {
 		return fmt.Errorf("eksctl create cluster: %w", err)
 	}
@@ -107,9 +184,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	return nil
 }
 
-// Delete tears down the EKS cluster. Prefers --config-file when available so
-// eksctl can unwind the same CloudFormation stacks it created; falls back to
-// --name/--region for clusters imported without a local config.
+// Delete tears down the exact EKS cluster identified by name and region.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -118,10 +193,16 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("eksctl unavailable: %w", err)
 	}
 
-	// DeleteCluster prefers configPath over name when configPath is set.
+	err = eksidentity.VerifyBeforeMutation(ctx, p.ownershipVerifier)
+	if err != nil {
+		return fmt.Errorf("verify EKS ownership before delete: %w", err)
+	}
+
+	// Keep configPath empty so DeleteCluster cannot replace the validated exact
+	// target with a name or region from the declarative create configuration.
 	// Wait=true because cluster deletion must complete before ksail
 	// considers the workspace clean.
-	err = p.client.DeleteCluster(ctx, target, p.region, p.configPath, true)
+	err = p.client.DeleteCluster(ctx, target, p.region, "", true)
 	if err != nil {
 		return fmt.Errorf("eksctl delete cluster: %w", err)
 	}
@@ -224,4 +305,87 @@ func (p *Provisioner) resolveName(name string) string {
 	}
 
 	return p.name
+}
+
+// effectiveCreateConfig copies the declarative eksctl config to a private temporary file and
+// replaces metadata.region with the region selected by KSail's credential/lifecycle resolver. This
+// keeps eksctl's config-file-only invocation aligned with the exact region used for identity capture
+// and cleanup without modifying the user's source file.
+func (p *Provisioner) effectiveCreateConfig() (string, func(), error) {
+	region := strings.TrimSpace(p.region)
+	if region == "" {
+		return p.configPath, func() {}, nil
+	}
+
+	effectiveData, err := effectiveCreateConfigData(p.configPath, region)
+	if err != nil {
+		return "", func() {}, err
+	}
+
+	return writeEffectiveCreateConfig(effectiveData)
+}
+
+func effectiveCreateConfigData(configPath, region string) ([]byte, error) {
+	canonical, err := fsutil.EvalCanonicalPath(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize EKS create config: %w", err)
+	}
+
+	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
+	if err != nil {
+		return nil, fmt.Errorf("read EKS create config: %w", err)
+	}
+
+	var config map[string]any
+
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		return nil, fmt.Errorf("parse EKS create config: %w", err)
+	}
+
+	metadataValue, exists := config["metadata"]
+	if !exists {
+		return nil, fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigMetadataRequired)
+	}
+
+	metadata, ok := metadataValue.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigMetadataType)
+	}
+
+	metadata["region"] = region
+
+	effectiveData, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("marshal effective EKS create config: %w", err)
+	}
+
+	return effectiveData, nil
+}
+
+func writeEffectiveCreateConfig(data []byte) (string, func(), error) {
+	tempFile, err := os.CreateTemp("", "ksail-eks-create-*.yaml")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create effective EKS create config: %w", err)
+	}
+
+	tempPath := tempFile.Name()
+	cleanup := func() { _ = os.Remove(tempPath) }
+
+	_, writeErr := tempFile.Write(data)
+	closeErr := tempFile.Close()
+
+	if writeErr != nil {
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("write effective EKS create config: %w", writeErr)
+	}
+
+	if closeErr != nil {
+		cleanup()
+
+		return "", func() {}, fmt.Errorf("close effective EKS create config: %w", closeErr)
+	}
+
+	return tempPath, cleanup, nil
 }

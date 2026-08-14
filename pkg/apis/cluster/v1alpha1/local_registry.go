@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"os"
 	"strconv"
 	"strings"
 
@@ -25,8 +26,8 @@ func (r LocalRegistry) Enabled() bool {
 
 // extractCredentials extracts username and password from a credential string.
 func extractCredentials(credPart string) (string, string) {
-	if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
-		return credPart[:colonIdx], credPart[colonIdx+1:]
+	if username, password, found := strings.Cut(credPart, ":"); found {
+		return username, password
 	}
 
 	return credPart, ""
@@ -40,8 +41,9 @@ const registryCredentialMask = "****"
 // RedactRegistryCredentials returns the registry spec with its password component
 // replaced by a fixed mask, so secrets such as a GHCR Personal Access Token are
 // never printed in cleartext. The username, host, port, and path are preserved so
-// diff output still shows what structurally changed. Specs without a "user:pass@"
-// credential prefix, or with an empty password, are returned unchanged.
+// diff output still shows what structurally changed. Specs without a password
+// delimiter in their credential prefix, or with an empty password, are returned
+// unchanged.
 //
 // The credential boundaries mirror [LocalRegistry.Parse]: the credentials are the
 // segment before the first "@", and the password is everything after the first
@@ -54,10 +56,10 @@ func RedactRegistryCredentials(registry string) string {
 		return registry
 	}
 
-	// Password exists only when there is a ":" within the credential segment
-	// (matching extractCredentials' colonIdx > 0 requirement).
+	// Password exists when there is a ":" within the credential segment,
+	// including an invalid password-only form with an empty username.
 	colonIdx := strings.Index(registry[:atIdx], ":")
-	if colonIdx <= 0 {
+	if colonIdx < 0 {
 		return registry
 	}
 
@@ -171,22 +173,112 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 	}
 }
 
-// ResolveCredentials returns the username and password with environment variable placeholders expanded.
-// Placeholders use the format ${VAR_NAME}. If a referenced environment variable is not set,
-// the placeholder is replaced with an empty string.
+// tokenEnvVarFor returns the environment variable name a path should read its
+// token from: the path-specific override when configured, otherwise the shared
+// TokenEnvVar. An empty result means no env-var source is configured and the
+// caller falls back to the password embedded in the Registry spec.
+func (c RegistryCredentials) tokenEnvVarFor(override string) string {
+	if name := strings.TrimSpace(override); name != "" {
+		return name
+	}
+
+	return strings.TrimSpace(c.TokenEnvVar)
+}
+
+// resolvePassword returns the token held by the configured environment variable.
+// A configured name is authoritative: a missing or empty variable resolves to an
+// empty token rather than silently falling back to another credential source, so
+// resolution never depends on ambient process-environment state.
+func (r LocalRegistry) resolvePassword(override string) string {
+	name := r.Credentials.tokenEnvVarFor(override)
+	if name == "" {
+		return envvar.Expand(r.Parse().Password)
+	}
+
+	return os.Getenv(name)
+}
+
+// PullEnvLookup returns an environment lookup that maps both the common token
+// source and the cluster-specific token source to the effective cluster pull
+// credential. This lets Talos patches keep referring to the common placeholder
+// while honoring an explicit cluster override.
+//
+// A selected source is authoritative: the returned lookup reports it as found
+// even when its environment variable is unset or empty. That prevents default
+// expressions such as ${TOKEN:-fallback} from bypassing the configured source.
+// Unrelated names are delegated to fallback; a nil fallback uses os.LookupEnv.
+func (r LocalRegistry) PullEnvLookup(
+	fallback func(string) (string, bool),
+) func(string) (string, bool) {
+	if fallback == nil {
+		fallback = os.LookupEnv
+	}
+
+	commonSource := strings.TrimSpace(r.Credentials.TokenEnvVar)
+	clusterSource := strings.TrimSpace(r.Credentials.ClusterTokenEnvVar)
+	effectiveSource := r.Credentials.tokenEnvVarFor(clusterSource)
+
+	return func(name string) (string, bool) {
+		matchesCommonSource := commonSource != "" && name == commonSource
+		matchesClusterSource := clusterSource != "" && name == clusterSource
+
+		if effectiveSource != "" && (matchesCommonSource || matchesClusterSource) {
+			value, _ := fallback(effectiveSource)
+
+			return value, true
+		}
+
+		return fallback(name)
+	}
+}
+
+// ResolveCredentials returns the credentials used by CLI and publish (push) paths.
+// The password comes from CLITokenEnvVar when configured, otherwise TokenEnvVar,
+// otherwise the password embedded in the Registry spec (where ${VAR_NAME}
+// placeholders are expanded, unset variables becoming empty strings).
 //
 //nolint:nonamedreturns // Named returns document the returned values for clarity
 func (r LocalRegistry) ResolveCredentials() (username, password string) {
-	parsed := r.Parse()
-
-	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
+	return envvar.Expand(r.Parse().Username), r.resolvePassword(r.Credentials.CLITokenEnvVar)
 }
 
-// HasCredentials returns true if the registry has non-empty username or password configured.
-func (r LocalRegistry) HasCredentials() bool {
-	parsed := r.Parse()
+// ResolvePullCredentials returns the credentials used by cluster-side image and
+// artifact pulls. The password comes from ClusterTokenEnvVar when configured,
+// otherwise TokenEnvVar, otherwise the password embedded in the Registry spec.
+// Resolution is registry-agnostic: no host carries special meaning.
+//
+//nolint:nonamedreturns // Named returns document the returned values for clarity.
+func (r LocalRegistry) ResolvePullCredentials() (username, password string) {
+	username = envvar.Expand(r.Parse().Username)
+	if strings.TrimSpace(username) == "" {
+		return "", ""
+	}
 
-	return parsed.Username != "" || parsed.Password != ""
+	return username, r.resolvePassword(r.Credentials.ClusterTokenEnvVar)
+}
+
+// UsesDedicatedPullCredentials reports whether cluster pull paths read their token
+// from a different environment variable than CLI and publish paths. It is derived
+// from configuration alone, so the answer never changes with process-environment
+// state and a pull-only secret is marked as such even when its token is unset.
+func (r LocalRegistry) UsesDedicatedPullCredentials() bool {
+	if strings.TrimSpace(envvar.Expand(r.Parse().Username)) == "" {
+		return false
+	}
+
+	pullSource := r.Credentials.tokenEnvVarFor(r.Credentials.ClusterTokenEnvVar)
+	publishSource := r.Credentials.tokenEnvVarFor(r.Credentials.CLITokenEnvVar)
+
+	return pullSource != publishSource
+}
+
+// HasCredentials reports whether the registry resolves to a non-empty username.
+// Password-only forms are deliberately rejected because downstream registry
+// authentication requires an identity and must not persist ambient pull tokens.
+func (r LocalRegistry) HasCredentials() bool {
+	username, _ := r.ResolveCredentials()
+
+	return strings.TrimSpace(username) != ""
 }
 
 // IsExternal returns true if this represents an external registry (not localhost).

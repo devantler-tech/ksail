@@ -67,16 +67,46 @@ var (
 	errInvalidValuesYAML = errors.New(
 		"yaml: unmarshal errors:\n  line 3: cannot unmarshal !!str `oops` into int",
 	)
+	// A truncated schema-registry fetch can surface as plain io.EOF ("EOF")
+	// rather than io.ErrUnexpectedEOF ("unexpected EOF"). The kubeconform client
+	// stringifies each failing result, so the io.EOF identity is gone by the time
+	// the retry predicate sees it and only this text remains.
+	errBareEOF        = errors.New("EOF")
+	errKubeconformEOF = errors.New(
+		"validate file /tmp/x/namespace.yaml: validation failed: Namespace/test-namespace: EOF",
+	)
+	// Same failure with formatFailure's " (from <source>)" attribution suffix,
+	// so EOF is not the final token.
+	errKubeconformEOFAttributed = errors.New(
+		"validation failed: Namespace/test-namespace: EOF (from base)",
+	)
+	// Prose that merely mentions EOF is not a transient fetch failure and must
+	// stay non-retryable — these pin the predicate against over-matching.
+	errProseEOF    = errors.New("check EOF handling in the parser")
+	errEOFPrefixed = errors.New("EOFError: malformed input")
+	// Prose whose EOF sits in detail position but continues into more words.
+	// A truncated fetch's io.EOF is the terminal token of its detail segment,
+	// so a continuing sentence is prose and must stay non-retryable.
+	errProseEOFAfterColon = errors.New("invalid values: EOF is not allowed")
+	// processResults joins multiple failing resources with "; ", so a truncated
+	// fetch's EOF is not the final token when a later resource fails differently.
+	errKubeconformEOFJoined = errors.New(
+		"validation failed: Namespace/a: EOF; Deployment/b: invalid schema",
+	)
 )
 
-func TestIsRetryable(t *testing.T) {
-	t.Parallel()
+// isRetryableCase is one row of the IsRetryable truth table.
+type isRetryableCase struct {
+	name     string
+	err      error
+	expected bool
+}
 
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
+// isRetryableCases returns the IsRetryable truth table. It is a function rather
+// than an inline literal so the table can grow without pushing the test body
+// past the funlen limit.
+func isRetryableCases() []isRetryableCase {
+	return []isRetryableCase{
 		// Non-retryable cases.
 		{name: "nil error", err: nil, expected: false},
 		{name: "generic error", err: errGeneric, expected: false},
@@ -119,9 +149,35 @@ func TestIsRetryable(t *testing.T) {
 		},
 		// Genuine invalid user values must NOT be retried (narrow-scope guard).
 		{name: "invalid values yaml not retried", err: errInvalidValuesYAML, expected: false},
+		// Truncated schema fetch surfacing as a bare io.EOF detail.
+		{name: "bare EOF", err: errBareEOF, expected: true},
+		{name: "kubeconform EOF detail", err: errKubeconformEOF, expected: true},
+		{
+			name:     "kubeconform EOF with attribution",
+			err:      errKubeconformEOFAttributed,
+			expected: true,
+		},
+		// Over-match guards: EOF in prose is not a transient fetch failure.
+		{name: "prose mentioning EOF not retried", err: errProseEOF, expected: false},
+		{name: "EOF-prefixed word not retried", err: errEOFPrefixed, expected: false},
+		{
+			name:     "prose EOF after a colon not retried",
+			err:      errProseEOFAfterColon,
+			expected: false,
+		},
+		// A joined multi-resource failure keeps the EOF retryable.
+		{
+			name:     "kubeconform EOF joined with a later failure",
+			err:      errKubeconformEOFJoined,
+			expected: true,
+		},
 	}
+}
 
-	for _, tt := range tests {
+func TestIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range isRetryableCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

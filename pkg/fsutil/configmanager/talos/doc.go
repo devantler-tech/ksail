@@ -19,9 +19,9 @@
 //	    return err
 //	}
 //
-//	// Access control-plane config
+//	// Access control-plane config (Talos alpha.2 multi-document accessors)
 //	cpConfig := configs.ControlPlane()
-//	cniName := cpConfig.Cluster().Network().CNI().Name()
+//	flannelEnabled := cpConfig.K8sFlannelCNIConfig() != nil
 //
 //	// Access worker config
 //	workerConfig := configs.Worker()
