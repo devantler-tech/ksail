@@ -665,7 +665,7 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 		},
 	}
 
-	_, err := p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{})
+	_, err = p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
 	}
