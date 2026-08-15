@@ -160,6 +160,32 @@ func TestApplyAllowsConfiguredUIOrigin(t *testing.T) {
 	assert.Contains(t, stub.gotManifests, "kind: ConfigMap")
 }
 
+func TestApplyAllowsDefaultPortEquivalentUIOrigin(t *testing.T) {
+	t.Parallel()
+
+	stub := &applyStub{}
+	server := &api.Server{
+		Service:  stub,
+		UIOrigin: "http://127.0.0.1:80",
+	}
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://127.0.0.1/api/v1/clusters/default/c1/apply",
+		strings.NewReader("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n"),
+	)
+	request.Header.Set("Content-Type", "application/yaml")
+	request.Header.Set("Origin", "http://127.0.0.1")
+
+	recorder := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, stub.gotManifests, "kind: ConfigMap")
+}
+
 func doApplyRequest(
 	handler http.Handler,
 	contentType string,

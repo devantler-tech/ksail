@@ -482,7 +482,7 @@ func (s *Server) originGuard(next http.Handler) http.Handler {
 			return
 		}
 
-		if !strings.EqualFold(request.Host, configured.Host) ||
+		if !requestHostMatches(request.Host, configured) ||
 			!requestOriginMatches(request.Header.Get("Origin"), configured) {
 			writeError(writer, http.StatusForbidden, errRequestOrigin)
 
@@ -516,6 +516,15 @@ func isOriginURL(parsed *url.URL) bool {
 		(parsed.Path == "" || parsed.Path == "/") && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
+func requestHostMatches(raw string, configured *url.URL) bool {
+	requestURL, err := url.Parse(configured.Scheme + "://" + raw)
+	if err != nil || !isOriginURL(requestURL) || requestURL.Path != "" {
+		return false
+	}
+
+	return originsMatch(requestURL, configured)
+}
+
 func requestOriginMatches(raw string, configured *url.URL) bool {
 	if raw == "" {
 		return true
@@ -526,10 +535,30 @@ func requestOriginMatches(raw string, configured *url.URL) bool {
 		return false
 	}
 
-	return strings.EqualFold(requestOrigin.Scheme, configured.Scheme) &&
-		strings.EqualFold(requestOrigin.Host, configured.Host) &&
-		requestOrigin.User == nil && requestOrigin.Path == "" &&
-		requestOrigin.RawQuery == "" && requestOrigin.Fragment == ""
+	return requestOrigin.User == nil && requestOrigin.Path == "" &&
+		requestOrigin.RawQuery == "" && requestOrigin.Fragment == "" &&
+		originsMatch(requestOrigin, configured)
+}
+
+func originsMatch(left, right *url.URL) bool {
+	return strings.EqualFold(left.Scheme, right.Scheme) &&
+		strings.EqualFold(left.Hostname(), right.Hostname()) &&
+		effectiveOriginPort(left) == effectiveOriginPort(right)
+}
+
+func effectiveOriginPort(origin *url.URL) string {
+	if port := origin.Port(); port != "" {
+		return port
+	}
+
+	switch strings.ToLower(origin.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
 }
 
 // uiNotBuiltMessage is served when StaticFS is set but the SPA assets were never built (only the
