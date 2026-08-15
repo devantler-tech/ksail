@@ -48,9 +48,7 @@ func TestApplyEndpoint(t *testing.T) {
 	recorder := doApplyRequest(
 		server.Handler(),
 		"application/yaml",
-		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
 	)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
@@ -69,9 +67,7 @@ func TestApplyEndpointDryRun(t *testing.T) {
 	recorder := doApplyRequest(
 		server.Handler(),
 		"application/yaml",
-		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply?dryRun=true",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
 	)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
@@ -87,9 +83,7 @@ func TestApplyBlockedWhenReadOnly(t *testing.T) {
 	recorder := doApplyRequest(
 		server.Handler(),
 		"application/yaml",
-		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
 	)
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
@@ -105,9 +99,7 @@ func TestApplyRejectsCORSSafelistedContentType(t *testing.T) {
 	recorder := doApplyRequest(
 		server.Handler(),
 		"text/plain",
-		http.MethodPost,
 		"/api/v1/clusters/default/c1/apply",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n",
 	)
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
@@ -115,20 +107,72 @@ func TestApplyRejectsCORSSafelistedContentType(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "application/yaml")
 }
 
+func TestApplyRejectsHostileMatchingHostAndOrigin(t *testing.T) {
+	t.Parallel()
+
+	stub := &applyStub{}
+	server := &api.Server{
+		Service:  stub,
+		UIOrigin: "http://127.0.0.1:8080",
+	}
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/clusters/default/c1/apply",
+		strings.NewReader("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n"),
+	)
+	request.Host = "attacker.example"
+	request.Header.Set("Content-Type", "application/yaml")
+	request.Header.Set("Origin", "http://attacker.example")
+
+	recorder := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Empty(t, stub.gotManifests)
+}
+
+func TestApplyAllowsConfiguredUIOrigin(t *testing.T) {
+	t.Parallel()
+
+	stub := &applyStub{}
+	server := &api.Server{
+		Service:  stub,
+		UIOrigin: "http://127.0.0.1:8080",
+	}
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://127.0.0.1:8080/api/v1/clusters/default/c1/apply",
+		strings.NewReader("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n"),
+	)
+	request.Header.Set("Content-Type", "application/yaml")
+	request.Header.Set("Origin", "http://127.0.0.1:8080")
+
+	recorder := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, stub.gotManifests, "kind: ConfigMap")
+}
+
 func doApplyRequest(
 	handler http.Handler,
 	contentType string,
-	method string,
 	target string,
-	body string,
 ) *httptest.ResponseRecorder {
 	request := httptest.NewRequestWithContext(
 		context.Background(),
-		method,
+		http.MethodPost,
 		target,
-		strings.NewReader(body),
+		strings.NewReader("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n"),
 	)
 	request.Header.Set("Content-Type", contentType)
+
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
