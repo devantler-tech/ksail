@@ -435,6 +435,7 @@ func TestCloneEnvironmentConfig_RejectsSymlinkedDestinationWithForce(t *testing.
 	repoRoot := t.TempDir()
 	outside := t.TempDir()
 	writeRootConfig(t, repoRoot)
+
 	outsideTarget := filepath.Join(outside, "target.yaml")
 	require.NoError(t, os.WriteFile(outsideTarget, []byte("SENTINEL\n"), 0o600))
 

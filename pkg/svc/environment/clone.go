@@ -165,7 +165,8 @@ func CloneEnvironmentConfig(
 func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
 	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
 
-	if err := validateCloneDestination(repoRoot, dest, newRelPath); err != nil {
+	err := validateCloneDestination(repoRoot, dest, newRelPath)
+	if err != nil {
 		return false, err
 	}
 
@@ -184,7 +185,8 @@ func validateCloneDestination(repoRoot, dest, displayPath string) error {
 			displayPath, ErrDestinationEscapesRepository)
 	}
 
-	if err := rejectSymlinkPath(repoRoot, dest); err != nil {
+	err := rejectSymlinkPath(repoRoot, dest)
+	if err != nil {
 		return fmt.Errorf("destination %s escapes the repository root: %w",
 			displayPath, err)
 	}
@@ -199,19 +201,23 @@ func rejectSymlinkPath(repoRoot, dest string) error {
 	}
 
 	current := repoRoot
-	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+
+	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
 		if part == "." || part == "" {
 			continue
 		}
 
 		current = filepath.Join(current, part)
+
 		info, lstatErr := os.Lstat(current)
 		if errors.Is(lstatErr, os.ErrNotExist) {
 			return nil
 		}
+
 		if lstatErr != nil {
 			return fmt.Errorf("inspecting %s: %w", current, lstatErr)
 		}
+
 		if info.Mode()&os.ModeSymlink != 0 {
 			return ErrDestinationEscapesRepository
 		}
