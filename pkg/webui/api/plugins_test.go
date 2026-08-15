@@ -399,6 +399,8 @@ func TestInstallPluginRejectsForeignWailsOrigin(t *testing.T) {
 		"wails://wails:8080",
 		"wails://user@wails",
 		"wails://wails/path",
+		"wails://wails?",
+		"wails://wails#",
 	} {
 		t.Run(origin, func(t *testing.T) {
 			t.Parallel()
