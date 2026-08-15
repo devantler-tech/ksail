@@ -17,9 +17,28 @@ type DiscoveredRegistries struct {
 
 // filterRegistriesByClusterName filters registries to only include those belonging to a specific cluster.
 // Registry names follow the pattern "{clusterName}-{host}" (e.g., "my-cluster-ghcr.io").
+//
+// The name alone is ambiguous: "foo-bar-ghcr.io" is either cluster "foo" with host "bar-ghcr.io"
+// or cluster "foo-bar" with host "ghcr.io". A plain prefix test claims it for BOTH, which matters
+// on a network several clusters share — every Kind cluster sits on "kind" — because the caller
+// then DELETES what this returns. Deleting "foo" would take a live "foo-bar" cluster's mirrors.
+//
+// otherClusters resolves that: it is the set of clusters that DEMONSTRABLY EXIST, discovered from
+// their node containers rather than inferred from registry names, and a candidate claimed by a
+// longer name in that set is left alone. Passing an empty set restores the plain prefix behaviour.
+//
+// Deriving rivals from names instead would misfire on a legitimate configuration: a cluster "foo"
+// with a mirror host called "bar-local-registry" produces a container "foo-bar-local-registry",
+// which reads as a cluster "foo-bar" that does not exist — and its own mirrors would then be
+// skipped and leaked. Mirror hosts are user-configurable, so no name pattern is a safe existence
+// marker.
+//
+// This narrows: it only ever removes entries the plain prefix test would have returned, never adds
+// one. It is still not exact ownership — #6294 adds an owning-cluster label for that.
 func filterRegistriesByClusterName(
 	registries []dockerclient.RegistryInfo,
 	clusterName string,
+	otherClusters []string,
 ) []dockerclient.RegistryInfo {
 	if clusterName == "" {
 		return registries
@@ -29,12 +48,29 @@ func filterRegistriesByClusterName(
 	filtered := make([]dockerclient.RegistryInfo, 0, len(registries))
 
 	for _, reg := range registries {
-		if strings.HasPrefix(reg.Name, prefix) {
-			filtered = append(filtered, reg)
+		if !strings.HasPrefix(reg.Name, prefix) {
+			continue
 		}
+
+		if claimedByLongerCluster(reg.Name, clusterName, otherClusters) {
+			continue
+		}
+
+		filtered = append(filtered, reg)
 	}
 
 	return filtered
+}
+
+// claimedByLongerCluster reports whether an existing cluster with a longer name owns this registry.
+func claimedByLongerCluster(registryName, clusterName string, otherClusters []string) bool {
+	for _, other := range otherClusters {
+		if len(other) > len(clusterName) && strings.HasPrefix(registryName, other+"-") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // DiscoverRegistriesByNetwork finds all registries connected to the cluster network.
@@ -44,6 +80,7 @@ func DiscoverRegistriesByNetwork(
 	cmd *cobra.Command,
 	distribution v1alpha1.Distribution,
 	clusterName string,
+	otherClusters []string,
 	cleanupDeps CleanupDependencies,
 ) *DiscoveredRegistries {
 	networkName := GetNetworkNameForDistribution(distribution, clusterName)
@@ -61,7 +98,7 @@ func DiscoverRegistriesByNetwork(
 			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
-		registries = filterRegistriesByClusterName(discovered, clusterName)
+		registries = filterRegistriesByClusterName(discovered, clusterName, otherClusters)
 
 		return nil
 	})

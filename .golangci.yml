@@ -44,6 +44,13 @@ linters:
       - linters:
           - paralleltest
         path: pkg/svc/credentials/store_test.go
+      # Tests that inject through the package-level loadRESTConfig /
+      # newUnstructuredClient seams cannot run in parallel: concurrent cases
+      # would overwrite each other's fake cluster.
+      - linters:
+          - paralleltest
+          - gochecknoglobals
+        path: pkg/svc/installer/flux/ocirepository_verify_live_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx

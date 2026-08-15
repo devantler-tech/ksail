@@ -4,7 +4,7 @@ metadata:
     github-path: skills/github-issues
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
-    github-tree-sha: 95fb5bd16c2cecb7c14c58d7e902a91daae2ec5e
+    github-tree-sha: d4591aac716969413e5ee0d7f95caae0540c329c
 name: github-issues
 ---
 # GitHub Issues
@@ -198,6 +198,7 @@ The following features require REST or GraphQL APIs beyond the basic MCP tools. 
 |------------|-------------|-----------|
 | Advanced search | Complex queries with boolean logic, date ranges, cross-repo search, issue field filters (`field.name:value`) | [references/search.md](references/search.md) |
 | Sub-issues & parent issues | Breaking work into hierarchical tasks | [references/sub-issues.md](references/sub-issues.md) |
+| Milestones | Create, read, update, close, reopen, delete milestones and manage milestone issues | [references/milestones.md](references/milestones.md) |
 | Issue dependencies | Tracking blocked-by / blocking relationships | [references/dependencies.md](references/dependencies.md) |
 | Issue types (advanced) | GraphQL operations beyond MCP `list_issue_types` / `type` param | [references/issue-types.md](references/issue-types.md) |
 | Projects V2 | Project boards, progress reports, field management | [references/projects.md](references/projects.md) |

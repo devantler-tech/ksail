@@ -9,4 +9,4 @@
 # Image mappings:
 # - docker.io/rancher/local-path-provisioner → localPathProvisionerVersion (release tag)
 
-FROM docker.io/rancher/local-path-provisioner:v0.0.36@sha256:1eba82e9c386038b4af6d69cca7519fac738c28c42735ed48ce70c882ad0d80f
+FROM docker.io/rancher/local-path-provisioner:v0.0.37@sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f

@@ -2,7 +2,8 @@ name: Maintenance
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 1 * *" # Monthly at 00:00 on the 1st
+    - cron: "0 0 * * *" # Daily bounded workflow-run cleanup
+    - cron: "15 0 1 * *" # Monthly package cleanup
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -13,25 +14,36 @@ permissions:
 
 jobs:
   delete-old-workflow-runs:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '0 0 * * *'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       actions: write
       contents: read
     steps:
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@b3018382ca039b53d238908238bd35d1fb14f8ee # v2.1.0
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 30
-          keep_minimum_runs: 6
-          check_branch_existence: true
-          check_pullrequest_exist: true
+          persist-credentials: false
+
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .github/scripts/delete-old-workflow-runs.sh \
+            --repository "${{ github.repository }}" \
+            --retain-days 30 \
+            --keep-minimum-runs 6 \
+            --max-deletions 750
 
   delete-old-images:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '15 0 1 * *'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     permissions:
       packages: write
     steps:

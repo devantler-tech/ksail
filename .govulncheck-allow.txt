@@ -10,11 +10,20 @@
 # Policy: the allowlist is for UNPATCHABLE findings only. The moment an
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
-# Verified with `govulncheck ./...` against ksail main (re-validated 2026-06-25):
-#   the 6 reachable advisories below, each "Fixed in: N/A" for the version
-#   pinned (transitively) in go.mod. Re-validate when bumping docker, k8s.io,
-#   or containerd deps. NOTE: x/image GO-2026-5061 is deliberately NOT listed —
-#   it has an upstream fix (v0.43.0) and is bumped per policy, not allowlisted.
+# Verified with `govulncheck ./...` against ksail main (whole-file re-validation
+# 2026-07-22): the reachable advisories below, each "Fixed in: N/A" for the
+#   version pinned (transitively) in go.mod. Re-validate when bumping any
+#   dependency that pins an allowlisted module. Today that is docker, k8s.io,
+#   containerd, and kubescape — kubescape pins BOTH x/crypto/openpgp and
+#   claircore transitively, so bumping it can move a pinned version, change a
+#   linked package, or alter reachability without any edit to this file naming
+#   those modules. NOTE: x/image GO-2026-5061 is deliberately NOT
+#   listed — it has an upstream fix (v0.43.0) and is bumped per policy, not
+#   allowlisted.
+#   That date covers the SET as a whole. An individual entry may carry a later
+#   measurement of its own — a targeted probe of one advisory, sometimes at a
+#   version main has not reached yet — and that does not re-date the sweep
+#   above. Read the per-entry date where one is given; otherwise this one.
 # ---------------------------------------------------------------------------
 
 # --- github.com/docker/docker (Moby) @ v28.5.2+incompatible -----------------
@@ -23,18 +32,6 @@
 # plugin request handling) that ksail does not run. No upstream fix.
 GO-2026-4887  # Moby AuthZ plugin bypass on oversized request bodies (daemon-side; no fix)
 GO-2026-4883  # Moby off-by-one in plugin privilege validation (daemon-side; no fix)
-
-# --- github.com/docker/docker (Moby) @ v28.5.2+incompatible — cp / archive ---
-# Published 2026-06-25; daemon-side TOCTOU / symlink-swap issues in the
-# `docker cp` and `PUT /containers/{id}/archive` code paths. ksail is a Docker
-# *client* that creates/manages local clusters via the daemon API; it never
-# invokes `docker cp` or the container-archive endpoints, so these paths are
-# unreachable in practice. No fix on the v1 docker/docker module line (only
-# moby/moby/v2 >= v2.0.0-beta.14, which ksail does not import). Remove when a
-# v1 fix ships.
-GO-2026-5617  # docker cp race -> bind-mount redirection to host path (CVE-2026-42306; no fix; path unused)
-GO-2026-5668  # docker cp symlink swap -> arbitrary empty-file creation on host (CVE-2026-41568; no fix; path unused)
-GO-2026-5746  # PUT /containers/{id}/archive executes container binaries on host (CVE-2026-41567; no fix; path unused)
 
 # --- k8s.io/kubernetes @ v1.36.0 --------------------------------------------
 # Imported for client/config types only; ksail does not run kube-apiserver,
@@ -73,3 +70,28 @@ GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via
 # untrusted PGP-signed input. Re-evaluate if kubescape migrates off
 # x/crypto/openpgp.
 GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via kubescape core.Scan; no fix; local-input-only path)
+
+# --- github.com/quay/claircore (transitive via kubescape) -------------------
+# Published 2026-07-17. GO-2026-5939 covers SSRF when an unauthenticated
+# Claircore service accepts manifests whose layer URIs point to internal or
+# cloud-metadata endpoints. The advisory provides no symbol metadata, so
+# govulncheck conservatively reports any linked Claircore package as reachable.
+# KSail does not run a Claircore service or link its remote manifest fetchers:
+# `ksail workload scan` passes a local directory to Kubescape, and
+# TestClaircoreLinkedPackagesStayInert pins each shipped module's exact version
+# and linked package set, and fails if anything beyond the audited
+# parsing/type/local-filesystem packages becomes linked (issue #6008, delivered
+# by #6012). The two modules are independently selected and are NOT on the same
+# version, so this entry is deliberately not tied to one.
+#
+# ⚠️ THIS ENTRY IS NOT REMOVABLE ON A VERSION BUMP, despite the general policy
+# above. GitHub's advisory (GHSA-698x-9w2p-7vvp) records `<= 1.5.52` as
+# affected, so a reader checking there concludes v1.5.53 is patched — but the
+# GO ADVISORY IS THE ONE govulncheck READS, and GO-2026-5939 declares only
+# `introduced: 0` with NO fixed event, i.e. every version is affected.
+# Measured 2026-07-28 against claircore v1.5.53: govulncheck still reports
+# `Fixed in: N/A`, and its findings still carry a non-empty `trace[0].function`
+# — which is exactly the reachability test the CI gate applies — so dropping
+# this line turns the gate red rather than clean. Remove it only when the GO
+# advisory itself gains a fixed version, never on the strength of the GHSA.
+GO-2026-5939  # Claircore manifest-URI SSRF (CVE-2026-10517; sink not linked; no GO-advisory fix at any version)

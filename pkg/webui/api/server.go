@@ -361,10 +361,7 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 	// mode itself, since exec can run arbitrary commands and the method-based guard would let the GET
 	// through.
 	if _, ok := s.Service.(ExecService); ok {
-		mux.Handle(
-			"GET /api/v1/clusters/{namespace}/{name}/exec",
-			s.originGuardForAllMethods(http.HandlerFunc(s.handleExec)),
-		)
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/exec", s.handleExec)
 	}
 
 	// Start/stop an existing cluster's infrastructure without deleting it (ClusterLifecycleController).
@@ -464,19 +461,6 @@ func securityHeaders(next http.Handler) http.Handler {
 // can control both request values after rebinding, but cannot change the listener-derived UIOrigin.
 // Non-browser clients may omit Origin, but still have to address the exact configured Host.
 func (s *Server) originGuard(next http.Handler) http.Handler {
-	return s.originGuardWhen(next, func(request *http.Request) bool {
-		return isMutating(request.Method)
-	})
-}
-
-func (s *Server) originGuardForAllMethods(next http.Handler) http.Handler {
-	return s.originGuardWhen(next, func(_ *http.Request) bool { return true })
-}
-
-func (s *Server) originGuardWhen(
-	next http.Handler,
-	requiresValidation func(*http.Request) bool,
-) http.Handler {
 	var configured *url.URL
 
 	var configErr error
@@ -486,7 +470,7 @@ func (s *Server) originGuardWhen(
 	}
 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !requiresValidation(request) || s.UIOrigin == "" {
+		if !isMutating(request.Method) || s.UIOrigin == "" {
 			next.ServeHTTP(writer, request)
 
 			return

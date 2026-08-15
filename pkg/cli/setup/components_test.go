@@ -123,8 +123,32 @@ func TestNeedsLoadBalancerInstall(t *testing.T) {
 		distribution v1alpha1.Distribution
 		provider     v1alpha1.Provider
 		loadBalancer v1alpha1.LoadBalancer
+		eksLBOptIn   bool
 		expected     bool
 	}{
+		{
+			name:         "EKS × AWS + Enabled + experimental opt-in returns true (special case)",
+			distribution: v1alpha1.DistributionEKS,
+			provider:     v1alpha1.ProviderAWS,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			eksLBOptIn:   true,
+			expected:     true,
+		},
+		{
+			name:         "EKS × AWS + Enabled without opt-in returns false (default in-tree path)",
+			distribution: v1alpha1.DistributionEKS,
+			provider:     v1alpha1.ProviderAWS,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     false,
+		},
+		{
+			name:         "EKS × AWS + Default + experimental opt-in returns false (Enabled required)",
+			distribution: v1alpha1.DistributionEKS,
+			provider:     v1alpha1.ProviderAWS,
+			loadBalancer: v1alpha1.LoadBalancerDefault,
+			eksLBOptIn:   true,
+			expected:     false,
+		},
 		{
 			name:         "Talos × Hetzner + Default returns true (special case)",
 			distribution: v1alpha1.DistributionTalos,
@@ -200,6 +224,9 @@ func TestNeedsLoadBalancerInstall(t *testing.T) {
 						Distribution: testCase.distribution,
 						Provider:     testCase.provider,
 						LoadBalancer: testCase.loadBalancer,
+						EKS: v1alpha1.OptionsEKS{
+							ExperimentalAWSLoadBalancerController: testCase.eksLBOptIn,
+						},
 					},
 				},
 			}

@@ -344,6 +344,7 @@ func TestListClustersWrapsError(t *testing.T) {
 	_, err := client.ListClusters(t.Context(), "proj", "loc")
 
 	require.ErrorIs(t, err, errBoom)
+	assert.NotContains(t, err.Error(), "loc")
 }
 
 func TestCloseWrapsError(t *testing.T) {

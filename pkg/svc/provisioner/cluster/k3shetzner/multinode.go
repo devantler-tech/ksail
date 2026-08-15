@@ -72,6 +72,7 @@ func (p *Provisioner) ComposeInitNode(
 func (p *Provisioner) ComposeJoiningNodes(
 	clusterName, token string,
 	joinAddress net.IP,
+	_ []byte,
 	material hetznerbase.BootstrapMaterial,
 ) ([]hetznerbase.NodeSpec, error) {
 	serverURL := "https://" + net.JoinHostPort(joinAddress.String(), k3sAPIPort)

@@ -101,7 +101,7 @@ func generateCLIDocs(root *cobra.Command) error {
 	var count int
 
 	for _, sub := range root.Commands() {
-		if sub.Name() == "help" || sub.Name() == "completion" {
+		if docs.HiddenFromDocs(sub) {
 			continue
 		}
 
@@ -143,7 +143,7 @@ func generateCommandDocs(c *cobra.Command, parentNames []string) (int, error) {
 	var subs []*cobra.Command
 
 	for _, sub := range c.Commands() {
-		if sub.Name() == "help" || sub.Name() == "completion" {
+		if docs.HiddenFromDocs(sub) {
 			continue
 		}
 
@@ -174,7 +174,7 @@ func generateCommandDocs(c *cobra.Command, parentNames []string) (int, error) {
 		var hasChildren bool
 
 		for _, grandchild := range sub.Commands() {
-			if grandchild.Name() != "help" && grandchild.Name() != "completion" {
+			if !docs.HiddenFromDocs(grandchild) {
 				hasChildren = true
 				break
 			}

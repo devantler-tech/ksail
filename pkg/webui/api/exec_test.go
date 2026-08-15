@@ -34,20 +34,12 @@ func (execStub) Exec(
 	return nil
 }
 
-func execWebSocketURL(httpURL, path string) string {
-	return "ws" + strings.TrimPrefix(httpURL, "http") + path
-}
+// execPath is the exec endpoint every exec test drives; it is fixed so the tests differ only in the
+// headers they present.
+const execPath = "/api/v1/clusters/default/c1/exec?pod=p1"
 
-func newOriginBoundExecServer(t *testing.T) (*httptest.Server, string) {
-	t.Helper()
-
-	server := httptest.NewUnstartedServer(nil)
-	origin := "http://" + server.Listener.Addr().String()
-	server.Config.Handler = (&api.Server{Service: execStub{}, UIOrigin: origin}).Handler()
-	server.Start()
-	t.Cleanup(server.Close)
-
-	return server, origin
+func execWebSocketURL(httpURL string) string {
+	return "ws" + strings.TrimPrefix(httpURL, "http") + execPath
 }
 
 func TestConfigReportsWorkloadExec(t *testing.T) {
@@ -67,9 +59,12 @@ func TestExecWebSocketBridge(t *testing.T) {
 	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
 	defer server.Close()
 
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	url := execWebSocketURL(server.URL)
 
-	conn, response, err := websocket.DefaultDialer.Dial(url, nil)
+	header := http.Header{}
+	header.Set("Origin", server.URL)
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
 	require.NoError(t, err)
 
 	if response != nil {
@@ -92,21 +87,18 @@ func TestExecWebSocketBridge(t *testing.T) {
 	assert.Equal(t, "hello", msg.Data)
 }
 
-func TestExecRejectsUntrustedOrigin(t *testing.T) {
+func TestExecRejectsCrossOriginWebSocket(t *testing.T) {
 	t.Parallel()
 
-	server, _ := newOriginBoundExecServer(t)
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
 
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
-	headers := http.Header{}
-	headers.Set("Origin", "http://attacker.example")
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "https://attacker.example")
 
-	conn, response, err := websocket.DefaultDialer.Dial(url, headers)
-	if conn != nil {
-		defer func() { _ = conn.Close() }()
-	}
-
-	require.Error(t, err) // upgrade refused before switching protocols
+	_, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.Error(t, err)
 	require.NotNil(t, response)
 
 	defer func() { _ = response.Body.Close() }()
@@ -114,15 +106,45 @@ func TestExecRejectsUntrustedOrigin(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, response.StatusCode)
 }
 
-func TestExecAllowsConfiguredUIOrigin(t *testing.T) {
+// TestExecRejectsRebindingOriginMatchingHost pins the DNS-rebinding case, which a same-origin policy
+// cannot catch: the attacker's hostname has been rebound to loopback, so Origin and Host agree and
+// gorilla's default CheckOrigin would accept the upgrade. Only anchoring on the loopback identity
+// rejects it.
+func TestExecRejectsRebindingOriginMatchingHost(t *testing.T) {
 	t.Parallel()
 
-	server, origin := newOriginBoundExecServer(t)
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
-	headers := http.Header{}
-	headers.Set("Origin", origin)
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
 
-	conn, response, err := websocket.DefaultDialer.Dial(url, headers)
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	// gorilla's Dialer promotes a "Host" header into the request's Host field, so this reproduces a
+	// rebound name resolving to the loopback listener with a self-consistent Origin/Host pair.
+	header.Set("Host", "attacker.example")
+	header.Set("Origin", "http://attacker.example")
+
+	_, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.Error(t, err)
+	require.NotNil(t, response)
+
+	defer func() { _ = response.Body.Close() }()
+
+	assert.Equal(t, http.StatusForbidden, response.StatusCode)
+}
+
+// TestExecAllowsLocalhostOrigin pins the everyday path: the SPA served from the loopback listener under
+// the "localhost" spelling still upgrades, so the hardening costs the operator nothing.
+func TestExecAllowsLocalhostOrigin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "http://localhost:8080")
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
 	require.NoError(t, err)
 
 	if response != nil {
@@ -132,13 +154,78 @@ func TestExecAllowsConfiguredUIOrigin(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 }
 
+// TestExecAllowsDesktopWailsOrigin pins the desktop shell's path: the SPA is served from the fixed
+// wails://wails origin through the Wails AssetServer (see desktop/main.go), with no TCP listener at
+// all, so that one origin upgrades even though it is not loopback.
+func TestExecAllowsDesktopWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+	defer server.Close()
+
+	url := execWebSocketURL(server.URL)
+	header := http.Header{}
+	header.Set("Origin", "wails://wails")
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, header)
+	require.NoError(t, err)
+
+	if response != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
+
+	defer func() { _ = conn.Close() }()
+}
+
+// TestExecRejectsForeignWailsAuthority pins that the desktop carve-out is the single wails://wails
+// origin and not the scheme. Trusting the scheme alone would admit any authority under it, and on this
+// path that check is the only thing between the caller and a shell in the cluster. A browser-sent
+// Origin carries scheme and authority and nothing else, so a port, user info, path, query or fragment
+// marks a crafted header rather than a real one.
+func TestExecRejectsForeignWailsAuthority(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"wails://attacker",
+		"wails://wails:8080",
+		"wails://user@wails",
+		"wails://wails/path",
+		"wails://wails?x=1",
+		"wails://wails#frag",
+		// An empty delimiter parses away to nothing — RawQuery and Fragment are both "" here — so a
+		// field-by-field comparison accepts these while the raw header is not the desktop origin.
+		"wails://wails?",
+		"wails://wails#",
+		"wails://wails?#",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewServer((&api.Server{Service: execStub{}}).Handler())
+			defer server.Close()
+
+			url := execWebSocketURL(server.URL)
+			header := http.Header{}
+			header.Set("Origin", origin)
+
+			_, response, err := websocket.DefaultDialer.Dial(url, header)
+			require.Error(t, err)
+			require.NotNil(t, response)
+
+			defer func() { _ = response.Body.Close() }()
+
+			assert.Equal(t, http.StatusForbidden, response.StatusCode)
+		})
+	}
+}
+
 func TestExecBlockedWhenReadOnly(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer((&api.Server{Service: execStub{}, ReadOnly: true}).Handler())
 	defer server.Close()
 
-	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	url := execWebSocketURL(server.URL)
 
 	_, response, err := websocket.DefaultDialer.Dial(url, nil)
 	require.Error(t, err) // upgrade refused before switching protocols
