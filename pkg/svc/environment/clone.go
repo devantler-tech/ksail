@@ -151,10 +151,17 @@ func CloneEnvironmentConfig(
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning
-// whether a file was actually written. The destination is containment-checked
-// against repoRoot, and an existing file is preserved (wrote=false) unless force
-// is set — mirroring fsutil.TryWriteFile's skip semantics so the caller's
-// "paths written" list excludes skipped files.
+// whether a file was actually written. An existing file is preserved (wrote=false)
+// unless force is set, so the caller's "paths written" list excludes skipped files.
+//
+// The lstat walk in validateCloneDestination enforces this package's stricter
+// policy — a symlinked destination or parent is rejected outright, even one that
+// stays inside repoRoot. It cannot, on its own, guarantee containment: an attacker
+// who swaps a validated parent for a symlink afterwards would redirect a
+// name-resolved write outside repoRoot. fsutil.TryWriteFileWithin closes that
+// window by resolving every component through a descriptor rooted at repoRoot, so
+// containment holds no matter who wins the race and the check above is left to do
+// only policy.
 func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
 	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
 
@@ -162,29 +169,12 @@ func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) 
 		return false, err
 	}
 
-	// TryWriteFile returns the content (not a write-status), so decide up front
-	// whether it will skip: it skips iff the file exists and force is false.
-	if !force {
-		_, statErr := os.Stat(dest)
-		if statErr == nil {
-			return false, nil
-		}
-
-		if !errors.Is(statErr, os.ErrNotExist) {
-			return false, fmt.Errorf("checking destination %s: %w", newRelPath, statErr)
-		}
-	}
-
-	if err := validateCloneDestination(repoRoot, dest, newRelPath); err != nil {
-		return false, err
-	}
-
-	_, writeErr := fsutil.TryWriteFile(content, dest, force)
+	wrote, writeErr := fsutil.TryWriteFileWithin(repoRoot, newRelPath, content, force)
 	if writeErr != nil {
 		return false, fmt.Errorf("writing %s: %w", newRelPath, writeErr)
 	}
 
-	return true, nil
+	return wrote, nil
 }
 
 func validateCloneDestination(repoRoot, dest, displayPath string) error {

@@ -197,7 +197,11 @@ func TestCloneOverlay_RejectsSymlinkedDestinationParent(t *testing.T) {
 	writeOverlay(t, repoRoot)
 
 	destParent := filepath.Join(repoRoot, "k8s", "clusters", "staging")
-	require.NoError(t, os.Symlink(outside, destParent))
+
+	symlinkErr := os.Symlink(outside, destParent)
+	if symlinkErr != nil {
+		t.Skipf("symlinks not supported: %v", symlinkErr)
+	}
 
 	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
 
@@ -206,6 +210,45 @@ func TestCloneOverlay_RejectsSymlinkedDestinationParent(t *testing.T) {
 
 	_, statErr := os.Stat(filepath.Join(outside, "kustomization.yaml"))
 	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+// TestCloneOverlay_ContainsWriteWhenParentIsSwappedAfterValidation covers the
+// window between the destination check and the write: the parent is a real
+// directory when the clone validates it and a symlink pointing outside repoRoot by
+// the time the content is written. The clone must not write through it, whichever
+// side wins that race.
+func TestCloneOverlay_ContainsWriteWhenParentIsSwappedAfterValidation(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	outside := t.TempDir()
+	writeOverlay(t, repoRoot)
+
+	sentinel := filepath.Join(outside, "kustomization.yaml")
+	require.NoError(t, os.WriteFile(sentinel, []byte("SENTINEL\n"), 0o600))
+
+	destParent := filepath.Join(repoRoot, "k8s", "clusters", "staging")
+	require.NoError(t, os.MkdirAll(destParent, 0o750))
+
+	// Stand in for an attacker winning the race after validateCloneDestination has
+	// already observed a legitimate directory.
+	require.NoError(t, os.Remove(destParent))
+
+	symlinkErr := os.Symlink(outside, destParent)
+	if symlinkErr != nil {
+		t.Skipf("symlinks not supported: %v", symlinkErr)
+	}
+
+	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
+
+	_, cloneErr := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", rewrites, true)
+	require.Error(t, cloneErr)
+
+	//nolint:gosec // G304: reads a file just written under the test's own t.TempDir().
+	data, readErr := os.ReadFile(sentinel)
+	require.NoError(t, readErr)
+	assert.Equal(t, "SENTINEL\n", string(data),
+		"the clone must not write outside repoRoot through a swapped parent")
 }
 
 func TestCloneOverlay_MissingSourceOverlay(t *testing.T) {
@@ -394,7 +437,11 @@ func TestCloneEnvironmentConfig_RejectsSymlinkedDestinationWithForce(t *testing.
 	writeRootConfig(t, repoRoot)
 	outsideTarget := filepath.Join(outside, "target.yaml")
 	require.NoError(t, os.WriteFile(outsideTarget, []byte("SENTINEL\n"), 0o600))
-	require.NoError(t, os.Symlink(outsideTarget, filepath.Join(repoRoot, "ksail.staging.yaml")))
+
+	symlinkErr := os.Symlink(outsideTarget, filepath.Join(repoRoot, "ksail.staging.yaml"))
+	if symlinkErr != nil {
+		t.Skipf("symlinks not supported: %v", symlinkErr)
+	}
 
 	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
 
