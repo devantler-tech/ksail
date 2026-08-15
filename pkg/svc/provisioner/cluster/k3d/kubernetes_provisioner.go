@@ -317,11 +317,7 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 // clustererr.ErrKubeconfigNotReady while the k3k-<name>-kubeconfig Secret has not been published
 // yet.
 func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
-	clusterName := name
-	if clusterName == "" {
-		clusterName = p.clusterName
-	}
-
+	clusterName := p.effectiveClusterName(name)
 	conn := ConnectionFor(clusterName)
 
 	raw, err := nested.ConnectorKubeconfig(
@@ -347,6 +343,14 @@ func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, e
 	}
 
 	return out, nil
+}
+
+func (p *K3kProvisioner) effectiveClusterName(name string) string {
+	if name != "" {
+		return name
+	}
+
+	return p.clusterName
 }
 
 // connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, rewrites the kubeconfig to
