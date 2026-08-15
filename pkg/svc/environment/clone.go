@@ -210,7 +210,7 @@ func rejectSymlinkPath(repoRoot, dest string) error {
 			return nil
 		}
 		if lstatErr != nil {
-			return lstatErr
+			return fmt.Errorf("inspecting %s: %w", current, lstatErr)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return ErrDestinationEscapesRepository

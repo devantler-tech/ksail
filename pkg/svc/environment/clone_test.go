@@ -449,7 +449,7 @@ func TestCloneEnvironmentConfig_RejectsSymlinkedDestinationWithForce(t *testing.
 		repoRoot, "ksail.prod.yaml", rewrites, true)
 	require.ErrorIs(t, err, environment.ErrDestinationEscapesRepository)
 
-	data, readErr := os.ReadFile(outsideTarget)
+	data, readErr := os.ReadFile(outsideTarget) //nolint:gosec // G304: test-owned temp path
 	require.NoError(t, readErr)
 	assert.Equal(t, "SENTINEL\n", string(data))
 }
