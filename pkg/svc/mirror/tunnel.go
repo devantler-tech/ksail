@@ -20,6 +20,14 @@ const (
 	// FrameClose ends a multiplexed connection on a StreamID. It carries no
 	// payload; any buffered Data for the stream was sent in earlier frames.
 	FrameClose FrameType = 3
+	// FrameKeepalive is a session-level liveness ping. The intercept client
+	// sends one periodically so the steering agent can tell a live-but-idle
+	// client from a dead one (the exec stream does not reliably deliver EOF
+	// when the client dies — ksail#6040). It belongs to no stream (StreamID
+	// 0, which the odd/even allocation never assigns) and carries no
+	// payload; receivers refresh their liveness deadline and otherwise
+	// ignore it.
+	FrameKeepalive FrameType = 4
 )
 
 // tunnelHeaderSize is the fixed on-wire header: StreamID (uint32) + Type
@@ -73,7 +81,7 @@ func checkFrameLength(frameType FrameType, length uint32) error {
 		if length > MaxTunnelPayload {
 			return fmt.Errorf("%w: %d bytes", ErrTunnelFrameTooLarge, length)
 		}
-	case FrameOpen, FrameClose:
+	case FrameOpen, FrameClose, FrameKeepalive:
 		if length > 0 {
 			return fmt.Errorf(
 				"%w: type %d has %d bytes",

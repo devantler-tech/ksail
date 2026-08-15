@@ -96,10 +96,17 @@ func runDeleteAction(
 	tmr := timer.New()
 	tmr.Start()
 
-	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.Name, flags.Provider, flags.Kubeconfig)
+	// Strict: delete is destructive, so an unreadable config aborts before anything is removed.
+	resolved, err := lifecycle.ResolveClusterInfoStrict(
+		cmd, flags.Name, flags.Provider, flags.Kubeconfig,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
+	}
+
+	err = lifecycle.ValidateStandaloneAWSTarget(resolved)
+	if err != nil {
+		return fmt.Errorf("validate standalone AWS target: %w", err)
 	}
 
 	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
@@ -116,12 +123,9 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(
-		clusterInfo,
-		resolved.OmniOpts,
-		resolved.KubernetesOpts,
-		flags.storage,
-	)
+	options := minimalProvisionerOptions(resolved, flags.storage)
+
+	provisioner, err := createDeleteProvisioner(cmd.Context(), clusterInfo, options)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -129,12 +133,9 @@ func runDeleteAction(
 	// Pre-discover registries before deletion for Docker provider
 	preDiscovered := prepareDockerDeletion(cmd, resolved, clusterInfo)
 
-	// Show confirmation prompt unless force flag is set or non-TTY
-	if !confirm.ShouldSkipPrompt(flags.force) {
-		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
-		if err != nil {
-			return err
-		}
+	err = confirmAndReverifyDeleteTarget(cmd, flags, resolved, preDiscovered, isKindCluster)
+	if err != nil {
+		return err
 	}
 
 	// Delete the cluster
@@ -152,9 +153,51 @@ func runDeleteAction(
 		preDiscovered,
 		isKindCluster,
 		detectedInfo,
+		clusterInfo.Distribution,
 	)
 
 	return nil
+}
+
+func confirmAndReverifyDeleteTarget(
+	cmd *cobra.Command,
+	flags *deleteFlags,
+	resolved *lifecycle.ResolvedClusterInfo,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
+) error {
+	// Show confirmation prompt unless force flag is set or non-TTY.
+	if !confirm.ShouldSkipPrompt(flags.force) {
+		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := lifecycle.VerifyAWSOwnershipBeforeMutation(
+		cmd.Context(),
+		resolved.AWSOwnershipVerifier,
+	)
+	if err != nil {
+		return fmt.Errorf("reverify EKS ownership after delete confirmation: %w", err)
+	}
+
+	return nil
+}
+
+func minimalProvisionerOptions(
+	resolved *lifecycle.ResolvedClusterInfo,
+	deleteStorage bool,
+) lifecycle.MinimalProvisionerOptions {
+	return lifecycle.MinimalProvisionerOptions{
+		OmniOpts:             resolved.OmniOpts,
+		KubernetesOpts:       resolved.KubernetesOpts,
+		AWSOpts:              resolved.AWSOpts,
+		AWSRegion:            resolved.AWSRegion,
+		AWSResolution:        resolved.AWSResolution,
+		AWSOwnershipVerifier: resolved.AWSOwnershipVerifier,
+		DeleteStorage:        deleteStorage,
+	}
 }
 
 // detectClusterDistribution detects the distribution and other cluster info.
@@ -216,6 +259,15 @@ func detectDeleteClusterInfo(
 		clusterInfo.Distribution = detectedInfo.Distribution
 	}
 
+	// Carry the container-name fallback into the distribution. Without this the fallback is
+	// computed and then thrown away, so a Kind cluster whose kubeconfig detection failed resolves
+	// its registry network as Talos — the cluster name — instead of "kind". Discovery then finds
+	// nothing, the resulting ErrNoRegistriesFound is swallowed as "nothing to do", and the
+	// registries are left running while delete reports success (#6286).
+	if clusterInfo.Distribution == "" && isKindCluster {
+		clusterInfo.Distribution = v1alpha1.DistributionVanilla
+	}
+
 	return detectedInfo, isKindCluster, clusterInfo
 }
 
@@ -230,7 +282,7 @@ func prepareDockerDeletion(
 	}
 
 	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	disconnectRegistriesBeforeDelete(cmd, clusterInfo)
+	disconnectRegistriesBeforeDelete(cmd, clusterInfo, preDiscovered)
 
 	return preDiscovered
 }
@@ -244,10 +296,11 @@ func performPostDeletionCleanup(
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
 	isKindCluster bool,
 	detectedInfo *clusterdetector.Info,
+	distribution v1alpha1.Distribution,
 ) {
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
-		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
+		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered, distribution)
 	}
 
 	// Cleanup OIDC kubeconfig entries (user + context) if they exist.
@@ -306,10 +359,9 @@ func promptForDeletion(
 // createDeleteProvisioner creates the appropriate provisioner for cluster deletion.
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
 func createDeleteProvisioner(
+	ctx context.Context,
 	clusterInfo *clusterdetector.Info,
-	omniOpts v1alpha1.OptionsOmni,
-	kubernetesOpts v1alpha1.OptionsKubernetes,
-	deleteStorage bool,
+	options lifecycle.MinimalProvisionerOptions,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
@@ -319,7 +371,7 @@ func createDeleteProvisioner(
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
-		provisioner, _, err := factoryOverride.Create(context.Background(), nil)
+		provisioner, _, err := factoryOverride.Create(ctx, nil)
 		if err != nil {
 			return nil, fmt.Errorf("factory override failed: %w", err)
 		}
@@ -328,7 +380,7 @@ func createDeleteProvisioner(
 	}
 
 	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		clusterInfo, omniOpts, kubernetesOpts, deleteStorage,
+		ctx, clusterInfo, options,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
@@ -357,8 +409,36 @@ func discoverRegistriesBeforeDelete(
 		cmd,
 		distribution,
 		clusterInfo.ClusterName,
+		otherClusterNames(cmd.Context(), clusterInfo.ClusterName),
 		cleanupDeps,
 	)
+}
+
+// otherClusterNames lists the clusters that currently exist besides this one.
+//
+// Registry names cannot say which cluster owns them — "foo-bar-ghcr.io" fits both "foo" and
+// "foo-bar" — and on a shared network the wrong answer deletes a live cluster's mirrors. Asking
+// the discoverer which clusters actually exist replaces that guess with a fact.
+//
+// Deliberately NOT inferred from registry names: a cluster "foo" with a mirror host called
+// "bar-local-registry" produces a container named "foo-bar-local-registry", which no naming rule
+// can distinguish from a cluster "foo-bar". Mirror hosts are user-configurable, so only node
+// containers are trustworthy evidence that a cluster is real.
+//
+// Best-effort by design. An incomplete discovery yields a shorter list, which can only widen the
+// prefix match back toward the pre-existing behaviour — never past it.
+func otherClusterNames(ctx context.Context, clusterName string) []string {
+	managed, _ := discoverManagedClusters(ctx)
+
+	others := make([]string, 0, len(managed))
+
+	for name := range managed {
+		if name != clusterName {
+			others = append(others, name)
+		}
+	}
+
+	return others
 }
 
 // disconnectRegistriesBeforeDelete disconnects registries from the cluster network.
@@ -368,7 +448,12 @@ func discoverRegistriesBeforeDelete(
 func disconnectRegistriesBeforeDelete(
 	cmd *cobra.Command,
 	clusterInfo *clusterdetector.Info,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
 ) {
+	if preDiscovered == nil || len(preDiscovered.Registries) == 0 {
+		return
+	}
+
 	cleanupDeps := getCleanupDeps()
 
 	// Resolve the distribution-specific network name
@@ -382,9 +467,22 @@ func disconnectRegistriesBeforeDelete(
 		clusterInfo.ClusterName,
 	)
 
-	// Silently disconnect registries - errors are ignored since the cluster
-	// may not have any registries connected, or the network may not exist
-	_ = mirrorregistry.DisconnectRegistriesFromNetwork(cmd, networkName, cleanupDeps)
+	// Detach only THIS cluster's registries — the set already discovered and narrowed for it.
+	//
+	// Detaching everything on the network is unsafe because a network name does not identify one
+	// cluster. Kind's "kind" is shared by every Kind cluster outright, and the generated names
+	// collide across distributions too: cluster names may contain hyphens, so a K3d cluster "foo"
+	// and a Talos cluster "k3d-foo" both resolve to "k3d-foo" (likewise "kwok-" prefixed names).
+	// Detaching a bystander's registries would break a live cluster — and this runs before the
+	// confirmation prompt, so it would happen even if the user then cancelled.
+	//
+	// Errors are ignored: a registry may already be gone or never have been connected.
+	_ = mirrorregistry.DisconnectRegistriesByInfo(
+		cmd,
+		networkName,
+		preDiscovered.Registries,
+		cleanupDeps,
+	)
 }
 
 // buildDeletionPreview builds a preview of resources that will be deleted.
@@ -510,7 +608,7 @@ func executeDelete(
 
 	// Clean up persisted state (spec + TTL) for the deleted cluster.
 	// Best-effort: log a warning on failure rather than blocking success.
-	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	stateErr := deleteResolvedClusterState(resolved)
 	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
 	}
@@ -527,6 +625,28 @@ func executeDelete(
 	return nil
 }
 
+func deleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		if strings.TrimSpace(resolved.AWSRegion) == "" {
+			return fmt.Errorf("delete exact-region EKS state: %w", state.ErrInvalidRegion)
+		}
+
+		err := state.DeleteEKSRegionState(resolved.ClusterName, resolved.AWSRegion)
+		if err != nil {
+			return fmt.Errorf("delete exact-region EKS state: %w", err)
+		}
+
+		return nil
+	}
+
+	err := state.DeleteClusterState(resolved.ClusterName)
+	if err != nil {
+		return fmt.Errorf("delete cluster state: %w", err)
+	}
+
+	return nil
+}
+
 // cleanupRegistriesAfterDelete cleans up registries after cluster deletion.
 func cleanupRegistriesAfterDelete(
 	cmd *cobra.Command,
@@ -534,6 +654,7 @@ func cleanupRegistriesAfterDelete(
 	resolved *lifecycle.ResolvedClusterInfo,
 	deleteStorage bool,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	distribution v1alpha1.Distribution,
 ) {
 	cleanupDeps := getCleanupDeps()
 
@@ -548,14 +669,21 @@ func cleanupRegistriesAfterDelete(
 			cleanupDeps,
 		)
 	} else {
-		// Discover and cleanup registries by network
-		// Use Talos as fallback since it uses cluster name as network name
+		// Discover and clean up by network, using the DETECTED distribution. Hardcoding Talos
+		// resolved the network as the cluster name for every distribution, so a Kind cluster's
+		// registries — which live on "kind" — were never found (#6286). Talos remains the fallback
+		// only when the distribution is genuinely unknown.
+		if distribution == "" {
+			distribution = v1alpha1.DistributionTalos
+		}
+
 		err = mirrorregistry.CleanupRegistriesByNetwork(
 			cmd,
 			tmr,
-			v1alpha1.DistributionTalos,
+			distribution,
 			resolved.ClusterName,
 			deleteStorage,
+			otherClusterNames(cmd.Context(), resolved.ClusterName),
 			cleanupDeps,
 		)
 	}

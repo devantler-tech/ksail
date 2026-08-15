@@ -221,6 +221,18 @@ func extractBackupArchive(
 }
 
 func extractTarEntries(tarReader *tar.Reader, destDir string) error {
+	// Every write goes through this root, so the operating system — not a string
+	// comparison — is what keeps an entry inside destDir. validateTarEntry stays
+	// the first line of defence because it produces the sentinel errors callers
+	// match on; the root is what a future lexical oversight, or a symlink swapped
+	// in between validation and open, cannot get past.
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return fmt.Errorf("failed to open extraction root: %w", err)
+	}
+
+	defer func() { _ = root.Close() }()
+
 	for {
 		header, err := tarReader.Next()
 		if errors.Is(err, io.EOF) {
@@ -236,35 +248,45 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			return err
 		}
 
-		if header.Typeflag == tar.TypeDir {
-			err = os.MkdirAll(
-				targetPath,
-				dirPerm,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-
-			continue
-		}
-
-		err = os.MkdirAll(
-			filepath.Dir(targetPath),
-			dirPerm,
-		)
+		relPath, err := filepath.Rel(destDir, targetPath)
 		if err != nil {
-			return fmt.Errorf(
-				"failed to create parent directory: %w", err,
-			)
+			return fmt.Errorf("%w: %s", ErrInvalidTarPath, header.Name)
 		}
 
-		err = extractFile(tarReader, targetPath)
+		err = extractTarEntry(tarReader, root, header, relPath)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// extractTarEntry writes one validated entry through root, which confines it to
+// the extraction directory.
+func extractTarEntry(
+	tarReader *tar.Reader,
+	root *os.Root,
+	header *tar.Header,
+	relPath string,
+) error {
+	if header.Typeflag == tar.TypeDir {
+		err := root.MkdirAll(relPath, dirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+
+		return nil
+	}
+
+	err := root.MkdirAll(filepath.Dir(relPath), dirPerm)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to create parent directory: %w", err,
+		)
+	}
+
+	return extractFile(tarReader, root, relPath)
 }
 
 func validateTarEntry(
@@ -307,9 +329,9 @@ func validateTarEntry(
 	return targetPath, nil
 }
 
-func extractFile(tarReader *tar.Reader, targetPath string) error {
-	outFile, err := os.OpenFile( //nolint:gosec // path is sanitized by extractTarEntries
-		targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, filePerm,
+func extractFile(tarReader *tar.Reader, root *os.Root, relPath string) error {
+	outFile, err := root.OpenFile(
+		relPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, filePerm,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)

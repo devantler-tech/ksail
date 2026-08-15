@@ -3,6 +3,7 @@ package k3dprovisioner_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,6 +229,74 @@ func TestKubeconfig_RewritesServerToInClusterServiceEndpoint(t *testing.T) {
 	for _, cluster := range config.Clusters {
 		assert.Equal(t, conn.Endpoint, cluster.Server)
 	}
+}
+
+func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
+	t.Parallel()
+
+	safeConn := k3dprovisioner.ConnectionFor("safe-namespace-qualified")
+	configuredConn := k3dprovisioner.ConnectionFor("configured-from-cli-context")
+	safeKubeconfig := strings.Replace(
+		k3kPublishedKubeconfig,
+		"user: {}",
+		"user:\n    token: safe-selected-token",
+		1,
+	)
+	configuredKubeconfig := strings.Replace(
+		k3kPublishedKubeconfig,
+		"user: {}",
+		"user:\n    token: configured-fallback-token",
+		1,
+	)
+	clientset := k8sfake.NewClientset(
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: safeConn.SecretName, Namespace: safeConn.Namespace},
+			Data:       map[string][]byte{"kubeconfig.yaml": []byte(safeKubeconfig)},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configuredConn.SecretName,
+				Namespace: configuredConn.Namespace,
+			},
+			Data: map[string][]byte{"kubeconfig.yaml": []byte(configuredKubeconfig)},
+		},
+	)
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "configured-from-cli-context",
+	})
+	require.NoError(t, err)
+
+	out, err := provisioner.Kubeconfig(context.Background(), "safe-namespace-qualified")
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(out)
+	require.NoError(t, err)
+
+	for _, cluster := range config.Clusters {
+		assert.Equal(t, safeConn.Endpoint, cluster.Server)
+	}
+
+	assert.Contains(t, string(out), "safe-selected-token")
+	assert.NotContains(t, string(out), "configured-fallback-token")
+}
+
+func TestExists_PrefersCallerSuppliedName(t *testing.T) {
+	t.Parallel()
+
+	callerConn := k3dprovisioner.ConnectionFor("team-a-nested-k3s")
+	clientset := k8sfake.NewClientset(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: callerConn.Namespace},
+	})
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	exists, err := provisioner.Exists(context.Background(), "team-a-nested-k3s")
+	require.NoError(t, err)
+	assert.True(t, exists)
 }
 
 func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {

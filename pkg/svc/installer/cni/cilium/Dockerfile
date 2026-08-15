@@ -4,4 +4,4 @@
 # Image mappings:
 # - quay.io/cilium/cilium → chart version (strip v prefix from tag)
 
-FROM quay.io/cilium/cilium:v1.19.5@sha256:20fbbc14ac20b55a292c0dcda5571bf31cde30a7dbc68c29db3e709390ab0732
+FROM quay.io/cilium/cilium:v1.20.0@sha256:383968cd5e8873f7976fa76aa6196045643558f4cc9518a207b9335cb24a0e93

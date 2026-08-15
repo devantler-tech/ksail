@@ -59,9 +59,9 @@ func (p *Provisioner) getHetznerNodesByRole(
 	nodes := make([]nodeWithRole, 0, len(listed))
 
 	for _, node := range listed {
-		server, serverErr := hzProvider.GetServerByName(ctx, node.Name)
-		if serverErr != nil || server == nil {
-			continue
+		server, serverErr := requireHetznerServer(ctx, hzProvider, node.Name)
+		if serverErr != nil {
+			return nil, serverErr
 		}
 
 		// Fail closed: a node with no reachable address would otherwise be silently
