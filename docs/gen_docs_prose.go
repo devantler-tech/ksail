@@ -93,23 +93,28 @@ machine:
 ` + cbt + `
 
 Because patch files are expanded too, you can inject **registry credentials** into the Talos
-machine config as config-as-code — keeping the secret in the environment, never committed. This is
-the supported way to give nodes registry auth (for example, so containerd can fetch cosign
-signatures for **private** packages during image verification) without passing credentials via CLI
-flags:
+machine config as config-as-code — keeping the secret in the environment, never committed. When
+` + bt + `localRegistry.credentials` + bt + ` is configured, Talos maps placeholders for both ` + bt + `tokenEnvVar` + bt + ` and
+` + bt + `clusterTokenEnvVar` + bt + ` to the effective cluster pull source. Other placeholders still resolve directly.
+A configured cluster source remains authoritative even when its variable is missing or empty, so a
+default expression cannot silently substitute a broader credential:
 
 ` + cbt + `yaml
 # talos/cluster/registry-auth.yaml - Credentials are injected from the environment at load time
 machine:
   registries:
     config:
-      ghcr.io:
+      registry.example.com:
         auth:
-          username: my-user
-          password: ${GHCR_TOKEN} # expanded at load; commit the placeholder, not the token
+          username: ${REGISTRY_USER}
+          # The common placeholder maps to the effective cluster token source.
+          password: ${REGISTRY_TOKEN:-forbidden-fallback}
 ` + cbt + `
 
 ### Example: Credentials
+
+Credentials may be embedded directly in the registry spec, where ` + bt + `${VAR_NAME}` + bt + ` placeholders are
+expanded at load time:
 
 ` + cbt + `yaml
 spec:
@@ -118,9 +123,40 @@ spec:
       registry: "${REGISTRY_USER}:${REGISTRY_PASS}@${REGISTRY_HOST:-ghcr.io}/myorg/myrepo"
 ` + cbt + `
 
+### Example: Separate push and pull credentials
+
+To give the cluster a **least-privilege, pull-only token** while the CLI keeps a token that can also
+push, declare which environment variable each execution path reads. Following the KSail ` + bt + `*EnvVar` + bt + `
+convention, these fields hold the **name** of an environment variable, never a token value:
+
+` + cbt + `yaml
+spec:
+  cluster:
+    localRegistry:
+      registry: "${REGISTRY_USER}@registry.example.com/myorg/myrepo"
+      credentials:
+        tokenEnvVar: REGISTRY_TOKEN
+        cliTokenEnvVar: REGISTRY_PUBLISH_TOKEN
+        clusterTokenEnvVar: REGISTRY_PULL_TOKEN
+` + cbt + `
+
+Resolution is deterministic and registry-agnostic — no registry host is special-cased:
+
+- CLI and publish paths read ` + bt + `cliTokenEnvVar` + bt + `, falling back to ` + bt + `tokenEnvVar` + bt + ` only when the override is
+  not configured.
+- Cluster pull paths — the Flux registry Secret, Argo CD repository credentials, and Talos node
+  authentication — read ` + bt + `clusterTokenEnvVar` + bt + `, falling back to ` + bt + `tokenEnvVar` + bt + ` the same way.
+- A configured override stays **authoritative** even when its environment variable is missing or
+  empty; KSail never silently falls back based on process-environment state.
+- When no field is set, the password embedded in ` + bt + `registry` + bt + ` is used.
+
+When ` + bt + `clusterTokenEnvVar` + bt + ` resolves to a different variable than the push path, the credential KSail
+persists into the cluster is marked pull-only, so it is never reused to publish artifacts.
+
 ` + cbt + `bash
-export REGISTRY_USER="github-user"
-export REGISTRY_PASS="ghp_secrettoken123"
+export REGISTRY_USER="registry-user"
+export REGISTRY_PUBLISH_TOKEN="write-capable-token"
+export REGISTRY_PULL_TOKEN="read-only-token"
 ksail cluster create
 ` + cbt + `
 

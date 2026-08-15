@@ -53,9 +53,9 @@ func NewComponentDetector(
 	}
 }
 
-// releaseSet is an in-memory index of Helm releases keyed by
-// name+namespace for O(1) existence checks after a single ListReleases call.
-type releaseSet map[releaseKey]struct{}
+// releaseSet is an in-memory index of the latest Helm release revision keyed
+// by name+namespace for O(1) deployed-state checks after one ListReleases call.
+type releaseSet map[releaseKey]helm.ReleaseInfo
 
 type releaseKey struct {
 	name      string
@@ -86,9 +86,12 @@ func (c *cachedHelmClient) ReleaseExists(
 		return exists, nil
 	}
 
-	_, ok := c.set[releaseKey{name: name, namespace: namespace}]
+	release, ok := c.set[releaseKey{name: name, namespace: namespace}]
+	if !ok {
+		return false, nil
+	}
 
-	return ok, nil
+	return strings.EqualFold(release.Status, "deployed"), nil
 }
 
 // DetectComponents probes the running cluster to populate a ClusterSpec that
@@ -120,7 +123,12 @@ func (d *ComponentDetector) DetectComponents(
 
 	releaseIndex := make(releaseSet, len(releases))
 	for _, r := range releases {
-		releaseIndex[releaseKey{name: r.Name, namespace: r.Namespace}] = struct{}{}
+		key := releaseKey{name: r.Name, namespace: r.Namespace}
+
+		current, exists := releaseIndex[key]
+		if !exists || r.Revision >= current.Revision {
+			releaseIndex[key] = r
+		}
 	}
 
 	cached := &ComponentDetector{
@@ -168,6 +176,11 @@ func (d *ComponentDetector) detectAllComponents(
 		return nil, fmt.Errorf("detect LoadBalancer: %w", err)
 	}
 
+	err = d.detectEKSComponents(ctx, spec, distribution, provider)
+	if err != nil {
+		return nil, err
+	}
+
 	spec.CertManager, err = d.detectCertManager(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect CertManager: %w", err)
@@ -189,6 +202,42 @@ func (d *ComponentDetector) detectAllComponents(
 	}
 
 	return spec, nil
+}
+
+func (d *ComponentDetector) detectEKSComponents(
+	ctx context.Context,
+	spec *v1alpha1.ClusterSpec,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+) error {
+	if distribution != v1alpha1.DistributionEKS || provider != v1alpha1.ProviderAWS {
+		return nil
+	}
+
+	installed, err := d.detectEKSLoadBalancerController(ctx)
+	if err != nil {
+		return err
+	}
+
+	spec.EKS.ExperimentalAWSLoadBalancerController = installed
+	if installed {
+		spec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+	}
+
+	return nil
+}
+
+func (d *ComponentDetector) detectEKSLoadBalancerController(ctx context.Context) (bool, error) {
+	exists, err := d.helmClient.ReleaseExists(
+		ctx,
+		ReleaseAWSLoadBalancerController,
+		NamespaceAWSLoadBalancerController,
+	)
+	if err != nil {
+		return false, fmt.Errorf("detect AWS Load Balancer Controller: %w", err)
+	}
+
+	return exists, nil
 }
 
 // releaseMapping maps a Helm release to the value returned when the release is found.
@@ -556,7 +605,8 @@ func (d *ComponentDetector) containerExists(
 		return false, nil
 	}
 
-	containers, err := d.dockerClient.ContainerList(ctx,
+	containers, err := d.dockerClient.ContainerList(
+		ctx,
 		container.ListOptions{
 			Filters: filters.NewArgs(
 				filters.Arg("name", "^/"+containerName+"$"),

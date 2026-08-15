@@ -12,6 +12,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 // File permission constant.
@@ -76,6 +77,20 @@ func (e *Exporter) Export(
 	// Set default output path
 	if opts.OutputPath == "" {
 		opts.OutputPath = "images.tar"
+	}
+
+	// Canonicalize the user-supplied destination once, before any write. The archive is
+	// written twice on the repair path (initial copy, then the post-repair re-export), so
+	// resolving it here is what guarantees both writes land on the same file rather than
+	// re-resolving a symlink that moved in between.
+	err = os.MkdirAll(filepath.Dir(opts.OutputPath), dirPerm)
+	if err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	opts.OutputPath, err = fsutil.EvalCanonicalPath(opts.OutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve export output path: %w", err)
 	}
 
 	// Find a suitable node for export
@@ -179,22 +194,59 @@ func (e *Exporter) exportImagesFromNode(
 		}
 	}
 
-	// Copy the tar file from container to host
-	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to copy export file from container: %w", err)
-	}
-
-	// Validate blob integrity in the exported OCI tar archive.
-	// Catches truncated or corrupted blobs that ctr export may silently produce
-	// when the containerd content store has incomplete data.
-	err = ValidateExportedTar(outputPath)
+	err = e.collectExportedArchive(
+		ctx,
+		nodeName,
+		tmpPath,
+		outputPath,
+		platform,
+		exportImages,
+		repairImages,
+	)
 	if err != nil {
 		return err
 	}
 
 	// Clean up temporary file in container
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
+
+	return nil
+}
+
+// collectExportedArchive copies the exported archive to the host and validates it,
+// repairing and re-exporting once if the archive turns out to be truncated.
+//
+// An incomplete containerd content store surfaces two ways: ctr export exits non-zero
+// (handled by tryExportImagesWithRepair), or it exits zero and silently writes a truncated
+// archive, which only this validation sees. Both have the same remedy, so the validation
+// failure refreshes the content store and re-exports once as well.
+func (e *Exporter) collectExportedArchive(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	outputPath string,
+	platform string,
+	exportImages []string,
+	repairImages []string,
+) error {
+	err := e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to copy export file from container: %w", err)
+	}
+
+	err = ValidateExportedTar(outputPath)
+	if err != nil {
+		return e.repairAndReExport(
+			ctx,
+			nodeName,
+			tmpPath,
+			outputPath,
+			platform,
+			exportImages,
+			repairImages,
+			err,
+		)
+	}
 
 	return nil
 }

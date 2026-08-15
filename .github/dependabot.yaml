@@ -212,6 +212,13 @@ updates:
       interval: daily
 
   - package-ecosystem: helm
+    directory: /pkg/svc/installer/awslbcontroller # aws-load-balancer-controller chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
     directory: /pkg/svc/installer/hcloudccm # hcloud-cloud-controller-manager chart version
     cooldown:
       default-days: 7
