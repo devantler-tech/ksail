@@ -72,7 +72,8 @@ func TestKubeProxyForcesJSONContentTypeForUpstreamActiveContent(t *testing.T) {
 	t.Parallel()
 
 	stub := &kubeProxyStub{
-		body:        `<!doctype html><script src="/api/v1/clusters/default/kind/proxy/api/v1/namespaces/default/services/http:evil/proxy/pwn.js"></script>`,
+		body: `<!doctype html><script src="/api/v1/clusters/default/kind/proxy/` +
+			`api/v1/namespaces/default/services/http:evil/proxy/pwn.js"></script>`,
 		contentType: "text/html; charset=utf-8",
 	}
 	server := &api.Server{Service: stub}
