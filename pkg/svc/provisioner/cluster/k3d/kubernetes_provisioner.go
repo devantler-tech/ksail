@@ -168,10 +168,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
 func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -233,10 +230,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 // Delete removes the k3k cluster by deleting the Cluster CR and namespace.
 func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	p.closeAPIServerPortForward()
 
@@ -261,10 +255,7 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 
 // Exists checks whether the k3k cluster namespace exists.
 func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -346,6 +337,9 @@ func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, e
 }
 
 func (p *K3kProvisioner) effectiveClusterName(name string) string {
+	// The operator passes a namespace-qualified provisioned name. It must win over
+	// the factory's unqualified fallback for every lifecycle operation so Create,
+	// Exists, Delete, and Kubeconfig address the same k3k resources.
 	if name != "" {
 		return name
 	}
@@ -543,7 +537,7 @@ func (p *K3kProvisioner) setupCluster(
 
 	_, _ = fmt.Fprintf(os.Stdout, "► creating namespace %s\n", namespace)
 
-	err = p.ensureNamespace(ctx, namespace)
+	err = p.ensureNamespace(ctx, clusterName, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("ensure namespace: %w", err)
 	}
@@ -643,13 +637,13 @@ func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
 }
 
 // ensureNamespace creates the namespace if it doesn't exist, with ksail labels.
-func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) error {
+func (p *K3kProvisioner) ensureNamespace(ctx context.Context, clusterName, namespace string) error {
 	nsObj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
 				"ksail.io/managed-by": "ksail",
-				"ksail.io/cluster":    p.clusterName,
+				"ksail.io/cluster":    clusterName,
 				// The k3k server runs embedded k3s and requires a privileged container.
 				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
 				// Talos, which defaults namespaces to baseline) would otherwise reject the

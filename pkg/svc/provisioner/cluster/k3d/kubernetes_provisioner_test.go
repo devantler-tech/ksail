@@ -258,6 +258,24 @@ func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
 	assert.NotContains(t, string(out), "configured-fallback-token")
 }
 
+func TestExists_PrefersCallerSuppliedName(t *testing.T) {
+	t.Parallel()
+
+	callerConn := k3dprovisioner.ConnectionFor("team-a-nested-k3s")
+	clientset := k8sfake.NewClientset(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: callerConn.Namespace},
+	})
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	exists, err := provisioner.Exists(context.Background(), "team-a-nested-k3s")
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
 func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {
 	t.Parallel()
 
