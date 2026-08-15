@@ -38,6 +38,18 @@ func execWebSocketURL(httpURL, path string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http") + path
 }
 
+func newOriginBoundExecServer(t *testing.T) (*httptest.Server, string) {
+	t.Helper()
+
+	server := httptest.NewUnstartedServer(nil)
+	origin := "http://" + server.Listener.Addr().String()
+	server.Config.Handler = (&api.Server{Service: execStub{}, UIOrigin: origin}).Handler()
+	server.Start()
+	t.Cleanup(server.Close)
+
+	return server, origin
+}
+
 func TestConfigReportsWorkloadExec(t *testing.T) {
 	t.Parallel()
 
@@ -78,6 +90,46 @@ func TestExecWebSocketBridge(t *testing.T) {
 	require.NoError(t, conn.ReadJSON(&msg))
 	assert.Equal(t, "stdout", msg.Op)
 	assert.Equal(t, "hello", msg.Data)
+}
+
+func TestExecRejectsUntrustedOrigin(t *testing.T) {
+	t.Parallel()
+
+	server, _ := newOriginBoundExecServer(t)
+
+	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	headers := http.Header{}
+	headers.Set("Origin", "http://attacker.example")
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, headers)
+	if conn != nil {
+		defer func() { _ = conn.Close() }()
+	}
+
+	require.Error(t, err) // upgrade refused before switching protocols
+	require.NotNil(t, response)
+
+	defer func() { _ = response.Body.Close() }()
+
+	assert.Equal(t, http.StatusForbidden, response.StatusCode)
+}
+
+func TestExecAllowsConfiguredUIOrigin(t *testing.T) {
+	t.Parallel()
+
+	server, origin := newOriginBoundExecServer(t)
+	url := execWebSocketURL(server.URL, "/api/v1/clusters/default/c1/exec?pod=p1")
+	headers := http.Header{}
+	headers.Set("Origin", origin)
+
+	conn, response, err := websocket.DefaultDialer.Dial(url, headers)
+	require.NoError(t, err)
+
+	if response != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
+
+	defer func() { _ = conn.Close() }()
 }
 
 func TestExecBlockedWhenReadOnly(t *testing.T) {

@@ -92,8 +92,9 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 		command = []string{"/bin/sh"}
 	}
 
-	// CheckOrigin allows any origin: the endpoint is already behind the auth guard (when OIDC is on)
-	// and the read-only check above, and the desktop connects cross-origin (wails:// → loopback).
+	// The route's origin guard protects listener-backed local servers before this point. Keep the
+	// upgrader permissive for the in-process desktop asset server, whose wails:// origin is expected
+	// and whose Server never receives a listener-derived UIOrigin.
 	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
 
 	conn, err := upgrader.Upgrade(writer, request, nil)
