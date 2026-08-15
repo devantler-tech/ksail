@@ -3,6 +3,7 @@ package k3dprovisioner_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,17 +213,29 @@ func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
 
 	safeConn := k3dprovisioner.ConnectionFor("safe-namespace-qualified")
 	configuredConn := k3dprovisioner.ConnectionFor("configured-from-cli-context")
+	safeKubeconfig := strings.Replace(
+		k3kPublishedKubeconfig,
+		"user: {}",
+		"user:\n    token: safe-selected-token",
+		1,
+	)
+	configuredKubeconfig := strings.Replace(
+		k3kPublishedKubeconfig,
+		"user: {}",
+		"user:\n    token: configured-fallback-token",
+		1,
+	)
 	clientset := k8sfake.NewClientset(
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: safeConn.SecretName, Namespace: safeConn.Namespace},
-			Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+			Data:       map[string][]byte{"kubeconfig.yaml": []byte(safeKubeconfig)},
 		},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configuredConn.SecretName,
 				Namespace: configuredConn.Namespace,
 			},
-			Data: map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+			Data: map[string][]byte{"kubeconfig.yaml": []byte(configuredKubeconfig)},
 		},
 	)
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
@@ -240,6 +253,9 @@ func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
 	for _, cluster := range config.Clusters {
 		assert.Equal(t, safeConn.Endpoint, cluster.Server)
 	}
+
+	assert.Contains(t, string(out), "safe-selected-token")
+	assert.NotContains(t, string(out), "configured-fallback-token")
 }
 
 func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {
