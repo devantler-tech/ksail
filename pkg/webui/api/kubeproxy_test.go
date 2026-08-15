@@ -92,8 +92,11 @@ func TestKubeProxyForcesJSONContentTypeForUpstreamActiveContent(t *testing.T) {
 		t.Errorf("x-content-type-options = %q, want nosniff", got)
 	}
 
-	if got := recorder.Body.String(); !strings.Contains(got, "<!doctype html>") {
-		t.Errorf("proxy body = %q, want streamed upstream body", got)
+	// Compare the whole body: the handler neutralizes active content by forcing the response content
+	// type, never by rewriting the payload, so a substring check would still pass if the body were
+	// truncated or sanitized.
+	if got := recorder.Body.String(); got != stub.body {
+		t.Errorf("proxy body = %q, want %q", got, stub.body)
 	}
 }
 
