@@ -258,7 +258,7 @@ func (p *ociRepositoryPatcher) tryPatch(
 func buildSyncKustomize(clusterCfg *v1alpha1.Cluster) (*SyncKustomize, error) {
 	verify := clusterCfg.Spec.Workload.Flux.Verify
 	if !verify.Enabled() {
-		return nil, nil
+		return nil, nil //nolint:nilnil // A nil patch omits spec.kustomize when verification is disabled.
 	}
 
 	verifyYAML, err := yaml.Marshal(buildVerifyPatch(verify))
@@ -271,7 +271,10 @@ func buildSyncKustomize(clusterCfg *v1alpha1.Cluster) (*SyncKustomize, error) {
 			Kind: fluxOCIRepositoryKind,
 			Name: defaultOCIRepositoryName,
 		},
-		Patch: "- op: add\n  path: /spec/verify\n  value:\n" + indentYAML(string(verifyYAML), "    "),
+		Patch: "- op: add\n  path: /spec/verify\n  value:\n" + indentYAML(
+			string(verifyYAML),
+			"    ",
+		),
 	}}}, nil
 }
 

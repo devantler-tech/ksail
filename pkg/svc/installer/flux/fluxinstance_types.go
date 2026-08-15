@@ -108,8 +108,9 @@ func (in *FluxInstanceList) DeepCopyObject() runtime.Object {
 
 // InstanceSpec contains the distribution configuration and sync source.
 type InstanceSpec struct {
-	Distribution Distribution `json:"distribution"`
-	Sync         *Sync        `json:"sync,omitempty"`
+	Distribution Distribution   `json:"distribution"`
+	Kustomize    *SyncKustomize `json:"kustomize,omitempty"`
+	Sync         *Sync          `json:"sync,omitempty"`
 }
 
 // DeepCopyInto copies all properties from this InstanceSpec into another.
@@ -118,6 +119,11 @@ func (in *InstanceSpec) DeepCopyInto(out *InstanceSpec) {
 	if in.Sync != nil {
 		out.Sync = new(Sync)
 		in.Sync.DeepCopyInto(out.Sync)
+	}
+
+	if in.Kustomize != nil {
+		out.Kustomize = new(SyncKustomize)
+		in.Kustomize.DeepCopyInto(out.Kustomize)
 	}
 }
 
@@ -138,7 +144,6 @@ type Sync struct {
 	Path       string           `json:"path"`
 	PullSecret string           `json:"pullSecret,omitempty"`
 	Provider   string           `json:"provider,omitempty"`
-	Kustomize  *SyncKustomize   `json:"kustomize,omitempty"`
 }
 
 // SyncKustomize configures patches applied by the Flux Operator while rendering sync resources.
@@ -164,11 +169,6 @@ func (in *Sync) DeepCopyInto(out *Sync) {
 	if in.Interval != nil {
 		intervalCopy := *in.Interval
 		out.Interval = &intervalCopy
-	}
-
-	if in.Kustomize != nil {
-		out.Kustomize = new(SyncKustomize)
-		in.Kustomize.DeepCopyInto(out.Kustomize)
 	}
 }
 

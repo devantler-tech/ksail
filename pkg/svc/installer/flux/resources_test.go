@@ -371,11 +371,30 @@ func TestBuildInstanceAddsFluxVerifyKustomizePatch(t *testing.T) {
 
 	instance, err := fluxinstaller.BuildInstance(clusterCfg, "test-cluster", "")
 	require.NoError(t, err)
-	require.NotNil(t, instance.Spec.Sync)
-	require.NotNil(t, instance.Spec.Sync.Kustomize)
-	require.Len(t, instance.Spec.Sync.Kustomize.Patches, 1)
 
-	patch := instance.Spec.Sync.Kustomize.Patches[0]
+	encoded, err := json.Marshal(instance)
+	require.NoError(t, err)
+
+	var manifest struct {
+		Spec struct {
+			Kustomize *struct {
+				Patches []struct {
+					Target struct {
+						Kind string `json:"kind"`
+						Name string `json:"name"`
+					} `json:"target"`
+					Patch string `json:"patch"`
+				} `json:"patches"`
+			} `json:"kustomize"`
+			Sync map[string]json.RawMessage `json:"sync"`
+		} `json:"spec"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &manifest))
+	require.NotNil(t, manifest.Spec.Kustomize)
+	assert.NotContains(t, manifest.Spec.Sync, "kustomize")
+	require.Len(t, manifest.Spec.Kustomize.Patches, 1)
+
+	patch := manifest.Spec.Kustomize.Patches[0]
 	assert.Equal(t, "OCIRepository", patch.Target.Kind)
 	assert.Equal(t, "flux-system", patch.Target.Name)
 	assert.Contains(t, patch.Patch, "path: /spec/verify")

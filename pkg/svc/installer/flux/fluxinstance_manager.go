@@ -289,6 +289,7 @@ func buildInstance(
 	}
 
 	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}
+
 	syncKustomize, err := buildSyncKustomize(clusterCfg)
 	if err != nil {
 		return nil, err
@@ -309,6 +310,7 @@ func buildInstance(
 				Registry: fluxDistributionRegistry,
 				Artifact: distributionArtifact(),
 			},
+			Kustomize: syncKustomize,
 			Sync: &Sync{
 				Kind:       fluxOCIRepositoryKind,
 				URL:        repoURL,
@@ -317,7 +319,6 @@ func buildInstance(
 				Provider:   "generic",
 				Interval:   intervalPtr,
 				PullSecret: pullSecret,
-				Kustomize:  syncKustomize,
 			},
 		},
 	}, nil
