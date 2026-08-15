@@ -122,7 +122,8 @@ func TestTryWriteFileWithin_SkipsExistingWithoutForce(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, wrote)
 
-	assert.Equal(t, originalContent, readBack(t, dest), "an existing file must be preserved without force")
+	assert.Equal(t, originalContent, readBack(t, dest),
+		"an existing file must be preserved without force")
 }
 
 func TestTryWriteFileWithin_OverwritesExistingWithForce(t *testing.T) {
@@ -153,7 +154,12 @@ func TestTryWriteFileWithin_RejectsInvalidPaths(t *testing.T) {
 	}{
 		{name: "empty base", basePath: "", relPath: "file.txt", wantErr: fsutil.ErrBasePath},
 		{name: "empty rel", basePath: base, relPath: "", wantErr: fsutil.ErrEmptyOutputPath},
-		{name: "parent escape", basePath: base, relPath: "../escape.txt", wantErr: fsutil.ErrPathOutsideBase},
+		{
+			name:     "parent escape",
+			basePath: base,
+			relPath:  "../escape.txt",
+			wantErr:  fsutil.ErrPathOutsideBase,
+		},
 		{
 			name:     "nested parent escape",
 			basePath: base,
