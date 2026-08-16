@@ -10,12 +10,20 @@ const (
 	defaultDestinationNamespace = "default"
 	defaultDestinationServer    = "https://kubernetes.default.svc"
 	defaultProject              = "default"
-	// defaultSourcePath is "." because OCI artifacts contain manifests at root level.
-	defaultSourcePath = "."
 
 	argoCDRefreshAnnotationKey  = "argocd.argoproj.io/refresh"
 	argoCDHardRefreshAnnotation = "hard"
 )
+
+// DefaultSourcePath is the path the generated root Application points at inside
+// the OCI artifact. Argo CD resolves it relative to the root of the expanded
+// archive, so "." selects the archive root.
+//
+// The workload artifact builder (pkg/client/oci) must publish manifests at this
+// path. Both sides are pinned by TestManifestLayerServesArgoCDSourcePath; see
+// https://github.com/devantler-tech/ksail/issues/6284 for the outage that
+// followed when they disagreed.
+const DefaultSourcePath = "."
 
 // ApplicationGVR returns the GroupVersionResource for ArgoCD Applications.
 func ApplicationGVR() schema.GroupVersionResource {
@@ -34,7 +42,7 @@ func buildApplication(opts EnsureOptions) *unstructured.Unstructured {
 
 	sourcePath := opts.SourcePath
 	if sourcePath == "" {
-		sourcePath = defaultSourcePath
+		sourcePath = DefaultSourcePath
 	}
 
 	obj := map[string]any{

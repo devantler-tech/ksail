@@ -52,3 +52,16 @@ func BuildArgoCDEnsureOptions(
 func IgnoredTaintsForCNIReadiness(clusterCfg *v1alpha1.Cluster) []string {
 	return ignoredTaintsForCNIReadiness(clusterCfg)
 }
+
+// NeedsRegistryIPResolutionForTest exports needsRegistryIPResolution for testing.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var NeedsRegistryIPResolutionForTest = needsRegistryIPResolution
+
+// RegistryHostNetworkNameForTest exports registryHostNetworkName for testing.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var RegistryHostNetworkNameForTest = registryHostNetworkName
+
+// DefaultTalosNetworkNameForTest exports defaultTalosNetworkName for testing.
+const DefaultTalosNetworkNameForTest = defaultTalosNetworkName

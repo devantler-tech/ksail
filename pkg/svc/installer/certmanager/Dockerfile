@@ -4,4 +4,4 @@
 # Image mappings:
 # - quay.io/jetstack/cert-manager-controller → chart version (tag matches chart version)
 
-FROM quay.io/jetstack/cert-manager-controller:v1.20.3@sha256:6c13d61e0348a5bc3477f8ea9a928624300b30d19b1c72a7d2b90372fc713db4
+FROM quay.io/jetstack/cert-manager-controller:v1.21.1@sha256:416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a

@@ -338,6 +338,25 @@
                 "registry": {
                   "type": "string",
                   "description": "Registry is the full registry specification in the format: [user:pass@]host[:port][/path]\nWhen populated, enables registry integration for GitOps workflows.\nExamples:\n  - \"localhost:5050\" (local Docker registry)\n  - \"ghcr.io/myorg/myrepo\" (GitHub Container Registry with path)\n  - \"${USER}:${PASS}@ghcr.io:443/myorg\" (with credentials from env vars)\nCredentials support ${ENV_VAR} placeholders for environment variable expansion."
+                },
+                "credentials": {
+                  "properties": {
+                    "tokenEnvVar": {
+                      "type": "string",
+                      "description": "TokenEnvVar is the environment variable holding the registry token used by both\npush and pull paths unless a path-specific override is configured.\nExample: \"GHCR_TOKEN\"."
+                    },
+                    "cliTokenEnvVar": {
+                      "type": "string",
+                      "description": "CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.\nExample: \"GHCR_PUSH_TOKEN\"."
+                    },
+                    "clusterTokenEnvVar": {
+                      "type": "string",
+                      "description": "ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token\npersisted into the cluster can be pull-only.\nExample: \"GHCR_PULL_TOKEN\"."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "description": "Credentials declares which environment variables hold the registry token for\neach execution path. When set, it takes precedence over any password embedded\nin the Registry spec."
                 }
               },
               "additionalProperties": false,
@@ -691,7 +710,7 @@
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "Extensions lists Talos Image Factory official system extension names to include in the\nnode image. KSail automatically computes the Image Factory schematic ID from this list\nand sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},\nwhere {version} is derived from the Talos config bundle's existing install image tag.\nFor Hetzner, the schematic is also used for snapshot building.\nExtension names follow the Image Factory convention (e.g., \"siderolabs/iscsi-tools\").\nThe Image Factory resolves extension versions automatically per Talos release.\nWhen SchematicID is also set, it takes precedence over Extensions."
+                  "description": "Extensions lists Talos Image Factory official system extension names to include in the\nnode image. KSail automatically computes the Image Factory schematic ID from this list\nand sets machine.install.image to the version-appropriate factory installer repository\n(`factory.talos.dev/installer` before Talos 1.14, `factory.talos.dev/metal-installer`\nfor Talos 1.14+) using the Talos config bundle's existing install image tag.\nFor Hetzner, the schematic is also used for snapshot building.\nExtension names follow the Image Factory convention (e.g., \"siderolabs/iscsi-tools\").\nThe Image Factory resolves extension versions automatically per Talos release.\nWhen SchematicID is also set, it takes precedence over Extensions."
                 },
                 "extraPortMappings": {
                   "items": {
@@ -743,6 +762,23 @@
               "additionalProperties": false,
               "type": "object",
               "description": "Talos holds options specific to the Talos distribution."
+            },
+            "eks": {
+              "properties": {
+                "experimentalAWSLoadBalancerController": {
+                  "type": "boolean",
+                  "description": "Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create."
+                },
+                "awsLoadBalancerControllerServiceAccount": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$",
+                  "description": "Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "EKS holds options specific to the EKS distribution."
             }
           },
           "additionalProperties": false,

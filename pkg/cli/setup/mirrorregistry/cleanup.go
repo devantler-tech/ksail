@@ -63,6 +63,7 @@ func CleanupRegistriesByNetwork(
 	distribution v1alpha1.Distribution,
 	clusterName string,
 	deleteVolumes bool,
+	otherClusters []string,
 	cleanupDeps CleanupDependencies,
 ) error {
 	networkName := GetNetworkNameForDistribution(distribution, clusterName)
@@ -72,6 +73,7 @@ func CleanupRegistriesByNetwork(
 		networkName,
 		clusterName,
 		deleteVolumes,
+		otherClusters,
 		cleanupDeps,
 	)
 	if err != nil {
@@ -149,6 +151,7 @@ func deleteRegistriesOnNetworkCore(
 	networkName string,
 	clusterName string,
 	deleteVolumes bool,
+	otherClusters []string,
 	cleanupDeps CleanupDependencies,
 ) ([]string, bool, error) {
 	var registryNames []string
@@ -168,7 +171,7 @@ func deleteRegistriesOnNetworkCore(
 		}
 
 		// Filter to only include registries belonging to this cluster
-		registries := filterRegistriesByClusterName(allRegistries, clusterName)
+		registries := filterRegistriesByClusterName(allRegistries, clusterName, otherClusters)
 
 		if len(registries) == 0 {
 			return nil

@@ -51,7 +51,7 @@ func mergeVersionDrift(
 		return
 	}
 
-	resolver := versionresolver.NewOCIResolver()
+	resolver := versionresolver.NewPromotionAwareResolver(versionresolver.NewOCIResolver())
 
 	for _, dimension := range versionDimensions(ctx, upgrader, current) {
 		mergeDimensionDrift(cmd, mainDiff, resolver, dimension)

@@ -15,8 +15,9 @@
 // (epic #3983). The Hetzner server lifecycle (network, firewall, placement group,
 // server create/delete) comes from the shared hetznerbase engine, and the run-time
 // two-phase join sequencing (devantler-tech/ksail#5755) is implemented in
-// multinode.go: the cluster identity is a pre-seeded CA (ca.go) fixed at compose
-// time, and the joining nodes dial a compose-time-stable join name whose
-// resolution each node pins to the init control plane's private address at first
-// boot — see [JoinName] for why a name rather than the IP.
+// multinode.go: kubeadm mints the cluster identity on the initial control plane,
+// its public CA discovery pin is derived from admin.conf after bring-up, and the
+// joining nodes dial a compose-time-stable join name whose resolution each node
+// pins to the init control plane's private address at first boot — see [JoinName]
+// for why a name rather than the IP.
 package kubeadmhetzner

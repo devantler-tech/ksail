@@ -1,9 +1,6 @@
 package helm
 
-import (
-	"fmt"
-	"os"
-)
+import "fmt"
 
 func (c *Client) switchNamespace(namespace string) (func(), error) {
 	if namespace == "" {
@@ -20,7 +17,7 @@ func (c *Client) switchNamespace(namespace string) (func(), error) {
 	reinitErr := c.actionConfig.Init(
 		c.settings.RESTClientGetter(),
 		namespace,
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if reinitErr != nil {
 		_ = c.restoreNamespace(previousNamespace)
@@ -42,7 +39,7 @@ func (c *Client) restoreNamespace(namespace string) error {
 	err := c.actionConfig.Init(
 		c.settings.RESTClientGetter(),
 		namespace,
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if err != nil {
 		return fmt.Errorf("init action config for namespace %q: %w", namespace, err)

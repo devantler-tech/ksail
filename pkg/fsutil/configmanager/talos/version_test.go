@@ -12,6 +12,21 @@ import (
 // (<= 1.35) is older than the built-in default, used to exercise capping.
 const pinnedTalos112 = "v1.12.4"
 
+func TestParseVersionContract(t *testing.T) {
+	t.Parallel()
+
+	defaultContract, err := talos.ParseVersionContract("")
+	require.NoError(t, err)
+	assert.False(t, defaultContract.MultidocKubernetesConfigSupported())
+
+	multiDocumentContract, err := talos.ParseVersionContract("1.14.0-alpha.2")
+	require.NoError(t, err)
+	assert.True(t, multiDocumentContract.MultidocKubernetesConfigSupported())
+
+	_, err = talos.ParseVersionContract("not-a-version")
+	require.Error(t, err)
+}
+
 //nolint:gochecknoglobals // table-driven test cases shared by the resolver test.
 var resolveKubernetesVersionCases = []struct {
 	name        string

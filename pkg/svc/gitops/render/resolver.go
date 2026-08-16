@@ -302,6 +302,53 @@ func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, 
 	return string(raw), nil
 }
 
+// lookupValuesRef resolves a valuesFrom reference's raw value from the in-stream
+// ConfigMap/Secret index, returning it and whether it was found. It is the single
+// source of truth for "can this reference be resolved offline?", shared by
+// applyValuesFrom (which merges the value) and unresolvedValueRefs (which reports
+// when it cannot be resolved).
+func lookupValuesRef(
+	ref meta.ValuesReference,
+	namespace string,
+	sources SourceIndex,
+) (string, bool) {
+	data, found := lookupValuesSource(ref, namespace, sources)
+	if !found {
+		return "", false
+	}
+
+	raw, ok := data[ref.GetValuesKey()]
+
+	return raw, ok
+}
+
+// lookupValuesSource resolves the referenced ConfigMap/Secret itself from the
+// in-stream index, returning its data and whether the *referent* is present —
+// distinct from whether the requested valuesKey exists inside it. Flux forgives
+// only a not-found optional referent: per the helm-controller API, "a not found
+// error for the values reference is ignored, but any ValuesKey, TargetPath or
+// transient error will still result in a reconciliation failure". Reporting the
+// two cases apart is what lets unresolvedValueRefs stay silent for a genuinely
+// absent optional referent while still flagging a present one whose key is missing.
+func lookupValuesSource(
+	ref meta.ValuesReference,
+	namespace string,
+	sources SourceIndex,
+) (map[string]string, bool) {
+	switch ref.Kind {
+	case "ConfigMap":
+		data, ok := sources.ConfigMaps[namespace+"/"+ref.Name]
+
+		return data, ok
+	case "Secret":
+		data, ok := sources.Secrets[namespace+"/"+ref.Name]
+
+		return data, ok
+	default:
+		return nil, false
+	}
+}
+
 // applyValuesFrom merges one valuesFrom reference into values, resolving it from
 // the in-repo ConfigMap/Secret index. References to objects not present in the
 // stream (typically cluster-managed) are skipped. A reference with a targetPath
@@ -313,18 +360,7 @@ func applyValuesFrom(
 	namespace string,
 	sources SourceIndex,
 ) {
-	var data map[string]string
-
-	switch ref.Kind {
-	case "ConfigMap":
-		data = sources.ConfigMaps[namespace+"/"+ref.Name]
-	case "Secret":
-		data = sources.Secrets[namespace+"/"+ref.Name]
-	default:
-		return
-	}
-
-	raw, ok := data[ref.GetValuesKey()]
+	raw, ok := lookupValuesRef(ref, namespace, sources)
 	if !ok {
 		return
 	}
