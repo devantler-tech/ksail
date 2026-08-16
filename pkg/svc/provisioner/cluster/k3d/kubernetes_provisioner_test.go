@@ -115,7 +115,7 @@ func TestEnsureNamespace_ScopesPrivilegedPodSecurity(t *testing.T) {
 		binding.Spec.ValidationActions,
 	)
 
-	assertBindingSelectsNamespace(t, binding, namespace)
+	assertBindingSelectsNamespace(t, binding, namespace, "nested-k3s")
 }
 
 func assertGuardIsFailClosed(t *testing.T, policy *admissionv1.ValidatingAdmissionPolicy) {
@@ -144,6 +144,7 @@ func assertBindingSelectsNamespace(
 	t *testing.T,
 	binding *admissionv1.ValidatingAdmissionPolicyBinding,
 	namespace *corev1.Namespace,
+	wantCluster string,
 ) {
 	t.Helper()
 
@@ -152,8 +153,14 @@ func assertBindingSelectsNamespace(
 
 	selector := binding.Spec.MatchResources.NamespaceSelector.MatchLabels
 
-	assert.Equal(t, namespace.Labels["ksail.io/cluster"], selector["ksail.io/cluster"])
-	assert.Equal(t, namespace.Labels["ksail.io/managed-by"], selector["ksail.io/managed-by"])
+	// Pin both sides to the expected values rather than comparing them to each other: two map
+	// lookups agree vacuously when the key is missing from both, so dropping a label from the
+	// namespace and the selector together would report agreement while the binding matches
+	// every namespace or none — the exact drift this helper exists to catch.
+	assert.Equal(t, wantCluster, namespace.Labels["ksail.io/cluster"])
+	assert.Equal(t, wantCluster, selector["ksail.io/cluster"])
+	assert.Equal(t, "ksail", namespace.Labels["ksail.io/managed-by"])
+	assert.Equal(t, "ksail", selector["ksail.io/managed-by"])
 }
 
 // The operator passes a namespace-qualified provisioned name that wins over the factory's
