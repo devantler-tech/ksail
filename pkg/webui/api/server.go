@@ -43,10 +43,13 @@ const (
 const errorJSONKey = "error"
 
 var (
-	errInvalidUIOrigin     = errors.New("invalid UI origin configuration")
-	errRequestOrigin       = errors.New("request origin does not match the UI origin")
-	errApplyContentType    = errors.New("manifest apply requires Content-Type application/yaml")
-	errUIOriginNotLoopback = errors.New("UI origin host is not loopback")
+	errInvalidUIOrigin  = errors.New("invalid UI origin configuration")
+	errRequestOrigin    = errors.New("request origin does not match the UI origin")
+	errApplyContentType = errors.New(
+		"manifest apply requires Content-Type application/yaml",
+	)
+	errUIOriginNotLoopback        = errors.New("UI origin host is not loopback")
+	errUnsupportedJSONContentType = errors.New("content type must be application/json")
 )
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
@@ -1235,12 +1238,20 @@ func isMutating(method string) bool {
 	}
 }
 
-// decodeJSON decodes a size-capped JSON request body into v. On failure it writes the appropriate
-// error response (413 if oversized, else 400) and returns the error so the handler returns early.
+// decodeJSON decodes a size-capped application/json request body into v. On failure it writes the
+// appropriate error response (415 for unsupported media type, 413 if oversized, else 400) and
+// returns the error so the handler returns early.
 func decodeJSON(writer http.ResponseWriter, request *http.Request, value any) error {
+	err := requireJSONContentType(request)
+	if err != nil {
+		writeDecodeError(writer, err)
+
+		return err
+	}
+
 	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
 
-	err := json.NewDecoder(limited).Decode(value)
+	err = json.NewDecoder(limited).Decode(value)
 	if err != nil {
 		wrapped := fmt.Errorf("decode request: %w", err)
 		writeDecodeError(writer, wrapped)
@@ -1254,15 +1265,31 @@ func decodeJSON(writer http.ResponseWriter, request *http.Request, value any) er
 func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1.Cluster, error) {
 	var cluster v1alpha1.Cluster
 
+	err := requireJSONContentType(request)
+	if err != nil {
+		return nil, err
+	}
+
 	// Cap the request body to guard against oversized payloads when exposed via Ingress.
 	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
 
-	err := json.NewDecoder(limited).Decode(&cluster)
+	err = json.NewDecoder(limited).Decode(&cluster)
 	if err != nil {
 		return nil, fmt.Errorf("decode cluster: %w", err)
 	}
 
 	return &cluster, nil
+}
+
+func requireJSONContentType(request *http.Request) error {
+	contentType := request.Header.Get("Content-Type")
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "application/json" {
+		return errUnsupportedJSONContentType
+	}
+
+	return nil
 }
 
 func writeJSON(writer http.ResponseWriter, status int, body any) {
@@ -1283,12 +1310,19 @@ func writeError(writer http.ResponseWriter, status int, err error) {
 	writeJSON(writer, status, map[string]string{errorJSONKey: err.Error()})
 }
 
-// writeDecodeError maps a request-body decode failure to the most appropriate status: 413 when the
-// body exceeded maxRequestBodyBytes, otherwise 400 for malformed JSON.
+// writeDecodeError maps a request-body decode failure to the most appropriate status: 415 when
+// the media type is unsupported, 413 when the body exceeded maxRequestBodyBytes, otherwise 400 for
+// malformed JSON.
 func writeDecodeError(writer http.ResponseWriter, err error) {
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
 		writeError(writer, http.StatusRequestEntityTooLarge, err)
+
+		return
+	}
+
+	if errors.Is(err, errUnsupportedJSONContentType) {
+		writeError(writer, http.StatusUnsupportedMediaType, err)
 
 		return
 	}
