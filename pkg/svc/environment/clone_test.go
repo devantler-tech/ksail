@@ -212,12 +212,11 @@ func TestCloneOverlay_RejectsSymlinkedDestinationParent(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
-// TestCloneOverlay_ContainsWriteWhenParentIsSwappedAfterValidation covers the
-// window between the destination check and the write: the parent is a real
-// directory when the clone validates it and a symlink pointing outside repoRoot by
-// the time the content is written. The clone must not write through it, whichever
-// side wins that race.
-func TestCloneOverlay_ContainsWriteWhenParentIsSwappedAfterValidation(t *testing.T) {
+// TestCloneOverlay_RejectsSymlinkedDestinationParentWithForce covers force mode:
+// a destination parent that is already a symlink when validation runs must be
+// rejected without changing the outside sentinel. The post-validation parent-swap
+// race is covered directly by TestTryWriteFileWithin_RefusesEscapeThroughSwappedParent.
+func TestCloneOverlay_RejectsSymlinkedDestinationParentWithForce(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -230,8 +229,7 @@ func TestCloneOverlay_ContainsWriteWhenParentIsSwappedAfterValidation(t *testing
 	destParent := filepath.Join(repoRoot, "k8s", "clusters", "staging")
 	require.NoError(t, os.MkdirAll(destParent, 0o750))
 
-	// Stand in for an attacker winning the race after validateCloneDestination has
-	// already observed a legitimate directory.
+	// Replace the destination parent before CloneOverlay validates the path.
 	require.NoError(t, os.Remove(destParent))
 
 	symlinkErr := os.Symlink(outside, destParent)
