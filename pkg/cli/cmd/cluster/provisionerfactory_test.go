@@ -15,7 +15,10 @@ import (
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -117,4 +120,49 @@ func TestCreateAndVerifyProvisioner_HonorsFactoryOverride(t *testing.T) {
 	require.True(t, isFake,
 		"createAndVerifyProvisioner must build its provisioner via newProvisionerFactory "+
 			"(override-aware), got %T", provisioner)
+}
+
+// TestCreateAndVerifyProvisioner_EKSBindsExactContext proves component clients
+// never inherit an unrelated ambient kubeconfig context when EKS context is
+// implicit in ksail.yaml.
+//
+//nolint:paralleltest // mutates the global provisioner-factory override
+func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
+	const (
+		clusterName   = "factory-coverage"
+		region        = "us-east-1"
+		ambient       = "arn:aws:iam::999999999999:role/ci@factory-coverage.us-east-1.eksctl.io"
+		targetContext = "arn:aws:iam::123456789012:role/ci@factory-coverage.us-east-1.eksctl.io"
+	)
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	config := clientcmdapi.NewConfig()
+	config.CurrentContext = ambient
+	config.Clusters[ambient] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+	config.AuthInfos[ambient] = &clientcmdapi.AuthInfo{Token: "ambient-token"}
+	config.Contexts[ambient] = &clientcmdapi.Context{Cluster: ambient, AuthInfo: ambient}
+	config.Clusters[targetContext] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6444"}
+	config.AuthInfos[targetContext] = &clientcmdapi.AuthInfo{Token: "target-token"}
+	config.Contexts[targetContext] = &clientcmdapi.Context{
+		Cluster:  targetContext,
+		AuthInfo: targetContext,
+	}
+	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
+
+	restore := cluster.SetProvisionerFactoryForTests(fakeFactory{})
+	defer restore()
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+
+	ctx := newFullyPopulatedFactoryContext()
+	ctx.ClusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
+	ctx.ClusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderAWS
+	ctx.ClusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
+	ctx.EKSConfig.Region = region
+	ctx.EKSAccountID = "123456789012"
+
+	_, err := cluster.ExportCreateAndVerifyProvisioner(cmd, ctx, clusterName)
+	require.NoError(t, err)
+	assert.Equal(t, targetContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
 }

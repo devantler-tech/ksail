@@ -20,6 +20,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -41,7 +42,15 @@ const (
 // responses. The SPA parses both with the same logic, so the key is shared.
 const errorJSONKey = "error"
 
-var errUnsupportedJSONContentType = errors.New("content type must be application/json")
+var (
+	errInvalidUIOrigin  = errors.New("invalid UI origin configuration")
+	errRequestOrigin    = errors.New("request origin does not match the UI origin")
+	errApplyContentType = errors.New(
+		"manifest apply requires Content-Type application/yaml",
+	)
+	errUIOriginNotLoopback        = errors.New("UI origin host is not loopback")
+	errUnsupportedJSONContentType = errors.New("content type must be application/json")
+)
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
 //
@@ -58,6 +67,10 @@ type Server struct {
 	ReadOnly bool
 	// BindAddress is the address the HTTP server listens on (e.g. ":8080").
 	BindAddress string
+	// UIOrigin is the server-held loopback origin allowed to issue mutating requests (for example,
+	// "http://127.0.0.1:8080"). Serve derives it from the listener for ModeLocal; other deployment
+	// modes leave it empty because their origin boundary is owned by their ingress or webview.
+	UIOrigin string
 	// OIDC configures app-driven OIDC authentication; empty IssuerURL disables it.
 	OIDC OIDCConfig
 
@@ -203,6 +216,10 @@ func (s *Server) Start(ctx context.Context) error {
 // listener separately lets callers (e.g. `ksail open web`) discover the chosen port before serving
 // when port 0 is requested.
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
+	if s.Mode == ModeLocal && s.UIOrigin == "" {
+		s.UIOrigin = "http://" + listener.Addr().String()
+	}
+
 	if s.OIDC.Enabled() && s.auth == nil {
 		auth, err := newAuthenticator(ctx, s.OIDC)
 		if err != nil {
@@ -278,7 +295,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /", spaFileServer(s.StaticFS))
 	}
 
-	return securityHeaders(s.authGuard(s.readOnlyGuard(mux)))
+	return securityHeaders(s.originGuard(s.authGuard(s.readOnlyGuard(mux))))
 }
 
 // registerCapabilityRoutes wires the optional endpoints whose presence is gated on the backend
@@ -440,6 +457,111 @@ func securityHeaders(next http.Handler) http.Handler {
 
 		next.ServeHTTP(writer, request)
 	})
+}
+
+// originGuard protects the unauthenticated loopback UI from DNS rebinding and cross-site mutation.
+// Host and Origin are compared with a server-held loopback origin, never with each other: an attacker
+// can control both request values after rebinding, but cannot change the listener-derived UIOrigin.
+// Non-browser clients may omit Origin, but still have to address the exact configured Host.
+func (s *Server) originGuard(next http.Handler) http.Handler {
+	var configured *url.URL
+
+	var configErr error
+
+	if s.UIOrigin != "" {
+		configured, configErr = parseLoopbackOrigin(s.UIOrigin)
+	}
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if !isMutating(request.Method) || s.UIOrigin == "" {
+			next.ServeHTTP(writer, request)
+
+			return
+		}
+
+		if configErr != nil {
+			writeError(writer, http.StatusInternalServerError, errInvalidUIOrigin)
+
+			return
+		}
+
+		if !requestHostMatches(request.Host, configured) ||
+			!requestOriginMatches(request.Header.Get("Origin"), configured) {
+			writeError(writer, http.StatusForbidden, errRequestOrigin)
+
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func parseLoopbackOrigin(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %q: %w", errInvalidUIOrigin, raw, err)
+	}
+
+	if !isOriginURL(parsed) {
+		return nil, fmt.Errorf("%w: %q", errInvalidUIOrigin, raw)
+	}
+
+	ip := net.ParseIP(parsed.Hostname())
+	if ip == nil || !ip.IsLoopback() {
+		return nil, fmt.Errorf("%w: %q", errUIOriginNotLoopback, parsed.Hostname())
+	}
+
+	return parsed, nil
+}
+
+func isOriginURL(parsed *url.URL) bool {
+	return parsed.Scheme != "" && parsed.Host != "" && parsed.User == nil &&
+		(parsed.Path == "" || parsed.Path == "/") && parsed.RawQuery == "" && parsed.Fragment == ""
+}
+
+func requestHostMatches(raw string, configured *url.URL) bool {
+	requestURL, err := url.Parse(configured.Scheme + "://" + raw)
+	if err != nil || !isOriginURL(requestURL) || requestURL.Path != "" {
+		return false
+	}
+
+	return originsMatch(requestURL, configured)
+}
+
+func requestOriginMatches(raw string, configured *url.URL) bool {
+	if raw == "" {
+		return true
+	}
+
+	requestOrigin, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+
+	return requestOrigin.User == nil && requestOrigin.Path == "" &&
+		requestOrigin.RawQuery == "" && requestOrigin.Fragment == "" &&
+		originsMatch(requestOrigin, configured)
+}
+
+func originsMatch(left, right *url.URL) bool {
+	return strings.EqualFold(left.Scheme, right.Scheme) &&
+		strings.EqualFold(left.Hostname(), right.Hostname()) &&
+		effectiveOriginPort(left) == effectiveOriginPort(right)
+}
+
+func effectiveOriginPort(origin *url.URL) string {
+	if port := origin.Port(); port != "" {
+		return port
+	}
+
+	switch strings.ToLower(origin.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
 }
 
 // uiNotBuiltMessage is served when StaticFS is set but the SPA assets were never built (only the
@@ -988,6 +1110,12 @@ func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 
+	if !isApplyManifestContentType(request.Header.Get("Content-Type")) {
+		writeError(writer, http.StatusUnsupportedMediaType, errApplyContentType)
+
+		return
+	}
+
 	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
 
 	manifests, err := io.ReadAll(limited)
@@ -1013,6 +1141,20 @@ func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) 
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{"results": results, "dryRun": dryRun})
+}
+
+func isApplyManifestContentType(header string) bool {
+	mediaType, _, err := mime.ParseMediaType(header)
+	if err != nil {
+		return false
+	}
+
+	switch strings.ToLower(mediaType) {
+	case "application/yaml", "application/x-yaml", "text/yaml":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) handleCipherRecipients(writer http.ResponseWriter, request *http.Request) {
@@ -1141,6 +1283,7 @@ func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1
 
 func requireJSONContentType(request *http.Request) error {
 	contentType := request.Header.Get("Content-Type")
+
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil || mediaType != "application/json" {
 		return errUnsupportedJSONContentType

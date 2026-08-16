@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
@@ -23,6 +24,28 @@ const (
 	// DefaultTimeout defines the fallback Helm chart installation timeout.
 	DefaultTimeout = 5 * time.Minute
 )
+
+// ValidateKubernetesReleaseStorageDriver rejects Helm backends whose release
+// records have no Kubernetes UID. Identity-bound lifecycle operations must run
+// only with Secret or ConfigMap storage so they can distinguish a same-name
+// replacement from the release incarnation KSail actually mutated.
+func ValidateKubernetesReleaseStorageDriver(driver string) error {
+	driver = normalizeReleaseStorageDriver(driver)
+	switch driver {
+	case "", "secret", "secrets", "configmap", "configmaps":
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", ErrReleaseStorageDriverUnsupported, driver)
+	}
+}
+
+func normalizeReleaseStorageDriver(driver string) string {
+	return strings.ToLower(strings.TrimSpace(driver))
+}
+
+func configuredReleaseStorageDriver() string {
+	return normalizeReleaseStorageDriver(os.Getenv("HELM_DRIVER"))
+}
 
 // Client represents the default helm implementation used by KSail.
 type Client struct {
@@ -93,7 +116,7 @@ func newClient(
 	initErr := actionConfig.Init(
 		settings.RESTClientGetter(),
 		settings.Namespace(),
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if initErr != nil {
 		return nil, fmt.Errorf("failed to initialize helm v4 action config: %w", initErr)
@@ -148,7 +171,7 @@ func (c *Client) RefreshDiscovery() error {
 	initErr := c.actionConfig.Init(
 		settings.RESTClientGetter(),
 		settings.Namespace(),
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if initErr != nil {
 		return fmt.Errorf("reinitialize helm action config after discovery refresh: %w", initErr)
@@ -248,8 +271,9 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 	return nil
 }
 
-// ReleaseExists checks whether a Helm release with the given name exists in the
-// specified namespace. It returns true when at least one revision is recorded.
+// ReleaseExists checks whether the latest Helm release revision with the given
+// name is deployed in the specified namespace. Failed, pending, uninstalled,
+// and superseded history must not be treated as a live component.
 func (c *Client) ReleaseExists(
 	_ context.Context,
 	releaseName, namespace string,
@@ -266,7 +290,6 @@ func (c *Client) ReleaseExists(
 	defer cleanup()
 
 	histClient := helmv4action.NewHistory(c.actionConfig)
-	histClient.Max = 1
 
 	releases, err := histClient.Run(releaseName)
 	if err != nil {
@@ -277,7 +300,26 @@ func (c *Client) ReleaseExists(
 		return false, fmt.Errorf("failed to check release history for %q: %w", releaseName, err)
 	}
 
-	return len(releases) > 0, nil
+	latestVersion := -1
+	latestStatus := ""
+
+	for _, release := range releases {
+		accessor, accessorErr := helmv4release.NewAccessor(release)
+		if accessorErr != nil {
+			return false, fmt.Errorf(
+				"failed to access release history for %q: %w",
+				releaseName,
+				accessorErr,
+			)
+		}
+
+		if accessor.Version() > latestVersion {
+			latestVersion = accessor.Version()
+			latestStatus = accessor.Status()
+		}
+	}
+
+	return latestVersion >= 0 && strings.EqualFold(latestStatus, "deployed"), nil
 }
 
 // ListReleases returns Helm releases across all namespaces for all statuses in a
@@ -304,7 +346,7 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	reinitErr := c.actionConfig.Init(
 		c.settings.RESTClientGetter(),
 		"",
-		os.Getenv("HELM_DRIVER"),
+		configuredReleaseStorageDriver(),
 	)
 	if reinitErr != nil {
 		restoreErr := c.restoreNamespace(previousNamespace)
@@ -341,6 +383,8 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 		result = append(result, ReleaseInfo{
 			Name:      accessor.Name(),
 			Namespace: accessor.Namespace(),
+			Revision:  accessor.Version(),
+			Status:    accessor.Status(),
 		})
 	}
 
@@ -358,6 +402,20 @@ func (c *Client) GetReleaseStorageLabels(
 	ctx context.Context,
 	releaseName, namespace string,
 ) (map[string]string, error) {
+	metadata, err := c.GetReleaseStorageMetadata(ctx, releaseName, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return metadata.Labels, nil
+}
+
+// GetReleaseStorageMetadata returns labels and the Kubernetes UID from the
+// latest Helm release storage object (Secret or ConfigMap).
+func (c *Client) GetReleaseStorageMetadata(
+	ctx context.Context,
+	releaseName, namespace string,
+) (*ReleaseStorageMetadata, error) {
 	if releaseName == "" {
 		return nil, errReleaseNameRequired
 	}
@@ -366,9 +424,11 @@ func (c *Client) GetReleaseStorageLabels(
 		namespace = c.settings.Namespace()
 	}
 
-	driver := os.Getenv("HELM_DRIVER")
-	if driver == "memory" {
-		return nil, ErrNoReleaseStorage
+	driver := configuredReleaseStorageDriver()
+
+	err := ValidateKubernetesReleaseStorageDriver(driver)
+	if err != nil {
+		return nil, err
 	}
 
 	restConfig, err := c.settings.RESTClientGetter().ToRESTConfig()
@@ -383,7 +443,7 @@ func (c *Client) GetReleaseStorageLabels(
 
 	selector := fmt.Sprintf("name=%s,owner=helm", releaseName)
 
-	return c.fetchStorageLabels(ctx, clientset, driver, namespace, selector)
+	return c.fetchReleaseStorageMetadata(ctx, clientset, driver, namespace, selector)
 }
 
 // GetReleaseValues returns the user-supplied values for the latest revision of
@@ -423,18 +483,26 @@ func (c *Client) GetReleaseValues(
 	return values, nil
 }
 
-// fetchStorageLabels queries either ConfigMaps or Secrets (based on driver) and
-// returns labels from the storage object with the highest version.
-func (c *Client) fetchStorageLabels(
+type releaseStorageItem struct {
+	Labels map[string]string
+	UID    string
+}
+
+// fetchReleaseStorageMetadata queries either ConfigMaps or Secrets based on
+// the configured Helm storage driver.
+func (c *Client) fetchReleaseStorageMetadata(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	driver, namespace, selector string,
-) (map[string]string, error) {
-	type labeledItem struct {
-		Labels map[string]string
+) (*ReleaseStorageMetadata, error) {
+	driver = normalizeReleaseStorageDriver(driver)
+
+	err := ValidateKubernetesReleaseStorageDriver(driver)
+	if err != nil {
+		return nil, err
 	}
 
-	var items []labeledItem
+	var items []releaseStorageItem
 
 	switch driver {
 	case "configmap", "configmaps":
@@ -448,7 +516,10 @@ func (c *Client) fetchStorageLabels(
 		}
 
 		for i := range cmList.Items {
-			items = append(items, labeledItem{Labels: cmList.Items[i].Labels})
+			items = append(items, releaseStorageItem{
+				Labels: cmList.Items[i].Labels,
+				UID:    string(cmList.Items[i].UID),
+			})
 		}
 	default:
 		secretList, err := clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
@@ -461,10 +532,19 @@ func (c *Client) fetchStorageLabels(
 		}
 
 		for i := range secretList.Items {
-			items = append(items, labeledItem{Labels: secretList.Items[i].Labels})
+			items = append(items, releaseStorageItem{
+				Labels: secretList.Items[i].Labels,
+				UID:    string(secretList.Items[i].UID),
+			})
 		}
 	}
 
+	return latestReleaseStorageMetadata(items)
+}
+
+func latestReleaseStorageMetadata(
+	items []releaseStorageItem,
+) (*ReleaseStorageMetadata, error) {
 	if len(items) == 0 {
 		return nil, ErrNoReleaseStorage
 	}
@@ -480,7 +560,22 @@ func (c *Client) fetchStorageLabels(
 		}
 	}
 
-	return items[bestIdx].Labels, nil
+	return &ReleaseStorageMetadata{
+		Labels:            items[bestIdx].Labels,
+		Identity:          items[bestIdx].UID,
+		HistoryIdentities: releaseStorageIdentities(items),
+	}, nil
+}
+
+func releaseStorageIdentities(items []releaseStorageItem) []string {
+	identities := make([]string, 0, len(items))
+	for _, item := range items {
+		if identity := strings.TrimSpace(item.UID); identity != "" {
+			identities = append(identities, identity)
+		}
+	}
+
+	return identities
 }
 
 func (c *Client) installRelease(

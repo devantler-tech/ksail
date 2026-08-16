@@ -271,7 +271,7 @@ func TestFilterRegistriesByClusterName(t *testing.T) {
 		t.Parallel()
 
 		input := []dockerRegistryInfo{{Name: "a"}, {Name: "b"}}
-		result := filterRegistriesByClusterName(input, "")
+		result := filterRegistriesByClusterName(input, "", nil)
 		assert.Len(t, result, 2)
 	})
 
@@ -283,7 +283,7 @@ func TestFilterRegistriesByClusterName(t *testing.T) {
 			{Name: "other-cluster-docker.io"},
 			{Name: "my-cluster-docker.io"},
 		}
-		result := filterRegistriesByClusterName(input, "my-cluster")
+		result := filterRegistriesByClusterName(input, "my-cluster", nil)
 		assert.Len(t, result, 2)
 		assert.Equal(t, "my-cluster-ghcr.io", result[0].Name)
 		assert.Equal(t, "my-cluster-docker.io", result[1].Name)
@@ -293,7 +293,7 @@ func TestFilterRegistriesByClusterName(t *testing.T) {
 		t.Parallel()
 
 		input := []dockerRegistryInfo{{Name: "other-cluster-ghcr.io"}}
-		result := filterRegistriesByClusterName(input, "my-cluster")
+		result := filterRegistriesByClusterName(input, "my-cluster", nil)
 		assert.Empty(t, result)
 	})
 }

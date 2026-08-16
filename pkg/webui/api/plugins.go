@@ -2,7 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 )
@@ -73,6 +78,10 @@ type PluginService interface {
 type PluginInstallRequest struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256,omitempty"`
+	// Trusted is the server-enforced acknowledgement that the caller understands the plugin will run
+	// unsandboxed as same-origin JavaScript with access to this UI's cluster APIs. The SPA sets it only
+	// after the explicit consent checkbox is checked; direct callers must opt in too.
+	Trusted bool `json:"trusted"`
 	// Signature is an optional base64-encoded ed25519 detached signature over the downloaded tarball
 	// bytes. When set, the install verifies it against KSAIL_PLUGIN_SIGNING_PUBKEY and rejects the
 	// install when no trusted key is configured (a claimed signature is never silently ignored).
@@ -249,10 +258,31 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 		return
 	}
 
+	err := requirePluginInstallRequestGuards(request)
+	if err != nil {
+		status := http.StatusForbidden
+		if errors.Is(err, errUnsupportedContentType) {
+			status = http.StatusUnsupportedMediaType
+		}
+
+		writeError(writer, status, err)
+
+		return
+	}
+
 	var req PluginInstallRequest
 
-	err := decodeJSON(writer, request, &req)
+	err = decodeJSON(writer, request, &req)
 	if err != nil {
+		return
+	}
+
+	if !req.Trusted {
+		writeClientError(
+			writer,
+			fmt.Errorf("%w: plugin install requires explicit trust acknowledgement", ErrInvalid),
+		)
+
 		return
 	}
 
@@ -266,6 +296,75 @@ func (s *Server) handleInstallPlugin(writer http.ResponseWriter, request *http.R
 	}
 
 	writeJSON(writer, http.StatusCreated, info)
+}
+
+var (
+	errUnsupportedContentType = errors.New("unsupported content type: expected application/json")
+	errCrossSitePluginInstall = errors.New("cross-site plugin install request rejected")
+)
+
+func requirePluginInstallRequestGuards(request *http.Request) error {
+	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/json" {
+		return errUnsupportedContentType
+	}
+
+	if isCrossSiteBrowserRequest(request) {
+		return errCrossSitePluginInstall
+	}
+
+	return nil
+}
+
+// isCrossSiteBrowserRequest reports whether a browser request came from somewhere other than the local
+// UI. The install endpoint is registered only when the service implements PluginInstaller — which only
+// the loopback-bound local backend does — and installing a plugin runs unsandboxed same-origin
+// JavaScript against the cluster, so a browser origin is trusted only when the page was itself served
+// from loopback.
+//
+// The trusted origin is deliberately NOT derived from the request: Host is client-controlled, so
+// comparing Origin against it accepts a DNS-rebinding attacker, whose page on a name rebound to
+// 127.0.0.1 presents a matching Origin/Host pair and a same-origin Sec-Fetch-Site. Anchoring on the
+// loopback identity closes that, because a browser sets Origin from the page's real URL.
+func isCrossSiteBrowserRequest(request *http.Request) bool {
+	switch request.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "none":
+		return true
+	}
+
+	origin := request.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser client (CLI tooling, tests). Browsers always send Origin on a cross-origin POST,
+		// and the JSON content-type guard above already blocks a simple form-based cross-site post.
+		return false
+	}
+
+	// The desktop shell serves the SPA from this one fixed origin (see desktop/main.go). Compare the
+	// raw header so crafted values with otherwise invisible empty delimiters (`?` or `#`) cannot be
+	// normalized into the trusted value by url.Parse.
+	if origin == "wails://wails" {
+		return false
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return true
+	}
+
+	return !isLoopbackOriginHost(parsed.Hostname())
+}
+
+// isLoopbackOriginHost reports whether a URL hostname names this machine's loopback interface.
+// "localhost" is included: an attacker can rebind their own name to 127.0.0.1, but cannot make a
+// browser report "localhost" as the origin of a page they serve.
+func isLoopbackOriginHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // handleUninstallPlugin removes an installed plugin by id. The id is validated here (and again in the

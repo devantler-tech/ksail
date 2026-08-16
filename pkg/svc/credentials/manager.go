@@ -137,6 +137,18 @@ func (m *Manager) Value(key Key) string {
 	return resolveEnvValue(key, name)
 }
 
+// ExplicitValue returns only the stored secure-store value for key, never the environment fall-
+// through Value also performs. It is what lets a composed resolver tell an operator's deliberate
+// override apart from whatever the surrounding shell happens to export — see ExplicitResolver.
+func (m *Manager) ExplicitValue(key Key) string {
+	value, ok, err := m.store.Get(key)
+	if err != nil || !ok {
+		return ""
+	}
+
+	return value
+}
+
 // Overlay reconciles the process environment to match the stored credentials: it exports every
 // stored value under its configured variable name and unsets any variable it previously exported
 // that is no longer backed by a stored value (a cleared secret) or whose variable name changed. It

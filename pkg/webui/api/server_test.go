@@ -55,6 +55,7 @@ func doRequest(handler http.Handler, method, target, body string) *httptest.Resp
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
 	}
+
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
@@ -195,7 +196,8 @@ func TestCreateClusterRejectsSimpleCrossOriginContentType(t *testing.T) {
 
 	fakeClient := newClient(t)
 	server := &api.Server{Service: operator.NewCRClusterService(fakeClient)}
-	body := `{"metadata":{"name":"evil-eks","namespace":"default"},"spec":{"cluster":{"distribution":"EKS","provider":"AWS"}}}`
+	body := `{"metadata":{"name":"evil-eks","namespace":"default"},` +
+		`"spec":{"cluster":{"distribution":"EKS","provider":"AWS"}}}`
 	request := httptest.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,

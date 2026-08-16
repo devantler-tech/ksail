@@ -25,8 +25,16 @@ env:
   GOMEMLIMIT: "6GiB"
 
 concurrency:
-  group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  # On main each run is its own verification record, so it gets a run-unique
+  # group. Sharing a group there is not made safe by cancel-in-progress alone: a
+  # group holds one running plus one pending run, and a third merge cancels the
+  # pending one — so the second merge's checks would still be lost. A unique key
+  # means nothing on main ever queues behind, or evicts, anything else.
+  #
+  # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
+  # runs there still cancel exactly as before.
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
 
@@ -104,7 +112,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -122,6 +130,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -133,9 +142,11 @@ jobs:
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
       desktop: ${{ steps.filter.outputs.desktop }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
+      cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
+      eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -148,7 +159,10 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
+              - '.govulncheck-allow.txt'
               - '.github/actions/**'
+            govuln-allowlist:
+              - '.govulncheck-allow.txt'
             system-test:
               # NOTE: Do not use negative patterns (!) here.
               # dorny/paths-filter v4 uses picomatch where negated patterns
@@ -266,11 +280,126 @@ jobs:
               # so guard a bump to this file with validate-calico-chart.
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
+            cask-pr-handoff:
+              - '.github/fixtures/cask-pr-handoff/**'
+              - '.github/scripts/cask-pr-handoff-workflow.test.sh'
+              - '.github/scripts/collect-cask-pr-handoff.sh'
+              - '.github/scripts/collect-cask-pr-handoff.test.sh'
+              - '.github/scripts/find-merged-cask-pr-handoff.sh'
+              - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
+              - '.github/scripts/redraft-evergreen-cask-prs.sh'
+              - '.github/scripts/redraft-evergreen-cask-prs.test.sh'
+              - '.github/scripts/validate-cask-pr-handoff.sh'
+              - '.github/scripts/validate-cask-pr-handoff.test.sh'
+              - '.github/workflows/cd.yaml'
+              - '.github/workflows/ci.yaml'
+            eks-smoke-scripts:
+              - '.github/scripts/delete-eks-smoke-cluster.sh'
+              - '.github/scripts/delete-eks-smoke-cluster.test.sh'
+              - '.github/workflows/system-test-eks.yaml'
+              - '.github/workflows/ci.yaml'
+
+  eks-smoke-scripts:
+    name: 🧹 Validate EKS Smoke Teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.eks-smoke-scripts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Verify EKS smoke teardown reports only real leaks
+        run: |
+          shellcheck \
+            .github/scripts/delete-eks-smoke-cluster.sh \
+            .github/scripts/delete-eks-smoke-cluster.test.sh
+          .github/scripts/delete-eks-smoke-cluster.test.sh
+
+  cask-pr-handoff:
+    name: 🔐 Validate Cask PR Handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Verify fail-closed cask PR handoff
+        run: |
+          shellcheck \
+            .github/fixtures/cask-pr-handoff/fake-bin/gh \
+            .github/scripts/collect-cask-pr-handoff.sh \
+            .github/scripts/collect-cask-pr-handoff.test.sh \
+            .github/scripts/find-merged-cask-pr-handoff.sh \
+            .github/scripts/find-merged-cask-pr-handoff.test.sh \
+            .github/scripts/redraft-evergreen-cask-prs.sh \
+            .github/scripts/redraft-evergreen-cask-prs.test.sh \
+            .github/scripts/validate-cask-pr-handoff.sh \
+            .github/scripts/validate-cask-pr-handoff.test.sh \
+            .github/scripts/cask-pr-handoff-workflow.test.sh
+          .github/scripts/collect-cask-pr-handoff.test.sh
+          .github/scripts/find-merged-cask-pr-handoff.test.sh
+          .github/scripts/redraft-evergreen-cask-prs.test.sh
+          .github/scripts/validate-cask-pr-handoff.test.sh
+          .github/scripts/cask-pr-handoff-workflow.test.sh
 
   ci-go:
     name: ✅ Validate Go Project
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@84813ae61fb21741e0a6193b5c14c6941a448577 # v9.0.7
+    needs: [changes]
+    # The two arms below cover what the ORG-REQUIRED workflow does not, and nothing
+    # more. validate-go-project.yaml carries its own `pull_request:` / `merge_group:`
+    # triggers alongside its `workflow_call` interface, so GitHub already runs the
+    # complete Go suite directly on every pull request here, with no help from this
+    # file. That direct run publishes its checks WITHOUT the `✅ Validate Go Project /`
+    # prefix, which is why a prefix-filtered read of a pull request shows "skipped"
+    # over a suite that has in fact passed (ksail#6563, ksail#6564 — both closed as
+    # measurement errors of exactly that shape).
+    #
+    #   * push to main — the required workflow is pull-request scoped and never runs
+    #     on the default branch, so this arm is the ONLY Go validation main gets.
+    #
+    #   * pull_request, gated on govuln-allowlist — DELIBERATELY NARROW. The required
+    #     run takes `scan-default-branch`'s default of false, so it will not scan a
+    #     pull request that edits only a .govulncheck-allow.txt; this arm exists so a
+    #     risk acceptance is validated by the scanner it applies to. Do NOT widen this
+    #     to `code`: .govulncheck-allow.txt is already a member of the `code` filter,
+    #     so `code` is a strict superset whose extra region is precisely where the
+    #     required workflow already runs the identical nine jobs. Widening it buys no
+    #     coverage and doubles the Go suite on every Go pull request.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changes.outputs.govuln-allowlist == 'true')
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@61d9c87b302523778789c7cf09655b87b6716e87 # v13.0.4
+    # Both inputs make a default-branch run answer "did the check run" rather than
+    # "did the diff touch a Go file". On main the branch's green IS the protection
+    # signal, so a path filter that skips the suite or the scan leaves main green
+    # over breakage it never looked at:
+    #
+    #   * scan-default-branch — an advisory published against already-merged code
+    #     makes unchanged code vulnerable. A diff filter structurally cannot see
+    #     that, so main stayed unscanned until someone happened to touch a Go file.
+    #
+    #   * test-default-branch — a Go test may read a non-Go file as its subject, so
+    #     a commit touching only those files skips the suite while breaking it.
+    #
+    # Both ship default-false in the reusable workflow so consumers adopt them one
+    # at a time; ksail is its only caller, so this completes the rollout and both
+    # inputs can then be retired (devantler-tech/actions#788, ksail#6373).
+    with:
+      scan-default-branch: true
+      test-default-branch: true
     permissions:
       contents: write
       issues: write
@@ -361,7 +490,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -373,7 +502,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -407,7 +536,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
@@ -421,7 +550,7 @@ jobs:
         uses: ./.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -449,7 +578,7 @@ jobs:
 
       - name: ⚙️ Setup Node.js
         if: needs.changes.outputs.schema == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: "npm"
@@ -517,10 +646,10 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
 
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: 📥 Download patches
@@ -566,14 +695,148 @@ jobs:
             fi
           done
 
+      # Commits through the GitHub API rather than the git CLI, because the repository
+      # requires signed commits and API-created commits are signed by GitHub automatically.
+      # A CLI commit here is unsigned and makes the pull request permanently unmergeable.
+      #
+      # Limitation: the API's FileAddition carries only a path and its contents, so file
+      # modes are not expressible. Reject anything other than a regular 0644 file below
+      # rather than dereferencing a symlink or silently losing an executable bit.
       - name: 📤 Commit and push generated changes (PR branch)
         if: github.event_name == 'pull_request'
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
-        with:
-          commit_message: "chore: sync modules and update generated files"
-          commit_user_name: generator-bot
-          commit_user_email: generator-bot@users.noreply.github.com
-          branch: ${{ github.head_ref }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          BRANCH: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          additions="$workdir/additions.ndjson"
+          deletions="$workdir/deletions.ndjson"
+          : >"$additions"
+          : >"$deletions"
+
+          # Written to a file rather than read through process substitution: a process
+          # substitution's exit status is invisible to both `set -e` and `pipefail`, so a
+          # failing `git status` would otherwise look exactly like "nothing to commit" and
+          # leave the branch silently stale with a green build.
+          # -uall lists untracked files individually; without it git collapses a new
+          # directory into a single "dir/" entry, which is not a file we can encode.
+          git status --porcelain -z --no-renames -uall >"$workdir/status"
+
+          while IFS= read -r -d '' entry; do
+            entry_status="${entry:0:2}"
+            entry_path="${entry:3}"
+            [ -n "$entry_path" ] || continue
+            case "$entry_status" in
+              *D*)
+                jq -n --arg p "$entry_path" '{path: $p}' >>"$deletions"
+                ;;
+              *)
+                # FileAddition cannot represent symlinks, special files, or executable
+                # modes. In particular, reading a symlink here would dereference it and
+                # could publish sensitive runner files as an ordinary repository file.
+                if [ -L "$entry_path" ] || [ ! -f "$entry_path" ] || [ -x "$entry_path" ]; then
+                  echo "::error file=${entry_path}::Generated change is not a regular non-executable file"
+                  exit 1
+                fi
+                # File content must never reach argv. Linux caps a single argv entry at
+                # MAX_ARG_STRLEN (128 KiB) independently of ARG_MAX, and generated files
+                # here run to hundreds of KiB (pkg/svc/chat/docs_generated.go alone is
+                # ~0.5 MB, ~0.67 MB once base64-encoded). Passing it with --arg fails with
+                # E2BIG on exactly the pull requests this step exists to serve. --rawfile
+                # reads it from disk instead, and base64 output is ASCII so binary inputs
+                # survive the round trip.
+                base64 -w0 <"$entry_path" >"$workdir/content.b64"
+                jq -n --arg p "$entry_path" --rawfile c "$workdir/content.b64" \
+                  '{path: $p, contents: ($c | gsub("\\s"; ""))}' >>"$additions"
+                ;;
+            esac
+          done <"$workdir/status"
+
+          # The whole point of using the API is that the commit is signed, so prove it
+          # rather than assuming it: an unsigned commit here blocks the pull request.
+          verify_signed() {
+            local sha="$1"
+            local verified
+            verified="$(gh api "repos/${REPO}/commits/${sha}" --jq '.commit.verification.verified')"
+            if [ "$verified" != "true" ]; then
+              echo "::error::Generated commit ${sha} is not signed (verified=${verified})."
+              exit 1
+            fi
+            echo "Verified signature on ${sha}."
+          }
+
+          if [ ! -s "$additions" ] && [ ! -s "$deletions" ]; then
+            echo "No generated changes to commit."
+            # Committing below pushes to the PR branch, which raises `synchronize`. That new
+            # run shares this workflow's concurrency group with cancel-in-progress, so it can
+            # cancel the committing run before it verifies. The replacement run then lands
+            # here, with the work already committed and nothing left to do — so verify the
+            # head instead of exiting blind, or a signing regression escapes unreported and
+            # silently re-creates the unmergeable-PR condition this step exists to prevent.
+            if [ "$(git log -1 --format=%s)" = "chore: sync modules and update generated files" ]; then
+              echo "Head is a generated commit; verifying it here in case the run that created it was cancelled."
+              verify_signed "$(git rev-parse HEAD)"
+            fi
+            exit 0
+          fi
+
+          # --slurpfile keeps the aggregate off argv too: the combined payload is bounded
+          # by total changed content, which routinely exceeds the same 128 KiB cap.
+          jq -n \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg oid "$(git rev-parse HEAD)" \
+            --slurpfile additions "$additions" \
+            --slurpfile deletions "$deletions" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {
+                input: {
+                  branch: {
+                    repositoryNameWithOwner: $repo,
+                    branchName: $branch
+                  },
+                  message: { headline: "chore: sync modules and update generated files" },
+                  expectedHeadOid: $oid,
+                  fileChanges: { additions: $additions, deletions: $deletions }
+                }
+              }
+            }' >"$workdir/mutation.json"
+
+          # `gh api graphql` exits non-zero on a GraphQL error, so the assignment itself
+          # would abort under `set -e` and skip these diagnostics. Handle the failure
+          # inline so the operator gets a labelled annotation instead of one stderr line.
+          if ! response="$(gh api graphql --input "$workdir/mutation.json" 2>"$workdir/stderr")"; then
+            echo "::error::createCommitOnBranch failed"
+            cat "$workdir/stderr" >&2
+            jq '.errors // .' <<<"$response" 2>/dev/null || printf '%s\n' "$response"
+            exit 1
+          fi
+          # Capture first, then assert with a builtin. `jq -e` as the if-condition cannot
+          # distinguish "the filter was false" (exit 1) from "jq itself failed" (exit 4 on
+          # empty input, 5 on malformed), so a truncated or non-JSON response would take
+          # the no-errors path and continue. Capturing instead puts jq's failure where
+          # `set -e` catches it, so a bad response stops here rather than surfacing later
+          # as an unrelated error against a commit id of "null".
+          errors="$(jq -c '.errors // empty' <<<"$response")"
+          if [ -n "$errors" ]; then
+            echo "::error::createCommitOnBranch failed"
+            printf '%s\n' "$errors"
+            exit 1
+          fi
+
+          oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$response")"
+          if [ -z "$oid" ]; then
+            echo "::error::createCommitOnBranch returned no commit oid"
+            printf '%s\n' "$response"
+            exit 1
+          fi
+          echo "Committed generated changes as ${oid}."
+          verify_signed "$oid"
 
       - name: 📤 Open PR for generated changes (protected branch)
         if: github.event_name != 'pull_request'
@@ -601,12 +864,12 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -689,7 +952,7 @@ jobs:
       contents: write
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -711,7 +974,7 @@ jobs:
       contents: write
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -733,12 +996,12 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: "npm"
@@ -765,12 +1028,12 @@ jobs:
         working-directory: vsce
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: "npm"
@@ -807,7 +1070,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -868,7 +1131,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -912,7 +1175,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -924,7 +1187,7 @@ jobs:
           docker-prune: "true"
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -951,7 +1214,7 @@ jobs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -962,7 +1225,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -998,7 +1261,7 @@ jobs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1010,7 +1273,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -1124,7 +1387,7 @@ jobs:
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1137,14 +1400,14 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -1164,6 +1427,7 @@ jobs:
         uses: ./.github/actions/restore-mirror-cache
 
       - name: 🧪 Run KSail System Test
+        id: system-test
         uses: ./.github/actions/ksail-system-test
         with:
           distribution: ${{ matrix.distribution }}
@@ -1180,6 +1444,44 @@ jobs:
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
           dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Composite-action steps cannot set timeout-minutes. Upload from the
+          # workflow instead so a stalled artifact service is hard-bounded.
+          # Defer cleanup until the failure diagnostics have been uploaded.
+          upload-artifacts: "false"
+          cleanup: "false"
+          # A reserved K3s pod sandbox can wedge every API-backed command in the
+          # rich debug action. Keep its essential diagnostics on bounded calls.
+          comprehensive-debug: ${{ matrix.distribution == 'K3s' && 'false' || 'true' }}
+
+      - name: 📤 Upload system test diagnostics
+        if: ${{ failure() && steps.system-test.outcome == 'failure' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: system-test-diagnostics-${{ steps.system-test.outputs.artifact-tag }}
+          path: /tmp/system-test-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: 🧪 Cleanup KSail System Test
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        uses: ./.github/actions/ksail-system-test-cleanup
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          args: ${{ matrix.args }}
+
+      - name: 📤 Upload system test logs
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: system-test-logs-${{ steps.system-test.outputs.artifact-tag }}
+          path: /tmp/ksail-system-test-logs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   verify-desktop-tidy:
     name: 🧩 Verify Desktop Module Tidy
@@ -1191,14 +1493,14 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -1260,7 +1562,7 @@ jobs:
       contents: read
     steps:
       - name: 📄 Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1321,10 +1623,11 @@ jobs:
         operator-chart-e2e,
         verify-desktop-tidy,
         validate-calico-chart,
+        cask-pr-handoff,
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@84813ae61fb21741e0a6193b5c14c6941a448577 # v9.0.7
+      - uses: devantler-tech/actions/aggregate-job-checks@61d9c87b302523778789c7cf09655b87b6716e87 # v13.0.4
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -1347,3 +1650,4 @@ jobs:
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.verify-desktop-tidy.result }}
             ${{ needs.validate-calico-chart.result }}
+            ${{ needs.cask-pr-handoff.result }}

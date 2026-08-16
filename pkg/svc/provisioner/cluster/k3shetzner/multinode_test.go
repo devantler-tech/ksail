@@ -51,7 +51,7 @@ func TestComposeJoiningNodesThreadsPrivateJoinURL(t *testing.T) {
 	prov := newProvisioner(&fakeInfra{}, 1, 2)
 
 	specs, err := prov.ComposeJoiningNodes(
-		testClusterName, "token", net.ParseIP("10.0.1.5"), testBootstrapMaterial(),
+		testClusterName, "token", net.ParseIP("10.0.1.5"), nil, testBootstrapMaterial(),
 	)
 	require.NoError(t, err)
 	require.Len(t, specs, 2)
@@ -76,7 +76,7 @@ func TestComposeJoiningNodesIncludesAdditionalControlPlanes(t *testing.T) {
 	prov := newProvisioner(&fakeInfra{}, 3, 1)
 
 	specs, err := prov.ComposeJoiningNodes(
-		testClusterName, "token", net.ParseIP("10.0.1.5"), testBootstrapMaterial(),
+		testClusterName, "token", net.ParseIP("10.0.1.5"), nil, testBootstrapMaterial(),
 	)
 	require.NoError(t, err)
 	require.Len(t, specs, 3)

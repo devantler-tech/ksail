@@ -26,6 +26,7 @@ type fakeMultiNodeStrategy struct {
 	kubeconfigPath      string
 	agents              int
 	receivedJoinAddress net.IP
+	receivedKubeconfig  []byte
 	composeInitErr      error
 	composeJoinErr      error
 }
@@ -61,9 +62,12 @@ func (f *fakeMultiNodeStrategy) ComposeInitNode(
 func (f *fakeMultiNodeStrategy) ComposeJoiningNodes(
 	_, _ string,
 	joinAddress net.IP,
+	initKubeconfig []byte,
 	_ hetznerbase.BootstrapMaterial,
 ) ([]hetznerbase.NodeSpec, error) {
 	f.receivedJoinAddress = joinAddress
+
+	f.receivedKubeconfig = append([]byte(nil), initKubeconfig...)
 
 	if f.composeJoinErr != nil {
 		return nil, f.composeJoinErr
@@ -150,6 +154,7 @@ func TestRunCreateMultiNodeBringsUpControlPlaneAndCreatesAgents(t *testing.T) {
 	// The engine derived the join address from the control plane's private IPv4.
 	require.NotNil(t, strategy.receivedJoinAddress)
 	assert.Equal(t, testJoinPrivateIP, strategy.receivedJoinAddress.String())
+	assert.Equal(t, remoteAdminKubeconfig, string(strategy.receivedKubeconfig))
 	// A successful bring-up leaves the cluster in place.
 	assert.Equal(t, 0, infra.deleteNodesCalls)
 
@@ -268,6 +273,7 @@ func (f *fakeHAMultiNodeStrategy) ControlPlaneJoinCompletePath() string { return
 func (f *fakeHAMultiNodeStrategy) ComposeJoiningNodes(
 	_, _ string,
 	joinAddress net.IP,
+	_ []byte,
 	_ hetznerbase.BootstrapMaterial,
 ) ([]hetznerbase.NodeSpec, error) {
 	f.receivedJoinAddress = joinAddress

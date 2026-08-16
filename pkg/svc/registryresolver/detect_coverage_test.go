@@ -74,6 +74,26 @@ func TestDetectRegistryFromConfig_EnabledLocalRegistry(t *testing.T) {
 	}
 }
 
+func TestDetectRegistryFromConfig_KeepsConfiguredPushToken(t *testing.T) {
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "user:push-token@ghcr.io/org/repo",
+				},
+			},
+		},
+	}
+
+	info, err := registryresolver.DetectRegistryFromConfig(cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "user", info.Username)
+	assert.Equal(t, "push-token", info.Password)
+}
+
 // TestDetectRegistryFromViper_WithRegistrySet tests DetectRegistryFromViper with
 // a valid registry flag value.
 //

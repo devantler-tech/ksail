@@ -252,6 +252,61 @@ func TestLoadConfigLoadsTalosDistributionConfig(t *testing.T) {
 	assert.Equal(t, "my-talos-cluster", manager.DistributionConfig.Talos.GetClusterName())
 }
 
+func TestLoadConfigMapsTalosRegistryPlaceholderToClusterTokenSource(t *testing.T) {
+	t.Setenv("KSAIL_TEST_REGISTRY_TOKEN", "publish-token")
+	t.Setenv("KSAIL_TEST_REGISTRY_CLUSTER_TOKEN", "pull-token")
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	talosPatchesDir := filepath.Join(tempDir, "talos")
+	clusterDir := filepath.Join(talosPatchesDir, "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	registryPatch := `machine:
+  registries:
+    config:
+      registry.example.com:
+        auth:
+          username: user
+          password: ${KSAIL_TEST_REGISTRY_TOKEN:-forbidden-fallback}
+`
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(clusterDir, "registry-auth.yaml"),
+			[]byte(registryPatch),
+			0o600,
+		),
+	)
+
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    distributionConfig: " + talosPatchesDir + "\n" +
+		"    localRegistry:\n" +
+		"      registry: user@registry.example.com/example/repo\n" +
+		"      credentials:\n" +
+		"        tokenEnvVar: KSAIL_TEST_REGISTRY_TOKEN\n" +
+		"        clusterTokenEnvVar: KSAIL_TEST_REGISTRY_CLUSTER_TOKEN\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
+
+	manager := configmanager.NewConfigManager(io.Discard, "")
+	manager.Viper.SetConfigFile("ksail.yaml")
+
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, manager.DistributionConfig)
+	require.NotNil(t, manager.DistributionConfig.Talos)
+
+	auth := manager.DistributionConfig.Talos.ControlPlane().
+		RegistryAuthConfigs()["registry.example.com"]
+	require.NotNil(t, auth)
+	assert.Equal(t, "pull-token", auth.Password())
+}
+
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
 func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing.T) {
 	tempDir := t.TempDir()
