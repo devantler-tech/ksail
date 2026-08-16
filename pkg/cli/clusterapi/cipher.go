@@ -140,7 +140,8 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 
 	return runCipherOp(encrypted, format, getDecryptStores, "decrypt secret",
 		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
-			if err := validateAgeOnlySOPSMetadata(path, inputStore); err != nil {
+			err := validateAgeOnlySOPSMetadata(path, inputStore)
+			if err != nil {
 				return nil, err
 			}
 
@@ -169,6 +170,7 @@ func validateAgeOnlySOPSMetadata(path string, inputStore sops.Store) error {
 	}
 
 	ageKeys := 0
+
 	for _, group := range tree.Metadata.KeyGroups {
 		for _, key := range group {
 			if _, ok := key.(*sopsage.MasterKey); !ok {
@@ -180,7 +182,10 @@ func validateAgeOnlySOPSMetadata(path string, inputStore sops.Store) error {
 	}
 
 	if ageKeys == 0 {
-		return fmt.Errorf("%w: SOPS metadata must include at least one age recipient", api.ErrInvalid)
+		return fmt.Errorf(
+			"%w: SOPS metadata must include at least one age recipient",
+			api.ErrInvalid,
+		)
 	}
 
 	return nil
