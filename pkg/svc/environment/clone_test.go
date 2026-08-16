@@ -240,7 +240,7 @@ func TestCloneOverlay_RejectsSymlinkedDestinationParentWithForce(t *testing.T) {
 	rewrites := environment.DeriveRewrites("prod", "staging", "", "hetzner")
 
 	_, cloneErr := environment.CloneOverlay(repoRoot, "k8s/clusters/prod", rewrites, true)
-	require.Error(t, cloneErr)
+	require.ErrorIs(t, cloneErr, environment.ErrDestinationEscapesRepository)
 
 	//nolint:gosec // G304: reads a file just written under the test's own t.TempDir().
 	data, readErr := os.ReadFile(sentinel)
