@@ -13,6 +13,7 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -68,7 +69,7 @@ func TestK3kReadyTimeout(t *testing.T) {
 	})
 }
 
-func TestEnsureNamespace_LabelsPrivilegedPodSecurity(t *testing.T) {
+func TestEnsureNamespace_ScopesPrivilegedPodSecurity(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset()
@@ -78,7 +79,7 @@ func TestEnsureNamespace_LabelsPrivilegedPodSecurity(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = provisioner.EnsureNamespaceForTest(context.Background(), "k3k-nested-k3s")
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "", "k3k-nested-k3s")
 	require.NoError(t, err)
 
 	namespace, err := clientset.CoreV1().Namespaces().Get(
@@ -86,9 +87,205 @@ func TestEnsureNamespace_LabelsPrivilegedPodSecurity(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// The k3k server is privileged; the namespace must opt into the privileged Pod Security
-	// standard so hosts that default to "baseline" (e.g. Talos) do not reject the server pod.
+	// The k3k server is privileged, but the namespace-wide PSA exemption must be paired with
+	// an admission policy that prevents arbitrary privileged pods from using that exemption.
 	assert.Equal(t, "privileged", namespace.Labels["pod-security.kubernetes.io/enforce"])
+
+	policy, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(
+		context.Background(), "ksail-k3k-nested-k3s-pod-security", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Len(t, policy.Spec.Validations, 1)
+	assert.Contains(
+		t,
+		policy.Spec.Validations[0].Expression,
+		"object.metadata.name.startsWith('k3k-nested-k3s-server-')",
+	)
+
+	assertGuardIsFailClosed(t, policy)
+
+	binding, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(
+		context.Background(), "ksail-k3k-nested-k3s-pod-security", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, policy.Name, binding.Spec.PolicyName)
+	assert.Equal(
+		t,
+		[]admissionv1.ValidationAction{admissionv1.Deny},
+		binding.Spec.ValidationActions,
+	)
+
+	assertBindingSelectsNamespace(t, binding, namespace, "nested-k3s")
+}
+
+func assertGuardIsFailClosed(t *testing.T, policy *admissionv1.ValidatingAdmissionPolicy) {
+	t.Helper()
+
+	// Without these, a later change to Ignore or a dropped Deny would silently stop the guard
+	// rejecting anything while every other assertion still passed.
+	require.NotNil(t, policy.Spec.FailurePolicy)
+	assert.Equal(t, admissionv1.Fail, *policy.Spec.FailurePolicy)
+
+	// Ephemeral containers arrive through their own subresource, so a rule matching only
+	// "pods" would never see them.
+	require.NotNil(t, policy.Spec.MatchConstraints)
+	require.Len(t, policy.Spec.MatchConstraints.ResourceRules, 1)
+	assert.Equal(
+		t,
+		[]string{"pods", "pods/ephemeralcontainers"},
+		policy.Spec.MatchConstraints.ResourceRules[0].Resources,
+	)
+}
+
+// The binding selects namespaces by label, so its selector and the label actually stamped on the
+// namespace must agree. If they drift, the binding matches nothing and the namespace keeps a
+// blanket privileged exemption with no guard attached.
+func assertBindingSelectsNamespace(
+	t *testing.T,
+	binding *admissionv1.ValidatingAdmissionPolicyBinding,
+	namespace *corev1.Namespace,
+	wantCluster string,
+) {
+	t.Helper()
+
+	require.NotNil(t, binding.Spec.MatchResources)
+	require.NotNil(t, binding.Spec.MatchResources.NamespaceSelector)
+
+	selector := binding.Spec.MatchResources.NamespaceSelector.MatchLabels
+
+	// Pin both sides to the expected values rather than comparing them to each other: two map
+	// lookups agree vacuously when the key is missing from both, so dropping a label from the
+	// namespace and the selector together would report agreement while the binding matches
+	// every namespace or none — the exact drift this helper exists to catch.
+	assert.Equal(t, wantCluster, namespace.Labels["ksail.io/cluster"])
+	assert.Equal(t, wantCluster, selector["ksail.io/cluster"])
+	assert.Equal(t, "ksail", namespace.Labels["ksail.io/managed-by"])
+	assert.Equal(t, "ksail", selector["ksail.io/managed-by"])
+}
+
+// The operator passes a namespace-qualified provisioned name that wins over the factory's
+// configured fallback. The namespace label follows that effective name, so the guard must too —
+// otherwise the binding's selector never matches and the exemption is unguarded.
+func TestEnsureNamespace_GuardFollowsEffectiveClusterName(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "factory-fallback",
+	})
+	require.NoError(t, err)
+
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "tenant-a", "k3k-tenant-a")
+	require.NoError(t, err)
+
+	namespace, err := clientset.CoreV1().Namespaces().Get(
+		context.Background(), "k3k-tenant-a", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-a", namespace.Labels["ksail.io/cluster"])
+
+	binding, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(
+		context.Background(), "ksail-k3k-tenant-a-pod-security", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, binding.Spec.MatchResources)
+	require.NotNil(t, binding.Spec.MatchResources.NamespaceSelector)
+	assert.Equal(
+		t,
+		namespace.Labels["ksail.io/cluster"],
+		binding.Spec.MatchResources.NamespaceSelector.MatchLabels["ksail.io/cluster"],
+	)
+
+	policy, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(
+		context.Background(), "ksail-k3k-tenant-a-pod-security", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Len(t, policy.Spec.Validations, 1)
+	assert.Contains(
+		t,
+		policy.Spec.Validations[0].Expression,
+		"object.metadata.name.startsWith('k3k-tenant-a-server-')",
+	)
+}
+
+func TestEnsureNamespace_IsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "", "k3k-nested-k3s")
+	require.NoError(t, err)
+
+	// Second call takes the already-exists update path for both guard resources.
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "", "k3k-nested-k3s")
+	require.NoError(t, err)
+
+	policies, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicies().List(
+		context.Background(), metav1.ListOptions{},
+	)
+	require.NoError(t, err)
+	assert.Len(t, policies.Items, 1)
+}
+
+func TestPrivilegedPodGuardName_TruncatesToObjectNameLimit(t *testing.T) {
+	t.Parallel()
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{})
+	require.NoError(t, err)
+
+	short := provisioner.PrivilegedPodGuardNameForTest("nested-k3s")
+	assert.Equal(t, "ksail-k3k-nested-k3s-pod-security", short)
+
+	long := provisioner.PrivilegedPodGuardNameForTest(strings.Repeat("a", 80))
+	assert.Len(t, long, 63)
+	assert.NotEqual(
+		t,
+		provisioner.PrivilegedPodGuardNameForTest(strings.Repeat("b", 80)),
+		long,
+		"truncated names must stay distinct across clusters",
+	)
+}
+
+// The guard resources are cluster-scoped, so deleting the cluster's namespace does not remove
+// them. Delete must, or every created-and-deleted cluster leaves a pair behind on the host.
+func TestDeletePrivilegedPodGuard_RemovesClusterScopedResources(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "", "k3k-nested-k3s")
+	require.NoError(t, err)
+
+	err = provisioner.DeletePrivilegedPodGuardForTest(context.Background(), "nested-k3s")
+	require.NoError(t, err)
+
+	policies, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicies().List(
+		context.Background(), metav1.ListOptions{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, policies.Items)
+
+	bindings, err := clientset.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().List(
+		context.Background(), metav1.ListOptions{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, bindings.Items)
+
+	// Deleting an already-absent guard is not an error — Delete runs on clusters that never
+	// finished provisioning.
+	err = provisioner.DeletePrivilegedPodGuardForTest(context.Background(), "nested-k3s")
+	assert.NoError(t, err)
 }
 
 func TestBuildClusterCR_Version(t *testing.T) {
