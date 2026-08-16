@@ -1,10 +1,10 @@
 name: Setup Desktop Build
 description: |
-  Shared setup for building the KSail desktop app: set up Go and Node.js,
-  install the Linux webview build dependencies (Wails v3's default Linux build
-  targets GTK4 + WebKitGTK 6.0, available on ubuntu-24.04 — 22.04 only ships
-  the legacy webkit2gtk-4.0/4.1), and build + stage the web UI for embedding
-  (go:embed via pkg/webui/embed.go).
+  Shared setup for building the KSail desktop app: reclaim Linux runner disk,
+  set up Go and Node.js, install the Linux webview build dependencies (Wails
+  v3's default Linux build targets GTK4 + WebKitGTK 6.0, available on
+  ubuntu-24.04 — 22.04 only ships the legacy webkit2gtk-4.0/4.1), and build +
+  stage the web UI for embedding (go:embed via pkg/webui/embed.go).
 
   Used by the desktop CI build (.github/workflows/desktop.yaml) and the
   desktop release legs (.github/workflows/cd.yaml). Assumes the repository is
@@ -13,6 +13,16 @@ description: |
 runs:
   using: composite
   steps:
+    - name: 🧹 Free disk space
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        DOCKER_PRUNE: "false"
+      # A nested `uses: ./...` resolves against the consumer's workspace and
+      # breaks remote callers. The action path reaches this sibling script in
+      # the fully downloaded KSail action repository at the same ref.
+      run: bash "$GITHUB_ACTION_PATH/../free-disk-space/free-disk-space.sh"
+
     - name: ⚙️ Setup Go
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:

@@ -3,7 +3,6 @@ package clusterapi
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -175,30 +174,17 @@ func unmanagedClusters(
 	config *clientcmdapi.Config,
 	managed map[string]listEntry,
 ) []v1alpha1.Cluster {
-	if config == nil {
-		return nil
-	}
+	// The enumerate-and-dedup skeleton (sorted context names, minus any whose raw or ksail-detected
+	// name is in the managed set) is shared with the CLI's cluster list via
+	// clusterdiscovery.UnmanagedContextNames, so both surfaces stay aligned and cannot drift.
+	contextNames := clusterdiscovery.UnmanagedContextNames(config, func(name string) bool {
+		_, ok := managed[name]
 
-	contextNames := make([]string, 0, len(config.Contexts))
-	for contextName := range config.Contexts {
-		contextNames = append(contextNames, contextName)
-	}
-
-	sort.Strings(contextNames)
+		return ok
+	})
 
 	items := make([]v1alpha1.Cluster, 0, len(contextNames))
-
 	for _, contextName := range contextNames {
-		// The dedup rule (raw context name OR ksail-detected name in the managed set) is shared with
-		// the CLI's cluster list via clusterdiscovery.ContextIsManaged, so both surfaces stay aligned.
-		if clusterdiscovery.ContextIsManaged(contextName, func(name string) bool {
-			_, ok := managed[name]
-
-			return ok
-		}) {
-			continue
-		}
-
 		endpoint := endpointForContext(config, contextName)
 		items = append(items, newUnmanagedCluster(contextName, endpoint))
 	}

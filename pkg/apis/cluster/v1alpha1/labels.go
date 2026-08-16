@@ -13,6 +13,10 @@ const ManagedNamespaceLabel = "ksail.io/managed-namespace"
 // mutations on it.
 const HostClusterLabel = "ksail.io/host-cluster"
 
+// HostClusterName is the well-known name reserved for the operator-owned Cluster resource that
+// represents the cluster the operator runs on.
+const HostClusterName = "host"
+
 // FinalizerName is added to Cluster resources so the operator can tear down the underlying cluster
 // before the custom resource is removed from the API server. It lives here, beside the other
 // ksail.io/* wire identifiers, so the controller and the REST API share one definition.
@@ -36,6 +40,13 @@ const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 // user cannot forge it.
 const LastAppliedComponentsAnnotation = "ksail.io/last-applied-components"
 
+// AWSLoadBalancerControllerReleaseIdentityAnnotation stores the Kubernetes UID
+// of a Helm storage object created or upgraded by the operator for the AWS Load
+// Balancer Controller. The operator requires this positive, concrete ownership
+// evidence before removing the release; the desired-spec baseline alone is not
+// ownership because an install may have preserved a GitOps-managed release.
+const AWSLoadBalancerControllerReleaseIdentityAnnotation = "ksail.io/aws-load-balancer-controller-release-identity"
+
 // UnmanagedAnnotation marks a Cluster that ksail surfaces from the user's kubeconfig but does not
 // manage: it was found as a kubeconfig context that no ksail infrastructure provider discovered, so
 // ksail never provisioned it and has no spec to drive it. Its value is the string "true". It lets
@@ -51,8 +62,17 @@ func (c *Cluster) IsUnmanaged() bool {
 	return c.Annotations[UnmanagedAnnotation] == "true"
 }
 
-// IsHostCluster reports whether this Cluster resource is the operator's self-registration of the
-// cluster it runs on (see HostClusterLabel).
+// IsHostCluster reports whether this Cluster carries the reserved host-cluster label.
+//
+// The label alone is user-controlled metadata. Privileged operator paths must use
+// IsHostClusterRegistration instead so a forged label on another Cluster cannot alias the hub
+// cluster.
 func (c *Cluster) IsHostCluster() bool {
 	return c.Labels[HostClusterLabel] == "true"
+}
+
+// IsHostClusterRegistration reports whether this Cluster is the operator's well-known
+// self-registration of the cluster it runs on.
+func (c *Cluster) IsHostClusterRegistration(namespace string) bool {
+	return c.IsHostCluster() && c.Name == HostClusterName && c.Namespace == namespace
 }

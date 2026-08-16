@@ -33,6 +33,7 @@ func expandedSpecStringFields() []string {
 		"Cluster.LocalRegistry.Registry",
 		"Cluster.Vanilla.MirrorsDir",
 		"Cluster.Talos.Config",
+		"Cluster.EKS.AWSLoadBalancerControllerServiceAccount",
 		"Provider.Hetzner.SSHKeyName",
 		"Provider.Hetzner.NetworkName",
 		"Provider.Hetzner.PlacementGroup",
@@ -62,6 +63,9 @@ func skippedSpecStringFields() []string {
 // them would destroy the reference (resolution happens at use time).
 func skippedEnvVarNameFields() []string {
 	return []string{
+		"Cluster.LocalRegistry.Credentials.CLITokenEnvVar",
+		"Cluster.LocalRegistry.Credentials.ClusterTokenEnvVar",
+		"Cluster.LocalRegistry.Credentials.TokenEnvVar",
 		"Cluster.SOPS.AgeKeyEnvVar",
 		"Cluster.SOPS.Env.Var",
 		"Provider.AWS.AccessKeyIDEnvVar",

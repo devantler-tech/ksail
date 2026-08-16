@@ -10,7 +10,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -171,8 +174,31 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 // fakeUpdater is a test clusterprovisioner.Updater whose Update returns a preset
 // result and error, letting tests drive applyInPlaceChanges deterministically.
 type fakeUpdater struct {
-	result *clusterupdate.UpdateResult
-	err    error
+	result  *clusterupdate.UpdateResult
+	err     error
+	diffErr error
+	calls   int
+}
+
+type fieldSupportUpdater struct {
+	*fakeUpdater
+
+	supported map[string]bool
+}
+
+func (u *fieldSupportUpdater) SupportsInPlaceField(field string) bool {
+	return u.supported[field]
+}
+
+type countingFactory struct{ calls int }
+
+func (f *countingFactory) Create(
+	context.Context,
+	*v1alpha1.Cluster,
+) (clusterprovisioner.Provisioner, any, error) {
+	f.calls++
+
+	return &fakeProvisioner{}, nil, nil
 }
 
 func (f *fakeUpdater) Update(
@@ -181,6 +207,8 @@ func (f *fakeUpdater) Update(
 	_, _ *v1alpha1.ClusterSpec,
 	_ clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
+	f.calls++
+
 	return f.result, f.err
 }
 
@@ -189,7 +217,7 @@ func (f *fakeUpdater) DiffConfig(
 	_ string,
 	_, _ *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
-	return clusterupdate.NewEmptyUpdateResult(), nil
+	return clusterupdate.NewEmptyUpdateResult(), f.diffErr
 }
 
 func (f *fakeUpdater) GetCurrentConfig(
@@ -197,6 +225,145 @@ func (f *fakeUpdater) GetCurrentConfig(
 	_ string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	return nil, nil, nil
+}
+
+func TestPromoteUnsupportedInPlaceChangesRequiresRecreation(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = []clusterupdate.Change{
+		{Field: "cluster.localRegistry.registry", Category: clusterupdate.ChangeCategoryInPlace},
+		{Field: "cluster.cni", Category: clusterupdate.ChangeCategoryInPlace},
+		{
+			Field:    "cluster.metricsServer",
+			OldValue: string(v1alpha1.MetricsServerEnabled),
+			NewValue: string(v1alpha1.MetricsServerDisabled),
+			Category: clusterupdate.ChangeCategoryInPlace,
+		},
+		{
+			Field:    "eks.managedNodeGroups[workers].desiredCapacity",
+			Category: clusterupdate.ChangeCategoryInPlace,
+		},
+	}
+	updater := &fieldSupportUpdater{
+		fakeUpdater: &fakeUpdater{},
+		supported: map[string]bool{
+			"eks.managedNodeGroups[workers].desiredCapacity": true,
+		},
+	}
+
+	cluster.ExportPromoteUnsupportedInPlaceChanges(updater, diff)
+
+	assert.Equal(t, []string{
+		"eks.managedNodeGroups[workers].desiredCapacity",
+	}, []string{diff.InPlaceChanges[0].Field})
+	require.Len(t, diff.RecreateRequired, 3)
+	assert.Equal(t, "cluster.localRegistry.registry", diff.RecreateRequired[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
+	assert.Equal(t, "cluster.cni", diff.RecreateRequired[1].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[1].Category)
+	assert.Equal(t, "cluster.metricsServer", diff.RecreateRequired[2].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[2].Category)
+}
+
+func TestPromoteUnsupportedInPlaceChangesRequiresRecreationForCNISwitch(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = []clusterupdate.Change{{
+		Field:    "cluster.cni",
+		OldValue: string(v1alpha1.CNICilium),
+		NewValue: string(v1alpha1.CNICalico),
+		Category: clusterupdate.ChangeCategoryInPlace,
+	}}
+	updater := &fieldSupportUpdater{
+		fakeUpdater: &fakeUpdater{},
+		supported:   map[string]bool{},
+	}
+
+	cluster.ExportPromoteUnsupportedInPlaceChanges(updater, diff)
+
+	assert.Empty(t, diff.InPlaceChanges)
+	require.Len(t, diff.RecreateRequired, 1)
+	assert.Equal(t, "cluster.cni", diff.RecreateRequired[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, diff.RecreateRequired[0].Category)
+}
+
+// TestComputeUpdateDiff_PropagatesProvisionerError verifies live provisioner
+// detection failures abort the update preview instead of becoming a false
+// no-change result.
+func TestComputeUpdateDiff_PropagatesProvisionerError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := assert.AnError
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+
+	ctx := &localregistry.Context{ClusterCfg: &v1alpha1.Cluster{}}
+
+	_, _, err := cluster.ExportComputeUpdateDiff(
+		cmd, ctx, "test", &fakeUpdater{diffErr: wantErr},
+	)
+
+	require.ErrorIs(t, err, wantErr)
+}
+
+func TestApplyInPlaceChangesRechecksEKSIdentityBeforeUpdaterMutation(t *testing.T) {
+	t.Parallel()
+
+	updater := &fakeUpdater{result: clusterupdate.NewEmptyUpdateResult()}
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		AWSOwnershipVerifier: func(context.Context) error {
+			return eksidentity.ErrIdentityMismatch
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cluster.ExportApplyInPlaceChanges(
+		cmd,
+		updater,
+		"replaced-eks-cluster",
+		&v1alpha1.ClusterSpec{},
+		ctx,
+		clusterupdate.NewEmptyUpdateResult(),
+		nil,
+		false,
+		false,
+	)
+
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Zero(t, updater.calls, "identity mismatch must abort before the updater mutates AWS")
+}
+
+//nolint:paralleltest // overrides the process-global provisioner factory seam.
+func TestRecreateRechecksEKSIdentityAfterConsentBeforeDeleteFactory(t *testing.T) {
+	factory := &countingFactory{}
+	restore := cluster.SetProvisionerFactoryForTests(factory)
+	t.Cleanup(restore)
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		AWSOwnershipVerifier: func(context.Context) error {
+			return eksidentity.ErrIdentityMismatch
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cluster.ExportExecuteRecreateFlow(cmd, ctx, "replaced-eks-cluster")
+
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Zero(
+		t,
+		factory.calls,
+		"identity mismatch must abort before constructing a delete provisioner",
+	)
 }
 
 func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test

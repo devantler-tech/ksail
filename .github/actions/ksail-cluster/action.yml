@@ -363,18 +363,38 @@ runs:
           fi
         }
 
-        # Talos+Docker clusters may experience transient bootstrap failures
-        # (node-join timeouts, CNI/CSI initialization races on shared CI runners).
-        # Retry up to 3 times with cleanup between attempts.
-        # See: https://github.com/devantler-tech/ksail/issues/4289
+        should_retry_create() {
+          local log_file="$1"
+
+          # Talos+Docker has a broader set of known transient bootstrap races.
+          if [ "$DISTRIBUTION" = "Talos" ] && [ "$PROVIDER" = "Docker" ]; then
+            return 0
+          fi
+
+          # K3s+Docker gets one recovery attempt, but only for the typed event
+          # signature emitted by KSail's reserved-pod-sandbox monitor.
+          if [ "$DISTRIBUTION" = "K3s" ] && [ "$PROVIDER" = "Docker" ] && \
+            grep -Fq "repeated reserved pod sandbox failures" "$log_file"; then
+            return 0
+          fi
+
+          return 1
+        }
+
+        # Keep Talos' existing broad retry policy. K3s retries only the
+        # repeated-reservation signature so unrelated failures remain fail-fast.
         if [ "$DISTRIBUTION" = "Talos" ] && [ "$PROVIDER" = "Docker" ]; then
           MAX_ATTEMPTS=3
+        elif [ "$DISTRIBUTION" = "K3s" ] && [ "$PROVIDER" = "Docker" ]; then
+          MAX_ATTEMPTS=2
         else
           MAX_ATTEMPTS=1
         fi
 
         create_succeeded=false
+        LAST_ATTEMPT=1
         for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          LAST_ATTEMPT="$attempt"
           LOG_FILE="/tmp/ksail-system-test-logs/cluster-create-attempt-${attempt}.log"
           if create_cluster 2>&1 | tee "$LOG_FILE"; then
             create_succeeded=true
@@ -382,25 +402,43 @@ runs:
             cp "$LOG_FILE" /tmp/ksail-system-test-logs/cluster-create.log
             break
           fi
-          if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-            echo "⚠️ cluster create attempt $attempt failed, cleaning up before retry…"
-            CLEANUP_LOG="/tmp/ksail-system-test-logs/cluster-create-cleanup-${attempt}.log"
-            # Remove the partially-created cluster so the next attempt starts clean
-            {
-            ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
-            # Remove any lingering Talos cluster node containers.
-            # ksail cluster delete --force may leave Talos Docker containers behind,
-            # keeping the cluster Docker network alive. The next create attempt then
-            # fails with "cluster already exists" or "network '<cluster>' already exists".
-            docker ps -aq --filter "label=talos.owned=true" \
-              | xargs -r docker rm -f 2>/dev/null || true
-            # Remove any lingering Talos cluster state directories.
-            # ksail cluster delete --force may not clean up ~/.talos/clusters/<name>/.
-            # On the next attempt, the Talos provisioner checks for this directory and
-            # refuses to create with "state directory already exists, is the cluster
-            # already running?". Since this retry loop is only for Talos+Docker on a
-            # single-use CI runner, it is safe to remove all leftover Talos state.
-            rm -rf ~/.talos/clusters/ || true
+          if [ "$attempt" -ge "$MAX_ATTEMPTS" ] || ! should_retry_create "$LOG_FILE"; then
+            break
+          fi
+
+          echo "⚠️ cluster create attempt $attempt hit a recoverable failure; cleaning up…"
+          CLEANUP_LOG="/tmp/ksail-system-test-logs/cluster-create-cleanup-${attempt}.log"
+          # Every external cleanup operation is bounded. A wedged runtime must
+          # not consume the remainder of the six-hour system-test job.
+          {
+            timeout --kill-after=10s 2m \
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
+
+            if [ "$DISTRIBUTION" = "K3s" ] && [ "$PROVIDER" = "Docker" ]; then
+              # A timed-out delete can leave k3d node containers running. This
+              # job owns its runner, so removing k3d-named containers is scoped
+              # to the cluster under test.
+              timeout --kill-after=10s 30s bash -c \
+                'docker ps -aq --filter "name=k3d-" | xargs -r docker rm -f' || true
+            fi
+
+            if [ "$DISTRIBUTION" = "Talos" ] && [ "$PROVIDER" = "Docker" ]; then
+              # Remove any lingering Talos cluster node containers.
+              # ksail cluster delete --force may leave Talos Docker containers behind,
+              # keeping the cluster Docker network alive. The next create attempt then
+              # fails with "cluster already exists" or "network '<cluster>' already exists".
+              timeout --kill-after=10s 30s bash -c \
+                'docker ps -aq --filter "label=talos.owned=true" | xargs -r docker rm -f' \
+                || true
+              # Remove any lingering Talos cluster state directories.
+              # ksail cluster delete --force may not clean up ~/.talos/clusters/<name>/.
+              # On the next attempt, the Talos provisioner checks for this directory and
+              # refuses to create with "state directory already exists, is the cluster
+              # already running?". Since this retry loop is only for Talos+Docker on a
+              # single-use CI runner, it is safe to remove all leftover Talos state.
+              rm -rf ~/.talos/clusters/ || true
+            fi
+
             # Remove any lingering KSail-managed mirror registry containers.
             # ksail cluster delete may not remove registry containers, leaving their
             # Docker network endpoints alive. The next create attempt then fails with
@@ -408,26 +446,28 @@ runs:
             # Filter by the KSail ownership label first, and keep the suffix match to
             # limit cleanup to the known registry container naming scheme.
             for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
-              docker ps -aq \
-                --filter "label=io.ksail.registry" \
-                --filter "name=-${_reg_suffix}" \
-                | xargs -r docker rm -f 2>/dev/null || true
+              # shellcheck disable=SC2016 # $1 is expanded by the bounded child shell.
+              timeout --kill-after=10s 30s bash -c '
+                docker ps -aq \
+                  --filter "label=io.ksail.registry" \
+                  --filter "name=-$1" \
+                  | xargs -r docker rm -f
+              ' _ "$_reg_suffix" || true
             done
             # Prune unused Docker resources (networks, stopped containers, dangling images).
             # This will also remove any cluster Docker networks left behind after the
             # container cleanup above.
-            docker system prune -f || true
-            } 2>&1 | tee "$CLEANUP_LOG"
-            echo "⚠️ waiting 30s before retry…"
-            sleep 30
-          fi
+            timeout --kill-after=10s 1m docker system prune -f || true
+          } 2>&1 | tee "$CLEANUP_LOG"
+          echo "⚠️ waiting 30s before the final retry…"
+          sleep 30
         done
 
         if [ "$create_succeeded" != "true" ]; then
           # Copy the last attempt log to the canonical name for diagnostic uploads
-          cp "/tmp/ksail-system-test-logs/cluster-create-attempt-${MAX_ATTEMPTS}.log" \
+          cp "/tmp/ksail-system-test-logs/cluster-create-attempt-${LAST_ATTEMPT}.log" \
             /tmp/ksail-system-test-logs/cluster-create.log 2>/dev/null || true
-          echo "❌ cluster create failed after $MAX_ATTEMPTS attempts"
+          echo "❌ cluster create failed after $LAST_ATTEMPT attempt(s)"
           exit 1
         fi
 

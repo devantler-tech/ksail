@@ -101,7 +101,7 @@ func TestInstallDeclaredChartsInstallsEnumeratedCharts(t *testing.T) {
 	cluster := workload.EphemeralCluster{
 		Name:           "ksail-ephemeral-test",
 		KubeconfigPath: "/tmp/kubeconfig",
-		Context:        "kwok-ksail-ephemeral-test",
+		Context:        "kind-ksail-ephemeral-test",
 	}
 
 	err := workload.ExportInstallDeclaredCharts(
@@ -115,7 +115,7 @@ func TestInstallDeclaredChartsInstallsEnumeratedCharts(t *testing.T) {
 	assert.Equal(t, "1.0.0", installed[0].Version)
 	assert.True(t, installed[0].CreateNamespace)
 	assert.Equal(t, "/tmp/kubeconfig", *gotKubeconfig)
-	assert.Equal(t, "kwok-ksail-ephemeral-test", *gotContext)
+	assert.Equal(t, "kind-ksail-ephemeral-test", *gotContext)
 }
 
 //nolint:paralleltest // swaps the shared newEphemeralHelmClient package var

@@ -48,7 +48,7 @@ Manage GitOps project files — read-only subcommands of `ksail project`. Select
 
 | Subcommand | Description | Accepts `args` |
 | ---------- | ----------- | -------------- |
-| `list-environments` | List the cluster environments declared in the workspace | No |
+| `env_list` | List the cluster environments declared in the workspace | No |
 
 ### project_write
 
@@ -56,7 +56,7 @@ Manage GitOps project files — write subcommands of `ksail project`. Select the
 
 | Subcommand | Description | Accepts `args` |
 | ---------- | ----------- | -------------- |
-| `add-environment` | Clone an existing cluster environment into a new one | Yes |
+| `env_add` | Clone an existing cluster environment into a new one | Yes |
 | `init` | Initialize a new project | Yes |
 
 ### tenant_write
@@ -76,7 +76,6 @@ Manage workload operations — read-only subcommands of `ksail workload`. Select
 | ---------- | ----------- | -------------- |
 | `describe` | Describe resources | Yes |
 | `explain` | Get documentation for a resource | Yes |
-| `export` | Export container images from the cluster | Yes |
 | `forward` | Forward one or more local ports to a pod | Yes |
 | `gen_clusterrole` | Create a cluster role | Yes |
 | `gen_clusterrolebinding` | Create a cluster role binding for a particular cluster role | Yes |
@@ -156,9 +155,11 @@ Manage workload operations — write subcommands of `ksail workload`. Select the
 | `debug` | Create debugging sessions for troubleshooting workloads and nodes | Yes |
 | `delete` | Delete resources | Yes |
 | `exec` | Execute a command in a container | Yes |
+| `export` | Export container images from the cluster | Yes |
 | `expose` | Expose a resource as a service | Yes |
 | `import` | Import container images to the cluster | Yes |
 | `install` | Install Helm charts | Yes |
+| `intercept` | Intercept a Deployment's inbound traffic to a local process (reverse dev bridge) | Yes |
 | `mirror` | Mirror a Deployment's inbound traffic locally (read-only pcap capture) | Yes |
 | `push` | Package and push an OCI artifact to a registry | Yes |
 | `reconcile` | Trigger reconciliation for GitOps workloads | Yes |

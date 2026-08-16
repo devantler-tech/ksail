@@ -119,6 +119,30 @@ export interface KSailClusterConfiguration {
          * Credentials support ${ENV_VAR} placeholders for environment variable expansion.
          */
         registry?: string;
+        /**
+         * Credentials declares which environment variables hold the registry token for
+         * each execution path. When set, it takes precedence over any password embedded
+         * in the Registry spec.
+         */
+        credentials?: {
+          /**
+           * TokenEnvVar is the environment variable holding the registry token used by both
+           * push and pull paths unless a path-specific override is configured.
+           * Example: "GHCR_TOKEN".
+           */
+          tokenEnvVar?: string;
+          /**
+           * CLITokenEnvVar overrides TokenEnvVar for CLI and publish (push) paths.
+           * Example: "GHCR_PUSH_TOKEN".
+           */
+          cliTokenEnvVar?: string;
+          /**
+           * ClusterTokenEnvVar overrides TokenEnvVar for cluster-side pull paths, so the token
+           * persisted into the cluster can be pull-only.
+           * Example: "GHCR_PULL_TOKEN".
+           */
+          clusterTokenEnvVar?: string;
+        };
       };
       /**
        * GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD.
@@ -398,8 +422,9 @@ export interface KSailClusterConfiguration {
         /**
          * Extensions lists Talos Image Factory official system extension names to include in the
          * node image. KSail automatically computes the Image Factory schematic ID from this list
-         * and sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},
-         * where {version} is derived from the Talos config bundle's existing install image tag.
+         * and sets machine.install.image to the version-appropriate factory installer repository
+         * (`factory.talos.dev/installer` before Talos 1.14, `factory.talos.dev/metal-installer`
+         * for Talos 1.14+) using the Talos config bundle's existing install image tag.
          * For Hetzner, the schematic is also used for snapshot building.
          * Extension names follow the Image Factory convention (e.g., "siderolabs/iscsi-tools").
          * The Image Factory resolves extension versions automatically per Talos release.
@@ -457,6 +482,19 @@ export interface KSailClusterConfiguration {
          * (naming the stuck volumes) rather than hanging. Example: "10m".
          */
         storageHealthTimeout?: string;
+      };
+      /**
+       * EKS holds options specific to the EKS distribution.
+       */
+      eks?: {
+        /**
+         * Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create.
+         */
+        experimentalAWSLoadBalancerController?: boolean;
+        /**
+         * Name of a pre-created IRSA service account for the AWS Load Balancer Controller (AWS's documented Helm install path). When set the chart is installed with serviceAccount.create=false and this name; when empty the chart creates its own service account and IAM comes from node-role credentials. Only used with experimentalAWSLoadBalancerController.
+         */
+        awsLoadBalancerControllerServiceAccount?: string;
       };
     };
     /**

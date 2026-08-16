@@ -10,6 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const ghcrPullTokenPatch = `machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          password: ${GHCR_PULL_TOKEN}
+`
+
+const legacyGHCRTokenPatch = `machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          password: ${GHCR_TOKEN}
+`
+
 func TestPatchScope_Constants(t *testing.T) {
 	t.Parallel()
 
@@ -262,6 +278,70 @@ func TestLoadPatches_ExpandsEnvVars(t *testing.T) {
 	// Verify the content was expanded
 	assert.Contains(t, string(patches[0].Content), "hostname: expanded-host")
 	assert.NotContains(t, string(patches[0].Content), "${TEST_HOSTNAME}")
+}
+
+// A placeholder resolves to exactly the variable it names: an unset ${GHCR_PULL_TOKEN}
+// does not silently borrow another variable's value. Which variable a patch reads is the
+// patch author's explicit choice, not an implicit runtime convention.
+func TestLoadPatches_PullTokenPlaceholderDoesNotBorrowAnotherVariable(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchContent := []byte(ghcrPullTokenPatch)
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "")
+	t.Setenv("GHCR_TOKEN", "legacy-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.NotContains(t, string(patches[0].Content), "legacy-token")
+}
+
+func TestLoadPatches_GHCRPullTokenPrefersDedicatedToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchContent := []byte(ghcrPullTokenPatch)
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+	t.Setenv("GHCR_TOKEN", "push-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.Contains(t, string(patches[0].Content), "password: pull-token")
+}
+
+// The reverse of the rule above: a ${GHCR_TOKEN} placeholder is never hijacked by an
+// ambient GHCR_PULL_TOKEN. A patch gets the variable it asked for.
+func TestLoadPatches_TokenPlaceholderIsNotHijackedByPullToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	patchFile := filepath.Join(clusterDir, "registry-auth.yaml")
+	require.NoError(t, os.WriteFile(patchFile, []byte(legacyGHCRTokenPatch), 0o600))
+
+	t.Setenv("GHCR_PULL_TOKEN", "pull-token")
+	t.Setenv("GHCR_TOKEN", "push-token")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+	assert.Contains(t, string(patches[0].Content), "password: push-token")
 }
 
 //nolint:paralleltest // Uses t.Setenv

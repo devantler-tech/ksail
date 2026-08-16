@@ -13,7 +13,9 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -25,6 +27,26 @@ import (
 	"github.com/spf13/pflag"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// ExportSetEKSIdentityClientFactory replaces SDK client construction for offline lifecycle tests.
+func ExportSetEKSIdentityClientFactory(
+	factory func(
+		context.Context,
+		string,
+		credentials.AWSResolution,
+	) (eksidentity.Client, error),
+) func() {
+	eksIdentityClientFactoryState.Lock()
+	previous := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.factory = factory
+	eksIdentityClientFactoryState.Unlock()
+
+	return func() {
+		eksIdentityClientFactoryState.Lock()
+		eksIdentityClientFactoryState.factory = previous
+		eksIdentityClientFactoryState.Unlock()
+	}
+}
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
 func ExportShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
@@ -40,6 +62,11 @@ func ExportAWSProviderStatus(
 	opts ...awsprovider.Option,
 ) (*provider.ClusterStatus, error) {
 	return awsProviderStatus(ctx, client, clusterName, region, opts...)
+}
+
+// ExportRestorePersistedAWSOptions exposes persisted AWS option restoration for focused tests.
+func ExportRestorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
+	return restorePersistedAWSOptions(resolved)
 }
 
 // ErrProviderNotConfigured exports errProviderNotConfigured for testing.
@@ -76,6 +103,55 @@ func ExportCreateAndVerifyProvisioner(
 	return createAndVerifyProvisioner(cmd, ctx, clusterName)
 }
 
+// ExportPersistRequiredEKSComponentState exports the fail-closed EKS component writer for testing.
+func ExportPersistRequiredEKSComponentState(
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	return persistRequiredEKSComponentState(
+		ctx,
+		clusterName,
+		setup.NeedsLoadBalancerInstall(ctx.ClusterCfg),
+		func() string {
+			if setup.NeedsLoadBalancerInstall(ctx.ClusterCfg) {
+				return "test-release-uid"
+			}
+
+			return ""
+		}(),
+	)
+}
+
+// ExportFinishCreateWithTTL exports the create finalization ordering for testing.
+func ExportFinishCreateWithTTL(
+	requiredStateErr error,
+	cleanupFailedTTLCreate func() error,
+	waitForTTL func() error,
+) error {
+	return finishCreateWithTTL(requiredStateErr, cleanupFailedTTLCreate, waitForTTL)
+}
+
+// ExportPromoteUnsupportedInPlaceChanges exposes fail-closed updater field routing.
+func ExportPromoteUnsupportedInPlaceChanges(
+	updater clusterprovisioner.Updater,
+	diff *clusterupdate.UpdateResult,
+) {
+	promoteUnsupportedInPlaceChanges(updater, diff)
+}
+
+// ExportOverlayOwnedEKSControllerCleanupBaseline exposes the owned failed-release cleanup signal.
+func ExportOverlayOwnedEKSControllerCleanupBaseline(
+	currentSpec, desiredSpec *v1alpha1.ClusterSpec,
+	clusterName, region string,
+) error {
+	return overlayOwnedEKSControllerCleanupBaseline(
+		currentSpec,
+		desiredSpec,
+		clusterName,
+		region,
+	)
+}
+
 // ExportResolveClusterContext exports resolveClusterContext for testing.
 func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)
@@ -107,6 +183,11 @@ func ExportEnsureClusterManaged(
 	)
 }
 
+// ExportParseEksctlContextTarget exports parseEksctlContextTarget for testing.
+func ExportParseEksctlContextTarget(contextName string) (string, string, bool) {
+	return parseEksctlContextTarget(contextName)
+}
+
 // ExportResolveCreatedContextName exports resolveCreatedContextName for testing.
 func ExportResolveCreatedContextName(
 	distribution v1alpha1.Distribution,
@@ -114,6 +195,21 @@ func ExportResolveCreatedContextName(
 	clusterName string,
 ) string {
 	return resolveCreatedContextName(distribution, provider, clusterName)
+}
+
+// ExportResolvePostCreateContext exports resolvePostCreateContext for testing.
+func ExportResolvePostCreateContext(ctx *localregistry.Context) error {
+	return resolvePostCreateContext(ctx)
+}
+
+// ExportPrepareEKSCreateConfig exports prepareEKSCreateConfig for testing.
+func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
+	return prepareEKSCreateConfig(ctx)
+}
+
+// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
+	return applyClusterNameOverride(ctx, name)
 }
 
 // ExportResolveConsent exports resolveConsent for testing.
@@ -161,12 +257,88 @@ func ExportApplyInPlaceChanges(
 	force bool,
 	allowRolling bool,
 ) error {
-	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
+	eksRegion := ""
+	if ctx.EKSConfig != nil {
+		eksRegion = ctx.EKSConfig.Region
+	}
+
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName, eksRegion)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
+}
+
+// ExportExecuteRecreateFlow exposes the post-consent recreate boundary for fail-closed tests.
+func ExportExecuteRecreateFlow(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+		consent:     true,
+	}
+
+	return orchestrator.executeRecreateFlow()
+}
+
+// ExportFinishRecreateFlow exposes successful recreation finalization for safety tests.
+func ExportFinishRecreateFlow(
+	ctx *localregistry.Context,
+	clusterName string,
+	creationErr error,
+	controllerReconciliationStarted bool,
+) error {
+	return finishRecreateFlow(
+		context.Background(),
+		ctx,
+		clusterName,
+		creationErr,
+		controllerReconciliationStarted,
+	)
+}
+
+// ExportClearDeletedEKSState exposes the post-delete state invalidation boundary.
+func ExportClearDeletedEKSState(ctx *localregistry.Context, clusterName string) error {
+	return clearDeletedEKSState(ctx, clusterName)
+}
+
+// ExportComputeUpdateDiff exposes updateOrchestrator.computeUpdateDiff for testing.
+func ExportComputeUpdateDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.computeUpdateDiff(updater)
+}
+
+// ExportApplyOrReportChanges exposes the no-change state-repair boundary for tests.
+func ExportApplyOrReportChanges(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	updater clusterprovisioner.Updater,
+	currentSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+	}
+
+	return orchestrator.applyOrReportChanges(updater, currentSpec, diff, nil)
 }
 
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
@@ -268,7 +440,31 @@ func ExportMaybeWaitForTTL(
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
+	return maybeWaitForTTL(cmd, clusterName, clusterCfg, nil)
+}
+
+// ExportAutoDeleteCluster exports autoDeleteCluster for offline TTL safety tests.
+func ExportAutoDeleteCluster(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	return autoDeleteCluster(cmd, clusterName, clusterCfg, eksConfig)
+}
+
+// ExportDeleteResolvedClusterState exposes exact-target state cleanup for safety tests.
+func ExportDeleteResolvedClusterState(resolved *lifecycle.ResolvedClusterInfo) error {
+	return deleteResolvedClusterState(resolved)
+}
+
+// ExportDeleteTTLClusterState exposes TTL state cleanup for safety tests.
+func ExportDeleteTTLClusterState(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
+	return deleteTTLClusterState(clusterName, clusterCfg, eksConfig)
 }
 
 // ExportNormalizeVersionTag exposes normalizeVersionTag for testing.
@@ -288,6 +484,16 @@ func ExportIsDowngrade(current, target string) bool {
 
 // ErrMetricsServerDisableUnsupported exports the sentinel error for testing.
 var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
+
+// ExportComputeSpecOnlyDiff exposes computeSpecOnlyDiff for unit testing. This is the diff
+// path behind `ksail cluster diff` and behind every provisioner with no Updater, so it is
+// the path whose drift-check coverage has to be assertable independently of the update path.
+func ExportComputeSpecOnlyDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+) *clusterupdate.UpdateResult {
+	return computeSpecOnlyDiff(cmd, ctx)
+}
 
 // ExportHandlerForField reports whether a registered handler exists for the given field name.
 func ExportHandlerForField(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
@@ -358,8 +564,9 @@ func ExportReconcileComponents(
 	clusterCfg *v1alpha1.Cluster,
 	diff *clusterupdate.UpdateResult,
 	result *clusterupdate.UpdateResult,
+	eksRegion ...string,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster", eksRegion...)
 
 	return r.reconcileComponents(context.Background(), diff, result)
 }
@@ -590,6 +797,34 @@ func ExportGuardUpdateTargetManaged(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	eksConfig *clusterprovisioner.EKSConfig,
 ) error {
-	return guardUpdateTargetManaged(ctx, clusterCfg, clusterName)
+	_, _, err := guardUpdateTargetManaged(ctx, clusterCfg, clusterName, eksConfig)
+
+	return err
+}
+
+// ExportFluxReassertMemoized runs both Flux handlers on ONE reconciler, flipping
+// the GitOps engine to Flux between the calls.
+//
+// The flip is what makes the result meaningful: the first call is a non-Flux
+// no-op, and a second call that recomputed would take the Flux path and attempt
+// the real upsert against a cancelled context. A nil second result therefore
+// proves the reassertion was memoized rather than merely that it succeeded.
+func ExportFluxReassertMemoized(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+) (error, error) {
+	reconciler := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+
+	first := reconciler.reconcileFluxVersion(context.Background(), clusterupdate.Change{})
+
+	clusterCfg.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	second := reconciler.reconcileFluxVerify(ctx, clusterupdate.Change{})
+
+	return first, second
 }

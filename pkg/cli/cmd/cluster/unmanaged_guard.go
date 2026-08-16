@@ -4,12 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"sort"
+	"strings"
+	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 )
 
 // ErrUnmanagedCluster indicates a ksail-only lifecycle action (start/stop/…) was attempted against a
@@ -17,6 +27,55 @@ import (
 // kubeadm cluster, a colleague's cluster). Read-only operations still work; only ksail-only
 // lifecycle actions are refused (ksail#5885, part of the unmanaged-cluster surface epic #5654).
 var ErrUnmanagedCluster = errors.New("cluster is not managed by ksail")
+
+var (
+	errAWSOwnershipNameMismatch = errors.New(
+		"exact AWS ownership query returned a different cluster",
+	)
+	errAWSOwnershipRegionMismatch = errors.New(
+		"exact AWS ownership query returned a different region",
+	)
+	errAWSOwnershipRegionMissing = errors.New(
+		"exact AWS ownership query did not report a region",
+	)
+	errAWSOwnershipRegionAmbiguous = errors.New(
+		"multiple kubeconfig regions match EKS cluster",
+	)
+	errAWSOwnershipRegionUnrecorded = errors.New(
+		"no persisted EKS ownership state for configured region",
+	)
+	errAWSOwnershipProvenanceMissing = errors.New(
+		"exact AWS ownership query did not report an eksctl-created cluster",
+	)
+)
+
+type eksIdentityClientFactory func(
+	ctx context.Context,
+	region string,
+	resolution credentials.AWSResolution,
+) (eksidentity.Client, error)
+
+//nolint:gochecknoglobals // synchronized injectable construction seam for offline lifecycle tests.
+var eksIdentityClientFactoryState = struct {
+	sync.RWMutex
+
+	factory eksIdentityClientFactory
+}{
+	factory: func(
+		ctx context.Context,
+		region string,
+		resolution credentials.AWSResolution,
+	) (eksidentity.Client, error) {
+		options := credentials.OptionsForFrozenAWSConfig(
+			resolution,
+			eksclient.WithAWSConfig,
+			eksclient.WithCredentialValues,
+			eksclient.RequireCredentialValues,
+		)
+
+		return eksclient.NewClient(ctx, region, options...)
+	},
+}
 
 // managedClusterLister enumerates the names of clusters ksail manages across every provider and
 // reports whether discovery was complete (no provider failed). The guard fails open when discovery
@@ -84,13 +143,36 @@ func ensureClusterManaged(
 // context↔name mapping stays defined in exactly one place. Best-effort: a missing/unreadable
 // kubeconfig yields false (treated as "not an unmanaged cluster, just absent").
 func kubeconfigHasClusterContext(kubeconfigPath, clusterName string) bool {
-	config := clusterdiscovery.LoadKubeconfig(kubeconfigPath)
+	return kubeconfigHasResolvedClusterContext(&lifecycle.ResolvedClusterInfo{
+		ClusterName:    clusterName,
+		KubeconfigPath: kubeconfigPath,
+	})
+}
+
+// kubeconfigHasResolvedClusterContext extends the shared prefix-based context mapping with the
+// suffix-shaped eksctl context formats: <iam>@<name>.<region>.eksctl.io and
+// <name>.<region>.eksctl.io.
+func kubeconfigHasResolvedClusterContext(resolved *lifecycle.ResolvedClusterInfo) bool {
+	config := clusterdiscovery.LoadKubeconfig(resolved.KubeconfigPath)
 	if config == nil {
 		return false
 	}
 
-	matchesClusterName := func(name string) bool { return name == clusterName }
+	matchesClusterName := func(name string) bool { return name == resolved.ClusterName }
+
 	for contextName := range config.Contexts {
+		if resolved.Provider == v1alpha1.ProviderAWS {
+			if eksctlContextMatchesCluster(
+				contextName,
+				resolved.ClusterName,
+				resolved.AWSRegion,
+			) {
+				return true
+			}
+
+			continue
+		}
+
 		if clusterdiscovery.ContextIsManaged(contextName, matchesClusterName) {
 			return true
 		}
@@ -99,9 +181,457 @@ func kubeconfigHasClusterContext(kubeconfigPath, clusterName string) bool {
 	return false
 }
 
-// unmanagedClusterGuard is the SimpleLifecycleConfig.Guard shared by the start and stop commands: it
-// rejects an action on a cluster ksail did not provision, using the real cross-provider discoverer.
+// parseEksctlContextTarget recognizes both identity-qualified and bare eksctl kubeconfig contexts.
+// Parsing from the last @ keeps IAM identities opaque; parsing the target at its last dot avoids
+// prefix matches between different cluster names.
+func parseEksctlContextTarget(contextName string) (string, string, bool) {
+	target := contextName
+	if identityEnd := strings.LastIndex(target, "@"); identityEnd >= 0 {
+		target = target[identityEnd+1:]
+	}
+
+	target, found := strings.CutSuffix(target, ".eksctl.io")
+	if !found {
+		return "", "", false
+	}
+
+	regionStart := strings.LastIndex(target, ".")
+	if regionStart <= 0 || regionStart == len(target)-1 {
+		return "", "", false
+	}
+
+	clusterName := target[:regionStart]
+	region := target[regionStart+1:]
+
+	if strings.Contains(clusterName, ".") || strings.Contains(region, ".") {
+		return "", "", false
+	}
+
+	return clusterName, region, true
+}
+
+// eksctlContextMatchesCluster recognizes eksctl's real kubeconfig context shape without treating a
+// mere substring as ownership proof. When the resolved region is known it must match exactly.
+func eksctlContextMatchesCluster(contextName, clusterName, region string) bool {
+	contextCluster, contextRegion, ok := parseEksctlContextTarget(contextName)
+	if !ok || contextCluster != clusterName {
+		return false
+	}
+
+	return region == "" || contextRegion == region
+}
+
+// bindAWSRegionFromKubeconfig uses a context region only as a fallback when neither the configured
+// environment variable nor eks.yaml supplied one. More than one exact-name region is ambiguous and
+// must stop before even the read-only ownership query chooses an AWS profile default.
+func bindAWSRegionFromKubeconfig(resolved *lifecycle.ResolvedClusterInfo) error {
+	if resolved.AWSRegion != "" {
+		return nil
+	}
+
+	config := clusterdiscovery.LoadKubeconfig(resolved.KubeconfigPath)
+	if config == nil {
+		return nil
+	}
+
+	regions := make(map[string]struct{})
+
+	for contextName := range config.Contexts {
+		clusterName, region, ok := parseEksctlContextTarget(contextName)
+		if ok && clusterName == resolved.ClusterName {
+			regions[region] = struct{}{}
+		}
+	}
+
+	if len(regions) == 0 {
+		return nil
+	}
+
+	if len(regions) == 1 {
+		for region := range regions {
+			resolved.AWSRegion = region
+		}
+
+		return nil
+	}
+
+	regionNames := make([]string, 0, len(regions))
+	for region := range regions {
+		regionNames = append(regionNames, region)
+	}
+
+	sort.Strings(regionNames)
+
+	return fmt.Errorf(
+		"%w %q (%s); set an explicit AWS region",
+		errAWSOwnershipRegionAmbiguous,
+		resolved.ClusterName,
+		strings.Join(regionNames, ", "),
+	)
+}
+
+// ensureAWSClusterManaged queries the exact name and region through eksctl under the resolved AWS
+// credential aliases. Unlike broad discovery (which may silently skip an unavailable provider),
+// every tool, credential, command, and parse error fails closed before a destructive operation.
+func ensureAWSClusterManaged(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved, true)
+	if err != nil {
+		return err
+	}
+
+	clusterName := resolved.ClusterName
+	region := resolved.AWSRegion
+
+	verifier, err := eksidentity.NewVerifier(identityClient, clusterName, region)
+	if err != nil {
+		return fmt.Errorf("load immutable EKS ownership identity: %w", err)
+	}
+
+	err = verifier(ctx)
+	if err != nil {
+		return fmt.Errorf("verify immutable EKS ownership identity: %w", err)
+	}
+
+	resolved.AWSOwnershipVerifier = verifier
+
+	return nil
+}
+
+// resolveAWSOwnershipTarget performs the legacy local-intent plus exact eksctl provenance check and
+// returns an SDK client pinned to the same one-time credential snapshot. Normal mutations follow it
+// with immutable identity verification; the explicit rebind flow deliberately uses only this
+// read-only prerequisite before capturing a new identity.
+func resolveAWSOwnershipTarget(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+	restorePersistedOptions bool,
+) (eksidentity.Client, error) {
+	if !hasLocalKSailEKSTargetEvidence(resolved) {
+		return nil, fmt.Errorf(
+			"no local KSail ownership evidence for EKS target %q: %w",
+			resolved.ClusterName,
+			unmanagedClusterError(resolved.ClusterName),
+		)
+	}
+
+	// Restore before the kubeconfig fallback: the persisted mapping may name a custom region
+	// variable, and bindAWSRegionFromKubeconfig is a no-op once a region is known. Binding first
+	// would let a stale or duplicated same-name kubeconfig context pin (or reject) the region
+	// before the captured RegionEnvVar is ever consulted.
+	if restorePersistedOptions {
+		err := restorePersistedAWSOptions(resolved)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := bindAWSRegionFromKubeconfig(resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	auth, err := queryFrozenAWSOwnership(ctx, resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved.AWSResolution = &auth
+
+	eksIdentityClientFactoryState.RLock()
+	factory := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.RUnlock()
+
+	identityClient, err := factory(ctx, resolved.AWSRegion, auth)
+	if err != nil {
+		return nil, fmt.Errorf("create immutable EKS identity client: %w", err)
+	}
+
+	return identityClient, nil
+}
+
+// isRestorableOwnershipStateAbsence reports that no usable credential mapping could be restored,
+// which is never fatal here. A legacy record predating the mapping schema is deliberately treated
+// like a missing one: the authoritative, actionable failure belongs to eksidentity.NewVerifier,
+// whose migrationRequiredError names the rebind command. Returning early keeps that message intact
+// instead of shadowing it with an opaque validation error, and still fails closed downstream.
+func isRestorableOwnershipStateAbsence(err error) bool {
+	return errors.Is(err, state.ErrEKSOwnershipStateNotFound) ||
+		errors.Is(err, state.ErrInvalidEKSOwnershipState)
+}
+
+func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
+	if resolved.ConfigSource {
+		return nil
+	}
+
+	region := strings.TrimSpace(resolved.AWSRegion)
+	if region != "" {
+		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+		if err != nil {
+			if isRestorableOwnershipStateAbsence(err) {
+				return nil
+			}
+
+			return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+		}
+
+		resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+		return nil
+	}
+
+	ownerships, err := state.ListEKSOwnershipStates(resolved.ClusterName)
+	if err != nil {
+		if isRestorableOwnershipStateAbsence(err) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+	}
+
+	ownership, err := selectPersistedAWSOwnership(ownerships)
+	if err != nil {
+		return err
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+	resolved.AWSRegion = strings.TrimSpace(ownership.Region)
+
+	return nil
+}
+
+func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
+	if current.ProfileEnvVar == "" {
+		current.ProfileEnvVar = persisted.ProfileEnvVar
+	}
+
+	if current.RegionEnvVar == "" {
+		current.RegionEnvVar = persisted.RegionEnvVar
+	}
+
+	if current.AccessKeyIDEnvVar == "" {
+		current.AccessKeyIDEnvVar = persisted.AccessKeyIDEnvVar
+	}
+
+	if current.SecretAccessKeyEnvVar == "" {
+		current.SecretAccessKeyEnvVar = persisted.SecretAccessKeyEnvVar
+	}
+
+	if current.SessionTokenEnvVar == "" {
+		current.SessionTokenEnvVar = persisted.SessionTokenEnvVar
+	}
+
+	return current
+}
+
+func selectPersistedAWSOwnership(
+	ownerships []*state.EKSOwnershipState,
+) (*state.EKSOwnershipState, error) {
+	requestedRegions := make(map[string]struct{})
+
+	for _, ownership := range ownerships {
+		options := credentials.AWSOptionsWithDefaults(ownership.AWSOptions)
+		if region := strings.TrimSpace(os.Getenv(options.RegionEnvVar)); region != "" {
+			requestedRegions[region] = struct{}{}
+		}
+	}
+
+	if len(requestedRegions) == 1 {
+		for requestedRegion := range requestedRegions {
+			for _, ownership := range ownerships {
+				if strings.TrimSpace(ownership.Region) == requestedRegion {
+					return ownership, nil
+				}
+			}
+
+			return nil, fmt.Errorf(
+				"%w %q",
+				errAWSOwnershipRegionUnrecorded,
+				requestedRegion,
+			)
+		}
+	}
+
+	if len(requestedRegions) > 1 || len(ownerships) != 1 {
+		return nil, fmt.Errorf(
+			"%w %q: persisted ownership state does not select one region",
+			errAWSOwnershipRegionAmbiguous,
+			ownerships[0].ClusterName,
+		)
+	}
+
+	return ownerships[0], nil
+}
+
+func queryFrozenAWSOwnership(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (credentials.AWSResolution, error) {
+	auth, err := credentials.ResolveFrozenAWS(
+		ctx,
+		credentials.NewAWSOptionsResolver(resolved.AWSOpts),
+		resolved.AWSRegion,
+	)
+	if err != nil {
+		return credentials.AWSResolution{}, fmt.Errorf(
+			"freeze AWS credentials for EKS ownership verification: %w",
+			err,
+		)
+	}
+
+	if resolved.AWSRegion == "" {
+		resolved.AWSRegion = strings.TrimSpace(auth.Region)
+	}
+
+	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
+		auth,
+		os.Environ(),
+		eksctlclient.WithEnvironment,
+		eksctlclient.RequireCredentialValues,
+	)
+
+	summary, err := eksctlclient.NewClient(eksctlOptions...).GetCluster(
+		ctx,
+		resolved.ClusterName,
+		resolved.AWSRegion,
+	)
+	if err != nil {
+		if errors.Is(err, eksctlclient.ErrClusterNotFound) {
+			return credentials.AWSResolution{}, awsOwnershipMismatchError(resolved, err)
+		}
+
+		return credentials.AWSResolution{}, awsOwnershipQueryError(resolved, err)
+	}
+
+	err = validateAWSOwnershipSummary(resolved, summary)
+	if err != nil {
+		return credentials.AWSResolution{}, err
+	}
+
+	if auth.Region == "" {
+		auth.Region = resolved.AWSRegion
+	}
+
+	return auth, nil
+}
+
+// hasLocalKSailEKSTargetEvidence requires local KSail intent before the cloud-side eksctl marker is
+// consulted. Matching an actual loaded eks.yaml authorizes config-backed commands; persisted EKS/AWS
+// creation state preserves standalone --name/--provider operation when project files are absent. A
+// kubeconfig context or EksctlCreated=True alone never qualifies. These name-based records do not
+// bind an immutable AWS account/cluster instance; ksail#6202 tracks that separate hardening.
+func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) bool {
+	if resolved.EKSConfigSource && strings.TrimSpace(resolved.ConfigClusterName) != "" &&
+		strings.TrimSpace(resolved.ConfigClusterName) == strings.TrimSpace(resolved.ClusterName) {
+		return true
+	}
+
+	spec, err := state.LoadClusterSpec(resolved.ClusterName)
+	if err != nil {
+		return false
+	}
+
+	return spec.Distribution == v1alpha1.DistributionEKS && spec.Provider == v1alpha1.ProviderAWS
+}
+
+// validateAWSOwnershipSummary requires the exact query to corroborate name, region, and eksctl
+// provenance. Every mismatch is a pre-mutation blocker.
+func validateAWSOwnershipSummary(
+	resolved *lifecycle.ResolvedClusterInfo,
+	summary *eksctlclient.ClusterSummary,
+) error {
+	if summary.Name != resolved.ClusterName {
+		return awsOwnershipMismatchError(
+			resolved,
+			fmt.Errorf(
+				"%w: got %q, want %q",
+				errAWSOwnershipNameMismatch,
+				summary.Name,
+				resolved.ClusterName,
+			),
+		)
+	}
+
+	if resolved.AWSRegion != "" && summary.Region != resolved.AWSRegion {
+		return awsOwnershipMismatchError(
+			resolved,
+			fmt.Errorf(
+				"%w: got %q, want %q",
+				errAWSOwnershipRegionMismatch,
+				summary.Region,
+				resolved.AWSRegion,
+			),
+		)
+	}
+
+	if resolved.AWSRegion == "" && strings.TrimSpace(summary.Region) == "" {
+		return awsOwnershipQueryError(resolved, errAWSOwnershipRegionMissing)
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(summary.EKSCTLCreated), "true") {
+		return fmt.Errorf(
+			"AWS ownership query returned an unmanaged target: %w",
+			errors.Join(
+				fmt.Errorf(
+					"%w: got EksctlCreated=%q",
+					errAWSOwnershipProvenanceMissing,
+					summary.EKSCTLCreated,
+				),
+				unmanagedClusterError(resolved.ClusterName),
+			),
+		)
+	}
+
+	if resolved.AWSRegion == "" {
+		resolved.AWSRegion = summary.Region
+	}
+
+	return nil
+}
+
+// awsOwnershipMismatchError classifies an absent/mismatched exact result as unmanaged only when a
+// strictly parsed eksctl context corroborates the requested name and region. A context identity is
+// never treated as ownership proof.
+func awsOwnershipMismatchError(resolved *lifecycle.ResolvedClusterInfo, cause error) error {
+	if kubeconfigHasResolvedClusterContext(resolved) {
+		return fmt.Errorf(
+			"AWS ownership query did not return the kubeconfig target: %w",
+			errors.Join(cause, unmanagedClusterError(resolved.ClusterName)),
+		)
+	}
+
+	return awsOwnershipQueryError(resolved, cause)
+}
+
+// awsOwnershipQueryError preserves tool, credential, command, and parse failures as fail-closed
+// diagnostics. Those failures do not prove a kubeconfig target is unmanaged; they only prove the
+// destructive command cannot establish ownership safely.
+func awsOwnershipQueryError(resolved *lifecycle.ResolvedClusterInfo, cause error) error {
+	return fmt.Errorf(
+		"verify AWS cluster ownership for %q: %w",
+		resolved.ClusterName,
+		cause,
+	)
+}
+
+func unmanagedClusterError(clusterName string) error {
+	return fmt.Errorf(
+		"%q is an unmanaged cluster: %w; read-only operations (list, resource browsing, logs, exec) still work",
+		clusterName,
+		ErrUnmanagedCluster,
+	)
+}
+
+// unmanagedClusterGuard is the SimpleLifecycleConfig.Guard shared by start and stop. AWS uses the
+// exact fail-closed ownership query; other providers retain the existing cross-provider guard.
 func unmanagedClusterGuard(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		return ensureAWSClusterManaged(ctx, resolved)
+	}
+
 	return ensureClusterManaged(ctx, resolved, discoverManagedClusters)
 }
 
@@ -122,12 +652,13 @@ func guardUpdateTargetManaged(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
-) error {
+	eksConfig *clusterprovisioner.EKSConfig,
+) (*credentials.AWSResolution, lifecycle.AWSOwnershipVerifier, error) {
 	kubeconfigPath, err := clusterdetector.ResolveKubeconfigPath(
 		clusterCfg.Spec.Cluster.Connection.Kubeconfig,
 	)
 	if err != nil {
-		return fmt.Errorf("resolve kubeconfig path: %w", err)
+		return nil, nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
 	// Canonicalize the user-supplied path before the guard reads the kubeconfig (repo path-safety
@@ -135,11 +666,63 @@ func guardUpdateTargetManaged(
 	// missing kubeconfig still falls through to the guard's fail-open path).
 	canonical, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
+		return nil, nil, fmt.Errorf("canonicalize kubeconfig path %q: %w", kubeconfigPath, err)
 	}
 
-	return updateUnmanagedGuardFunc(ctx, &lifecycle.ResolvedClusterInfo{
+	resolved := resolveUpdateTarget(clusterCfg, clusterName, canonical, eksConfig)
+
+	err = lifecycle.ValidateStandaloneAWSTarget(resolved)
+	if err != nil {
+		return nil, nil, fmt.Errorf("validate AWS update target: %w", err)
+	}
+
+	err = updateUnmanagedGuardFunc(ctx, resolved)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// A regionless eks.yaml may be safely bound by an exact kubeconfig context or the exact eksctl
+	// query. Preserve that verified region so the subsequent update/recreate cannot fall back to a
+	// different ambient/default AWS region.
+	if eksConfig != nil && strings.TrimSpace(resolved.AWSRegion) != "" {
+		eksConfig.Region = strings.TrimSpace(resolved.AWSRegion)
+	}
+
+	return resolved.AWSResolution, resolved.AWSOwnershipVerifier, nil
+}
+
+func resolveUpdateTarget(
+	clusterCfg *v1alpha1.Cluster,
+	clusterName, canonicalKubeconfig string,
+	eksConfig *clusterprovisioner.EKSConfig,
+) *lifecycle.ResolvedClusterInfo {
+	resolved := &lifecycle.ResolvedClusterInfo{
 		ClusterName:    clusterName,
-		KubeconfigPath: canonical,
-	})
+		Provider:       clusterCfg.Spec.Cluster.Provider,
+		KubeconfigPath: canonicalKubeconfig,
+		AWSOpts:        clusterCfg.Spec.Provider.AWS,
+	}
+	if eksConfig == nil {
+		return resolved
+	}
+
+	configuredAWSRegion := strings.TrimSpace(eksConfig.Region)
+	effectiveAWSRegion := lifecycle.ResolveAWSRegion(
+		clusterCfg.Spec.Provider.AWS,
+		&clusterprovisioner.DistributionConfig{EKS: eksConfig},
+	)
+
+	// The exact verified name/region drives both in-place operations and recreation deletion. Pin it
+	// into the distribution config before either later path constructs its provisioner.
+	eksConfig.Region = effectiveAWSRegion
+	resolved.ConfigClusterName = strings.TrimSpace(eksConfig.Name)
+	resolved.EKSConfigSource = eksConfig.NameFromConfig &&
+		strings.TrimSpace(eksConfig.ConfigPath) != "" &&
+		resolved.ConfigClusterName != ""
+	resolved.ConfigSource = resolved.EKSConfigSource
+	resolved.AWSRegion = effectiveAWSRegion
+	resolved.AWSRegionFromConfig = effectiveAWSRegion != "" &&
+		effectiveAWSRegion == configuredAWSRegion
+
+	return resolved
 }
