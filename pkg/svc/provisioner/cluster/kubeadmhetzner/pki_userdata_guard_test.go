@@ -13,27 +13,50 @@ import (
 // covers every encoding a key could arrive in rather than one chosen spelling.
 const pemPrivateKeyMarker = "PRIVATE KEY"
 
+// pemPrivateKeyLabels are the PEM block labels the guard must reach. Each is a
+// label only: the fixtures below wrap them around a placeholder body, so no
+// test carries key-shaped bytes.
+func pemPrivateKeyLabels() []string {
+	return []string{
+		"RSA PRIVATE KEY",
+		"PRIVATE KEY",
+		"EC PRIVATE KEY",
+		"DSA PRIVATE KEY",
+		"ENCRYPTED PRIVATE KEY",
+		"OPENSSH PRIVATE KEY",
+	}
+}
+
 // kubeadmCertificateTransportMarkers are the kubeadm settings that move control
 // plane signing material between nodes. `--upload-certs` stores the cluster PKI
 // in a cluster Secret and `certificateKey` is the symmetric key that decrypts
 // it, so either one in provider user-data hands the provider the cluster
 // identity even though no PEM block appears.
-var kubeadmCertificateTransportMarkers = []string{
-	"certificateKey",
-	"certificate-key",
-	"upload-certs",
-	"uploadCerts",
+func kubeadmCertificateTransportMarkers() []string {
+	return []string{
+		"certificateKey",
+		"certificate-key",
+		"upload-certs",
+		"uploadCerts",
+	}
 }
 
 // pkiPathMarkers are the on-disk locations of the private halves of the cluster
 // PKI. kubeadm mints these on the initial control plane; a path appearing in
 // user-data means the renderer is writing the material rather than letting
 // kubeadm generate it.
-var pkiPathMarkers = []string{
-	"/etc/kubernetes/pki/ca.key",
-	"/etc/kubernetes/pki/front-proxy-ca.key",
-	"/etc/kubernetes/pki/etcd/ca.key",
-	"/etc/kubernetes/pki/sa.key",
+func pkiPathMarkers() []string {
+	return []string{
+		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.key",
+		"/etc/kubernetes/pki/sa.key",
+	}
+}
+
+// pemBlock wraps a placeholder body in a PEM block carrying the given label.
+func pemBlock(label string) string {
+	return "-----BEGIN " + label + "-----\nredacted\n-----END " + label + "-----"
 }
 
 // signingMaterialMarkersIn reports every marker of cluster-signing material
@@ -46,13 +69,13 @@ func signingMaterialMarkersIn(userData string) []string {
 		found = append(found, pemPrivateKeyMarker)
 	}
 
-	for _, marker := range kubeadmCertificateTransportMarkers {
+	for _, marker := range kubeadmCertificateTransportMarkers() {
 		if strings.Contains(userData, marker) {
 			found = append(found, marker)
 		}
 	}
 
-	for _, marker := range pkiPathMarkers {
+	for _, marker := range pkiPathMarkers() {
 		if strings.Contains(userData, marker) {
 			found = append(found, marker)
 		}
@@ -73,22 +96,33 @@ func assertNoSigningMaterial(t *testing.T, userData, subject string) {
 
 // TestSigningMaterialGuardCatchesEveryPrivateKeyEncoding pins the guard's own
 // reach. A guard written against one PEM spelling passes over a key that
-// arrives in another encoding, so each supported encoding and each kubeadm
-// certificate-transport setting is exercised individually.
+// arrives in another encoding, so every supported label is exercised.
 func TestSigningMaterialGuardCatchesEveryPrivateKeyEncoding(t *testing.T) {
 	t.Parallel()
 
+	for _, label := range pemPrivateKeyLabels() {
+		userData := "#cloud-config\nwrite_files:\n  - content: |\n      " + pemBlock(label) + "\n"
+
+		t.Run(label, func(t *testing.T) {
+			t.Parallel()
+
+			assert.NotEmpty(t, signingMaterialMarkersIn(userData),
+				"a %s block must be reported as signing material", label)
+		})
+	}
+}
+
+// TestSigningMaterialGuardCatchesKubeadmCertificateTransports pins the reach
+// over kubeadm's own certificate sharing, which moves signing material without
+// emitting a PEM block at all.
+func TestSigningMaterialGuardCatchesKubeadmCertificateTransports(t *testing.T) {
+	t.Parallel()
+
 	for name, sample := range map[string]string{
-		"pkcs1 rsa":       "-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----",
-		"pkcs8":           "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----",
-		"sec1 ec":         "-----BEGIN EC PRIVATE KEY-----\nMHc\n-----END EC PRIVATE KEY-----",
-		"dsa":             "-----BEGIN DSA PRIVATE KEY-----\nMIIB\n-----END DSA PRIVATE KEY-----",
-		"encrypted pkcs8": "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIE\n-----END ENCRYPTED PRIVATE KEY-----",
-		"openssh":         "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n-----END OPENSSH PRIVATE KEY-----",
-		"kubeadm certificateKey": "write_files:\n  - content: |\n" +
-			"      certificateKey: 0123456789abcdef0123456789abcdef\n",
-		"kubeadm upload-certs": "runcmd:\n  - kubeadm init --upload-certs\n",
-		"ca key path":          "write_files:\n  - path: /etc/kubernetes/pki/ca.key\n",
+		"certificateKey": "write_files:\n  - content: |\n" +
+			"      certificateKey: " + strings.Repeat("0", 64) + "\n",
+		"upload-certs": "runcmd:\n  - kubeadm init --upload-certs\n",
+		"ca key path":  "write_files:\n  - path: /etc/kubernetes/pki/ca.key\n",
 	} {
 		userData := "#cloud-config\n" + sample
 
