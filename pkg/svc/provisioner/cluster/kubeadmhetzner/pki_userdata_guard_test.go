@@ -85,10 +85,10 @@ func TestSigningMaterialGuardCatchesEveryPrivateKeyEncoding(t *testing.T) {
 		"dsa":             "-----BEGIN DSA PRIVATE KEY-----\nMIIB\n-----END DSA PRIVATE KEY-----",
 		"encrypted pkcs8": "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIE\n-----END ENCRYPTED PRIVATE KEY-----",
 		"openssh":         "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n-----END OPENSSH PRIVATE KEY-----",
-		"kubeadm certificateKey": "#cloud-config\nwrite_files:\n  - content: |\n" +
+		"kubeadm certificateKey": "write_files:\n  - content: |\n" +
 			"      certificateKey: 0123456789abcdef0123456789abcdef\n",
-		"kubeadm upload-certs": "#cloud-config\nruncmd:\n  - kubeadm init --upload-certs\n",
-		"ca key path":          "#cloud-config\nwrite_files:\n  - path: /etc/kubernetes/pki/ca.key\n",
+		"kubeadm upload-certs": "runcmd:\n  - kubeadm init --upload-certs\n",
+		"ca key path":          "write_files:\n  - path: /etc/kubernetes/pki/ca.key\n",
 	} {
 		userData := "#cloud-config\n" + sample
 
