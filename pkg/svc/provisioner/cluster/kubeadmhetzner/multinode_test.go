@@ -65,6 +65,7 @@ func TestComposeInitNodeKeepsPKIOutOfUserData(t *testing.T) {
 
 	assert.NotContains(t, spec.UserData, "BEGIN CERTIFICATE")
 	assert.NotContains(t, spec.UserData, "BEGIN RSA PRIVATE KEY")
+	assertNoSigningMaterial(t, spec.UserData, "the initial control plane")
 }
 
 // adminKubeconfig returns a kubeadm-shaped admin.conf with a generated CA and
@@ -148,6 +149,8 @@ func TestComposeJoiningNodesPinsJoinNameAndCA(t *testing.T) {
 			assert.NotContains(t, spec.UserData, path,
 				"joining nodes must never receive private PKI material")
 		}
+
+		assertNoSigningMaterial(t, spec.UserData, "a joining node")
 	}
 }
 
