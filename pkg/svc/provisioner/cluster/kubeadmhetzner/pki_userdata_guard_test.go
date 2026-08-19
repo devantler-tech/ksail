@@ -112,27 +112,74 @@ func TestSigningMaterialGuardCatchesEveryPrivateKeyEncoding(t *testing.T) {
 	}
 }
 
-// TestSigningMaterialGuardCatchesKubeadmCertificateTransports pins the reach
+// TestSigningMaterialGuardCatchesEveryKubeadmCertificateTransport pins the reach
 // over kubeadm's own certificate sharing, which moves signing material without
-// emitting a PEM block at all.
-func TestSigningMaterialGuardCatchesKubeadmCertificateTransports(t *testing.T) {
+// emitting a PEM block at all. The cases are generated from the declared marker
+// set so that dropping a marker fails here rather than silently narrowing the
+// guard.
+func TestSigningMaterialGuardCatchesEveryKubeadmCertificateTransport(t *testing.T) {
 	t.Parallel()
 
-	for name, sample := range map[string]string{
-		"certificateKey": "write_files:\n  - content: |\n" +
-			"      certificateKey: " + strings.Repeat("0", 64) + "\n",
-		"upload-certs": "runcmd:\n  - kubeadm init --upload-certs\n",
-		"ca key path":  "write_files:\n  - path: /etc/kubernetes/pki/ca.key\n",
-	} {
-		userData := "#cloud-config\n" + sample
+	for _, marker := range kubeadmCertificateTransportMarkers() {
+		userData := "#cloud-config\nwrite_files:\n  - content: |\n      " + marker + ": placeholder\n"
 
-		t.Run(name, func(t *testing.T) {
+		t.Run(marker, func(t *testing.T) {
 			t.Parallel()
 
 			assert.NotEmpty(t, signingMaterialMarkersIn(userData),
-				"a %s transport must be reported as signing material", name)
+				"the %s transport must be reported as signing material", marker)
 		})
 	}
+}
+
+// TestSigningMaterialGuardCatchesEveryPKIPath pins the reach over the on-disk
+// locations of the private PKI, generated from the declared set for the same
+// reason.
+func TestSigningMaterialGuardCatchesEveryPKIPath(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range pkiPathMarkers() {
+		userData := "#cloud-config\nwrite_files:\n  - path: " + path + "\n"
+
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			assert.NotEmpty(t, signingMaterialMarkersIn(userData),
+				"writing %s must be reported as signing material", path)
+		})
+	}
+}
+
+// TestSigningMaterialMarkerSetsAreComplete pins the declared marker sets against
+// an independent literal. The behavioural tests above generate their cases from
+// these sets, so dropping a marker there would delete its own case and pass
+// silently; comparing against a literal written out here is what actually fails
+// when the guard is narrowed.
+func TestSigningMaterialMarkerSetsAreComplete(t *testing.T) {
+	t.Parallel()
+
+	assert.ElementsMatch(t, []string{
+		"certificateKey",
+		"certificate-key",
+		"upload-certs",
+		"uploadCerts",
+	}, kubeadmCertificateTransportMarkers())
+
+	assert.ElementsMatch(t, []string{
+		"/etc/kubernetes/pki/ca.key",
+		"/etc/kubernetes/pki/front-proxy-ca.key",
+		"/etc/kubernetes/pki/etcd/ca.key",
+		"/etc/kubernetes/pki/sa.key",
+	}, pkiPathMarkers())
+
+	assert.ElementsMatch(t, []string{
+		"RSA PRIVATE KEY",
+		"PRIVATE KEY",
+		"EC PRIVATE KEY",
+		"DSA PRIVATE KEY",
+		"ENCRYPTED PRIVATE KEY",
+		"OPENSSH PRIVATE KEY",
+	}, pemPrivateKeyLabels())
 }
 
 // TestSigningMaterialGuardAcceptsMaterialFreeUserData is the guard's negative
