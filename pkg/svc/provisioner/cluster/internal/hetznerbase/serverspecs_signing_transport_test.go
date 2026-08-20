@@ -50,7 +50,12 @@ func TestDeriveServerSpecsRejectsCertificateTransportMarkers(t *testing.T) {
 		// token the guard would otherwise not recognise.
 		"dot-separated field":   "certificate.key: abcdef0123456789",
 		"slash-separated field": "certificate/key: abcdef0123456789",
-		"space-separated field": "certificate key: abcdef0123456789",
+		// Whitespace inside the marker is a token boundary, so these are caught
+		// by the assignment shape rather than by normalisation: a field carrying
+		// a value is material in provider-readable user-data whatever the field
+		// is called, while the same two words in a sentence are not.
+		"space-separated field":        "certificate key: abcdef0123456789",
+		"space-separated upload-certs": "upload certs = true",
 		// Reuses the guard's existing base64 unwrapping, proving the marker
 		// class is inspected through the same nesting pipeline as PEM material.
 		"base64 nested": base64.StdEncoding.EncodeToString(
@@ -126,6 +131,19 @@ func TestDeriveServerSpecsAcceptsMaterialFreeUserData(t *testing.T) {
 		"kubeadm config path": "cat /etc/kubernetes/ksail/kubeadm-config.yaml",
 		// A public certificate under the PKI directory is not a private key.
 		"public PKI cert": "cat /etc/kubernetes/pki/ca.crt",
+		// PROSE, not a setting. User-data legitimately carries comments and
+		// operator documentation, and a normaliser that drops whitespace along
+		// with every other separator joins the words either side of a sentence
+		// boundary: "certificate." + "Key" becomes the marker token and the
+		// deploy is refused on ordinary content. These pin the token boundary
+		// that keeps that from happening; none of them assigns a value, which
+		// is what separates them from the space-separated FIELD above.
+		"sentence boundary before Key": "# Install the TLS certificate. " +
+			"Key material stays in OpenBao.",
+		"sentence boundary before Keys": "# Rotate the certificate. " +
+			"Keys live in the vault.",
+		"plural inside one sentence": "# Renew the certificate keys every 90 days.",
+		"upload certs in prose":      "# Upload certs are handled by the operator.",
 	}
 
 	for name, body := range tests {
