@@ -144,6 +144,17 @@ func TestDeriveServerSpecsAcceptsMaterialFreeUserData(t *testing.T) {
 			"Keys live in the vault.",
 		"plural inside one sentence": "# Renew the certificate keys every 90 days.",
 		"upload certs in prose":      "# Upload certs are handled by the operator.",
+
+		// ASSIGNMENT-SHAPED but material-free. The spaced-assignment rule exists
+		// to catch a hand-written `certificate key: <hex>`, but user-data
+		// legitimately carries shell that PRINTS that shape and comments that
+		// document it. Matching on the shape alone refuses a valid bring-up, so
+		// the VALUE is what decides: a kubeadm certificate key is a long hex
+		// token, and an upload-certs setting that matters is one being switched
+		// ON. Prose values and a disabled setting carry nothing.
+		"shell echoing a log line":         `echo "certificate key: generated during bootstrap"`,
+		"shell echoing a disabled setting": `echo "upload certs: disabled"`,
+		"comment documenting the field":    "# certificate key: documented here",
 	}
 
 	for name, body := range tests {
