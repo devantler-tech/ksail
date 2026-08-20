@@ -346,6 +346,18 @@ var ErrSigningTransportInUserData = errors.New(
 // caught. The public .crt halves are deliberately not matched.
 var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 
+// spacedTransportAssignment matches a transport setting whose marker is split by
+// whitespace AND used as an assignment -- `certificate key: <hex>`, `upload certs
+// = true`. normaliseTransportText deliberately treats whitespace as a token
+// boundary so ordinary prose does not collapse into a marker, which alone would
+// stop matching this shape; the assignment punctuation is what separates the two.
+// A field carrying a value is material in provider-readable user-data whether or
+// not kubeadm would parse that exact field name, while a sentence containing the
+// same two words is not.
+var spacedTransportAssignment = regexp.MustCompile(
+	`(?i)(certificate\s+key|upload\s+certs)\s*[:=]`,
+)
+
 // signingTransportMarkers are the kubeadm certificate-transport settings in
 // normalised form. Each is stored as normaliseTransportText renders it, so one
 // entry covers every separator and casing spelling of that setting.
@@ -353,20 +365,36 @@ func signingTransportMarkers() []string {
 	return []string{"certificatekey", "uploadcerts"}
 }
 
-// normaliseTransportText lowercases and drops every non-alphanumeric character,
-// collapsing certificateKey, certificate-key, certificate_key, certificate.key,
-// certificate/key and certificate key onto one token. The separator class is
-// open-ended, so the guard keeps a whitelist of the characters that carry
-// meaning rather than a blacklist of the separators it knows about: enumerating
-// separators fails for exactly the reason enumerating spellings does, one
-// unlisted member at a time.
+// normaliseTransportText lowercases and drops every non-alphanumeric character
+// EXCEPT whitespace, collapsing certificateKey, certificate-key, certificate_key,
+// certificate.key and certificate/key onto one token. The separator class is
+// open-ended, so the guard keeps a whitelist of the characters that carry meaning
+// rather than a blacklist of the separators it knows about: enumerating separators
+// fails for exactly the reason enumerating spellings does, one unlisted member at
+// a time.
+//
+// Whitespace is the deliberate exception, and it is a HARD token boundary rather
+// than another separator to drop. Dropping it too joins adjacent words, so any
+// prose that ends one sentence in "certificate" and opens the next with "Key"
+// normalises to a marker hit -- "Install the TLS certificate. Key material stays
+// in OpenBao." is rejected as a signing transport. User-data legitimately carries
+// comments and documentation, so that is a false positive on ordinary content, and
+// it reaches scalars via write_files: content:.
+//
+// Keeping the boundary costs no real detection: no kubeadm spelling of either
+// setting contains an internal space. A space-separated "certificate key" is not a
+// YAML field or a CLI flag, so it delivers nothing and matching it would only
+// resurface the prose case.
 func normaliseTransportText(value string) string {
 	return strings.Map(func(character rune) rune {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+		switch {
+		case unicode.IsLetter(character) || unicode.IsDigit(character):
 			return unicode.ToLower(character)
+		case unicode.IsSpace(character):
+			return ' '
+		default:
+			return -1
 		}
-
-		return -1
 	}, value)
 }
 
@@ -374,6 +402,10 @@ func normaliseTransportText(value string) string {
 // transport marker or a cluster PKI private-key path.
 func matchesSigningTransport(value string) bool {
 	if clusterPKIKeyPath.MatchString(value) {
+		return true
+	}
+
+	if spacedTransportAssignment.MatchString(value) {
 		return true
 	}
 
