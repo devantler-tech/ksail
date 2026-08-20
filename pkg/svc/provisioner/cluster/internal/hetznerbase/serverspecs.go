@@ -347,15 +347,26 @@ var ErrSigningTransportInUserData = errors.New(
 var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 
 // spacedTransportAssignment matches a transport setting whose marker is split by
-// whitespace AND used as an assignment -- `certificate key: <hex>`, `upload certs
-// = true`. normaliseTransportText deliberately treats whitespace as a token
-// boundary so ordinary prose does not collapse into a marker, which alone would
-// stop matching this shape; the assignment punctuation is what separates the two.
-// A field carrying a value is material in provider-readable user-data whether or
-// not kubeadm would parse that exact field name, while a sentence containing the
-// same two words is not.
+// whitespace AND whose VALUE carries the material -- `certificate key: <hex>`,
+// `upload certs = true`. normaliseTransportText deliberately treats whitespace as
+// a token boundary so ordinary prose does not collapse into a marker, which alone
+// would stop matching this shape; this rule is what rescues the spaced spelling.
+//
+// The VALUE is the discriminator, not the assignment punctuation. User-data
+// legitimately carries shell that PRINTS this shape and comments that document
+// it -- `echo "certificate key: generated during bootstrap"`,
+// `# certificate key: documented here` -- and matching the shape alone refuses a
+// valid bring-up on content that exposes nothing. A kubeadm certificate key is a
+// long hex token, and an upload-certs setting only matters when it is switched
+// ON, so a prose value and a disabled setting are both material-free.
+//
+// This narrows only the hand-written SPACED spelling. The spellings a tool
+// actually emits -- `certificateKey`, `--certificate-key`, `--upload-certs` --
+// are matched by normalisation whatever their value, so nothing kubeadm produces
+// depends on this rule.
 var spacedTransportAssignment = regexp.MustCompile(
-	`(?i)(certificate\s+key|upload\s+certs)\s*[:=]`,
+	`(?i)(?:certificate\s+key\s*[:=]\s*["']?[A-Fa-f0-9]{12,}` +
+		`|upload\s+certs\s*[:=]\s*["']?(?:true|yes|on|enabled|1)\b)`,
 )
 
 // signingTransportMarkers are the kubeadm certificate-transport settings in
