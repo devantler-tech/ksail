@@ -283,7 +283,7 @@ func decodedContainsPrivateKey(decoded []byte) bool {
 		return true
 	}
 
-	if len(decoded) < 2 || decoded[0] != 0x1f || decoded[1] != 0x8b {
+	if !looksLikeGzip(decoded) {
 		return false
 	}
 
@@ -421,7 +421,7 @@ func decodedContainsSigningTransport(value string) bool {
 		return true
 	}
 
-	if len(decoded) < 2 || decoded[0] != 0x1f || decoded[1] != 0x8b {
+	if !looksLikeGzip(decoded) {
 		return false
 	}
 
@@ -435,6 +435,13 @@ func decodedContainsSigningTransport(value string) bool {
 	}
 
 	return matchesSigningTransport(expanded)
+}
+
+// looksLikeGzip reports whether payload opens with the gzip magic bytes. All
+// three unwrap paths -- both scalar guards and the top-level one -- ask the same
+// question, so the magic lives here rather than being spelled out at each site.
+func looksLikeGzip(payload []byte) bool {
+	return len(payload) >= 2 && payload[0] == 0x1f && payload[1] == 0x8b
 }
 
 // gunzipLimited expands a gzip payload up to the inspection bound. oversize
@@ -464,11 +471,50 @@ func gunzipLimited(compressed []byte) (string, bool, bool) {
 // validateProviderUserData rejects any transport that would retain cluster
 // signing material in Hetzner's provider-readable user-data. PEM material is
 // checked first so a leaked key keeps reporting the more specific error.
+//
+// Top-level raw gzip is expanded before either guard runs. cloud-init accepts
+// gzip-compressed user-data directly, and the compressed bytes are not YAML, so
+// without this the document scan fails to parse and legitimate compressed
+// user-data is refused with a parse error. Expanding first is also what lets a
+// marker hidden in compressed user-data report its own error rather than that
+// same parse error. Both guards then run against the expanded text, so PEM-first
+// priority is preserved across the unwrap.
 func validateProviderUserData(userData string) error {
-	err := validatePEMPrivateKeys(userData)
+	inspected, err := expandRawGzipUserData(userData)
 	if err != nil {
 		return err
 	}
 
-	return validateSigningTransport(userData)
+	pemErr := validatePEMPrivateKeys(inspected)
+	if pemErr != nil {
+		return pemErr
+	}
+
+	return validateSigningTransport(inspected)
+}
+
+// expandRawGzipUserData returns the text the guards should inspect: the gzip
+// payload's contents when userData is raw gzip, and userData unchanged
+// otherwise. Anything that is not gzip is returned untouched rather than
+// refused, so uncompressed user-data keeps its existing behaviour exactly.
+//
+// A payload expanding past the inspection bound is REFUSED rather than passed
+// through, matching decodedContainsSigningTransport, which treats oversize as a
+// positive: a marker could sit past the inspected prefix, so allowing it would
+// let compression hide exactly what this guard exists to catch. A payload that
+// announces itself as gzip and then fails to expand is refused for the same
+// reason -- it cannot be inspected, and unparseable input must not be the way
+// past a security guard.
+func expandRawGzipUserData(userData string) (string, error) {
+	raw := []byte(userData)
+	if !looksLikeGzip(raw) {
+		return userData, nil
+	}
+
+	expanded, oversize, ok := gunzipLimited(raw)
+	if oversize || !ok {
+		return "", ErrSigningTransportInUserData
+	}
+
+	return expanded, nil
 }
