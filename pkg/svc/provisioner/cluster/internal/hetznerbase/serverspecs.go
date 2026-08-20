@@ -119,11 +119,11 @@ func DeriveServerSpecs(
 	return specs, nil
 }
 
-// validateProviderUserData rejects raw or encoded PEM private keys anywhere in
+// validatePEMPrivateKeys rejects raw or encoded PEM private keys anywhere in
 // the cloud-init YAML stream except a document's top-level ssh_keys module.
 // That module is the intentional per-node host identity; every other private
 // key would be retained in Hetzner's provider-readable user-data.
-func validateProviderUserData(userData string) error {
+func validatePEMPrivateKeys(userData string) error {
 	decoder := yaml.NewDecoder(strings.NewReader(userData))
 
 	for {
@@ -310,4 +310,195 @@ func firewallIDs(firewallID int64) []int64 {
 	}
 
 	return []int64{firewallID}
+}
+
+// ErrSigningTransportInUserData is returned when a server spec would deliver
+// cluster-signing material through provider-readable user-data by a transport
+// that carries no PEM block. kubeadm's --upload-certs stores the cluster PKI in
+// a Secret and the certificate key decrypts it, so either one hands the provider
+// the cluster identity as surely as the key itself would. A path to a private
+// half of the cluster PKI means the renderer is writing that material rather
+// than letting kubeadm mint it on the node.
+var ErrSigningTransportInUserData = errors.New(
+	"hetzner: provider user-data contains cluster-signing transport material",
+)
+
+// clusterPKIKeyPath matches a path to a private half of the cluster PKI. It
+// keys on the directory plus the .key extension rather than enumerating the
+// four file names, so a PKI key this package does not yet know about is still
+// caught. The public .crt halves are deliberately not matched.
+var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
+
+// signingTransportMarkers are the kubeadm certificate-transport settings in
+// normalised form. Each is stored as normaliseTransportText renders it, so one
+// entry covers every separator and casing spelling of that setting.
+func signingTransportMarkers() []string {
+	return []string{"certificatekey", "uploadcerts"}
+}
+
+// normaliseTransportText lowercases and drops the separators that distinguish
+// otherwise identical spellings, collapsing certificateKey, certificate-key and
+// certificate_key onto one token. Matching the normalised form is what keeps
+// this guard from being evaded by a spelling it does not enumerate.
+func normaliseTransportText(value string) string {
+	return strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(value))
+}
+
+// matchesSigningTransport reports whether the text carries a certificate
+// transport marker or a cluster PKI private-key path.
+func matchesSigningTransport(value string) bool {
+	if clusterPKIKeyPath.MatchString(value) {
+		return true
+	}
+
+	normalised := normaliseTransportText(value)
+	for _, marker := range signingTransportMarkers() {
+		if strings.Contains(normalised, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// validateSigningTransport rejects certificate-transport markers and cluster PKI
+// key paths anywhere in the user-data.
+//
+// Unlike the PEM guard this applies no ssh_keys exemption: that module carries
+// the node's SSH host identity, which legitimately contains a private key but
+// never a kubeadm certificate transport, so exempting it here would leave a
+// blind spot rather than avoid a false positive.
+//
+// The raw document is scanned first so the result cannot be changed by how the
+// YAML is structured, then each scalar's decoded form is inspected so a marker
+// hidden in a base64 or gzip payload is caught by the same unwrapping the PEM
+// guard performs.
+func validateSigningTransport(userData string) error {
+	if matchesSigningTransport(userData) {
+		return ErrSigningTransportInUserData
+	}
+
+	decoder := yaml.NewDecoder(strings.NewReader(userData))
+
+	for {
+		var document yaml.Node
+
+		err := decoder.Decode(&document)
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+
+		if err != nil {
+			return fmt.Errorf("parse cloud-init user-data: %w", err)
+		}
+
+		if encodedSigningTransport(&document, make(map[*yaml.Node]struct{})) {
+			return ErrSigningTransportInUserData
+		}
+	}
+}
+
+// decodedContainsSigningTransport reports whether a scalar's base64 or gzip
+// payload carries a transport marker. The plaintext form is already covered by
+// the raw-document scan, so only the decoded shapes are inspected here.
+func decodedContainsSigningTransport(value string) bool {
+	decoded, decodedOK := decodeBase64(value)
+	if !decodedOK {
+		return false
+	}
+
+	if matchesSigningTransport(string(decoded)) {
+		return true
+	}
+
+	if len(decoded) < 2 || decoded[0] != 0x1f || decoded[1] != 0x8b {
+		return false
+	}
+
+	expanded, oversize, expandedOK := gunzipLimited(decoded)
+	if oversize {
+		return true
+	}
+
+	if !expandedOK {
+		return false
+	}
+
+	return matchesSigningTransport(expanded)
+}
+
+// gunzipLimited expands a gzip payload up to the inspection bound. oversize
+// reports a payload expanding past that bound, which callers refuse rather than
+// allow to hide a marker past the inspected prefix; ok reports whether expanded
+// holds a usable result.
+func gunzipLimited(compressed []byte) (string, bool, bool) {
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return "", false, false
+	}
+
+	decompressed, readErr := io.ReadAll(io.LimitReader(reader, maxDecodedUserDataBytes+1))
+
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		return "", false, false
+	}
+
+	if len(decompressed) > maxDecodedUserDataBytes {
+		return "", true, false
+	}
+
+	return string(decompressed), false, true
+}
+
+// validateProviderUserData rejects any transport that would retain cluster
+// signing material in Hetzner's provider-readable user-data. PEM material is
+// checked first so a leaked key keeps reporting the more specific error.
+func validateProviderUserData(userData string) error {
+	err := validatePEMPrivateKeys(userData)
+	if err != nil {
+		return err
+	}
+
+	return validateSigningTransport(userData)
+}
+
+// encodedSigningTransport walks every scalar and inspects its decoded form.
+// Active nodes stop recursive aliases from cycling.
+func encodedSigningTransport(node *yaml.Node, active map[*yaml.Node]struct{}) bool {
+	if node == nil {
+		return false
+	}
+
+	if _, visited := active[node]; visited {
+		return false
+	}
+
+	active[node] = struct{}{}
+	defer delete(active, node)
+
+	switch node.Kind {
+	case yaml.ScalarNode:
+		return decodedContainsSigningTransport(node.Value)
+	case yaml.AliasNode:
+		return encodedSigningTransport(node.Alias, active)
+	case yaml.DocumentNode, yaml.SequenceNode, yaml.MappingNode:
+		return encodedSigningTransportInChildren(node.Content, active)
+	}
+
+	return false
+}
+
+// encodedSigningTransportInChildren inspects each child in order.
+func encodedSigningTransportInChildren(
+	children []*yaml.Node,
+	active map[*yaml.Node]struct{},
+) bool {
+	for _, child := range children {
+		if encodedSigningTransport(child, active) {
+			return true
+		}
+	}
+
+	return false
 }
