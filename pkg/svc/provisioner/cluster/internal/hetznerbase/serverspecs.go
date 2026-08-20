@@ -124,6 +124,20 @@ func DeriveServerSpecs(
 // That module is the intentional per-node host identity; every other private
 // key would be retained in Hetzner's provider-readable user-data.
 func validatePEMPrivateKeys(userData string) error {
+	return scanDocuments(userData, ErrPrivateKeyInUserData, func(document *yaml.Node) bool {
+		return yamlNodeMatches(
+			document, true, make(map[*yaml.Node]struct{}), containsPrivateKeyMaterial, true,
+		)
+	})
+}
+
+// scalarMatch reports whether a scalar value carries material the caller refuses.
+type scalarMatch func(string) bool
+
+// scanDocuments decodes every YAML document in the user-data and returns
+// refusal when inspect reports a match. Both guards share it so the stream
+// handling cannot drift between them.
+func scanDocuments(userData string, refusal error, inspect func(*yaml.Node) bool) error {
 	decoder := yaml.NewDecoder(strings.NewReader(userData))
 
 	for {
@@ -138,20 +152,27 @@ func validatePEMPrivateKeys(userData string) error {
 			return fmt.Errorf("parse cloud-init user-data: %w", err)
 		}
 
-		if yamlNodeContainsPrivateKey(&document, true, make(map[*yaml.Node]struct{})) {
-			return ErrPrivateKeyInUserData
+		if inspect(&document) {
+			return refusal
 		}
 	}
 }
 
-// yamlNodeContainsPrivateKey walks scalar mapping keys and values while
-// exempting only the top-level cloud-init ssh_keys value. Nested keys with the
-// same name are not identities and remain subject to inspection. Active nodes
-// stop recursive aliases from cycling without suppressing later sibling paths.
-func yamlNodeContainsPrivateKey(
+// yamlNodeMatches walks scalar mapping keys and values, applying match to every
+// scalar. Active nodes stop recursive aliases from cycling without suppressing
+// later sibling paths.
+//
+// exemptSSHKeys skips a document top-level ssh_keys value. Only the PEM guard
+// sets it: that module is the intentional per-node host identity, so its private
+// key is expected there. The transport guard leaves it false, because no kubeadm
+// certificate transport legitimately appears under ssh_keys and exempting it
+// would be a blind spot rather than a false-positive fix.
+func yamlNodeMatches(
 	node *yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	if node == nil {
 		return false
@@ -166,27 +187,29 @@ func yamlNodeContainsPrivateKey(
 
 	switch node.Kind {
 	case yaml.DocumentNode:
-		return yamlChildrenContainPrivateKey(node.Content, true, active)
+		return yamlChildrenMatch(node.Content, true, active, match, exemptSSHKeys)
 	case yaml.MappingNode:
-		return yamlMappingContainsPrivateKey(node.Content, topLevel, active)
+		return yamlMappingMatches(node.Content, topLevel, active, match, exemptSSHKeys)
 	case yaml.SequenceNode:
-		return yamlChildrenContainPrivateKey(node.Content, false, active)
+		return yamlChildrenMatch(node.Content, false, active, match, exemptSSHKeys)
 	case yaml.ScalarNode:
-		return containsPrivateKeyMaterial(node.Value)
+		return match(node.Value)
 	case yaml.AliasNode:
-		return yamlNodeContainsPrivateKey(node.Alias, false, active)
+		return yamlNodeMatches(node.Alias, false, active, match, exemptSSHKeys)
 	}
 
 	return false
 }
 
-func yamlChildrenContainPrivateKey(
+func yamlChildrenMatch(
 	children []*yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	for _, child := range children {
-		if yamlNodeContainsPrivateKey(child, topLevel, active) {
+		if yamlNodeMatches(child, topLevel, active, match, exemptSSHKeys) {
 			return true
 		}
 	}
@@ -194,24 +217,26 @@ func yamlChildrenContainPrivateKey(
 	return false
 }
 
-func yamlMappingContainsPrivateKey(
+func yamlMappingMatches(
 	content []*yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	for index := 0; index+1 < len(content); index += 2 {
 		key := content[index]
 		value := content[index+1]
 
-		if yamlNodeContainsPrivateKey(key, false, active) {
+		if yamlNodeMatches(key, false, active, match, exemptSSHKeys) {
 			return true
 		}
 
-		if topLevel && key.Kind == yaml.ScalarNode && key.Value == "ssh_keys" {
+		if exemptSSHKeys && topLevel && key.Kind == yaml.ScalarNode && key.Value == "ssh_keys" {
 			continue
 		}
 
-		if yamlNodeContainsPrivateKey(value, false, active) {
+		if yamlNodeMatches(value, false, active, match, exemptSSHKeys) {
 			return true
 		}
 	}
@@ -266,25 +291,16 @@ func decodedContainsPrivateKey(decoded []byte) bool {
 }
 
 func gzipContainsPrivateKey(compressed []byte) bool {
-	reader, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return false
-	}
-
-	decompressed, readErr := io.ReadAll(io.LimitReader(reader, maxDecodedUserDataBytes+1))
-
-	closeErr := reader.Close()
-	if readErr != nil || closeErr != nil {
-		return false
-	}
-
-	// Provider user-data is small. An encoded scalar expanding beyond this bound
-	// is refused rather than allowed to hide a marker past the inspected prefix.
-	if len(decompressed) > maxDecodedUserDataBytes {
+	expanded, oversize, ok := gunzipLimited(compressed)
+	if oversize {
 		return true
 	}
 
-	return containsPrivateKeyPEM(string(decompressed))
+	if !ok {
+		return false
+	}
+
+	return containsPrivateKeyPEM(expanded)
 }
 
 func containsPrivateKeyPEM(value string) bool {
@@ -374,28 +390,22 @@ func matchesSigningTransport(value string) bool {
 // hidden in a base64 or gzip payload is caught by the same unwrapping the PEM
 // guard performs.
 func validateSigningTransport(userData string) error {
-	if matchesSigningTransport(userData) {
-		return ErrSigningTransportInUserData
+	return scanDocuments(userData, ErrSigningTransportInUserData, func(document *yaml.Node) bool {
+		return yamlNodeMatches(
+			document, true, make(map[*yaml.Node]struct{}), containsSigningTransportMaterial, false,
+		)
+	})
+}
+
+// containsSigningTransportMaterial reports whether a scalar carries a transport
+// marker in plain text or inside an encoded payload. It mirrors
+// containsPrivateKeyMaterial so both guards inspect the same shapes.
+func containsSigningTransportMaterial(value string) bool {
+	if matchesSigningTransport(value) {
+		return true
 	}
 
-	decoder := yaml.NewDecoder(strings.NewReader(userData))
-
-	for {
-		var document yaml.Node
-
-		err := decoder.Decode(&document)
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-
-		if err != nil {
-			return fmt.Errorf("parse cloud-init user-data: %w", err)
-		}
-
-		if encodedSigningTransport(&document, make(map[*yaml.Node]struct{})) {
-			return ErrSigningTransportInUserData
-		}
-	}
+	return decodedContainsSigningTransport(value)
 }
 
 // decodedContainsSigningTransport reports whether a scalar's base64 or gzip
@@ -461,44 +471,4 @@ func validateProviderUserData(userData string) error {
 	}
 
 	return validateSigningTransport(userData)
-}
-
-// encodedSigningTransport walks every scalar and inspects its decoded form.
-// Active nodes stop recursive aliases from cycling.
-func encodedSigningTransport(node *yaml.Node, active map[*yaml.Node]struct{}) bool {
-	if node == nil {
-		return false
-	}
-
-	if _, visited := active[node]; visited {
-		return false
-	}
-
-	active[node] = struct{}{}
-	defer delete(active, node)
-
-	switch node.Kind {
-	case yaml.ScalarNode:
-		return decodedContainsSigningTransport(node.Value)
-	case yaml.AliasNode:
-		return encodedSigningTransport(node.Alias, active)
-	case yaml.DocumentNode, yaml.SequenceNode, yaml.MappingNode:
-		return encodedSigningTransportInChildren(node.Content, active)
-	}
-
-	return false
-}
-
-// encodedSigningTransportInChildren inspects each child in order.
-func encodedSigningTransportInChildren(
-	children []*yaml.Node,
-	active map[*yaml.Node]struct{},
-) bool {
-	for _, child := range children {
-		if encodedSigningTransport(child, active) {
-			return true
-		}
-	}
-
-	return false
 }
