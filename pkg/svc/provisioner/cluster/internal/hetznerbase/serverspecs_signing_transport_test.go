@@ -44,6 +44,13 @@ func TestDeriveServerSpecsRejectsCertificateTransportMarkers(t *testing.T) {
 		// Neither the kebab nor the camel spelling: a literal-list guard misses
 		// this, so it pins that detection normalises rather than enumerates.
 		"snake_case field": "certificate_key: abcdef0123456789",
+		// The separator class is open-ended, so enumerating members of it is the
+		// same mistake as enumerating spellings: each of these is a separator no
+		// enumerating normaliser strips, and each rewrites the marker into a
+		// token the guard would otherwise not recognise.
+		"dot-separated field":   "certificate.key: abcdef0123456789",
+		"slash-separated field": "certificate/key: abcdef0123456789",
+		"space-separated field": "certificate key: abcdef0123456789",
 		// Reuses the guard's existing base64 unwrapping, proving the marker
 		// class is inspected through the same nesting pipeline as PEM material.
 		"base64 nested": base64.StdEncoding.EncodeToString(
