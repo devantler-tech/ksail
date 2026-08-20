@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -352,12 +353,21 @@ func signingTransportMarkers() []string {
 	return []string{"certificatekey", "uploadcerts"}
 }
 
-// normaliseTransportText lowercases and drops the separators that distinguish
-// otherwise identical spellings, collapsing certificateKey, certificate-key and
-// certificate_key onto one token. Matching the normalised form is what keeps
-// this guard from being evaded by a spelling it does not enumerate.
+// normaliseTransportText lowercases and drops every non-alphanumeric character,
+// collapsing certificateKey, certificate-key, certificate_key, certificate.key,
+// certificate/key and certificate key onto one token. The separator class is
+// open-ended, so the guard keeps a whitelist of the characters that carry
+// meaning rather than a blacklist of the separators it knows about: enumerating
+// separators fails for exactly the reason enumerating spellings does, one
+// unlisted member at a time.
 func normaliseTransportText(value string) string {
-	return strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(value))
+	return strings.Map(func(character rune) rune {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			return unicode.ToLower(character)
+		}
+
+		return -1
+	}, value)
 }
 
 // matchesSigningTransport reports whether the text carries a certificate
