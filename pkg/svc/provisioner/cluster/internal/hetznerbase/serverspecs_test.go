@@ -251,6 +251,14 @@ loop: &loop
 		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
 	)
 
-	require.NoError(t, err)
-	assert.Len(t, specs, len(nodes))
+	// The property under test is TERMINATION: a cyclic alias must not expand
+	// forever. That still holds — reaching an assertion at all proves it.
+	//
+	// The outcome changed from accepted to refused when the structural allowlist
+	// landed, and the refusal is the stronger answer: `loop` is not a module any
+	// renderer emits, and no user-facing surface can inject user-data, so no
+	// legitimate bring-up produces this document. Recorded here rather than left
+	// as a silent expectation flip.
+	require.ErrorIs(t, err, hetznerbase.ErrUserDataShapeNotAllowed)
+	assert.Nil(t, specs)
 }
