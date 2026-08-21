@@ -3,7 +3,9 @@ package argocd_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
@@ -461,6 +463,77 @@ func TestCheckNamedApplicationReady(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, testCase.wantReady, ready)
+		})
+	}
+}
+
+// TestIsColdStartTransient pins the readiness gate that keeps a control-plane
+// cold start from being reported as a permanent source failure.
+//
+// ArgoCD's own repo-server and redis are still coming up while the root
+// Application is first compared, so the Application briefly carries a
+// ComparisonError naming a connection failure. ArgoCD self-heals seconds later
+// ("will retry" in its own logs), but the reconcile poll had already given up.
+//
+// Both states are asserted deliberately: inside the warm-up window such an
+// error must be retryable, and outside it — or for a genuinely failed
+// operation — it must stay terminal, so a real misconfiguration is never
+// masked into a timeout.
+func TestIsColdStartTransient(t *testing.T) {
+	t.Parallel()
+
+	const grace = 90 * time.Second
+
+	tests := []struct {
+		name    string
+		err     error
+		elapsed time.Duration
+		want    bool
+	}{
+		{
+			name:    "source unavailable inside the warm-up window is retryable",
+			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "connection refused"),
+			elapsed: 5 * time.Second,
+			want:    true,
+		},
+		{
+			name:    "source unavailable outside the warm-up window stays terminal",
+			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "repository not found"),
+			elapsed: grace + time.Second,
+			want:    false,
+		},
+		{
+			name:    "a failed operation is never masked, even inside the window",
+			err:     fmt.Errorf("%w: %s", argocd.ErrOperationFailed, "sync operation failed"),
+			elapsed: time.Second,
+			want:    false,
+		},
+		{
+			name:    "an unrelated error is never masked",
+			err:     errSimulatedAPIFailure,
+			elapsed: time.Second,
+			want:    false,
+		},
+		{
+			name:    "no error is not a transient",
+			err:     nil,
+			elapsed: time.Second,
+			want:    false,
+		},
+		{
+			name:    "the window boundary itself is already terminal",
+			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "connection refused"),
+			elapsed: grace,
+			want:    false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := argocd.IsColdStartTransient(testCase.err, testCase.elapsed, grace)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
