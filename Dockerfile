@@ -11,8 +11,9 @@ ARG TARGETPLATFORM
 # GoReleaser v2 places binaries in ${TARGETPLATFORM}/ subdirectories
 COPY ${TARGETPLATFORM}/ksail /ksail
 
-# Use nonroot user from distroless
-USER nonroot:nonroot
+# Use the distroless nonroot user by its numeric id. A name is not resolvable
+# without /etc/passwd, and Kubernetes runAsNonRoot can only verify a numeric id.
+USER 65532:65532
 
 # Add a simple healthcheck compatible with distroless (exec form only)
 # This verifies the binary is present and runnable.
