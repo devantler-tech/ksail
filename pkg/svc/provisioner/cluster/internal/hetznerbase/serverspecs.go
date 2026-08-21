@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -24,6 +25,35 @@ import (
 const DefaultImageName = "ubuntu-24.04"
 
 const maxDecodedUserDataBytes = 1 << 20
+
+// maxProviderUserDataBytes is Hetzner Cloud's hard ceiling on a server's
+// user_data field (32 KiB). It is a different bound from
+// maxDecodedUserDataBytes, which caps how much text the guards will READ so a
+// marker cannot hide past the inspected prefix; this one caps what the provider
+// will ACCEPT. The Talos autoscaler path pins the same ceiling as
+// hetznerUserDataLimitBytes, where exceeding it makes Hetzner reject the request
+// with "invalid input in field 'user_data'".
+const maxProviderUserDataBytes = 32768
+
+// ErrUserDataTooLargeForProvider is returned when the user-data a node would be
+// created with exceeds what Hetzner accepts. Expanding compressed user-data
+// before forwarding it is what makes this reachable: a payload well under the
+// ceiling while compressed can expand past it, and forwarding the expanded text
+// would turn a deployable node into an opaque provider rejection.
+var ErrUserDataTooLargeForProvider = errors.New(
+	"hetzner: provider user-data exceeds the maximum the provider accepts",
+)
+
+// ErrUserDataNotInspectable is returned when user-data announces itself as gzip
+// and then cannot be read: it either fails to expand, or expands past
+// maxDecodedUserDataBytes. Such input is refused rather than forwarded, because
+// unparseable input must not be the way past a security guard -- but no signing
+// material was observed in it, so it does not report ErrSigningTransportInUserData.
+// It is a distinct condition from ErrUserDataTooLargeForProvider, which is about
+// the separate ceiling the PROVIDER accepts rather than the inspection bound.
+var ErrUserDataNotInspectable = errors.New(
+	"hetzner: provider user-data announces gzip but cannot be inspected",
+)
 
 // ErrPrivateKeyInUserData is returned when a server spec would deliver private
 // key material through provider-readable user-data. The cloud-init ssh_keys
@@ -92,7 +122,7 @@ func DeriveServerSpecs(
 	specs := make([]hetzner.CreateServerOpts, 0, len(nodes))
 
 	for _, node := range nodes {
-		err := validateProviderUserData(node.UserData)
+		validatedUserData, err := validateProviderUserData(node.UserData)
 		if err != nil {
 			return nil, fmt.Errorf("validate user-data for node %d: %w", node.Index, err)
 		}
@@ -108,7 +138,7 @@ func DeriveServerSpecs(
 			ImageName:        DefaultImageName,
 			Location:         opts.Location,
 			Labels:           node.Labels,
-			UserData:         node.UserData,
+			UserData:         validatedUserData,
 			NetworkID:        infra.NetworkID,
 			PlacementGroupID: infra.PlacementGroupID,
 			SSHKeyID:         infra.SSHKeyID,
@@ -119,11 +149,25 @@ func DeriveServerSpecs(
 	return specs, nil
 }
 
-// validateProviderUserData rejects raw or encoded PEM private keys anywhere in
+// validatePEMPrivateKeys rejects raw or encoded PEM private keys anywhere in
 // the cloud-init YAML stream except a document's top-level ssh_keys module.
 // That module is the intentional per-node host identity; every other private
 // key would be retained in Hetzner's provider-readable user-data.
-func validateProviderUserData(userData string) error {
+func validatePEMPrivateKeys(userData string) error {
+	return scanDocuments(userData, ErrPrivateKeyInUserData, func(document *yaml.Node) bool {
+		return yamlNodeMatches(
+			document, true, make(map[*yaml.Node]struct{}), containsPrivateKeyMaterial, true,
+		)
+	})
+}
+
+// scalarMatch reports whether a scalar value carries material the caller refuses.
+type scalarMatch func(string) bool
+
+// scanDocuments decodes every YAML document in the user-data and returns
+// refusal when inspect reports a match. Both guards share it so the stream
+// handling cannot drift between them.
+func scanDocuments(userData string, refusal error, inspect func(*yaml.Node) bool) error {
 	decoder := yaml.NewDecoder(strings.NewReader(userData))
 
 	for {
@@ -138,20 +182,27 @@ func validateProviderUserData(userData string) error {
 			return fmt.Errorf("parse cloud-init user-data: %w", err)
 		}
 
-		if yamlNodeContainsPrivateKey(&document, true, make(map[*yaml.Node]struct{})) {
-			return ErrPrivateKeyInUserData
+		if inspect(&document) {
+			return refusal
 		}
 	}
 }
 
-// yamlNodeContainsPrivateKey walks scalar mapping keys and values while
-// exempting only the top-level cloud-init ssh_keys value. Nested keys with the
-// same name are not identities and remain subject to inspection. Active nodes
-// stop recursive aliases from cycling without suppressing later sibling paths.
-func yamlNodeContainsPrivateKey(
+// yamlNodeMatches walks scalar mapping keys and values, applying match to every
+// scalar. Active nodes stop recursive aliases from cycling without suppressing
+// later sibling paths.
+//
+// exemptSSHKeys skips a document top-level ssh_keys value. Only the PEM guard
+// sets it: that module is the intentional per-node host identity, so its private
+// key is expected there. The transport guard leaves it false, because no kubeadm
+// certificate transport legitimately appears under ssh_keys and exempting it
+// would be a blind spot rather than a false-positive fix.
+func yamlNodeMatches(
 	node *yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	if node == nil {
 		return false
@@ -166,27 +217,29 @@ func yamlNodeContainsPrivateKey(
 
 	switch node.Kind {
 	case yaml.DocumentNode:
-		return yamlChildrenContainPrivateKey(node.Content, true, active)
+		return yamlChildrenMatch(node.Content, true, active, match, exemptSSHKeys)
 	case yaml.MappingNode:
-		return yamlMappingContainsPrivateKey(node.Content, topLevel, active)
+		return yamlMappingMatches(node.Content, topLevel, active, match, exemptSSHKeys)
 	case yaml.SequenceNode:
-		return yamlChildrenContainPrivateKey(node.Content, false, active)
+		return yamlChildrenMatch(node.Content, false, active, match, exemptSSHKeys)
 	case yaml.ScalarNode:
-		return containsPrivateKeyMaterial(node.Value)
+		return match(node.Value)
 	case yaml.AliasNode:
-		return yamlNodeContainsPrivateKey(node.Alias, false, active)
+		return yamlNodeMatches(node.Alias, false, active, match, exemptSSHKeys)
 	}
 
 	return false
 }
 
-func yamlChildrenContainPrivateKey(
+func yamlChildrenMatch(
 	children []*yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	for _, child := range children {
-		if yamlNodeContainsPrivateKey(child, topLevel, active) {
+		if yamlNodeMatches(child, topLevel, active, match, exemptSSHKeys) {
 			return true
 		}
 	}
@@ -194,24 +247,26 @@ func yamlChildrenContainPrivateKey(
 	return false
 }
 
-func yamlMappingContainsPrivateKey(
+func yamlMappingMatches(
 	content []*yaml.Node,
 	topLevel bool,
 	active map[*yaml.Node]struct{},
+	match scalarMatch,
+	exemptSSHKeys bool,
 ) bool {
 	for index := 0; index+1 < len(content); index += 2 {
 		key := content[index]
 		value := content[index+1]
 
-		if yamlNodeContainsPrivateKey(key, false, active) {
+		if yamlNodeMatches(key, false, active, match, exemptSSHKeys) {
 			return true
 		}
 
-		if topLevel && key.Kind == yaml.ScalarNode && key.Value == "ssh_keys" {
+		if exemptSSHKeys && topLevel && key.Kind == yaml.ScalarNode && key.Value == "ssh_keys" {
 			continue
 		}
 
-		if yamlNodeContainsPrivateKey(value, false, active) {
+		if yamlNodeMatches(value, false, active, match, exemptSSHKeys) {
 			return true
 		}
 	}
@@ -258,7 +313,7 @@ func decodedContainsPrivateKey(decoded []byte) bool {
 		return true
 	}
 
-	if len(decoded) < 2 || decoded[0] != 0x1f || decoded[1] != 0x8b {
+	if !looksLikeGzip(decoded) {
 		return false
 	}
 
@@ -266,25 +321,16 @@ func decodedContainsPrivateKey(decoded []byte) bool {
 }
 
 func gzipContainsPrivateKey(compressed []byte) bool {
-	reader, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return false
-	}
-
-	decompressed, readErr := io.ReadAll(io.LimitReader(reader, maxDecodedUserDataBytes+1))
-
-	closeErr := reader.Close()
-	if readErr != nil || closeErr != nil {
-		return false
-	}
-
-	// Provider user-data is small. An encoded scalar expanding beyond this bound
-	// is refused rather than allowed to hide a marker past the inspected prefix.
-	if len(decompressed) > maxDecodedUserDataBytes {
+	expanded, oversize, ok := gunzipLimited(compressed)
+	if oversize {
 		return true
 	}
 
-	return containsPrivateKeyPEM(string(decompressed))
+	if !ok {
+		return false
+	}
+
+	return containsPrivateKeyPEM(expanded)
 }
 
 func containsPrivateKeyPEM(value string) bool {
@@ -310,4 +356,317 @@ func firewallIDs(firewallID int64) []int64 {
 	}
 
 	return []int64{firewallID}
+}
+
+// ErrSigningTransportInUserData is returned when a server spec would deliver
+// cluster-signing material through provider-readable user-data by a transport
+// that carries no PEM block. kubeadm's --upload-certs stores the cluster PKI in
+// a Secret and the certificate key decrypts it, so either one hands the provider
+// the cluster identity as surely as the key itself would. A path to a private
+// half of the cluster PKI means the renderer is writing that material rather
+// than letting kubeadm mint it on the node.
+var ErrSigningTransportInUserData = errors.New(
+	"hetzner: provider user-data contains cluster-signing transport material",
+)
+
+// clusterPKIKeyPath matches a path to a private half of the cluster PKI. It
+// keys on the directory plus the .key extension rather than enumerating the
+// four file names, so a PKI key this package does not yet know about is still
+// caught. The public .crt halves are deliberately not matched.
+var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
+
+// clusterPKIWorkingDirectoryKeyPath matches a private-key basename used after
+// shell changes its working directory into the cluster PKI tree. At execution
+// time `cd /etc/kubernetes/pki && install ... ca.key` writes the same file as an
+// absolute path, so inspecting only contiguous path spellings leaves a bypass.
+// Shell short options can be separate or clustered; accept the no-argument cd
+// option alphabet conservatively so combinations such as `-P -e` and `-Pe`
+// cannot hide the working directory from the guard.
+//
+// The trailing filename is anchored to a WHITESPACE boundary, which is what
+// keeps the `/`-exclusion in `[^\s/;&|]*` load-bearing. Without the anchor the
+// preceding `[^;&|]*` simply consumes up to the last separator, so an ABSOLUTE
+// path elsewhere on the command -- `curl ... -o /etc/apt/keyrings/k8s.key` --
+// satisfies the rule and a bring-up that leaks nothing is refused. An absolute
+// path does not resolve relative to the working directory, so it is not this
+// rule's business; the absolute-path rule above owns it.
+//
+// Deliberately NOT bounded to a single line. `cd` persists until the next one,
+// so `cd /etc/kubernetes/pki && cat ca.crt` followed by `install ca.key` on the
+// FOLLOWING line is a real leak. Excluding the newline from the trailing segment
+// would silence the false positive above by also dropping that case, trading a
+// noisy refusal for a silent miss.
+var clusterPKIWorkingDirectoryKeyPath = regexp.MustCompile(
+	`(?is)\bcd\s+(?:(?:-[LPe@]+|--)\s+)*/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
+		`[^;&|]*(?:^|\s)[^\s/;&|]*\.key\b`,
+)
+
+// spacedTransportAssignment matches a transport setting whose marker is split by
+// whitespace AND whose VALUE carries the material -- `certificate key: <hex>`,
+// `upload certs = true`. normaliseTransportText deliberately treats whitespace as
+// a token boundary so ordinary prose does not collapse into a marker, which alone
+// would stop matching this shape; this rule is what rescues the spaced spelling.
+//
+// The VALUE is the discriminator, not the assignment punctuation. User-data
+// legitimately carries shell that PRINTS this shape and comments that document
+// it -- `echo "certificate key: generated during bootstrap"`,
+// `# certificate key: documented here` -- and matching the shape alone refuses a
+// valid bring-up on content that exposes nothing. A kubeadm certificate key is a
+// long hex token, and an upload-certs setting only matters when it is switched
+// ON, so a prose value and a disabled setting are both material-free.
+//
+// This narrows only the hand-written SPACED spelling. The spellings a tool
+// actually emits -- `certificateKey`, `--certificate-key`, `--upload-certs` --
+// are matched by normalisation whatever their value, so nothing kubeadm produces
+// depends on this rule.
+var spacedTransportAssignment = regexp.MustCompile(
+	`(?i)(?:certificate\s+key\s*[:=]\s*["']?[A-Fa-f0-9]{12,}` +
+		`|upload\s+certs\s*[:=]\s*["']?(?:true|yes|on|enabled|1)\b)`,
+)
+
+// signingTransportMarkers are the kubeadm certificate-transport settings in
+// normalised form. Each is stored as normaliseTransportText renders it, so one
+// entry covers every separator and casing spelling of that setting.
+func signingTransportMarkers() []string {
+	return []string{"certificatekey", "uploadcerts"}
+}
+
+// normaliseTransportText lowercases and drops every non-alphanumeric character
+// EXCEPT whitespace, collapsing certificateKey, certificate-key, certificate_key,
+// certificate.key and certificate/key onto one token. The separator class is
+// open-ended, so the guard keeps a whitelist of the characters that carry meaning
+// rather than a blacklist of the separators it knows about: enumerating separators
+// fails for exactly the reason enumerating spellings does, one unlisted member at
+// a time.
+//
+// Whitespace is the deliberate exception, and it is a HARD token boundary rather
+// than another separator to drop. Dropping it too joins adjacent words, so any
+// prose that ends one sentence in "certificate" and opens the next with "Key"
+// normalises to a marker hit -- "Install the TLS certificate. Key material stays
+// in OpenBao." is rejected as a signing transport. User-data legitimately carries
+// comments and documentation, so that is a false positive on ordinary content, and
+// it reaches scalars via write_files: content:.
+//
+// Keeping the boundary costs no real detection: no kubeadm spelling of either
+// setting contains an internal space. A space-separated "certificate key" is not a
+// YAML field or a CLI flag, so it delivers nothing and matching it would only
+// resurface the prose case.
+func normaliseTransportText(value string) string {
+	return strings.Map(func(character rune) rune {
+		switch {
+		case unicode.IsLetter(character) || unicode.IsDigit(character):
+			return unicode.ToLower(character)
+		case unicode.IsSpace(character):
+			return ' '
+		default:
+			return -1
+		}
+	}, value)
+}
+
+// normaliseShellSpelling removes syntax that the shell removes before command
+// execution. Quoted token fragments and backslash-newline continuations can
+// otherwise split a protected flag or path while still producing it verbatim
+// at runtime.
+func normaliseShellSpelling(value string) string {
+	return strings.NewReplacer(
+		"\\\r\n", "",
+		"\\\n", "",
+		`"`, "",
+		`'`, "",
+	).Replace(value)
+}
+
+// matchesSigningTransport reports whether the text carries a certificate
+// transport marker or a cluster PKI private-key path.
+func matchesSigningTransport(value string) bool {
+	shellValue := normaliseShellSpelling(value)
+
+	if clusterPKIKeyPath.MatchString(shellValue) ||
+		clusterPKIWorkingDirectoryKeyPath.MatchString(shellValue) {
+		return true
+	}
+
+	if spacedTransportAssignment.MatchString(shellValue) {
+		return true
+	}
+
+	normalised := normaliseTransportText(shellValue)
+	for _, marker := range signingTransportMarkers() {
+		if strings.Contains(normalised, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// validateSigningTransport rejects certificate-transport markers and cluster PKI
+// key paths anywhere in the user-data.
+//
+// Unlike the PEM guard this applies no ssh_keys exemption: that module carries
+// the node's SSH host identity, which legitimately contains a private key but
+// never a kubeadm certificate transport, so exempting it here would leave a
+// blind spot rather than avoid a false positive.
+//
+// The raw document is scanned first so the result cannot be changed by how the
+// YAML is structured, then each scalar's decoded form is inspected so a marker
+// hidden in a base64 or gzip payload is caught by the same unwrapping the PEM
+// guard performs.
+func validateSigningTransport(userData string) error {
+	return scanDocuments(userData, ErrSigningTransportInUserData, func(document *yaml.Node) bool {
+		return yamlNodeMatches(
+			document, true, make(map[*yaml.Node]struct{}), containsSigningTransportMaterial, false,
+		)
+	})
+}
+
+// containsSigningTransportMaterial reports whether a scalar carries a transport
+// marker in plain text or inside an encoded payload. It mirrors
+// containsPrivateKeyMaterial so both guards inspect the same shapes.
+func containsSigningTransportMaterial(value string) bool {
+	if matchesSigningTransport(value) {
+		return true
+	}
+
+	return decodedContainsSigningTransport(value)
+}
+
+// decodedContainsSigningTransport reports whether a scalar's base64 or gzip
+// payload carries a transport marker. The plaintext form is already covered by
+// the raw-document scan, so only the decoded shapes are inspected here.
+func decodedContainsSigningTransport(value string) bool {
+	decoded, decodedOK := decodeBase64(value)
+	if !decodedOK {
+		return false
+	}
+
+	if matchesSigningTransport(string(decoded)) {
+		return true
+	}
+
+	if !looksLikeGzip(decoded) {
+		return false
+	}
+
+	expanded, oversize, expandedOK := gunzipLimited(decoded)
+	if oversize {
+		return true
+	}
+
+	if !expandedOK {
+		return false
+	}
+
+	return matchesSigningTransport(expanded)
+}
+
+// looksLikeGzip reports whether payload opens with the gzip magic bytes. All
+// three unwrap paths -- both scalar guards and the top-level one -- ask the same
+// question, so the magic lives here rather than being spelled out at each site.
+func looksLikeGzip(payload []byte) bool {
+	return len(payload) >= 2 && payload[0] == 0x1f && payload[1] == 0x8b
+}
+
+// gunzipLimited expands a gzip payload up to the inspection bound. oversize
+// reports a payload expanding past that bound, which callers refuse rather than
+// allow to hide a marker past the inspected prefix; ok reports whether expanded
+// holds a usable result.
+func gunzipLimited(compressed []byte) (string, bool, bool) {
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return "", false, false
+	}
+
+	decompressed, readErr := io.ReadAll(io.LimitReader(reader, maxDecodedUserDataBytes+1))
+
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		return "", false, false
+	}
+
+	if len(decompressed) > maxDecodedUserDataBytes {
+		return "", true, false
+	}
+
+	return string(decompressed), false, true
+}
+
+// validateProviderUserData returns the inspected text that is safe to send to
+// Hetzner, rejecting any transport that would retain cluster signing material
+// in provider-readable user-data. PEM material is checked first so a leaked key
+// keeps reporting the more specific error.
+//
+// Top-level raw gzip is expanded before either guard runs. cloud-init accepts
+// gzip-compressed user-data directly, and the compressed bytes are not YAML, so
+// without this the document scan fails to parse and legitimate compressed
+// user-data is refused with a parse error. Expanding first is also what lets a
+// marker hidden in compressed user-data report its own error rather than that
+// same parse error. Both guards then run against the expanded text, so PEM-first
+// priority is preserved across the unwrap. Returning that expanded text is
+// load-bearing: raw gzip bytes are not valid JSON text and must not be forwarded
+// to the provider after only their expanded form was validated.
+//
+// The returned text is finally bounded by what the provider accepts, which is a
+// separate ceiling from the inspection bound and is only reachable because the
+// expansion above can grow an acceptable input past it.
+func validateProviderUserData(userData string) (string, error) {
+	inspected, err := expandRawGzipUserData(userData)
+	if err != nil {
+		return "", err
+	}
+
+	pemErr := validatePEMPrivateKeys(inspected)
+	if pemErr != nil {
+		return "", pemErr
+	}
+
+	err = validateSigningTransport(inspected)
+	if err != nil {
+		return "", err
+	}
+
+	// The guards have passed, so the remaining question is whether the provider
+	// will take this value at all. Checked here rather than at the call site
+	// because this function decides what gets forwarded, and expanding gzip is
+	// what lets an acceptable input become an unacceptable output.
+	if len(inspected) > maxProviderUserDataBytes {
+		return "", fmt.Errorf(
+			"%w: %d bytes exceeds the %d-byte limit",
+			ErrUserDataTooLargeForProvider, len(inspected), maxProviderUserDataBytes,
+		)
+	}
+
+	return inspected, nil
+}
+
+// expandRawGzipUserData returns the text the guards should inspect: the gzip
+// payload's contents when userData is raw gzip, and userData unchanged
+// otherwise. Anything that is not gzip is returned untouched rather than
+// refused, so uncompressed user-data keeps its existing behaviour exactly.
+//
+// A payload expanding past the inspection bound is REFUSED rather than passed
+// through, matching decodedContainsSigningTransport, which treats oversize as a
+// positive: a marker could sit past the inspected prefix, so allowing it would
+// let compression hide exactly what this guard exists to catch. A payload that
+// announces itself as gzip and then fails to expand is refused for the same
+// reason -- it cannot be inspected, and unparseable input must not be the way
+// past a security guard.
+//
+// Both cases report ErrUserDataNotInspectable rather than
+// ErrSigningTransportInUserData: the refusal is correct, but no marker was
+// observed, and an operator triaging a failed create must be able to tell "we
+// found signing material" from "we could not look".
+func expandRawGzipUserData(userData string) (string, error) {
+	raw := []byte(userData)
+	if !looksLikeGzip(raw) {
+		return userData, nil
+	}
+
+	expanded, oversize, ok := gunzipLimited(raw)
+	if oversize || !ok {
+		return "", ErrUserDataNotInspectable
+	}
+
+	return expanded, nil
 }
