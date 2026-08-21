@@ -93,7 +93,7 @@ func DeriveServerSpecs(
 	specs := make([]hetzner.CreateServerOpts, 0, len(nodes))
 
 	for _, node := range nodes {
-		err := validateProviderUserData(node.UserData)
+		validatedUserData, err := validateProviderUserData(node.UserData)
 		if err != nil {
 			return nil, fmt.Errorf("validate user-data for node %d: %w", node.Index, err)
 		}
@@ -109,7 +109,7 @@ func DeriveServerSpecs(
 			ImageName:        DefaultImageName,
 			Location:         opts.Location,
 			Labels:           node.Labels,
-			UserData:         node.UserData,
+			UserData:         validatedUserData,
 			NetworkID:        infra.NetworkID,
 			PlacementGroupID: infra.PlacementGroupID,
 			SSHKeyID:         infra.SSHKeyID,
@@ -346,6 +346,15 @@ var ErrSigningTransportInUserData = errors.New(
 // caught. The public .crt halves are deliberately not matched.
 var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 
+// clusterPKIWorkingDirectoryKeyPath matches a private-key basename used after
+// shell changes its working directory into the cluster PKI tree. At execution
+// time `cd /etc/kubernetes/pki && install ... ca.key` writes the same file as an
+// absolute path, so inspecting only contiguous path spellings leaves a bypass.
+var clusterPKIWorkingDirectoryKeyPath = regexp.MustCompile(
+	`(?is)\bcd\s+(?:--\s+)?/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
+		`[^;&|]*[^\s/;&|]*\.key\b`,
+)
+
 // spacedTransportAssignment matches a transport setting whose marker is split by
 // whitespace AND whose VALUE carries the material -- `certificate key: <hex>`,
 // `upload certs = true`. normaliseTransportText deliberately treats whitespace as
@@ -409,18 +418,34 @@ func normaliseTransportText(value string) string {
 	}, value)
 }
 
+// normaliseShellSpelling removes syntax that the shell removes before command
+// execution. Quoted token fragments and backslash-newline continuations can
+// otherwise split a protected flag or path while still producing it verbatim
+// at runtime.
+func normaliseShellSpelling(value string) string {
+	return strings.NewReplacer(
+		"\\\r\n", "",
+		"\\\n", "",
+		`"`, "",
+		`'`, "",
+	).Replace(value)
+}
+
 // matchesSigningTransport reports whether the text carries a certificate
 // transport marker or a cluster PKI private-key path.
 func matchesSigningTransport(value string) bool {
-	if clusterPKIKeyPath.MatchString(value) {
+	shellValue := normaliseShellSpelling(value)
+
+	if clusterPKIKeyPath.MatchString(shellValue) ||
+		clusterPKIWorkingDirectoryKeyPath.MatchString(shellValue) {
 		return true
 	}
 
-	if spacedTransportAssignment.MatchString(value) {
+	if spacedTransportAssignment.MatchString(shellValue) {
 		return true
 	}
 
-	normalised := normaliseTransportText(value)
+	normalised := normaliseTransportText(shellValue)
 	for _, marker := range signingTransportMarkers() {
 		if strings.Contains(normalised, marker) {
 			return true
@@ -521,9 +546,10 @@ func gunzipLimited(compressed []byte) (string, bool, bool) {
 	return string(decompressed), false, true
 }
 
-// validateProviderUserData rejects any transport that would retain cluster
-// signing material in Hetzner's provider-readable user-data. PEM material is
-// checked first so a leaked key keeps reporting the more specific error.
+// validateProviderUserData returns the inspected text that is safe to send to
+// Hetzner, rejecting any transport that would retain cluster signing material
+// in provider-readable user-data. PEM material is checked first so a leaked key
+// keeps reporting the more specific error.
 //
 // Top-level raw gzip is expanded before either guard runs. cloud-init accepts
 // gzip-compressed user-data directly, and the compressed bytes are not YAML, so
@@ -531,19 +557,26 @@ func gunzipLimited(compressed []byte) (string, bool, bool) {
 // user-data is refused with a parse error. Expanding first is also what lets a
 // marker hidden in compressed user-data report its own error rather than that
 // same parse error. Both guards then run against the expanded text, so PEM-first
-// priority is preserved across the unwrap.
-func validateProviderUserData(userData string) error {
+// priority is preserved across the unwrap. Returning that expanded text is
+// load-bearing: raw gzip bytes are not valid JSON text and must not be forwarded
+// to the provider after only their expanded form was validated.
+func validateProviderUserData(userData string) (string, error) {
 	inspected, err := expandRawGzipUserData(userData)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	pemErr := validatePEMPrivateKeys(inspected)
 	if pemErr != nil {
-		return pemErr
+		return "", pemErr
 	}
 
-	return validateSigningTransport(inspected)
+	err = validateSigningTransport(inspected)
+	if err != nil {
+		return "", err
+	}
+
+	return inspected, nil
 }
 
 // expandRawGzipUserData returns the text the guards should inspect: the gzip

@@ -39,6 +39,7 @@ func TestDeriveServerSpecsRejectsCertificateTransportMarkers(t *testing.T) {
 	tests := map[string]string{
 		"camelCase field":   "certificateKey: abcdef0123456789",
 		"kebab-case flag":   "kubeadm join --certificate-key abcdef0123456789",
+		"continued flag":    "kubeadm join --certificate-\\\nkey abcdef0123456789",
 		"upload-certs flag": "kubeadm init --upload-certs",
 		"camelCase option":  "uploadCerts: true",
 		// Neither the kebab nor the camel spelling: a literal-list guard misses
@@ -91,10 +92,12 @@ func TestDeriveServerSpecsRejectsClusterPKIKeyPaths(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"cluster CA":      "cp /tmp/staged /etc/kubernetes/pki/ca.key",
-		"front proxy CA":  "cp /tmp/staged /etc/kubernetes/pki/front-proxy-ca.key",
-		"etcd CA":         "cp /tmp/staged /etc/kubernetes/pki/etcd/ca.key",
-		"service account": "cp /tmp/staged /etc/kubernetes/pki/sa.key",
+		"cluster CA":            "cp /tmp/staged /etc/kubernetes/pki/ca.key",
+		"front proxy CA":        "cp /tmp/staged /etc/kubernetes/pki/front-proxy-ca.key",
+		"etcd CA":               "cp /tmp/staged /etc/kubernetes/pki/etcd/ca.key",
+		"service account":       "cp /tmp/staged /etc/kubernetes/pki/sa.key",
+		"quoted key suffix":     `cp /tmp/staged /etc/kubernetes/pki/ca."key"`,
+		"PKI working directory": "cd /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 	}
 
 	for name, body := range tests {
@@ -131,6 +134,9 @@ func TestDeriveServerSpecsAcceptsMaterialFreeUserData(t *testing.T) {
 		"kubeadm config path": "cat /etc/kubernetes/ksail/kubeadm-config.yaml",
 		// A public certificate under the PKI directory is not a private key.
 		"public PKI cert": "cat /etc/kubernetes/pki/ca.crt",
+		// Changing into the PKI directory is not itself a leak; the relative
+		// path rule must still discriminate a public certificate from a key.
+		"public PKI cert from working directory": "cd /etc/kubernetes/pki && cat ca.crt",
 		// PROSE, not a setting. User-data legitimately carries comments and
 		// operator documentation, and a normaliser that drops whitespace along
 		// with every other separator joins the words either side of a sentence
@@ -234,7 +240,8 @@ func TestDeriveServerSpecsHandlesRawGzipUserData(t *testing.T) {
 		)
 
 		require.NoError(t, err)
-		assert.NotNil(t, specs)
+		require.Len(t, specs, 2)
+		assert.Equal(t, userDataCarrying("runcmd:\n  - echo hello"), specs[1].UserData)
 	})
 
 	// Announcing gzip and then failing to expand must not be the way past the
