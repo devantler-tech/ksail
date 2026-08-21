@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"filippo.io/age"
 	sopsclient "github.com/devantler-tech/ksail/v7/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/getsops/sops/v3"
@@ -140,14 +141,159 @@ func (s *Service) DecryptSecret(_ context.Context, encrypted, format string) (st
 
 	return runCipherOp(encrypted, format, getDecryptStores, "decrypt secret",
 		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
+			recipients, err := validateAgeOnlySOPSMetadata(path, inputStore)
+			if err != nil {
+				return nil, err
+			}
+
+			identities, err := localX25519Identities(recipients)
+			if err != nil {
+				return nil, err
+			}
+
 			return sopsclient.Decrypt(sopsclient.DecryptOpts{
 				Cipher:      aes.NewCipher(),
 				InputStore:  inputStore,
 				OutputStore: outputStore,
 				InputPath:   path,
-				KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+				KeyServices: []keyservice.KeyServiceClient{newAgeOnlyLocalClient(identities)},
 			})
 		})
+}
+
+// validateAgeOnlySOPSMetadata enforces the local UI secret boundary before invoking SOPS'
+// local keyservice. NewLocalClient supports every SOPS master-key backend described in the
+// document metadata (KMS, Vault, PGP, etc.); the UI intentionally supports local X25519 age keys
+// only. It returns the validated recipients so identity loading can be restricted to matching keys.
+func validateAgeOnlySOPSMetadata(path string, inputStore sops.Store) (map[string]struct{}, error) {
+	content, err := os.ReadFile(path) //nolint:gosec // G304: path is our 0600 temp file.
+	if err != nil {
+		return nil, fmt.Errorf("read staged sops file: %w", err)
+	}
+
+	tree, err := inputStore.LoadEncryptedFile(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse sops metadata: %w", err)
+	}
+
+	recipients := make(map[string]struct{})
+
+	for _, group := range tree.Metadata.KeyGroups {
+		for _, key := range group {
+			ageKey, ok := key.(*sopsage.MasterKey)
+			if !ok {
+				return nil, fmt.Errorf(
+					"%w: SOPS decrypt supports only age recipients",
+					api.ErrInvalid,
+				)
+			}
+
+			recipient, parseErr := age.ParseX25519Recipient(ageKey.Recipient)
+			if parseErr != nil {
+				return nil, fmt.Errorf(
+					"%w: SOPS decrypt supports only X25519 age recipients: %w",
+					api.ErrInvalid,
+					parseErr,
+				)
+			}
+
+			recipients[recipient.String()] = struct{}{}
+		}
+	}
+
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf(
+			"%w: SOPS metadata must include at least one age recipient",
+			api.ErrInvalid,
+		)
+	}
+
+	return recipients, nil
+}
+
+// localX25519Identities parses only local X25519 private keys whose recipients were validated in
+// the document metadata. Supplying a non-empty parsed identity set prevents SOPS from consulting
+// command-, SSH-, environment-, or user-config identity sources during decryption.
+func localX25519Identities(recipients map[string]struct{}) (sopsage.ParsedIdentities, error) {
+	keyPath, err := sopsclient.GetAgeKeyPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve age key path: %w", err)
+	}
+
+	file, err := os.Open(keyPath) //nolint:gosec // G304: trusted SOPS age-key path, not user input
+	if err != nil {
+		return nil, fmt.Errorf("open age key file: %w", err)
+	}
+
+	defer func() { _ = file.Close() }()
+
+	var identities sopsage.ParsedIdentities
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, agePrivateKeyPrefix) {
+			continue
+		}
+
+		identity, parseErr := age.ParseX25519Identity(line)
+		if parseErr != nil {
+			continue
+		}
+
+		if _, ok := recipients[identity.Recipient().String()]; ok {
+			identities = append(identities, identity)
+		}
+	}
+
+	scannerErr := scanner.Err()
+	if scannerErr != nil {
+		return nil, fmt.Errorf("read age key file: %w", scannerErr)
+	}
+
+	if len(identities) == 0 {
+		return nil, fmt.Errorf(
+			"%w: no local X25519 identity matches the SOPS recipients",
+			api.ErrInvalid,
+		)
+	}
+
+	return identities, nil
+}
+
+type ageOnlyKeyServiceServer struct {
+	keyservice.Server
+
+	identities sopsage.ParsedIdentities
+}
+
+func newAgeOnlyLocalClient(identities sopsage.ParsedIdentities) keyservice.LocalClient {
+	return keyservice.NewCustomLocalClient(&ageOnlyKeyServiceServer{identities: identities})
+}
+
+func (s *ageOnlyKeyServiceServer) Decrypt(
+	_ context.Context,
+	request *keyservice.DecryptRequest,
+) (*keyservice.DecryptResponse, error) {
+	ageKey := request.GetKey().GetAgeKey()
+	if ageKey == nil {
+		return nil, fmt.Errorf("%w: SOPS decrypt supports only age recipients", api.ErrInvalid)
+	}
+
+	masterKey, err := sopsage.MasterKeyFromRecipient(ageKey.GetRecipient())
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid age recipient: %w", api.ErrInvalid, err)
+	}
+
+	masterKey.EncryptedKey = string(request.GetCiphertext())
+	s.identities.ApplyToMasterKey(masterKey)
+
+	plaintext, err := masterKey.Decrypt()
+	if err != nil {
+		return nil, fmt.Errorf("decrypt age data key: %w", err)
+	}
+
+	return &keyservice.DecryptResponse{Plaintext: plaintext}, nil
 }
 
 // runCipherOp shares the prepareSecretFile setup/cleanup + result-formatting boilerplate common to

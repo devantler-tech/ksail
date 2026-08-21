@@ -245,8 +245,13 @@ const (
 	defaultReconcileTimeout       = 5 * time.Minute
 	fluxKustomizationPollInterval = 500 * time.Millisecond
 	argoCDApplicationPollInterval = 500 * time.Millisecond
-	reconcileConcurrency          = 5
-	reconcileCmdLong              = "Trigger reconciliation/sync and wait for completion. " +
+	// argoCDSourceWarmupGrace bounds how long a source-availability error is
+	// treated as a control-plane cold start rather than a real failure. ArgoCD
+	// self-heals these within seconds; a source still unavailable after this
+	// window is a genuine misconfiguration and fails with an actionable error.
+	argoCDSourceWarmupGrace = 90 * time.Second
+	reconcileConcurrency    = 5
+	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +
 		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
 		"For ArgoCD, tracks each Application until synced and healthy."
 	// kwokReconcileSkipMsg is emitted when reconciliation is skipped for KWOK.

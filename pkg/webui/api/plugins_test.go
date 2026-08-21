@@ -4,10 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 )
+
+// trustedInstallBody is the install request every trust-gate test posts; the tests differ only in the
+// headers they present, so the body is fixed to keep that the single variable.
+const trustedInstallBody = `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz",` +
+	`"trusted":true}`
 
 // pluginStub is a ClusterService that also implements api.PluginService, returning canned plugin
 // metadata and asset bytes so the plugin routes and capability can be exercised without a filesystem.
@@ -29,6 +36,195 @@ func (p pluginStub) PluginAsset(_ context.Context, _, _ string) (api.PluginAsset
 	}
 
 	return p.asset, nil
+}
+
+type pluginInstallerStub struct {
+	pluginStub
+
+	installCalled bool
+}
+
+func (p *pluginInstallerStub) InstallPlugin(
+	_ context.Context,
+	_ api.PluginInstallRequest,
+) (api.PluginInfo, error) {
+	p.installCalled = true
+
+	return api.PluginInfo{Name: "demo", Main: "main.js"}, nil
+}
+
+func (p *pluginInstallerStub) UninstallPlugin(_ context.Context, _ string) error {
+	return nil
+}
+
+func doPluginInstall(
+	t *testing.T,
+	server *api.Server,
+	body string,
+	headers map[string]string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/plugins",
+		strings.NewReader(body),
+	)
+
+	for name, value := range headers {
+		// Host is not a normal header on an inbound request — net/http lifts it onto Request.Host — so
+		// it must be assigned there for a test to control what the handler sees.
+		if strings.EqualFold(name, "Host") {
+			request.Host = value
+
+			continue
+		}
+
+		request.Header.Set(name, value)
+	}
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	return recorder
+}
+
+func TestInstallPluginRequiresJSONContentType(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := trustedInstallBody
+
+	recorder := doPluginInstall(t, server, body, map[string]string{"Content-Type": "text/plain"})
+
+	if recorder.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("install status = %d, want 415", recorder.Code)
+	}
+
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a non-JSON request")
+	}
+}
+
+func TestInstallPluginRequiresTrustedConsent(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := `{"url":"https://github.com/example/plugin/releases/download/v1/plugin.tar.gz"}`
+
+	recorder := doPluginInstall(
+		t,
+		server,
+		body,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("install status = %d, want 422", recorder.Code)
+	}
+
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called without trusted consent")
+	}
+}
+
+// TestInstallPluginRejectsRebindingOriginMatchingHost pins the DNS-rebinding case that a Host-derived
+// origin comparison cannot catch: the attacker's name has been rebound to loopback, so Origin and Host
+// agree and the browser reports Sec-Fetch-Site: same-origin. Only anchoring on the loopback identity
+// rejects it, and the installer must never be reached.
+func TestInstallPluginRejectsRebindingOriginMatchingHost(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := trustedInstallBody
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type":   "application/json",
+		"Host":           "attacker.example",
+		"Origin":         "http://attacker.example",
+		"Sec-Fetch-Site": "same-origin",
+	})
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("install status = %d, want 403", recorder.Code)
+	}
+
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a DNS-rebound cross-site request")
+	}
+}
+
+// TestInstallPluginAcceptsLoopbackOrigin pins the everyday path: the SPA served from the loopback
+// listener still installs, so the hardening costs the local operator nothing.
+func TestInstallPluginAcceptsLoopbackOrigin(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := trustedInstallBody
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type":   "application/json",
+		"Host":           "127.0.0.1:8080",
+		"Origin":         "http://127.0.0.1:8080",
+		"Sec-Fetch-Site": "same-origin",
+	})
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201", recorder.Code)
+	}
+
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for a loopback-origin request")
+	}
+}
+
+func TestInstallPluginRejectsCrossSiteBrowserRequest(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := trustedInstallBody
+
+	recorder := doPluginInstall(t, server, body, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "https://evil.example",
+	})
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("install status = %d, want 403", recorder.Code)
+	}
+
+	if installer.installCalled {
+		t.Fatal("InstallPlugin was called for a cross-site request")
+	}
+}
+
+func TestInstallPluginAcceptsTrustedJSONRequest(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+	body := trustedInstallBody
+
+	recorder := doPluginInstall(
+		t,
+		server,
+		body,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201; body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for a trusted JSON request")
+	}
 }
 
 func TestConfigAdvertisesPluginsCapability(t *testing.T) {
@@ -189,5 +385,63 @@ func TestPluginContentType(t *testing.T) {
 		if got := api.PluginContentType(file); got != want {
 			t.Errorf("PluginContentType(%q) = %q, want %q", file, got, want)
 		}
+	}
+}
+
+// TestInstallPluginRejectsForeignWailsOrigin pins that the desktop carve-out matches ONE origin. The
+// check previously trusted the `wails` scheme alone, which also admits `wails://attacker` — and the
+// scheme is the only thing standing between this branch and plugin installation.
+func TestInstallPluginRejectsForeignWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"wails://attacker",
+		"wails://wails:8080",
+		"wails://user@wails",
+		"wails://wails/path",
+		"wails://wails?",
+		"wails://wails#",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			installer := &pluginInstallerStub{}
+			server := &api.Server{Service: installer}
+
+			recorder := doPluginInstall(t, server, trustedInstallBody, map[string]string{
+				"Content-Type": "application/json",
+				"Origin":       origin,
+			})
+
+			if recorder.Code != http.StatusForbidden {
+				t.Fatalf("install status = %d, want 403 for Origin %q", recorder.Code, origin)
+			}
+
+			if installer.installCalled {
+				t.Fatalf("InstallPlugin was called for Origin %q", origin)
+			}
+		})
+	}
+}
+
+// TestInstallPluginAcceptsDesktopWailsOrigin pins the everyday desktop path, so tightening the check
+// above cannot silently break the shell it exists to allow (see desktop/main.go).
+func TestInstallPluginAcceptsDesktopWailsOrigin(t *testing.T) {
+	t.Parallel()
+
+	installer := &pluginInstallerStub{}
+	server := &api.Server{Service: installer}
+
+	recorder := doPluginInstall(t, server, trustedInstallBody, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "wails://wails",
+	})
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want 201; body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	if !installer.installCalled {
+		t.Fatal("InstallPlugin was not called for the desktop wails://wails origin")
 	}
 }

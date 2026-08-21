@@ -2,6 +2,7 @@ package k3dprovisioner
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -37,6 +40,9 @@ const (
 	k3kSystemNamespace = "k3k-system"
 	// k3kNamespacePrefix is the namespace prefix for k3k clusters.
 	k3kNamespacePrefix = "k3k-"
+	// maxObjectNameLength is the maximum length of a Kubernetes object name that must be a
+	// DNS-1123 label. Names longer than this are truncated and suffixed with a content hash.
+	maxObjectNameLength = 63
 	// k3kKubeconfigSecretSuffix is appended to the cluster name for the kubeconfig Secret.
 	k3kKubeconfigSecretSuffix = "kubeconfig"
 	// k3kKubeconfigKey is the key in the kubeconfig Secret.
@@ -168,10 +174,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
 func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -233,10 +236,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 // Delete removes the k3k cluster by deleting the Cluster CR and namespace.
 func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	p.closeAPIServerPortForward()
 
@@ -250,6 +250,13 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("delete namespace %s: %w", namespace, err)
 	}
 
+	// The guard policy and binding are cluster-scoped, so the namespace delete above does not
+	// reach them.
+	err = p.deletePrivilegedPodGuard(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	// Clean up kubeconfig entries
 	contextName := "k3k-" + clusterName
 	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
@@ -261,10 +268,7 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 
 // Exists checks whether the k3k cluster namespace exists.
 func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
+	clusterName := p.effectiveClusterName(name)
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -317,11 +321,7 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 // clustererr.ErrKubeconfigNotReady while the k3k-<name>-kubeconfig Secret has not been published
 // yet.
 func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
-	clusterName := p.clusterName
-	if clusterName == "" {
-		clusterName = name
-	}
-
+	clusterName := p.effectiveClusterName(name)
 	conn := ConnectionFor(clusterName)
 
 	raw, err := nested.ConnectorKubeconfig(
@@ -347,6 +347,17 @@ func (p *K3kProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, e
 	}
 
 	return out, nil
+}
+
+func (p *K3kProvisioner) effectiveClusterName(name string) string {
+	// The operator passes a namespace-qualified provisioned name. It must win over
+	// the factory's unqualified fallback for every lifecycle operation so Create,
+	// Exists, Delete, and Kubeconfig address the same k3k resources.
+	if name != "" {
+		return name
+	}
+
+	return p.clusterName
 }
 
 // connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, rewrites the kubeconfig to
@@ -539,7 +550,7 @@ func (p *K3kProvisioner) setupCluster(
 
 	_, _ = fmt.Fprintf(os.Stdout, "► creating namespace %s\n", namespace)
 
-	err = p.ensureNamespace(ctx, namespace)
+	err = p.ensureNamespace(ctx, clusterName, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("ensure namespace: %w", err)
 	}
@@ -639,25 +650,34 @@ func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
 }
 
 // ensureNamespace creates the namespace if it doesn't exist, with ksail labels.
-func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) error {
+func (p *K3kProvisioner) ensureNamespace(ctx context.Context, clusterName, namespace string) error {
+	// clusterName, not p.clusterName: the namespace label below and the guard binding's namespace
+	// selector must agree, or the binding matches nothing and the privileged exemption stamped on
+	// this namespace goes unguarded.
+	err := p.ensurePrivilegedPodGuard(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	nsObj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
 				"ksail.io/managed-by": "ksail",
-				"ksail.io/cluster":    p.clusterName,
+				"ksail.io/cluster":    clusterName,
 				// The k3k server runs embedded k3s and requires a privileged container.
 				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
 				// Talos, which defaults namespaces to baseline) would otherwise reject the
 				// server StatefulSet's pod with a "violates PodSecurity baseline: privileged"
-				// FailedCreate error, leaving the k3k cluster stuck Provisioning. Opt this
-				// dedicated namespace into the privileged standard so the server can start.
+				// FailedCreate error, leaving the k3k cluster stuck Provisioning. The
+				// admission guard created above scopes that namespace-wide PSA exemption so
+				// arbitrary pods cannot use it for privileged host access.
 				"pod-security.kubernetes.io/enforce": "privileged",
 			},
 		},
 	}
 
-	_, err := p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{})
+	_, err = p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
 	}
@@ -667,6 +687,285 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 	}
 
 	return nil
+}
+
+// unsafeContainerPredicate is the CEL sub-expression, over a container bound to `c`, that matches
+// a container requesting a setting the PSA baseline profile forbids. The namespace carries a
+// blanket "privileged" PSA exemption for the k3k server, so the guard re-imposes these baseline
+// restrictions on every other pod: privileged mode, any added capability beyond the single one
+// baseline permits, and host ports.
+const unsafeContainerPredicate = "(" +
+	"(has(c.securityContext) && has(c.securityContext.privileged) && " +
+	"c.securityContext.privileged == true) || " +
+	"(has(c.securityContext) && has(c.securityContext.capabilities) && " +
+	"has(c.securityContext.capabilities.add) && " +
+	"c.securityContext.capabilities.add.exists(cap, cap != 'NET_BIND_SERVICE')) || " +
+	"(has(c.ports) && c.ports.exists(port, has(port.hostPort) && port.hostPort > 0))" +
+	")"
+
+// baselineSysctls are the sysctls the PSA baseline profile considers safe. Anything else is
+// treated as an unsafe setting by the guard.
+const baselineSysctls = "['kernel.shm_rmid_forced', 'net.ipv4.ip_local_port_range', " +
+	"'net.ipv4.ip_unprivileged_port_start', 'net.ipv4.tcp_syncookies', " +
+	"'net.ipv4.ping_group_range', 'net.ipv4.ip_local_reserved_ports']"
+
+// unsafePodExpression is the CEL expression identifying a pod that requests privileged or
+// host-level settings. It is the guard's trigger: a pod matching it must additionally prove it is
+// a KSail-managed k3k server pod to be admitted. The container predicate is applied to all three
+// container lists — a privileged init or ephemeral container escapes the namespace just as
+// effectively as a privileged app container.
+const unsafePodExpression = "object.spec.hostPID == true || " +
+	"object.spec.hostIPC == true || " +
+	"object.spec.hostNetwork == true || " +
+	"(has(object.spec.volumes) && object.spec.volumes.exists(v, has(v.hostPath))) || " +
+	"(has(object.spec.securityContext) && has(object.spec.securityContext.sysctls) && " +
+	"object.spec.securityContext.sysctls.exists(s, !(s.name in " + baselineSysctls + "))) || " +
+	"object.spec.containers.exists(c, " + unsafeContainerPredicate + ") || " +
+	"(has(object.spec.initContainers) && object.spec.initContainers.exists(c, " +
+	unsafeContainerPredicate + ")) || " +
+	"(has(object.spec.ephemeralContainers) && object.spec.ephemeralContainers.exists(c, " +
+	unsafeContainerPredicate + "))"
+
+// serverPodExemptionTemplate is the CEL expression admitting an unsafe pod only when it is a
+// KSail-managed k3k server pod. Formatted with the server pod name prefix and the cluster name.
+//
+// The pod name and labels are attacker-controlled: anyone able to create a Pod in this namespace
+// can reproduce them. They are therefore paired with `request.userInfo`, which the API server
+// populates from the authenticated request and a requester cannot forge, so a pod hand-crafted by
+// a namespace user no longer satisfies the exemption. The k3k server pod is created by a
+// controller acting as a service account, which is what this admits.
+//
+// Every map lookup is key-guarded. CEL raises "no such key" on a missing map key, and because
+// FailurePolicy is Fail an evaluation error becomes a rejection carrying that error instead of the
+// guard's own message.
+const serverPodExemptionTemplate = "!variables.isUnsafePod || " +
+	"(request.userInfo.username.startsWith('system:serviceaccount:') && " +
+	"object.metadata.name.startsWith('%s') && " +
+	"has(object.metadata.labels) && " +
+	"'cluster' in object.metadata.labels && " +
+	"object.metadata.labels['cluster'] == '%s' && " +
+	"'role' in object.metadata.labels && " +
+	"object.metadata.labels['role'] == 'server')"
+
+// privilegedPodGuardMessage is returned to the user when the guard rejects a pod.
+const privilegedPodGuardMessage = "only KSail-managed k3k server pods may use privileged or " +
+	"host-level pod settings in this namespace"
+
+func (p *K3kProvisioner) ensurePrivilegedPodGuard(ctx context.Context, clusterName string) error {
+	name := p.privilegedPodGuardName(clusterName)
+
+	err := p.applyPrivilegedPodGuardPolicy(ctx, name, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return p.applyPrivilegedPodGuardBinding(ctx, name, clusterName)
+}
+
+// buildPrivilegedPodGuardPolicy builds the ValidatingAdmissionPolicy that rejects pods requesting
+// privileged or host-level settings unless they are KSail-managed k3k server pods.
+func (p *K3kProvisioner) buildPrivilegedPodGuardPolicy(
+	name, clusterName string,
+) *admissionv1.ValidatingAdmissionPolicy {
+	failurePolicy := admissionv1.Fail
+	matchPolicy := admissionv1.Equivalent
+	serverPodNamePrefix := fmt.Sprintf("k3k-%s-server-", clusterName)
+
+	return &admissionv1.ValidatingAdmissionPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"ksail.io/managed-by": "ksail",
+				"ksail.io/cluster":    clusterName,
+			},
+		},
+		Spec: admissionv1.ValidatingAdmissionPolicySpec{
+			FailurePolicy: &failurePolicy,
+			MatchConstraints: &admissionv1.MatchResources{
+				ResourceRules: []admissionv1.NamedRuleWithOperations{
+					{
+						RuleWithOperations: admissionv1.RuleWithOperations{
+							Operations: []admissionv1.OperationType{
+								admissionv1.Create,
+								admissionv1.Update,
+							},
+							Rule: admissionv1.Rule{
+								APIGroups:   []string{""},
+								APIVersions: []string{"v1"},
+								// Ephemeral containers are added through their own
+								// subresource, so a rule matching only "pods" never sees
+								// them and unsafePodExpression's ephemeralContainers check
+								// would be unreachable in production.
+								Resources: []string{"pods", "pods/ephemeralcontainers"},
+							},
+						},
+					},
+				},
+				MatchPolicy: &matchPolicy,
+			},
+			Validations: []admissionv1.Validation{
+				{
+					Expression: fmt.Sprintf(
+						serverPodExemptionTemplate,
+						serverPodNamePrefix,
+						clusterName,
+					),
+					Message: privilegedPodGuardMessage,
+				},
+			},
+			Variables: []admissionv1.Variable{
+				{
+					Name:       "isUnsafePod",
+					Expression: unsafePodExpression,
+				},
+			},
+		},
+	}
+}
+
+// guardResourceClient is the subset of a typed client-go resource client the guard apply routine
+// needs. The generated ValidatingAdmissionPolicy and ...Binding clients satisfy it structurally,
+// so one conflict-safe routine serves both instead of each resource repeating the flow.
+type guardResourceClient[T metav1.Object] interface {
+	Create(ctx context.Context, obj T, opts metav1.CreateOptions) (T, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (T, error)
+	Update(ctx context.Context, obj T, opts metav1.UpdateOptions) (T, error)
+}
+
+// applyGuardResource creates the resource, and when it already exists re-reads its
+// resourceVersion and updates in place so a re-run converges on the current definition. The
+// update is retried on Conflict: a concurrent writer must not abort namespace setup. Create and
+// update failures are reported as the operation that actually failed.
+func applyGuardResource[T metav1.Object](
+	ctx context.Context,
+	kind, name string,
+	desired T,
+	client guardResourceClient[T],
+) error {
+	_, err := client.Create(ctx, desired, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+
+	if !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create k3k privileged pod guard %s: %w", kind, err)
+	}
+
+	// The closure names the failing operation; the wrap below adds the resource, so the two
+	// compose without repeating each other. RetryOnConflict matches Conflict through the
+	// wrapper, so wrapping inside the closure does not defeat the retry.
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, getErr := client.Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get existing: %w", getErr)
+		}
+
+		desired.SetResourceVersion(existing.GetResourceVersion())
+
+		_, updateErr := client.Update(ctx, desired, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("update: %w", updateErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("k3k privileged pod guard %s: %w", kind, err)
+	}
+
+	return nil
+}
+
+// applyPrivilegedPodGuardPolicy creates the guard policy, updating it in place when it already
+// exists so a re-run converges on the current definition.
+func (p *K3kProvisioner) applyPrivilegedPodGuardPolicy(
+	ctx context.Context,
+	name, clusterName string,
+) error {
+	return applyGuardResource(
+		ctx,
+		"policy",
+		name,
+		p.buildPrivilegedPodGuardPolicy(name, clusterName),
+		p.hostClientset.AdmissionregistrationV1().ValidatingAdmissionPolicies(),
+	)
+}
+
+// buildPrivilegedPodGuardBinding builds the binding that scopes the guard policy to this
+// cluster's KSail-managed namespaces.
+func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
+	name, clusterName string,
+) *admissionv1.ValidatingAdmissionPolicyBinding {
+	return &admissionv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"ksail.io/managed-by": "ksail",
+				"ksail.io/cluster":    clusterName,
+			},
+		},
+		Spec: admissionv1.ValidatingAdmissionPolicyBindingSpec{
+			PolicyName: name,
+			MatchResources: &admissionv1.MatchResources{
+				// These labels must be exactly the ones ensureNamespace stamps on the
+				// namespace, or the binding selects nothing and the namespace keeps its
+				// blanket privileged exemption with no guard attached.
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"ksail.io/managed-by": "ksail",
+						"ksail.io/cluster":    clusterName,
+					},
+				},
+			},
+			ValidationActions: []admissionv1.ValidationAction{admissionv1.Deny},
+		},
+	}
+}
+
+// applyPrivilegedPodGuardBinding creates the guard binding, updating it in place when it already
+// exists so a re-run converges on the current definition.
+func (p *K3kProvisioner) applyPrivilegedPodGuardBinding(
+	ctx context.Context,
+	name, clusterName string,
+) error {
+	return applyGuardResource(
+		ctx,
+		"binding",
+		name,
+		p.buildPrivilegedPodGuardBinding(name, clusterName),
+		p.hostClientset.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings(),
+	)
+}
+
+// deletePrivilegedPodGuard removes the cluster-scoped guard resources. They are not namespaced, so
+// deleting the cluster's namespace leaves them behind on the host cluster.
+func (p *K3kProvisioner) deletePrivilegedPodGuard(ctx context.Context, clusterName string) error {
+	name := p.privilegedPodGuardName(clusterName)
+	admission := p.hostClientset.AdmissionregistrationV1()
+
+	err := admission.ValidatingAdmissionPolicyBindings().
+		Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete k3k privileged pod guard binding: %w", err)
+	}
+
+	err = admission.ValidatingAdmissionPolicies().Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete k3k privileged pod guard policy: %w", err)
+	}
+
+	return nil
+}
+
+func (p *K3kProvisioner) privilegedPodGuardName(clusterName string) string {
+	name := fmt.Sprintf("ksail-k3k-%s-pod-security", clusterName)
+	if len(name) <= maxObjectNameLength {
+		return name
+	}
+
+	sum := sha256.Sum256([]byte(name))
+
+	return fmt.Sprintf("%.54s-%x", name, sum[:4])
 }
 
 // buildClusterCR constructs the k3k Cluster custom resource with the provisioner's configuration.
