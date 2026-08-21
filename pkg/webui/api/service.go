@@ -123,8 +123,8 @@ type Capabilities struct {
 	// implements ResourceWriter. The SPA still combines it with !readOnly before showing the actions.
 	WorkloadWrite bool `json:"workloadWrite"`
 	// KubeconfigDownload reports whether the backend can export a portable kubeconfig for a cluster —
-	// true exactly when the serving ClusterService implements KubeconfigProvider. The local backend
-	// extracts the cluster's context from the user's kubeconfig; the operator does not implement it.
+	// true exactly when the serving ClusterService implements KubeconfigProvider. Credential-bearing
+	// kubeconfig exports must only be implemented by backends with an authentication boundary.
 	KubeconfigDownload bool `json:"kubeconfigDownload"`
 	// ApplyManifests reports whether the backend can server-side-apply raw manifests to a cluster —
 	// true exactly when the serving ClusterService implements ApplyService. Combined with !readOnly

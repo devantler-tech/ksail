@@ -132,8 +132,8 @@ export interface Capabilities {
   // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
   // delete). The SPA combines it with !readOnly before showing the action affordances.
   workloadWrite: boolean;
-  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
-  // local backend). The SPA shows the Download-kubeconfig action only then.
+  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster.
+  // The SPA shows the Download-kubeconfig action only then.
   kubeconfigDownload: boolean;
   // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
   // with !readOnly before showing the Apply YAML action.
@@ -759,10 +759,12 @@ export interface PluginCosign {
 // strongest; sha256 (hex, optional) pins the download (integrity); signature (base64 ed25519 detached
 // signature over the tarball bytes, optional) authenticates against the backend's trusted public key
 // (KSAIL_PLUGIN_SIGNING_PUBKEY) — the backend rejects a claimed signature when no key is configured;
-// name (optional) overrides the install id.
+// trusted is the server-enforced acknowledgement that the plugin runs unsandboxed; name (optional)
+// overrides the install id.
 export interface PluginInstallRequest {
   url: string;
   sha256?: string;
+  trusted: boolean;
   signature?: string;
   cosign?: PluginCosign;
   name?: string;

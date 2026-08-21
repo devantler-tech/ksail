@@ -25,7 +25,7 @@ import (
 // represent the cluster it runs ON, so the hub itself shows up in the cluster list and can be
 // browsed like any managed cluster (cf. Rancher's "local" cluster, Argo CD's "in-cluster"
 // destination, Headlamp's "main" context).
-const HostClusterName = "host"
+const HostClusterName = v1alpha1.HostClusterName
 
 // defaultHostClusterNamespace is the last-resort namespace for the host registration, used when
 // the operator runs outside a cluster (e.g. local development against a kubeconfig).
@@ -69,7 +69,7 @@ func EnsureHostCluster(ctx context.Context, hub client.Client, namespace string)
 
 	err := hub.Get(ctx, key, &existing)
 	if err == nil {
-		if existing.IsHostCluster() {
+		if existing.IsHostClusterRegistration(namespace) {
 			return nil
 		}
 

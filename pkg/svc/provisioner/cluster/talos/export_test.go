@@ -27,6 +27,10 @@ import (
 
 var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
 
+// ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest exposes the stable error
+// identity expected when the persisted ownership marker is JSON null.
+var ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest = errManagedNodeAnnotationKeysExpectedJSONArray
+
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
 type NodeWithRoleForTest = nodeWithRole
 
