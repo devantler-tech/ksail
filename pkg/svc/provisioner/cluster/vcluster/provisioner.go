@@ -363,12 +363,14 @@ func tryDBusRecovery(
 	logger loftlog.Logger,
 	recoverDBus dbusRecoverFn,
 ) error {
-	logger.Infof("D-Bus not ready in container — recovering in place...")
+	logger.Infof("ksail.vcluster.dbus_recovery state=entered cluster=%q", clusterName)
 
 	recoverErr := recoverDBus(ctx, globalFlags, clusterName, logger)
 	if recoverErr != nil {
 		return fmt.Errorf("D-Bus recovery failed: %w", recoverErr)
 	}
+
+	logger.Infof("ksail.vcluster.dbus_recovery state=completed cluster=%q", clusterName)
 
 	return nil
 }
