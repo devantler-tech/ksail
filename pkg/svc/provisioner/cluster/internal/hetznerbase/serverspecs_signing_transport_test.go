@@ -351,6 +351,15 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 		require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
 		assert.Nil(t, specs)
 	})
+}
+
+// TestDeriveServerSpecsPinsProviderCeilingBoundary pins the comparison at the
+// provider ceiling itself. The pair below is what discriminates `>` from `>=`:
+// a payload at exactly the ceiling must be accepted and one byte more refused,
+// so an off-by-one that turned away a legitimate 32768-byte node cannot pass
+// unnoticed.
+func TestDeriveServerSpecsPinsProviderCeilingBoundary(t *testing.T) {
+	t.Parallel()
 
 	// The control: a payload at EXACTLY the ceiling still goes through, so the
 	// bound is a ceiling rather than a blanket refusal of large user-data.
