@@ -1,6 +1,7 @@
 package talosprovisioner_test
 
 import (
+	"strings"
 	"testing"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -14,9 +15,11 @@ import (
 )
 
 const (
-	sysctlRmemMax  = "net.core.rmem_max"
-	sysctlKptr     = "kernel.kptr_restrict"
-	mirrorEndpoint = "http://talos-default-docker.io:5000"
+	sysctlRmemMax              = "net.core.rmem_max"
+	sysctlKptr                 = "kernel.kptr_restrict"
+	mirrorEndpoint             = "http://talos-default-docker.io:5000"
+	managedNodeAnnotationKey   = "ksail.devantler.tech/managed-node-annotation-keys"
+	bootstrapNodeAnnotationKey = "ksail.devantler.tech/bootstrap-managed-node-annotation-keys"
 )
 
 // wrapConfig wraps a v1alpha1.Config as a full Talos config provider.
@@ -234,6 +237,278 @@ func TestBuildDesiredNodeConfig_NoFalsePositive(t *testing.T) {
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
 	require.NoError(t, err)
 	assert.Empty(t, diff, "an unchanged config must not report drift")
+}
+
+// TestBuildDesiredNodeConfig_PreservesExternallyManagedNodeAnnotations is the
+// regression guard for #6549. A controller may extend machine.nodeAnnotations
+// after KSail creates the cluster. Those additional map entries are not owned by
+// KSail's desired patch set and must not make every subsequent update delete
+// them, report phantom machine.config drift, and re-apply all node configs.
+func TestBuildDesiredNodeConfig_PreservesExternallyManagedNodeAnnotations(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+	running := runningFromPatches(t, patch)
+
+	running, err := running.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations = map[string]string{
+			"example.com/external-proof": "verified",
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff,
+		"an external node annotation must not report machine-config drift")
+
+	changes, err := prov.DetectRoleMachineConfigDriftForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, changes,
+		"the update planner must not schedule a machine-config apply for an external annotation")
+	assert.Equal(t, "verified",
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external-proof"],
+		"the externally managed annotation must survive a later real config apply")
+
+	// Model the next cluster-update invocation after the first desired config was
+	// applied. The same desired input and external annotation must now converge,
+	// rather than reappearing as the same phantom change on every run.
+	nextDesired, err := prov.BuildDesiredNodeConfigForTest(
+		desired, desired, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	nextDiff, err := talosprovisioner.MachineConfigDiffForTest(desired, nextDesired)
+	require.NoError(t, err)
+	assert.Empty(t, nextDiff, "two consecutive updates must remain converged")
+}
+
+// TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation verifies the
+// ownership boundary: preserving live-only keys must not hide drift for an
+// annotation that KSail's current desired patch explicitly declares.
+func TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation(t *testing.T) {
+	t.Parallel()
+
+	runningPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: old\n")
+	running := runningFromPatches(t, runningPatch)
+	running, err := running.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations["example.com/external"] = "preserved"
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	desiredPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: new\n")
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{desiredPatch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "example.com/owned",
+		"a changed KSail-owned annotation must remain visible as drift")
+	assert.Equal(
+		t,
+		"new",
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/owned"],
+	)
+	assert.Equal(t, "preserved",
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
+}
+
+// TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation guards the
+// ownership boundary across updates: once KSail has rendered an annotation from
+// its patch set, removing that key from the patch must remain an intentional
+// deletion while unrelated live-only annotations stay preserved.
+func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testing.T) {
+	t.Parallel()
+
+	ownedPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: old\n")
+	running := runningFromPatches(t, ownedPatch)
+	running, err := running.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations["example.com/external"] = "preserved"
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	trackedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{ownedPatch},
+	)
+	require.NoError(t, err)
+
+	tracked, err := talosprovisioner.NewProvisioner(trackedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			running, running, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	removedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	desired, err := talosprovisioner.NewProvisioner(removedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			tracked, tracked, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(tracked, desired)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "example.com/owned",
+		"removing a previously desired annotation must remain visible as drift")
+	assert.NotContains(t,
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations,
+		"example.com/owned",
+		"a previously desired annotation must not be reclassified as external")
+	assert.Equal(t, "preserved",
+		desired.RawV1Alpha1().MachineConfig.MachineNodeAnnotations["example.com/external"])
+}
+
+// TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval verifies the
+// explicit migration path for a cluster created before KSail persisted annotation
+// ownership. A bootstrap directive seeds the previous ownership set once; KSail
+// strips it, persists the current set, and preserves unrelated live-only keys.
+func TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				bootstrapNodeAnnotationKey: `["example.com/owned"]`,
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				"example.com/owned":    "removed",
+				"example.com/external": "preserved",
+			},
+		},
+	})
+
+	grafted, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.NoError(t, err)
+
+	annotations := grafted.RawV1Alpha1().MachineConfig.MachineNodeAnnotations
+	assert.NotContains(t, annotations, "example.com/owned",
+		"the explicit legacy ownership seed must keep the removed key removable")
+	assert.Equal(t, "preserved", annotations["example.com/external"],
+		"the migration seed must not absorb unrelated live-only annotations")
+	assert.Equal(t, "[]", annotations[managedNodeAnnotationKey],
+		"the one-time seed must be replaced by the current ownership set")
+}
+
+// TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision guards
+// the reserved annotation key at patch-loading time. An arbitrary user value
+// must fail before it can be applied and poison every subsequent update.
+func TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision(t *testing.T) {
+	t.Parallel()
+
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				managedNodeAnnotationKey: `[]`,
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{MachineConfig: &v1alpha1.MachineConfig{}})
+
+	_, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ownership key is reserved by KSail")
+}
+
+// TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit proves
+// KSail accounts for its metadata before returning a config for Talos to apply.
+// The user's annotation map is valid at the Kubernetes 256 KiB ceiling by itself,
+// but adding the ownership marker must return a clear preflight error.
+func TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit(t *testing.T) {
+	t.Parallel()
+
+	const annotationSizeLimit = 256 * 1024
+
+	key := "example.com/owned"
+	desired := wrapConfig(&v1alpha1.Config{
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineNodeAnnotations: map[string]string{
+				key: strings.Repeat("x", annotationSizeLimit-len(key)),
+			},
+		},
+	})
+	running := wrapConfig(&v1alpha1.Config{MachineConfig: &v1alpha1.MachineConfig{}})
+
+	_, err := talosprovisioner.GraftNodeManagedSectionsForTest(desired, running)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "node annotations exceed 256 KiB after ownership metadata")
+}
+
+// TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys guards the
+// ownership boundary against a malformed marker that would otherwise erase
+// KSail's prior ownership set and restore intentionally removed annotations.
+func TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys(t *testing.T) {
+	t.Parallel()
+
+	ownedPatch := sysctlPatch("machine:\n  nodeAnnotations:\n    example.com/owned: old\n")
+	running := runningFromPatches(t, ownedPatch)
+
+	trackedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{ownedPatch},
+	)
+	require.NoError(t, err)
+
+	tracked, err := talosprovisioner.NewProvisioner(trackedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			running, running, talosprovisioner.RoleControlPlane,
+		)
+	require.NoError(t, err)
+
+	malformed, err := tracked.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		cfg.MachineConfig.MachineNodeAnnotations[managedNodeAnnotationKey] = "null"
+		delete(cfg.MachineConfig.MachineNodeAnnotations, "example.com/owned")
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	removedConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	_, err = talosprovisioner.NewProvisioner(removedConfigs, nil).
+		BuildDesiredNodeConfigForTest(
+			malformed, malformed, talosprovisioner.RoleControlPlane,
+		)
+	require.EqualError(t, err,
+		"graft node-managed config sections: "+
+			"decode managed node-annotation keys: expected JSON array")
+	require.ErrorIs(
+		t,
+		err,
+		talosprovisioner.ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest,
+	)
 }
 
 // TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors reproduces the Docker

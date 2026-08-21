@@ -25,6 +25,11 @@ var ErrSourceOverlayMissing = errors.New("source overlay directory not found")
 // repoRoot/srcConfigRel does not exist or is not a regular file.
 var ErrSourceConfigMissing = errors.New("source environment config not found")
 
+// ErrDestinationEscapesRepository is returned when a clone destination would
+// write outside repoRoot, including through an existing symlinked parent or
+// destination file.
+var ErrDestinationEscapesRepository = errors.New("destination escapes repository root")
+
 // CloneOverlay clones every file under repoRoot/srcRelDir into the destination
 // overlay implied by rewrites, applying the structured path+content rewrites to
 // each regular file and copying SOPS-encrypted *.enc.yaml files byte-for-byte
@@ -146,43 +151,79 @@ func CloneEnvironmentConfig(
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning
-// whether a file was actually written. The destination is containment-checked
-// against repoRoot, and an existing file is preserved (wrote=false) unless force
-// is set — mirroring fsutil.TryWriteFile's skip semantics so the caller's
-// "paths written" list excludes skipped files.
+// whether a file was actually written. An existing file is preserved (wrote=false)
+// unless force is set, so the caller's "paths written" list excludes skipped files.
+//
+// The lstat walk in validateCloneDestination enforces this package's stricter
+// policy — a symlinked destination or parent is rejected outright, even one that
+// stays inside repoRoot. It cannot, on its own, guarantee containment: an attacker
+// who swaps a validated parent for a symlink afterwards would redirect a
+// name-resolved write outside repoRoot. fsutil.TryWriteFileWithin closes that
+// window by resolving every component through a descriptor rooted at repoRoot, so
+// containment holds no matter who wins the race and the check above is left to do
+// only policy.
 func writeClone(repoRoot, newRelPath, content string, force bool) (bool, error) {
 	dest := filepath.Join(repoRoot, filepath.FromSlash(newRelPath))
 
-	// Lexical containment on the cleaned destination: filepath.Join collapses any
-	// ".." segments, so a rewritten path that escapes repoRoot yields a relative
-	// path starting with "..". (The destination's parents may not exist yet, so the
-	// symlink-resolving EvalCanonicalPath can't be used here; the source overlay was
-	// already canonicalised and contained above.)
-	rel, relErr := filepath.Rel(repoRoot, dest)
-	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return false, fmt.Errorf("destination %s escapes the repository root: %w",
-			newRelPath, fsutil.ErrPathOutsideBase)
+	err := validateCloneDestination(repoRoot, dest, newRelPath)
+	if err != nil {
+		return false, err
 	}
 
-	// TryWriteFile returns the content (not a write-status), so decide up front
-	// whether it will skip: it skips iff the file exists and force is false.
-	if !force {
-		_, statErr := os.Stat(dest)
-		if statErr == nil {
-			return false, nil
-		}
-
-		if !errors.Is(statErr, os.ErrNotExist) {
-			return false, fmt.Errorf("checking destination %s: %w", newRelPath, statErr)
-		}
-	}
-
-	_, writeErr := fsutil.TryWriteFile(content, dest, force)
+	wrote, writeErr := fsutil.TryWriteFileWithin(repoRoot, newRelPath, content, force)
 	if writeErr != nil {
 		return false, fmt.Errorf("writing %s: %w", newRelPath, writeErr)
 	}
 
-	return true, nil
+	return wrote, nil
+}
+
+func validateCloneDestination(repoRoot, dest, displayPath string) error {
+	rel, relErr := filepath.Rel(repoRoot, dest)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination %s escapes the repository root: %w",
+			displayPath, ErrDestinationEscapesRepository)
+	}
+
+	err := rejectSymlinkPath(repoRoot, dest)
+	if err != nil {
+		return fmt.Errorf("destination %s escapes the repository root: %w",
+			displayPath, err)
+	}
+
+	return nil
+}
+
+func rejectSymlinkPath(repoRoot, dest string) error {
+	rel, err := filepath.Rel(repoRoot, dest)
+	if err != nil {
+		return ErrDestinationEscapesRepository
+	}
+
+	current := repoRoot
+
+	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+
+		current = filepath.Join(current, part)
+
+		info, lstatErr := os.Lstat(current)
+		if errors.Is(lstatErr, os.ErrNotExist) {
+			return nil
+		}
+
+		if lstatErr != nil {
+			return fmt.Errorf("inspecting %s: %w", current, lstatErr)
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrDestinationEscapesRepository
+		}
+	}
+
+	return nil
 }
 
 // cloneFile reads one source file and returns its destination repo-relative path
