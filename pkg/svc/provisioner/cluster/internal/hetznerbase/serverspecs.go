@@ -44,6 +44,17 @@ var ErrUserDataTooLargeForProvider = errors.New(
 	"hetzner: provider user-data exceeds the maximum the provider accepts",
 )
 
+// ErrUserDataNotInspectable is returned when user-data announces itself as gzip
+// and then cannot be read: it either fails to expand, or expands past
+// maxDecodedUserDataBytes. Such input is refused rather than forwarded, because
+// unparseable input must not be the way past a security guard -- but no signing
+// material was observed in it, so it does not report ErrSigningTransportInUserData.
+// It is a distinct condition from ErrUserDataTooLargeForProvider, which is about
+// the separate ceiling the PROVIDER accepts rather than the inspection bound.
+var ErrUserDataNotInspectable = errors.New(
+	"hetzner: provider user-data announces gzip but cannot be inspected",
+)
+
 // ErrPrivateKeyInUserData is returned when a server spec would deliver private
 // key material through provider-readable user-data. The cloud-init ssh_keys
 // module is the deliberate exception: it carries the per-node SSH host identity
@@ -641,6 +652,11 @@ func validateProviderUserData(userData string) (string, error) {
 // announces itself as gzip and then fails to expand is refused for the same
 // reason -- it cannot be inspected, and unparseable input must not be the way
 // past a security guard.
+//
+// Both cases report ErrUserDataNotInspectable rather than
+// ErrSigningTransportInUserData: the refusal is correct, but no marker was
+// observed, and an operator triaging a failed create must be able to tell "we
+// found signing material" from "we could not look".
 func expandRawGzipUserData(userData string) (string, error) {
 	raw := []byte(userData)
 	if !looksLikeGzip(raw) {
@@ -649,7 +665,7 @@ func expandRawGzipUserData(userData string) (string, error) {
 
 	expanded, oversize, ok := gunzipLimited(raw)
 	if oversize || !ok {
-		return "", ErrSigningTransportInUserData
+		return "", ErrUserDataNotInspectable
 	}
 
 	return expanded, nil

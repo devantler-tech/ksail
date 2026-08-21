@@ -15,6 +15,10 @@ import (
 
 // userDataCarrying wraps a fixture body in a minimal cloud-config document so
 // each case exercises the real YAML walk rather than a bare scalar.
+// providerCeilingBytes mirrors the package's maxProviderUserDataBytes. Declared
+// once here so the boundary cases below cannot drift apart from each other.
+const providerCeilingBytes = 32768
+
 func userDataCarrying(body string) string {
 	return fmt.Sprintf(`#cloud-config
 write_files:
@@ -281,7 +285,7 @@ func TestDeriveServerSpecsHandlesRawGzipUserData(t *testing.T) {
 			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
 		)
 
-		require.ErrorIs(t, err, hetznerbase.ErrSigningTransportInUserData)
+		require.ErrorIs(t, err, hetznerbase.ErrUserDataNotInspectable)
 		assert.Nil(t, specs)
 	})
 }
@@ -314,10 +318,10 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 		t.Parallel()
 
 		compressed := gzipUserData(t, oversized)
-		require.Less(t, len(compressed), 32768,
+		require.Less(t, len(compressed), providerCeilingBytes,
 			"fixture must be under the provider ceiling while compressed, "+
 				"or it would not distinguish the two bounds")
-		require.Greater(t, len(oversized), 32768,
+		require.Greater(t, len(oversized), providerCeilingBytes,
 			"fixture must exceed the provider ceiling once expanded")
 
 		nodes := twoNodeSpecs()
@@ -348,13 +352,18 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 		assert.Nil(t, specs)
 	})
 
-	// The control: a payload at the ceiling still goes through, so the bound is a
-	// ceiling rather than a blanket refusal of large user-data.
+	// The control: a payload at EXACTLY the ceiling still goes through, so the
+	// bound is a ceiling rather than a blanket refusal of large user-data.
+	//
+	// The exact length is the point. A comfortably-small payload satisfies this
+	// assertion for every fixture in the file, so it would not discriminate `>`
+	// from `>=` in the runtime check -- an off-by-one that refused a legitimate
+	// 32768-byte node would pass such a control unnoticed.
 	t.Run("user-data at the ceiling is accepted", func(t *testing.T) {
 		t.Parallel()
 
-		atLimit := userDataCarrying("runcmd:\n  - echo hello")
-		require.LessOrEqual(t, len(atLimit), 32768)
+		atLimit := userDataAtExactly(t, providerCeilingBytes)
+		require.Len(t, atLimit, providerCeilingBytes)
 
 		nodes := twoNodeSpecs()
 		nodes[1].UserData = atLimit
@@ -366,4 +375,35 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, specs, 2)
 	})
+
+	// The paired case one byte over: together with the control above this pins
+	// the comparison itself, not merely that some large payload is refused.
+	t.Run("user-data one byte over the ceiling is refused", func(t *testing.T) {
+		t.Parallel()
+
+		overBySingleByte := userDataAtExactly(t, providerCeilingBytes+1)
+		require.Len(t, overBySingleByte, providerCeilingBytes+1)
+
+		nodes := twoNodeSpecs()
+		nodes[1].UserData = overBySingleByte
+
+		specs, err := hetznerbase.DeriveServerSpecs(
+			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+		)
+
+		require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
+		assert.Nil(t, specs)
+	})
+}
+
+// userDataAtExactly returns valid cloud-config user-data of exactly total bytes,
+// padded with a trailing YAML comment run so the document still parses. The
+// boundary cases above need the length to be exact, not approximate.
+func userDataAtExactly(t *testing.T, total int) string {
+	t.Helper()
+
+	base := userDataCarrying("runcmd:\n  - echo hello")
+	require.LessOrEqual(t, len(base), total, "base fixture already exceeds the target length")
+
+	return base + strings.Repeat("#", total-len(base))
 }
