@@ -353,9 +353,23 @@ var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 // Shell short options can be separate or clustered; accept the no-argument cd
 // option alphabet conservatively so combinations such as `-P -e` and `-Pe`
 // cannot hide the working directory from the guard.
+//
+// The trailing filename is anchored to a WHITESPACE boundary, which is what
+// keeps the `/`-exclusion in `[^\s/;&|]*` load-bearing. Without the anchor the
+// preceding `[^;&|]*` simply consumes up to the last separator, so an ABSOLUTE
+// path elsewhere on the command -- `curl ... -o /etc/apt/keyrings/k8s.key` --
+// satisfies the rule and a bring-up that leaks nothing is refused. An absolute
+// path does not resolve relative to the working directory, so it is not this
+// rule's business; the absolute-path rule above owns it.
+//
+// Deliberately NOT bounded to a single line. `cd` persists until the next one,
+// so `cd /etc/kubernetes/pki && cat ca.crt` followed by `install ca.key` on the
+// FOLLOWING line is a real leak. Excluding the newline from the trailing segment
+// would silence the false positive above by also dropping that case, trading a
+// noisy refusal for a silent miss.
 var clusterPKIWorkingDirectoryKeyPath = regexp.MustCompile(
 	`(?is)\bcd\s+(?:(?:-[LPe@]+|--)\s+)*/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
-		`[^;&|]*[^\s/;&|]*\.key\b`,
+		`[^;&|]*(?:^|\s)[^\s/;&|]*\.key\b`,
 )
 
 // spacedTransportAssignment matches a transport setting whose marker is split by

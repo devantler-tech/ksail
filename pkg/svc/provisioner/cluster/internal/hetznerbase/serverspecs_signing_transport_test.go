@@ -100,6 +100,13 @@ func TestDeriveServerSpecsRejectsClusterPKIKeyPaths(t *testing.T) {
 		"PKI working directory":          "cd /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI logical working directory":  "cd -L /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI physical working directory": "cd -P /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		// `cd` persists until the next one, so a key written on a LATER line is
+		// still written into the PKI directory. This pins that the fix for the
+		// absolute-path false positive did not buy quiet by bounding the rule to a
+		// single line -- doing so drops exactly this case, turning a noisy refusal
+		// into a silent miss.
+		"PKI working directory, key on a later line": "cd /etc/kubernetes/pki && cat ca.crt\n" +
+			"install -m 0600 /tmp/staged ca.key",
 		"PKI physical error options":     "cd -P -e /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI combined physical error":    "cd -Pe /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI reordered physical error":   "cd -eP /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
@@ -166,6 +173,17 @@ func TestDeriveServerSpecsAcceptsMaterialFreeUserData(t *testing.T) {
 		"shell echoing a log line":         `echo "certificate key: generated during bootstrap"`,
 		"shell echoing a disabled setting": `echo "upload certs: disabled"`,
 		"comment documenting the field":    "# certificate key: documented here",
+
+		// A LATER LINE is a different command. The working-directory rule exists
+		// to catch `cd /etc/kubernetes/pki && install ... ca.key`, where the key
+		// is the argument of the command the `&&` chains. Once the shell moves to
+		// the next LINE it is no longer operating in that chained command, so a
+		// `.key` there is unrelated -- here an apt keyring written to a wholly
+		// different directory. Without a newline bound the rule reads the whole
+		// scalar after one `cd`, and refuses a bring-up that leaks nothing.
+		"apt keyring on a line after a PKI cd": "cd /etc/kubernetes/pki && cat ca.crt\n" +
+			"curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.34/deb/Release.key " +
+			"-o /etc/apt/keyrings/k8s.key",
 	}
 
 	for name, body := range tests {
