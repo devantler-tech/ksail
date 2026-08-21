@@ -626,6 +626,11 @@ func validateProviderUserData(userData string) (string, error) {
 		return "", err
 	}
 
+	err = validateUserDataShape(inspected)
+	if err != nil {
+		return "", err
+	}
+
 	// The guards have passed, so the remaining question is whether the provider
 	// will take this value at all. Checked here rather than at the call site
 	// because this function decides what gets forwarded, and expanding gzip is
