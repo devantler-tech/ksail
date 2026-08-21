@@ -351,7 +351,7 @@ var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 // time `cd /etc/kubernetes/pki && install ... ca.key` writes the same file as an
 // absolute path, so inspecting only contiguous path spellings leaves a bypass.
 var clusterPKIWorkingDirectoryKeyPath = regexp.MustCompile(
-	`(?is)\bcd\s+(?:--\s+)?/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
+	`(?is)\bcd\s+(?:-[LP]\s+|--\s+)?/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
 		`[^;&|]*[^\s/;&|]*\.key\b`,
 )
 

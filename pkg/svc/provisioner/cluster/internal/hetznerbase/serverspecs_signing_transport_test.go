@@ -92,12 +92,14 @@ func TestDeriveServerSpecsRejectsClusterPKIKeyPaths(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"cluster CA":            "cp /tmp/staged /etc/kubernetes/pki/ca.key",
-		"front proxy CA":        "cp /tmp/staged /etc/kubernetes/pki/front-proxy-ca.key",
-		"etcd CA":               "cp /tmp/staged /etc/kubernetes/pki/etcd/ca.key",
-		"service account":       "cp /tmp/staged /etc/kubernetes/pki/sa.key",
-		"quoted key suffix":     `cp /tmp/staged /etc/kubernetes/pki/ca."key"`,
-		"PKI working directory": "cd /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"cluster CA":                     "cp /tmp/staged /etc/kubernetes/pki/ca.key",
+		"front proxy CA":                 "cp /tmp/staged /etc/kubernetes/pki/front-proxy-ca.key",
+		"etcd CA":                        "cp /tmp/staged /etc/kubernetes/pki/etcd/ca.key",
+		"service account":                "cp /tmp/staged /etc/kubernetes/pki/sa.key",
+		"quoted key suffix":              `cp /tmp/staged /etc/kubernetes/pki/ca."key"`,
+		"PKI working directory":          "cd /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI logical working directory":  "cd -L /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI physical working directory": "cd -P /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 	}
 
 	for name, body := range tests {
