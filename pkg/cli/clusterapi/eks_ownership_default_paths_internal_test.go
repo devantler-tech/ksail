@@ -85,6 +85,7 @@ func TestDefaultEKSCaptureRefusesRepointedSelector(t *testing.T) {
 
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_PROFILE", "original")
+
 	identity := newEKSCreateIdentity(v1alpha1.OptionsAWS{})
 
 	name := "clusterapi-test"
@@ -92,6 +93,7 @@ func TestDefaultEKSCaptureRefusesRepointedSelector(t *testing.T) {
 	saveOwnership(t, name, "us-east-1", recordedAliases())
 
 	t.Setenv("AWS_PROFILE", "repointed")
+
 	err := eksOwnershipService().defaultEKSCapture(t.Context(), name, identity)
 	if !errors.Is(err, ErrEKSOwnershipSelectorChanged) {
 		t.Fatalf("expected ErrEKSOwnershipSelectorChanged, got %v", err)
@@ -103,6 +105,7 @@ func TestDefaultEKSCaptureDoesNotRefuseMatchingSelector(t *testing.T) {
 
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_PROFILE", "original")
+
 	identity := newEKSCreateIdentity(v1alpha1.OptionsAWS{})
 
 	name := "clusterapi-test"

@@ -29,7 +29,9 @@ var ErrUnguardableFactory = errors.New("provisioner factory cannot carry the EKS
 // names the identity the create was pinned to. Create is a long async operation; a selector
 // that was repointed mid-create would otherwise let capture freeze a same-named cluster in a
 // different account. Capture refuses rather than bind that unrelated cluster.
-var ErrEKSOwnershipSelectorChanged = errors.New("AWS selector changed between EKS create and capture")
+var ErrEKSOwnershipSelectorChanged = errors.New(
+	"AWS selector changed between EKS create and capture",
+)
 
 // defaultEKSOwnershipTimeout bounds the whole ownership resolution: the AWS config load, the STS
 // caller-identity query and the EKS DescribeCluster behind it.
