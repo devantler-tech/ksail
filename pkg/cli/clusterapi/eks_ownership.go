@@ -25,6 +25,12 @@ var ErrEKSOwnershipEvidenceMissing = errors.New("no local KSail EKS target bindi
 // would leave VerifyBeforeMutation a no-op, which is the gap this guard exists to close.
 var ErrUnguardableFactory = errors.New("provisioner factory cannot carry the EKS ownership guard")
 
+// ErrEKSOwnershipSelectorChanged reports that the AWS identity selector at capture no longer
+// names the identity the create was pinned to. Create is a long async operation; a selector
+// that was repointed mid-create would otherwise let capture freeze a same-named cluster in a
+// different account. Capture refuses rather than bind that unrelated cluster.
+var ErrEKSOwnershipSelectorChanged = errors.New("AWS selector changed between EKS create and capture")
+
 // defaultEKSOwnershipTimeout bounds the whole ownership resolution: the AWS config load, the STS
 // caller-identity query and the EKS DescribeCluster behind it.
 //
@@ -276,8 +282,20 @@ func (s *Service) defaultEKSCapture(
 		)
 	}
 
+	// Re-resolve the live selector through the same option-alias resolver the create used, then
+	// refuse if it now names a different identity. Create is 15–20 minutes of async work; a
+	// mid-create profile or access-key change would otherwise let FreezeAWS record a same-named
+	// cluster in a different account as this cluster's immutable identity. Matching selectors
+	// still freeze the pinned snapshot, not the live resolution, so capture stays bound to the
+	// identity the create actually used.
+	live := credentials.ResolveAWS(credentials.NewAWSOptionsResolver(identity.awsOptions))
+	if !identity.selection.SelectorEquals(live) {
+		return fmt.Errorf("%w for %q", ErrEKSOwnershipSelectorChanged, name)
+	}
+
 	// Freeze the create's own selection, for the region the create actually bound to. This is the
-	// single resolution the recorded identity is read under.
+	// single resolution the recorded identity is read under, and it runs only after the live
+	// selector still names that same identity.
 	resolution, err := credentials.FreezeAWS(ctx, identity.selection, bound.Region)
 	if err != nil {
 		return fmt.Errorf("freeze AWS credentials for EKS ownership: %w", err)
