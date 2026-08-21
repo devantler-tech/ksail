@@ -2,6 +2,7 @@ package clusterapi
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -77,6 +78,44 @@ func TestCaptureRefusesWhenTheCreatePinnedNoIdentity(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrEKSOwnershipEvidenceMissing)
 	require.Contains(t, err.Error(), "pinned no AWS identity")
+}
+
+func TestDefaultEKSCaptureRefusesRepointedSelector(t *testing.T) {
+	isolateHome(t)
+
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_PROFILE", "original")
+
+	identity := newEKSCreateIdentity(v1alpha1.OptionsAWS{})
+
+	name := "clusterapi-test"
+	markEKSCreated(t, name)
+	saveOwnership(t, name, "us-east-1", recordedAliases())
+
+	t.Setenv("AWS_PROFILE", "repointed")
+
+	err := eksOwnershipService().defaultEKSCapture(t.Context(), name, identity)
+	if !errors.Is(err, ErrEKSOwnershipSelectorChanged) {
+		t.Fatalf("expected ErrEKSOwnershipSelectorChanged, got %v", err)
+	}
+}
+
+func TestDefaultEKSCaptureDoesNotRefuseMatchingSelector(t *testing.T) {
+	isolateHome(t)
+
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_PROFILE", "original")
+
+	identity := newEKSCreateIdentity(v1alpha1.OptionsAWS{})
+
+	name := "clusterapi-test"
+	markEKSCreated(t, name)
+	saveOwnership(t, name, "us-east-1", recordedAliases())
+
+	err := eksOwnershipService().defaultEKSCapture(t.Context(), name, identity)
+	if errors.Is(err, ErrEKSOwnershipSelectorChanged) {
+		t.Fatalf("matching selector must not be refused as a selector change, got %v", err)
+	}
 }
 
 // TestCaptureReachesTheIdentityRefusalOnlyThroughARealBinding is the control that makes the test

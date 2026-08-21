@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +36,23 @@ const redactedSecretPlaceholder = "<redacted>"
 // change summary so it stays readable; the full config is re-applied regardless.
 const maxDriftDiffLines = 60
 
+// managedNodeAnnotationKeys records which machine.nodeAnnotations keys came
+// from KSail's desired patch set on the previous successful render. The marker
+// lets a later render distinguish an intentionally removed KSail key from a
+// live-only key owned by another controller.
+const managedNodeAnnotationKeys = "ksail.devantler.tech/managed-node-annotation-keys"
+
+// bootstrapManagedNodeAnnotationKeys is an explicit, one-time migration input
+// for clusters that predate ownership tracking. It is consumed from the desired
+// patch and never applied to a node; operators list legacy KSail-owned keys here
+// when removing them during the first update after upgrading KSail.
+const bootstrapManagedNodeAnnotationKeys = "ksail.devantler.tech/bootstrap-managed-node-annotation-keys"
+
+// maxNodeAnnotationBytes matches Kubernetes' aggregate annotation key/value
+// limit. Ownership metadata is stored in the same map, so KSail must account for
+// its bytes before returning a config that Talos would later reject on apply.
+const maxNodeAnnotationBytes = 256 * 1024
+
 // MachineConfigField is the change field reported when the desired Talos machine
 // config differs from what is running on the nodes.
 const MachineConfigField = "machine.config"
@@ -51,6 +70,20 @@ var errNoRoleConfig = errors.New("no Talos machine config available for node rol
 var errMissingControlPlanePKI = errors.New(
 	"secrets source lacks control-plane PKI (cluster CA private key); " +
 		"a control-plane node's config is required to realign worker configs",
+)
+
+// errManagedNodeAnnotationKeysExpectedJSONArray is returned when the persisted
+// ownership marker is valid JSON but not an array (for example, JSON null).
+var errManagedNodeAnnotationKeysExpectedJSONArray = errors.New(
+	"decode managed node-annotation keys: expected JSON array",
+)
+
+var errManagedNodeAnnotationKeysReserved = errors.New(
+	"managed node-annotation ownership key is reserved by KSail",
+)
+
+var errNodeAnnotationOwnershipMetadataLimit = errors.New(
+	"node annotations exceed 256 KiB after ownership metadata",
 )
 
 // detectInPlaceMachineConfigDrift reports whether the desired Talos machine
@@ -415,10 +448,10 @@ func (p *Provisioner) alignKubernetesVersion(
 	return updated, nil
 }
 
-// graftNodeManagedSections copies the machine-config sections that ksail injects
-// post-generation — registry mirrors/auth, cert SANs, and the Hetzner HCloud VIP
-// endpoint — from the running config into the desired config, so they don't read
-// as removable drift. These are node/setup-managed rather than user patch content.
+// graftNodeManagedSections copies machine-config state that must survive a
+// regeneration — registry mirrors/auth, cert SANs, externally managed node
+// annotations, and the Hetzner HCloud VIP endpoint — from the running config
+// into the desired config, so it does not read as removable drift.
 //
 // If ksail gains another post-generation machine-config transform, graft its
 // section here too (otherwise it will surface as phantom drift). The per-node
@@ -446,6 +479,17 @@ func graftNodeManagedSections(
 		if len(cfg.MachineConfig.MachineCertSANs) == 0 {
 			cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
 		}
+		// machine.nodeAnnotations is a shared extension map. KSail owns keys present
+		// in its rendered desired config; preserve live-only keys so another
+		// controller can annotate nodes without making every KSail update delete
+		// those entries and re-apply the whole machine config (#6549).
+		err := graftExternalNodeAnnotations(
+			cfg.MachineConfig,
+			runningRaw.MachineConfig,
+		)
+		if err != nil {
+			return err
+		}
 
 		graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
 
@@ -456,6 +500,172 @@ func graftNodeManagedSections(
 	}
 
 	return grafted, nil
+}
+
+// graftExternalNodeAnnotations merges live-only node-annotation keys into the
+// desired config. Desired values win on collisions, while the managed-key
+// marker prevents a key removed from KSail's patch set from being reclassified
+// as external and copied back.
+func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) error {
+	previousOwnedKeys, hasMarker, err := resolvePreviousNodeAnnotationKeys(
+		desired.MachineNodeAnnotations,
+		running.MachineNodeAnnotations,
+	)
+	if err != nil {
+		return err
+	}
+
+	currentOwnedKeys := nodeAnnotationKeys(desired.MachineNodeAnnotations)
+	sort.Strings(currentOwnedKeys)
+
+	if desired.MachineNodeAnnotations == nil &&
+		(len(running.MachineNodeAnnotations) > 0 || hasMarker) {
+		desired.MachineNodeAnnotations = make(
+			map[string]string,
+			len(running.MachineNodeAnnotations)+1,
+		)
+	}
+
+	mergeExternalNodeAnnotations(
+		desired.MachineNodeAnnotations,
+		running.MachineNodeAnnotations,
+		previousOwnedKeys,
+	)
+
+	return persistNodeAnnotationOwnership(
+		desired.MachineNodeAnnotations,
+		currentOwnedKeys,
+		hasMarker,
+	)
+}
+
+func resolvePreviousNodeAnnotationKeys(
+	desired, running map[string]string,
+) (map[string]struct{}, bool, error) {
+	if _, claimsOwnershipMarker := desired[managedNodeAnnotationKeys]; claimsOwnershipMarker {
+		return nil, false, errManagedNodeAnnotationKeysReserved
+	}
+
+	bootstrapOwnedKeys, hasBootstrapMarker, err := previousNodeAnnotationKeys(
+		desired,
+		bootstrapManagedNodeAnnotationKeys,
+	)
+	if err != nil {
+		return nil, false, fmt.Errorf("decode bootstrap managed node-annotation keys: %w", err)
+	}
+
+	// The bootstrap directive is input only. Strip it before deriving the current
+	// ownership set and before returning a config that Talos can apply.
+	delete(desired, bootstrapManagedNodeAnnotationKeys)
+
+	previousOwnedKeys, hasRunningMarker, err := previousNodeAnnotationKeys(
+		running,
+		managedNodeAnnotationKeys,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !hasRunningMarker && hasBootstrapMarker {
+		previousOwnedKeys = bootstrapOwnedKeys
+	}
+
+	return previousOwnedKeys, hasRunningMarker || hasBootstrapMarker, nil
+}
+
+func persistNodeAnnotationOwnership(
+	annotations map[string]string,
+	currentOwnedKeys []string,
+	hasMarker bool,
+) error {
+	if hasMarker || len(currentOwnedKeys) > 0 {
+		encodedKeys, err := json.Marshal(currentOwnedKeys)
+		if err != nil {
+			return fmt.Errorf("encode managed node-annotation keys: %w", err)
+		}
+
+		annotations[managedNodeAnnotationKeys] = string(encodedKeys)
+
+		annotationBytes := nodeAnnotationBytes(annotations)
+		if annotationBytes > maxNodeAnnotationBytes {
+			return fmt.Errorf(
+				"%w: %d bytes",
+				errNodeAnnotationOwnershipMetadataLimit,
+				annotationBytes,
+			)
+		}
+	}
+
+	return nil
+}
+
+func nodeAnnotationBytes(annotations map[string]string) int {
+	total := 0
+	for key, value := range annotations {
+		total += len(key) + len(value)
+	}
+
+	return total
+}
+
+func mergeExternalNodeAnnotations(
+	desired, running map[string]string,
+	previousOwnedKeys map[string]struct{},
+) {
+	for key, value := range running {
+		if key == managedNodeAnnotationKeys {
+			continue
+		}
+
+		if _, ownedNow := desired[key]; ownedNow {
+			continue
+		}
+
+		if _, ownedBefore := previousOwnedKeys[key]; ownedBefore {
+			continue
+		}
+
+		desired[key] = value
+	}
+}
+
+func nodeAnnotationKeys(annotations map[string]string) []string {
+	keys := make([]string, 0, len(annotations))
+	for key := range annotations {
+		if key != managedNodeAnnotationKeys && key != bootstrapManagedNodeAnnotationKeys {
+			keys = append(keys, key)
+		}
+	}
+
+	return keys
+}
+
+func previousNodeAnnotationKeys(
+	annotations map[string]string,
+	markerKey string,
+) (map[string]struct{}, bool, error) {
+	markerValue, hasMarker := annotations[markerKey]
+	if !hasMarker {
+		return nil, false, nil
+	}
+
+	var keys []string
+
+	err := json.Unmarshal([]byte(markerValue), &keys)
+	if err != nil {
+		return nil, true, fmt.Errorf("decode managed node-annotation keys: %w", err)
+	}
+
+	if keys == nil {
+		return nil, true, errManagedNodeAnnotationKeysExpectedJSONArray
+	}
+
+	keySet := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		keySet[key] = struct{}{}
+	}
+
+	return keySet, true, nil
 }
 
 // graftHCloudVIP preserves the runtime-injected Hetzner VIP on its network
