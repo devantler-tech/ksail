@@ -107,9 +107,9 @@ func TestDeriveServerSpecsRejectsClusterPKIKeyPaths(t *testing.T) {
 		// into a silent miss.
 		"PKI working directory, key on a later line": "cd /etc/kubernetes/pki && cat ca.crt\n" +
 			"install -m 0600 /tmp/staged ca.key",
-		"PKI physical error options":     "cd -P -e /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
-		"PKI combined physical error":    "cd -Pe /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
-		"PKI reordered physical error":   "cd -eP /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI physical error options":   "cd -P -e /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI combined physical error":  "cd -Pe /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI reordered physical error": "cd -eP /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 	}
 
 	for name, body := range tests {
@@ -283,5 +283,87 @@ func TestDeriveServerSpecsHandlesRawGzipUserData(t *testing.T) {
 
 		require.ErrorIs(t, err, hetznerbase.ErrSigningTransportInUserData)
 		assert.Nil(t, specs)
+	})
+}
+
+// TestDeriveServerSpecsBoundsForwardedUserData pins the PROVIDER bound on the
+// value that is actually sent, which is a different limit from the inspection
+// bound and exists for a different reason.
+//
+// maxDecodedUserDataBytes caps how much text the guards will read, so a marker
+// cannot hide past the inspected prefix. It says nothing about what Hetzner will
+// accept. Hetzner's ceiling on user_data is 32 KiB -- the same limit the Talos
+// autoscaler path already pins as hetznerUserDataLimitBytes, where exceeding it
+// makes the API reject the request with "invalid input in field 'user_data'".
+//
+// Expanding compressed user-data before forwarding it is what makes the two
+// bounds diverge: a payload that is comfortably under the provider ceiling while
+// compressed can expand well past it, so forwarding the expanded text turns a
+// deployable node into an opaque provider rejection. Refusing locally names the
+// real problem instead.
+func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
+	t.Parallel()
+
+	// Compresses to far under the provider ceiling, expands to far over it, so
+	// the two bounds disagree about this exact payload.
+	oversized := userDataCarrying(
+		"runcmd:\n  - echo hello\n" + strings.Repeat("# padding\n", 6000),
+	)
+
+	t.Run("gzip expanding past the provider ceiling is refused", func(t *testing.T) {
+		t.Parallel()
+
+		compressed := gzipUserData(t, oversized)
+		require.Less(t, len(compressed), 32768,
+			"fixture must be under the provider ceiling while compressed, "+
+				"or it would not distinguish the two bounds")
+		require.Greater(t, len(oversized), 32768,
+			"fixture must exceed the provider ceiling once expanded")
+
+		nodes := twoNodeSpecs()
+		nodes[1].UserData = compressed
+
+		specs, err := hetznerbase.DeriveServerSpecs(
+			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+		)
+
+		require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
+		assert.Nil(t, specs)
+	})
+
+	// The bound governs the forwarded value whatever produced it, so uncompressed
+	// user-data over the ceiling is refused on the same terms rather than being
+	// handed to the provider to reject.
+	t.Run("uncompressed user-data over the ceiling is refused", func(t *testing.T) {
+		t.Parallel()
+
+		nodes := twoNodeSpecs()
+		nodes[1].UserData = oversized
+
+		specs, err := hetznerbase.DeriveServerSpecs(
+			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+		)
+
+		require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
+		assert.Nil(t, specs)
+	})
+
+	// The control: a payload at the ceiling still goes through, so the bound is a
+	// ceiling rather than a blanket refusal of large user-data.
+	t.Run("user-data at the ceiling is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		atLimit := userDataCarrying("runcmd:\n  - echo hello")
+		require.LessOrEqual(t, len(atLimit), 32768)
+
+		nodes := twoNodeSpecs()
+		nodes[1].UserData = atLimit
+
+		specs, err := hetznerbase.DeriveServerSpecs(
+			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+		)
+
+		require.NoError(t, err)
+		require.Len(t, specs, 2)
 	})
 }

@@ -26,6 +26,24 @@ const DefaultImageName = "ubuntu-24.04"
 
 const maxDecodedUserDataBytes = 1 << 20
 
+// maxProviderUserDataBytes is Hetzner Cloud's hard ceiling on a server's
+// user_data field (32 KiB). It is a different bound from
+// maxDecodedUserDataBytes, which caps how much text the guards will READ so a
+// marker cannot hide past the inspected prefix; this one caps what the provider
+// will ACCEPT. The Talos autoscaler path pins the same ceiling as
+// hetznerUserDataLimitBytes, where exceeding it makes Hetzner reject the request
+// with "invalid input in field 'user_data'".
+const maxProviderUserDataBytes = 32768
+
+// ErrUserDataTooLargeForProvider is returned when the user-data a node would be
+// created with exceeds what Hetzner accepts. Expanding compressed user-data
+// before forwarding it is what makes this reachable: a payload well under the
+// ceiling while compressed can expand past it, and forwarding the expanded text
+// would turn a deployable node into an opaque provider rejection.
+var ErrUserDataTooLargeForProvider = errors.New(
+	"hetzner: provider user-data exceeds the maximum the provider accepts",
+)
+
 // ErrPrivateKeyInUserData is returned when a server spec would deliver private
 // key material through provider-readable user-data. The cloud-init ssh_keys
 // module is the deliberate exception: it carries the per-node SSH host identity
@@ -577,6 +595,10 @@ func gunzipLimited(compressed []byte) (string, bool, bool) {
 // priority is preserved across the unwrap. Returning that expanded text is
 // load-bearing: raw gzip bytes are not valid JSON text and must not be forwarded
 // to the provider after only their expanded form was validated.
+//
+// The returned text is finally bounded by what the provider accepts, which is a
+// separate ceiling from the inspection bound and is only reachable because the
+// expansion above can grow an acceptable input past it.
 func validateProviderUserData(userData string) (string, error) {
 	inspected, err := expandRawGzipUserData(userData)
 	if err != nil {
@@ -591,6 +613,17 @@ func validateProviderUserData(userData string) (string, error) {
 	err = validateSigningTransport(inspected)
 	if err != nil {
 		return "", err
+	}
+
+	// The guards have passed, so the remaining question is whether the provider
+	// will take this value at all. Checked here rather than at the call site
+	// because this function decides what gets forwarded, and expanding gzip is
+	// what lets an acceptable input become an unacceptable output.
+	if len(inspected) > maxProviderUserDataBytes {
+		return "", fmt.Errorf(
+			"%w: %d bytes exceeds the %d-byte limit",
+			ErrUserDataTooLargeForProvider, len(inspected), maxProviderUserDataBytes,
+		)
 	}
 
 	return inspected, nil
