@@ -88,6 +88,21 @@ type ciWorkflow struct {
 	} `yaml:"jobs"`
 }
 
+// TestGoValidationIncludesVulnerabilityAllowlistChanges pins ci-go's pull-request gate to
+// govuln-allowlist ON PURPOSE. The assertion below looks like it pins a stale contract, and
+// twice it has been "corrected" to needs.changes.outputs.code (ksail#6563, ksail#6564 — both
+// closed once measured). It is not stale:
+//
+// devantler-tech/actions/.github/workflows/validate-go-project.yaml declares its own
+// pull_request: trigger as well as workflow_call, so it already runs org-required on every
+// pull request in this repository, publishing its checks without the "✅ Validate Go Project /"
+// prefix. ci-go's pull-request arm therefore adds nothing on a Go diff. What it uniquely adds
+// is the scan-default-branch: true behaviour on an allowlist-only pull request, which the
+// required run — taking that input's false default — does not perform.
+//
+// .govulncheck-allow.txt is itself a member of the code filter, so widening this gate to code
+// is a strict superset that duplicates all nine required-workflow jobs on every Go pull
+// request and buys no coverage. If this assertion fails, fix the workflow, not the test.
 func TestGoValidationIncludesVulnerabilityAllowlistChanges(t *testing.T) {
 	t.Parallel()
 

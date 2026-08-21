@@ -2,6 +2,7 @@ package clusterapi_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"filippo.io/age"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
+	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +59,68 @@ func TestCipherRoundTripDefaultRecipient(t *testing.T) { //nolint:paralleltest /
 	decrypted, err := service.DecryptSecret(ctx, encrypted, "yaml")
 	require.NoError(t, err)
 	assert.Contains(t, decrypted, "token: abc123")
+}
+
+func TestDecryptSecretRejectsNonAgeSopsMetadata(t *testing.T) {
+	t.Parallel()
+
+	service := clusterapi.NewTestService(nil)
+	encrypted := `data: ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]
+sops:
+  hc_vault:
+    - vault_address: http://127.0.0.1:1
+      engine_path: transit
+      key_name: attacker
+      created_at: "2026-07-12T00:00:00Z"
+      enc: vault:v1:attacker-controlled
+  lastmodified: "2026-07-12T00:00:00Z"
+  mac: ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]
+  version: 3.13.2
+`
+
+	_, err := service.DecryptSecret(context.Background(), encrypted, "yaml")
+
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.ErrorContains(t, err, "only age recipients")
+}
+
+func TestDecryptSecretRejectsNonX25519AgeRecipient(t *testing.T) {
+	t.Parallel()
+
+	const sshRecipient = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID+Wi8WZw2bXfBpcs/WECttCzP39OkenS6pHWHWGFJvN Test"
+
+	service := clusterapi.NewTestService(nil)
+	encrypted, err := service.EncryptSecret(
+		context.Background(), "password: s3cret\n", sshRecipient, "yaml",
+	)
+	require.NoError(t, err)
+
+	_, err = service.DecryptSecret(context.Background(), encrypted, "yaml")
+
+	require.ErrorIs(t, err, api.ErrInvalid)
+	assert.ErrorContains(t, err, "X25519")
+}
+
+func TestDecryptSecretDoesNotExecuteAgeIdentityCommands(t *testing.T) {
+	recipient := writeAgeKey(t)
+	service := clusterapi.NewTestService(nil)
+
+	encrypted, err := service.EncryptSecret(
+		context.Background(), "password: s3cret\n", recipient, "yaml",
+	)
+	require.NoError(t, err)
+
+	keyCommandMarker := filepath.Join(t.TempDir(), "age-key-command-ran")
+	sshCommandMarker := filepath.Join(t.TempDir(), "age-ssh-command-ran")
+	t.Setenv(sopsage.SopsAgeKeyCmdEnv, fmt.Sprintf("touch %q", keyCommandMarker))
+	t.Setenv(sopsage.SopsAgeSshPrivateKeyCmdEnv, fmt.Sprintf("touch %q", sshCommandMarker))
+
+	decrypted, err := service.DecryptSecret(context.Background(), encrypted, "yaml")
+
+	require.NoError(t, err)
+	assert.Contains(t, decrypted, "password: s3cret")
+	assert.NoFileExists(t, keyCommandMarker)
+	assert.NoFileExists(t, sshCommandMarker)
 }
 
 func TestCipherRecipientsFromKeyFile(t *testing.T) { //nolint:paralleltest // t.Setenv

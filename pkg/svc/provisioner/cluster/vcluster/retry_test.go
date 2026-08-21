@@ -1,6 +1,7 @@
 package vclusterprovisioner_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -43,6 +44,21 @@ var (
 
 func newTestLogger() loftlog.Logger {
 	return loftlog.NewStreamLogger(io.Discard, io.Discard, logrus.WarnLevel)
+}
+
+func assertDBusRecoveryMarkers(t *testing.T, output string, wantMarkers bool) {
+	t.Helper()
+
+	for _, marker := range []string{
+		"ksail.vcluster.dbus_recovery state=entered",
+		"ksail.vcluster.dbus_recovery state=completed",
+	} {
+		if wantMarkers {
+			assert.Contains(t, output, marker)
+		} else {
+			assert.NotContains(t, output, marker)
+		}
+	}
 }
 
 // --- isTransientCreateError tests ---
@@ -256,6 +272,62 @@ func TestCreateWithRetry_DBusErrorTriggersRecovery(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, recoverCalls, "D-Bus recovery should be called once")
+}
+
+func TestCreateWithRetry_DBusRecoveryMarkers(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name        string
+		createErr   error
+		wantMarkers bool
+	}{
+		{"recovery_path_reports_start_and_completion_without_user_input", errDBus, true},
+		{"happy_path_reports_no_recovery_marker", nil, false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+
+			logger := loftlog.NewStreamLogger(&output, &output, logrus.InfoLevel)
+			create := func(
+				_ context.Context,
+				_ *cli.CreateOptions,
+				_ *flags.GlobalFlags,
+				_ string,
+				_ loftlog.Logger,
+			) error {
+				return testCase.createErr
+			}
+			cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
+				t.Error("cleanup should not be called")
+			}
+			recoverDBus := func(
+				_ context.Context,
+				_ *flags.GlobalFlags,
+				_ string,
+				_ loftlog.Logger,
+			) error {
+				return nil
+			}
+
+			err := vclusterprovisioner.CreateWithRetryForTest(
+				context.Background(),
+				&cli.CreateOptions{},
+				&flags.GlobalFlags{},
+				"user-controlled\ncluster",
+				logger,
+				time.Millisecond,
+				create, cleanup, recoverDBus,
+			)
+
+			require.NoError(t, err)
+
+			assertDBusRecoveryMarkers(t, output.String(), testCase.wantMarkers)
+			assert.NotContains(t, output.String(), "user-controlled")
+		})
+	}
 }
 
 // TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry is the regression guard

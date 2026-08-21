@@ -366,6 +366,19 @@ func (r AWSResolution) HasCustomCredentialSources() bool {
 	return r.hasCustomCredentialEnv
 }
 
+// SelectorEquals reports whether two resolutions name the same AWS identity selector.
+// Capture uses this to refuse a mid-create selector repoint without treating
+// same-identity key rotation as a different cluster. Compare selector identity
+// only — not frozen secrets, frozen, or sdkConfig.
+func (r AWSResolution) SelectorEquals(other AWSResolution) bool {
+	return r.Profile == other.Profile &&
+		r.AccessKeyID == other.AccessKeyID &&
+		r.Region == other.Region &&
+		r.sourceEnvVars == other.sourceEnvVars &&
+		r.sourceRegionEnvVar == other.sourceRegionEnvVar &&
+		r.hasCustomCredentialEnv == other.hasCustomCredentialEnv
+}
+
 // IsFrozen reports whether the selection was resolved to one concrete static credential tuple.
 func (r AWSResolution) IsFrozen() bool {
 	return r.frozen
