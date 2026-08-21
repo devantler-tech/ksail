@@ -100,6 +100,9 @@ func TestDeriveServerSpecsRejectsClusterPKIKeyPaths(t *testing.T) {
 		"PKI working directory":          "cd /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI logical working directory":  "cd -L /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 		"PKI physical working directory": "cd -P /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI physical error options":     "cd -P -e /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI combined physical error":    "cd -Pe /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
+		"PKI reordered physical error":   "cd -eP /etc/kubernetes/pki && install -m 0600 /tmp/staged ca.key",
 	}
 
 	for name, body := range tests {

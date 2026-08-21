@@ -350,8 +350,11 @@ var clusterPKIKeyPath = regexp.MustCompile(`/etc/kubernetes/pki/[^\s"']*\.key`)
 // shell changes its working directory into the cluster PKI tree. At execution
 // time `cd /etc/kubernetes/pki && install ... ca.key` writes the same file as an
 // absolute path, so inspecting only contiguous path spellings leaves a bypass.
+// Shell short options can be separate or clustered; accept the no-argument cd
+// option alphabet conservatively so combinations such as `-P -e` and `-Pe`
+// cannot hide the working directory from the guard.
 var clusterPKIWorkingDirectoryKeyPath = regexp.MustCompile(
-	`(?is)\bcd\s+(?:-[LP]\s+|--\s+)?/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
+	`(?is)\bcd\s+(?:(?:-[LPe@]+|--)\s+)*/etc/kubernetes/pki(?:/[^\s;&|]*)?\s*(?:&&|;|\n)` +
 		`[^;&|]*[^\s/;&|]*\.key\b`,
 )
 
