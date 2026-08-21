@@ -55,9 +55,27 @@ func (p *K3kProvisioner) BuildClusterCRForTest(
 	return p.buildClusterCR(clusterName, namespace, certSAN)
 }
 
-// EnsureNamespaceForTest exposes ensureNamespace for unit testing.
-func (p *K3kProvisioner) EnsureNamespaceForTest(ctx context.Context, namespace string) error {
-	return p.ensureNamespace(ctx, namespace)
+// EnsureNamespaceForTest exposes ensureNamespace for unit testing. name is the lifecycle argument
+// Create/Delete pass, so a test can exercise the case where the operator's provisioned name
+// differs from the factory's configured fallback.
+func (p *K3kProvisioner) EnsureNamespaceForTest(
+	ctx context.Context,
+	name, namespace string,
+) error {
+	return p.ensureNamespace(ctx, p.effectiveClusterName(name), namespace)
+}
+
+// DeletePrivilegedPodGuardForTest exposes deletePrivilegedPodGuard for unit testing.
+func (p *K3kProvisioner) DeletePrivilegedPodGuardForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.deletePrivilegedPodGuard(ctx, clusterName)
+}
+
+// PrivilegedPodGuardNameForTest exposes privilegedPodGuardName for unit testing.
+func (p *K3kProvisioner) PrivilegedPodGuardNameForTest(clusterName string) string {
+	return p.privilegedPodGuardName(clusterName)
 }
 
 // WithRunnerForTest injects a command runner so lifecycle operations can be

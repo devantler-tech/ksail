@@ -128,8 +128,9 @@ func (s *crClusterService) Update(
 	}
 
 	// The host cluster's spec is not reconciled (the operator does not manage the hub's lifecycle),
-	// so spec edits through the API would only mislead.
-	if existing.IsHostCluster() {
+	// so spec edits through the API would only mislead. Match the registration, not the bare label:
+	// the label is client-writable, so a forged one would otherwise make this Cluster unupdatable.
+	if existing.IsHostClusterRegistration(HostClusterNamespace()) {
 		return nil, api.ErrHostClusterProtected
 	}
 
@@ -154,7 +155,7 @@ func (s *crClusterService) Delete(ctx context.Context, namespace, name string) e
 	var existing v1alpha1.Cluster
 
 	getErr := s.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &existing)
-	if getErr == nil && existing.IsHostCluster() {
+	if getErr == nil && existing.IsHostClusterRegistration(HostClusterNamespace()) {
 		return api.ErrHostClusterProtected
 	}
 
