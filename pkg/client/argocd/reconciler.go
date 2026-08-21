@@ -224,3 +224,25 @@ func isApplicationSynced(app *unstructured.Unstructured) bool {
 
 	return true
 }
+
+// IsColdStartTransient reports whether err is a source-availability failure
+// that ArgoCD is expected to resolve on its own, given how long the caller has
+// been polling.
+//
+// During a control-plane cold start ArgoCD's repo-server and redis are still
+// coming up, so the first comparison of the root Application briefly reports a
+// connection failure. ArgoCD retries internally and self-heals seconds later,
+// but the message is indistinguishable from a genuinely unreachable source, so
+// the classifier cannot tell the two apart from the text alone. Elapsed poll
+// time is what separates them: a source that is still unavailable once the
+// warm-up window has passed is a real misconfiguration.
+//
+// Only ErrSourceNotAvailable is eligible. A failed operation, or any other
+// error, stays terminal so a genuine failure is never masked into a timeout.
+func IsColdStartTransient(err error, elapsed, grace time.Duration) bool {
+	if err == nil {
+		return false
+	}
+
+	return errors.Is(err, ErrSourceNotAvailable) && elapsed < grace
+}
