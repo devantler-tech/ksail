@@ -282,7 +282,7 @@ func TestCreateWithRetry_DBusRecoveryMarkers(t *testing.T) {
 		createErr   error
 		wantMarkers bool
 	}{
-		{"recovery_path_reports_start_and_completion", errDBus, true},
+		{"recovery_path_reports_start_and_completion_without_user_input", errDBus, true},
 		{"happy_path_reports_no_recovery_marker", nil, false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -316,7 +316,7 @@ func TestCreateWithRetry_DBusRecoveryMarkers(t *testing.T) {
 				context.Background(),
 				&cli.CreateOptions{},
 				&flags.GlobalFlags{},
-				"test-cluster",
+				"user-controlled\ncluster",
 				logger,
 				time.Millisecond,
 				create, cleanup, recoverDBus,
@@ -325,6 +325,7 @@ func TestCreateWithRetry_DBusRecoveryMarkers(t *testing.T) {
 			require.NoError(t, err)
 
 			assertDBusRecoveryMarkers(t, output.String(), testCase.wantMarkers)
+			assert.NotContains(t, output.String(), "user-controlled")
 		})
 	}
 }
