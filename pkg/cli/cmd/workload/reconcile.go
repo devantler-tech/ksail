@@ -812,6 +812,10 @@ func buildArgoCDApplicationTasks(
 // pollUntilApplicationReady polls a named ArgoCD Application until it is
 // synced and healthy, or the context's deadline expires. On permanent failure,
 // it returns an actionable error including the resource name and failure details.
+// A source-availability error inside the cold-start warm-up window is treated as
+// "not ready yet" rather than a permanent failure, because ArgoCD resolves those
+// itself within seconds of the control plane coming up.
+//
 // The caller is expected to provide a context with a deadline (shared across all
 // application tasks) so that the total reconcile time is bounded.
 func pollUntilApplicationReady(
@@ -819,12 +823,18 @@ func pollUntilApplicationReady(
 	argoReconciler *argocd.Reconciler,
 	name string,
 ) error {
+	start := time.Now()
+
 	return reconcilerclient.PollUntilReady( //nolint:wrapcheck // identity preserved
 		ctx,
 		argoCDApplicationPollInterval,
 		func(ctx context.Context) (reconcilerclient.CheckResult, error) {
 			ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
 			if err != nil {
+				if argocd.IsColdStartTransient(err, time.Since(start), argoCDSourceWarmupGrace) {
+					return reconcilerclient.CheckResult{Ready: false}, nil
+				}
+
 				return reconcilerclient.CheckResult{}, err //nolint:wrapcheck // identity preserved
 			}
 
