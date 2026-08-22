@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // metadataUserDataEndpoint is the Hetzner instance metadata document returning
@@ -18,6 +19,10 @@ import (
 // the node itself, which is why verification is expressed as a command rather
 // than an API read.
 const metadataUserDataEndpoint = "http://169.254.169.254/hetzner/v1/userdata"
+
+// metadataServiceHost is the link-local address of the metadata service, named
+// separately because it is what --noproxy must exempt.
+const metadataServiceHost = "169.254.169.254"
 
 // metadataFetchTimeoutSeconds bounds the metadata request so a node whose
 // link-local route is black-holed fails instead of hanging a verification run.
@@ -116,16 +121,40 @@ func VerifyNodeUserData(ctx context.Context, run NodeCommand) error {
 		)
 	}
 
+	// Emptiness has to be judged again AFTER decompression. A gzip stream of
+	// nothing is several non-space bytes, so the raw check above passes it
+	// through, and the document it expands to is empty -- which every guard
+	// trivially accepts. That is the same unobserved-reads-as-verified failure
+	// the raw check refuses, arriving one encoding layer down.
+	inspected, err := expandRawGzipUserData(string(stdout))
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrNodeUserDataUnreadable, err)
+	}
+
+	if strings.TrimSpace(inspected) == "" {
+		return fmt.Errorf(
+			"%w: %s returned a document that is empty once decoded",
+			ErrNodeUserDataUnreadable, metadataUserDataEndpoint,
+		)
+	}
+
 	return VerifyNoSigningMaterial(string(stdout))
 }
 
 // metadataUserDataCommand builds the metadata fetch. --fail turns an HTTP error
-// status into a non-zero exit so a proxy or error page cannot be inspected as
-// though it were user-data, and --show-error keeps the cause on stderr for the
-// caller to surface.
+// status into a non-zero exit so an error page cannot be inspected as though it
+// were user-data, and --show-error keeps the cause on stderr for the caller to
+// surface.
+//
+// --noproxy is the load-bearing one. The node may export ALL_PROXY or a
+// lowercase http_proxy, and curl honours those for this link-local address like
+// any other, so the request could be answered by a proxy instead of the metadata
+// service. A proxy returning clean content would be a false pass on the exact
+// question this function exists to answer -- what the PROVIDER holds -- so the
+// address is pinned out of proxying rather than trusted to be direct.
 func metadataUserDataCommand() string {
 	return fmt.Sprintf(
-		"curl --fail --silent --show-error --max-time %d -- %s",
-		metadataFetchTimeoutSeconds, metadataUserDataEndpoint,
+		"curl --fail --silent --show-error --noproxy %s --max-time %d -- %s",
+		metadataServiceHost, metadataFetchTimeoutSeconds, metadataUserDataEndpoint,
 	)
 }

@@ -252,3 +252,59 @@ func TestVerifyNodeUserDataIgnoresWhitespaceOnlyStderr(t *testing.T) {
 		t.Fatalf("whitespace-only stderr must not be treated as a diagnostic: %v", err)
 	}
 }
+
+// A node may export ALL_PROXY or a lowercase http_proxy, and curl honours those
+// for a link-local address like any other. A proxy answering this request could
+// return clean content and produce a false pass on the one question the function
+// exists to answer -- what the PROVIDER holds -- so the address must be pinned
+// out of proxying rather than assumed to be reached directly.
+func TestVerifyNodeUserDataBypassesProxiesForTheMetadataAddress(t *testing.T) {
+	t.Parallel()
+
+	var seen string
+
+	run := func(_ context.Context, command string) ([]byte, []byte, error) {
+		seen = command
+
+		return []byte(cleanUserData), nil, nil
+	}
+
+	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(seen, "--noproxy 169.254.169.254") {
+		t.Fatalf("metadata request does not bypass proxies, command was %q", seen)
+	}
+}
+
+// A gzip stream of nothing is several non-space bytes, so the raw emptiness
+// check passes it through; the document it expands to is empty, which every
+// guard trivially accepts. Emptiness therefore has to be re-judged after
+// decompression or "we could not look" reads as the strongest possible result.
+func TestVerifyNodeUserDataRejectsGzipOfEmptyDocument(t *testing.T) {
+	t.Parallel()
+
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(gzipOf(t, "")), nil, nil
+	}
+
+	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
+	if !errors.Is(err, hetznerbase.ErrNodeUserDataUnreadable) {
+		t.Fatalf("want ErrNodeUserDataUnreadable for a gzip of nothing, got %v", err)
+	}
+}
+
+func TestVerifyNodeUserDataRejectsGzipOfWhitespaceOnlyDocument(t *testing.T) {
+	t.Parallel()
+
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(gzipOf(t, "  \n\t\n")), nil, nil
+	}
+
+	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
+	if !errors.Is(err, hetznerbase.ErrNodeUserDataUnreadable) {
+		t.Fatalf("want ErrNodeUserDataUnreadable for a gzip of whitespace, got %v", err)
+	}
+}
