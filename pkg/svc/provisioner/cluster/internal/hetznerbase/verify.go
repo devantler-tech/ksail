@@ -38,13 +38,20 @@ var ErrNodeUserDataUnreadable = errors.New(
 )
 
 // NodeCommand runs a single shell command on a node and returns its standard
-// output. A non-zero exit or a transport failure must return a non-nil error so
-// the caller cannot mistake an unexecuted command for an empty result.
+// output and standard error separately. A non-zero exit or a transport failure
+// must return a non-nil error so the caller cannot mistake an unexecuted command
+// for an empty result.
+//
+// stderr is returned rather than discarded because a zero exit does not imply a
+// complete read: curl runs with --show-error, so a diagnostic can be written
+// while the command still succeeds, and an adapter is free to surface a remote's
+// stderr without failing. Folding the two streams together would hide exactly
+// that case, and the caller could not tell a full document from a truncated one.
 //
 // It is a function rather than an interface so callers adapt their own client
 // without this package depending on a transport: the bootstrap SSH client's Run
 // method fits behind a two-line adapter.
-type NodeCommand func(ctx context.Context, command string) ([]byte, error)
+type NodeCommand func(ctx context.Context, command string) (stdout, stderr []byte, err error)
 
 // VerifyNoSigningMaterial reports whether userData carries cluster signing
 // material, applying the same guards the create path applies.
@@ -86,9 +93,20 @@ func VerifyNodeUserData(ctx context.Context, run NodeCommand) error {
 		return fmt.Errorf("%w: no command runner was supplied", ErrNodeUserDataUnreadable)
 	}
 
-	stdout, err := run(ctx, metadataUserDataCommand())
+	stdout, stderr, err := run(ctx, metadataUserDataCommand())
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrNodeUserDataUnreadable, err)
+	}
+
+	// A zero exit with a diagnostic on stderr is an incomplete read, not a clean
+	// node: curl's --show-error puts the cause here, and reporting "no signing
+	// material" from a document we know was not fully retrieved is the same
+	// unobserved-reads-as-verified failure the empty-document guard below refuses.
+	if len(bytes.TrimSpace(stderr)) != 0 {
+		return fmt.Errorf(
+			"%w: %s wrote to stderr: %s",
+			ErrNodeUserDataUnreadable, metadataUserDataEndpoint, bytes.TrimSpace(stderr),
+		)
 	}
 
 	if len(bytes.TrimSpace(stdout)) == 0 {

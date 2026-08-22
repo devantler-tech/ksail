@@ -130,8 +130,8 @@ func TestVerifyNoSigningMaterialIgnoresProviderSizeCeiling(t *testing.T) {
 func TestVerifyNodeUserDataRejectsEmptyDocument(t *testing.T) {
 	t.Parallel()
 
-	run := func(_ context.Context, _ string) ([]byte, error) {
-		return []byte("   \n"), nil
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte("   \n"), nil, nil
 	}
 
 	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
@@ -144,8 +144,8 @@ func TestVerifyNodeUserDataSurfacesFetchFailure(t *testing.T) {
 	t.Parallel()
 
 	sentinel := errFetchFailed
-	run := func(_ context.Context, _ string) ([]byte, error) {
-		return nil, sentinel
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return nil, nil, sentinel
 	}
 
 	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
@@ -161,8 +161,8 @@ func TestVerifyNodeUserDataSurfacesFetchFailure(t *testing.T) {
 func TestVerifyNodeUserDataDetectsLeakOnNode(t *testing.T) {
 	t.Parallel()
 
-	run := func(_ context.Context, _ string) ([]byte, error) {
-		return []byte(leakingUserData), nil
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(leakingUserData), nil, nil
 	}
 
 	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
@@ -174,8 +174,8 @@ func TestVerifyNodeUserDataDetectsLeakOnNode(t *testing.T) {
 func TestVerifyNodeUserDataAcceptsCleanNode(t *testing.T) {
 	t.Parallel()
 
-	run := func(_ context.Context, _ string) ([]byte, error) {
-		return []byte(cleanUserData), nil
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(cleanUserData), nil, nil
 	}
 
 	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
@@ -191,10 +191,10 @@ func TestVerifyNodeUserDataQueriesTheMetadataUserDataEndpoint(t *testing.T) {
 
 	var seen string
 
-	run := func(_ context.Context, command string) ([]byte, error) {
+	run := func(_ context.Context, command string) ([]byte, []byte, error) {
 		seen = command
 
-		return []byte(cleanUserData), nil
+		return []byte(cleanUserData), nil, nil
 	}
 
 	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
@@ -213,5 +213,42 @@ func TestVerifyNodeUserDataRejectsMissingRunner(t *testing.T) {
 	err := hetznerbase.VerifyNodeUserData(t.Context(), nil)
 	if !errors.Is(err, hetznerbase.ErrNodeUserDataUnreadable) {
 		t.Fatalf("want ErrNodeUserDataUnreadable for nil runner, got %v", err)
+	}
+}
+
+// A zero exit with a diagnostic on stderr is the case a stdout-only runner
+// cannot express: the document may be truncated, yet nothing in stdout says so.
+// Reporting it clean would turn a partial read into the strongest result the
+// function can return, which is the same failure the empty-document guard
+// refuses. curl runs with --show-error, so this is the shape a real fetch takes
+// when it warns without failing.
+func TestVerifyNodeUserDataRejectsStderrOnZeroExit(t *testing.T) {
+	t.Parallel()
+
+	diagnostic := []byte("curl: (18) transfer closed with outstanding read data")
+
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(cleanUserData), diagnostic, nil
+	}
+
+	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
+	if !errors.Is(err, hetznerbase.ErrNodeUserDataUnreadable) {
+		t.Fatalf("want ErrNodeUserDataUnreadable for stderr on a zero exit, got %v", err)
+	}
+}
+
+// Whitespace-only stderr is not a diagnostic — a runner that always allocates a
+// buffer would otherwise make every node unreadable, which would be a guard that
+// fails closed so hard it can never pass.
+func TestVerifyNodeUserDataIgnoresWhitespaceOnlyStderr(t *testing.T) {
+	t.Parallel()
+
+	run := func(_ context.Context, _ string) ([]byte, []byte, error) {
+		return []byte(cleanUserData), []byte("  \n\t"), nil
+	}
+
+	err := hetznerbase.VerifyNodeUserData(t.Context(), run)
+	if err != nil {
+		t.Fatalf("whitespace-only stderr must not be treated as a diagnostic: %v", err)
 	}
 }
