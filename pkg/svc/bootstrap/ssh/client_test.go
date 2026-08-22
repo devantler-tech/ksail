@@ -27,7 +27,7 @@ var errUnknownClientKey = errors.New("unknown client key")
 // execHandler scripts one exec request. stdin carries everything the client
 // streamed on the session's input channel, so a write test can assert that
 // secret content travelled there and never in the command line.
-type execHandler func(command string, stdin []byte) (stdout string, stderr string, exitCode uint32)
+type execHandler func(command string, stdin io.Reader) (stdout string, stderr string, exitCode uint32)
 
 // exitStatusPayload is the SSH exit-status request payload (RFC 4254 §6.10).
 type exitStatusPayload struct {
@@ -153,13 +153,11 @@ func serveSession(channel ssh.Channel, requests <-chan *ssh.Request, handler exe
 
 		_ = request.Reply(true, nil)
 
-		// Drain the input channel first: the client streams file content here, and
-		// the handler needs it to assert what actually crossed the wire. The client
-		// always closes its write side (x/crypto/ssh does so even for a nil Stdin),
-		// so this returns promptly for commands that send nothing.
-		stdin, _ := io.ReadAll(channel)
+		// Hand the handler the LIVE input stream rather than a drained copy: a
+		// handler that exits without reading must stop consuming while the client
+		// is still writing, which is how a real remote refusal behaves.
 
-		stdout, stderr, exitCode := handler(payload.Command, stdin)
+		stdout, stderr, exitCode := handler(payload.Command, channel)
 
 		_, _ = channel.Write([]byte(stdout))
 		_, _ = channel.Stderr().Write([]byte(stderr))
@@ -224,7 +222,7 @@ func TestFileExists(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, _ []byte) (string, string, uint32) {
+		func(command string, _ io.Reader) (string, string, uint32) {
 			switch command {
 			case "test -f '/present'":
 				return "", "", 0
@@ -363,7 +361,7 @@ func TestRunCapturesOutputAndZeroExit(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, _ []byte) (string, string, uint32) {
+		func(command string, _ io.Reader) (string, string, uint32) {
 			if command != "uname -r" {
 				return "", "unexpected command: " + command, 1
 			}
@@ -399,7 +397,7 @@ func TestRunSurfacesNonZeroExit(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(string, []byte) (string, string, uint32) {
+		func(string, io.Reader) (string, string, uint32) {
 			return "", "boom\n", 7
 		},
 		0,
@@ -435,7 +433,7 @@ func TestReadFileFetchesQuotedPath(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, _ []byte) (string, string, uint32) {
+		func(command string, _ io.Reader) (string, string, uint32) {
 			sawCommand = command
 
 			return kubeconfig, "", 0
@@ -471,7 +469,7 @@ func TestReadFileEscapesSingleQuotes(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, _ []byte) (string, string, uint32) {
+		func(command string, _ io.Reader) (string, string, uint32) {
 			sawCommand = command
 
 			return "", "", 0
@@ -503,7 +501,7 @@ func TestDialRejectsUnknownHostKey(t *testing.T) {
 	addr, _ := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(string, []byte) (string, string, uint32) {
+		func(string, io.Reader) (string, string, uint32) {
 			return "", "", 0
 		},
 		0,
@@ -526,7 +524,7 @@ func TestDialWithRetryRecoversFromEarlyRefusals(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(string, []byte) (string, string, uint32) {
+		func(string, io.Reader) (string, string, uint32) {
 			return "up\n", "", 0
 		},
 		2,

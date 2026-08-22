@@ -95,6 +95,12 @@ func writeScript(remotePath string, size int, mode fs.FileMode) string {
 		// write the secret straight through to its target; unlinking first means
 		// the redirect always creates a fresh regular file owned by us.
 		"rm -f -- " + staging,
+		// noclobber: the unlink above and this redirect are not atomic, so a racing
+		// re-creation of the staging path could still be waiting here. Exclusive
+		// creation refuses ANY existing entry — regular file, symlink, or dangling
+		// symlink (verified on sh, dash and bash) — so "set -e" fails the write
+		// closed instead of following it.
+		"set -C",
 		"cat > " + staging,
 		// Count what actually arrived. $n is deliberately unquoted so any padding
 		// some wc implementations emit is split away; an empty or non-numeric

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -17,10 +18,11 @@ import (
 	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
 )
 
-// payloadMarker is a token that must never reach the remote command line. It
-// stands in for cluster signing material without being a usable key.
+// osWindows names the one platform whose shell cannot run the remote half.
 const osWindows = "windows"
 
+// payloadMarker is a token that must never reach the remote command line. It
+// stands in for cluster signing material without being a usable key.
 const payloadMarker = "MARKER-cbf29ce484222325"
 
 // writeRecorder captures what the stubbed server observed for one write, so a
@@ -63,8 +65,9 @@ func writeServer(
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, stdin []byte) (string, string, uint32) {
-			recorder.record(command, stdin)
+		func(command string, stdin io.Reader) (string, string, uint32) {
+			drained, _ := io.ReadAll(stdin)
+			recorder.record(command, drained)
 
 			return "", stderr, exitCode
 		},
@@ -213,13 +216,15 @@ func TestWriteFileReportsATruncatedTransfer(t *testing.T) {
 // /bin/sh with the received stdin, so the remote half is exercised for real
 // rather than through a scripted exit code.
 func shellExecHandler(ctx context.Context, captured *writeRecorder) execHandler {
-	return func(command string, stdin []byte) (string, string, uint32) {
-		captured.record(command, stdin)
+	return func(command string, stdin io.Reader) (string, string, uint32) {
+		// Record the command only: stdin is streamed straight to the shell, so
+		// draining it here would defeat the point of handing over a live reader.
+		captured.record(command, nil)
 
 		//nolint:gosec // G204: the command is this package's own rendered script,
 		// captured from the stub server; exercising it is the point of the test.
 		cmd := exec.CommandContext(ctx, "/bin/sh", "-c", command)
-		cmd.Stdin = bytes.NewReader(stdin)
+		cmd.Stdin = stdin
 
 		var errBuf bytes.Buffer
 
@@ -454,5 +459,71 @@ func TestWriteFileReportsAFailureThatPreemptsTheStream(t *testing.T) {
 	after, err := os.ReadFile(blocker)
 	if err != nil || !bytes.Equal(after, seed) {
 		t.Fatalf("blocker changed: %q err=%v", after, err)
+	}
+}
+
+// TestWriteFileFailsClosedIfTheStagingPathIsRecreated covers the window the
+// unlink alone cannot close: the unlink and the redirect are two separate
+// syscalls, so an attacker who re-creates the staging path in between would be
+// followed by a plain redirect. Simulated deterministically by neutralising the
+// unlink in the rendered script and leaving a symlink in place, which is
+// exactly the state the losing side of that race produces.
+func TestWriteFileFailsClosedIfTheStagingPathIsRecreated(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == osWindows {
+		t.Skip("the remote half is a POSIX shell script; nodes are Linux")
+	}
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "ca.key")
+	victim := filepath.Join(dir, "victim")
+	untouched := []byte("VICTIM-CONTENT\n")
+
+	err := os.WriteFile(victim, untouched, 0o600)
+	if err != nil {
+		t.Fatalf("seed victim: %v", err)
+	}
+
+	// Capture the script the client would send.
+	client, recorder := writeServer(t, 0, "")
+	secret := []byte(
+		"-----BEGIN PRIVATE KEY-----\n" + payloadMarker + "\n-----END PRIVATE KEY-----\n",
+	)
+
+	err = client.WriteFile(t.Context(), dest, secret, 0o600)
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+
+	script, _ := recorder.snapshot()
+
+	if !strings.Contains(script, "set -C") {
+		t.Fatal("script does not enable noclobber, so the race window is open")
+	}
+
+	// Drop the unlink: this is the attacker winning the race.
+	raced := strings.Replace(script, "rm -f -- '"+dest+".ksail-partial'", "true", 1)
+	if raced == script {
+		t.Fatal("could not neutralise the unlink; the simulation would be vacuous")
+	}
+
+	err = os.Symlink(victim, dest+".ksail-partial")
+	if err != nil {
+		t.Fatalf("plant symlink: %v", err)
+	}
+
+	//nolint:gosec // G204: replays this package's own rendered script.
+	replay := exec.CommandContext(t.Context(), "/bin/sh", "-c", raced)
+	replay.Stdin = bytes.NewReader(secret)
+
+	if replay.Run() == nil {
+		t.Fatal("the write succeeded through a re-created staging path")
+	}
+
+	//nolint:gosec // G304: reads a file just written under the test's own t.TempDir().
+	after, err := os.ReadFile(victim)
+	if err != nil || !bytes.Equal(after, untouched) {
+		t.Fatalf("secret reached the victim through the race: %q err=%v", after, err)
 	}
 }
