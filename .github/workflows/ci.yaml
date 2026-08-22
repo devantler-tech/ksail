@@ -151,7 +151,7 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 Filter paths
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -381,7 +381,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@61d9c87b302523778789c7cf09655b87b6716e87 # v13.0.4
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@cf66636f30170e30cc00b19ddc54b4101b4e8516 # v13.0.5
     # Both inputs make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1627,7 +1627,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@61d9c87b302523778789c7cf09655b87b6716e87 # v13.0.4
+      - uses: devantler-tech/actions/aggregate-job-checks@cf66636f30170e30cc00b19ddc54b4101b4e8516 # v13.0.5
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
