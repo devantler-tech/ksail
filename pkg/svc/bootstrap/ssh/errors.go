@@ -37,4 +37,11 @@ var (
 	// after the byte count matches — so a caller seeing this never has a short
 	// file masquerading as a complete one.
 	ErrWriteTruncated = errors.New("ssh bootstrap: remote file write was truncated")
+
+	// ErrRelativeRemotePath is returned by [Client.WriteFile] for a path that is
+	// not absolute. A relative path would resolve against whatever directory the
+	// login shell happens to start in, which is not a property callers should
+	// depend on, and it is the only way an argument could begin with a dash and
+	// be mistaken for a command-line option.
+	ErrRelativeRemotePath = errors.New("ssh bootstrap: remote path must be absolute")
 )

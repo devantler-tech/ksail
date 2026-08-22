@@ -50,6 +50,10 @@ func (c *Client) WriteFile(
 	content []byte,
 	mode fs.FileMode,
 ) error {
+	if !path.IsAbs(remotePath) {
+		return fmt.Errorf("%w: %s", ErrRelativeRemotePath, remotePath)
+	}
+
 	if mode == 0 {
 		mode = DefaultSecretFileMode
 	}
@@ -63,7 +67,7 @@ func (c *Client) WriteFile(
 
 	if errors.Is(err, ErrCommandFailed) && result.ExitCode == WriteTruncatedExitCode {
 		return fmt.Errorf(
-			"%w: %s: remote received fewer than %d byte(s); destination left unchanged",
+			"%w: %s: remote did not receive the expected %d byte(s); destination left unchanged",
 			ErrWriteTruncated, remotePath, len(content),
 		)
 	}
@@ -86,6 +90,11 @@ func writeScript(remotePath string, size int, mode fs.FileMode) string {
 		// the mode, but only after the bytes have landed, and a secret must not
 		// be world-readable even for that window.
 		"umask 077",
+		// Remove any pre-existing staging entry before creating it. The name is
+		// predictable, and a redirect onto a symlink someone left there would
+		// write the secret straight through to its target; unlinking first means
+		// the redirect always creates a fresh regular file owned by us.
+		"rm -f -- " + staging,
 		"cat > " + staging,
 		// Count what actually arrived. $n is deliberately unquoted so any padding
 		// some wc implementations emit is split away; an empty or non-numeric
@@ -96,6 +105,8 @@ func writeScript(remotePath string, size int, mode fs.FileMode) string {
 			"; exit " + strconv.Itoa(WriteTruncatedExitCode) + "; }",
 		// Set the mode before publishing, so the file is never visible at its
 		// final path with the wrong permissions.
+		// No "--" here: BSD chmod rejects it. remotePath is validated absolute, so
+		// the argument can never begin with a dash and be read as an option.
 		"chmod " + fmt.Sprintf("%04o", mode.Perm()) + " " + staging,
 		"mv -f -- " + staging + " " + shellQuote(remotePath),
 	}, "\n")

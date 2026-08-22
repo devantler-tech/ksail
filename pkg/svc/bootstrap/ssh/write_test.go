@@ -328,3 +328,78 @@ func assertPublished(t *testing.T, dest string, want []byte) {
 		t.Fatal("staging file left beside the destination")
 	}
 }
+
+// TestWriteFileDoesNotFollowAPrePlacedStagingSymlink pins a real attack the
+// staging step would otherwise enable: the staging name is derived from the
+// destination and therefore predictable, so anything already sitting there is
+// attacker-chosen. A shell redirect follows a symlink and writes through to its
+// target, which would deliver the secret to a file of someone else's choosing.
+func TestWriteFileDoesNotFollowAPrePlacedStagingSymlink(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("the remote half is a POSIX shell script; nodes are Linux")
+	}
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "ca.key")
+	victim := filepath.Join(dir, "victim")
+	untouched := []byte("VICTIM-CONTENT\n")
+
+	err := os.WriteFile(victim, untouched, 0o600)
+	if err != nil {
+		t.Fatalf("seed victim: %v", err)
+	}
+
+	// Someone gets there first and points the staging name at the victim.
+	err = os.Symlink(victim, dest+".ksail-partial")
+	if err != nil {
+		t.Fatalf("pre-place symlink: %v", err)
+	}
+
+	secret := []byte(
+		"-----BEGIN PRIVATE KEY-----\n" + payloadMarker + "\n-----END PRIVATE KEY-----\n",
+	)
+
+	pair := mustGenerateKeyPair(t)
+	addr, hostKey := startServer(
+		t, pair.Signer.PublicKey(), shellExecHandler(t.Context(), &writeRecorder{}), 0,
+	)
+	client := mustDial(t, addr, pair, hostKey)
+
+	err = client.WriteFile(t.Context(), dest, secret, 0o600)
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	//nolint:gosec // G304: reads a file just written under the test's own t.TempDir().
+	got, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatalf("read victim: %v", err)
+	}
+
+	if !bytes.Equal(got, untouched) {
+		t.Fatalf("secret was written through the symlink into %s: %q", victim, got)
+	}
+
+	assertPublished(t, dest, secret)
+}
+
+// TestWriteFileRejectsARelativePath covers the guard that keeps the remote
+// argument unambiguous: a relative path would resolve against whatever
+// directory the login shell starts in.
+func TestWriteFileRejectsARelativePath(t *testing.T) {
+	t.Parallel()
+
+	client, recorder := writeServer(t, 0, "")
+
+	err := client.WriteFile(t.Context(), "etc/kubernetes/pki/ca.key", []byte("x"), 0o600)
+	if !errors.Is(err, sshbootstrap.ErrRelativeRemotePath) {
+		t.Fatalf("want ErrRelativeRemotePath, got %v", err)
+	}
+
+	command, _ := recorder.snapshot()
+	if command != "" {
+		t.Fatalf("a rejected path must not reach the node: %q", command)
+	}
+}
