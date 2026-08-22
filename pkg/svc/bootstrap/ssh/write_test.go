@@ -34,6 +34,8 @@ type writeRecorder struct {
 	stdin   []byte
 }
 
+// record stores what one exec request carried. stdin may be nil when the
+// handler streamed the input straight through instead of draining it.
 func (r *writeRecorder) record(command string, stdin []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,6 +45,8 @@ func (r *writeRecorder) record(command string, stdin []byte) {
 	r.stdin = append([]byte(nil), stdin...)
 }
 
+// snapshot returns a copy of the recorded command and stdin, safe to read
+// while the server goroutine is still running.
 func (r *writeRecorder) snapshot() (string, []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
