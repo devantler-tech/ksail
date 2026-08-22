@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -23,7 +24,10 @@ const (
 var errUnknownClientKey = errors.New("unknown client key")
 
 // execHandler scripts the in-process server's response to one exec request.
-type execHandler func(command string) (stdout string, stderr string, exitCode uint32)
+// execHandler scripts one exec request. stdin carries everything the client
+// streamed on the session's input channel, so a write test can assert that
+// secret content travelled there and never in the command line.
+type execHandler func(command string, stdin []byte) (stdout string, stderr string, exitCode uint32)
 
 // exitStatusPayload is the SSH exit-status request payload (RFC 4254 §6.10).
 type exitStatusPayload struct {
@@ -149,7 +153,13 @@ func serveSession(channel ssh.Channel, requests <-chan *ssh.Request, handler exe
 
 		_ = request.Reply(true, nil)
 
-		stdout, stderr, exitCode := handler(payload.Command)
+		// Drain the input channel first: the client streams file content here, and
+		// the handler needs it to assert what actually crossed the wire. The client
+		// always closes its write side (x/crypto/ssh does so even for a nil Stdin),
+		// so this returns promptly for commands that send nothing.
+		stdin, _ := io.ReadAll(channel)
+
+		stdout, stderr, exitCode := handler(payload.Command, stdin)
 
 		_, _ = channel.Write([]byte(stdout))
 		_, _ = channel.Stderr().Write([]byte(stderr))
@@ -214,7 +224,7 @@ func TestFileExists(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string) (string, string, uint32) {
+		func(command string, _ []byte) (string, string, uint32) {
 			switch command {
 			case "test -f '/present'":
 				return "", "", 0
@@ -353,7 +363,7 @@ func TestRunCapturesOutputAndZeroExit(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string) (string, string, uint32) {
+		func(command string, _ []byte) (string, string, uint32) {
 			if command != "uname -r" {
 				return "", "unexpected command: " + command, 1
 			}
@@ -386,9 +396,14 @@ func TestRunSurfacesNonZeroExit(t *testing.T) {
 	t.Parallel()
 
 	pair := mustGenerateKeyPair(t)
-	addr, hostKey := startServer(t, pair.Signer.PublicKey(), func(string) (string, string, uint32) {
-		return "", "boom\n", 7
-	}, 0)
+	addr, hostKey := startServer(
+		t,
+		pair.Signer.PublicKey(),
+		func(string, []byte) (string, string, uint32) {
+			return "", "boom\n", 7
+		},
+		0,
+	)
 
 	client := mustDial(t, addr, pair, hostKey)
 
@@ -420,7 +435,7 @@ func TestReadFileFetchesQuotedPath(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string) (string, string, uint32) {
+		func(command string, _ []byte) (string, string, uint32) {
 			sawCommand = command
 
 			return kubeconfig, "", 0
@@ -456,7 +471,7 @@ func TestReadFileEscapesSingleQuotes(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string) (string, string, uint32) {
+		func(command string, _ []byte) (string, string, uint32) {
 			sawCommand = command
 
 			return "", "", 0
@@ -485,9 +500,14 @@ func TestDialRejectsUnknownHostKey(t *testing.T) {
 	pair := mustGenerateKeyPair(t)
 	otherPair := mustGenerateKeyPair(t)
 
-	addr, _ := startServer(t, pair.Signer.PublicKey(), func(string) (string, string, uint32) {
-		return "", "", 0
-	}, 0)
+	addr, _ := startServer(
+		t,
+		pair.Signer.PublicKey(),
+		func(string, []byte) (string, string, uint32) {
+			return "", "", 0
+		},
+		0,
+	)
 
 	// Pin the WRONG host key: the handshake must fail.
 	_, err := sshbootstrap.Dial(
@@ -503,9 +523,14 @@ func TestDialWithRetryRecoversFromEarlyRefusals(t *testing.T) {
 	t.Parallel()
 
 	pair := mustGenerateKeyPair(t)
-	addr, hostKey := startServer(t, pair.Signer.PublicKey(), func(string) (string, string, uint32) {
-		return "up\n", "", 0
-	}, 2)
+	addr, hostKey := startServer(
+		t,
+		pair.Signer.PublicKey(),
+		func(string, []byte) (string, string, uint32) {
+			return "up\n", "", 0
+		},
+		2,
+	)
 
 	ctx, cancel := context.WithTimeout(t.Context(), testRunBudget)
 	defer cancel()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -160,48 +161,7 @@ func DialWithRetry(
 // non-zero exit returns [RunResult] alongside an error wrapping
 // [ErrCommandFailed]; transport failures return only the error.
 func (c *Client) Run(ctx context.Context, command string) (RunResult, error) {
-	session, err := c.conn.NewSession()
-	if err != nil {
-		return RunResult{}, fmt.Errorf("open session: %w", err)
-	}
-
-	defer func() { _ = session.Close() }()
-
-	var stdout, stderr bytes.Buffer
-
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-
-	// Session.Run is not context-aware; closing the session on cancellation
-	// unblocks it.
-	stop := closeOnDone(ctx, session)
-
-	err = session.Run(command)
-
-	stop()
-
-	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
-
-	var exitErr *ssh.ExitError
-	if errors.As(err, &exitErr) {
-		result.ExitCode = exitErr.ExitStatus()
-
-		return result, fmt.Errorf(
-			"%w: %q exited %d: %s",
-			ErrCommandFailed, command, result.ExitCode,
-			strings.TrimSpace(stderr.String()),
-		)
-	}
-
-	if err != nil {
-		if ctx.Err() != nil {
-			return result, fmt.Errorf("run %q: %w", command, ctx.Err())
-		}
-
-		return result, fmt.Errorf("run %q: %w", command, err)
-	}
-
-	return result, nil
+	return c.exec(ctx, command, nil)
 }
 
 // ReadFile streams a remote file's contents over the exec channel (`cat`), so
@@ -241,6 +201,63 @@ func (c *Client) Close() error {
 	}
 
 	return nil
+}
+
+// exec runs command with an optional stdin stream. A nil stdin keeps the
+// remote reading an empty input, which is what every command-only caller
+// wants; [Client.WriteFile] passes a reader so file content travels here
+// instead of on the command line.
+func (c *Client) exec(
+	ctx context.Context,
+	command string,
+	stdin io.Reader,
+) (RunResult, error) {
+	session, err := c.conn.NewSession()
+	if err != nil {
+		return RunResult{}, fmt.Errorf("open session: %w", err)
+	}
+
+	defer func() { _ = session.Close() }()
+
+	var stdout, stderr bytes.Buffer
+
+	if stdin != nil {
+		session.Stdin = stdin
+	}
+
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+
+	// Session.Run is not context-aware; closing the session on cancellation
+	// unblocks it.
+	stop := closeOnDone(ctx, session)
+
+	err = session.Run(command)
+
+	stop()
+
+	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
+
+	var exitErr *ssh.ExitError
+	if errors.As(err, &exitErr) {
+		result.ExitCode = exitErr.ExitStatus()
+
+		return result, fmt.Errorf(
+			"%w: %q exited %d: %s",
+			ErrCommandFailed, command, result.ExitCode,
+			strings.TrimSpace(stderr.String()),
+		)
+	}
+
+	if err != nil {
+		if ctx.Err() != nil {
+			return result, fmt.Errorf("run %q: %w", command, ctx.Err())
+		}
+
+		return result, fmt.Errorf("run %q: %w", command, err)
+	}
+
+	return result, nil
 }
 
 // closeOnDone closes closer when ctx is cancelled, and returns a stop func
