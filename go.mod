@@ -62,7 +62,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.43.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.30
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.33
-	github.com/aws/aws-sdk-go-v2/service/eks v1.89.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.91.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.5
 	github.com/aws/smithy-go v1.27.7
 	github.com/charmbracelet/bubbles v1.0.0
