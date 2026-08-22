@@ -19,6 +19,8 @@ import (
 
 // payloadMarker is a token that must never reach the remote command line. It
 // stands in for cluster signing material without being a usable key.
+const osWindows = "windows"
+
 const payloadMarker = "MARKER-cbf29ce484222325"
 
 // writeRecorder captures what the stubbed server observed for one write, so a
@@ -255,7 +257,7 @@ func exitCodeOf(exitErr *exec.ExitError) int {
 func TestWriteFileScriptRunsInARealShell(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("the remote half is a POSIX shell script; nodes are Linux")
 	}
 
@@ -337,7 +339,7 @@ func assertPublished(t *testing.T, dest string, want []byte) {
 func TestWriteFileDoesNotFollowAPrePlacedStagingSymlink(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("the remote half is a POSIX shell script; nodes are Linux")
 	}
 
@@ -401,5 +403,56 @@ func TestWriteFileRejectsARelativePath(t *testing.T) {
 	command, _ := recorder.snapshot()
 	if command != "" {
 		t.Fatalf("a rejected path must not reach the node: %q", command)
+	}
+}
+
+// TestWriteFileReportsAFailureThatPreemptsTheStream covers the case the scripted
+// stub cannot reach: the remote aborts at mkdir and never drains stdin, while
+// the client is still streaming a payload larger than the SSH window. The exit
+// status must still win over the interrupted copy, and the failure must not be
+// dressed up as truncation — the bytes never got as far as being counted.
+func TestWriteFileReportsAFailureThatPreemptsTheStream(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == osWindows {
+		t.Skip("the remote half is a POSIX shell script; nodes are Linux")
+	}
+
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+
+	seed := []byte("a file, not a directory\n")
+
+	err := os.WriteFile(blocker, seed, 0o600)
+	if err != nil {
+		t.Fatalf("seed blocker: %v", err)
+	}
+
+	// The parent of dest is a regular file, so `mkdir -p` fails immediately and
+	// `set -e` aborts the script before `cat` ever reads the stream.
+	dest := filepath.Join(blocker, "sub", "ca.key")
+	payload := bytes.Repeat([]byte("A"), 4<<20)
+
+	pair := mustGenerateKeyPair(t)
+	addr, hostKey := startServer(
+		t, pair.Signer.PublicKey(), shellExecHandler(t.Context(), &writeRecorder{}), 0,
+	)
+	client := mustDial(t, addr, pair, hostKey)
+
+	err = client.WriteFile(t.Context(), dest, payload, 0o600)
+	if !errors.Is(err, sshbootstrap.ErrCommandFailed) {
+		t.Fatalf("want ErrCommandFailed, got %v", err)
+	}
+
+	if errors.Is(err, sshbootstrap.ErrWriteTruncated) {
+		t.Fatalf("a refusal before the stream was read is not truncation: %v", err)
+	}
+
+	// dest's parent is a regular file, so nothing could have been created under
+	// it — assert the blocker itself came through untouched.
+	//nolint:gosec // G304: reads a file just written under the test's own t.TempDir().
+	after, err := os.ReadFile(blocker)
+	if err != nil || !bytes.Equal(after, seed) {
+		t.Fatalf("blocker changed: %q err=%v", after, err)
 	}
 }
