@@ -30,4 +30,18 @@ var (
 	// stderr) when a remote command runs but exits non-zero. Callers branch on it
 	// with errors.Is and read the exit code from [RunResult.ExitCode].
 	ErrCommandFailed = errors.New("ssh bootstrap: remote command failed")
+
+	// ErrWriteTruncated is returned (wrapped) by [Client.WriteFile] when the
+	// remote received fewer bytes than the client announced. The destination is
+	// left untouched — content is staged beside it and renamed into place only
+	// after the byte count matches — so a caller seeing this never has a short
+	// file masquerading as a complete one.
+	ErrWriteTruncated = errors.New("ssh bootstrap: remote file write was truncated")
+
+	// ErrRelativeRemotePath is returned by [Client.WriteFile] for a path that is
+	// not absolute. A relative path would resolve against whatever directory the
+	// login shell happens to start in, which is not a property callers should
+	// depend on, and it is the only way an argument could begin with a dash and
+	// be mistaken for a command-line option.
+	ErrRelativeRemotePath = errors.New("ssh bootstrap: remote path must be absolute")
 )
