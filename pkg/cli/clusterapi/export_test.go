@@ -116,6 +116,12 @@ func NewTestService(factory FactoryFunc) *Service {
 	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
 	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
 	service.kubeconfigPath = func() string { return "" }
+	service.resolveEKSCreateAccount = func(
+		context.Context,
+		credentials.AWSResolution,
+	) (string, error) {
+		return "123456789012", nil
+	}
 	// Stub the AWS-touching half of the EKS mutation guard so tests stay hermetic. Tests that are
 	// about the guard itself override it with SetEKSOwnershipGuardForTest.
 	service.captureEKSIdentity = func(context.Context, string, *eksCreateIdentity) error { return nil }
@@ -149,7 +155,13 @@ func (s *Service) SetEKSOwnershipCaptureForTest(
 // test asserting on these is asserting the property that matters — that the capture records under
 // the credentials the create actually ran with, not an independently resolved set.
 func (s *Service) SetEKSOwnershipCaptureRecorderForTest(
-	record func(name string, pinned bool, awsOptions v1alpha1.OptionsAWS, selectionRegion string),
+	record func(
+		name string,
+		pinned bool,
+		awsOptions v1alpha1.OptionsAWS,
+		selectionRegion string,
+		accountID string,
+	),
 ) {
 	s.captureEKSIdentity = func(
 		_ context.Context,
@@ -157,15 +169,23 @@ func (s *Service) SetEKSOwnershipCaptureRecorderForTest(
 		identity *eksCreateIdentity,
 	) error {
 		if identity == nil {
-			record(name, false, v1alpha1.OptionsAWS{}, "")
+			record(name, false, v1alpha1.OptionsAWS{}, "", "")
 
 			return nil
 		}
 
-		record(name, true, identity.awsOptions, identity.selection.Region)
+		record(name, true, identity.awsOptions, identity.selection.Region, identity.accountID)
 
 		return nil
 	}
+}
+
+// SetEKSCreateAccountResolverForTest overrides the read-only STS lookup performed before an EKS
+// create, so tests can assert its ordering and failure behavior without AWS credentials.
+func (s *Service) SetEKSCreateAccountResolverForTest(
+	resolve func(context.Context, credentials.AWSResolution) (string, error),
+) {
+	s.resolveEKSCreateAccount = resolve
 }
 
 // SetEKSOwnershipTimeoutForTest shortens the bound on the ownership resolution's network calls, so a

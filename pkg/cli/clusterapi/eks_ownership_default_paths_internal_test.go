@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -37,6 +39,89 @@ func markEKSCreated(t *testing.T, name string) {
 	require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
 		Distribution: v1alpha1.DistributionEKS,
 	}))
+}
+
+type captureIdentityClient struct {
+	accountID string
+	cluster   *ekstypes.Cluster
+}
+
+func (c captureIdentityClient) CallerAccountID(context.Context) (string, error) {
+	return c.accountID, nil
+}
+
+func (c captureIdentityClient) DescribeCluster(context.Context, string) (*ekstypes.Cluster, error) {
+	return c.cluster, nil
+}
+
+func liveEKSCluster(name, region, accountID string) *ekstypes.Cluster {
+	createdAt := time.Date(2026, time.August, 25, 0, 0, 0, 0, time.UTC)
+
+	return &ekstypes.Cluster{
+		Name:      aws.String(name),
+		Arn:       aws.String("arn:aws:eks:" + region + ":" + accountID + ":cluster/" + name),
+		CreatedAt: &createdAt,
+	}
+}
+
+//nolint:paralleltest // isolateHome uses t.Setenv and process-global state paths.
+func TestCaptureEKSIdentityForCreateRefusesDifferentAccountBeforePersisting(t *testing.T) {
+	isolateHome(t)
+
+	const (
+		name           = "repointed-profile"
+		region         = "us-east-1"
+		createAccount  = "123456789012"
+		captureAccount = "210987654321"
+	)
+
+	client := captureIdentityClient{
+		accountID: captureAccount,
+		cluster:   liveEKSCluster(name, region, captureAccount),
+	}
+
+	err := captureEKSIdentityForCreate(
+		t.Context(),
+		client,
+		name,
+		region,
+		recordedAliases(),
+		createAccount,
+	)
+	require.ErrorIs(t, err, ErrEKSOwnershipAccountChanged)
+
+	_, loadErr := state.LoadEKSOwnershipState(name, region)
+	require.Error(t, loadErr, "a mismatched capture account was persisted before refusal")
+}
+
+//nolint:paralleltest // isolateHome uses t.Setenv and process-global state paths.
+func TestCaptureEKSIdentityForCreateAcceptsSameAccountCredentialRotation(t *testing.T) {
+	isolateHome(t)
+
+	const (
+		name      = "same-account-rotation"
+		region    = "us-east-1"
+		accountID = "123456789012"
+	)
+
+	client := captureIdentityClient{
+		accountID: accountID,
+		cluster:   liveEKSCluster(name, region, accountID),
+	}
+
+	err := captureEKSIdentityForCreate(
+		t.Context(),
+		client,
+		name,
+		region,
+		recordedAliases(),
+		accountID,
+	)
+	require.NoError(t, err)
+
+	ownership, loadErr := state.LoadEKSOwnershipState(name, region)
+	require.NoError(t, loadErr)
+	require.Equal(t, accountID, ownership.AccountID)
 }
 
 // TestCaptureRefusesWhenTheCreateWroteNoBinding covers the first refusal in the shipped capture

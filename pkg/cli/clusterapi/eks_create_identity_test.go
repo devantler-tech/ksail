@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,7 @@ type captureRecord struct {
 	pinned          bool
 	awsOptions      v1alpha1.OptionsAWS
 	selectionRegion string
+	accountID       string
 }
 
 // recordCaptureForCreate runs an EKS create whose spec resolves AWS through awsOptions, and returns
@@ -83,12 +85,13 @@ func recordCaptureForCreate(
 	records := make(chan captureRecord, 1)
 
 	service.SetEKSOwnershipCaptureRecorderForTest(
-		func(name string, pinned bool, options v1alpha1.OptionsAWS, region string) {
+		func(name string, pinned bool, options v1alpha1.OptionsAWS, region, accountID string) {
 			records <- captureRecord{
 				name:            name,
 				pinned:          pinned,
 				awsOptions:      options,
 				selectionRegion: region,
+				accountID:       accountID,
 			}
 		},
 	)
@@ -121,6 +124,105 @@ func recordCaptureForCreate(
 	}
 }
 
+func TestCreateEKSResolvesAccountOnceBeforeProvisioning(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	events := make(chan string, 4)
+	provisioner := &midCreateProvisioner{
+		fakeProvisioner: &fakeProvisioner{},
+		onCreate:        func() { events <- "create" },
+	}
+	service := clusterapi.NewTestService(func(
+		_ v1alpha1.Distribution,
+		_ string,
+	) (clusterprovisioner.Factory, error) {
+		return midCreateFactory{provisioner: provisioner}, nil
+	})
+	service.SetEKSCreateAccountResolverForTest(func(
+		_ context.Context,
+		_ credentials.AWSResolution,
+	) (string, error) {
+		events <- "resolve-account"
+
+		return "210987654321", nil
+	})
+	service.SetEKSOwnershipCaptureRecorderForTest(func(
+		_ string,
+		_ bool,
+		_ v1alpha1.OptionsAWS,
+		_ string,
+		accountID string,
+	) {
+		events <- "capture:" + accountID
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("account-pinned-eks", v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		list, listErr := service.List(context.Background())
+		require.NoError(collect, listErr)
+
+		phase, found := phaseOf(list, "account-pinned-eks")
+		require.True(collect, found)
+		require.Equal(collect, v1alpha1.ClusterPhaseReady, phase)
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.Equal(t, "resolve-account", <-events)
+	assert.Equal(t, "create", <-events)
+	assert.Equal(t, "capture:210987654321", <-events)
+
+	select {
+	case event := <-events:
+		t.Fatalf("account resolution ran more than once: unexpected event %q", event)
+	default:
+	}
+}
+
+func TestCreateEKSStopsBeforeProvisioningWhenAccountResolutionFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	created := make(chan struct{}, 1)
+	provisioner := &midCreateProvisioner{
+		fakeProvisioner: &fakeProvisioner{},
+		onCreate:        func() { created <- struct{}{} },
+	}
+	service := clusterapi.NewTestService(func(
+		_ v1alpha1.Distribution,
+		_ string,
+	) (clusterprovisioner.Factory, error) {
+		return midCreateFactory{provisioner: provisioner}, nil
+	})
+	service.SetEKSCreateAccountResolverForTest(func(
+		context.Context,
+		credentials.AWSResolution,
+	) (string, error) {
+		return "", assert.AnError
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("unresolved-account-eks", v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		list, listErr := service.List(context.Background())
+		require.NoError(collect, listErr)
+
+		phase, found := phaseOf(list, "unresolved-account-eks")
+		require.True(collect, found)
+		require.Equal(collect, v1alpha1.ClusterPhaseFailed, phase)
+	}, eventuallyTimeout, eventuallyTick)
+
+	select {
+	case <-created:
+		t.Fatal("EKS provisioning started without a resolved create-time AWS account")
+	default:
+	}
+}
+
 // TestCreateEKSCapturesUnderItsOwnCredentialNames is the regression this file exists for.
 //
 // The create provisioner resolves AWS through the cluster spec's own variable names; the capture
@@ -144,6 +246,8 @@ func TestCreateEKSCapturesUnderItsOwnCredentialNames(t *testing.T) {
 
 	require.True(t, got.pinned,
 		"the create supplied no pinned identity, so the capture would resolve AWS independently")
+	require.Equal(t, "123456789012", got.accountID,
+		"the create supplied no pinned account, so profile contents could be repointed mid-create")
 
 	assert.Equal(t, customRegionValue, got.selectionRegion,
 		"the capture resolved through the canonical AWS_* names instead of the spec's own, so it "+

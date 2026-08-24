@@ -104,6 +104,10 @@ type Service struct {
 	// so the guard above has something to verify against. Injectable alongside resolveEKSGuard.
 	captureEKSIdentity eksCaptureFunc
 
+	// resolveEKSCreateAccount performs the one read-only STS lookup that pins an EKS create to the
+	// AWS account selected before provisioning begins. Injectable so tests stay credential-free.
+	resolveEKSCreateAccount eksCreateAccountFunc
+
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
 	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
 	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
@@ -185,6 +189,7 @@ func NewService() *Service {
 	service.resolveEKSGuard = service.defaultEKSGuard
 	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
 	service.captureEKSIdentity = service.defaultEKSCapture
+	service.resolveEKSCreateAccount = service.defaultEKSCreateAccount
 	service.useDefaultClients()
 
 	return service
@@ -906,20 +911,26 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 	// the credentials this create ran with. Re-resolving it after an asynchronous create — from a
 	// different source, and after Settings may have moved — is what let a create in one account be
 	// recorded as a same-named cluster in another.
-	var identity *eksCreateIdentity
+	var (
+		identity *eksCreateIdentity
+		err      error
+	)
 
 	if isEKS {
-		identity = newEKSCreateIdentity(spec.Provider.AWS)
+		identity, err = s.resolveEKSCreateIdentity(ctx, spec.Provider.AWS)
 	}
 
-	err := s.runProvisioner(
-		ctx,
-		name,
-		spec,
-		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
-			return p.Create(actionCtx, name)
-		},
-	)
+	if err == nil {
+		err = s.runProvisioner(
+			ctx,
+			name,
+			spec,
+			func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
+				return p.Create(actionCtx, name)
+			},
+		)
+	}
+
 	if err == nil && isEKS {
 		err = state.SaveClusterSpec(name, &spec.Cluster)
 		if err != nil {
