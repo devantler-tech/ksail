@@ -315,8 +315,9 @@ func (s *Service) captureEKSOwnership(
 }
 
 // defaultEKSCapture resolves the just-written binding and records the live identity under the exact
-// credential snapshot the create was pinned to. It verifies both the selector and the AWS account:
-// a same-named profile can be rewritten mid-create without changing selector equality.
+// credential snapshot the create was pinned to. It compares the capture-time AWS account with the
+// account resolved at create start and refuses before persistence when they differ, including when a
+// same-named profile's contents are repointed without changing selector equality.
 func (s *Service) defaultEKSCapture(
 	ctx context.Context,
 	name string,
