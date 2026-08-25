@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -32,6 +33,15 @@ var ErrUnguardableFactory = errors.New("provisioner factory cannot carry the EKS
 var ErrEKSOwnershipSelectorChanged = errors.New(
 	"AWS selector changed between EKS create and capture",
 )
+
+// ErrEKSOwnershipAccountChanged reports that the selector still has the same name at capture time,
+// but now resolves to a different AWS account than it did before create began. Profile contents are
+// mutable independently of the profile name, so selector equality alone cannot establish identity.
+var ErrEKSOwnershipAccountChanged = errors.New(
+	"AWS account changed between EKS create and capture",
+)
+
+var errEKSCreateAccountMissing = errors.New("AWS account ID is empty before EKS create")
 
 // defaultEKSOwnershipTimeout bounds the whole ownership resolution: the AWS config load, the STS
 // caller-identity query and the EKS DescribeCluster behind it.
@@ -189,8 +199,9 @@ func applyEKSMutationGuard(
 	return guardable.WithEKSMutationGuard(&guard.resolution, guard.verifier), nil
 }
 
-// eksCreateIdentity is the exact AWS identity an EKS create runs under: one frozen credential
-// snapshot, the region it was frozen for, and the variable names it was resolved through.
+// eksCreateIdentity is the exact AWS identity an EKS create runs under: the credential-selection
+// snapshot and variable names handed to the provisioner, plus the AWS account they resolved to
+// immediately before provisioning began.
 //
 // It exists because the create provisioner and the capture that follows it used to resolve AWS
 // independently. The provisioner resolves from the cluster spec's own variable names
@@ -208,25 +219,75 @@ func applyEKSMutationGuard(
 type eksCreateIdentity struct {
 	selection  credentials.AWSResolution
 	awsOptions v1alpha1.OptionsAWS
+	accountID  string
 }
 
-// newEKSCreateIdentity snapshots the AWS selection a create is about to run under.
-//
-// It resolves through the cluster spec's own variable names — the exact source
-// resolveEKSCredentialOptions uses inside the provisioner — so the capture that follows records
-// under the credentials the create actually used rather than under an independently resolved set.
-//
-// Taking the snapshot BEFORE the create is what closes the timing half of the problem: eksctl runs
-// asynchronously, so an operator changing Settings while it works would otherwise move the values
-// the capture later reads. This is a pure read of the process environment; it deliberately does not
-// freeze, because freezing forces concrete credential retrieval (profile chain, IMDS) and a create
-// is entitled to rely on eksctl resolving its own credentials. The freeze happens at capture time,
-// against this snapshot.
+// eksCreateAccountFunc resolves the AWS account selected by one credential snapshot. The default
+// performs exactly one STS GetCallerIdentity call; the seam keeps local lifecycle tests hermetic.
+type eksCreateAccountFunc func(
+	ctx context.Context,
+	selection credentials.AWSResolution,
+) (string, error)
+
+// newEKSCreateIdentity snapshots the AWS selection a create is about to run under. Account
+// resolution is a separate, fallible step in resolveEKSCreateIdentity so selector-only refusal tests
+// can construct the immutable value without AWS credentials.
 func newEKSCreateIdentity(awsOptions v1alpha1.OptionsAWS) *eksCreateIdentity {
 	return &eksCreateIdentity{
 		selection:  credentials.ResolveAWS(credentials.NewAWSOptionsResolver(awsOptions)),
 		awsOptions: awsOptions,
 	}
+}
+
+// resolveEKSCreateIdentity snapshots the AWS selection and resolves its account before create begins.
+//
+// It resolves through the cluster spec's own variable names — the exact source
+// resolveEKSCredentialOptions uses inside the provisioner — so the capture that follows records
+// under the credentials the create actually used rather than under an independently resolved set.
+//
+// Taking both observations BEFORE the create closes the timing gap for mutable profile contents:
+// selector names alone stay equal when a profile is rewritten to point at another account. The
+// selection remains unfrozen so eksctl keeps its normal credential-chain behavior; the read-only STS
+// lookup records only the account identifier needed to verify capture later.
+func (s *Service) resolveEKSCreateIdentity(
+	ctx context.Context,
+	awsOptions v1alpha1.OptionsAWS,
+) (*eksCreateIdentity, error) {
+	identity := newEKSCreateIdentity(awsOptions)
+
+	ctx, cancel := context.WithTimeout(ctx, s.eksOwnershipTimeout)
+	defer cancel()
+
+	accountID, err := s.resolveEKSCreateAccount(ctx, identity.selection)
+	if err != nil {
+		return nil, fmt.Errorf("resolve AWS account before EKS create: %w", err)
+	}
+
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, errEKSCreateAccountMissing
+	}
+
+	identity.accountID = accountID
+
+	return identity, nil
+}
+
+func (s *Service) defaultEKSCreateAccount(
+	ctx context.Context,
+	selection credentials.AWSResolution,
+) (string, error) {
+	client, err := s.eksIdentityClientFor(ctx, selection.Region, selection)
+	if err != nil {
+		return "", err
+	}
+
+	accountID, err := client.CallerAccountID(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get AWS caller account for EKS create: %w", err)
+	}
+
+	return accountID, nil
 }
 
 // eksCaptureFunc records the immutable AWS identity of a just-created EKS cluster, under the
@@ -254,7 +315,9 @@ func (s *Service) captureEKSOwnership(
 }
 
 // defaultEKSCapture resolves the just-written binding and records the live identity under the exact
-// credential snapshot the create was pinned to.
+// credential snapshot the create was pinned to. It compares the capture-time AWS account with the
+// account resolved at create start and refuses before persistence when they differ, including when a
+// same-named profile's contents are repointed without changing selector equality.
 func (s *Service) defaultEKSCapture(
 	ctx context.Context,
 	name string,
@@ -308,7 +371,7 @@ func (s *Service) defaultEKSCapture(
 		return err
 	}
 
-	_, err = eksidentity.Capture(
+	err = captureEKSIdentityForCreate(
 		ctx,
 		client,
 		name,
@@ -317,9 +380,45 @@ func (s *Service) defaultEKSCapture(
 		// resolves the same identity this capture observed. Recording the canonical defaults instead
 		// would misdescribe every cluster whose spec names custom variables.
 		credentials.AWSOptionsWithDefaults(identity.awsOptions),
+		identity.accountID,
 	)
 	if err != nil {
 		return fmt.Errorf("capture immutable EKS ownership identity: %w", err)
+	}
+
+	return nil
+}
+
+// captureEKSIdentityForCreate observes the capture-time account and cluster, refuses an account
+// change before any state write, then persists the validated ownership record. Comparing accounts
+// rather than credential bytes permits normal same-account key rotation.
+func captureEKSIdentityForCreate(
+	ctx context.Context,
+	client eksidentity.Client,
+	name, region string,
+	awsOptions v1alpha1.OptionsAWS,
+	createAccountID string,
+) error {
+	ownership, err := eksidentity.Observe(ctx, client, name, region)
+	if err != nil {
+		return fmt.Errorf("observe EKS identity after create: %w", err)
+	}
+
+	if ownership.AccountID != strings.TrimSpace(createAccountID) {
+		return fmt.Errorf(
+			"%w for %q: create account %q, capture account %q",
+			ErrEKSOwnershipAccountChanged,
+			name,
+			strings.TrimSpace(createAccountID),
+			ownership.AccountID,
+		)
+	}
+
+	ownership.AWSOptions = awsOptions
+
+	err = eksidentity.Persist(name, ownership.Region, ownership)
+	if err != nil {
+		return fmt.Errorf("persist EKS identity after create: %w", err)
 	}
 
 	return nil
