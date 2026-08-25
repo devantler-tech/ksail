@@ -10,6 +10,13 @@
 # Policy: the allowlist is for UNPATCHABLE findings only. The moment an
 # upstream fix ships, delete the entry and bump the affected module instead.
 #
+# ONE NARROW EXCEPTION, and it must stay narrow: a fix that EXISTS but is not
+# adoptable because a transitive constraint blocks it. Such an entry is
+# TEMPORARY, must say so, must name the constraint that blocks the bump, and
+# must cite the issue whose closure removes it. It is not risk-acceptance of an
+# unfixable flaw; it is a dated IOU against a tracked bump. If an entry like
+# this has no tracking issue, it is out of policy — fix it or delete it.
+#
 # Verified with `govulncheck ./...` against ksail main (whole-file re-validation
 # 2026-07-22): the reachable advisories below, each "Fixed in: N/A" for the
 #   version pinned (transitively) in go.mod. Re-validate when bumping any
@@ -95,3 +102,33 @@ GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via k
 # this line turns the gate red rather than clean. Remove it only when the GO
 # advisory itself gains a fixed version, never on the strength of the GHSA.
 GO-2026-5939  # Claircore manifest-URI SSRF (CVE-2026-10517; sink not linked; no GO-advisory fix at any version)
+
+# --- github.com/moby/go-archive (transitive via k3d's docker runtime) -------
+# ⚠️ THIS ENTRY IS A TEMPORARY, TRACKED ACCEPTANCE — NOT AN UNPATCHABLE ONE.
+# It is the one exception to the "no upstream fix available" policy at the top
+# of this file, and it is recorded separately so nobody reads it as one of the
+# permanent entries. The fix EXISTS; it is not adoptable yet. Removal is
+# tracked by ksail#6660, which is the only thing this entry waits on.
+#
+# GO-2026-6253 (CVE-2026-17106) is a crafted tar archive that can write outside
+# its extraction directory, fixed upstream in moby/go-archive v0.3.0. It
+# reaches us only through k3d:
+#   pkg/fsutil/validator/k3d -> k3d/pkg/runtimes[/docker]
+#     -> docker/docker/pkg/archive -> moby/go-archive
+#
+# Why the bump is blocked: the `replace` in go.mod pins go-archive back to
+# v0.1.0 because v0.2.0 removed the package-level `Compression` type alias that
+# docker/docker still references. Raising the pin to v0.3.3 was measured on
+# f4fd458f and does not compile:
+#   docker@v28.5.2+incompatible/pkg/archive/archive_deprecated.go:103:47:
+#     undefined: archive.Compression
+# v28.5.2 is the newest v28 on the module proxy, so no patch-level bump clears
+# it. docker/docker v29 is the real fix, and go.mod separately pins docker/cli
+# to v28 because k3d v5.9.0-rc.0 uses the monolith types v29 moved away from —
+# so this is a coordinated docker/docker + docker/cli + k3d bump, not a hotfix.
+#
+# Scope of the acceptance: the advisory was published 2026-08-25T19:43:10Z and
+# turned `main` red on the next run, blocking every ksail PR behind a gate no
+# PR could clear. The risk is accepted only to unblock that pipeline, and only
+# until #6660 lands. Delete this entry as part of that bump — do not re-date it.
+GO-2026-6253  # moby/go-archive tar path traversal (fix v0.3.0 exists but is BLOCKED by the docker/docker v28 Compression alias; tracked by #6660)
