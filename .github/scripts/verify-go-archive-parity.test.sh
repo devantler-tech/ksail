@@ -70,6 +70,33 @@ if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev
 fi
 rm -r "${upstream}/pkg"
 
+# `diff -u` FOLLOWS symbolic links, so it exits 0 comparing an upstream regular
+# file against a local symlink whose target holds identical bytes. Enumeration
+# admits symlinks (`-type l`), so a replacement such as
+# `archive.go -> ../unreviewed/archive.go` passed parity while RESOLVING OUTSIDE
+# the parity-checked module — after which its target can change without this
+# check ever seeing it. File TYPE must match, not just content.
+mkdir -p "${tmp_dir}/unreviewed"
+cp "${upstream}/archive.go" "${tmp_dir}/unreviewed/archive.go"
+rm "${local_copy}/archive.go"
+ln -s '../unreviewed/archive.go' "${local_copy}/archive.go"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: local symlink replacing an upstream regular file passed parity validation\n' >&2
+	exit 1
+fi
+rm "${local_copy}/archive.go"
+cp "${upstream}/archive.go" "${local_copy}/archive.go"
+
+# A symlink UPSTREAM against a local regular file is the mirror case: it must be
+# rejected too, so the guard cannot be satisfied by swapping which side is typed.
+ln -s '../unreviewed/archive.go' "${upstream}/link_only.go"
+printf 'package archive\n' >"${local_copy}/link_only.go"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: upstream symlink against a local regular file passed parity validation\n' >&2
+	exit 1
+fi
+rm "${upstream}/link_only.go" "${local_copy}/link_only.go"
+
 "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}"
 
 printf 'All go-archive parity cases passed.\n'

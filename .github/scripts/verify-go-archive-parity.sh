@@ -131,6 +131,18 @@ fi
 
 if [[ -n "${shared_files}" ]]; then
 	while IFS= read -r rel; do
+		# `diff -u` FOLLOWS symbolic links, so identical bytes behind a link
+		# read as parity. Enumeration admits links, so a local
+		# `archive.go -> ../unreviewed/archive.go` compared clean while
+		# RESOLVING OUTSIDE the parity-checked module — and its target could
+		# then be changed without this check ever seeing it. Byte equality is
+		# only a provenance guarantee when both sides are the same file TYPE,
+		# so a link on either side is rejected before any content comparison.
+		if [[ -L "${upstream_dir}/${rel}" || -L "${local_dir}/${rel}" ]]; then
+			printf 'symbolic link is not permitted in the parity-checked module: %s\n' "${rel}" >&2
+			status=1
+			continue
+		fi
 		diff -u "${upstream_dir}/${rel}" "${local_dir}/${rel}" || status=1
 	done <<<"${shared_files}"
 fi
