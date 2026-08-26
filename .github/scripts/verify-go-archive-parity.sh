@@ -39,6 +39,49 @@ while (($# > 0)); do
 	esac
 done
 
+# The pin above is what this check compares against, and nothing tied it to what
+# the module graph actually REQUIRES. A dependency bump to go.mod would leave
+# this verifying the superseded version and still passing, while Go's metadata
+# advertises the new one, so version-based vulnerability analysis would credit
+# the binary with fixes that were never compiled. Assert the pin against every
+# manifest that requires the module.
+readonly module_manifests=(
+	'go.mod'
+	'desktop/go.mod'
+)
+
+require_manifest_pin() {
+	local manifest="$1" path required count
+	path="${repo_root}/${manifest}"
+	[[ -f "${path}" ]] || {
+		printf 'module manifest not found: %s\n' "${manifest}" >&2
+		return 1
+	}
+	# `$2 ~ /^v[0-9]/` selects the require line and skips the `=>` replace
+	# directive, which carries the same module path in $1.
+	required="$(awk -v m="${module}" '$1 == m && $2 ~ /^v[0-9]/ { print $2 }' "${path}" | LC_ALL=C sort -u)"
+	[[ -n "${required}" ]] || {
+		printf '%s does not require %s, so the reviewed pin cannot be confirmed\n' "${manifest}" "${module}" >&2
+		return 1
+	}
+	count="$(printf '%s\n' "${required}" | grep -c .)"
+	((count == 1)) || {
+		printf '%s requires %d versions of %s: %s\n' "${manifest}" "${count}" "${module}" "${required//$'\n'/ }" >&2
+		return 1
+	}
+	[[ "${required}" == "${version}" ]] || {
+		printf '%s requires %s %s but the reviewed parity pin is %s.\n' "${manifest}" "${module}" "${required}" "${version}" >&2
+		printf 'Re-review the upstream source at %s, then update version and expected_sum in %s.\n' "${required}" "${0##*/}" >&2
+		return 1
+	}
+}
+
+manifest_status=0
+for manifest in "${module_manifests[@]}"; do
+	require_manifest_pin "${manifest}" || manifest_status=1
+done
+((manifest_status == 0)) || exit 1
+
 if [[ -z "${upstream_dir}" ]]; then
 	module_json="$(go mod download -json "${module}@${version}")"
 	upstream_dir="$({
@@ -88,13 +131,40 @@ is_excepted() {
 # Capture the enumeration before filtering: a `find` failure must abort rather
 # than yield an empty list, which would read as "no differences".
 list_comparable_files() {
-	local root="$1" raw rel
-	raw="$(cd -- "${root}" && find . \( -type f -o -type l \) -print)" || return 1
-	while IFS= read -r rel; do
+	local root="$1" rel raw_file status=0
+	raw_file="$(mktemp)"
+	# Capture the enumeration before filtering: a `find` failure must abort
+	# rather than yield an empty list, which would read as "no differences".
+	#
+	# NUL-delimited, because a newline inside a path splits one entry into
+	# several records that are then matched against the exception list
+	# INDEPENDENTLY. `KSail-PATCH.md<LF>compat_legacy.go` disappears from the
+	# comparison entirely — both halves are declared exceptions — while the Go
+	# tool still compiles the real `.go` file. The enumeration cannot be held in
+	# a variable: bash strips NUL bytes in command substitution, which would
+	# silently rejoin every path into one.
+	if ! (cd -- "${root}" && find . \( -type f -o -type l \) -print0) >"${raw_file}"; then
+		rm -f "${raw_file}"
+		return 1
+	fi
+	local -a kept=()
+	# Deliberately not a pipeline: a `return` from inside a piped `while` runs
+	# in a subshell and its status is discarded, so the rejection below would be
+	# lost and the path would be treated as absent.
+	while IFS= read -r -d '' rel; do
 		[[ -n "${rel}" ]] || continue
 		rel="${rel#./}"
-		is_excepted "${rel}" || printf '%s\n' "${rel}"
-	done <<<"${raw}" | LC_ALL=C sort
+		if [[ "${rel}" == *$'\n'* ]]; then
+			printf 'newline in module path is not permitted: %q\n' "${rel}" >&2
+			status=1
+			break
+		fi
+		is_excepted "${rel}" || kept+=("${rel}")
+	done <"${raw_file}"
+	rm -f "${raw_file}"
+	((status == 0)) || return 1
+	((${#kept[@]} > 0)) || return 0
+	printf '%s\n' "${kept[@]}" | LC_ALL=C sort
 }
 
 list_dir="$(mktemp -d)"
