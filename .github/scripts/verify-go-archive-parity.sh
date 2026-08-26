@@ -129,6 +129,24 @@ if [[ -n "${undeclared_locally}" ]]; then
 	done <<<"${undeclared_locally}"
 fi
 
+# The compatibility Go files are parity EXCEPTIONS, so `is_excepted()` removes
+# them from both comparable-file lists and the shared-file guard below never
+# examines them — yet they are compiled as part of the module. A link at either
+# path therefore lets the Go tool build source from outside the provenance-checked
+# tree, and that target can be repointed afterwards without this check seeing it.
+# Being exempt from CONTENT parity is not the same as being exempt from having to
+# live inside the module, so the file type is asserted here independently.
+readonly compat_go_files=(
+	'compat_legacy.go'
+	'compat_legacy_test.go'
+)
+for compat_rel in "${compat_go_files[@]}"; do
+	if [[ -L "${local_dir}/${compat_rel}" ]]; then
+		printf 'symbolic link is not permitted at compatibility path: %s\n' "${compat_rel}" >&2
+		status=1
+	fi
+done
+
 if [[ -n "${shared_files}" ]]; then
 	while IFS= read -r rel; do
 		# `diff -u` FOLLOWS symbolic links, so identical bytes behind a link

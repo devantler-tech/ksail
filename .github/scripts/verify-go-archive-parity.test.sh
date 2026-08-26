@@ -97,6 +97,25 @@ if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev
 fi
 rm "${upstream}/link_only.go" "${local_copy}/link_only.go"
 
+# The two COMPATIBILITY Go files are parity exceptions, so they are filtered out
+# of the comparable-file lists before the shared-file symlink guard ever runs —
+# that guard therefore never examines them. They are still compiled as part of
+# the module, so a link at either path lets the Go tool build source from outside
+# the provenance-checked tree, with its target repointable afterwards. Each is
+# asserted separately: one guard covering only the other path would pass here.
+for compat in compat_legacy.go compat_legacy_test.go; do
+	mkdir -p "${tmp_dir}/unreviewed"
+	printf 'package archive\n' >"${tmp_dir}/unreviewed/${compat}"
+	rm -f "${local_copy}/${compat}"
+	ln -s "../unreviewed/${compat}" "${local_copy}/${compat}"
+	if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+		printf 'FAIL: symbolic link at compatibility path %s passed parity validation\n' "${compat}" >&2
+		exit 1
+	fi
+	rm -f "${local_copy}/${compat}"
+	printf 'package archive\n' >"${local_copy}/${compat}"
+done
+
 "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}"
 
 printf 'All go-archive parity cases passed.\n'
