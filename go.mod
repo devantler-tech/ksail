@@ -77,7 +77,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.6
 	github.com/go-jose/go-jose/v4 v4.1.4
-	github.com/google/cel-go v0.29.2
+	github.com/google/cel-go v0.31.0
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.23.0
 	github.com/gopacket/gopacket v1.7.1
