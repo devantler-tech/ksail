@@ -63,7 +63,10 @@ fi
 # import. Every distributable module file must otherwise remain byte-identical;
 # the three named files are the complete KSail-owned compatibility surface.
 diff -ruN \
-	--exclude='.*' \
+	--exclude='.gitattributes' \
+	--exclude='.github' \
+	--exclude='.gitignore' \
+	--exclude='.golangci.yml' \
 	--exclude='KSail-PATCH.md' \
 	--exclude='compat_legacy.go' \
 	--exclude='compat_legacy_test.go' \

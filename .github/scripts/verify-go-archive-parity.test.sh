@@ -32,4 +32,11 @@ if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev
 	exit 1
 fi
 
+rm "${local_copy}/unexpected.go"
+printf 'module runtime data\n' >"${upstream}/.runtime"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: missing hidden module file passed parity validation\n' >&2
+	exit 1
+fi
+
 printf 'All go-archive parity cases passed.\n'
