@@ -27,6 +27,9 @@
     "**/mocks.go",
     "**/*mocks*.go",
     "**/*_test.go",
+    "**/third_party/go-archive/**",
+    "!**/third_party/go-archive/compat_legacy.go",
+    "!**/third_party/go-archive/compat_legacy_test.go",
     "**/zz_generated*.go",
     "**/patches/**"
   ],
