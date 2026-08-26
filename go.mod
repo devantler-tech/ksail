@@ -655,7 +655,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/buildkit v0.31.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/go-archive v0.2.0 // indirect
+	github.com/moby/go-archive v0.3.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/moby/api v1.55.0 // indirect
 	github.com/moby/moby/client v0.5.0 // indirect
@@ -927,7 +927,7 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
-	golang.org/x/image v0.43.0 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
@@ -1021,12 +1021,9 @@ replace (
 	// https://github.com/loft-sh/log/pull/3 is merged and tagged.
 	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
 
-	// rancher/k3k v1.1.0 transitively requires moby/go-archive v0.2.0 (via
-	// testcontainers-go v0.42.0). v0.2.0 removed the Compression type alias from
-	// the package-level archive wrapper. Pinning back to v0.1.0 restores that
-	// alias. This replace can be removed once docker/docker ships a release
-	// compatible with moby/go-archive v0.2.0.
-	github.com/moby/go-archive => github.com/moby/go-archive v0.1.0
+	// The local module is v0.3.0 plus deprecated compression aliases still
+	// required by Docker 28.5.2. See third_party/go-archive/KSail-PATCH.md.
+	github.com/moby/go-archive => ./third_party/go-archive
 )
 
 tool (
