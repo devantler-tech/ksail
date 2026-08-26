@@ -381,7 +381,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@73a065f966c4478d4dbaa2b3583a493fab9d478e # v13.2.0
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@0de1d284f879d62d6fe316d3997fd3ea8f092fb3 # v13.2.1
     # Both inputs make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
