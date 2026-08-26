@@ -85,7 +85,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.44.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.301
+	github.com/kubescape/opa-utils v0.0.308
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.35.2
 	github.com/modelcontextprotocol/go-sdk v1.6.1
