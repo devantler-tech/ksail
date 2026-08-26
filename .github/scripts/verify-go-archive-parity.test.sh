@@ -39,4 +39,37 @@ if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev
 	exit 1
 fi
 
+rm "${upstream}/.runtime"
+
+# `diff --exclude=PATTERN` matched a BASENAME at every recursion level, so an
+# exception granted to a top-level entry silently covered nested files and
+# directories of the same name — a path for undeclared code to ride into the
+# vendored copy. Each case below must be REJECTED, and the positive control
+# after them proves the anchoring, not a permanently-failing validator.
+mkdir -p "${local_copy}/pkg"
+printf 'package smuggled\n' >"${local_copy}/pkg/compat_legacy.go"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: nested excepted-basename file passed parity validation\n' >&2
+	exit 1
+fi
+rm -r "${local_copy}/pkg"
+
+mkdir -p "${local_copy}/pkg/.github"
+printf 'nested metadata\n' >"${local_copy}/pkg/.github/workflow.yml"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: nested excepted-basename directory passed parity validation\n' >&2
+	exit 1
+fi
+rm -r "${local_copy}/pkg"
+
+mkdir -p "${upstream}/pkg"
+printf 'package upstreamonly\n' >"${upstream}/pkg/compat_legacy.go"
+if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
+	printf 'FAIL: nested excepted-basename file missing locally passed parity validation\n' >&2
+	exit 1
+fi
+rm -r "${upstream}/pkg"
+
+"${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}"
+
 printf 'All go-archive parity cases passed.\n'

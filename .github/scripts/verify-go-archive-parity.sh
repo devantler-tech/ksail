@@ -59,17 +59,85 @@ fi
 	exit 1
 }
 
-# Go's module zip contains repository metadata that KSail deliberately does not
-# import. Every distributable module file must otherwise remain byte-identical;
-# the three named files are the complete KSail-owned compatibility surface.
-diff -ruN \
-	--exclude='.gitattributes' \
-	--exclude='.github' \
-	--exclude='.gitignore' \
-	--exclude='.golangci.yml' \
-	--exclude='KSail-PATCH.md' \
-	--exclude='compat_legacy.go' \
-	--exclude='compat_legacy_test.go' \
-	"${upstream_dir}" "${local_dir}"
+# Go's module zip carries repository metadata that KSail deliberately does not
+# import, and KSail adds a small compatibility surface of its own. Both sets are
+# declared here as EXACT top-level entries: an exception covers that entry and,
+# when it is a directory, everything beneath it.
+#
+# Anchoring is the point. `diff --exclude=PATTERN` matches a BASENAME at every
+# recursion level, so a nested `pkg/compat_legacy.go` or `pkg/.github/` was
+# silently exempted and could carry undeclared code into the vendored copy.
+readonly parity_exceptions=(
+	'.gitattributes'
+	'.github'
+	'.gitignore'
+	'.golangci.yml'
+	'KSail-PATCH.md'
+	'compat_legacy.go'
+	'compat_legacy_test.go'
+)
+
+is_excepted() {
+	local rel="$1" exception
+	for exception in "${parity_exceptions[@]}"; do
+		[[ "${rel}" == "${exception}" || "${rel}" == "${exception}/"* ]] && return 0
+	done
+	return 1
+}
+
+# Capture the enumeration before filtering: a `find` failure must abort rather
+# than yield an empty list, which would read as "no differences".
+list_comparable_files() {
+	local root="$1" raw rel
+	raw="$(cd -- "${root}" && find . \( -type f -o -type l \) -print)" || return 1
+	while IFS= read -r rel; do
+		[[ -n "${rel}" ]] || continue
+		rel="${rel#./}"
+		is_excepted "${rel}" || printf '%s\n' "${rel}"
+	done <<<"${raw}" | LC_ALL=C sort
+}
+
+list_dir="$(mktemp -d)"
+trap 'rm -rf "${list_dir}"' EXIT
+list_comparable_files "${upstream_dir}" >"${list_dir}/upstream"
+list_comparable_files "${local_dir}" >"${list_dir}/local"
+
+# An empty upstream enumeration is UNKNOWN, never clean.
+[[ -s "${list_dir}/upstream" ]] || {
+	printf 'no comparable files found under %s; refusing to report parity\n' "${upstream_dir}" >&2
+	exit 1
+}
+
+# Command substitution so a `comm` failure aborts instead of looking clean.
+missing_locally="$(LC_ALL=C comm -23 "${list_dir}/upstream" "${list_dir}/local")"
+undeclared_locally="$(LC_ALL=C comm -13 "${list_dir}/upstream" "${list_dir}/local")"
+shared_files="$(LC_ALL=C comm -12 "${list_dir}/upstream" "${list_dir}/local")"
+
+status=0
+
+if [[ -n "${missing_locally}" ]]; then
+	status=1
+	while IFS= read -r rel; do
+		printf 'missing from local copy: %s\n' "${rel}" >&2
+	done <<<"${missing_locally}"
+fi
+
+if [[ -n "${undeclared_locally}" ]]; then
+	status=1
+	while IFS= read -r rel; do
+		printf 'undeclared in local copy: %s\n' "${rel}" >&2
+	done <<<"${undeclared_locally}"
+fi
+
+if [[ -n "${shared_files}" ]]; then
+	while IFS= read -r rel; do
+		diff -u "${upstream_dir}/${rel}" "${local_dir}/${rel}" || status=1
+	done <<<"${shared_files}"
+fi
+
+((status == 0)) || {
+	printf 'go-archive %s parity validation failed\n' "${version}" >&2
+	exit 1
+}
 
 printf 'go-archive %s parity verified at %s\n' "${version}" "${expected_sum}"
