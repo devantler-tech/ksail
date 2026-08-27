@@ -97,4 +97,34 @@ if grep -Fq 'failed deletion attempt(s)' "${tmp_dir}/already-deleted-output"; th
 	printf 'FAIL: cleanup counted an already-absent run as a failed deletion\n' >&2
 	exit 1
 fi
+grep -Fq 'Cleanup complete: 1 workflow run(s) deleted, 1 already absent' \
+	"${tmp_dir}/already-deleted-output"
 printf 'PASS: cleanup treats an already-deleted run as success\n'
+
+# Only the response STATUS LINE may classify a run as already absent. A genuine
+# non-404 failure whose response body happens to contain the text "(HTTP 404)"
+# must still fail the batch — otherwise cleanup exits 0 while the run it failed
+# to delete is still there.
+misleading_state="${tmp_dir}/misleading-body"
+mkdir -p "${misleading_state}"
+if PATH="${fake_bin}:${PATH}" \
+	GH_TOKEN=fixture \
+	FAKE_GH_SCENARIO=misleading-body \
+	FAKE_GH_STATE_DIR="${misleading_state}" \
+	KSAIL_MAINTENANCE_CUTOFF_DATE=2026-07-02 \
+	"${cleanup}" \
+	--repository devantler-tech/ksail \
+	--retain-days 30 \
+	--keep-minimum-runs 2 \
+	--max-deletions 2 >"${tmp_dir}/misleading-body-output" 2>&1; then
+	printf 'FAIL: cleanup accepted a non-404 failure as an already-absent run\n' >&2
+	cat "${tmp_dir}/misleading-body-output" >&2
+	exit 1
+fi
+if grep -Fq 'Already absent: workflow run 1005 (101)' "${tmp_dir}/misleading-body-output"; then
+	printf 'FAIL: a non-404 body containing "(HTTP 404)" was read as already absent\n' >&2
+	exit 1
+fi
+grep -Fq 'ERROR: failed to delete workflow run 1005 (101)' "${tmp_dir}/misleading-body-output"
+grep -Fq 'Cleanup completed with 1 failed deletion attempt(s)' "${tmp_dir}/misleading-body-output"
+printf 'PASS: a non-404 failure mentioning "(HTTP 404)" still fails the batch\n'

@@ -38,10 +38,26 @@ case "$*" in
 		exit 42
 	fi
 	if [[ "${scenario}" == already-deleted ]]; then
-		# Mirrors real gh when the run vanished between listing and deletion:
-		# the same 404 body on stdout and the same marker on stderr.
+		# Mirrors real `gh api --include` when the run vanished between listing
+		# and deletion: the response status line and headers on stdout ahead of
+		# the 404 body, and the human-readable marker on stderr.
+		printf 'HTTP/2.0 404 Not Found\n'
+		printf 'Content-Type: application/json; charset=utf-8\n'
+		printf '\n'
 		printf '%s' '{"message":"Not Found","documentation_url":"https://docs.github.com/rest/actions/workflow-runs#delete-a-workflow-run","status":"404"}'
 		printf 'gh: Not Found (HTTP 404)\n' >&2
+		exit 1
+	fi
+	if [[ "${scenario}" == misleading-body ]]; then
+		# A genuine NON-404 failure whose response body happens to contain the
+		# text "(HTTP 404)". Matching that string anywhere in the combined
+		# output would misread this as an absent run; only the status line
+		# distinguishes it.
+		printf 'HTTP/2.0 500 Internal Server Error\n'
+		printf 'Content-Type: application/json; charset=utf-8\n'
+		printf '\n'
+		printf '%s' '{"message":"upstream said (HTTP 404) while proxying","status":"500"}'
+		printf 'gh: Internal Server Error (HTTP 500)\n' >&2
 		exit 1
 	fi
 	printf '1005\n' >>"${state_dir}/deleted"

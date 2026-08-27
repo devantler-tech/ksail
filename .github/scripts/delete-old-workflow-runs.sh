@@ -166,15 +166,22 @@ for workflow_id in "${workflow_ids[@]}"; do
 
 		((deletion_attempts += 1))
 		if delete_output="$(
-			gh api --method DELETE "repos/${repository}/actions/runs/${run_id}" 2>&1
+			gh api --method DELETE "repos/${repository}/actions/runs/${run_id}" \
+				--include 2>&1
 		)"; then
 			((deletions += 1))
 			printf 'Deleted workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
-		elif [[ "${delete_output}" == *"(HTTP 404)"* ]]; then
+		elif grep -qE '^HTTP/[0-9.]+ 404( |$)' <<<"${delete_output}"; then
 			# The run vanished between the listing above and this delete — a
 			# concurrent cleanup pass or GitHub's own retention got there first.
 			# The run is gone, which is the outcome this script wanted, so it is
 			# not a failed attempt. Reported so the batch stays auditable.
+			#
+			# Classified on the response status line that --include puts on
+			# stdout, anchored to the start of a line. A failure's response BODY
+			# can itself contain the text "(HTTP 404)", so matching that string
+			# anywhere in the combined output would count a genuine failure as an
+			# absent run and let the batch exit 0 with the run still present.
 			((already_absent += 1))
 			printf 'Already absent: workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
 		else
