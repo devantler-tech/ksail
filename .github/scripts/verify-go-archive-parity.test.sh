@@ -129,8 +129,8 @@ done
 # and pins nothing (measured).
 newline_path="${local_copy}/$(printf 'KSail-PATCH.md\ncompat_legacy.go')"
 printf 'package archive\n' >"${newline_path}"
-newline_output="$("${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" 2>&1)" \
-	&& newline_rc=0 || newline_rc=$?
+newline_output="$("${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" 2>&1)" &&
+	newline_rc=0 || newline_rc=$?
 if ((newline_rc == 0)); then
 	printf 'FAIL: newline in a module path passed parity validation\n' >&2
 	exit 1
