@@ -13,6 +13,16 @@ import (
 
 var yamlDocumentSeparator = regexp.MustCompile(`(?m)^---[\t ]*\r?\n`)
 
+var (
+	errAPIVersionMigrationRequired = errors.New(
+		"API version migration requires kind, source, and target",
+	)
+	errNoServedAPIVersion               = errors.New("no served API version")
+	errRenderedAPIVersionNotReplaceable = errors.New(
+		"rendered resource has no replaceable API version",
+	)
+)
+
 type apiVersionMigrationKey struct {
 	apiVersion string
 	kind       string
@@ -30,10 +40,6 @@ type manifestIdentity struct {
 func (c *Client) newAPIVersionPostRenderer(
 	migrations []APIVersionMigration,
 ) (*apiVersionPostRenderer, error) {
-	if len(migrations) == 0 {
-		return nil, nil
-	}
-
 	discoveryClient, err := c.settings.RESTClientGetter().ToDiscoveryClient()
 	if err != nil {
 		return nil, fmt.Errorf("get discovery client for API version migration: %w", err)
@@ -42,10 +48,6 @@ func (c *Client) newAPIVersionPostRenderer(
 	resolved, err := resolveAPIVersionMigrations(discoveryClient, migrations)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(resolved) == 0 {
-		return nil, nil
 	}
 
 	return &apiVersionPostRenderer{migrations: resolved}, nil
@@ -59,12 +61,17 @@ func resolveAPIVersionMigrations(
 
 	for _, migration := range migrations {
 		if migration.Kind == "" || migration.From == "" || migration.To == "" {
-			return nil, errors.New("API version migration requires kind, source, and target")
+			return nil, errAPIVersionMigrationRequired
 		}
 
 		fromServed, err := apiResourceServed(discoveryClient, migration.From, migration.Kind)
 		if err != nil {
-			return nil, fmt.Errorf("discover source API %s kind %s: %w", migration.From, migration.Kind, err)
+			return nil, fmt.Errorf(
+				"discover source API %s kind %s: %w",
+				migration.From,
+				migration.Kind,
+				err,
+			)
 		}
 
 		if fromServed {
@@ -73,12 +80,18 @@ func resolveAPIVersionMigrations(
 
 		toServed, err := apiResourceServed(discoveryClient, migration.To, migration.Kind)
 		if err != nil {
-			return nil, fmt.Errorf("discover target API %s kind %s: %w", migration.To, migration.Kind, err)
+			return nil, fmt.Errorf(
+				"discover target API %s kind %s: %w",
+				migration.To,
+				migration.Kind,
+				err,
+			)
 		}
 
 		if !toServed {
 			return nil, fmt.Errorf(
-				"no served API version for kind %s (checked %s and %s)",
+				"%w for kind %s (checked %s and %s)",
+				errNoServedAPIVersion,
 				migration.Kind,
 				migration.From,
 				migration.To,
@@ -102,7 +115,7 @@ func apiResourceServed(
 			return false, nil
 		}
 
-		return false, err
+		return false, fmt.Errorf("discover resources for API version %s: %w", apiVersion, err)
 	}
 
 	for _, resource := range resources.APIResources {
@@ -115,6 +128,10 @@ func apiResourceServed(
 }
 
 func (r *apiVersionPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
+	if len(r.migrations) == 0 {
+		return renderedManifests, nil
+	}
+
 	manifest := renderedManifests.Bytes()
 	separators := yamlDocumentSeparator.FindAllIndex(manifest, -1)
 	output := bytes.NewBuffer(make([]byte, 0, len(manifest)))
@@ -143,8 +160,10 @@ func (r *apiVersionPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.Bu
 
 func (r *apiVersionPostRenderer) renderDocument(document []byte) ([]byte, error) {
 	identity := manifestIdentity{}
-	if err := yaml.Unmarshal(document, &identity); err != nil {
-		return nil, fmt.Errorf("read rendered manifest identity: %w", err)
+
+	unmarshalErr := yaml.Unmarshal(document, &identity)
+	if unmarshalErr != nil {
+		return nil, fmt.Errorf("read rendered manifest identity: %w", unmarshalErr)
 	}
 
 	target, ok := r.migrations[apiVersionMigrationKey{
@@ -160,7 +179,8 @@ func (r *apiVersionPostRenderer) renderDocument(document []byte) ([]byte, error)
 	)
 	if !apiVersionLine.Match(document) {
 		return nil, fmt.Errorf(
-			"rendered kind %s has no replaceable apiVersion %s",
+			"%w: kind %s, apiVersion %s",
+			errRenderedAPIVersionNotReplaceable,
 			identity.Kind,
 			identity.APIVersion,
 		)

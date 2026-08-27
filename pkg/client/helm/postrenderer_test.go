@@ -1,31 +1,18 @@
-package helm
+package helm_test
 
 import (
-	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery/fake"
 	k8stesting "k8s.io/client-go/testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const admissionRegistrationGroup = "admissionregistration.k8s.io"
-
-var admissionAPIMigrations = []APIVersionMigration{
-	{
-		Kind: "MutatingAdmissionPolicy",
-		From: admissionRegistrationGroup + "/v1beta1",
-		To:   admissionRegistrationGroup + "/v1",
-	},
-	{
-		Kind: "MutatingAdmissionPolicyBinding",
-		From: admissionRegistrationGroup + "/v1beta1",
-		To:   admissionRegistrationGroup + "/v1",
-	},
-}
 
 func TestResolveAPIVersionMigrations(t *testing.T) {
 	t.Parallel()
@@ -63,7 +50,10 @@ func TestResolveAPIVersionMigrations(t *testing.T) {
 			discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
 			discoveryClient.Resources = testCase.resources
 
-			migrations, err := resolveAPIVersionMigrations(discoveryClient, admissionAPIMigrations)
+			count, err := helm.ResolveAPIVersionMigrationsForTest(
+				discoveryClient,
+				admissionAPIMigrations(),
+			)
 
 			if testCase.expectedError != "" {
 				require.ErrorContains(t, err, testCase.expectedError)
@@ -72,7 +62,7 @@ func TestResolveAPIVersionMigrations(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Len(t, migrations, testCase.expectedCount)
+			assert.Equal(t, testCase.expectedCount, count)
 		})
 	}
 }
@@ -99,19 +89,40 @@ metadata:
   name: leave-untouched
 `
 
-	renderer := &apiVersionPostRenderer{
-		migrations: map[apiVersionMigrationKey]string{
-			{apiVersion: admissionRegistrationGroup + "/v1beta1", kind: "MutatingAdmissionPolicy"}:        admissionRegistrationGroup + "/v1",
-			{apiVersion: admissionRegistrationGroup + "/v1beta1", kind: "MutatingAdmissionPolicyBinding"}: admissionRegistrationGroup + "/v1",
-		},
+	discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
+	discoveryClient.Resources = []*metav1.APIResourceList{
+		apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
 	}
 
-	output, err := renderer.Run(bytes.NewBufferString(input))
+	output, err := helm.RenderAPIVersionMigrationsForTest(
+		discoveryClient,
+		admissionAPIMigrations(),
+		input,
+	)
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, bytes.Count(output.Bytes(), []byte("apiVersion: admissionregistration.k8s.io/v1\n")))
-	assert.Contains(t, output.String(), "apiVersion: admissionregistration.k8s.io/v1beta1\nkind: ValidatingAdmissionPolicy")
-	assert.Contains(t, output.String(), "# Source: calico/templates/policy.yaml")
+	assert.Equal(t, 2, strings.Count(output, "apiVersion: admissionregistration.k8s.io/v1\n"))
+	assert.Contains(
+		t,
+		output,
+		"apiVersion: admissionregistration.k8s.io/v1beta1\nkind: ValidatingAdmissionPolicy",
+	)
+	assert.Contains(t, output, "# Source: calico/templates/policy.yaml")
+}
+
+func admissionAPIMigrations() []helm.APIVersionMigration {
+	return []helm.APIVersionMigration{
+		{
+			Kind: "MutatingAdmissionPolicy",
+			From: admissionRegistrationGroup + "/v1beta1",
+			To:   admissionRegistrationGroup + "/v1",
+		},
+		{
+			Kind: "MutatingAdmissionPolicyBinding",
+			From: admissionRegistrationGroup + "/v1beta1",
+			To:   admissionRegistrationGroup + "/v1",
+		},
+	}
 }
 
 func apiResourceList(groupVersion string, kinds ...string) *metav1.APIResourceList {
