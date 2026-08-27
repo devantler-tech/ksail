@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -23,6 +24,12 @@ var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 const (
 	// talosImageRepository is the OCI repository for the Talos node image.
 	talosImageRepository = "ghcr.io/siderolabs/talos"
+
+	// kubernetesUpgradeReconcileTimeout mirrors talosctl's default for library
+	// callers. Without it the SDK receives zero instead, so Kubernetes 1.37 can
+	// exhaust manifest reconciliation while its API server restarts and
+	// kube-proxy rolls out.
+	kubernetesUpgradeReconcileTimeout = 5 * time.Minute
 )
 
 // UpgradeDistribution performs a rolling Talos OS upgrade from fromVersion to
@@ -183,6 +190,7 @@ func (p *Provisioner) UpgradeKubernetes(
 		ControllerManagerImage: constants.KubernetesControllerManagerImage,
 		SchedulerImage:         constants.KubernetesSchedulerImage,
 		ProxyImage:             constants.KubeProxyImage,
+		ReconcileTimeout:       kubernetesUpgradeReconcileTimeout,
 		EncoderOpt: encoder.WithComments(
 			encoder.CommentsDocs | encoder.CommentsExamples,
 		),

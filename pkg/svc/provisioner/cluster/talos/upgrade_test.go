@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -12,6 +13,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestKubernetesUpgradeReconcileTimeoutAllowsControlPlaneRecovery(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		5*time.Minute,
+		talosprovisioner.KubernetesUpgradeReconcileTimeoutForTest(),
+		"library callers must supply the five-minute default that talosctl normally wires",
+	)
+}
 
 // talosVersionLifecycleGA is the first Talos release whose nodes implement the
 // LifecycleService/ImageService upgrade APIs.
