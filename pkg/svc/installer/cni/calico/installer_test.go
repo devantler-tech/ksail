@@ -286,11 +286,6 @@ func isCalicoCRDSpec(spec *helm.ChartSpec) bool {
 	return spec != nil && spec.ChartName == "projectcalico/projectcalico.org.v3"
 }
 
-// isLegacyCalicoCRDSpec reports whether spec targets the compatibility CRD chart.
-func isLegacyCalicoCRDSpec(spec *helm.ChartSpec) bool {
-	return spec != nil && spec.ChartName == "projectcalico/crd.projectcalico.org.v1"
-}
-
 // isCalicoOperatorSpec reports whether spec targets the tigera-operator chart.
 func isCalicoOperatorSpec(spec *helm.ChartSpec) bool {
 	return spec != nil && spec.ChartName == "projectcalico/tigera-operator"
