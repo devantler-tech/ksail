@@ -195,13 +195,7 @@ func ParseLatest(reader io.Reader) (Release, error) {
 		}
 
 		versionKey := parsedVersion.String()
-		if existing, exists := releases[versionKey]; exists {
-			if existing.ISOAMD64 != release.ISOAMD64 || existing.ISOARM64 != release.ISOARM64 {
-				conflicts[versionKey] = struct{}{}
-			}
-		} else {
-			releases[versionKey] = release
-		}
+		recordRelease(releases, conflicts, versionKey, release)
 
 		if latestVersion == nil || parsedVersion.GreaterThan(latestVersion) {
 			latest = release
@@ -219,6 +213,26 @@ func ParseLatest(reader io.Reader) (Release, error) {
 	}
 
 	return latest, nil
+}
+
+func recordRelease(
+	releases map[string]Release,
+	conflicts map[string]struct{},
+	versionKey string,
+	release Release,
+) {
+	existing, exists := releases[versionKey]
+	if !exists {
+		releases[versionKey] = release
+
+		return
+	}
+
+	if existing.ISOAMD64 == release.ISOAMD64 && existing.ISOARM64 == release.ISOARM64 {
+		return
+	}
+
+	conflicts[versionKey] = struct{}{}
 }
 
 func parseRelease(item rssItem, titleVersion string) (Release, *semver.Version, error) {

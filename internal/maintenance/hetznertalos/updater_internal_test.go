@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errInjectedWrite = errors.New("injected second write failure")
+
 func TestWriteSourcesRollsBackEarlierFileWhenLaterWriteFails(t *testing.T) {
 	t.Parallel()
 
@@ -24,19 +26,18 @@ func TestWriteSourcesRollsBackEarlierFileWhenLaterWriteFails(t *testing.T) {
 		{path: firstPath, content: []byte("new defaults"), mode: 0o600},
 		{path: secondPath, content: []byte("new options"), mode: 0o600},
 	}
-	errInjected := errors.New("injected second write failure")
 	calls := 0
 	writeFile := func(path string, content []byte, mode os.FileMode) error {
 		calls++
 		if calls == 2 {
-			return errInjected
+			return errInjectedWrite
 		}
 
 		return fsutil.AtomicWriteFile(path, content, mode)
 	}
 
 	err := writeSourcesWith(files, writeFile)
-	require.ErrorIs(t, err, errInjected)
+	require.ErrorIs(t, err, errInjectedWrite)
 	assert.Equal(t, 3, calls, "the successful first write must be rolled back")
 
 	firstContent, readErr := os.ReadFile(firstPath) //nolint:gosec // Test fixture path.
