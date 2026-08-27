@@ -18,6 +18,17 @@ import (
 // valid for that maintenance environment even when the installed Talos target
 // is newer.
 func ResolveClusterKubernetesVersion(cluster *v1alpha1.Cluster) string {
+	return ResolveKubernetesVersion(
+		ResolveClusterTalosCompatibilityVersion(cluster),
+		cluster.Spec.Cluster.KubernetesVersion,
+	)
+}
+
+// ResolveClusterTalosCompatibilityVersion returns the Talos version that
+// constrains generated Kubernetes configuration. For Hetzner's default ISO,
+// this is the older of the requested Talos target and the bootstrap ISO's Talos
+// release. Other providers and custom Hetzner ISOs retain the requested target.
+func ResolveClusterTalosCompatibilityVersion(cluster *v1alpha1.Cluster) string {
 	talosVersion := cluster.Spec.Cluster.Talos.Version
 
 	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
@@ -29,10 +40,7 @@ func ResolveClusterKubernetesVersion(cluster *v1alpha1.Cluster) string {
 		)
 	}
 
-	return ResolveKubernetesVersion(
-		talosVersion,
-		cluster.Spec.Cluster.KubernetesVersion,
-	)
+	return talosVersion
 }
 
 // olderTalosVersion returns the older of two Talos versions. An empty primary
