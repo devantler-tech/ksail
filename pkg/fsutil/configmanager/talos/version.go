@@ -5,10 +5,58 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/compatibility"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
+
+// ResolveClusterKubernetesVersion determines the Kubernetes version for a
+// cluster while accounting for provider-specific Talos bootstrap constraints.
+// Hetzner's default ISO boots Talos 1.12.4, so generated configuration must be
+// valid for that maintenance environment even when the installed Talos target
+// is newer.
+func ResolveClusterKubernetesVersion(cluster *v1alpha1.Cluster) string {
+	talosVersion := cluster.Spec.Cluster.Talos.Version
+
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		(cluster.Spec.Cluster.Talos.ISO == 0 ||
+			cluster.Spec.Cluster.Talos.ISO == v1alpha1.DefaultTalosISO) {
+		talosVersion = olderTalosVersion(
+			talosVersion,
+			v1alpha1.DefaultHetznerTalosVersion,
+		)
+	}
+
+	return ResolveKubernetesVersion(
+		talosVersion,
+		cluster.Spec.Cluster.KubernetesVersion,
+	)
+}
+
+// olderTalosVersion returns the older of two Talos versions. An empty primary
+// version means the fallback is the only known compatibility constraint. An
+// invalid primary is preserved so the existing version-contract validation can
+// report it to the user.
+func olderTalosVersion(primary, fallback string) string {
+	primary = strings.TrimSpace(primary)
+	if primary == "" {
+		return fallback
+	}
+
+	primaryVersion, err := semver.NewVersion(strings.TrimPrefix(primary, "v"))
+	if err != nil {
+		return primary
+	}
+
+	fallbackVersion, err := semver.NewVersion(strings.TrimPrefix(fallback, "v"))
+	if err != nil || primaryVersion.LessThan(fallbackVersion) {
+		return primary
+	}
+
+	return fallback
+}
 
 // normalizeKubernetesVersion trims surrounding whitespace and any leading "v" so
 // the value matches the form the Talos bundle expects for KubeVersion ("1.32.0",

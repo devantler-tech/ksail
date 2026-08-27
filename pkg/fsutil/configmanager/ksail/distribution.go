@@ -317,10 +317,7 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 // existing cluster the provisioner further prefers the running version when unpinned,
 // so an unrelated update never forces a Kubernetes upgrade.
 func (m *ConfigManager) resolveTalosKubernetesVersion() string {
-	version := talosconfigmanager.ResolveKubernetesVersion(
-		m.Config.Spec.Cluster.Talos.Version,
-		m.Config.Spec.Cluster.KubernetesVersion,
-	)
+	version := talosconfigmanager.ResolveClusterKubernetesVersion(m.Config)
 	warnKubernetesVersionCapped(m.Config, version, m.Writer)
 
 	return version

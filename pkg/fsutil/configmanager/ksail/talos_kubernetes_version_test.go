@@ -15,6 +15,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLoadConfig_TalosUnpinnedHetznerUsesCompatibleKubernetesVersion guards the
+// project-init path where neither Talos nor Kubernetes is explicitly pinned.
+// Hetzner boots the built-in Talos 1.12 ISO, so the generated machine config
+// must stay within that release's Kubernetes support window.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate filesystem state for config loading.
+func TestLoadConfig_TalosUnpinnedHetznerUsesCompatibleKubernetesVersion(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    provider: Hetzner\n" +
+		"    cni: Cilium\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
+
+	manager := configmanager.NewConfigManager(io.Discard, "")
+	manager.Viper.SetConfigFile("ksail.yaml")
+
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+
+	require.NotNil(t, manager.DistributionConfig)
+	require.NotNil(t, manager.DistributionConfig.Talos)
+	assert.Equal(t, "1.35.0", manager.DistributionConfig.Talos.KubernetesVersion())
+}
+
 // TestLoadConfig_TalosFallbackCapsKubernetesVersion guards the regression where the
 // no-scaffolded-talos-dir fallback in cacheTalosConfig ignored the resolved version:
 // with an older Talos version pinned and no talos/ patches dir, the default config

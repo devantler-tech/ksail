@@ -128,10 +128,7 @@ func buildDistributionConfig(
 		// Honor the Kubernetes version pin / cap the default to the pinned Talos
 		// version, matching the CLI so the operator never deploys an incompatible
 		// Kubernetes version.
-		kubernetesVersion := talosconfigmanager.ResolveKubernetesVersion(
-			cluster.Spec.Cluster.Talos.Version,
-			cluster.Spec.Cluster.KubernetesVersion,
-		)
+		kubernetesVersion := talosconfigmanager.ResolveClusterKubernetesVersion(cluster)
 
 		talosConfig, err := newTalosConfig(
 			name,
