@@ -125,6 +125,7 @@ done <<<"${workflow_output}"
 deletion_attempts=0
 deletion_failures=0
 deletions=0
+already_absent=0
 for workflow_id in "${workflow_ids[@]}"; do
 	keep_output="$(
 		gh api --method GET "repos/${repository}/actions/workflows/${workflow_id}/runs" \
@@ -164,13 +165,22 @@ for workflow_id in "${workflow_ids[@]}"; do
 		fi
 
 		((deletion_attempts += 1))
-		if gh api --method DELETE "repos/${repository}/actions/runs/${run_id}"; then
+		if delete_output="$(
+			gh api --method DELETE "repos/${repository}/actions/runs/${run_id}" 2>&1
+		)"; then
 			((deletions += 1))
 			printf 'Deleted workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
+		elif [[ "${delete_output}" == *"(HTTP 404)"* ]]; then
+			# The run vanished between the listing above and this delete — a
+			# concurrent cleanup pass or GitHub's own retention got there first.
+			# The run is gone, which is the outcome this script wanted, so it is
+			# not a failed attempt. Reported so the batch stays auditable.
+			((already_absent += 1))
+			printf 'Already absent: workflow run %s (%s)\n' "${run_id}" "${workflow_id}"
 		else
 			((deletion_failures += 1))
-			printf 'ERROR: failed to delete workflow run %s (%s)\n' \
-				"${run_id}" "${workflow_id}" >&2
+			printf 'ERROR: failed to delete workflow run %s (%s): %s\n' \
+				"${run_id}" "${workflow_id}" "${delete_output}" >&2
 		fi
 
 		if ((deletion_attempts == max_deletions)); then
@@ -186,4 +196,5 @@ if ((deletion_failures > 0)); then
 	exit 1
 fi
 
-printf 'Cleanup complete: %s workflow run(s) deleted\n' "${deletions}"
+printf 'Cleanup complete: %s workflow run(s) deleted, %s already absent\n' \
+	"${deletions}" "${already_absent}"

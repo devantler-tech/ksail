@@ -69,3 +69,32 @@ grep -Fq 'ERROR: failed to delete workflow run 1005 (101)' "${tmp_dir}/delete-fa
 grep -Fq 'Deletion limit reached: 2' "${tmp_dir}/delete-failure-output"
 grep -Fq 'Cleanup completed with 1 failed deletion attempt(s)' "${tmp_dir}/delete-failure-output"
 printf 'PASS: cleanup continues its bounded batch and reports deletion failures\n'
+
+# A run can disappear between the listing and the deletion — a concurrent
+# cleanup pass or GitHub's own retention removes it first. The delete then
+# 404s, but the run is gone, which is exactly what this script wanted, so it
+# must not be reported as a failed deletion attempt.
+already_deleted_state="${tmp_dir}/already-deleted"
+mkdir -p "${already_deleted_state}"
+if ! PATH="${fake_bin}:${PATH}" \
+	GH_TOKEN=fixture \
+	FAKE_GH_SCENARIO=already-deleted \
+	FAKE_GH_STATE_DIR="${already_deleted_state}" \
+	KSAIL_MAINTENANCE_CUTOFF_DATE=2026-07-02 \
+	"${cleanup}" \
+	--repository devantler-tech/ksail \
+	--retain-days 30 \
+	--keep-minimum-runs 2 \
+	--max-deletions 2 >"${tmp_dir}/already-deleted-output" 2>&1; then
+	printf 'FAIL: cleanup treated an already-deleted run as a failure\n' >&2
+	cat "${tmp_dir}/already-deleted-output" >&2
+	exit 1
+fi
+printf '1006\n' >"${tmp_dir}/expected-already-deleted-deletions"
+diff -u "${tmp_dir}/expected-already-deleted-deletions" "${already_deleted_state}/deleted"
+grep -Fq 'Already absent: workflow run 1005 (101)' "${tmp_dir}/already-deleted-output"
+if grep -Fq 'failed deletion attempt(s)' "${tmp_dir}/already-deleted-output"; then
+	printf 'FAIL: cleanup counted an already-absent run as a failed deletion\n' >&2
+	exit 1
+fi
+printf 'PASS: cleanup treats an already-deleted run as success\n'

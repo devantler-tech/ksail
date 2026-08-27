@@ -37,6 +37,13 @@ case "$*" in
 		printf 'fixture deletion failure\n' >&2
 		exit 42
 	fi
+	if [[ "${scenario}" == already-deleted ]]; then
+		# Mirrors real gh when the run vanished between listing and deletion:
+		# the same 404 body on stdout and the same marker on stderr.
+		printf '%s' '{"message":"Not Found","documentation_url":"https://docs.github.com/rest/actions/workflow-runs#delete-a-workflow-run","status":"404"}'
+		printf 'gh: Not Found (HTTP 404)\n' >&2
+		exit 1
+	fi
 	printf '1005\n' >>"${state_dir}/deleted"
 	;;
 *"api --method DELETE repos/devantler-tech/ksail/actions/runs/1006"*)
