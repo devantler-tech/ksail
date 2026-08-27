@@ -22,6 +22,7 @@ func main() {
 	if err == nil {
 		err = hetznertalos.Run(context.Background(), rootPath, feedPath, os.Stdout)
 	}
+
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "update Hetzner Talos ISO: %v\n", err)
 

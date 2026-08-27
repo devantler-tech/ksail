@@ -22,6 +22,7 @@ func TestCanonicalizePathsResolvesSymlinks(t *testing.T) {
 	rootLink := filepath.Join(linkDir, "repo")
 	feedPath := filepath.Join(realRoot, "feed.rss")
 	feedLink := filepath.Join(linkDir, "feed.rss")
+
 	require.NoError(t, os.WriteFile(feedPath, []byte("fixture"), 0o600))
 	require.NoError(t, os.Symlink(realRoot, rootLink))
 	require.NoError(t, os.Symlink(feedPath, feedLink))

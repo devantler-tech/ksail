@@ -19,6 +19,7 @@ func TestWriteSourcesRollsBackEarlierFileWhenLaterWriteFails(t *testing.T) {
 	dir := t.TempDir()
 	firstPath := filepath.Join(dir, "defaults.go")
 	secondPath := filepath.Join(dir, "options.go")
+
 	require.NoError(t, os.WriteFile(firstPath, []byte("old defaults"), 0o600))
 	require.NoError(t, os.WriteFile(secondPath, []byte("old options"), 0o600))
 

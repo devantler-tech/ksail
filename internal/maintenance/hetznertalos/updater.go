@@ -180,6 +180,7 @@ func ParseLatest(reader io.Reader) (Release, error) {
 		latestKey     string
 		latest        Release
 	)
+
 	releases := make(map[string]Release)
 	conflicts := make(map[string]struct{})
 
@@ -332,6 +333,7 @@ func loadSources(root string) (string, int64, []sourceFile, error) {
 
 	for _, name := range paths {
 		path := filepath.Join(root, filepath.FromSlash(name))
+
 		content, err := fsutil.ReadFileSafe(root, path)
 		if err != nil {
 			return "", 0, nil, fmt.Errorf("read source %s: %w", path, err)
@@ -448,6 +450,7 @@ func writeSourcesWith(
 
 			for rollbackIndex := index - 1; rollbackIndex >= 0; rollbackIndex-- {
 				backup := backups[rollbackIndex]
+
 				rollbackErr := writeFile(backup.path, backup.content, backup.mode)
 				if rollbackErr != nil {
 					rollbackErrs = append(
@@ -494,6 +497,7 @@ func ensureMachinerySupports(root, releaseVersion string) error {
 
 func readMachineryVersion(root string) (string, error) {
 	path := filepath.Join(root, "go.mod")
+
 	content, err := fsutil.ReadFileSafe(root, path)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", path, err)
