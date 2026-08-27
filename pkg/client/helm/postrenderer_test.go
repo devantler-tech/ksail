@@ -1,6 +1,7 @@
 package helm_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/discovery/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -17,38 +20,16 @@ const admissionRegistrationGroup = "admissionregistration.k8s.io"
 func TestResolveAPIVersionMigrations(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name          string
-		resources     []*metav1.APIResourceList
-		expectedCount int
-		expectedError string
-	}{
-		{
-			name: "keeps served source API",
-			resources: []*metav1.APIResourceList{
-				apiResourceList(admissionRegistrationGroup+"/v1beta1", admissionKinds()...),
-			},
-			expectedCount: 0,
-		},
-		{
-			name: "migrates to served target API",
-			resources: []*metav1.APIResourceList{
-				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
-			},
-			expectedCount: 2,
-		},
-		{
-			name:          "fails when neither API is served",
-			expectedError: "no served API version",
-		},
-	}
-
-	for _, testCase := range testCases {
+	for _, testCase := range apiMigrationResolutionTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
-			discoveryClient.Resources = testCase.resources
+			fakeDiscovery := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
+			fakeDiscovery.Resources = testCase.resources
+			discoveryClient := &groupVersionDiscovery{
+				DiscoveryInterface: fakeDiscovery,
+				resourceErrors:     testCase.resourceErrors,
+			}
 
 			count, err := helm.ResolveAPIVersionMigrationsForTest(
 				discoveryClient,
@@ -65,6 +46,69 @@ func TestResolveAPIVersionMigrations(t *testing.T) {
 			assert.Equal(t, testCase.expectedCount, count)
 		})
 	}
+}
+
+type apiMigrationResolutionTestCase struct {
+	name           string
+	resources      []*metav1.APIResourceList
+	resourceErrors map[string]error
+	expectedCount  int
+	expectedError  string
+}
+
+func apiMigrationResolutionTestCases() []apiMigrationResolutionTestCase {
+	return []apiMigrationResolutionTestCase{
+		{
+			name: "keeps served source API",
+			resources: []*metav1.APIResourceList{
+				apiResourceList(admissionRegistrationGroup+"/v1beta1", admissionKinds()...),
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "migrates to served target API",
+			resources: []*metav1.APIResourceList{
+				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "migrates after a source memory cache miss",
+			resources: []*metav1.APIResourceList{
+				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
+			},
+			resourceErrors: map[string]error{
+				admissionRegistrationGroup + "/v1beta1": memory.ErrCacheNotFound,
+			},
+			expectedCount: 2,
+		},
+		{
+			name:          "fails when neither API is served",
+			expectedError: "no served API version",
+		},
+	}
+}
+
+type groupVersionDiscovery struct {
+	discovery.DiscoveryInterface
+
+	resourceErrors map[string]error
+}
+
+func (d *groupVersionDiscovery) ServerResourcesForGroupVersion(
+	groupVersion string,
+) (*metav1.APIResourceList, error) {
+	resourceErr := d.resourceErrors[groupVersion]
+	if resourceErr != nil {
+		return nil, resourceErr
+	}
+
+	resources, err := d.DiscoveryInterface.ServerResourcesForGroupVersion(groupVersion)
+	if err != nil {
+		return nil, fmt.Errorf("discover delegated group version: %w", err)
+	}
+
+	return resources, nil
 }
 
 func TestAPIVersionPostRenderer_Run(t *testing.T) {

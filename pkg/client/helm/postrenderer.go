@@ -9,6 +9,7 @@ import (
 	helmpostrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	"sigs.k8s.io/yaml"
 )
 
@@ -122,7 +123,7 @@ func apiResourceServed(
 ) (bool, error) {
 	resources, err := discoveryClient.ServerResourcesForGroupVersion(apiVersion)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || errors.Is(err, memory.ErrCacheNotFound) {
 			return false, nil
 		}
 
