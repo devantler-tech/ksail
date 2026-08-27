@@ -770,10 +770,10 @@ spec:
                     properties:
                       allowedCidrs:
                         description: |-
-                          AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
-                          on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
-                          to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
-                          and the Talos OS-level ingress firewall for defense-in-depth.
+                          AllowedCIDRs restricts public access to the Kubernetes API (6443) on control-plane nodes
+                          and the Talos API (50000) on every node to the specified CIDR blocks. When empty, both
+                          APIs are open to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner
+                          Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth.
                           Examples: ["203.0.113.0/24", "198.51.100.0/24"]
                         items:
                           type: string

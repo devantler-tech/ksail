@@ -588,7 +588,7 @@ export interface KSailClusterConfiguration {
          */
         serverLimit?: number;
         /**
-         * CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6).
+         * CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6).
          */
         allowedCidrs?: string[];
         /**

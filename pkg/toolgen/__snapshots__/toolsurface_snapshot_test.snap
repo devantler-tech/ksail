@@ -335,7 +335,7 @@ workload_write
   "parameters": {
     "properties": {
       "allowed-cidrs": {
-        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: create, update)",
+        "description": "CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)... (applies to: create, update)",
         "items": {
           "type": "string"
         },
@@ -2190,7 +2190,7 @@ workload_write
   "parameters": {
     "properties": {
       "allowed-cidrs": {
-        "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)...",
+        "description": "CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6)...",
         "items": {
           "type": "string"
         },

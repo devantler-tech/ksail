@@ -58,6 +58,7 @@ func TestRegisterAllowedCIDRsFlag(t *testing.T) {
 	flag := cmd.Flags().Lookup("allowed-cidrs")
 	require.NotNil(t, flag, "allowed-cidrs flag should be registered")
 	assert.Equal(t, "stringSlice", flag.Value.Type())
+	assert.Contains(t, flag.Usage, "Talos API on every node")
 }
 
 func TestApplyClusterMutationFlags_MergesChangedFlags(t *testing.T) {

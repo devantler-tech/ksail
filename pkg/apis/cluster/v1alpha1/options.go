@@ -271,12 +271,12 @@ type OptionsHetzner struct {
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
 	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"minimum=0" jsonschema_description:"Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10"` //nolint:lll
-	// AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
-	// on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
-	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
-	// and the Talos OS-level ingress firewall for defense-in-depth.
+	// AllowedCIDRs restricts public access to the Kubernetes API (6443) on control-plane nodes
+	// and the Talos API (50000) on every node to the specified CIDR blocks. When empty, both
+	// APIs are open to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner
+	// Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
-	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
 	// nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
 	// IPv4-less workers; ksail then reaches their Talos API over the private network — which
