@@ -480,6 +480,30 @@ jobs:
             }
             core.setFailed('Timed out waiting for Go validation checks to complete');
 
+  verify-go-archive:
+    name: 🔐 Verify go-archive Provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🧪 Verify parity guard behavior
+        run: .github/scripts/verify-go-archive-parity.test.sh
+
+      - name: 🔐 Verify reviewed upstream bytes
+        run: .github/scripts/verify-go-archive-parity.sh
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
@@ -1607,6 +1631,7 @@ jobs:
         changes,
         ci-go,
         wait-for-validate-go,
+        verify-go-archive,
         build-artifact,
         generate,
         auto-commit,
@@ -1634,6 +1659,7 @@ jobs:
             ${{ needs.changes.result }}
             ${{ needs.ci-go.result }}
             ${{ needs.wait-for-validate-go.result }}
+            ${{ needs.verify-go-archive.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}
