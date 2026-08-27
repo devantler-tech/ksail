@@ -2,7 +2,6 @@ package ciharness_test
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,17 +9,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// todosWorkflow captures the local job surface that delivers scanner inputs.
+// todosWorkflow captures the reusable job surface that delivers scanner inputs.
 //
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type todosWorkflow struct {
 	Jobs map[string]struct {
-		Uses   string `yaml:"uses"`
-		RunsOn string `yaml:"runs-on"`
-		Steps  []struct {
-			Env map[string]string `yaml:"env"`
-			Run string            `yaml:"run"`
-		} `yaml:"steps"`
+		Uses    string            `yaml:"uses"`
+		RunsOn  string            `yaml:"runs-on"`
+		Steps   []map[string]any  `yaml:"steps"`
+		With    map[string]string `yaml:"with"`
+		Secrets map[string]string `yaml:"secrets"`
 	} `yaml:"jobs"`
 }
 
@@ -34,38 +32,22 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 
 	job, found := workflow.Jobs["todos"]
 	require.True(t, found, "TODO workflow must define the todos job")
-	require.Empty(t, job.Uses, "TODO scanner inputs must be delivered by the KSail-owned job")
-	require.Equal(t, "ubuntu-latest", job.RunsOn)
-
-	var (
-		scanEnv map[string]string
-		scanRun string
+	require.Equal(
+		t,
+		"devantler-tech/actions/.github/workflows/scan-for-todo-comments.yaml@"+
+			"56665ea3f455622d6ff0cc0fb2b90fc3be6e41e7",
+		job.Uses,
 	)
+	assert.Empty(t, job.RunsOn, "reusable workflow callers cannot configure runs-on")
+	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
+	assert.Equal(t, "${{ secrets.APP_PRIVATE_KEY }}", job.Secrets["APP_PRIVATE_KEY"])
 
-	for _, step := range job.Steps {
-		if _, configured := step.Env["INPUT_IGNORE"]; configured {
-			scanEnv = step.Env
-			scanRun = step.Run
-
-			break
-		}
-	}
-
-	require.NotNil(t, scanEnv, "scanner step must configure INPUT_IGNORE")
-
-	ignorePattern := scanEnv["INPUT_IGNORE"]
+	ignorePattern := job.With["ignore"]
 	assert.Equal(t, `^third_party/`, ignorePattern)
 
 	compiled, err := regexp.Compile(ignorePattern)
 	require.NoError(t, err)
 	assert.True(t, compiled.MatchString("third_party/go-archive/archive/tar/reader.go"))
 	assert.False(t, compiled.MatchString("internal/maintenance/todos.go"))
-
-	assert.Contains(t, strings.Join(strings.Fields(scanRun), " "), "--env INPUT_IGNORE")
-	assert.Equal(
-		t,
-		"ghcr.io/alstr/todo-to-issue-action:v5.1.15@sha256:"+
-			"a1794cab7e7a0306d6f74dd5249734f2c0b49e47d7549c6cdca4421bced67c9d",
-		scanEnv["TODO_TO_ISSUE_IMAGE"],
-	)
+	assert.Contains(t, string(contents), "# v13.2.2")
 }
