@@ -19,8 +19,6 @@ import (
 	talosmachineryversion "github.com/siderolabs/talos/pkg/machinery/version"
 )
 
-const kubernetesUpgradeReconcileTimeout = 3 * time.Minute
-
 // Compile-time interface compliance check.
 var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 
@@ -216,7 +214,7 @@ func kubernetesUpgradeOptions(logWriter io.Writer) k8s.UpgradeOptions {
 		ControllerManagerImage: constants.KubernetesControllerManagerImage,
 		SchedulerImage:         constants.KubernetesSchedulerImage,
 		ProxyImage:             constants.KubeProxyImage,
-		ReconcileTimeout:       kubernetesUpgradeReconcileTimeout,
+		ReconcileTimeout:       3 * time.Minute,
 		EncoderOpt: encoder.WithComments(
 			encoder.CommentsDocs | encoder.CommentsExamples,
 		),
