@@ -23,6 +23,11 @@ var errCalicoRetryAPIServerUnavailable = errors.New(
 		"the server is currently unable to handle the request",
 )
 
+var errCalicoV3CRDChartUnsupportedMAPBeta = errors.New(
+	`resource mapping not found: no matches for kind "MutatingAdmissionPolicy" ` +
+		`in version "admissionregistration.k8s.io/v1beta1"`,
+)
+
 // TestInstaller_Install_TalosDistribution_Values verifies Talos-specific Calico values
 // are passed through the Helm install, including kubeletVolumePluginPath and NFTables.
 func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
@@ -132,6 +137,51 @@ func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
 	err := installer.Install(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "install or upgrade calico")
+}
+
+// TestInstaller_Install_FallsBackWhenV3CRDChartUsesRemovedMAPBetaAPI verifies
+// Kubernetes 1.36 clusters remain installable while Calico's v3 CRD chart still
+// renders MutatingAdmissionPolicy at the removed v1beta1 API. The legacy CRD
+// chart is supported by the same operator release and does not ship those
+// admission policies, so it is the narrow compatibility fallback.
+func TestInstaller_Install_FallsBackWhenV3CRDChartUsesRemovedMAPBetaAPI(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstaller(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		false,
+	)
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
+		Return(nil, errCalicoV3CRDChartUnsupportedMAPBeta).
+		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isLegacyCalicoCRDSpec)).
+		Return(nil, nil).
+		Once()
+	client.EXPECT().
+		RefreshDiscovery().
+		Return(nil).
+		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
+		Return(nil, nil).
+		Once()
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
 }
 
 // TestInstaller_Install_ContextCanceled_Vanilla verifies install fails on canceled context.

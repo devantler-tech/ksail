@@ -1370,13 +1370,13 @@ jobs:
             args: ""
             test-kubernetes-provider: "true"
             test-workload-mirror: "true"
-          # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
-          # chart ships MutatingAdmissionPolicy resources that need the v1beta1
-          # admissionregistration API enabled on the embedded k3s server via the k3k
-          # Cluster serverArgs. The default test-kubernetes-provider legs above use
-          # the distribution-default CNI, so this leg is the only one exercising the
-          # k3k+Calico serverArgs path. A unique host args value keeps this as a
-          # standalone matrix combination (not merged into the args="" Vanilla leg).
+          # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s v3 CRD
+          # chart ships MutatingAdmissionPolicy resources: pre-1.36 clusters need the
+          # beta API enabled via k3k serverArgs, while Calico 3.32 falls back to its v1
+          # CRD chart on 1.36 because that release still renders the removed v1beta1
+          # API. The default test-kubernetes-provider legs above use the
+          # distribution-default CNI, so this is the only k3k+Calico coverage. A
+          # unique host args value keeps it separate from the args="" Vanilla leg.
           - distribution: Vanilla
             provider: Docker
             init: true
@@ -1587,7 +1587,7 @@ jobs:
           # this version (installer.go chartSpec/crdChartSpec); a bump that
           # outpaces either chart leaves the install unresolvable.
           status=0
-          for chart in tigera-operator projectcalico.org.v3; do
+          for chart in tigera-operator projectcalico.org.v3 crd.projectcalico.org.v1; do
             if helm show chart "projectcalico/$chart" --version "$version" >/dev/null 2>&1; then
               echo "✅ projectcalico/$chart $version is published"
             else

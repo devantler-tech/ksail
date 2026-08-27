@@ -44,6 +44,9 @@ const (
 
 	// calicoChartsRepoURL is the Tigera Helm chart repository serving the Calico charts.
 	calicoChartsRepoURL = "https://docs.tigera.io/calico/charts"
+
+	calicoV3CRDChartName     = "projectcalico/projectcalico.org.v3"
+	calicoLegacyCRDChartName = "projectcalico/crd.projectcalico.org.v1"
 )
 
 // NewInstaller creates a new Calico installer with distribution-specific configuration.
@@ -168,9 +171,20 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 // must be installed first; otherwise the operator chart's Installation/APIServer
 // custom resources fail Helm manifest validation on a fresh cluster.
 func (c *Installer) crdChartSpec() *helm.ChartSpec {
+	return c.crdChartSpecFor(calicoV3CRDChartName)
+}
+
+// legacyCRDChartSpec returns Calico's supported crd.projectcalico.org/v1
+// chart. It is used only when the matching v3 chart renders the removed
+// MutatingAdmissionPolicy v1beta1 API on Kubernetes 1.36+.
+func (c *Installer) legacyCRDChartSpec() *helm.ChartSpec {
+	return c.crdChartSpecFor(calicoLegacyCRDChartName)
+}
+
+func (c *Installer) crdChartSpecFor(chartName string) *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "calico-crds",
-		ChartName:       "projectcalico/projectcalico.org.v3",
+		ChartName:       chartName,
 		Namespace:       "tigera-operator",
 		Version:         chartVersion(),
 		RepoURL:         calicoChartsRepoURL,
@@ -214,6 +228,14 @@ func (c *Installer) installCalico(ctx context.Context) error {
 
 	// Phase 1: install the CRDs (separate projectcalico.org.v3 chart since v3.30).
 	crdErr := c.runInstallWithRetry(ctx, client, c.crdChartSpec())
+	if isUnsupportedMAPBetaAPIError(crdErr) {
+		// Calico 3.32's v3 CRD chart hard-codes the MutatingAdmissionPolicy
+		// v1beta1 API, which Kubernetes 1.36 no longer serves. Fall back to
+		// Calico's supported v1 CRD chart until the version-aware upstream
+		// rendering fix ships. Atomic installs ensure the failed v3 release is
+		// rolled back before the same release name is retried with this chart.
+		crdErr = c.runInstallWithRetry(ctx, client, c.legacyCRDChartSpec())
+	}
 	if crdErr != nil {
 		return fmt.Errorf("install calico CRDs: %w", crdErr)
 	}
@@ -295,11 +317,26 @@ func (c *Installer) runInstallWithRetry(
 // other distributions such an error indicates a genuine problem and is not
 // retried.
 func (c *Installer) shouldRetryInstall(err error) bool {
+	if isUnsupportedMAPBetaAPIError(err) {
+		return false
+	}
+
 	if isAPIDiscoveryError(err) {
 		return true
 	}
 
 	return c.distribution == v1alpha1.DistributionK3s && isAPIServerUnavailableError(err)
+}
+
+func isUnsupportedMAPBetaAPIError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	return strings.Contains(errMsg, `no matches for kind "MutatingAdmissionPolicy"`) &&
+		strings.Contains(errMsg, `version "admissionregistration.k8s.io/v1beta1"`)
 }
 
 // attemptCalicoInstall performs a single Helm install (or upgrade) attempt.
