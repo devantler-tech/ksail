@@ -635,6 +635,11 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 		return nil, err
 	}
 
+	client.PostRenderer, err = c.newAPIVersionPostRenderer(spec.APIVersionMigrations)
+	if err != nil {
+		return nil, err
+	}
+
 	runFn := func() (any, error) {
 		return client.RunWithContext(ctx, chart, vals)
 	}
@@ -652,6 +657,11 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
+	if err != nil {
+		return nil, err
+	}
+
+	client.PostRenderer, err = c.newAPIVersionPostRenderer(spec.APIVersionMigrations)
 	if err != nil {
 		return nil, err
 	}
