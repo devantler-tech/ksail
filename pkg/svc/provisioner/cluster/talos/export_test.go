@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	taloskubernetes "github.com/siderolabs/talos/pkg/cluster/kubernetes"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,6 +38,12 @@ type NodeWithRoleForTest = nodeWithRole
 // CountNodeRolesForTest exposes countNodeRoles for unit testing.
 func CountNodeRolesForTest(nodes []NodeWithRoleForTest) (int32, int32) {
 	return countNodeRoles(nodes)
+}
+
+// KubernetesUpgradeOptionsForTest exposes the upgrade options to the black-box
+// test package without adding a production API.
+func KubernetesUpgradeOptionsForTest(logWriter io.Writer) taloskubernetes.UpgradeOptions {
+	return kubernetesUpgradeOptions(logWriter)
 }
 
 // LowestTalosVersionForTest exposes lowestTalosVersion for unit testing.
