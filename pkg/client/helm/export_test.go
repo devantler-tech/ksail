@@ -9,6 +9,7 @@ import (
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	helmpostrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	"k8s.io/client-go/discovery"
@@ -164,4 +165,14 @@ func RenderAPIVersionMigrationsForTest(
 	}
 
 	return output.String(), nil
+}
+
+// OptionalAPIVersionPostRendererForTest exposes the nil-interface boundary.
+func OptionalAPIVersionPostRendererForTest(enabled bool) helmpostrenderer.PostRenderer {
+	var renderer *apiVersionPostRenderer
+	if enabled {
+		renderer = &apiVersionPostRenderer{}
+	}
+
+	return optionalAPIVersionPostRenderer(renderer)
 }

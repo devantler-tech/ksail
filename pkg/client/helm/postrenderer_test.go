@@ -110,6 +110,13 @@ metadata:
 	assert.Contains(t, output, "# Source: calico/templates/policy.yaml")
 }
 
+func TestOptionalAPIVersionPostRenderer_DisablesNilRenderer(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, helm.OptionalAPIVersionPostRendererForTest(false))
+	assert.NotNil(t, helm.OptionalAPIVersionPostRendererForTest(true))
+}
+
 func admissionAPIMigrations() []helm.APIVersionMigration {
 	return []helm.APIVersionMigration{
 		{

@@ -637,7 +637,7 @@ func (c *Client) performInstall(
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
 	client.CreateNamespace = spec.CreateNamespace
-	client.PostRenderer = postRenderer
+	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	applyCommonActionConfig(installActionAdapter{client}, spec)
 
@@ -662,7 +662,7 @@ func (c *Client) upgradeRelease(
 ) (*v1.Release, error) {
 	client := helmv4action.NewUpgrade(c.actionConfig)
 	client.Namespace = spec.Namespace
-	client.PostRenderer = postRenderer
+	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
 

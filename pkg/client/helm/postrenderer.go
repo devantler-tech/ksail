@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	helmpostrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/yaml"
@@ -35,6 +36,16 @@ type apiVersionPostRenderer struct {
 type manifestIdentity struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
+}
+
+func optionalAPIVersionPostRenderer(
+	renderer *apiVersionPostRenderer,
+) helmpostrenderer.PostRenderer {
+	if renderer == nil {
+		return nil
+	}
+
+	return renderer
 }
 
 func (c *Client) newAPIVersionPostRenderer(
