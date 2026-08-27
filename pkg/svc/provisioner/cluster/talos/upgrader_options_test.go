@@ -1,10 +1,11 @@
-package talosprovisioner
+package talosprovisioner_test
 
 import (
 	"io"
 	"testing"
 	"time"
 
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +15,7 @@ import (
 func TestKubernetesUpgradeOptionsAllowsManifestReconciliation(t *testing.T) {
 	t.Parallel()
 
-	options := kubernetesUpgradeOptions(io.Discard)
+	options := talosprovisioner.KubernetesUpgradeOptionsForTest(io.Discard)
 
 	assert.GreaterOrEqual(t, options.ReconcileTimeout, 3*time.Minute)
 }
