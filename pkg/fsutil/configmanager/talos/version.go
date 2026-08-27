@@ -14,9 +14,8 @@ import (
 
 // ResolveClusterKubernetesVersion determines the Kubernetes version for a
 // cluster while accounting for provider-specific Talos bootstrap constraints.
-// Hetzner's default ISO boots Talos 1.12.4, so generated configuration must be
-// valid for that maintenance environment even when the installed Talos target
-// is newer.
+// Hetzner's tracked default ISO can lag the installed Talos target, so generated
+// configuration must remain valid for that maintenance environment.
 func ResolveClusterKubernetesVersion(cluster *v1alpha1.Cluster) string {
 	return ResolveKubernetesVersion(
 		ResolveClusterTalosCompatibilityVersion(cluster),
@@ -74,12 +73,12 @@ func normalizeKubernetesVersion(version string) string {
 }
 
 // ParseVersionContract resolves a pinned Talos version to the machinery
-// contract used for config generation. An empty pin retains the conservative
-// Talos 1.12 contract used by the default Hetzner bootstrap ISO.
+// contract used for config generation. An empty pin follows the Talos release
+// provided by KSail's tracked default Hetzner bootstrap ISO.
 func ParseVersionContract(pinnedVersion string) (*talosconfig.VersionContract, error) {
 	pinnedVersion = strings.TrimSpace(pinnedVersion)
 	if pinnedVersion == "" {
-		return talosconfig.TalosVersion1_12, nil
+		pinnedVersion = v1alpha1.DefaultHetznerTalosVersion
 	}
 
 	if !strings.HasPrefix(pinnedVersion, "v") {
@@ -155,6 +154,11 @@ func defaultKubernetesVersionForTalos(pinnedTalosVersion string) string {
 // compatible version is found, so the caller (or Talos itself) surfaces the
 // incompatibility rather than this silently choosing an unrelated version.
 func highestCompatibleKubernetesVersion(talosVersion *compatibility.TalosVersion) string {
+	defaultVersion, err := compatibility.ParseKubernetesVersion(DefaultKubernetesVersion)
+	if err == nil && defaultVersion.SupportedWith(talosVersion) == nil {
+		return DefaultKubernetesVersion
+	}
+
 	major, minor, ok := splitMajorMinor(DefaultKubernetesVersion)
 	if !ok {
 		return DefaultKubernetesVersion

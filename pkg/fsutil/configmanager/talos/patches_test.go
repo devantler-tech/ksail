@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	talosconstants "github.com/siderolabs/talos/pkg/machinery/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -250,7 +251,7 @@ func TestConstants(t *testing.T) {
 	// Test that default constants are exported and have expected values
 	assert.Equal(t, "talos", talos.DefaultPatchesDir)
 	assert.Equal(t, "10.5.0.0/24", talos.DefaultNetworkCIDR)
-	assert.Equal(t, "1.36.0", talos.DefaultKubernetesVersion)
+	assert.Equal(t, talosconstants.DefaultKubernetesVersion, talos.DefaultKubernetesVersion)
 	assert.NotEmpty(t, talos.DefaultClusterName)
 	assert.Contains(t, talos.DefaultTalosImage, "talos")
 }

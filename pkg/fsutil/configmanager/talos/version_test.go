@@ -3,6 +3,7 @@ package talos_test
 import (
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,9 @@ func TestParseVersionContract(t *testing.T) {
 
 	defaultContract, err := talos.ParseVersionContract("")
 	require.NoError(t, err)
-	assert.False(t, defaultContract.MultidocKubernetesConfigSupported())
+	expectedDefault, err := talos.ParseVersionContract(v1alpha1.DefaultHetznerTalosVersion)
+	require.NoError(t, err)
+	assert.Equal(t, expectedDefault.String(), defaultContract.String())
 
 	multiDocumentContract, err := talos.ParseVersionContract("1.14.0-alpha.2")
 	require.NoError(t, err)

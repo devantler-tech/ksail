@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	talosconstants "github.com/siderolabs/talos/pkg/machinery/constants"
 	"sigs.k8s.io/yaml"
 )
 
@@ -23,17 +24,19 @@ var _ configmanager.ConfigManager[Configs] = (*ConfigManager)(nil)
 //nolint:gochecknoglobals // Exported constant initialized from embedded Dockerfile
 var DefaultTalosImage = talosImage()
 
+// DefaultKubernetesVersion is the Kubernetes version supported by the embedded
+// Talos machinery. Keeping one source of truth lets Dependabot's Talos updates
+// advance the default compatibility pair without a copied KSail literal.
+//
+//nolint:gochecknoglobals // Talos machinery exposes its default as a variable
+var DefaultKubernetesVersion = talosconstants.DefaultKubernetesVersion
+
 // Default configuration values for Talos clusters.
 const (
 	// DefaultPatchesDir is the default directory for Talos patches.
 	DefaultPatchesDir = "talos"
 	// DefaultNetworkCIDR is the default CIDR for the cluster network.
 	DefaultNetworkCIDR = "10.5.0.0/24"
-	// DefaultKubernetesVersion is the default Kubernetes version. It must be >= 1.34
-	// so the admissionregistration.k8s.io/v1beta1 API (MutatingAdmissionPolicy) is
-	// available for Calico v3.30+; 1.36.0 is the embedded Talos machinery's own
-	// default and matches the other distributions.
-	DefaultKubernetesVersion = "1.36.0"
 	// DefaultClusterName is the default cluster name for Talos clusters.
 	DefaultClusterName = "talos-default"
 )
@@ -53,7 +56,7 @@ type ConfigManager struct {
 	// additionalPatches are runtime patches added programmatically.
 	additionalPatches []Patch
 	// versionContract controls which Talos version-gated config fields are generated.
-	// Defaults to TalosVersion1_12 for compatibility with Hetzner bootstrap ISOs.
+	// Defaults to the version contract for the tracked Hetzner bootstrap ISO.
 	versionContract *talosconfig.VersionContract
 	// extensions is the list of Talos Image Factory official extension names.
 	// When non-empty, machine.install.image is patched to use a factory installer.
@@ -89,7 +92,6 @@ func NewConfigManager(
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
 		configLoaded:      false,
-		versionContract:   talosconfig.TalosVersion1_12,
 		envLookup:         os.LookupEnv,
 	}
 }
@@ -98,10 +100,9 @@ func NewConfigManager(
 // The version contract controls which version-gated fields are included in the generated
 // machine config. Use this to opt into features introduced in newer Talos versions.
 //
-// The default is TalosVersion1_12, which is safe for Hetzner bootstrap ISOs (currently
-// Talos 1.12.4, ISO 125127). Version contracts greater than the booted machined's
-// version generate fields it does not recognise (e.g. machine.install.grubUseUKICmdline),
-// causing bootstrap failures.
+// The default follows the tracked Hetzner bootstrap ISO. Version contracts greater
+// than the booted machine's version generate fields it does not recognise (e.g.
+// machine.install.grubUseUKICmdline), causing bootstrap failures.
 // Set a higher contract only when all bootstrap paths support the required Talos version.
 func (m *ConfigManager) WithVersionContract(contract *talosconfig.VersionContract) *ConfigManager {
 	m.versionContract = contract
@@ -163,7 +164,15 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Append additional runtime patches
 	patches = append(patches, m.additionalPatches...)
 
-	patches, err = migrateKubernetesPatchesForContract(patches, m.versionContract)
+	versionContract := m.versionContract
+	if versionContract == nil {
+		versionContract, err = ParseVersionContract("")
+		if err != nil {
+			return nil, fmt.Errorf("resolve default Hetzner Talos version contract: %w", err)
+		}
+	}
+
+	patches, err = migrateKubernetesPatchesForContract(patches, versionContract)
 	if err != nil {
 		return nil, fmt.Errorf("failed to migrate Kubernetes patches: %w", err)
 	}
@@ -174,7 +183,7 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 		m.kubernetesVersion,
 		m.networkCIDR,
 		patches,
-		m.versionContract,
+		versionContract,
 		m.extensions,
 	)
 	if err != nil {
