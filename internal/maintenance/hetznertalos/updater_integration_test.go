@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,6 +55,41 @@ func TestUpdaterFailsClosedBeforeWritingOnMalformedAnnouncement(t *testing.T) {
 	assert.Contains(t, output, "unrecognized ID payload")
 }
 
+func TestUpdaterRejectsConflictingHighestVersionAnnouncements(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	before := snapshotFixture(t, repoRoot)
+	output, err := runUpdater(t, repoRoot, conflictingHighestVersionFeed)
+	require.Error(t, err)
+
+	assert.Equal(t, before, snapshotFixture(t, repoRoot))
+	assert.Contains(t, output, "conflicting Talos ISO announcements")
+}
+
+func TestUpdaterRejectsSourceSymlinkEscapingRepositoryRoot(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows runners")
+	}
+
+	repoRoot := writeRepositoryFixture(t)
+	defaultsPath := filepath.Join(repoRoot, "pkg/apis/cluster/v1alpha1/defaults.go")
+	original := readFixtureFile(t, repoRoot, "pkg/apis/cluster/v1alpha1/defaults.go")
+	outsidePath := filepath.Join(t.TempDir(), "defaults.go")
+	require.NoError(t, os.WriteFile(outsidePath, []byte(original), 0o600))
+	require.NoError(t, os.Remove(defaultsPath))
+	require.NoError(t, os.Symlink(outsidePath, defaultsPath))
+
+	output, err := runUpdater(t, repoRoot, testFeed)
+	require.Error(t, err, output)
+
+	outsideContent, readErr := os.ReadFile(outsidePath) //nolint:gosec // Test fixture path.
+	require.NoError(t, readErr)
+	assert.Equal(t, original, string(outsideContent))
+}
+
 func TestUpdaterWaitsForCompatibleTalosMachinery(t *testing.T) {
 	t.Parallel()
 
@@ -72,7 +108,7 @@ func writeRepositoryFixture(t *testing.T) string {
 	repoRoot := t.TempDir()
 	writeFixtureFile(t, repoRoot, "go.mod", `module example.com/fixture
 
-go 1.26.0
+go 1.26.6
 
 require github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
 `)
@@ -206,6 +242,31 @@ const futureFeed = `<?xml version="1.0" encoding="utf-8"?>
       <content:encoded><![CDATA[
         <p>The ISO <code>Talos Linux 9.0.0</code>
         (IDs <code>900001</code> (x86) &#x26; <code>900002</code> (arm))
+        is now available as ISO for all Cloud Servers.</p>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>
+`
+
+const conflictingHighestVersionFeed = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <item>
+      <title>Talos Linux v1.13.2 ISO now available</title>
+      <link>https://docs.hetzner.cloud/changelog#2026-09-02-talos-linux-v1132-a</link>
+      <content:encoded><![CDATA[
+        <p>The ISO <code>Talos Linux 1.13.2</code>
+        (IDs <code>130001</code> (x86) &#x26; <code>130002</code> (arm))
+        is now available as ISO for all Cloud Servers.</p>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Talos Linux v1.13.2 ISO now available</title>
+      <link>https://docs.hetzner.cloud/changelog#2026-09-02-talos-linux-v1132-b</link>
+      <content:encoded><![CDATA[
+        <p>The ISO <code>Talos Linux 1.13.2</code>
+        (IDs <code>130101</code> (x86) &#x26; <code>130102</code> (arm))
         is now available as ISO for all Cloud Servers.</p>
       ]]></content:encoded>
     </item>

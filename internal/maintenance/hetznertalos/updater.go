@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 const (
@@ -34,6 +35,7 @@ var (
 	errUnexpectedFeedStatus  = errors.New("unexpected Hetzner changelog status")
 	errInvalidISOID          = errors.New("invalid Talos ISO ID")
 	errDuplicateISOID        = errors.New("talos amd64 and arm64 ISO IDs must differ")
+	errConflictingRelease    = errors.New("conflicting Talos ISO announcements")
 	errSourceFieldMissing    = errors.New("coupled source field missing")
 	errUnexpectedSourceFiles = errors.New("unexpected coupled source-file count")
 	errMachineryMissing      = errors.New("versioned Talos machinery requirement missing")
@@ -175,8 +177,11 @@ func ParseLatest(reader io.Reader) (Release, error) {
 
 	var (
 		latestVersion *semver.Version
+		latestKey     string
 		latest        Release
 	)
+	releases := make(map[string]Release)
+	conflicts := make(map[string]struct{})
 
 	for _, item := range feed.Channel.Items {
 		titleMatch := talosTitlePattern.FindStringSubmatch(strings.TrimSpace(item.Title))
@@ -189,14 +194,28 @@ func ParseLatest(reader io.Reader) (Release, error) {
 			return Release{}, err
 		}
 
+		versionKey := parsedVersion.String()
+		if existing, exists := releases[versionKey]; exists {
+			if existing.ISOAMD64 != release.ISOAMD64 || existing.ISOARM64 != release.ISOARM64 {
+				conflicts[versionKey] = struct{}{}
+			}
+		} else {
+			releases[versionKey] = release
+		}
+
 		if latestVersion == nil || parsedVersion.GreaterThan(latestVersion) {
 			latest = release
 			latestVersion = parsedVersion
+			latestKey = versionKey
 		}
 	}
 
 	if latestVersion == nil {
 		return Release{}, fmt.Errorf("%w in Hetzner changelog", errNoAnnouncement)
+	}
+
+	if _, conflicted := conflicts[latestKey]; conflicted {
+		return Release{}, fmt.Errorf("%w for v%s", errConflictingRelease, latest.Version)
 	}
 
 	return latest, nil
@@ -299,8 +318,7 @@ func loadSources(root string) (string, int64, []sourceFile, error) {
 
 	for _, name := range paths {
 		path := filepath.Join(root, filepath.FromSlash(name))
-		// Every path is fixed beneath the explicit repository root.
-		content, err := os.ReadFile(path) //nolint:gosec
+		content, err := fsutil.ReadFileSafe(root, path)
 		if err != nil {
 			return "", 0, nil, fmt.Errorf("read source %s: %w", path, err)
 		}
@@ -386,10 +404,46 @@ func updateSources(files []sourceFile, release Release) ([]sourceFile, error) {
 }
 
 func writeSources(files []sourceFile) error {
-	for _, file := range files {
-		err := os.WriteFile(file.path, file.content, file.mode)
+	return writeSourcesWith(files, fsutil.AtomicWriteFile)
+}
+
+func writeSourcesWith(
+	files []sourceFile,
+	writeFile func(path string, content []byte, mode os.FileMode) error,
+) error {
+	backups := make([]sourceFile, len(files))
+	for index, file := range files {
+		original, err := fsutil.ReadFileSafe(filepath.Dir(file.path), file.path)
 		if err != nil {
-			return fmt.Errorf("write updated source %s: %w", file.path, err)
+			return fmt.Errorf("stage original source %s: %w", file.path, err)
+		}
+
+		info, err := os.Stat(file.path)
+		if err != nil {
+			return fmt.Errorf("stat original source %s: %w", file.path, err)
+		}
+
+		backups[index] = sourceFile{path: file.path, content: original, mode: info.Mode().Perm()}
+	}
+
+	for index, file := range files {
+		err := writeFile(file.path, file.content, file.mode)
+		if err != nil {
+			writeErr := fmt.Errorf("write updated source %s: %w", file.path, err)
+			rollbackErrs := []error{writeErr}
+
+			for rollbackIndex := index - 1; rollbackIndex >= 0; rollbackIndex-- {
+				backup := backups[rollbackIndex]
+				rollbackErr := writeFile(backup.path, backup.content, backup.mode)
+				if rollbackErr != nil {
+					rollbackErrs = append(
+						rollbackErrs,
+						fmt.Errorf("restore source %s: %w", backup.path, rollbackErr),
+					)
+				}
+			}
+
+			return errors.Join(rollbackErrs...)
 		}
 	}
 
@@ -426,8 +480,7 @@ func ensureMachinerySupports(root, releaseVersion string) error {
 
 func readMachineryVersion(root string) (string, error) {
 	path := filepath.Join(root, "go.mod")
-	// The path is fixed beneath the explicit repository root.
-	content, err := os.ReadFile(path) //nolint:gosec
+	content, err := fsutil.ReadFileSafe(root, path)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
