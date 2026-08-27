@@ -164,6 +164,8 @@ release:
   extra_files:
     # Attach the Cluster CRD so it can be applied without the Helm chart.
     - glob: ./charts/ksail-operator/crds/*.yaml
+    # Stable one-line installer for Linux and macOS release archives.
+    - glob: ./install.sh
   footer: |
     ## Quick Start
 
@@ -177,10 +179,10 @@ release:
     brew install --cask --no-quarantine devantler-tech/tap/ksail
     ```
 
-    **Go Install**:
+    **Shell Installer** (Linux/macOS, checksum verified):
 
     ```bash
-    go install github.com/devantler-tech/ksail/v7@{{ .Tag }}
+    curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
     ```
 
     **Download Binary**: Choose your platform from the assets above

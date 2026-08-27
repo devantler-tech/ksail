@@ -54,16 +54,19 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
 
   </TabItem>
 
-  <TabItem label="Go Install">
-    ### Go Install
+  <TabItem label="Shell Installer">
+    ### Shell Installer (Linux/macOS)
 
-    If you have Go 1.26.1+ installed, you can build and install KSail via `go install`:
+    Install the latest release archive with checksum verification:
 
     ```bash
-    go install github.com/devantler-tech/ksail/v7@latest
+    curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
     ```
 
-    This builds and installs the `ksail` binary to `$GOPATH/bin` (typically `~/go/bin`). Ensure this directory is in your PATH.
+    If Go is installed, the script uses `$GOPATH/bin`; otherwise it uses `~/.local/bin`. Set `KSAIL_INSTALL_DIR` to choose another destination or `KSAIL_VERSION` to install a specific release.
+
+    > [!NOTE]
+    > Versioned `go install github.com/devantler-tech/ksail/v7@...` is not supported. Go ignores the main-module dependency overrides that KSail currently needs for upstream compatibility and security fixes. To compile from source, use the **From Source** method below so those reviewed overrides remain active.
 
   </TabItem>
 
@@ -83,7 +86,7 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
   <TabItem label="From Source">
     ### Build from Source
 
-    Clone the repository and build the binary:
+    Clone the repository and build the binary with its reviewed module graph:
 
     ```bash
     git clone https://github.com/devantler-tech/ksail.git
