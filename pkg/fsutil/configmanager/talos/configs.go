@@ -807,13 +807,9 @@ func newConfigsWithEndpointAndSecrets(
 	extensions []string,
 ) (*Configs, error) {
 	// Default nil versionContract so the stored and generated values always match.
-	if versionContract == nil {
-		defaultContract, err := ParseVersionContract("")
-		if err != nil {
-			return nil, fmt.Errorf("resolve default Hetzner Talos version contract: %w", err)
-		}
-
-		versionContract = defaultContract
+	versionContract, err := resolveVersionContract(versionContract)
+	if err != nil {
+		return nil, err
 	}
 
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)

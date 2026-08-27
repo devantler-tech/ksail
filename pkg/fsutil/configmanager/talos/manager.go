@@ -164,12 +164,9 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Append additional runtime patches
 	patches = append(patches, m.additionalPatches...)
 
-	versionContract := m.versionContract
-	if versionContract == nil {
-		versionContract, err = ParseVersionContract("")
-		if err != nil {
-			return nil, fmt.Errorf("resolve default Hetzner Talos version contract: %w", err)
-		}
+	versionContract, err := resolveVersionContract(m.versionContract)
+	if err != nil {
+		return nil, err
 	}
 
 	patches, err = migrateKubernetesPatchesForContract(patches, versionContract)

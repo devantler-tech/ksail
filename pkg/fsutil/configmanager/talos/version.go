@@ -97,6 +97,23 @@ func ParseVersionContract(pinnedVersion string) (*talosconfig.VersionContract, e
 	return contract, nil
 }
 
+// resolveVersionContract preserves an explicit contract or resolves the tracked
+// Hetzner bootstrap ISO contract when none was provided.
+func resolveVersionContract(
+	versionContract *talosconfig.VersionContract,
+) (*talosconfig.VersionContract, error) {
+	if versionContract != nil {
+		return versionContract, nil
+	}
+
+	defaultContract, err := ParseVersionContract("")
+	if err != nil {
+		return nil, fmt.Errorf("resolve default Hetzner Talos version contract: %w", err)
+	}
+
+	return defaultContract, nil
+}
+
 // ResolveKubernetesVersion determines the Kubernetes version a freshly generated
 // Talos machine config should target, given an optional explicit pin
 // (spec.cluster.kubernetesVersion) and an optional pinned Talos OS version
