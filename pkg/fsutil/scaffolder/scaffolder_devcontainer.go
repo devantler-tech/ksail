@@ -40,7 +40,9 @@ const devcontainerJSONTemplate = `{
       "minikube": "none"
     }
   },
-  "postCreateCommand": "curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | KSAIL_INSTALL_DIR=\"$HOME/go/bin\" sh",
+  "postCreateCommand": "curl -fsSL ` +
+	`https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | ` +
+	`KSAIL_INSTALL_DIR=\"$HOME/go/bin\" sh",
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:${containerEnv:HOME}/go/bin"
   }

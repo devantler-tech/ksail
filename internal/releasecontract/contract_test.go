@@ -2,6 +2,7 @@ package releasecontract_test
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,13 +20,10 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 		t.Fatal("resolve test source path")
 	}
 
-	modulePath := filepath.Join(filepath.Dir(testFile), "..", "..", "go.mod")
-	contents, err := os.ReadFile(modulePath)
-	if err != nil {
-		t.Fatalf("read go.mod: %v", err)
-	}
+	repository := os.DirFS(filepath.Join(filepath.Dir(testFile), "..", ".."))
+	contents := readRepositoryFile(t, repository, "go.mod")
 
-	moduleFile, err := modfile.Parse(modulePath, contents, nil)
+	moduleFile, err := modfile.Parse("go.mod", contents, nil)
 	if err != nil {
 		t.Fatalf("parse go.mod: %v", err)
 	}
@@ -51,14 +49,12 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 
 	offenders := make([]string, 0, len(userFacingPaths))
 	for _, relativePath := range userFacingPaths {
-		path := filepath.Join(filepath.Dir(modulePath), relativePath)
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", relativePath, err)
-		}
+		contents := readRepositoryFile(t, repository, relativePath)
+
 		for _, installCommand := range installCommands {
 			if bytes.Contains(contents, installCommand) {
 				offenders = append(offenders, relativePath)
+
 				break
 			}
 		}
@@ -71,4 +67,15 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 			strings.Join(offenders, ", "),
 		)
 	}
+}
+
+func readRepositoryFile(t *testing.T, repository fs.FS, path string) []byte {
+	t.Helper()
+
+	contents, err := fs.ReadFile(repository, path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	return contents
 }
