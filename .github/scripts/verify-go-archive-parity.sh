@@ -101,6 +101,14 @@ fi
 	printf 'local module directory does not exist: %s\n' "${local_dir}" >&2
 	exit 1
 }
+[[ ! -L "${upstream_dir}" ]] || {
+	printf 'symbolic link is not permitted for upstream module root\n' >&2
+	exit 1
+}
+[[ ! -L "${local_dir}" ]] || {
+	printf 'symbolic link is not permitted for local module root\n' >&2
+	exit 1
+}
 
 # Go's module zip carries repository metadata that KSail deliberately does not
 # import, and KSail adds a small compatibility surface of its own. Both sets are

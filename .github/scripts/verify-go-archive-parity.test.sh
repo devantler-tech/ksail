@@ -70,6 +70,39 @@ if "${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev
 fi
 rm -r "${upstream}/pkg"
 
+# A symlink at either comparison ROOT bypasses every child-entry guard below:
+# `cd -- "${root}"` follows the link before `find` enumerates the resolved tree,
+# so all children still look like ordinary files. Go follows the local root in
+# the same way through the module replace directive, allowing compiled source to
+# live outside third_party/go-archive while parity reports success.
+local_root_link="${tmp_dir}/local-root-link"
+ln -s "${local_copy}" "${local_root_link}"
+local_root_output="$("${validator}" --upstream-dir "${upstream}" --local-dir "${local_root_link}" 2>&1)" &&
+	local_root_rc=0 || local_root_rc=$?
+if ((local_root_rc == 0)); then
+	printf 'FAIL: symbolic link at the local module root passed parity validation\n' >&2
+	exit 1
+fi
+if ! grep -q 'symbolic link is not permitted for local module root' <<<"${local_root_output}"; then
+	printf 'FAIL: local root symlink was rejected, but not by the root guard\n' >&2
+	printf '%s\n' "${local_root_output}" >&2
+	exit 1
+fi
+
+upstream_root_link="${tmp_dir}/upstream-root-link"
+ln -s "${upstream}" "${upstream_root_link}"
+upstream_root_output="$("${validator}" --upstream-dir "${upstream_root_link}" --local-dir "${local_copy}" 2>&1)" &&
+	upstream_root_rc=0 || upstream_root_rc=$?
+if ((upstream_root_rc == 0)); then
+	printf 'FAIL: symbolic link at the upstream module root passed parity validation\n' >&2
+	exit 1
+fi
+if ! grep -q 'symbolic link is not permitted for upstream module root' <<<"${upstream_root_output}"; then
+	printf 'FAIL: upstream root symlink was rejected, but not by the root guard\n' >&2
+	printf '%s\n' "${upstream_root_output}" >&2
+	exit 1
+fi
+
 # `diff -u` FOLLOWS symbolic links, so it exits 0 comparing an upstream regular
 # file against a local symlink whose target holds identical bytes. Enumeration
 # admits symlinks (`-type l`), so a replacement such as
