@@ -76,7 +76,7 @@ runs:
       run: |
         set -euo pipefail
         go generate ./pkg/svc/chat/...
-        go tool bundler --platform linux/amd64 --cli-version 1.0.10
+        go tool bundler --platform linux/amd64 --cli-version 1.0.79
         ctx="$(mktemp -d)"
         mkdir -p "$ctx/linux/amd64"
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
