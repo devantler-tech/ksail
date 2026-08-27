@@ -106,4 +106,15 @@ if KSAIL_VERSION='v7.180.5/../../malicious' run_installer >/dev/null 2>&1; then
 	exit 1
 fi
 
+release_workflow="${repo_root}/.github/workflows/cd.yaml"
+for release_guard in \
+	'const requiredInstallerAssets = [' \
+	"'install.sh'," \
+	'missing required installer release assets'; do
+	if ! grep -Fq "${release_guard}" "${release_workflow}"; then
+		printf 'FAIL: release workflow does not enforce %s\n' "${release_guard}" >&2
+		exit 1
+	fi
+done
+
 printf 'All release installer cases passed.\n'
