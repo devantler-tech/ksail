@@ -103,6 +103,40 @@ if ! grep -q 'symbolic link is not permitted for upstream module root' <<<"${ups
 	exit 1
 fi
 
+# The same link reached by an EQUIVALENT SPELLING. Bash dereferences a symbolic
+# link whenever the tested path carries a trailing separator or a trailing `.`
+# component, so `[[ -L "${root}" ]]` is FALSE for `root-link/` and `root-link/.`
+# while `cd -- "${root}"` still resolves the link. Every guard above then runs
+# against the resolved tree and reports parity, which is the exact bypass the
+# root guard exists to close.
+for root_suffix in '/' '/.' '//' '/./' '/././'; do
+	spelled_local="${local_root_link}${root_suffix}"
+	spelled_local_output="$("${validator}" --upstream-dir "${upstream}" --local-dir "${spelled_local}" 2>&1)" &&
+		spelled_local_rc=0 || spelled_local_rc=$?
+	if ((spelled_local_rc == 0)); then
+		printf 'FAIL: local module root spelled %s passed parity validation\n' "${spelled_local}" >&2
+		exit 1
+	fi
+	if ! grep -q 'symbolic link is not permitted for local module root' <<<"${spelled_local_output}"; then
+		printf 'FAIL: local root spelled %s was rejected, but not by the root guard\n' "${spelled_local}" >&2
+		printf '%s\n' "${spelled_local_output}" >&2
+		exit 1
+	fi
+
+	spelled_upstream="${upstream_root_link}${root_suffix}"
+	spelled_upstream_output="$("${validator}" --upstream-dir "${spelled_upstream}" --local-dir "${local_copy}" 2>&1)" &&
+		spelled_upstream_rc=0 || spelled_upstream_rc=$?
+	if ((spelled_upstream_rc == 0)); then
+		printf 'FAIL: upstream module root spelled %s passed parity validation\n' "${spelled_upstream}" >&2
+		exit 1
+	fi
+	if ! grep -q 'symbolic link is not permitted for upstream module root' <<<"${spelled_upstream_output}"; then
+		printf 'FAIL: upstream root spelled %s was rejected, but not by the root guard\n' "${spelled_upstream}" >&2
+		printf '%s\n' "${spelled_upstream_output}" >&2
+		exit 1
+	fi
+done
+
 # `diff -u` FOLLOWS symbolic links, so it exits 0 comparing an upstream regular
 # file against a local symlink whose target holds identical bytes. Enumeration
 # admits symlinks (`-type l`), so a replacement such as

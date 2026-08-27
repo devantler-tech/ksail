@@ -101,11 +101,37 @@ fi
 	printf 'local module directory does not exist: %s\n' "${local_dir}" >&2
 	exit 1
 }
-[[ ! -L "${upstream_dir}" ]] || {
+# `-L` answers a question about the PATH AS WRITTEN, not about the directory the
+# rest of this script goes on to enumerate. Bash dereferences a symbolic link
+# whenever the tested path carries a trailing separator or a trailing `.`
+# component, so `[[ -L "link/" ]]` and `[[ -L "link/." ]]` are both FALSE while
+# `cd -- "link/"` resolves the link exactly as `cd -- "link"` does. A root
+# spelled with either suffix therefore walked straight past this guard, and the
+# comparison below enumerated the link's target — an unreviewed tree outside
+# third_party/go-archive — while reporting parity.
+#
+# Strip those no-op suffixes first so the guard tests the same path `cd` will
+# resolve. The loop is what makes it exhaustive rather than a list of spellings:
+# it keeps removing trailing `/` and `/.` until neither is present, which folds
+# `link//`, `link/./`, and `link/././` onto the same `link` as the bare form.
+# The final component is preserved when it is the only one left, so a root of
+# `/` is still tested as `/` rather than as the empty string.
+normalize_root() {
+	local path="$1"
+	while [[ "${path}" == */ || "${path}" == */. ]]; do
+		local stripped="${path%/}"
+		stripped="${stripped%/.}"
+		[[ -n "${stripped}" ]] || break
+		path="${stripped}"
+	done
+	printf '%s' "${path}"
+}
+
+[[ ! -L "$(normalize_root "${upstream_dir}")" ]] || {
 	printf 'symbolic link is not permitted for upstream module root\n' >&2
 	exit 1
 }
-[[ ! -L "${local_dir}" ]] || {
+[[ ! -L "$(normalize_root "${local_dir}")" ]] || {
 	printf 'symbolic link is not permitted for local module root\n' >&2
 	exit 1
 }
