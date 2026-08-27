@@ -112,10 +112,7 @@ func newTalosDistributionConfig(
 	cluster *v1alpha1.Cluster,
 	name string,
 ) (*DistributionConfig, error) {
-	kubernetesVersion := talosconfigmanager.ResolveKubernetesVersion(
-		cluster.Spec.Cluster.Talos.Version,
-		cluster.Spec.Cluster.KubernetesVersion,
-	)
+	kubernetesVersion := talosconfigmanager.ResolveClusterKubernetesVersion(cluster)
 
 	versionContract, err := talosconfigmanager.ParseVersionContract(
 		cluster.Spec.Cluster.Talos.Version,

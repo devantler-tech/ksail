@@ -73,6 +73,18 @@ func TestBuildDistributionConfigTalosHonorsVersionPin(t *testing.T) {
 	assert.Equal(t, buildClusterName, config.Talos.Name, "the bundle is named after the cluster")
 }
 
+func TestBuildDistributionConfigTalosHetznerDefaultsToCompatibleKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	cluster := clusterWith(v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+
+	config, err := clusterprovisioner.BuildDistributionConfig(cluster, buildClusterName, false)
+	require.NoError(t, err)
+	require.NotNil(t, config.Talos)
+	assert.Equal(t, "1.35.0", config.Talos.KubernetesVersion())
+}
+
 // TestBuildDistributionConfigTalosUsesPinnedVersionContract verifies the shared
 // web/local builder emits Talos 1.14's multi-document configuration shape.
 func TestBuildDistributionConfigTalosUsesPinnedVersionContract(t *testing.T) {

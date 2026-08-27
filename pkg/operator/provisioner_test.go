@@ -53,18 +53,17 @@ func TestBuildDistributionConfig_Vanilla(t *testing.T) {
 	assert.Equal(t, "c1", config.Kind.Name)
 }
 
-func TestBuildDistributionConfig_TalosCapsKubernetesVersion(t *testing.T) {
+func TestBuildDistributionConfig_TalosHetznerDefaultsToCompatibleKubernetesVersion(t *testing.T) {
 	t.Parallel()
 
-	// Talos 1.12 supports Kubernetes <= 1.35, so the built-in default must be capped.
 	cluster := clusterWithDistribution("c1", v1alpha1.DistributionTalos)
-	cluster.Spec.Cluster.Talos.Version = "v1.12.4"
+	cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
 
 	config, err := operator.BuildDistributionConfig(cluster)
 	require.NoError(t, err)
 	require.NotNil(t, config.Talos)
 	assert.Equal(t, "1.35.0", config.Talos.KubernetesVersion(),
-		"operator must cap the default Kubernetes version to the pinned Talos version")
+		"operator must stay compatible with the default Hetzner Talos ISO")
 }
 
 func TestBuildDistributionConfig_TalosHonorsKubernetesVersionPin(t *testing.T) {

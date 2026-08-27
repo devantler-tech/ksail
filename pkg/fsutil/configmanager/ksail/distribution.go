@@ -317,10 +317,7 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 // existing cluster the provisioner further prefers the running version when unpinned,
 // so an unrelated update never forces a Kubernetes upgrade.
 func (m *ConfigManager) resolveTalosKubernetesVersion() string {
-	version := talosconfigmanager.ResolveKubernetesVersion(
-		m.Config.Spec.Cluster.Talos.Version,
-		m.Config.Spec.Cluster.KubernetesVersion,
-	)
+	version := talosconfigmanager.ResolveClusterKubernetesVersion(m.Config)
 	warnKubernetesVersionCapped(m.Config, version, m.Writer)
 
 	return version
@@ -336,7 +333,8 @@ func warnKubernetesVersionCapped(cfg *v1alpha1.Cluster, resolvedVersion string, 
 		return
 	}
 
-	if strings.TrimSpace(cfg.Spec.Cluster.Talos.Version) == "" {
+	talosVersion := talosconfigmanager.ResolveClusterTalosCompatibilityVersion(cfg)
+	if strings.TrimSpace(talosVersion) == "" {
 		return
 	}
 
@@ -347,11 +345,11 @@ func warnKubernetesVersionCapped(cfg *v1alpha1.Cluster, resolvedVersion string, 
 	notify.WriteMessage(notify.Message{
 		Type: notify.WarningType,
 		Content: fmt.Sprintf(
-			"Kubernetes %s is too new for the pinned Talos version %s; "+
+			"Kubernetes %s is too new for Talos compatibility version %s; "+
 				"defaulting to compatible Kubernetes %s. "+
 				"Set spec.cluster.kubernetesVersion to choose a different version.",
 			talosconfigmanager.DefaultKubernetesVersion,
-			cfg.Spec.Cluster.Talos.Version,
+			talosVersion,
 			resolvedVersion,
 		),
 		Writer: out,

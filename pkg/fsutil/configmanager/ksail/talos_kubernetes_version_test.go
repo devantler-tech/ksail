@@ -15,6 +15,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLoadConfig_TalosUnpinnedHetznerUsesCompatibleKubernetesVersion guards the
+// project-init path where neither Talos nor Kubernetes is explicitly pinned.
+// Hetzner boots the built-in Talos 1.12 ISO, so the generated machine config
+// must stay within that release's Kubernetes support window.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate filesystem state for config loading.
+func TestLoadConfig_TalosUnpinnedHetznerUsesCompatibleKubernetesVersion(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    provider: Hetzner\n" +
+		"    cni: Cilium\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
+
+	manager := configmanager.NewConfigManager(io.Discard, "")
+	manager.Viper.SetConfigFile("ksail.yaml")
+
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+
+	require.NotNil(t, manager.DistributionConfig)
+	require.NotNil(t, manager.DistributionConfig.Talos)
+	assert.Equal(t, "1.35.0", manager.DistributionConfig.Talos.KubernetesVersion())
+}
+
 // TestLoadConfig_TalosFallbackCapsKubernetesVersion guards the regression where the
 // no-scaffolded-talos-dir fallback in cacheTalosConfig ignored the resolved version:
 // with an older Talos version pinned and no talos/ patches dir, the default config
@@ -140,9 +169,24 @@ func TestWarnKubernetesVersionCapped_WarnsWhenDefaultCapped(t *testing.T) {
 	// Resolved version differs from the built-in default => the default was capped.
 	configmanager.WarnKubernetesVersionCappedForTest(cfg, "1.35.0", &out)
 
-	assert.Contains(t, out.String(), "too new for the pinned Talos version v1.12.4")
+	assert.Contains(t, out.String(), "too new for Talos compatibility version v1.12.4")
 	assert.Contains(t, out.String(), "1.35.0")
 	assert.Contains(t, out.String(), "spec.cluster.kubernetesVersion")
+}
+
+func TestWarnKubernetesVersionCapped_ReportsDefaultHetznerISOConstraint(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NewCluster()
+	cfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
+	cfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+	cfg.Spec.Cluster.Talos.Version = "v1.13.2"
+
+	var out bytes.Buffer
+	configmanager.WarnKubernetesVersionCappedForTest(cfg, "1.35.0", &out)
+
+	assert.Contains(t, out.String(), v1alpha1.DefaultHetznerTalosVersion)
+	assert.NotContains(t, out.String(), cfg.Spec.Cluster.Talos.Version)
 }
 
 func TestWarnKubernetesVersionCapped_SilentWhenExplicitlyPinned(t *testing.T) {
