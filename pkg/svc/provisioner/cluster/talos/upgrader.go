@@ -3,9 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
-	"time"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -176,7 +174,19 @@ func (p *Provisioner) UpgradeKubernetes(
 	toVersionBare := strings.TrimPrefix(toVersion, "v")
 
 	// Auto-detect the current running K8s version from the cluster.
-	upgradeOpts := kubernetesUpgradeOptions(p.logWriter)
+	upgradeOpts := k8s.UpgradeOptions{
+		LogOutput:              p.logWriter,
+		PrePullImages:          true,
+		UpgradeKubelet:         true,
+		KubeletImage:           constants.KubeletImage,
+		APIServerImage:         constants.KubernetesAPIServerImage,
+		ControllerManagerImage: constants.KubernetesControllerManagerImage,
+		SchedulerImage:         constants.KubernetesSchedulerImage,
+		ProxyImage:             constants.KubeProxyImage,
+		EncoderOpt: encoder.WithComments(
+			encoder.CommentsDocs | encoder.CommentsExamples,
+		),
+	}
 
 	fromVersionBare, err := k8s.DetectLowestVersion(ctx, &state, upgradeOpts)
 	if err != nil {
@@ -202,23 +212,6 @@ func (p *Provisioner) UpgradeKubernetes(
 	)
 
 	return nil
-}
-
-func kubernetesUpgradeOptions(logWriter io.Writer) k8s.UpgradeOptions {
-	return k8s.UpgradeOptions{
-		LogOutput:              logWriter,
-		PrePullImages:          true,
-		UpgradeKubelet:         true,
-		KubeletImage:           constants.KubeletImage,
-		APIServerImage:         constants.KubernetesAPIServerImage,
-		ControllerManagerImage: constants.KubernetesControllerManagerImage,
-		SchedulerImage:         constants.KubernetesSchedulerImage,
-		ProxyImage:             constants.KubeProxyImage,
-		ReconcileTimeout:       3 * time.Minute,
-		EncoderOpt: encoder.WithComments(
-			encoder.CommentsDocs | encoder.CommentsExamples,
-		),
-	}
 }
 
 // GetCurrentVersions returns the running Talos and Kubernetes versions.
