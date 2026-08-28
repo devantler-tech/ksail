@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -8,8 +9,10 @@ import (
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	helmpostrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -131,4 +134,55 @@ func FetchReleaseStorageMetadata(
 	driver, namespace, selector string,
 ) (*ReleaseStorageMetadata, error) {
 	return (&Client{}).fetchReleaseStorageMetadata(ctx, clientset, driver, namespace, selector)
+}
+
+// ResolveAPIVersionMigrationsForTest exposes migration resolution for tests.
+func ResolveAPIVersionMigrationsForTest(
+	discoveryClient discovery.DiscoveryInterface,
+	migrations []APIVersionMigration,
+) (int, error) {
+	resolved, err := resolveAPIVersionMigrations(discoveryClient, migrations)
+
+	return len(resolved), err
+}
+
+// ResolveFreshAPIVersionMigrationsForTest exposes fresh migration resolution for tests.
+func ResolveFreshAPIVersionMigrationsForTest(
+	discoveryClient discovery.CachedDiscoveryInterface,
+	migrations []APIVersionMigration,
+) (int, error) {
+	resolved, err := resolveFreshAPIVersionMigrations(discoveryClient, migrations)
+
+	return len(resolved), err
+}
+
+// RenderAPIVersionMigrationsForTest resolves and applies migrations for tests.
+func RenderAPIVersionMigrationsForTest(
+	discoveryClient discovery.DiscoveryInterface,
+	migrations []APIVersionMigration,
+	manifest string,
+) (string, error) {
+	resolved, err := resolveAPIVersionMigrations(discoveryClient, migrations)
+	if err != nil {
+		return "", err
+	}
+
+	renderer := &apiVersionPostRenderer{migrations: resolved}
+
+	output, err := renderer.Run(bytes.NewBufferString(manifest))
+	if err != nil {
+		return "", err
+	}
+
+	return output.String(), nil
+}
+
+// OptionalAPIVersionPostRendererForTest exposes the nil-interface boundary.
+func OptionalAPIVersionPostRendererForTest(enabled bool) helmpostrenderer.PostRenderer {
+	var renderer *apiVersionPostRenderer
+	if enabled {
+		renderer = &apiVersionPostRenderer{}
+	}
+
+	return optionalAPIVersionPostRenderer(renderer)
 }

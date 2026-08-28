@@ -3,12 +3,15 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
+	"time"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
+	"github.com/siderolabs/go-kubernetes/kubernetes/ssa"
 	"github.com/siderolabs/go-kubernetes/kubernetes/upgrade"
 	"github.com/siderolabs/talos/pkg/cluster"
 	k8s "github.com/siderolabs/talos/pkg/cluster/kubernetes"
@@ -23,7 +26,34 @@ var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 const (
 	// talosImageRepository is the OCI repository for the Talos node image.
 	talosImageRepository = "ghcr.io/siderolabs/talos"
+
+	// kubernetesUpgradeReconcileTimeout mirrors talosctl's default for library
+	// callers. Without it the SDK receives zero instead, so Kubernetes 1.37 can
+	// exhaust manifest reconciliation while its API server restarts and
+	// kube-proxy rolls out.
+	kubernetesUpgradeReconcileTimeout = 5 * time.Minute
 )
+
+// kubernetesUpgradeOptions supplies the defaults that talosctl normally adds
+// around the lower-level SDK. KSail calls that SDK directly, so Go zero values
+// here would silently change reconciliation and inventory behavior.
+func kubernetesUpgradeOptions(logWriter io.Writer) k8s.UpgradeOptions {
+	return k8s.UpgradeOptions{
+		LogOutput:              logWriter,
+		PrePullImages:          true,
+		UpgradeKubelet:         true,
+		KubeletImage:           constants.KubeletImage,
+		APIServerImage:         constants.KubernetesAPIServerImage,
+		ControllerManagerImage: constants.KubernetesControllerManagerImage,
+		SchedulerImage:         constants.KubernetesSchedulerImage,
+		ProxyImage:             constants.KubeProxyImage,
+		ReconcileTimeout:       kubernetesUpgradeReconcileTimeout,
+		InventoryPolicy:        ssa.InventoryPolicyAdoptIfNoInventory,
+		EncoderOpt: encoder.WithComments(
+			encoder.CommentsDocs | encoder.CommentsExamples,
+		),
+	}
+}
 
 // UpgradeDistribution performs a rolling Talos OS upgrade from fromVersion to
 // toVersion using the LifecycleService API.
@@ -174,19 +204,7 @@ func (p *Provisioner) UpgradeKubernetes(
 	toVersionBare := strings.TrimPrefix(toVersion, "v")
 
 	// Auto-detect the current running K8s version from the cluster.
-	upgradeOpts := k8s.UpgradeOptions{
-		LogOutput:              p.logWriter,
-		PrePullImages:          true,
-		UpgradeKubelet:         true,
-		KubeletImage:           constants.KubeletImage,
-		APIServerImage:         constants.KubernetesAPIServerImage,
-		ControllerManagerImage: constants.KubernetesControllerManagerImage,
-		SchedulerImage:         constants.KubernetesSchedulerImage,
-		ProxyImage:             constants.KubeProxyImage,
-		EncoderOpt: encoder.WithComments(
-			encoder.CommentsDocs | encoder.CommentsExamples,
-		),
-	}
+	upgradeOpts := kubernetesUpgradeOptions(p.logWriter)
 
 	fromVersionBare, err := k8s.DetectLowestVersion(ctx, &state, upgradeOpts)
 	if err != nil {

@@ -28,8 +28,8 @@ const defaultDevcontainerName = "ksail"
 // The definition deliberately covers the three things a KSail project needs at
 // runtime: Docker-in-Docker (KSail runs Kind/K3d/Talos node containers inside the
 // dev container), kubectl + Helm to interact with the provisioned cluster, and the
-// KSail CLI itself installed via `go install` (the cross-platform install method —
-// the Homebrew cask is macOS-only) so it lands on PATH.
+// KSail CLI itself installed from a checksum-verified release archive (the
+// Homebrew cask is macOS-only) so it lands on PATH.
 const devcontainerJSONTemplate = `{
   "name": %s,
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
@@ -40,7 +40,9 @@ const devcontainerJSONTemplate = `{
       "minikube": "none"
     }
   },
-  "postCreateCommand": "go install github.com/devantler-tech/ksail/v7@latest",
+  "postCreateCommand": "curl -fsSL ` +
+	`https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | ` +
+	`KSAIL_INSTALL_DIR=\"$HOME/go/bin\" sh",
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:${containerEnv:HOME}/go/bin"
   }

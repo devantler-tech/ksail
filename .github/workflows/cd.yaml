@@ -719,6 +719,27 @@ jobs:
 
             const release = matching[0];
 
+            // The public install command is intentionally excluded from link checking while this
+            // draft is still the first release that can create it. Preserve the user contract at
+            // the authoritative boundary instead: immutable publication must fail closed unless
+            // both the installer and the checksum manifest it consumes are present and non-empty.
+            const version = tag.replace(/^v/, '');
+            const requiredInstallerAssets = [
+              'install.sh',
+              `ksail_${version}_checksums.txt`,
+            ];
+            const assetsByName = new Map(release.assets.map(asset => [asset.name, asset]));
+            const missingInstallerAssets = requiredInstallerAssets.filter(name => {
+              const asset = assetsByName.get(name);
+              return !asset || asset.size <= 0;
+            });
+            if (missingInstallerAssets.length > 0) {
+              core.setFailed(
+                `Release ${tag} is missing required installer release assets: ${missingInstallerAssets.join(', ')}`,
+              );
+              return;
+            }
+
             if (!release.draft) {
               console.log(`Release ${tag} is already published`);
               return;

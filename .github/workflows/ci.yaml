@@ -498,6 +498,9 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: 📦 Verify release installer
+        run: .github/scripts/install-release.test.sh
+
       - name: 🧪 Verify parity guard behavior
         run: .github/scripts/verify-go-archive-parity.test.sh
 
