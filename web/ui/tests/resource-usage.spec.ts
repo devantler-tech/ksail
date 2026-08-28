@@ -32,6 +32,7 @@ test("top pod consumers stay inside a mobile viewport", async ({ page }) => {
   const layout = await page.evaluate(() => {
     const fixture = document.querySelector<HTMLElement>("[data-testid='resource-usage-fixture']")!;
     const podName = document.querySelector<HTMLElement>("[title^='observability-system/']")!;
+    const podNameStyle = getComputedStyle(podName);
 
     return {
       documentClientWidth: document.documentElement.clientWidth,
@@ -40,10 +41,23 @@ test("top pod consumers stay inside a mobile viewport", async ({ page }) => {
       fixtureScrollWidth: fixture.scrollWidth,
       podNameClientWidth: podName.clientWidth,
       podNameScrollWidth: podName.scrollWidth,
+      podNameOverflowX: podNameStyle.overflowX,
+      podNameTextOverflow: podNameStyle.textOverflow,
+      podNameWhiteSpace: podNameStyle.whiteSpace,
     };
   });
 
   expect(layout.documentScrollWidth).toBe(layout.documentClientWidth);
   expect(layout.fixtureScrollWidth).toBe(layout.fixtureClientWidth);
   expect(layout.podNameScrollWidth).toBeGreaterThan(layout.podNameClientWidth);
+
+  // scrollWidth > clientWidth only proves the name is wider than its box -- it is
+  // equally true of a box that clips the overflow with no affordance at all. The
+  // three declarations below are what Tailwind's `truncate` actually applies, and
+  // together they are the property this test claims: the name is kept on one line,
+  // clipped to the box, and marked as continuing with an ellipsis. Dropping any one
+  // of them is a user-visible regression that the width assertion alone cannot see.
+  expect(layout.podNameWhiteSpace).toBe("nowrap");
+  expect(layout.podNameOverflowX).toBe("hidden");
+  expect(layout.podNameTextOverflow).toBe("ellipsis");
 });
