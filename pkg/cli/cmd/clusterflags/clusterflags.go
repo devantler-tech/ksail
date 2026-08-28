@@ -65,7 +65,8 @@ func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
 // and merged manually via applyAllowedCIDRsFlag.
 func RegisterAllowedCIDRsFlag(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("allowed-cidrs", []string{},
-		"CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. "+
+		"CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. "+
+			"Private cluster-network access remains enabled. "+
 			"When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6). "+
 			"Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24")
 }

@@ -276,7 +276,7 @@ type OptionsHetzner struct {
 	// APIs are open to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner
 	// Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
-	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the Kubernetes API on control-plane nodes and the Talos API on every node. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. Private cluster-network access remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
 	// nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
 	// IPv4-less workers; ksail then reaches their Talos API over the private network — which

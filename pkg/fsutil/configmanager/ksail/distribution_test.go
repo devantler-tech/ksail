@@ -251,6 +251,7 @@ func TestIngressFirewallPatchesSuccess(t *testing.T) {
 		workerContent := string(patches[2].Content)
 		workerAPIRule := networkRuleDocument(t, workerContent, "apid")
 		assert.Contains(t, workerAPIRule, "192.168.1.0/24")
+		assert.Contains(t, workerAPIRule, "10.244.0.0/16")
 		assert.NotContains(t, workerAPIRule, "0.0.0.0/0")
 
 		workerKubeletRule := networkRuleDocument(t, workerContent, "kubelet")

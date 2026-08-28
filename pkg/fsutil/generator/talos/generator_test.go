@@ -45,7 +45,7 @@ func assertGeneratedWorkerIngress(t *testing.T, path string) {
 
 	workerAPIRule := networkRuleDocument(t, workerRules, "apid")
 	assert.Contains(t, workerAPIRule, "203.0.113.0/24")
-	assert.NotContains(t, workerAPIRule, "10.0.0.0/16")
+	assert.Contains(t, workerAPIRule, "10.0.0.0/16")
 
 	workerKubeletRule := networkRuleDocument(t, workerRules, "kubelet")
 	assert.Contains(t, workerKubeletRule, "10.0.0.0/16")
@@ -1181,4 +1181,23 @@ func TestIngressFirewallWorkerRulesYAML(t *testing.T) {
 	// Verify known ports
 	assert.Contains(t, result, "10250") // kubelet
 	assert.Contains(t, result, "50000") // apid
+}
+
+// TestIngressFirewallWorkerRulesYAMLWithAllowedCIDRs verifies that public Talos API
+// access is restricted without breaking management of IPv4-less workers over the
+// cluster's private network.
+func TestIngressFirewallWorkerRulesYAMLWithAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	result := talosgenerator.IngressFirewallWorkerRulesYAML(
+		"192.168.0.0/24",
+		4789,
+		[]string{"203.0.113.5/24"},
+	)
+
+	apidRule := networkRuleDocument(t, result, "apid")
+	assert.Contains(t, apidRule, "subnet: 203.0.113.0/24")
+	assert.Contains(t, apidRule, "subnet: 192.168.0.0/24")
+	assert.NotContains(t, apidRule, "subnet: 0.0.0.0/0")
+	assert.NotContains(t, apidRule, "subnet: ::/0")
 }
