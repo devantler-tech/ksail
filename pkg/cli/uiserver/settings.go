@@ -108,7 +108,8 @@ func (s settingsService) UpdateAppSettings(
 	})
 	if errors.Is(err, credentials.ErrInvalidReasoningEffort) ||
 		errors.Is(err, credentials.ErrInvalidAIProvider) ||
-		errors.Is(err, credentials.ErrInvalidAIWireAPI) {
+		errors.Is(err, credentials.ErrInvalidAIWireAPI) ||
+		errors.Is(err, credentials.ErrInvalidEnvVarName) {
 		return api.AppSettings{}, fmt.Errorf("%w: %w", api.ErrInvalid, err)
 	}
 
