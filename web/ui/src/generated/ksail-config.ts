@@ -924,6 +924,7 @@ export interface KSailClusterConfiguration {
        * AI provider for chat. Empty defaults to copilot.
        */
       provider?:
+        | ""
         | "copilot"
         | "openai"
         | "anthropic"
@@ -951,7 +952,7 @@ export interface KSailClusterConfiguration {
       /**
        * OpenAI-compatible wire API (completions or responses). Empty defaults to completions.
        */
-      wireApi?: "completions" | "responses";
+      wireApi?: "" | "completions" | "responses";
       /**
        * Azure OpenAI API version. Empty uses the runtime default.
        */
