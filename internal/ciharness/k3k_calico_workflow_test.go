@@ -11,6 +11,9 @@ import (
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type k3kCalicoWorkflow struct {
 	On struct {
+		PullRequest struct {
+			Paths []string `yaml:"paths"`
+		} `yaml:"pull_request"`
 		Schedule []struct {
 			Cron string `yaml:"cron"`
 		} `yaml:"schedule"`
@@ -34,6 +37,12 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 
 	require.Len(t, workflow.On.Schedule, 1, "sentinel must have one weekly schedule")
 	assert.Equal(t, "30 2 * * 1", workflow.On.Schedule[0].Cron)
+	assert.Contains(
+		t,
+		workflow.On.PullRequest.Paths,
+		".github/workflows/system-test-k3k-calico.yaml",
+		"workflow changes must exercise the real sentinel before merge",
+	)
 	assert.Equal(t, "read", workflow.Permissions["contents"])
 
 	require.Len(t, workflow.Jobs, 1, "scheduled sentinel must remain one bounded test leg")

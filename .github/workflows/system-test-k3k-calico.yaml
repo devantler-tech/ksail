@@ -1,6 +1,9 @@
 name: 🧪 System Test - k3k + Calico Sentinel
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/system-test-k3k-calico.yaml"
   workflow_dispatch:
   schedule:
     # This third-party compatibility path can regress without a repository diff.
