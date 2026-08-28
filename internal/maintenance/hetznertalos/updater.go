@@ -397,6 +397,7 @@ func compareVersions(candidate, current string) (int, error) {
 
 	return candidateVersion.Compare(currentVersion), nil
 }
+
 func updateSources(files []sourceFile, release Release) ([]sourceFile, error) {
 	if len(files) != expectedFileCount {
 		return nil, fmt.Errorf("%w: got %d", errUnexpectedSourceFiles, len(files))

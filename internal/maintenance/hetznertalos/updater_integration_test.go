@@ -358,7 +358,9 @@ go 1.26.6
 
 require github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
 
-replace github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2 => github.com/siderolabs/talos/pkg/machinery v1.12.4 // pinned
+replace github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2 => `+
+		"github.com/siderolabs/talos/pkg/machinery v1.12.4 // pinned"+
+		`
 `)
 
 	before := snapshotFixture(t, repoRoot)
