@@ -104,6 +104,7 @@ linters:
         - github.com/docker/docker
         - github.com/docker/cli
         - github.com/opencontainers/runtime-spec
+        - github.com/opencontainers/runc
         - github.com/loft-sh/log
         - github.com/anchore/grype
         - github.com/kubescape/kubescape/v3
