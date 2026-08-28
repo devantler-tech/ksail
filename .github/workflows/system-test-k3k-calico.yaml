@@ -1,0 +1,111 @@
+name: 🧪 System Test - k3k + Calico Sentinel
+
+on:
+  workflow_dispatch:
+  schedule:
+    # This third-party compatibility path can regress without a repository diff.
+    # Run one bounded sentinel weekly on the default branch instead of the full matrix.
+    - cron: "30 2 * * 1"
+
+concurrency:
+  group: "system-test-k3k-calico-${{ github.ref }}"
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  k3k-calico-sentinel:
+    name: 🧪 k3k + Calico Sentinel
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Free disk space
+        uses: ./.github/actions/free-disk-space
+        with:
+          docker-prune: "true"
+
+      - name: 🔐 Login to Docker Hub
+        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 📥 Restore Helm Cache
+        uses: ./.github/actions/restore-helm-cache
+
+      - name: 📥 Restore Mirror Cache
+        uses: ./.github/actions/restore-mirror-cache
+
+      - name: 🧪 Run k3k + Calico Sentinel
+        id: system-test
+        uses: ./.github/actions/ksail-system-test
+        with:
+          distribution: Vanilla
+          provider: Docker
+          init: "true"
+          args: "--name k3k-calico-host"
+          apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          test-kubernetes-provider: "true"
+          kubernetes-provider-distributions: K3s
+          kubernetes-provider-cni: Calico
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          upload-artifacts: "false"
+          cleanup: "false"
+
+      - name: 📤 Upload system test diagnostics
+        if: ${{ failure() && steps.system-test.outcome == 'failure' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: k3k-calico-system-test-diagnostics
+          path: /tmp/system-test-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: 🧪 Cleanup KSail System Test
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        uses: ./.github/actions/ksail-system-test-cleanup
+        with:
+          distribution: Vanilla
+          provider: Docker
+          args: "--name k3k-calico-host"
+
+      - name: 📤 Upload system test logs
+        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: k3k-calico-system-test-logs
+          path: /tmp/ksail-system-test-logs/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,0 +1,65 @@
+package ciharness_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+//nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
+type k3kCalicoWorkflow struct {
+	On struct {
+		Schedule []struct {
+			Cron string `yaml:"cron"`
+		} `yaml:"schedule"`
+	} `yaml:"on"`
+	Permissions map[string]string `yaml:"permissions"`
+	Jobs        map[string]struct {
+		TimeoutMinutes int               `yaml:"timeout-minutes"`
+		Permissions    map[string]string `yaml:"permissions"`
+		Strategy       any               `yaml:"strategy"`
+		Steps          []harnessStep     `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/system-test-k3k-calico.yaml")
+
+	var workflow k3kCalicoWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	require.Len(t, workflow.On.Schedule, 1, "sentinel must have one weekly schedule")
+	assert.Equal(t, "30 2 * * 1", workflow.On.Schedule[0].Cron)
+	assert.Equal(t, "read", workflow.Permissions["contents"])
+
+	require.Len(t, workflow.Jobs, 1, "scheduled sentinel must remain one bounded test leg")
+	job, found := workflow.Jobs["k3k-calico-sentinel"]
+	require.True(t, found, "k3k+Calico sentinel job is missing")
+	assert.Equal(t, 120, job.TimeoutMinutes)
+	assert.Nil(t, job.Strategy, "sentinel must not expand into a system-test matrix")
+	assert.Equal(t, "read", job.Permissions["contents"])
+	assert.Equal(t, "write", job.Permissions["packages"])
+
+	checkout := findHarnessStep(t, job.Steps, "📄 Checkout")
+	assert.Equal(t, false, checkout.With["persist-credentials"])
+
+	systemTest := findHarnessStep(t, job.Steps, "🧪 Run k3k + Calico Sentinel")
+	assert.Equal(t, "./.github/actions/ksail-system-test", systemTest.Uses)
+	assert.Equal(t, "Vanilla", systemTest.With["distribution"])
+	assert.Equal(t, "Docker", systemTest.With["provider"])
+	assert.Equal(t, "true", systemTest.With["init"])
+	assert.Equal(t, "--name k3k-calico-host", systemTest.With["args"])
+	assert.Equal(t, "true", systemTest.With["test-kubernetes-provider"])
+	assert.Equal(t, "K3s", systemTest.With["kubernetes-provider-distributions"])
+	assert.Equal(t, "Calico", systemTest.With["kubernetes-provider-cni"])
+	assert.Equal(t, "false", systemTest.With["cleanup"])
+	assert.Equal(t, "false", systemTest.With["upload-artifacts"])
+
+	cleanup := findHarnessStep(t, job.Steps, "🧪 Cleanup KSail System Test")
+	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanup.Uses)
+	assert.Contains(t, cleanup.If, "always()")
+}
