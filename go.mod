@@ -1038,6 +1038,16 @@ replace (
 	// so a v1.3.6 requirement is only a floor and any dependency asking for a
 	// newer runc would reintroduce the break. Remove this once dockertest stops
 	// importing the removed package.
+	//
+	// SECURITY TRADE-OFF, and the trigger for revisiting it: the left side carries no
+	// version, so this replaces EVERY selected runc version, not just the one that
+	// broke. A runc security release published after v1.3.6 will therefore NOT be
+	// picked up while this stands, and dependency automation cannot flag that, because
+	// this replacement is what makes its update resolve at all. runc is a container
+	// runtime, so treat every runc advisory as a review trigger for this block. Note
+	// the remedy is to REMOVE the pin (drop dockertest, or move to a release that no
+	// longer imports libcontainer/user) — bumping it cannot go past v1.3.6 without
+	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 )
 

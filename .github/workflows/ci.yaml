@@ -130,6 +130,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
@@ -161,6 +162,14 @@ jobs:
               - 'go.sum'
               - '.govulncheck-allow.txt'
               - '.github/actions/**'
+            # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
+            # module files matter — not every .go file. It also includes THIS workflow, because
+            # the check lives here and a workflow-only PR would otherwise be able to weaken or
+            # delete it without ever running it.
+            dependency-test-graph:
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
             govuln-allowlist:
               - '.govulncheck-allow.txt'
             system-test:
@@ -1629,7 +1638,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.dependency-test-graph == 'true'
     permissions:
       contents: read
     steps:
