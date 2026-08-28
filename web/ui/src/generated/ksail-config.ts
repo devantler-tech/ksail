@@ -280,7 +280,8 @@ export interface KSailClusterConfiguration {
            * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste).
            */
           expander?:
-            ("Price" | "LeastWaste" | "LeastNodes" | "Random") | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")
+            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
           /**
            * How long a node should be unneeded before it is eligible for scale down (e.g. 10m)
            */
@@ -923,7 +924,14 @@ export interface KSailClusterConfiguration {
        * AI provider for chat. Empty defaults to copilot.
        */
       provider?:
-        "copilot" | "openai" | "anthropic" | "gemini" | "azure-openai" | "openrouter" | "ollama" | "openai-compatible";
+        | "copilot"
+        | "openai"
+        | "anthropic"
+        | "gemini"
+        | "azure-openai"
+        | "openrouter"
+        | "ollama"
+        | "openai-compatible";
       /**
        * Chat model identifier. API providers require it; empty or 'auto' uses the Copilot default.
        */
