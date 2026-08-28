@@ -594,6 +594,14 @@ func (c *Client) installRelease(
 
 	defer cleanup()
 
+	var postRenderer *apiVersionPostRenderer
+	if len(spec.APIVersionMigrations) > 0 {
+		postRenderer, err = c.newAPIVersionPostRenderer(spec.APIVersionMigrations)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Check if release exists when doing upgrade
 	var rel *v1.Release
 
@@ -604,13 +612,13 @@ func (c *Client) installRelease(
 		releases, histErr := histClient.Run(spec.ReleaseName)
 		if histErr == nil && len(releases) > 0 {
 			// Release exists, perform upgrade
-			rel, err = c.upgradeRelease(ctx, spec)
+			rel, err = c.upgradeRelease(ctx, spec, postRenderer)
 		} else {
 			// Release doesn't exist, perform install
-			rel, err = c.performInstall(ctx, spec)
+			rel, err = c.performInstall(ctx, spec, postRenderer)
 		}
 	} else {
-		rel, err = c.performInstall(ctx, spec)
+		rel, err = c.performInstall(ctx, spec, postRenderer)
 	}
 
 	if err != nil {
@@ -620,11 +628,16 @@ func (c *Client) installRelease(
 	return releaseToInfo(rel), nil
 }
 
-func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Release, error) {
+func (c *Client) performInstall(
+	ctx context.Context,
+	spec *ChartSpec,
+	postRenderer *apiVersionPostRenderer,
+) (*v1.Release, error) {
 	client := helmv4action.NewInstall(c.actionConfig)
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
 	client.CreateNamespace = spec.CreateNamespace
+	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	applyCommonActionConfig(installActionAdapter{client}, spec)
 
@@ -642,9 +655,14 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	return executeAndExtractRelease(runFn)
 }
 
-func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Release, error) {
+func (c *Client) upgradeRelease(
+	ctx context.Context,
+	spec *ChartSpec,
+	postRenderer *apiVersionPostRenderer,
+) (*v1.Release, error) {
 	client := helmv4action.NewUpgrade(c.actionConfig)
 	client.Namespace = spec.Namespace
+	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
 
