@@ -162,6 +162,10 @@ jobs:
               - 'go.sum'
               - '.govulncheck-allow.txt'
               - '.github/actions/**'
+              # The Go CI harness validates the reusable scanner boundary and its
+              # repository-specific ignore selector. Run that contract before a
+              # workflow-only scanner update can merge.
+              - '.github/workflows/todos.yaml'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
             # the check lives here and a workflow-only PR would otherwise be able to weaken or
