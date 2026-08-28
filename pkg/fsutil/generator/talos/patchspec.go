@@ -185,7 +185,11 @@ func ingressFirewallSpecs() []patchSpec {
 			subdir:   subdirWorkers,
 			filename: ingressFirewallRulesFileName,
 			content: func(cfg *Config) (string, error) {
-				return IngressFirewallWorkerRulesYAML(cfg.NetworkCIDR, cfg.CNIPort), nil
+				return IngressFirewallWorkerRulesYAML(
+					cfg.NetworkCIDR,
+					cfg.CNIPort,
+					cfg.AllowedCIDRs,
+				), nil
 			},
 		},
 	}

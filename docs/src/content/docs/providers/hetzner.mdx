@@ -83,7 +83,8 @@ spec:
       # placementGroupFallbackToNone: false
       # Talos OS-level ingress firewall (default: Enabled — provides defense-in-depth)
       # ingressFirewall: "Enabled"  # or "Disabled"
-      # Restrict Kubernetes API (6443) and Talos API (50000) access to these CIDRs.
+      # Restrict public Kubernetes API (6443) access on control planes and public Talos API (50000) access on every node to these CIDRs.
+      # Private worker Talos API access from the cluster network remains enabled.
       # When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6).
       # Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall.
       # allowedCidrs: ["203.0.113.0/24", "198.51.100.0/24"]
@@ -349,7 +350,7 @@ When using the Hetzner provider, KSail automatically installs:
 KSail applies two independent firewall layers for Hetzner Talos clusters:
 
 1. **Hetzner Cloud Firewall** — Restricts external traffic at the network perimeter. KSail manages three rules: Talos API (50000/tcp), Kubernetes API (6443/tcp), and ICMP. Ports for cluster-internal communication (etcd, kubelet, trustd) are not exposed because nodes communicate over the private Hetzner Cloud Network. When `allowedCidrs` is set, the Kubernetes and Talos API rules restrict source IPs to those CIDR blocks instead of `0.0.0.0/0` and `::/0`.
-2. **Talos OS-level ingress firewall** — Defense-in-depth at the node level, enabled by default (`spec.provider.hetzner.ingressFirewall: Enabled`). Blocks all ingress by default; opens only the ports required for each node role (control plane vs worker), restricted to the cluster subnet where appropriate. When `allowedCidrs` is set, the Kubernetes API and Talos API `NetworkRuleConfig` rules also restrict source IPs to those CIDRs. Disable with `ingressFirewall: Disabled` if you manage node-level firewall rules yourself.
+2. **Talos OS-level ingress firewall** — Defense-in-depth at the node level, enabled by default (`spec.provider.hetzner.ingressFirewall: Enabled`). Blocks all ingress by default; opens only the ports required for each node role (control plane vs worker), restricted to the cluster subnet where appropriate. When `allowedCidrs` is set, the public Kubernetes API and Talos API `NetworkRuleConfig` rules restrict public source IPs to those CIDRs while retaining worker Talos API access from the private cluster subnet. Disable with `ingressFirewall: Disabled` if you manage node-level firewall rules yourself.
 
 > [!NOTE]
 > **Upgrading from older KSail versions**: Clusters created before the firewall hardening change used 6 Hetzner Cloud Firewall rules. KSail now manages 3 rules (Talos API, Kubernetes API, and ICMP), with etcd, kubelet, and trustd access kept on the private Hetzner Cloud Network. Running `ksail cluster update` automatically migrates existing clusters to the current rule set.
