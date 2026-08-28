@@ -17,11 +17,11 @@ KSail bundles common Kubernetes tooling into a single binary. Spin up local clus
 ## Quick Install
 
 ```bash
-# macOS / Linux (Homebrew)
-brew install --cask devantler-tech/tap/ksail
+# Linux / macOS (checksum-verified release)
+curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
 
-# Go (1.26.1+)
-go install github.com/devantler-tech/ksail/v7@latest
+# macOS (Homebrew)
+brew install --cask devantler-tech/tap/ksail
 ```
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for binary downloads and more options.

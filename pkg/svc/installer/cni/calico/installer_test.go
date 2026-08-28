@@ -283,7 +283,22 @@ func expectCalicoInstall(t *testing.T, client *helm.MockInterface, installErr er
 
 // isCalicoCRDSpec reports whether spec targets the projectcalico.org.v3 CRD chart.
 func isCalicoCRDSpec(spec *helm.ChartSpec) bool {
-	return spec != nil && spec.ChartName == "projectcalico/projectcalico.org.v3"
+	return spec != nil && spec.ChartName == "projectcalico/projectcalico.org.v3" &&
+		assert.ObjectsAreEqual(
+			[]helm.APIVersionMigration{
+				{
+					Kind: "MutatingAdmissionPolicy",
+					From: "admissionregistration.k8s.io/v1beta1",
+					To:   "admissionregistration.k8s.io/v1",
+				},
+				{
+					Kind: "MutatingAdmissionPolicyBinding",
+					From: "admissionregistration.k8s.io/v1beta1",
+					To:   "admissionregistration.k8s.io/v1",
+				},
+			},
+			spec.APIVersionMigrations,
+		)
 }
 
 // isCalicoOperatorSpec reports whether spec targets the tigera-operator chart.
