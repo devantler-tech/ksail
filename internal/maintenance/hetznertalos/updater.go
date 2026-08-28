@@ -539,7 +539,7 @@ func readMachineryVersion(root string) (string, error) {
 		return "", err
 	}
 
-	replacement, replaced, err := machineryReplacementVersion(parsed, path)
+	replacement, replaced, err := machineryReplacementVersion(parsed, version, path)
 	if err != nil {
 		return "", err
 	}
@@ -575,13 +575,22 @@ func machineryRequiredVersion(parsed *modfile.File, path string) (string, error)
 // machineryReplacementVersion reports the effective version of a replacement of the
 // machinery module. A filesystem replacement carries no version, which is rejected
 // rather than silently ignored: its supported Talos release cannot be established.
-func machineryReplacementVersion(parsed *modfile.File, path string) (string, bool, error) {
+func machineryReplacementVersion(
+	parsed *modfile.File,
+	requiredVersion, path string,
+) (string, bool, error) {
 	var versions []string
 
 	for _, replacement := range parsed.Replace {
-		if replacement.Old.Path == machineryModulePath {
-			versions = append(versions, replacement.New.Version)
+		if replacement.Old.Path != machineryModulePath {
+			continue
 		}
+
+		if replacement.Old.Version != "" && replacement.Old.Version != requiredVersion {
+			continue
+		}
+
+		versions = append(versions, replacement.New.Version)
 	}
 
 	if len(versions) > 1 {

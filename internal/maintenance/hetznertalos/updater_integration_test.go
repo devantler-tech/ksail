@@ -371,6 +371,33 @@ replace github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2 => `+
 	assert.Contains(t, output, "machinery")
 }
 
+// TestUpdaterIgnoresMachineryReplacementForDifferentRequiredVersion catches a
+// version-qualified replace directive being applied to a different requirement.
+// The v1.13.2 replacement is not effective when go.mod requires v1.14.0-alpha.2,
+// so the updater must use the requirement and accept the v1.13.2 announcement.
+func TestUpdaterIgnoresMachineryReplacementForDifferentRequiredVersion(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	writeFixtureFile(t, repoRoot, "go.mod", `module example.com/fixture
+
+go 1.26.6
+
+require github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
+
+replace github.com/siderolabs/talos/pkg/machinery v1.13.2 => `+
+		"github.com/siderolabs/talos/pkg/machinery v1.12.4 // pinned"+
+		`
+`)
+
+	output, err := runUpdater(t, repoRoot, testFeed)
+	require.NoError(t, err, output)
+
+	defaults := readFixtureFile(t, repoRoot, "pkg/apis/cluster/v1alpha1/defaults.go")
+	assert.Contains(t, defaults, `DefaultHetznerTalosVersion = "v1.13.2"`)
+	assert.Contains(t, defaults, "DefaultTalosISO int64 = 130001")
+}
+
 // TestUpdaterRejectsFilesystemMachineryReplacement is the companion control: a
 // replacement carrying no version cannot establish a supported Talos release, so
 // it is rejected rather than silently falling back to the requirement.
