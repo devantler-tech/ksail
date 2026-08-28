@@ -51,10 +51,17 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 	assert.Equal(t, 120, job.TimeoutMinutes)
 	assert.Nil(t, job.Strategy, "sentinel must not expand into a system-test matrix")
 	assert.Equal(t, "read", job.Permissions["contents"])
-	assert.Equal(t, "write", job.Permissions["packages"])
+	assert.Equal(t, "read", job.Permissions["packages"])
 
 	checkout := findHarnessStep(t, job.Steps, "📄 Checkout")
 	assert.Equal(t, false, checkout.With["persist-credentials"])
+
+	dockerHubLogin := findHarnessStep(t, job.Steps, "🔐 Login to Docker Hub")
+	assert.Equal(t, "${{ secrets.DOCKERHUB_TOKEN }}", dockerHubLogin.Env["DOCKERHUB_TOKEN"])
+	assert.Contains(t, dockerHubLogin.If, "github.event_name != 'pull_request'")
+	assert.Contains(t, dockerHubLogin.If, "vars.DOCKERHUB_USERNAME != ''")
+	assert.Contains(t, dockerHubLogin.If, "env.DOCKERHUB_TOKEN != ''")
+	assert.Equal(t, "${{ env.DOCKERHUB_TOKEN }}", dockerHubLogin.With["password"])
 
 	systemTest := findHarnessStep(t, job.Steps, "🧪 Run k3k + Calico Sentinel")
 	assert.Equal(t, "./.github/actions/ksail-system-test", systemTest.Uses)
@@ -65,6 +72,16 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 	assert.Equal(t, "true", systemTest.With["test-kubernetes-provider"])
 	assert.Equal(t, "K3s", systemTest.With["kubernetes-provider-distributions"])
 	assert.Equal(t, "Calico", systemTest.With["kubernetes-provider-cni"])
+	assert.Equal(
+		t,
+		"${{ github.event_name != 'pull_request' && secrets.GITHUB_TOKEN || '' }}",
+		systemTest.With["ghcr-token"],
+	)
+	assert.Equal(
+		t,
+		"${{ github.event_name != 'pull_request' && secrets.DOCKERHUB_TOKEN || '' }}",
+		systemTest.With["dockerhub-token"],
+	)
 	assert.Equal(t, "false", systemTest.With["cleanup"])
 	assert.Equal(t, "false", systemTest.With["upload-artifacts"])
 

@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
-      packages: write
+      packages: read
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,11 +37,13 @@ jobs:
           docker-prune: "true"
 
       - name: 🔐 Login to Docker Hub
-        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        if: ${{ github.event_name != 'pull_request' && vars.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -77,9 +79,9 @@ jobs:
           kubernetes-provider-distributions: K3s
           kubernetes-provider-cni: Calico
           ghcr-user: ${{ github.actor }}
-          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          ghcr-token: ${{ github.event_name != 'pull_request' && secrets.GITHUB_TOKEN || '' }}
           dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
-          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          dockerhub-token: ${{ github.event_name != 'pull_request' && secrets.DOCKERHUB_TOKEN || '' }}
           upload-artifacts: "false"
           cleanup: "false"
 
