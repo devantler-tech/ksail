@@ -8,6 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	defaultBranchGHCRToken = "${{ github.event_name != 'pull_request' && " +
+		"github.ref_name == github.event.repository.default_branch && secrets.GITHUB_TOKEN || '' }}"
+	defaultBranchDockerHubToken = "${{ github.event_name != 'pull_request' && " +
+		"github.ref_name == github.event.repository.default_branch && secrets.DOCKERHUB_TOKEN || '' }}"
+)
+
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type k3kCalicoWorkflow struct {
 	On struct {
@@ -58,13 +65,7 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 	checkout := findHarnessStep(t, job.Steps, "📄 Checkout")
 	assert.Equal(t, false, checkout.With["persist-credentials"])
 
-	dockerHubLogin := findHarnessStep(t, job.Steps, "🔐 Login to Docker Hub")
-	assert.Equal(t, "${{ secrets.DOCKERHUB_TOKEN }}", dockerHubLogin.Env["DOCKERHUB_TOKEN"])
-	assert.Contains(t, dockerHubLogin.If, "github.event_name != 'pull_request'")
-	assert.Contains(t, dockerHubLogin.If, "github.ref_name == github.event.repository.default_branch")
-	assert.Contains(t, dockerHubLogin.If, "vars.DOCKERHUB_USERNAME != ''")
-	assert.Contains(t, dockerHubLogin.If, "env.DOCKERHUB_TOKEN != ''")
-	assert.Equal(t, "${{ env.DOCKERHUB_TOKEN }}", dockerHubLogin.With["password"])
+	assertDockerHubLoginGuard(t, job.Steps)
 
 	systemTest := findHarnessStep(t, job.Steps, "🧪 Run k3k + Calico Sentinel")
 	assert.Equal(t, "./.github/actions/ksail-system-test", systemTest.Uses)
@@ -77,12 +78,12 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 	assert.Equal(t, "Calico", systemTest.With["kubernetes-provider-cni"])
 	assert.Equal(
 		t,
-		"${{ github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch && secrets.GITHUB_TOKEN || '' }}",
+		defaultBranchGHCRToken,
 		systemTest.With["ghcr-token"],
 	)
 	assert.Equal(
 		t,
-		"${{ github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch && secrets.DOCKERHUB_TOKEN || '' }}",
+		defaultBranchDockerHubToken,
 		systemTest.With["dockerhub-token"],
 	)
 	assert.Equal(t, "false", systemTest.With["cleanup"])
@@ -91,4 +92,16 @@ func TestK3KCalicoSentinelRunsWeeklyOutsidePullRequests(t *testing.T) {
 	cleanup := findHarnessStep(t, job.Steps, "🧪 Cleanup KSail System Test")
 	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanup.Uses)
 	assert.Contains(t, cleanup.If, "always()")
+}
+
+func assertDockerHubLoginGuard(t *testing.T, steps []harnessStep) {
+	t.Helper()
+
+	dockerHubLogin := findHarnessStep(t, steps, "🔐 Login to Docker Hub")
+	assert.Equal(t, "${{ secrets.DOCKERHUB_TOKEN }}", dockerHubLogin.Env["DOCKERHUB_TOKEN"])
+	assert.Contains(t, dockerHubLogin.If, "github.event_name != 'pull_request'")
+	assert.Contains(t, dockerHubLogin.If, "github.ref_name == github.event.repository.default_branch")
+	assert.Contains(t, dockerHubLogin.If, "vars.DOCKERHUB_USERNAME != ''")
+	assert.Contains(t, dockerHubLogin.If, "env.DOCKERHUB_TOKEN != ''")
+	assert.Equal(t, "${{ env.DOCKERHUB_TOKEN }}", dockerHubLogin.With["password"])
 }
