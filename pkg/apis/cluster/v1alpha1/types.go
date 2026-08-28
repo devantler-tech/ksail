@@ -291,7 +291,7 @@ type FluxConfig struct {
 type ChatSpec struct {
 	// Provider selects the API backing the chat assistant. Empty preserves the historical Copilot
 	// default. OpenAI-compatible accepts any compatible endpoint, including self-hosted services.
-	Provider AIProvider `json:"provider,omitzero" jsonschema:"enum=copilot,enum=openai,enum=anthropic,enum=gemini,enum=azure-openai,enum=openrouter,enum=ollama,enum=openai-compatible" jsonschema_description:"AI provider for chat. Empty defaults to copilot."` //nolint:lll
+	Provider AIProvider `json:"provider,omitzero" jsonschema:"enum=,enum=copilot,enum=openai,enum=anthropic,enum=gemini,enum=azure-openai,enum=openrouter,enum=ollama,enum=openai-compatible" jsonschema_description:"AI provider for chat. Empty defaults to copilot."` //nolint:lll
 
 	Model string `json:"model,omitzero" jsonschema_description:"Chat model identifier. API providers require it; empty or 'auto' uses the Copilot default."` //nolint:lll
 	// ReasoningEffort specifies the reasoning effort level for chat responses.
@@ -304,7 +304,7 @@ type ChatSpec struct {
 	// persisted in ksail.yaml. Empty uses KSAIL_AI_API_KEY, then the provider's conventional variable.
 	APIKeyEnvVar string `json:"apiKeyEnvVar,omitzero" jsonschema_description:"Environment variable containing the AI provider API key. Empty uses KSAIL_AI_API_KEY then the provider default."` //nolint:lll
 	// WireAPI chooses the OpenAI-compatible request format. Empty uses chat completions.
-	WireAPI string `json:"wireApi,omitzero" jsonschema:"enum=completions,enum=responses" jsonschema_description:"OpenAI-compatible wire API (completions or responses). Empty defaults to completions."` //nolint:lll
+	WireAPI string `json:"wireApi,omitzero" jsonschema:"enum=,enum=completions,enum=responses" jsonschema_description:"OpenAI-compatible wire API (completions or responses). Empty defaults to completions."` //nolint:lll
 	// AzureAPIVersion optionally overrides the Azure OpenAI API version.
 	AzureAPIVersion string `json:"azureApiVersion,omitzero" jsonschema_description:"Azure OpenAI API version. Empty uses the runtime default."` //nolint:lll
 }

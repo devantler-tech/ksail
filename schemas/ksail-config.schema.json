@@ -1203,6 +1203,7 @@
             "provider": {
               "type": "string",
               "enum": [
+                "",
                 "copilot",
                 "openai",
                 "anthropic",
@@ -1238,6 +1239,7 @@
             "wireApi": {
               "type": "string",
               "enum": [
+                "",
                 "completions",
                 "responses"
               ],
