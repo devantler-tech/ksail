@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
+	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -256,6 +257,18 @@ func TestBuildTUISlashCommands_ModelWithArgsSendsSetRequest(t *testing.T) {
 	setMsg, ok := msg.(chat.ExportModelSetRequestMsg)
 	assert.True(t, ok, "expected modelSetRequestMsg, got %T", msg)
 	assert.Equal(t, "gpt-5", setMsg.Model)
+}
+
+func TestBuildTUICommandOptionsDoesNotQueryCopilotModelsForBYOK(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportGetSessionConfig(model).Provider = &copilot.ProviderConfig{
+		Type: "openai", BaseURL: "http://127.0.0.1:11434/v1",
+	}
+
+	options := chat.BuildTUICommandOptions()["model"](model)
+	assert.Empty(t, options)
 }
 
 // --- BuildNonTUISlashCommands tests ---

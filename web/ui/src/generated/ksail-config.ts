@@ -280,8 +280,7 @@ export interface KSailClusterConfiguration {
            * Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes, LeastWaste]) applied as a chain — the first expander filters node groups and each later one breaks the previous tie (upstream --expander=least-nodes,least-waste).
            */
           expander?:
-            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")
-            | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
+            ("Price" | "LeastWaste" | "LeastNodes" | "Random") | ("Price" | "LeastWaste" | "LeastNodes" | "Random")[];
           /**
            * How long a node should be unneeded before it is eligible for scale down (e.g. 10m)
            */
@@ -921,13 +920,34 @@ export interface KSailClusterConfiguration {
      */
     chat?: {
       /**
-       * Chat model (empty or 'auto' for API default)
+       * AI provider for chat. Empty defaults to copilot.
+       */
+      provider?:
+        "copilot" | "openai" | "anthropic" | "gemini" | "azure-openai" | "openrouter" | "ollama" | "openai-compatible";
+      /**
+       * Chat model identifier. API providers require it; empty or 'auto' uses the Copilot default.
        */
       model?: string;
       /**
        * Reasoning effort level for chat responses (low, medium, or high)
        */
       reasoningEffort?: "low" | "medium" | "high";
+      /**
+       * Provider API base URL. Required for azure-openai and openai-compatible; optional override for other BYOK providers.
+       */
+      baseUrl?: string;
+      /**
+       * Environment variable containing the AI provider API key. Empty uses KSAIL_AI_API_KEY then the provider default.
+       */
+      apiKeyEnvVar?: string;
+      /**
+       * OpenAI-compatible wire API (completions or responses). Empty defaults to completions.
+       */
+      wireApi?: "completions" | "responses";
+      /**
+       * Azure OpenAI API version. Empty uses the runtime default.
+       */
+      azureApiVersion?: string;
     };
   };
 }

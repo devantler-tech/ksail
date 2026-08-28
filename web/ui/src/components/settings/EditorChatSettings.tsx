@@ -12,13 +12,43 @@ const REASONING_OPTIONS = [
   { value: "high", label: "High" },
 ];
 
+const PROVIDER_OPTIONS = [
+  { value: "", label: "GitHub Copilot (default)" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "gemini", label: "Google Gemini" },
+  { value: "azure-openai", label: "Azure OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "ollama", label: "Ollama" },
+  { value: "openai-compatible", label: "Other OpenAI-compatible API" },
+];
+
+const WIRE_API_OPTIONS = [
+  { value: "", label: "Chat completions (default)" },
+  { value: "completions", label: "Chat completions" },
+  { value: "responses", label: "Responses API" },
+];
+
+const EMPTY_APP_SETTINGS: AppSettings = {
+  editor: "",
+  chat: {
+    provider: "",
+    model: "",
+    reasoningEffort: "",
+    baseUrl: "",
+    apiKeyEnvVar: "",
+    wireApi: "",
+    azureApiVersion: "",
+  },
+};
+
 // EditorChatSettings is the Settings page's "Editor & AI" category: the editor command used for
-// interactive flows (overlaid onto EDITOR by the backend) and the AI assistant's model + reasoning
-// effort. Backend-persisted (ui-settings.json), so it uses a draft/save flow like Credentials.
+// interactive flows and the provider-neutral AI assistant settings. Secrets remain in Credentials;
+// this section persists only provider metadata and an optional environment-variable name.
 export function EditorChatSettings() {
   const toast = useToast();
   const [loaded, setLoaded] = useState<AppSettings | null>(null);
-  const [draft, setDraft] = useState<AppSettings>({ editor: "", chat: { model: "", reasoningEffort: "" } });
+  const [draft, setDraft] = useState<AppSettings>(EMPTY_APP_SETTINGS);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -60,11 +90,14 @@ export function EditorChatSettings() {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(loaded);
+  const provider = draft.chat.provider || "copilot";
+  const usesAPIProvider = provider !== "copilot";
+  const usesOpenAIWire = usesAPIProvider && provider !== "anthropic";
 
   return (
     <SettingsSection
       title="Editor & AI"
-      description="The editor used for interactive flows and the AI assistant's model."
+      description="The editor used for interactive flows and the API provider backing the AI assistant."
       footer={
         <Button onClick={() => void handleSave()} loading={saving} disabled={!dirty}>
           Save settings
@@ -87,17 +120,117 @@ export function EditorChatSettings() {
           </FieldHelp>
         </div>
 
+        <SelectField
+          label="AI provider"
+          value={draft.chat.provider}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              chat: {
+                ...draft.chat,
+                provider: event.target.value,
+                model: "",
+                baseUrl: "",
+                apiKeyEnvVar: "",
+                wireApi: "",
+                azureApiVersion: "",
+              },
+            })
+          }
+        >
+          {PROVIDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </SelectField>
+
         <div>
           <TextField
             label="AI model"
-            placeholder="default"
+            placeholder={usesAPIProvider ? "required" : "default"}
             autoComplete="off"
             spellCheck={false}
             value={draft.chat.model}
             onChange={(event) => setDraft({ ...draft, chat: { ...draft.chat, model: event.target.value } })}
           />
-          <FieldHelp>The model the AI assistant uses (GitHub Copilot). Leave blank for the default.</FieldHelp>
+          <FieldHelp>
+            {usesAPIProvider
+              ? "The provider model or Azure deployment name. Required for API providers."
+              : "Optional Copilot model override. Leave blank for the default."}
+          </FieldHelp>
         </div>
+
+        {usesAPIProvider && (
+          <>
+            <div>
+              <TextField
+                label="Base URL"
+                placeholder={
+                  provider === "azure-openai" || provider === "openai-compatible"
+                    ? "required"
+                    : "provider default"
+                }
+                autoComplete="off"
+                spellCheck={false}
+                value={draft.chat.baseUrl}
+                onChange={(event) =>
+                  setDraft({ ...draft, chat: { ...draft.chat, baseUrl: event.target.value } })
+                }
+              />
+              <FieldHelp>
+                Required for Azure and custom endpoints; otherwise leave blank for the provider default.
+                Azure expects only the resource host, without <code>/openai/v1</code>.
+              </FieldHelp>
+            </div>
+
+            <div>
+              <TextField
+                label="API key environment variable"
+                placeholder="provider default"
+                autoComplete="off"
+                spellCheck={false}
+                value={draft.chat.apiKeyEnvVar}
+                onChange={(event) =>
+                  setDraft({ ...draft, chat: { ...draft.chat, apiKeyEnvVar: event.target.value } })
+                }
+              />
+              <FieldHelp>
+                Leave blank to use the secure <strong>AI providers</strong> key under Credentials, then the
+                provider's conventional variable. This stores only the variable name, never the key.
+              </FieldHelp>
+            </div>
+          </>
+        )}
+
+        {usesOpenAIWire && (
+          <SelectField
+            label="API format"
+            value={draft.chat.wireApi}
+            onChange={(event) =>
+              setDraft({ ...draft, chat: { ...draft.chat, wireApi: event.target.value } })
+            }
+          >
+            {WIRE_API_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </SelectField>
+        )}
+
+        {provider === "azure-openai" && (
+          <TextField
+            label="Azure API version"
+            placeholder="runtime default"
+            autoComplete="off"
+            spellCheck={false}
+            value={draft.chat.azureApiVersion}
+            onChange={(event) =>
+              setDraft({ ...draft, chat: { ...draft.chat, azureApiVersion: event.target.value } })
+            }
+          />
+        )}
 
         <SelectField
           label="Reasoning effort"

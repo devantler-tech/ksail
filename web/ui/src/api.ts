@@ -397,8 +397,13 @@ export function updateSettings(req: SettingsUpdateRequest): Promise<SettingsResp
 // ChatSettings is the AI assistant's model selection and reasoning effort. Empty values defer to the
 // backend's runtime defaults.
 export interface ChatSettings {
+  provider: string;
   model: string;
   reasoningEffort: string;
+  baseUrl: string;
+  apiKeyEnvVar: string;
+  wireApi: string;
+  azureApiVersion: string;
 }
 
 // AppSettings is the local UI's non-credential preferences (editor command + chat). It is the body

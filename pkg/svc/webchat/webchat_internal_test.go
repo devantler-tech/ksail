@@ -6,8 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
+	copilot "github.com/github/copilot-sdk/go"
 	"github.com/github/copilot-sdk/go/rpc"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAvailableRequiresToken(t *testing.T) {
@@ -24,6 +29,66 @@ func TestAvailableRequiresToken(t *testing.T) {
 
 	if !runner.Available(context.Background()) {
 		t.Error("Available = false with COPILOT_TOKEN set, want true")
+	}
+}
+
+func TestAvailableSupportsBYOKWithoutCopilotToken(t *testing.T) {
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	t.Setenv("COPILOT_TOKEN", "")
+	t.Setenv("OPENAI_API_KEY", "provider-key")
+
+	runner := New(nil, WithSessionDefaults(func() v1alpha1.ChatSpec {
+		return v1alpha1.ChatSpec{Provider: v1alpha1.AIProviderOpenAI, Model: "gpt-5"}
+	}))
+
+	assert.True(t, runner.Available(context.Background()))
+}
+
+func TestAvailableFailsClosedForIncompleteBYOK(t *testing.T) {
+	t.Setenv("KSAIL_COPILOT_TOKEN", "")
+	t.Setenv("COPILOT_TOKEN", "")
+	t.Setenv("OPENAI_API_KEY", "")
+
+	runner := New(nil, WithSessionDefaults(func() v1alpha1.ChatSpec {
+		return v1alpha1.ChatSpec{Provider: v1alpha1.AIProviderOpenAI, Model: "gpt-5"}
+	}))
+
+	assert.False(t, runner.Available(context.Background()))
+}
+
+func TestBuildSessionConfigCarriesBYOKProvider(t *testing.T) {
+	t.Parallel()
+
+	sdkProvider := &copilot.ProviderConfig{
+		Type: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "secret",
+	}
+	provider := chatsvc.ResolvedProvider{
+		Name: v1alpha1.AIProviderOpenAI, Model: "gpt-5", SDK: sdkProvider,
+	}
+
+	config := buildSessionConfig(provider, "high", nil, nil)
+	assert.Equal(t, "gpt-5", config.Model)
+	assert.Equal(t, "high", config.ReasoningEffort)
+	assert.Same(t, sdkProvider, config.Provider)
+}
+
+func TestClientOptionsDisableCopilotAuthenticationForBYOK(t *testing.T) {
+	t.Setenv("KSAIL_COPILOT_TOKEN", "must-not-leak")
+	t.Setenv("COPILOT_TOKEN", "must-not-leak")
+	t.Setenv("COPILOT_SDK_AUTH_TOKEN", "must-not-leak")
+
+	provider := chatsvc.ResolvedProvider{Name: v1alpha1.AIProviderOpenAI}
+	options, key := clientOptions(provider)
+
+	require.NotNil(t, options.UseLoggedInUser)
+	assert.False(t, *options.UseLoggedInUser)
+	assert.Empty(t, options.GitHubToken)
+	assert.Equal(t, "byok", key)
+
+	for _, entry := range options.Env {
+		assert.NotContains(t, entry, "KSAIL_COPILOT_TOKEN=")
+		assert.NotContains(t, entry, "COPILOT_TOKEN=")
+		assert.NotContains(t, entry, "COPILOT_SDK_AUTH_TOKEN=")
 	}
 }
 

@@ -1,5 +1,5 @@
-// Package webchat powers the KSail web UI's AI assistant over GitHub Copilot. It reuses KSail's chat
-// service (system context + Cobra-generated tools) and the Copilot SDK's streaming session, adapting
+// Package webchat powers the KSail web UI's provider-neutral AI assistant. It reuses KSail's chat
+// service (system context + Cobra-generated tools) and a shared streaming runtime, adapting
 // them to the web transport's streaming contract (api.ChatService, via the local backend's runner
 // seam): one turn per request, streamed as api.ChatEvent values.
 //
@@ -8,15 +8,13 @@
 // handler emits a tool-confirm event carrying a unique confirmId and blocks until the SPA posts a
 // decision back (POST /api/v1/chat/confirm → ConfirmTool), then approves or denies accordingly. Read
 // operations are still auto-approved so the assistant can inspect the cluster without prompting.
-// Availability requires a non-interactive Copilot token (KSAIL_COPILOT_TOKEN / COPILOT_TOKEN), since a
-// server cannot drive the interactive device login.
+// Copilot availability requires a non-interactive token because a server cannot drive device login.
+// BYOK providers instead require their validated provider settings and API credentials.
 //
-// Runtime verification note: the live path spawns the Copilot CLI subprocess and streams from it, so it
-// can only be exercised in a Copilot-configured environment — it is gated off (Available == false) when
-// no token is present, which is the case in CI. Tests cover the non-Copilot logic (availability, prompt
-// building, confirm routing); the streaming integration is verified manually with Copilot configured.
-// This mirrors how the repo treats other CI-unverifiable integrations (cloud providers) — gated behind
-// availability.
+// Runtime verification note: the live path spawns the shared Copilot CLI subprocess and streams from
+// it. Copilot sessions are gated off when no token is present; API-provider sessions are gated by their
+// own configuration. Tests cover availability, provider isolation, prompt building, and confirm routing;
+// live hosted-provider inference remains an external integration check.
 package webchat
 
 import (
@@ -29,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
@@ -49,10 +48,12 @@ var (
 	errTurnTimeout = errors.New("assistant response timed out")
 	// errAssistant wraps a session-level error message reported by the assistant.
 	errAssistant = errors.New("assistant error")
+	// errCopilotTokenRequired keeps the server-only Copilot prerequisite statically matchable.
+	errCopilotTokenRequired = errors.New("GitHub Copilot token is required for web chat")
 )
 
-// Runner powers the web UI's AI assistant. The Copilot client is started lazily on the first turn and
-// reused across turns (starting it spawns a subprocess and authenticates, which is too slow per-turn);
+// Runner powers the web UI's AI assistant. The shared runtime client is started lazily on the first
+// turn and reused across turns (starting it spawns a subprocess, which is too slow per-turn);
 // Close stops it. A fresh session is created per turn, so prior turns are replayed via the prompt.
 //
 // Write tools are gated by per-action confirmation: pending tool-confirm prompts are tracked in the
@@ -61,12 +62,13 @@ var (
 type Runner struct {
 	rootCmd *cobra.Command
 
-	// sessionDefaults supplies the model and reasoning effort for new sessions, read fresh per turn so
-	// Settings changes take effect without a restart. Nil leaves both to the Copilot runtime defaults.
-	sessionDefaults func() (model, reasoningEffort string)
+	// sessionDefaults supplies provider settings for new sessions, read fresh per turn so Settings
+	// changes take effect without a restart. Nil preserves the GitHub Copilot default.
+	sessionDefaults func() v1alpha1.ChatSpec
 
-	mu     sync.Mutex
-	client *copilot.Client
+	mu        sync.Mutex
+	client    *copilot.Client
+	clientKey string
 
 	// confirmMu guards confirms. It is separate from mu (which guards the long-lived client) so a
 	// confirm decision never contends with client startup.
@@ -79,9 +81,9 @@ type Runner struct {
 // Option configures a Runner.
 type Option func(*Runner)
 
-// WithSessionDefaults supplies the model and reasoning effort applied to new chat sessions. The
+// WithSessionDefaults supplies the provider settings applied to new chat sessions. The
 // provider is read fresh per turn, so Settings changes take effect without restarting the server.
-func WithSessionDefaults(provider func() (model, reasoningEffort string)) Option {
+func WithSessionDefaults(provider func() v1alpha1.ChatSpec) Option {
 	return func(runner *Runner) { runner.sessionDefaults = provider }
 }
 
@@ -96,13 +98,18 @@ func New(rootCmd *cobra.Command, opts ...Option) *Runner {
 	return runner
 }
 
-// Available reports whether the assistant can run: a Copilot token must be present. A server cannot
-// complete the interactive device-login flow, so token auth is the only supported path here.
+// Available reports whether the current provider configuration is complete. Copilot requires its
+// explicit server token; BYOK providers use their own API-key and endpoint requirements.
 func (r *Runner) Available(_ context.Context) bool {
-	return copilotToken() != ""
+	provider, err := chatsvc.ResolveProvider(r.currentSpec(), os.Getenv)
+	if err != nil {
+		return false
+	}
+
+	return !provider.UsesCopilot() || copilotToken() != ""
 }
 
-// Close stops the Copilot client (and its subprocess) if one was started.
+// Close stops the shared runtime client (and its subprocess) if one was started.
 func (r *Runner) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -110,6 +117,7 @@ func (r *Runner) Close() {
 	if r.client != nil {
 		_ = r.client.Stop()
 		r.client = nil
+		r.clientKey = ""
 	}
 }
 
@@ -117,7 +125,18 @@ func (r *Runner) Close() {
 // on normal completion. Read tools are auto-approved; write tools are gated behind a per-action
 // confirmation streamed to emit and resolved by ConfirmTool.
 func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.ChatEvent)) error {
-	client, err := r.ensureClient(ctx)
+	spec := r.currentSpec()
+
+	provider, err := chatsvc.ResolveProvider(spec, os.Getenv)
+	if err != nil {
+		return fmt.Errorf("resolve AI provider: %w", err)
+	}
+
+	if provider.UsesCopilot() && copilotToken() == "" {
+		return errCopilotTokenRequired
+	}
+
+	client, err := r.ensureClient(ctx, provider)
 	if err != nil {
 		return err
 	}
@@ -125,22 +144,16 @@ func (r *Runner) Run(ctx context.Context, req api.ChatRequest, emit func(api.Cha
 	tools, _ := chatsvc.GetKSailToolMetadata(r.rootCmd, nil, toolgen.NewSessionLogRef())
 	streaming := true
 
-	model, reasoningEffort := "", ""
-	if r.sessionDefaults != nil {
-		model, reasoningEffort = r.sessionDefaults()
-	}
+	sessionConfig := buildSessionConfig(
+		provider,
+		spec.ReasoningEffort,
+		chatsvc.BuildSystemSectionsForProvider(r.rootCmd, provider),
+		r.confirmPermissionHandler(ctx, emit),
+	)
+	sessionConfig.Streaming = &streaming
+	sessionConfig.Tools = tools
 
-	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		Streaming:       &streaming,
-		Model:           model,
-		ReasoningEffort: reasoningEffort,
-		SystemMessage: &copilot.SystemMessageConfig{
-			Mode:     "customize",
-			Sections: chatsvc.BuildSystemSections(r.rootCmd),
-		},
-		Tools:               tools,
-		OnPermissionRequest: r.confirmPermissionHandler(ctx, emit),
-	})
+	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
 		return fmt.Errorf("create chat session: %w", err)
 	}
@@ -170,29 +183,102 @@ func (r *Runner) ConfirmTool(confirmID string, approved bool) {
 	}
 }
 
-// ensureClient starts the Copilot client once and returns the shared instance.
-func (r *Runner) ensureClient(ctx context.Context) (*copilot.Client, error) {
+func (r *Runner) currentSpec() v1alpha1.ChatSpec {
+	if r.sessionDefaults == nil {
+		return v1alpha1.ChatSpec{}
+	}
+
+	return r.sessionDefaults()
+}
+
+func buildSessionConfig(
+	provider chatsvc.ResolvedProvider,
+	reasoningEffort string,
+	sections map[string]copilot.SectionOverride,
+	permissionHandler copilot.PermissionHandlerFunc,
+) *copilot.SessionConfig {
+	return &copilot.SessionConfig{
+		Model:           provider.Model,
+		ReasoningEffort: reasoningEffort,
+		Provider:        provider.SDK,
+		SystemMessage: &copilot.SystemMessageConfig{
+			Mode:     "customize",
+			Sections: sections,
+		},
+		OnPermissionRequest: permissionHandler,
+	}
+}
+
+// ensureClient starts the shared runtime once per authentication mode and returns it. Switching
+// between Copilot and BYOK restarts the runtime so a BYOK process never inherits Copilot login state.
+func (r *Runner) ensureClient(
+	ctx context.Context,
+	provider chatsvc.ResolvedProvider,
+) (*copilot.Client, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.client != nil {
+	options, key := clientOptions(provider)
+	if r.client != nil && r.clientKey == key {
 		return r.client, nil
 	}
 
-	client := copilot.NewClient(&copilot.ClientOptions{
-		LogLevel:                  "error",
-		GitHubToken:               copilotToken(),
-		SessionIdleTimeoutSeconds: sessionIdleTimeoutSeconds,
-	})
+	if r.client != nil {
+		_ = r.client.Stop()
+		r.client = nil
+		r.clientKey = ""
+	}
+
+	client := copilot.NewClient(options)
 
 	err := client.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("start Copilot client: %w", err)
+		return nil, fmt.Errorf("start chat runtime: %w", err)
 	}
 
 	r.client = client
+	r.clientKey = key
 
 	return client, nil
+}
+
+func clientOptions(provider chatsvc.ResolvedProvider) (*copilot.ClientOptions, string) {
+	options := &copilot.ClientOptions{
+		LogLevel:                  "error",
+		SessionIdleTimeoutSeconds: sessionIdleTimeoutSeconds,
+	}
+
+	if provider.UsesCopilot() {
+		token := copilotToken()
+		options.GitHubToken = token
+		options.UseLoggedInUser = new(false)
+
+		return options, "copilot:" + token
+	}
+
+	options.UseLoggedInUser = new(false)
+	options.Env = filterRuntimeEnv(os.Environ())
+
+	return options, "byok"
+}
+
+func filterRuntimeEnv(environment []string) []string {
+	blocked := map[string]struct{}{
+		"GITHUB_TOKEN": {}, "GH_TOKEN": {}, "COPILOT_GITHUB_TOKEN": {},
+		"KSAIL_COPILOT_TOKEN": {}, "COPILOT_TOKEN": {}, "COPILOT_SDK_AUTH_TOKEN": {},
+	}
+
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, found := strings.Cut(entry, "=")
+		if _, excluded := blocked[name]; found && excluded {
+			continue
+		}
+
+		filtered = append(filtered, entry)
+	}
+
+	return filtered
 }
 
 // copilotToken returns the configured Copilot token, in precedence order. GITHUB_TOKEN is intentionally

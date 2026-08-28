@@ -74,8 +74,13 @@ type AppSettings struct {
 // ChatSettings is the AI assistant's model selection and reasoning effort. Empty values defer to the
 // runtime defaults.
 type ChatSettings struct {
+	Provider        string `json:"provider"`
 	Model           string `json:"model"`
 	ReasoningEffort string `json:"reasoningEffort"`
+	BaseURL         string `json:"baseUrl"`
+	APIKeyEnvVar    string `json:"apiKeyEnvVar"`
+	WireAPI         string `json:"wireApi"`
+	AzureAPIVersion string `json:"azureApiVersion"`
 }
 
 // CredentialTestResult reports the outcome of a provider connection test. OK=false with a Message is

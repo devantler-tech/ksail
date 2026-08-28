@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"slices"
 	"sync"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
 // settingsFileMode and settingsDirMode keep the on-disk settings (env-var-name overrides — not
@@ -33,6 +35,12 @@ var ErrUnknownCredential = errors.New("unknown credential")
 // ErrInvalidReasoningEffort indicates a chat reasoning-effort value outside the allowed set.
 var ErrInvalidReasoningEffort = errors.New("invalid reasoning effort")
 
+// ErrInvalidAIProvider indicates an app setting outside the supported provider set.
+var ErrInvalidAIProvider = errors.New("invalid AI provider")
+
+// ErrInvalidAIWireAPI indicates an app setting outside completions/responses.
+var ErrInvalidAIWireAPI = errors.New("invalid AI wire API")
+
 // editorEnvVar is the conventional environment variable KSail's editor resolution honors; Overlay
 // exports the configured editor command under it so CLI editor flows (and subprocesses) pick it up.
 const editorEnvVar = "EDITOR"
@@ -46,6 +54,14 @@ func validReasoningEffort(effort string) bool {
 	default:
 		return false
 	}
+}
+
+func validAIProvider(provider v1alpha1.AIProvider) bool {
+	return provider == "" || slices.Contains(v1alpha1.ValidAIProviders(), provider)
+}
+
+func validAIWireAPI(wireAPI string) bool {
+	return wireAPI == "" || wireAPI == "completions" || wireAPI == "responses"
 }
 
 // settings holds the non-secret, file-persisted configuration: per-credential overrides of the
@@ -62,16 +78,39 @@ type settings struct {
 
 // chatPrefs holds the AI assistant model selection and reasoning effort.
 type chatPrefs struct {
-	Model           string `json:"model,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	Provider        v1alpha1.AIProvider `json:"provider,omitempty"`
+	Model           string              `json:"model,omitempty"`
+	ReasoningEffort string              `json:"reasoningEffort,omitempty"`
+	BaseURL         string              `json:"baseUrl,omitempty"`
+	APIKeyEnvVar    string              `json:"apiKeyEnvVar,omitempty"`
+	WireAPI         string              `json:"wireApi,omitempty"`
+	AzureAPIVersion string              `json:"azureApiVersion,omitempty"`
 }
 
 // AppSettings is the local UI's non-credential preferences (editor command + chat model/effort),
 // persisted alongside the env-var overrides in ui-settings.json.
 type AppSettings struct {
 	Editor              string
+	ChatProvider        v1alpha1.AIProvider
 	ChatModel           string
 	ChatReasoningEffort string
+	ChatBaseURL         string
+	ChatAPIKeyEnvVar    string
+	ChatWireAPI         string
+	ChatAzureAPIVersion string
+}
+
+// ChatSpec returns the provider-neutral chat settings in the shared API shape.
+func (s AppSettings) ChatSpec() v1alpha1.ChatSpec {
+	return v1alpha1.ChatSpec{
+		Provider:        s.ChatProvider,
+		Model:           s.ChatModel,
+		ReasoningEffort: s.ChatReasoningEffort,
+		BaseURL:         s.ChatBaseURL,
+		APIKeyEnvVar:    s.ChatAPIKeyEnvVar,
+		WireAPI:         s.ChatWireAPI,
+		AzureAPIVersion: s.ChatAzureAPIVersion,
+	}
 }
 
 // envSnapshot records what a process environment variable held before Overlay first overrode it, so
@@ -347,17 +386,30 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 		return fmt.Errorf("%w: %q", ErrInvalidReasoningEffort, next.ChatReasoningEffort)
 	}
 
+	if !validAIProvider(next.ChatProvider) {
+		return fmt.Errorf("%w: %q", ErrInvalidAIProvider, next.ChatProvider)
+	}
+
+	if !validAIWireAPI(next.ChatWireAPI) {
+		return fmt.Errorf("%w: %q", ErrInvalidAIWireAPI, next.ChatWireAPI)
+	}
+
 	m.mu.Lock()
 
 	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
 	m.settings.Editor = next.Editor
 
-	if next.ChatModel == "" && next.ChatReasoningEffort == "" {
+	if next.chatIsEmpty() {
 		m.settings.Chat = nil
 	} else {
 		m.settings.Chat = &chatPrefs{
+			Provider:        next.ChatProvider,
 			Model:           next.ChatModel,
 			ReasoningEffort: next.ChatReasoningEffort,
+			BaseURL:         next.ChatBaseURL,
+			APIKeyEnvVar:    next.ChatAPIKeyEnvVar,
+			WireAPI:         next.ChatWireAPI,
+			AzureAPIVersion: next.ChatAzureAPIVersion,
 		}
 	}
 
@@ -374,6 +426,12 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 	m.mu.Unlock()
 
 	return m.Overlay()
+}
+
+func (s AppSettings) chatIsEmpty() bool {
+	return s.ChatProvider == "" && s.ChatModel == "" && s.ChatReasoningEffort == "" &&
+		s.ChatBaseURL == "" && s.ChatAPIKeyEnvVar == "" && s.ChatWireAPI == "" &&
+		s.ChatAzureAPIVersion == ""
 }
 
 // addEditorOverlay adds the configured editor command to the desired environment under EDITOR so
@@ -418,8 +476,13 @@ func (m *Manager) applyEnvVarOverrides(updates []CredentialUpdate) error {
 func (s settings) appSettings() AppSettings {
 	out := AppSettings{Editor: s.Editor}
 	if s.Chat != nil {
+		out.ChatProvider = s.Chat.Provider
 		out.ChatModel = s.Chat.Model
 		out.ChatReasoningEffort = s.Chat.ReasoningEffort
+		out.ChatBaseURL = s.Chat.BaseURL
+		out.ChatAPIKeyEnvVar = s.Chat.APIKeyEnvVar
+		out.ChatWireAPI = s.Chat.WireAPI
+		out.ChatAzureAPIVersion = s.Chat.AzureAPIVersion
 	}
 
 	return out

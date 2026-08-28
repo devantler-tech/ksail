@@ -215,7 +215,7 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
   return (
     <div className="space-y-6">
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Configure the credentials KSail uses to reach each cloud provider. Each credential resolves
+        Configure the credentials KSail uses to reach cloud and AI providers. Each credential resolves
         from a stored value when set, otherwise from the named environment variable.
         {secureStorage
           ? " Stored secrets are kept in your operating system's secure store, never written to disk in plain text."

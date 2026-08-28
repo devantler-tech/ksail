@@ -135,7 +135,7 @@ func DetectStore() (Store, bool) {
 func IsSecret(key Key) bool {
 	switch key {
 	case HetznerToken, OmniServiceAccountKey, AWSAccessKeyID, AWSSecretAccessKey, AWSSessionToken,
-		CopilotToken:
+		CopilotToken, AIProviderAPIKey:
 		return true
 	case OmniEndpoint, AWSRegion, AWSProfile, GCPProject, GCPLocation,
 		AzureSubscriptionID, AzureResourceGroup:
@@ -148,6 +148,8 @@ func IsSecret(key Key) bool {
 // copilotGroup is the Settings UI section label for the GitHub Copilot credential — a feature group
 // rather than an infrastructure provider.
 const copilotGroup = "GitHub Copilot"
+
+const aiProviderGroup = "AI providers"
 
 // ProviderFor returns the Settings UI group a credential belongs to: the infrastructure provider for
 // cloud credentials, or a feature group (e.g. the AI assistant) for non-provider credentials.
@@ -165,6 +167,8 @@ func ProviderFor(key Key) string {
 		return string(v1alpha1.ProviderAzure)
 	case CopilotToken:
 		return copilotGroup
+	case AIProviderAPIKey:
+		return aiProviderGroup
 	default:
 		return ""
 	}
@@ -187,6 +191,7 @@ func Label(key Key) string {
 		AzureSubscriptionID:   "Subscription ID",
 		AzureResourceGroup:    "Resource group",
 		CopilotToken:          "Token",
+		AIProviderAPIKey:      "API key",
 	}
 
 	if label, ok := labels[key]; ok {

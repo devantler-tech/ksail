@@ -94,4 +94,5 @@ func (c *Cluster) expandWorkloadSpec() {
 
 func (c *Cluster) expandChatSpec() {
 	c.Spec.Chat.Model = envvar.Expand(c.Spec.Chat.Model)
+	c.Spec.Chat.BaseURL = envvar.Expand(c.Spec.Chat.BaseURL)
 }

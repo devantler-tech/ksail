@@ -41,6 +41,7 @@ func expandedSpecStringFields() []string {
 		"Workload.Tag",
 		"Workload.KustomizationFile",
 		"Workload.Scan.Exceptions",
+		"Chat.BaseURL",
 		"Chat.Model",
 	}
 }
@@ -68,6 +69,7 @@ func skippedEnvVarNameFields() []string {
 		"Cluster.LocalRegistry.Credentials.TokenEnvVar",
 		"Cluster.SOPS.AgeKeyEnvVar",
 		"Cluster.SOPS.Env.Var",
+		"Chat.APIKeyEnvVar",
 		"Provider.AWS.AccessKeyIDEnvVar",
 		"Provider.AWS.ProfileEnvVar",
 		"Provider.AWS.RegionEnvVar",
@@ -143,7 +145,9 @@ func skippedOIDCFields() []string {
 // expansion list has never covered.
 func skippedClusterWorkloadConfigFields() []string {
 	return []string{
+		"Chat.AzureAPIVersion",
 		"Chat.ReasoningEffort",
+		"Chat.WireAPI",
 		"Cluster.ImportImages",
 		"Cluster.SOPS.Extract.File",
 		"Cluster.SOPS.Extract.PublicKeys[]",

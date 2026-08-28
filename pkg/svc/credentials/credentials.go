@@ -54,6 +54,10 @@ const (
 	// provider, but resolved the same way (secure store override, otherwise the environment) so it can
 	// be configured from the Settings page instead of only via the environment.
 	CopilotToken Key = "copilot.token"
+	// AIProviderAPIKey is the API key used by the selected non-Copilot AI provider. The selected
+	// provider's conventional environment variable remains a fallback; this generic key gives the
+	// Settings UI one secure-store entry that works when users switch providers.
+	AIProviderAPIKey Key = "ai.apiKey"
 )
 
 // Default environment variable names. These mirror the canonical defaults declared on the v1alpha1
@@ -73,7 +77,8 @@ const (
 	defaultAzureResourceGroupEnvVar = "AZURE_RESOURCE_GROUP"
 	// defaultCopilotTokenEnvVar is the primary variable webchat.copilotToken() reads first (it also
 	// falls back to COPILOT_TOKEN); using it as the default keeps a stored token resolvable via Overlay.
-	defaultCopilotTokenEnvVar = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
+	defaultCopilotTokenEnvVar  = "KSAIL_COPILOT_TOKEN" //nolint:gosec // env var NAME, not a secret
+	defaultAIProviderKeyEnvVar = "KSAIL_AI_API_KEY"    //nolint:gosec // env var NAME, not a secret
 	// copilotEnvFallback is the secondary variable webchat.copilotToken() reads after the primary; the
 	// credential resolution mirrors it so Settings recognizes a Copilot token set only via COPILOT_TOKEN.
 	copilotEnvFallback = "COPILOT_TOKEN"
@@ -95,6 +100,7 @@ func AllKeys() []Key {
 		AzureSubscriptionID,
 		AzureResourceGroup,
 		CopilotToken,
+		AIProviderAPIKey,
 	}
 }
 
@@ -115,6 +121,7 @@ func DefaultEnvVar(key Key) string {
 		AzureSubscriptionID:   defaultAzureSubscriptionEnvVar,
 		AzureResourceGroup:    defaultAzureResourceGroupEnvVar,
 		CopilotToken:          defaultCopilotTokenEnvVar,
+		AIProviderAPIKey:      defaultAIProviderKeyEnvVar,
 	}[key]
 }
 

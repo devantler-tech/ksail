@@ -99,6 +99,7 @@ func TestIsSecret_ClassifiesEveryKey(t *testing.T) {
 		credentials.AWSSecretAccessKey:    true,
 		credentials.AWSSessionToken:       true,
 		credentials.CopilotToken:          true,
+		credentials.AIProviderAPIKey:      true,
 		credentials.OmniEndpoint:          false,
 		credentials.AWSRegion:             false,
 		credentials.AWSProfile:            false,
@@ -138,6 +139,7 @@ func TestProviderFor_MapsEveryKey(t *testing.T) {
 		credentials.AzureSubscriptionID:   string(v1alpha1.ProviderAzure),
 		credentials.AzureResourceGroup:    string(v1alpha1.ProviderAzure),
 		credentials.CopilotToken:          "GitHub Copilot",
+		credentials.AIProviderAPIKey:      "AI providers",
 		credentials.Key("unknown.key"):    "",
 	}
 
@@ -163,6 +165,7 @@ func TestLabel_NamesEveryKey(t *testing.T) {
 		credentials.AzureSubscriptionID:   "Subscription ID",
 		credentials.AzureResourceGroup:    "Resource group",
 		credentials.CopilotToken:          "Token",
+		credentials.AIProviderAPIKey:      "API key",
 	}
 
 	for key, want := range tests {

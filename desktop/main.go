@@ -18,6 +18,7 @@ import (
 	"log"
 	"runtime"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
@@ -183,10 +184,10 @@ func startClusterWatch(
 func wireAssistant(server *api.Server) *webchat.Runner {
 	runner := webchat.New(
 		cmd.NewRootCmd("", "", ""),
-		webchat.WithSessionDefaults(func() (string, string) {
+		webchat.WithSessionDefaults(func() v1alpha1.ChatSpec {
 			app := credentials.LoadAppSettings()
 
-			return app.ChatModel, app.ChatReasoningEffort
+			return app.ChatSpec()
 		}),
 	)
 

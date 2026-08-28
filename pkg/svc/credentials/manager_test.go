@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -203,4 +204,45 @@ func TestManager_SettingsPersistAcrossInstances(t *testing.T) {
 	second, err := credentials.NewManager(credentials.NewMemoryStore())
 	require.NoError(t, err)
 	assert.Equal(t, "MY_OMNI_ENDPOINT", second.EnvVar(credentials.OmniEndpoint))
+}
+
+//nolint:gosec // APIKeyEnvVar is an environment-variable name, not a credential.
+func TestManager_ChatProviderSettingsPersistAcrossInstances(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	first, err := credentials.NewManager(credentials.NewMemoryStore())
+	require.NoError(t, err)
+	require.NoError(t, first.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:        v1alpha1.AIProviderAzureOpenAI,
+		ChatModel:           "production-deployment",
+		ChatReasoningEffort: "high",
+		ChatBaseURL:         "https://resource.openai.azure.com",
+		ChatAPIKeyEnvVar:    "TEAM_AZURE_KEY",
+		ChatWireAPI:         "responses",
+		ChatAzureAPIVersion: "2025-04-01-preview",
+	}))
+
+	second, err := credentials.NewManager(credentials.NewMemoryStore())
+	require.NoError(t, err)
+	assert.Equal(t, credentials.AppSettings{
+		ChatProvider:        v1alpha1.AIProviderAzureOpenAI,
+		ChatModel:           "production-deployment",
+		ChatReasoningEffort: "high",
+		ChatBaseURL:         "https://resource.openai.azure.com",
+		ChatAPIKeyEnvVar:    "TEAM_AZURE_KEY",
+		ChatWireAPI:         "responses",
+		ChatAzureAPIVersion: "2025-04-01-preview",
+	}, second.AppSettings())
+}
+
+func TestManager_UpdateAppSettingsRejectsInvalidProviderFields(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	manager, _ := newManager(t)
+
+	err := manager.UpdateAppSettings(credentials.AppSettings{ChatProvider: "unknown"})
+	require.ErrorIs(t, err, credentials.ErrInvalidAIProvider)
+
+	err = manager.UpdateAppSettings(credentials.AppSettings{ChatWireAPI: "messages"})
+	require.ErrorIs(t, err, credentials.ErrInvalidAIWireAPI)
 }
