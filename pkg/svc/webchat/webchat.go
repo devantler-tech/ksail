@@ -271,7 +271,7 @@ func filterRuntimeEnv(environment []string) []string {
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		name, _, found := strings.Cut(entry, "=")
-		if _, excluded := blocked[name]; found && excluded {
+		if _, excluded := blocked[strings.ToUpper(name)]; found && excluded {
 			continue
 		}
 

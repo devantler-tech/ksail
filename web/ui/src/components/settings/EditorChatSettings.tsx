@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage, getAppSettings, updateAppSettings, type AppSettings } from "../../api.ts";
+import { envVarError } from "../../lib/envVar.ts";
 import { Button, SelectField, TextField } from "../ui.tsx";
 import { ErrorBanner, TableSkeleton } from "../states.tsx";
 import { useToast } from "../Toast.tsx";
@@ -93,13 +94,18 @@ export function EditorChatSettings() {
   const provider = draft.chat.provider || "copilot";
   const usesAPIProvider = provider !== "copilot";
   const usesOpenAIWire = usesAPIProvider && provider !== "anthropic";
+  const apiKeyEnvVarError = envVarError(draft.chat.apiKeyEnvVar);
 
   return (
     <SettingsSection
       title="Editor & AI"
       description="The editor used for interactive flows and the API provider backing the AI assistant."
       footer={
-        <Button onClick={() => void handleSave()} loading={saving} disabled={!dirty}>
+        <Button
+          onClick={() => void handleSave()}
+          loading={saving}
+          disabled={!dirty || apiKeyEnvVarError !== null}
+        >
           Save settings
         </Button>
       }
@@ -190,11 +196,15 @@ export function EditorChatSettings() {
                 placeholder="provider default"
                 autoComplete="off"
                 spellCheck={false}
+                aria-invalid={apiKeyEnvVarError !== null}
                 value={draft.chat.apiKeyEnvVar}
                 onChange={(event) =>
                   setDraft({ ...draft, chat: { ...draft.chat, apiKeyEnvVar: event.target.value } })
                 }
               />
+              {apiKeyEnvVarError ? (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{apiKeyEnvVarError}</p>
+              ) : null}
               <FieldHelp>
                 Leave blank to use the secure <strong>AI providers</strong> key under Credentials, then the
                 provider's conventional variable. This stores only the variable name, never the key.

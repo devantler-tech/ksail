@@ -9,6 +9,7 @@ import {
   type CredentialUpdate,
 } from "../../api.ts";
 import { cx } from "../../lib/cx.ts";
+import { envVarError } from "../../lib/envVar.ts";
 import { Button, TextField } from "../ui.tsx";
 import { ErrorBanner, TableSkeleton } from "../states.tsx";
 import { useToast } from "../Toast.tsx";
@@ -22,9 +23,6 @@ interface Draft {
 // TESTABLE_PROVIDERS are the providers whose credentials can be live-tested (a cheap authenticated
 // API call). Keyed by the lowercased provider name (the API path segment). AWS is not yet supported.
 const TESTABLE_PROVIDERS = new Set(["hetzner", "omni"]);
-
-// envVarNamePattern mirrors the backend's accepted environment-variable identifier shape.
-const envVarNamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const SOURCE_TONES: Record<CredentialSetting["source"], string> = {
   store:
@@ -85,18 +83,6 @@ function computeUpdates(
     }
   }
   return updates;
-}
-
-// envVarError validates an environment-variable name override, returning a message or null when ok. A
-// blank name is allowed: the backend treats it as "reset to the conventional default variable".
-function envVarError(name: string): string | null {
-  if (name.trim() === "") {
-    return null;
-  }
-  if (!envVarNamePattern.test(name)) {
-    return "Letters, digits and underscore only; cannot start with a digit.";
-  }
-  return null;
 }
 
 function sourceLabel(credential: CredentialSetting, secureStorage: boolean): string {

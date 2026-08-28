@@ -59,6 +59,38 @@ spec:
 }
 
 //nolint:paralleltest // t.Chdir mutates process-wide state.
+func TestParseChatFlagsExplicitEmptyProviderFlagsClearConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	yamlContent := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    provider: azure-openai
+    baseUrl: https://resource.openai.azure.com
+    apiKeyEnvVar: TEAM_AZURE_KEY
+    wireApi: responses
+    azureApiVersion: 2025-04-01-preview
+`
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(yamlContent), 0o600))
+
+	cmd := NewChatCmd()
+	for _, name := range []string{
+		"provider", "base-url", "api-key-env", "wire-api", "azure-api-version",
+	} {
+		require.NoError(t, cmd.Flags().Set(name, ""))
+	}
+
+	got, err := parseChatFlags(cmd)
+	require.NoError(t, err)
+	assert.Empty(t, got.provider)
+	assert.Empty(t, got.baseURL)
+	assert.Empty(t, got.apiKeyEnvVar)
+	assert.Empty(t, got.wireAPI)
+	assert.Empty(t, got.azureAPIVersion)
+}
+
+//nolint:paralleltest // t.Chdir mutates process-wide state.
 func TestParseChatFlagsUsesProviderConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 

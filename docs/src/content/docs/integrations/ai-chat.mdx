@@ -256,7 +256,7 @@ The command works with Vanilla, K3s, Talos, and VCluster, and exits 0 even when 
 
 **Chat won't start:** For API providers, verify the model, endpoint requirements, and API-key variable. For Copilot, authenticate with `copilot auth login` or a Copilot token.
 
-**Model not available:** Try different models (`--model gpt-5`) or use auto-selection (`--model auto`).
+**Model not available:** Copilot users can try auto-selection (`--model auto`). API-provider users must set `--model <provider-model-id>` to a model or Azure deployment that provider exposes.
 
 **Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 

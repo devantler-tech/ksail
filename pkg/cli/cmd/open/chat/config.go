@@ -64,16 +64,28 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	}
 
 	return flags{
-		provider:        v1alpha1.AIProvider(resolveString(providerFlag, string(cfg.Provider))),
+		provider: v1alpha1.AIProvider(resolveString(
+			providerFlag,
+			string(cfg.Provider),
+			cmd.Flags().Changed("provider"),
+		)),
 		model:           model,
 		reasoningEffort: reasoningEffort,
-		baseURL:         resolveString(baseURLFlag, cfg.BaseURL),
-		apiKeyEnvVar:    resolveString(apiKeyEnvVarFlag, cfg.APIKeyEnvVar),
-		wireAPI:         resolveString(wireAPIFlag, cfg.WireAPI),
-		azureAPIVersion: resolveString(azureAPIVersionFlag, cfg.AzureAPIVersion),
-		streaming:       streaming,
-		timeout:         timeout,
-		useTUI:          useTUI,
+		baseURL:         resolveString(baseURLFlag, cfg.BaseURL, cmd.Flags().Changed("base-url")),
+		apiKeyEnvVar: resolveString(
+			apiKeyEnvVarFlag,
+			cfg.APIKeyEnvVar,
+			cmd.Flags().Changed("api-key-env"),
+		),
+		wireAPI: resolveString(wireAPIFlag, cfg.WireAPI, cmd.Flags().Changed("wire-api")),
+		azureAPIVersion: resolveString(
+			azureAPIVersionFlag,
+			cfg.AzureAPIVersion,
+			cmd.Flags().Changed("azure-api-version"),
+		),
+		streaming: streaming,
+		timeout:   timeout,
+		useTUI:    useTUI,
 	}, nil
 }
 
@@ -89,8 +101,8 @@ func (f flags) chatSpec() v1alpha1.ChatSpec {
 	}
 }
 
-func resolveString(flagValue, configValue string) string {
-	if flagValue != "" {
+func resolveString(flagValue, configValue string, flagChanged bool) string {
+	if flagChanged {
 		return flagValue
 	}
 

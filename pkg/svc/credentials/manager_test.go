@@ -245,4 +245,7 @@ func TestManager_UpdateAppSettingsRejectsInvalidProviderFields(t *testing.T) {
 
 	err = manager.UpdateAppSettings(credentials.AppSettings{ChatWireAPI: "messages"})
 	require.ErrorIs(t, err, credentials.ErrInvalidAIWireAPI)
+
+	err = manager.UpdateAppSettings(credentials.AppSettings{ChatAPIKeyEnvVar: "TEAM=KEY"})
+	require.ErrorIs(t, err, credentials.ErrInvalidEnvVarName)
 }

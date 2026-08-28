@@ -76,6 +76,8 @@ func TestClientOptionsDisableCopilotAuthenticationForBYOK(t *testing.T) {
 	t.Setenv("KSAIL_COPILOT_TOKEN", "must-not-leak")
 	t.Setenv("COPILOT_TOKEN", "must-not-leak")
 	t.Setenv("COPILOT_SDK_AUTH_TOKEN", "must-not-leak")
+	t.Setenv("gItHuB_ToKeN", "mixed-case-must-not-leak")
+	t.Setenv("cOpIlOt_ToKeN", "mixed-case-must-not-leak")
 
 	provider := chatsvc.ResolvedProvider{Name: v1alpha1.AIProviderOpenAI}
 	options, key := clientOptions(provider)
@@ -89,6 +91,8 @@ func TestClientOptionsDisableCopilotAuthenticationForBYOK(t *testing.T) {
 		assert.NotContains(t, entry, "KSAIL_COPILOT_TOKEN=")
 		assert.NotContains(t, entry, "COPILOT_TOKEN=")
 		assert.NotContains(t, entry, "COPILOT_SDK_AUTH_TOKEN=")
+		assert.NotContains(t, entry, "gItHuB_ToKeN=")
+		assert.NotContains(t, entry, "cOpIlOt_ToKeN=")
 	}
 }
 

@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -87,11 +88,6 @@ func resolveAPIProvider(
 		return ResolvedProvider{}, fmt.Errorf("%w: %q", ErrInvalidAIWireAPI, spec.WireAPI)
 	}
 
-	baseURL, err := resolveProviderBaseURL(name, spec.BaseURL, preset.baseURL)
-	if err != nil {
-		return ResolvedProvider{}, err
-	}
-
 	apiKey, source := resolveAPIKey(spec.APIKeyEnvVar, preset.keyEnvVars, lookupEnv)
 	if preset.requiresKey && apiKey == "" {
 		return ResolvedProvider{}, fmt.Errorf(
@@ -100,6 +96,11 @@ func resolveAPIProvider(
 			name,
 			source,
 		)
+	}
+
+	baseURL, err := resolveProviderBaseURL(name, spec.BaseURL, preset.baseURL, apiKey != "")
+	if err != nil {
+		return ResolvedProvider{}, err
 	}
 
 	resolved.SDK = &copilot.ProviderConfig{
@@ -119,6 +120,7 @@ func resolveProviderBaseURL(
 	provider v1alpha1.AIProvider,
 	configuredURL string,
 	defaultURL string,
+	requiresHTTPS bool,
 ) (string, error) {
 	baseURL := strings.TrimSpace(configuredURL)
 	if baseURL == "" {
@@ -129,7 +131,7 @@ func resolveProviderBaseURL(
 		return "", fmt.Errorf("%w: provider %q", ErrMissingAIBaseURL, provider)
 	}
 
-	err := validateProviderBaseURL(provider, baseURL)
+	err := validateProviderBaseURL(provider, baseURL, requiresHTTPS)
 	if err != nil {
 		return "", err
 	}
@@ -187,14 +189,20 @@ func validWireAPI(wireAPI string) bool {
 	return wireAPI == "" || slices.Contains([]string{"completions", "responses"}, wireAPI)
 }
 
-func validateProviderBaseURL(provider v1alpha1.AIProvider, rawURL string) error {
+func validateProviderBaseURL(
+	provider v1alpha1.AIProvider,
+	rawURL string,
+	requiresHTTPS bool,
+) error {
 	parsed, err := parseProviderBaseURL(rawURL)
 	if err != nil {
 		return err
 	}
 
-	if parsed.Scheme != "https" && provider != v1alpha1.AIProviderOllama &&
-		provider != v1alpha1.AIProviderOpenAICompatible {
+	allowsLocalHTTP := provider == v1alpha1.AIProviderOllama ||
+		provider == v1alpha1.AIProviderOpenAICompatible
+	if parsed.Scheme != "https" &&
+		(requiresHTTPS || !allowsLocalHTTP || !isLoopbackHost(parsed.Hostname())) {
 		return fmt.Errorf("%w: provider %q requires HTTPS", ErrInvalidAIBaseURL, provider)
 	}
 
@@ -206,6 +214,14 @@ func validateProviderBaseURL(provider v1alpha1.AIProvider, rawURL string) error 
 	}
 
 	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	ip := net.ParseIP(host)
+
+	return strings.EqualFold(host, "localhost") ||
+		strings.HasSuffix(strings.ToLower(host), ".localhost") ||
+		(ip != nil && ip.IsLoopback())
 }
 
 func parseProviderBaseURL(rawURL string) (*url.URL, error) {

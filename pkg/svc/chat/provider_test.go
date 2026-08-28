@@ -269,6 +269,45 @@ func TestResolveProviderRejectsIncompleteOrInvalidConfiguration(t *testing.T) {
 			wantErr: chat.ErrInvalidAIBaseURL,
 		},
 		{
+			name: "remote keyless compatible endpoint rejects plaintext",
+			spec: v1alpha1.ChatSpec{
+				Provider: v1alpha1.AIProviderOpenAICompatible,
+				Model:    "model",
+				BaseURL:  "http://gateway.example.test/v1",
+			},
+			wantErr: chat.ErrInvalidAIBaseURL,
+		},
+		{
+			name: "generic key rejects plaintext compatible endpoint",
+			spec: v1alpha1.ChatSpec{
+				Provider: v1alpha1.AIProviderOpenAICompatible,
+				Model:    "model",
+				BaseURL:  "http://127.0.0.1:9000/v1",
+			},
+			env:     map[string]string{"KSAIL_AI_API_KEY": "key"},
+			wantErr: chat.ErrInvalidAIBaseURL,
+		},
+		{
+			name: "explicit key rejects plaintext compatible endpoint",
+			spec: v1alpha1.ChatSpec{
+				Provider:     v1alpha1.AIProviderOpenAICompatible,
+				Model:        "model",
+				BaseURL:      "http://localhost:9000/v1",
+				APIKeyEnvVar: "TEAM_AI_KEY",
+			},
+			env:     map[string]string{"TEAM_AI_KEY": "key"},
+			wantErr: chat.ErrInvalidAIBaseURL,
+		},
+		{
+			name: "generic key rejects plaintext ollama endpoint",
+			spec: v1alpha1.ChatSpec{
+				Provider: v1alpha1.AIProviderOllama,
+				Model:    "qwen3:8b",
+			},
+			env:     map[string]string{"KSAIL_AI_API_KEY": "key"},
+			wantErr: chat.ErrInvalidAIBaseURL,
+		},
+		{
 			name: "endpoint rejects embedded credentials",
 			spec: v1alpha1.ChatSpec{
 				Provider: v1alpha1.AIProviderOpenAICompatible,

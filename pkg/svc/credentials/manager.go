@@ -394,6 +394,10 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 		return fmt.Errorf("%w: %q", ErrInvalidAIWireAPI, next.ChatWireAPI)
 	}
 
+	if next.ChatAPIKeyEnvVar != "" && !envVarNamePattern.MatchString(next.ChatAPIKeyEnvVar) {
+		return fmt.Errorf("%w: %q", ErrInvalidEnvVarName, next.ChatAPIKeyEnvVar)
+	}
+
 	m.mu.Lock()
 
 	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
