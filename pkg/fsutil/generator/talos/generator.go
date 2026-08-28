@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -152,10 +153,9 @@ type Config struct {
 	NetworkCIDR string
 	// CNIPort is the CNI encapsulation port (e.g., 8472 for Cilium VXLAN, 4789 for Flannel/Calico).
 	CNIPort int
-	// AllowedCIDRs restricts the Kubernetes API and Talos API ingress firewall rules on
-	// control-plane nodes to the specified CIDR blocks. When empty, those rules allow
-	// 0.0.0.0/0 and ::/0 (open to all). Only affects the CP rules; worker rules are
-	// always restricted to the private network CIDR.
+	// AllowedCIDRs restricts public access to the Kubernetes API on control-plane nodes
+	// and the Talos API on every node. Private cluster-network access remains enabled.
+	// When empty, those API rules allow 0.0.0.0/0 and ::/0 (open to all).
 	AllowedCIDRs []string
 	// EnableOIDC indicates whether to generate an OIDC API server configuration patch.
 	// Talos 1.14 uses KubeAuthenticationConfig; older releases use API-server flags.
@@ -448,13 +448,27 @@ func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int, allowedCIDRs []
 }
 
 // IngressFirewallWorkerRulesYAML returns the Talos NetworkRuleConfig documents for worker
-// nodes. Workers expose fewer ports than control-plane nodes.
-func IngressFirewallWorkerRulesYAML(networkCIDR string, cniPort int) string {
+// nodes. Workers expose fewer ports than control-plane nodes, but their Talos API must allow
+// the public API ingress sources because KSail prefers each worker's public address. When those
+// sources are restricted, the private cluster subnet remains allowed so IPv4-less workers can
+// still be managed through their private address.
+func IngressFirewallWorkerRulesYAML(
+	networkCIDR string,
+	cniPort int,
+	allowedCIDRs []string,
+) string {
 	networkIngress := singleSubnetIngress(networkCIDR)
+
+	apiCIDRs := allowedCIDRs
+	if len(allowedCIDRs) > 0 {
+		apiCIDRs = append(slices.Clone(allowedCIDRs), networkCIDR)
+	}
+
+	apiIngress := formatIngressSubnets(apiCIDRs)
 
 	docs := []string{
 		networkRuleConfigDoc("kubelet", "10250", "tcp", networkIngress),
-		networkRuleConfigDoc("apid", "50000", "tcp", networkIngress),
+		networkRuleConfigDoc("apid", "50000", "tcp", apiIngress),
 		networkRuleConfigDoc("cni-vxlan", strconv.Itoa(cniPort), "udp", networkIngress),
 	}
 

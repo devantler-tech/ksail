@@ -14,8 +14,8 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.1
 	github.com/fatih/color v1.19.0
-	github.com/fluxcd/helm-controller/api v1.6.2
-	github.com/fluxcd/kustomize-controller/api v1.9.3
+	github.com/fluxcd/helm-controller/api v1.6.3
+	github.com/fluxcd/kustomize-controller/api v1.9.4
 	github.com/fluxcd/pkg/apis/meta v1.31.0
 	github.com/fluxcd/source-controller/api v1.9.4
 	github.com/getsops/sops/v3 v3.13.3
@@ -37,12 +37,12 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v4 v4.2.4
-	k8s.io/api v0.36.3
-	k8s.io/apiextensions-apiserver v0.36.3
-	k8s.io/apimachinery v0.36.3
-	k8s.io/cli-runtime v0.36.3
-	k8s.io/client-go v0.36.3
-	k8s.io/kubectl v0.36.3
+	k8s.io/api v0.36.4
+	k8s.io/apiextensions-apiserver v0.36.4
+	k8s.io/apimachinery v0.36.4
+	k8s.io/cli-runtime v0.36.4
+	k8s.io/client-go v0.36.4
+	k8s.io/kubectl v0.36.4
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/kind v0.32.0
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -952,10 +952,10 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	k8s.io/apiserver v0.36.3 // indirect
+	k8s.io/apiserver v0.36.4 // indirect
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.36.3 // indirect
-	k8s.io/component-helpers v0.36.3 // indirect
+	k8s.io/component-base v0.36.4 // indirect
+	k8s.io/component-helpers v0.36.4 // indirect
 	k8s.io/cri-api v0.36.2 // indirect
 	k8s.io/cri-client v0.36.1 // indirect
 	k8s.io/kube-aggregator v0.36.0 // indirect
@@ -963,8 +963,8 @@ require (
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.36.3 // indirect
-	k8s.io/streaming v0.36.3 // indirect
+	k8s.io/metrics v0.36.4 // indirect
+	k8s.io/streaming v0.36.4 // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -1025,6 +1025,31 @@ replace (
 	// Local v0.3.0 compatibility module for Docker 28.5.2. See
 	// third_party/go-archive/KSail-PATCH.md.
 	github.com/moby/go-archive => ./third_party/go-archive
+
+	// runc removed libcontainer/user in v1.4.0 (verified against the module zips:
+	// v1.3.6 ships it, v1.4.0 and v1.5.1 do not). dockertest v3.12.0 — the latest
+	// release — still imports it from its vendored docker/pkg/idtools, and that
+	// import is reachable from KSail only through the TESTS of a dependency
+	// (sops/v3/hcvault.test), which `go build` and `go test ./...` never resolve.
+	// Dependabot DOES resolve that graph on every update, so whenever an update
+	// pulls runc past v1.3.6 the package has no provider, go falls back to
+	// runc@latest, and the whole root go_modules update aborts.
+	//
+	// This must be a `replace`, not a `require`: MVS selects the MAXIMUM version,
+	// so a v1.3.6 requirement is only a floor and any dependency asking for a
+	// newer runc would reintroduce the break. Remove this once dockertest stops
+	// importing the removed package.
+	//
+	// SECURITY TRADE-OFF, and the trigger for revisiting it: the left side carries no
+	// version, so this replaces EVERY selected runc version, not just the one that
+	// broke. A runc security release published after v1.3.6 will therefore NOT be
+	// picked up while this stands, and dependency automation cannot flag that, because
+	// this replacement is what makes its update resolve at all. runc is a container
+	// runtime, so treat every runc advisory as a review trigger for this block. Note
+	// the remedy is to REMOVE the pin (drop dockertest, or move to a release that no
+	// longer imports libcontainer/user) — bumping it cannot go past v1.3.6 without
+	// reintroducing the break described above.
+	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 )
 
 tool (

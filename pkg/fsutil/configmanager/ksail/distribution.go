@@ -1121,9 +1121,13 @@ func ingressFirewallPatches(
 			),
 		},
 		{
-			Path:    "ingress-firewall-worker-rules",
-			Scope:   talosconfigmanager.PatchScopeWorker,
-			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(normalizedCIDR, cniPort)),
+			Path:  "ingress-firewall-worker-rules",
+			Scope: talosconfigmanager.PatchScopeWorker,
+			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(
+				normalizedCIDR,
+				cniPort,
+				allowedCIDRs,
+			)),
 		},
 	}, nil
 }

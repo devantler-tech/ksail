@@ -3,6 +3,7 @@ package talosgenerator_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -13,6 +14,43 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func networkRuleDocument(t *testing.T, content, name string) string {
+	t.Helper()
+
+	for document := range strings.SplitSeq(content, "---\n") {
+		if strings.Contains(document, "name: "+name+"\n") {
+			return document
+		}
+	}
+
+	require.FailNow(t, "network rule not found", "name: %s", name)
+
+	return ""
+}
+
+func assertGeneratedWorkerIngress(t *testing.T, path string) {
+	t.Helper()
+
+	workerContent, err := os.ReadFile(path) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	workerRules := string(workerContent)
+	assert.Contains(t, workerRules, "name: kubelet")
+	assert.Contains(t, workerRules, "name: apid")
+	assert.Contains(t, workerRules, "name: cni-vxlan")
+	assert.NotContains(t, workerRules, "name: etcd")
+	assert.NotContains(t, workerRules, "name: trustd")
+	assert.NotContains(t, workerRules, "name: kubernetes-api")
+
+	workerAPIRule := networkRuleDocument(t, workerRules, "apid")
+	assert.Contains(t, workerAPIRule, "203.0.113.0/24")
+	assert.Contains(t, workerAPIRule, "10.0.0.0/16")
+
+	workerKubeletRule := networkRuleDocument(t, workerRules, "kubelet")
+	assert.Contains(t, workerKubeletRule, "10.0.0.0/16")
+	assert.NotContains(t, workerKubeletRule, "203.0.113.0/24")
+}
 
 func TestNewGenerator(t *testing.T) {
 	t.Parallel()
@@ -900,6 +938,7 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 		EnableIngressFirewall: true,
 		NetworkCIDR:           "10.0.0.0/16",
 		CNIPort:               8472,
+		AllowedCIDRs:          []string{"203.0.113.0/24"},
 		WorkerNodes:           1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
@@ -938,20 +977,11 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 	assert.Contains(t, cpStr, "name: cni-vxlan")
 	assert.Contains(t, cpStr, "8472")
 	assert.Contains(t, cpStr, "10.0.0.0/16")
+	assert.Contains(t, cpStr, "203.0.113.0/24")
 
 	// Verify worker ingress-firewall-rules.yaml was created
 	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
-	workerContent, err := os.ReadFile(workerRulesPath) //nolint:gosec // Test file path is safe
-	require.NoError(t, err)
-
-	workerStr := string(workerContent)
-	assert.Contains(t, workerStr, "name: kubelet")
-	assert.Contains(t, workerStr, "name: apid")
-	assert.Contains(t, workerStr, "name: cni-vxlan")
-	assert.NotContains(t, workerStr, "name: etcd")
-	assert.NotContains(t, workerStr, "name: trustd")
-	assert.NotContains(t, workerStr, "name: kubernetes-api")
-	assert.Contains(t, workerStr, "10.0.0.0/16")
+	assertGeneratedWorkerIngress(t, workerRulesPath)
 
 	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
 	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
@@ -1120,7 +1150,7 @@ func TestIngressFirewallCPRulesYAMLNormalizesCIDRs(t *testing.T) {
 func TestIngressFirewallWorkerRulesYAML(t *testing.T) {
 	t.Parallel()
 
-	result := talosgenerator.IngressFirewallWorkerRulesYAML("192.168.0.0/24", 4789)
+	result := talosgenerator.IngressFirewallWorkerRulesYAML("192.168.0.0/24", 4789, nil)
 
 	// Verify expected rule names are present
 	assert.Contains(t, result, "name: kubelet")
@@ -1132,17 +1162,42 @@ func TestIngressFirewallWorkerRulesYAML(t *testing.T) {
 	assert.NotContains(t, result, "name: trustd")
 	assert.NotContains(t, result, "name: kubernetes-api")
 
-	// Verify network CIDR is injected
-	assert.Contains(t, result, "subnet: 192.168.0.0/24")
-
 	// Verify CNI port is injected
 	assert.Contains(t, result, "4789")
 
-	// Verify worker rules are restricted to the network CIDR (no 0.0.0.0/0)
-	assert.NotContains(t, result, "subnet: 0.0.0.0/0")
-	assert.NotContains(t, result, "subnet: ::/0")
+	// KSail reaches every Hetzner node's Talos API through its public address during
+	// create and later lifecycle operations. The worker apid rule must therefore
+	// use the same API ingress sources as the cloud firewall and control plane.
+	apidRule := networkRuleDocument(t, result, "apid")
+	assert.Contains(t, apidRule, "subnet: 0.0.0.0/0")
+	assert.Contains(t, apidRule, "subnet: ::/0")
+	assert.NotContains(t, apidRule, "subnet: 192.168.0.0/24")
+
+	// Cluster-internal worker services remain private-network-only.
+	kubeletRule := networkRuleDocument(t, result, "kubelet")
+	assert.Contains(t, kubeletRule, "subnet: 192.168.0.0/24")
+	assert.NotContains(t, kubeletRule, "subnet: 0.0.0.0/0")
 
 	// Verify known ports
 	assert.Contains(t, result, "10250") // kubelet
 	assert.Contains(t, result, "50000") // apid
+}
+
+// TestIngressFirewallWorkerRulesYAMLWithAllowedCIDRs verifies that public Talos API
+// access is restricted without breaking management of IPv4-less workers over the
+// cluster's private network.
+func TestIngressFirewallWorkerRulesYAMLWithAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	result := talosgenerator.IngressFirewallWorkerRulesYAML(
+		"192.168.0.0/24",
+		4789,
+		[]string{"203.0.113.5/24"},
+	)
+
+	apidRule := networkRuleDocument(t, result, "apid")
+	assert.Contains(t, apidRule, "subnet: 203.0.113.0/24")
+	assert.Contains(t, apidRule, "subnet: 192.168.0.0/24")
+	assert.NotContains(t, apidRule, "subnet: 0.0.0.0/0")
+	assert.NotContains(t, apidRule, "subnet: ::/0")
 }
