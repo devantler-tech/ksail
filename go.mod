@@ -1024,6 +1024,21 @@ replace (
 	// Local v0.3.0 compatibility module for Docker 28.5.2. See
 	// third_party/go-archive/KSail-PATCH.md.
 	github.com/moby/go-archive => ./third_party/go-archive
+
+	// runc removed libcontainer/user in v1.4.0 (verified against the module zips:
+	// v1.3.6 ships it, v1.4.0 and v1.5.1 do not). dockertest v3.12.0 — the latest
+	// release — still imports it from its vendored docker/pkg/idtools, and that
+	// import is reachable from KSail only through the TESTS of a dependency
+	// (sops/v3/hcvault.test), which `go build` and `go test ./...` never resolve.
+	// Dependabot DOES resolve that graph on every update, so whenever an update
+	// pulls runc past v1.3.6 the package has no provider, go falls back to
+	// runc@latest, and the whole root go_modules update aborts.
+	//
+	// This must be a `replace`, not a `require`: MVS selects the MAXIMUM version,
+	// so a v1.3.6 requirement is only a floor and any dependency asking for a
+	// newer runc would reintroduce the break. Remove this once dockertest stops
+	// importing the removed package.
+	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 )
 
 tool (
