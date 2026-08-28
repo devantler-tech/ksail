@@ -409,8 +409,8 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `controlPlanes` – Number of control-plane nodes (default: `1`)
 - `workers` – Number of worker nodes (default: `0`)
 - `config` – Path to talosconfig file (default: `~/.talos/config`)
-- `version` – Pin the Talos OS version (e.g. `v1.12.4`); caps upgrades and selects the node image (default: built-in)
-- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `125127` for Talos 1.12.4 x86; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
+- `version` – Pin the Talos OS version; caps upgrades and selects the node image (default: built-in)
+- `iso` – Cloud provider ISO/image ID for Talos Linux (the x86 default follows Hetzner's official changelog; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
 
 The Kubernetes version is set at the top level (`spec.cluster.kubernetesVersion`), not under `talos`:
 

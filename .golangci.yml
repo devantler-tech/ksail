@@ -205,6 +205,9 @@ linters:
             # fetch + join sequencing, native Go instead of a shelled ssh binary.
             # Already linked transitively (containerd/helm stack).
             - golang.org/x/crypto/ssh
+            # x/mod/modfile parses the effective Talos machinery version used by
+            # the Hetzner ISO compatibility updater.
+            - golang.org/x/mod
             - golang.org/x/oauth2
             - golang.org/x/sync
             - golang.org/x/term

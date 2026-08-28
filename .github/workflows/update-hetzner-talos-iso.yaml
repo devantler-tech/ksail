@@ -1,0 +1,102 @@
+name: Update Hetzner Talos ISO
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Poll away from the top of the hour, where GitHub warns scheduled runs
+    # can be delayed or dropped under high load.
+    - cron: "23 */6 * * *"
+
+concurrency:
+  group: "${{ github.workflow }}"
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update:
+    name: Track public ISO compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Every step that needs write access uses the GitHub App token generated below
+    # (checkout, and the pull-request action), so GITHUB_TOKEN itself needs no write
+    # scope. Read-only keeps the ambient token from being a second, broader path to
+    # the same operations.
+    permissions:
+      contents: read
+    steps:
+      - name: 🔑 Generate GitHub App Token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: generate-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation has no environment scoping
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🔎 Read official Hetzner catalog
+        id: catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./internal/maintenance/hetznertalos/cmd
+
+          if git diff --quiet -- \
+            pkg/apis/cluster/v1alpha1/defaults.go \
+            pkg/apis/cluster/v1alpha1/options.go; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: ✅ Verify compatibility update
+        if: steps.catalog.outputs.changed == 'true'
+        run: >-
+          go test
+          ./internal/maintenance/hetznertalos
+          ./pkg/apis/cluster/v1alpha1
+          ./pkg/fsutil/configmanager/talos
+          ./pkg/fsutil/configmanager/ksail
+
+      - name: 📤 Open compatibility update PR
+        if: steps.catalog.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          # Commits through the GitHub API rather than the git CLI, because the
+          # repository requires signed commits (ruleset "Require signed commits")
+          # and API-created commits are signed by GitHub automatically. A CLI commit
+          # here is unsigned and makes the pull request permanently unmergeable, so
+          # the automated update could never land. See .github/workflows/ci.yaml.
+          sign-commits: true
+          token: ${{ steps.generate-token.outputs.token }}
+          branch-token: ${{ steps.generate-token.outputs.token }}
+          commit-message: "chore(talos): update Hetzner ISO compatibility pair"
+          committer: "ksail-bot <ksail-bot@users.noreply.github.com>"
+          branch: chore/update-hetzner-talos-iso
+          base: ${{ github.event.repository.default_branch }}
+          title: "chore(talos): update Hetzner ISO compatibility pair"
+          body: |
+            Hetzner announced a newer public Talos Linux ISO in its official changelog.
+
+            This automated update keeps the following defaults on one reviewed head:
+            - Hetzner x86 ISO ID
+            - Talos bootstrap compatibility version
+            - Kubernetes default inherited from the pinned Talos machinery dependency
+
+            KSail's existing CI generator appends any derived schema and documentation
+            changes to this same PR before it can pass required checks.
+
+            Source: https://docs.hetzner.cloud/changelog/feed.rss
+          delete-branch: true
