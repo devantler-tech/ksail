@@ -39,6 +39,7 @@ jobs:
       - name: 🔐 Login to Docker Hub
         if: >-
           ${{ github.event_name != 'pull_request'
+          && github.ref_type == 'branch'
           && github.ref_name == github.event.repository.default_branch
           && vars.DOCKERHUB_USERNAME != ''
           && env.DOCKERHUB_TOKEN != '' }}
@@ -83,9 +84,17 @@ jobs:
           kubernetes-provider-distributions: K3s
           kubernetes-provider-cni: Calico
           ghcr-user: ${{ github.actor }}
-          ghcr-token: ${{ github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch && secrets.GITHUB_TOKEN || '' }}
+          ghcr-token: >-
+            ${{ github.event_name != 'pull_request'
+            && github.ref_type == 'branch'
+            && github.ref_name == github.event.repository.default_branch
+            && secrets.GITHUB_TOKEN || '' }}
           dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
-          dockerhub-token: ${{ github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch && secrets.DOCKERHUB_TOKEN || '' }}
+          dockerhub-token: >-
+            ${{ github.event_name != 'pull_request'
+            && github.ref_type == 'branch'
+            && github.ref_name == github.event.repository.default_branch
+            && secrets.DOCKERHUB_TOKEN || '' }}
           upload-artifacts: "false"
           cleanup: "false"
 
@@ -101,7 +110,10 @@ jobs:
           if-no-files-found: ignore
 
       - name: 🧪 Cleanup KSail System Test
-        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        if: >-
+          ${{ always()
+          && steps.system-test.outcome != 'skipped'
+          && steps.system-test.outcome != '' }}
         uses: ./.github/actions/ksail-system-test-cleanup
         with:
           distribution: Vanilla
@@ -109,7 +121,10 @@ jobs:
           args: "--name k3k-calico-host"
 
       - name: 📤 Upload system test logs
-        if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
+        if: >-
+          ${{ always()
+          && steps.system-test.outcome != 'skipped'
+          && steps.system-test.outcome != '' }}
         continue-on-error: true
         timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

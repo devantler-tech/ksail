@@ -10,9 +10,11 @@ import (
 
 const (
 	defaultBranchGHCRToken = "${{ github.event_name != 'pull_request' && " +
-		"github.ref_name == github.event.repository.default_branch && secrets.GITHUB_TOKEN || '' }}"
+		"github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch && " +
+		"secrets.GITHUB_TOKEN || '' }}"
 	defaultBranchDockerHubToken = "${{ github.event_name != 'pull_request' && " +
-		"github.ref_name == github.event.repository.default_branch && secrets.DOCKERHUB_TOKEN || '' }}"
+		"github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch && " +
+		"secrets.DOCKERHUB_TOKEN || '' }}"
 )
 
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
@@ -100,6 +102,7 @@ func assertDockerHubLoginGuard(t *testing.T, steps []harnessStep) {
 	dockerHubLogin := findHarnessStep(t, steps, "🔐 Login to Docker Hub")
 	assert.Equal(t, "${{ secrets.DOCKERHUB_TOKEN }}", dockerHubLogin.Env["DOCKERHUB_TOKEN"])
 	assert.Contains(t, dockerHubLogin.If, "github.event_name != 'pull_request'")
+	assert.Contains(t, dockerHubLogin.If, "github.ref_type == 'branch'")
 	assert.Contains(
 		t,
 		dockerHubLogin.If,
