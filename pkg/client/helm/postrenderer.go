@@ -15,8 +15,12 @@ import (
 
 var (
 	yamlDocumentSeparator = regexp.MustCompile(`(?m)^---[\t ]*\r?\n`)
-	apiVersionScalarLine  = regexp.MustCompile(
-		`(?m)^(apiVersion:[\t ]*)([^\t #\r\n]+)([\t ]*(?:#[^\r\n]*)?)(\r?)$`,
+	mappingKeyLine        = regexp.MustCompile(
+		`(?m)^( *)(?:[A-Za-z0-9_.-]+|"[^"\r\n]+"|'[^'\r\n]+')[\t ]*:`,
+	)
+	apiVersionScalarLine = regexp.MustCompile(
+		`(?m)^( *)((?:apiVersion|"apiVersion"|'apiVersion')[\t ]*:[\t ]*)` +
+			`([^\t #\r\n]+)([\t ]*(?:#[^\r\n]*)?)(\r?)$`,
 	)
 )
 
@@ -214,28 +218,50 @@ func (r *apiVersionPostRenderer) renderDocument(document []byte) ([]byte, error)
 }
 
 func replaceRenderedAPIVersion(document []byte, current, target string) ([]byte, bool) {
-	match := apiVersionScalarLine.FindSubmatchIndex(document)
-	if match == nil {
+	rootIndent, ok := topLevelMappingIndent(document)
+	if !ok {
 		return nil, false
 	}
 
-	scalar, quote := unquoteAPIVersionScalar(document[match[4]:match[5]])
-	if string(scalar) != current {
-		return nil, false
+	for _, match := range apiVersionScalarLine.FindAllSubmatchIndex(document, -1) {
+		if match[3]-match[2] != rootIndent {
+			continue
+		}
+
+		scalar, quote := unquoteAPIVersionScalar(document[match[6]:match[7]])
+		if string(scalar) != current {
+			continue
+		}
+
+		replacement := []byte(target)
+		if quote != 0 {
+			replacement = append([]byte{quote}, replacement...)
+			replacement = append(replacement, quote)
+		}
+
+		output := make([]byte, 0, len(document)+len(replacement)-len(scalar))
+		output = append(output, document[:match[6]]...)
+		output = append(output, replacement...)
+		output = append(output, document[match[7]:]...)
+
+		return output, true
 	}
 
-	replacement := []byte(target)
-	if quote != 0 {
-		replacement = append([]byte{quote}, replacement...)
-		replacement = append(replacement, quote)
+	return nil, false
+}
+
+func topLevelMappingIndent(document []byte) (int, bool) {
+	matches := mappingKeyLine.FindAllSubmatchIndex(document, -1)
+	if len(matches) == 0 {
+		return 0, false
 	}
 
-	output := make([]byte, 0, len(document)+len(replacement)-len(scalar))
-	output = append(output, document[:match[4]]...)
-	output = append(output, replacement...)
-	output = append(output, document[match[5]:]...)
+	indent := len(document)
+	for _, match := range matches {
+		indent = min(indent, match[3]-match[2])
+	}
 
-	return output, true
+	return indent, true
 }
 
 func unquoteAPIVersionScalar(scalar []byte) ([]byte, byte) {

@@ -208,11 +208,35 @@ metadata:
 func TestAPIVersionPostRenderer_PreservesQuotedAndCRLFFormatting(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name     string
-		input    string
-		expected string
-	}{
+	for _, testCase := range apiVersionFormattingTestCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
+			discoveryClient.Resources = []*metav1.APIResourceList{
+				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
+			}
+
+			output, err := helm.RenderAPIVersionMigrationsForTest(
+				discoveryClient,
+				admissionAPIMigrations(),
+				testCase.input,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, testCase.expected, output)
+		})
+	}
+}
+
+type apiVersionFormattingTestCase struct {
+	name     string
+	input    string
+	expected string
+}
+
+func apiVersionFormattingTestCases() []apiVersionFormattingTestCase {
+	return []apiVersionFormattingTestCase{
 		{
 			name: "quoted API version",
 			input: "apiVersion: \"admissionregistration.k8s.io/v1beta1\" # keep\n" +
@@ -234,26 +258,33 @@ func TestAPIVersionPostRenderer_PreservesQuotedAndCRLFFormatting(t *testing.T) {
 			expected: "apiVersion: admissionregistration.k8s.io/v1\r\n" +
 				"kind: MutatingAdmissionPolicyBinding\r\n",
 		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
-			discoveryClient.Resources = []*metav1.APIResourceList{
-				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
-			}
-
-			output, err := helm.RenderAPIVersionMigrationsForTest(
-				discoveryClient,
-				admissionAPIMigrations(),
-				testCase.input,
-			)
-
-			require.NoError(t, err)
-			assert.Equal(t, testCase.expected, output)
-		})
+		{
+			name: "quoted top-level key",
+			input: "\"apiVersion\": admissionregistration.k8s.io/v1beta1\n" +
+				"kind: MutatingAdmissionPolicy\n",
+			expected: "\"apiVersion\": admissionregistration.k8s.io/v1\n" +
+				"kind: MutatingAdmissionPolicy\n",
+		},
+		{
+			name: "indented top-level keys",
+			input: "  apiVersion: admissionregistration.k8s.io/v1beta1\n" +
+				"  kind: MutatingAdmissionPolicyBinding\n",
+			expected: "  apiVersion: admissionregistration.k8s.io/v1\n" +
+				"  kind: MutatingAdmissionPolicyBinding\n",
+		},
+		{
+			name: "nested key before top-level key",
+			input: "metadata:\n" +
+				"  labels:\n" +
+				"    apiVersion: admissionregistration.k8s.io/v1beta1\n" +
+				"apiVersion: admissionregistration.k8s.io/v1beta1\n" +
+				"kind: MutatingAdmissionPolicy\n",
+			expected: "metadata:\n" +
+				"  labels:\n" +
+				"    apiVersion: admissionregistration.k8s.io/v1beta1\n" +
+				"apiVersion: admissionregistration.k8s.io/v1\n" +
+				"kind: MutatingAdmissionPolicy\n",
+		},
 	}
 }
 

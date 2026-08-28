@@ -63,7 +63,7 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
     curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
     ```
 
-    If Go is installed, the script uses `$GOPATH/bin`; otherwise it uses `~/.local/bin`. Set `KSAIL_INSTALL_DIR` to choose another destination or `KSAIL_VERSION` to install a specific release.
+    If Go is installed, the script uses `$GOPATH/bin`; otherwise it uses `~/.local/bin`. Set `KSAIL_INSTALL_DIR` to choose another destination. To install a specific release, set `KSAIL_VERSION` to its `v`-prefixed tag (for example, `v7.180.5`).
 
     > [!NOTE]
     > Versioned installation through `go install` is not supported. Go ignores the main-module dependency overrides that KSail currently needs for upstream compatibility and security fixes. To compile from source, use the **From Source** method below so those reviewed overrides remain active.
