@@ -84,7 +84,8 @@ spec:
       # placementGroupFallbackToNone: false
       # Talos OS-level ingress firewall (default: Enabled — provides defense-in-depth)
       # ingressFirewall: "Enabled"  # or "Disabled"
-      # Restrict Kubernetes API (6443) access on control planes and Talos API (50000) access on every node to these CIDRs.
+      # Restrict public Kubernetes API (6443) access on control planes and public Talos API (50000) access on every node to these CIDRs.
+      # Private worker Talos API access from the cluster network remains enabled.
       # When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6).
       # Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall.
       # allowedCidrs: ["203.0.113.0/24", "198.51.100.0/24"]
