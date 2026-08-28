@@ -43,9 +43,9 @@ Docker is required for local cluster creation. KSail embeds kubectl, helm, kind,
 The update method depends on how you installed it:
 
 ```bash
-brew upgrade devantler-tech/tap/ksail                  # Homebrew
-go install github.com/devantler-tech/ksail/v7@latest   # Go install
-# Binary: https://github.com/devantler-tech/ksail/releases
+curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh  # Shell installer
+brew upgrade devantler-tech/tap/ksail                                                        # Homebrew
+# Manual binary: https://github.com/devantler-tech/ksail/releases
 ```
 
 ## Cluster Management
