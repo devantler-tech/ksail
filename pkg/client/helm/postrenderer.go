@@ -13,7 +13,12 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-var yamlDocumentSeparator = regexp.MustCompile(`(?m)^---[\t ]*\r?\n`)
+var (
+	yamlDocumentSeparator = regexp.MustCompile(`(?m)^---[\t ]*\r?\n`)
+	apiVersionScalarLine  = regexp.MustCompile(
+		`(?m)^(apiVersion:[\t ]*)([^\t #\r\n]+)([\t ]*(?:#[^\r\n]*)?)(\r?)$`,
+	)
+)
 
 var (
 	errAPIVersionMigrationRequired = errors.New(
@@ -57,12 +62,21 @@ func (c *Client) newAPIVersionPostRenderer(
 		return nil, fmt.Errorf("get discovery client for API version migration: %w", err)
 	}
 
-	resolved, err := resolveAPIVersionMigrations(discoveryClient, migrations)
+	resolved, err := resolveFreshAPIVersionMigrations(discoveryClient, migrations)
 	if err != nil {
 		return nil, err
 	}
 
 	return &apiVersionPostRenderer{migrations: resolved}, nil
+}
+
+func resolveFreshAPIVersionMigrations(
+	discoveryClient discovery.CachedDiscoveryInterface,
+	migrations []APIVersionMigration,
+) (map[apiVersionMigrationKey]string, error) {
+	discoveryClient.Invalidate()
+
+	return resolveAPIVersionMigrations(discoveryClient, migrations)
 }
 
 func resolveAPIVersionMigrations(
@@ -186,10 +200,8 @@ func (r *apiVersionPostRenderer) renderDocument(document []byte) ([]byte, error)
 		return document, nil
 	}
 
-	apiVersionLine := regexp.MustCompile(
-		`(?m)^(apiVersion:[\t ]*)` + regexp.QuoteMeta(identity.APIVersion) + `([\t ]*(?:#.*)?)$`,
-	)
-	if !apiVersionLine.Match(document) {
+	output, replaced := replaceRenderedAPIVersion(document, identity.APIVersion, target)
+	if !replaced {
 		return nil, fmt.Errorf(
 			"%w: kind %s, apiVersion %s",
 			errRenderedAPIVersionNotReplaceable,
@@ -198,7 +210,40 @@ func (r *apiVersionPostRenderer) renderDocument(document []byte) ([]byte, error)
 		)
 	}
 
-	replacement := []byte("${1}" + target + "${2}")
+	return output, nil
+}
 
-	return apiVersionLine.ReplaceAll(document, replacement), nil
+func replaceRenderedAPIVersion(document []byte, current, target string) ([]byte, bool) {
+	match := apiVersionScalarLine.FindSubmatchIndex(document)
+	if match == nil {
+		return nil, false
+	}
+
+	scalar, quote := unquoteAPIVersionScalar(document[match[4]:match[5]])
+	if string(scalar) != current {
+		return nil, false
+	}
+
+	replacement := []byte(target)
+	if quote != 0 {
+		replacement = append([]byte{quote}, replacement...)
+		replacement = append(replacement, quote)
+	}
+
+	output := make([]byte, 0, len(document)+len(replacement)-len(scalar))
+	output = append(output, document[:match[4]]...)
+	output = append(output, replacement...)
+	output = append(output, document[match[5]:]...)
+
+	return output, true
+}
+
+func unquoteAPIVersionScalar(scalar []byte) ([]byte, byte) {
+	if len(scalar) >= 2 &&
+		((scalar[0] == '"' && scalar[len(scalar)-1] == '"') ||
+			(scalar[0] == '\'' && scalar[len(scalar)-1] == '\'')) {
+		return scalar[1 : len(scalar)-1], scalar[0]
+	}
+
+	return scalar, 0
 }

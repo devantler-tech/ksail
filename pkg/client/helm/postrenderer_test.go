@@ -48,6 +48,31 @@ func TestResolveAPIVersionMigrations(t *testing.T) {
 	}
 }
 
+func TestResolveFreshAPIVersionMigrationsInvalidatesStaleDiscovery(t *testing.T) {
+	t.Parallel()
+
+	fakeDiscovery := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
+	fakeDiscovery.Resources = []*metav1.APIResourceList{
+		apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
+	}
+	discoveryClient := &staleCachedDiscovery{
+		DiscoveryInterface: fakeDiscovery,
+		staleResources: apiResourceList(
+			admissionRegistrationGroup+"/v1beta1",
+			admissionKinds()...,
+		),
+	}
+
+	count, err := helm.ResolveFreshAPIVersionMigrationsForTest(
+		discoveryClient,
+		admissionAPIMigrations(),
+	)
+
+	require.NoError(t, err)
+	assert.True(t, discoveryClient.invalidated)
+	assert.Equal(t, 2, count)
+}
+
 type apiMigrationResolutionTestCase struct {
 	name           string
 	resources      []*metav1.APIResourceList
@@ -93,6 +118,32 @@ type groupVersionDiscovery struct {
 	discovery.DiscoveryInterface
 
 	resourceErrors map[string]error
+}
+
+type staleCachedDiscovery struct {
+	discovery.DiscoveryInterface
+
+	staleResources *metav1.APIResourceList
+	invalidated    bool
+}
+
+func (d *staleCachedDiscovery) Fresh() bool { return d.invalidated }
+
+func (d *staleCachedDiscovery) Invalidate() { d.invalidated = true }
+
+func (d *staleCachedDiscovery) ServerResourcesForGroupVersion(
+	groupVersion string,
+) (*metav1.APIResourceList, error) {
+	if !d.invalidated && groupVersion == d.staleResources.GroupVersion {
+		return d.staleResources, nil
+	}
+
+	resources, err := d.DiscoveryInterface.ServerResourcesForGroupVersion(groupVersion)
+	if err != nil {
+		return nil, fmt.Errorf("discover refreshed group version: %w", err)
+	}
+
+	return resources, nil
 }
 
 func (d *groupVersionDiscovery) ServerResourcesForGroupVersion(
@@ -152,6 +203,58 @@ metadata:
 		"apiVersion: admissionregistration.k8s.io/v1beta1\nkind: ValidatingAdmissionPolicy",
 	)
 	assert.Contains(t, output, "# Source: calico/templates/policy.yaml")
+}
+
+func TestAPIVersionPostRenderer_PreservesQuotedAndCRLFFormatting(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "quoted API version",
+			input: "apiVersion: \"admissionregistration.k8s.io/v1beta1\" # keep\n" +
+				"kind: MutatingAdmissionPolicy\n",
+			expected: "apiVersion: \"admissionregistration.k8s.io/v1\" # keep\n" +
+				"kind: MutatingAdmissionPolicy\n",
+		},
+		{
+			name: "single-quoted API version",
+			input: "apiVersion: 'admissionregistration.k8s.io/v1beta1'\n" +
+				"kind: MutatingAdmissionPolicyBinding\n",
+			expected: "apiVersion: 'admissionregistration.k8s.io/v1'\n" +
+				"kind: MutatingAdmissionPolicyBinding\n",
+		},
+		{
+			name: "CRLF line endings",
+			input: "apiVersion: admissionregistration.k8s.io/v1beta1\r\n" +
+				"kind: MutatingAdmissionPolicyBinding\r\n",
+			expected: "apiVersion: admissionregistration.k8s.io/v1\r\n" +
+				"kind: MutatingAdmissionPolicyBinding\r\n",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			discoveryClient := &fake.FakeDiscovery{Fake: &k8stesting.Fake{}}
+			discoveryClient.Resources = []*metav1.APIResourceList{
+				apiResourceList(admissionRegistrationGroup+"/v1", admissionKinds()...),
+			}
+
+			output, err := helm.RenderAPIVersionMigrationsForTest(
+				discoveryClient,
+				admissionAPIMigrations(),
+				testCase.input,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, testCase.expected, output)
+		})
+	}
 }
 
 func TestOptionalAPIVersionPostRenderer_DisablesNilRenderer(t *testing.T) {

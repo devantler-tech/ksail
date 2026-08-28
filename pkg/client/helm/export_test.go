@@ -146,6 +146,16 @@ func ResolveAPIVersionMigrationsForTest(
 	return len(resolved), err
 }
 
+// ResolveFreshAPIVersionMigrationsForTest exposes fresh migration resolution for tests.
+func ResolveFreshAPIVersionMigrationsForTest(
+	discoveryClient discovery.CachedDiscoveryInterface,
+	migrations []APIVersionMigration,
+) (int, error) {
+	resolved, err := resolveFreshAPIVersionMigrations(discoveryClient, migrations)
+
+	return len(resolved), err
+}
+
 // RenderAPIVersionMigrationsForTest resolves and applies migrations for tests.
 func RenderAPIVersionMigrationsForTest(
 	discoveryClient discovery.DiscoveryInterface,

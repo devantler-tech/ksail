@@ -1,15 +1,19 @@
 package releasecontract_test
 
 import (
-	"bytes"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
 
 	"golang.org/x/mod/modfile"
+)
+
+var versionedKSailInstallCommand = regexp.MustCompile(
+	`go[\t ]+install[\t ]+github\.com/devantler-tech/ksail/v7@`,
 )
 
 func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
@@ -33,10 +37,6 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 		return
 	}
 
-	installCommands := [][]byte{
-		[]byte("go install " + "github.com/devantler-tech/ksail/v7@latest"),
-		[]byte("go install " + "github.com/devantler-tech/ksail/v7@{{ .Tag }}"),
-	}
 	userFacingPaths := []string{
 		".goreleaser.yaml",
 		"README.md",
@@ -51,12 +51,8 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 	for _, relativePath := range userFacingPaths {
 		contents := readRepositoryFile(t, repository, relativePath)
 
-		for _, installCommand := range installCommands {
-			if bytes.Contains(contents, installCommand) {
-				offenders = append(offenders, relativePath)
-
-				break
-			}
+		if containsVersionedKSailInstallCommand(contents) {
+			offenders = append(offenders, relativePath)
 		}
 	}
 
@@ -66,6 +62,49 @@ func TestPublishedInstallationMatchesModuleContract(t *testing.T) {
 			graphOverrides,
 			strings.Join(offenders, ", "),
 		)
+	}
+}
+
+func containsVersionedKSailInstallCommand(contents []byte) bool {
+	return versionedKSailInstallCommand.Match(contents)
+}
+
+func TestContainsVersionedKSailInstallCommand(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		contents string
+		want     bool
+	}{
+		{
+			name:     "latest",
+			contents: "go install github.com/devantler-tech/ksail/v7@latest",
+			want:     true,
+		},
+		{
+			name:     "release tag",
+			contents: "go install github.com/devantler-tech/ksail/v7@v7.180.5",
+			want:     true,
+		},
+		{
+			name:     "template tag",
+			contents: "go install github.com/devantler-tech/ksail/v7@{{ .Tag }}",
+			want:     true,
+		},
+		{name: "unversioned source build", contents: "go install ./cmd/ksail", want: false},
+		{name: "different module", contents: "go install example.com/tool@v1.2.3", want: false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := containsVersionedKSailInstallCommand([]byte(testCase.contents))
+			if got != testCase.want {
+				t.Fatalf("containsVersionedKSailInstallCommand() = %v, want %v", got, testCase.want)
+			}
+		})
 	}
 }
 
