@@ -51,7 +51,8 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	assert.False(t, compiled.MatchString("internal/maintenance/todos.go"))
 	assert.Regexp(
 		t,
-		`# v\d+\.\d+\.\d+`,
+		`(?m)^\s*uses:\s+devantler-tech/actions/\.github/workflows/`+
+			`scan-for-todo-comments\.yaml@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+\s*$`,
 		string(contents),
 		"workflow pin must retain its release annotation",
 	)
