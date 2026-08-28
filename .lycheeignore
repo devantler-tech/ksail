@@ -20,10 +20,6 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
-# Release bootstrap: this URL becomes valid when the first installer-bearing
-# release is published. Remove this exact exception after that release exists.
-https://github.com/devantler-tech/ksail/releases/latest/download/install.sh
-
 # pkg.go.dev may lag behind newly published major versions (returns 404 until indexed)
 https://pkg.go.dev/github.com/devantler-tech/ksail/
 
