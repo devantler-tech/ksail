@@ -3,6 +3,7 @@ package configmanager_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -11,6 +12,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func networkRuleDocument(t *testing.T, content, name string) string {
+	t.Helper()
+
+	for document := range strings.SplitSeq(content, "---\n") {
+		if strings.Contains(document, "name: "+name+"\n") {
+			return document
+		}
+	}
+
+	require.FailNow(t, "network rule not found", "name: %s", name)
+
+	return ""
+}
 
 // writeFileWithParents writes content at path, creating any missing parent dirs.
 func writeFileWithParents(t *testing.T, path, content string) {
@@ -218,7 +233,7 @@ func TestIngressFirewallPatchesSuccess(t *testing.T) {
 		assert.Contains(t, cpContent, "10.244.0.0/16")
 	})
 
-	t.Run("allowed CIDRs restrict the control-plane rules", func(t *testing.T) {
+	t.Run("allowed CIDRs restrict every public Talos API rule", func(t *testing.T) {
 		t.Parallel()
 
 		patches, err := configmanager.IngressFirewallPatchesForTest(
@@ -232,6 +247,16 @@ func TestIngressFirewallPatchesSuccess(t *testing.T) {
 		cpContent := string(patches[1].Content)
 		assert.Contains(t, cpContent, "192.168.1.0/24")
 		assert.NotContains(t, cpContent, "0.0.0.0/0")
+
+		workerContent := string(patches[2].Content)
+		workerAPIRule := networkRuleDocument(t, workerContent, "apid")
+		assert.Contains(t, workerAPIRule, "192.168.1.0/24")
+		assert.Contains(t, workerAPIRule, "10.244.0.0/16")
+		assert.NotContains(t, workerAPIRule, "0.0.0.0/0")
+
+		workerKubeletRule := networkRuleDocument(t, workerContent, "kubelet")
+		assert.Contains(t, workerKubeletRule, "10.244.0.0/16")
+		assert.NotContains(t, workerKubeletRule, "192.168.1.0/24")
 	})
 
 	t.Run("non-canonical network CIDR is normalized", func(t *testing.T) {
