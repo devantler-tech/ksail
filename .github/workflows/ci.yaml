@@ -171,10 +171,14 @@ jobs:
             # reddens main instead (ksail#6750 merged 2026-08-28T17:17Z with its test job
             # `skipped`; main went red 94 minutes later). This filter feeds a job of its own
             # so that class of change is gated on the PR that makes it. The harness sources
-            # are included for the same reason ci.yaml is included below -- otherwise a PR
-            # could weaken or delete the assertion without ever running it.
+            # and THIS workflow are included for the same reason dependency-test-graph
+            # includes ci.yaml below: the job and its assertions both live in files this
+            # filter would otherwise not match, so a PR editing only one of them could
+            # weaken or delete the gate while the aggregator recorded it as an ordinary
+            # skip.
             todos-contract:
               - '.github/workflows/todos.yaml'
+              - '.github/workflows/ci.yaml'
               - 'internal/ciharness/**'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
