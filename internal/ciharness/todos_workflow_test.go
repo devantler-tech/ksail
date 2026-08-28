@@ -49,5 +49,10 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, compiled.MatchString("third_party/go-archive/archive/tar/reader.go"))
 	assert.False(t, compiled.MatchString("internal/maintenance/todos.go"))
-	assert.Regexp(t, `# v\d+\.\d+\.\d+`, string(contents), "workflow pin must retain its release annotation")
+	assert.Regexp(
+		t,
+		`# v\d+\.\d+\.\d+`,
+		string(contents),
+		"workflow pin must retain its release annotation",
+	)
 }
