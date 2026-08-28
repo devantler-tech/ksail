@@ -55,7 +55,11 @@ func TestDevcontainerTemplateRendersValidJSON(t *testing.T) {
 		t.Fatalf("rendered devcontainer template is not valid JSON:\n%s", content)
 	}
 
-	for _, want := range []string{"docker-in-docker", "go install github.com/devantler-tech/ksail"} {
+	for _, want := range []string{
+		"docker-in-docker",
+		"releases/latest/download/install.sh",
+		"KSAIL_INSTALL_DIR=\\\"$HOME/go/bin\\\"",
+	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("rendered template missing %q", want)
 		}

@@ -64,6 +64,12 @@ type ChartSpec struct {
 	SetJSONVals map[string]string
 	Labels      map[string]string
 
+	// APIVersionMigrations lets a chart keep supporting Kubernetes API
+	// transitions while an upstream release catches up. A matching rendered
+	// resource is migrated from From to To only when the cluster no longer
+	// serves From and does serve To.
+	APIVersionMigrations []APIVersionMigration
+
 	RepoURL  string
 	Username string
 
@@ -72,6 +78,13 @@ type ChartSpec struct {
 	KeyFile               string
 	CaFile                string
 	InsecureSkipTLSverify bool
+}
+
+// APIVersionMigration describes one kind-specific Kubernetes API transition.
+type APIVersionMigration struct {
+	Kind string
+	From string
+	To   string
 }
 
 // RepositoryEntry describes a Helm repository that should be added locally

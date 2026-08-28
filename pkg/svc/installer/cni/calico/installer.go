@@ -176,6 +176,21 @@ func (c *Installer) crdChartSpec() *helm.ChartSpec {
 		RepoURL:         calicoChartsRepoURL,
 		CreateNamespace: true,
 		Timeout:         c.GetTimeout(),
+		// Calico v3.32.0 renders these resources as v1beta1, which Kubernetes
+		// 1.36 no longer serves. Mirror Calico's upstream compatibility fix until
+		// it reaches a published chart, while retaining v1beta1 on older clusters.
+		APIVersionMigrations: []helm.APIVersionMigration{
+			{
+				Kind: "MutatingAdmissionPolicy",
+				From: "admissionregistration.k8s.io/v1beta1",
+				To:   "admissionregistration.k8s.io/v1",
+			},
+			{
+				Kind: "MutatingAdmissionPolicyBinding",
+				From: "admissionregistration.k8s.io/v1beta1",
+				To:   "admissionregistration.k8s.io/v1",
+			},
+		},
 	}
 }
 
