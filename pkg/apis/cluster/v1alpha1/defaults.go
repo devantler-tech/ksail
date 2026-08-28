@@ -93,14 +93,13 @@ func DefaultHetznerFallbackLocations() []string {
 const (
 	// DefaultHetznerTalosVersion is the Talos release provided by
 	// DefaultTalosISO. Config generation uses this version as a bootstrap
-	// compatibility ceiling when the default ISO is selected.
+	// compatibility ceiling when the default ISO is selected. The scheduled
+	// Hetzner catalog updater advances the version and ISO together.
 	DefaultHetznerTalosVersion = "v1.12.4"
 	// DefaultTalosISO is the default Hetzner ISO/image ID for booting Talos
-	// Linux 1.12.4 x86 (matches `default:"125127"` struct tag). The prior default
-	// (122630, Talos 1.11.2) was deprecated and removed from Hetzner on 2026-03-18.
+	// Linux on x86. The scheduled Hetzner catalog updater keeps this ID, its
+	// OptionsTalos struct-tag default, and the Talos version contract in sync.
 	// For ARM-based servers, set OptionsTalos.ISO to the matching ARM ISO ID.
-	// Keep this in sync with the version-contract default in
-	// pkg/fsutil/configmanager/talos (currently TalosVersion1_12).
 	DefaultTalosISO int64 = 125127
 )
 

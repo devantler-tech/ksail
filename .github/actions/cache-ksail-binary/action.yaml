@@ -18,6 +18,11 @@ inputs:
     required: false
     default: "true"
 
+  copilot-cli-version:
+    description: Copilot CLI version bundled into the binary. Included in the cache key so a version bump rebuilds instead of restoring a binary bundled with the previous version.
+    required: false
+    default: "1.0.79"
+
 outputs:
   cache-hit:
     description: Whether the cache was hit ('true' or 'false').
@@ -38,8 +43,9 @@ runs:
       env:
         GO_VERSION: ${{ inputs.go-version }}
         SOURCE_HASH: ${{ inputs.source-hash }}
+        COPILOT_CLI_VERSION: ${{ inputs.copilot-cli-version }}
       run: |
-        KSAIL_CACHE_KEY="${RUNNER_OS}-ksail-bin-${GO_VERSION}-${SOURCE_HASH}"
+        KSAIL_CACHE_KEY="${RUNNER_OS}-ksail-bin-${GO_VERSION}-${SOURCE_HASH}-cli${COPILOT_CLI_VERSION}"
         printf 'value=%s\n' "$KSAIL_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
     - name: ♻️ Restore cached ksail binary
@@ -63,6 +69,7 @@ runs:
         GOMEMLIMIT: "6GiB"
         CACHE_HIT: ${{ steps.ksail-cache.outputs.cache-hit }}
         OUTPUT_PATH: ${{ inputs.output-path }}
+        COPILOT_CLI_VERSION: ${{ inputs.copilot-cli-version }}
       run: |
         set -Eeuo pipefail
 
@@ -102,7 +109,7 @@ runs:
           # Build binary (generate embedded docs + bundle Copilot CLI)
           mkdir -p ./.cache
           go generate ./pkg/svc/chat/...
-          go tool bundler --cli-version 1.0.10
+          go tool bundler --cli-version "$COPILOT_CLI_VERSION"
           go build -trimpath -ldflags="-s -w" -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then

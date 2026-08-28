@@ -21,7 +21,7 @@ The Hetzner provider is ideal when you:
 
 1. **Hetzner Cloud account** — Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud/)
 2. **API token** — Create one in the [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens (read/write permissions)
-3. **Talos ISO or Schematic** *(Talos distribution only)* — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `125127` for Talos 1.12.4; for ARM, look up the matching ISO ID in the Hetzner Cloud Console), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
+3. **Talos ISO or Schematic** *(Talos distribution only)* — Either KSail's automatically tracked default x86 Talos ISO must be available in your Hetzner Cloud project (for ARM, look up the matching ISO ID in the Hetzner Cloud Console), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
 4. **Docker** — Required locally for `ksail` CLI operations
 
 ## Configuration
@@ -55,10 +55,9 @@ spec:
     controlPlanes: 1
     workers: 2
     talos:
-      # ISO image ID for Hetzner (default: 125127 for Talos 1.12.4 x86;
-      # look up the matching ARM ISO ID in the Hetzner Cloud Console).
+      # Omit ISO to use KSail's automatically tracked Hetzner x86 default.
+      # For ARM, set the matching ISO ID from the Hetzner Cloud Console.
       # Ignored when schematicId is set — KSail builds a snapshot instead.
-      iso: 125127
       # Optional: Talos factory schematic ID. When set, KSail builds a Hetzner
       # snapshot from the Talos factory URL and uses it instead of the ISO.
       # Obtain a schematic ID from https://factory.talos.dev.
@@ -190,7 +189,7 @@ private IP.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `talos.iso` | int | `125127` | Hetzner Cloud ISO/image ID for Talos 1.12.4 x86 (look up the matching ARM ID in the Hetzner Cloud Console). Ignored when `schematicId` is set. |
+| `talos.iso` | int | tracked x86 default | Hetzner Cloud ISO/image ID for Talos Linux (look up the matching ARM ID in the Hetzner Cloud Console). Ignored when `schematicId` is set. |
 | `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. `spec.cluster.talos.version` must also be set. Not supported for ARM64 server types (`cax*`). The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
 
 ### Autoscaler Configuration

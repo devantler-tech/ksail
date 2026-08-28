@@ -78,9 +78,9 @@ type OptionsTalos struct {
 	// ISO is the cloud provider's ISO/image ID for booting Talos Linux.
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
-	// Defaults to 125127 (Talos Linux 1.12.4 x86). The prior default 122630
-	// (Talos 1.11.2) was removed from Hetzner on 2026-03-18. For ARM, look up the
-	// matching Talos ISO ID in the Hetzner Cloud Console (Images → ISOs).
+	// The x86 default is advanced automatically from Hetzner's official changelog.
+	// For ARM, look up the matching Talos ISO ID in the Hetzner Cloud Console
+	// (Images → ISOs).
 	// When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
 	ISO int64 `default:"125127" json:"iso,omitzero"`
 	// SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.

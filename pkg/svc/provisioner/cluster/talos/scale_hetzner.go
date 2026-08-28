@@ -177,10 +177,10 @@ func (p *Provisioner) launchHetznerScaleCreation(
 // (isoID, imageID) pair to set on hetzner.CreateServerOpts. A Talos snapshot image
 // takes precedence over the maintenance-mode ISO: when imageID > 0 the ISO is
 // suppressed so the node boots directly into the cluster's Talos version. The
-// default ISO (v1alpha1.DefaultTalosISO) is an older bootstrap image (Talos 1.12.4)
-// whose machined cannot parse config documents introduced in later Talos releases
-// (e.g. ImageVerificationConfig, Talos 1.13+); booting a scaled or recreated node
-// from it makes config apply fail with `"<kind>" "v1alpha1": not registered`.
+// default ISO (v1alpha1.DefaultTalosISO) can be older than the target Talos release;
+// its machined cannot parse config documents introduced after that bootstrap version.
+// Booting a scaled or recreated node from it can therefore make config apply fail
+// with `"<kind>" "v1alpha1": not registered`.
 // Initial create, scale-up, and rolling-recreate all route their boot-source
 // decision through this helper so they never diverge on the Talos version a new
 // node boots.
