@@ -273,3 +273,72 @@ const conflictingHighestVersionFeed = `<?xml version="1.0" encoding="utf-8"?>
   </channel>
 </rss>
 `
+
+// TestUpdaterRefreshesReplacedISOAtTheTrackedVersion covers Hetzner republishing
+// the release KSail already tracks under a new ISO ID. The semantic version is
+// unchanged, so a version-only comparison reports the catalog as current and
+// leaves DefaultTalosISO pointing at an image Hetzner may have withdrawn.
+func TestUpdaterRefreshesReplacedISOAtTheTrackedVersion(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	output, err := runUpdater(t, repoRoot, replacedISOFeed)
+	require.NoError(t, err, output)
+
+	defaults := readFixtureFile(t, repoRoot, "pkg/apis/cluster/v1alpha1/defaults.go")
+	assert.Contains(t, defaults, `DefaultHetznerTalosVersion = "v1.12.4"`)
+	assert.Contains(t, defaults, "DefaultTalosISO int64 = 125999")
+
+	options := readFixtureFile(t, repoRoot, "pkg/apis/cluster/v1alpha1/options.go")
+	assert.Contains(t, options, `default:"125999" json:"iso,omitzero"`)
+
+	assert.Contains(t, output, "v1.12.4/125127 -> v1.12.4/125999")
+}
+
+// TestUpdaterLeavesTheBaselineAloneWhenTheCatalogRepeatsIt is the negative
+// control for the test above: an unchanged version AND an unchanged ISO must
+// still write nothing, so refreshing on a replaced ID cannot turn every run
+// into a no-op update PR.
+func TestUpdaterLeavesTheBaselineAloneWhenTheCatalogRepeatsIt(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	before := snapshotFixture(t, repoRoot)
+	output, err := runUpdater(t, repoRoot, unchangedBaselineFeed)
+	require.NoError(t, err, output)
+
+	assert.Equal(t, before, snapshotFixture(t, repoRoot))
+	assert.Contains(t, output, "already current at v1.12.4/125127")
+}
+
+const replacedISOFeed = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <item>
+      <title>Talos Linux v1.12.4 ISO now available</title>
+      <link>https://docs.hetzner.cloud/changelog#2026-08-20-talos-linux-v1124</link>
+      <content:encoded><![CDATA[
+        <p>The ISO <code>Talos Linux 1.12.4</code>
+        (IDs <code>125999</code> (x86) &#x26; <code>125998</code> (arm))
+        is now available as ISO for all Cloud Servers.</p>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>
+`
+
+const unchangedBaselineFeed = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <item>
+      <title>Talos Linux v1.12.4 ISO now available</title>
+      <link>https://docs.hetzner.cloud/changelog#2026-08-20-talos-linux-v1124</link>
+      <content:encoded><![CDATA[
+        <p>The ISO <code>Talos Linux 1.12.4</code>
+        (IDs <code>125127</code> (x86) &#x26; <code>125126</code> (arm))
+        is now available as ISO for all Cloud Servers.</p>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>
+`

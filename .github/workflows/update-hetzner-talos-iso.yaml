@@ -71,7 +71,14 @@ jobs:
         if: steps.catalog.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
+          # Commits through the GitHub API rather than the git CLI, because the
+          # repository requires signed commits (ruleset "Require signed commits")
+          # and API-created commits are signed by GitHub automatically. A CLI commit
+          # here is unsigned and makes the pull request permanently unmergeable, so
+          # the automated update could never land. See .github/workflows/ci.yaml.
+          sign-commits: true
           token: ${{ steps.generate-token.outputs.token }}
+          branch-token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore(talos): update Hetzner ISO compatibility pair"
           committer: "ksail-bot <ksail-bot@users.noreply.github.com>"
           branch: chore/update-hetzner-talos-iso

@@ -117,12 +117,20 @@ func Run(ctx context.Context, root, feedFile string, out io.Writer) error {
 		return err
 	}
 
-	newer, err := isNewer(latest.Version, currentVersion)
+	versionOrder, err := compareVersions(latest.Version, currentVersion)
 	if err != nil {
 		return err
 	}
 
-	if !newer {
+	// Hetzner also republishes the release KSail already tracks under a new ISO
+	// ID. The version is unchanged then, so a version-only comparison reports the
+	// catalog as current while DefaultTalosISO keeps pointing at an image Hetzner
+	// may have withdrawn. Requiring equality here — never merely "not newer" —
+	// keeps the version half monotonic, so an older announcement still cannot win.
+	newer := versionOrder > 0
+	isoReplaced := versionOrder == 0 && latest.ISOAMD64 != currentISO
+
+	if !newer && !isoReplaced {
 		_, _ = fmt.Fprintf(
 			out,
 			"Hetzner Talos ISO already current at %s/%d\n",
@@ -365,20 +373,22 @@ func loadSources(root string) (string, int64, []sourceFile, error) {
 	return "v" + string(versionMatch[2]), isoID, files, nil
 }
 
-func isNewer(candidate, current string) (bool, error) {
+// compareVersions orders the announced Talos version against the recorded
+// baseline: a positive result means the announcement is newer, zero means it
+// restates the tracked release, and a negative result means it is older.
+func compareVersions(candidate, current string) (int, error) {
 	candidateVersion, err := semver.NewVersion(strings.TrimPrefix(candidate, "v"))
 	if err != nil {
-		return false, fmt.Errorf("parse candidate Talos version %q: %w", candidate, err)
+		return 0, fmt.Errorf("parse candidate Talos version %q: %w", candidate, err)
 	}
 
 	currentVersion, err := semver.NewVersion(strings.TrimPrefix(current, "v"))
 	if err != nil {
-		return false, fmt.Errorf("parse current Talos version %q: %w", current, err)
+		return 0, fmt.Errorf("parse current Talos version %q: %w", current, err)
 	}
 
-	return candidateVersion.GreaterThan(currentVersion), nil
+	return candidateVersion.Compare(currentVersion), nil
 }
-
 func updateSources(files []sourceFile, release Release) ([]sourceFile, error) {
 	if len(files) != expectedFileCount {
 		return nil, fmt.Errorf("%w: got %d", errUnexpectedSourceFiles, len(files))
