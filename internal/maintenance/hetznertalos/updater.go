@@ -18,6 +18,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"golang.org/x/mod/modfile"
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 	maxFeedBytes      = 4 << 20
 	httpTimeout       = 30 * time.Second
 	expectedFileCount = 2
+	// machineryModulePath is the module whose Talos release gates config generation.
+	machineryModulePath = "github.com/siderolabs/talos/pkg/machinery"
 )
 
 var (
@@ -58,12 +61,6 @@ var (
 	)
 	isoStructTagPattern = regexp.MustCompile(
 		"(ISO\\s+int64\\s+`default:\")[0-9]+(\" json:\"iso,omitzero\"`)",
-	)
-	machineryRequirementPattern = regexp.MustCompile(
-		`(?m)^\s*(?:require\s+)?github\.com/siderolabs/talos/pkg/machinery\s+(v\S+)(?:\s+//.*)?$`,
-	)
-	machineryReplacementPattern = regexp.MustCompile(
-		`(?m)^\s*(?:replace\s+)?github\.com/siderolabs/talos/pkg/machinery\s*=>\s*\S+(?:\s+(v\S+))?\s*$`,
 	)
 )
 
@@ -117,20 +114,12 @@ func Run(ctx context.Context, root, feedFile string, out io.Writer) error {
 		return err
 	}
 
-	versionOrder, err := compareVersions(latest.Version, currentVersion)
+	update, err := shouldUpdate(latest, currentVersion, currentISO)
 	if err != nil {
 		return err
 	}
 
-	// Hetzner also republishes the release KSail already tracks under a new ISO
-	// ID. The version is unchanged then, so a version-only comparison reports the
-	// catalog as current while DefaultTalosISO keeps pointing at an image Hetzner
-	// may have withdrawn. Requiring equality here — never merely "not newer" —
-	// keeps the version half monotonic, so an older announcement still cannot win.
-	newer := versionOrder > 0
-	isoReplaced := versionOrder == 0 && latest.ISOAMD64 != currentISO
-
-	if !newer && !isoReplaced {
+	if !update {
 		_, _ = fmt.Fprintf(
 			out,
 			"Hetzner Talos ISO already current at %s/%d\n",
@@ -376,6 +365,25 @@ func loadSources(root string) (string, int64, []sourceFile, error) {
 // compareVersions orders the announced Talos version against the recorded
 // baseline: a positive result means the announcement is newer, zero means it
 // restates the tracked release, and a negative result means it is older.
+// shouldUpdate reports whether the announced release supersedes the recorded
+// baseline. Hetzner also republishes the release KSail already tracks under a new
+// ISO ID; the version is unchanged then, so a version-only comparison reports the
+// catalog as current while DefaultTalosISO keeps pointing at an image Hetzner may
+// have withdrawn. Requiring equality for that case — never merely "not newer" —
+// keeps the version half monotonic, so an older announcement still cannot win.
+func shouldUpdate(latest Release, currentVersion string, currentISO int64) (bool, error) {
+	versionOrder, err := compareVersions(latest.Version, currentVersion)
+	if err != nil {
+		return false, err
+	}
+
+	if versionOrder > 0 {
+		return true, nil
+	}
+
+	return versionOrder == 0 && latest.ISOAMD64 != currentISO, nil
+}
+
 func compareVersions(candidate, current string) (int, error) {
 	candidateVersion, err := semver.NewVersion(strings.TrimPrefix(candidate, "v"))
 	if err != nil {
@@ -505,6 +513,13 @@ func ensureMachinerySupports(root, releaseVersion string) error {
 	return nil
 }
 
+// readMachineryVersion returns the Talos machinery version go.mod resolves to,
+// preferring an effective replacement over the requirement.
+//
+// Parsed rather than pattern-matched: a version-qualified replacement
+// ("<module> v1 => <target> v2") and a trailing comment are both invisible to a
+// line regex, which would silently fall back to the required version and let
+// ensureMachinerySupports approve a release the effective module does not support.
 func readMachineryVersion(root string) (string, error) {
 	path := filepath.Join(root, "go.mod")
 
@@ -513,37 +528,83 @@ func readMachineryVersion(root string) (string, error) {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
 
-	requirements := machineryRequirementPattern.FindAllSubmatch(content, -1)
-	if len(requirements) != 1 {
-		return "", fmt.Errorf(
-			"%w: got %d requirements in %s",
-			errMachineryMissing,
-			len(requirements),
-			path,
-		)
+	parsed, err := modfile.Parse(path, content, nil)
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	version := string(requirements[0][1])
-
-	replacements := machineryReplacementPattern.FindAllSubmatch(content, -1)
-	if len(replacements) > 1 {
-		return "", fmt.Errorf(
-			"%w: got %d replacements in %s",
-			errMachineryMissing,
-			len(replacements),
-			path,
-		)
+	version, err := machineryRequiredVersion(parsed, path)
+	if err != nil {
+		return "", err
 	}
 
-	if len(replacements) == 1 {
-		if len(replacements[0]) < 2 || len(replacements[0][1]) == 0 {
-			return "", fmt.Errorf("%w: unversioned replacement in %s", errMachineryMissing, path)
-		}
+	replacement, replaced, err := machineryReplacementVersion(parsed, path)
+	if err != nil {
+		return "", err
+	}
 
-		version = string(replacements[0][1])
+	if replaced {
+		return replacement, nil
 	}
 
 	return version, nil
+}
+
+func machineryRequiredVersion(parsed *modfile.File, path string) (string, error) {
+	var versions []string
+
+	for _, requirement := range parsed.Require {
+		if requirement.Mod.Path == machineryModulePath {
+			versions = append(versions, requirement.Mod.Version)
+		}
+	}
+
+	if len(versions) != 1 {
+		return "", fmt.Errorf(
+			"%w: got %d requirements in %s",
+			errMachineryMissing,
+			len(versions),
+			path,
+		)
+	}
+
+	return versions[0], nil
+}
+
+// machineryReplacementVersion reports the effective version of a replacement of the
+// machinery module. A filesystem replacement carries no version, which is rejected
+// rather than silently ignored: its supported Talos release cannot be established.
+func machineryReplacementVersion(parsed *modfile.File, path string) (string, bool, error) {
+	var versions []string
+
+	for _, replacement := range parsed.Replace {
+		if replacement.Old.Path == machineryModulePath {
+			versions = append(versions, replacement.New.Version)
+		}
+	}
+
+	if len(versions) > 1 {
+		return "", false, fmt.Errorf(
+			"%w: got %d replacements in %s",
+			errMachineryMissing,
+			len(versions),
+			path,
+		)
+	}
+
+	if len(versions) == 0 {
+		return "", false, nil
+	}
+
+	if versions[0] == "" {
+		return "", false, fmt.Errorf(
+			"%w: unversioned replacement in %s",
+			errMachineryMissing,
+			path,
+		)
+	}
+
+	return versions[0], true, nil
 }
 
 func replaceExactlyOnce(

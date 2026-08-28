@@ -342,3 +342,53 @@ const unchangedBaselineFeed = `<?xml version="1.0" encoding="utf-8"?>
   </channel>
 </rss>
 `
+
+// TestUpdaterHonoursVersionQualifiedMachineryReplacement covers a go.mod whose
+// machinery module is replaced with a version qualifier on the left-hand side.
+// The effective module is v1.12.x, which does not support the announced v1.13.2,
+// so the update must be refused. A line-oriented pattern cannot see this form —
+// it reads the requirement instead and lets an unsupported release through.
+func TestUpdaterHonoursVersionQualifiedMachineryReplacement(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	writeFixtureFile(t, repoRoot, "go.mod", `module example.com/fixture
+
+go 1.26.6
+
+require github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
+
+replace github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2 => github.com/siderolabs/talos/pkg/machinery v1.12.4 // pinned
+`)
+
+	before := snapshotFixture(t, repoRoot)
+	output, err := runUpdater(t, repoRoot, testFeed)
+	require.Error(t, err, output)
+
+	assert.Equal(t, before, snapshotFixture(t, repoRoot))
+	assert.Contains(t, output, "machinery")
+}
+
+// TestUpdaterRejectsFilesystemMachineryReplacement is the companion control: a
+// replacement carrying no version cannot establish a supported Talos release, so
+// it is rejected rather than silently falling back to the requirement.
+func TestUpdaterRejectsFilesystemMachineryReplacement(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := writeRepositoryFixture(t)
+	writeFixtureFile(t, repoRoot, "go.mod", `module example.com/fixture
+
+go 1.26.6
+
+require github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
+
+replace github.com/siderolabs/talos/pkg/machinery => ./third_party/machinery
+`)
+
+	before := snapshotFixture(t, repoRoot)
+	output, err := runUpdater(t, repoRoot, testFeed)
+	require.Error(t, err, output)
+
+	assert.Equal(t, before, snapshotFixture(t, repoRoot))
+	assert.Contains(t, output, "unversioned replacement")
+}
