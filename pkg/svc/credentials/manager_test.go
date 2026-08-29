@@ -275,3 +275,31 @@ func TestManager_OverlayExportsAIKeyUnderChatConfiguredEnvVar(t *testing.T) {
 		os.Getenv(credentials.DefaultEnvVar(credentials.AIProviderAPIKey)),
 		"overlay must still export under the default name")
 }
+
+// Overlay's error is logged verbatim by newCredentialManager, and the api-key variable name it used
+// to carry comes straight out of ui-settings.json — a file the load path does not validate, unlike
+// UpdateAppSettings. Naming the credential instead keeps the diagnostic that matters (which
+// credential failed) while keeping unvalidated file content out of the log line.
+func TestManager_OverlayErrorNamesCredentialNotConfiguredVariable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Written directly rather than through UpdateAppSettings: that path rejects the name, and the
+	// gap under test is precisely that the load path does not.
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ksail"), 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(home, ".ksail", "ui-settings.json"),
+		[]byte(`{"chat":{"apiKeyEnvVar":"BAD=NAME"}}`),
+		0o600,
+	))
+
+	manager, store := newManager(t)
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+
+	err := manager.Overlay()
+	require.Error(t, err, "a variable name os.Setenv rejects must surface as an error")
+	assert.NotContains(t, err.Error(), "BAD=NAME",
+		"the export error must not echo the settings-file variable name into a logged line")
+	assert.Contains(t, err.Error(), string(credentials.AIProviderAPIKey),
+		"the export error must still name which credential could not be exported")
+}

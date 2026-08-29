@@ -45,6 +45,20 @@ var ErrInvalidAIWireAPI = errors.New("invalid AI wire API")
 // exports the configured editor command under it so CLI editor flows (and subprocesses) pick it up.
 const editorEnvVar = "EDITOR"
 
+// editorSource labels the EDITOR overlay entry, whose value is a preference rather than a stored
+// credential. It exists so every desired export carries a source, and no export has to fall back to
+// naming the variable itself.
+const editorSource Key = "editor"
+
+// envExport is one variable Overlay should set. The source credential travels with the value so a
+// failed export can report WHICH credential could not be exported instead of the variable name: that
+// name is read from ui-settings.json without validation (unlike UpdateAppSettings, which rejects a
+// malformed one), and Overlay's error is logged verbatim by the local UI's credential manager.
+type envExport struct {
+	value  string
+	source Key
+}
+
 // validReasoningEffort reports whether effort is one UpdateAppSettings accepts (matching
 // ChatSpec.ReasoningEffort); "" means "leave to the runtime default".
 func validReasoningEffort(effort string) bool {
@@ -218,7 +232,7 @@ func (m *Manager) Overlay() error {
 		delete(m.exported, name)
 	}
 
-	for name, value := range desired {
+	for name, export := range desired {
 		// Capture the pre-override value the first time we set a given variable so a later clear can
 		// restore it. If we already track the name, the current value is our own override from a prior
 		// Overlay, not the inherited original — so do not recapture it.
@@ -227,9 +241,9 @@ func (m *Manager) Overlay() error {
 			m.exported[name] = envSnapshot{value: original, present: present}
 		}
 
-		setErr := os.Setenv(name, value)
+		setErr := os.Setenv(name, export.value)
 		if setErr != nil {
-			return fmt.Errorf("export %q to environment: %w", name, setErr)
+			return fmt.Errorf("export %s credential to environment: %w", export.source, setErr)
 		}
 	}
 
@@ -427,8 +441,8 @@ func (s AppSettings) chatIsEmpty() bool {
 // be exported under. Split out of Overlay so the name-selection policy lives in one place and
 // Overlay itself stays within the repo's complexity budget. Takes no lock: the accessors it
 // calls take m.mu.RLock themselves, so the caller must NOT hold m.mu.
-func (m *Manager) desiredExports() (map[string]string, error) {
-	desired := make(map[string]string)
+func (m *Manager) desiredExports() (map[string]envExport, error) {
+	desired := make(map[string]envExport)
 
 	for _, key := range AllKeys() {
 		value, ok, err := m.store.Get(key)
@@ -444,8 +458,8 @@ func (m *Manager) desiredExports() (map[string]string, error) {
 		// provider's default name. The create path builds provider specs with the default *EnvVar
 		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
 		// stored value usable for creation even when a custom variable name is configured.
-		desired[m.EnvVar(key)] = value
-		desired[DefaultEnvVar(key)] = value
+		desired[m.EnvVar(key)] = envExport{value: value, source: key}
+		desired[DefaultEnvVar(key)] = envExport{value: value, source: key}
 
 		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
 		// name a variable, it consults that one and nothing else. That name lives in the chat
@@ -453,7 +467,7 @@ func (m *Manager) desiredExports() (map[string]string, error) {
 		// this export a user who stores a key AND names a variable is told the key is missing.
 		if key == AIProviderAPIKey {
 			if name := m.chatAPIKeyEnvVar(); name != "" {
-				desired[name] = value
+				desired[name] = envExport{value: value, source: key}
 			}
 		}
 	}
@@ -479,9 +493,9 @@ func (m *Manager) chatAPIKeyEnvVar() string {
 // addEditorOverlay adds the configured editor command to the desired environment under EDITOR so
 // KSail's editor resolution (and any editor subprocess) honors it — important for a Dock/Finder-
 // launched desktop app with no shell env. The caller must hold m.mu.
-func (m *Manager) addEditorOverlay(desired map[string]string) {
+func (m *Manager) addEditorOverlay(desired map[string]envExport) {
 	if m.settings.Editor != "" {
-		desired[editorEnvVar] = m.settings.Editor
+		desired[editorEnvVar] = envExport{value: m.settings.Editor, source: editorSource}
 	}
 }
 
