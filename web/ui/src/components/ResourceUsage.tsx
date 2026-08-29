@@ -300,7 +300,7 @@ export function ResourceUsagePanel({
           </div>
 
           {usage.metricsAvailable && topPods && topPods.length > 0 ? (
-            <div className="grid gap-4 border-t border-slate-100 pt-3 sm:grid-cols-2 dark:border-slate-800">
+            <div className="grid grid-cols-1 gap-4 border-t border-slate-100 pt-3 sm:grid-cols-2 dark:border-slate-800">
               {DIMENSIONS.map((dimension) => (
                 <ConsumerList
                   key={dimension.key}

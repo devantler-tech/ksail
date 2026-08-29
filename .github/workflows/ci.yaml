@@ -132,6 +132,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
+      todos-contract: ${{ steps.filter.outputs.todos-contract }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -162,6 +163,23 @@ jobs:
               - 'go.sum'
               - '.govulncheck-allow.txt'
               - '.github/actions/**'
+            # The Go harness in internal/ciharness asserts the shape of the TODO scanner
+            # caller. Its subject is a WORKFLOW file, not a Go file, so the org-required
+            # validate-go-project run cannot reach it: that workflow gates its own test job
+            # on a `go` filter of **/*.go|go.mod|go.sum|.golangci.* and skips everything
+            # else. A scanner-only bump therefore merges with the contract unexecuted and
+            # reddens main instead (ksail#6750 merged 2026-08-28T17:17Z with its test job
+            # `skipped`; main went red 94 minutes later). This filter feeds a job of its own
+            # so that class of change is gated on the PR that makes it. The harness sources
+            # and THIS workflow are included for the same reason dependency-test-graph
+            # includes ci.yaml below: the job and its assertions both live in files this
+            # filter would otherwise not match, so a PR editing only one of them could
+            # weaken or delete the gate while the aggregator recorded it as an ordinary
+            # skip.
+            todos-contract:
+              - '.github/workflows/todos.yaml'
+              - '.github/workflows/ci.yaml'
+              - 'internal/ciharness/**'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
             # the check lives here and a workflow-only PR would otherwise be able to weaken or
@@ -390,7 +408,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@56665ea3f455622d6ff0cc0fb2b90fc3be6e41e7 # v13.2.2
+    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@3ee6cb9bbd616c2a38779be41a5e41f3e77282d0 # v13.2.3
     # Both inputs make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1677,6 +1695,39 @@ jobs:
           fi
           echo "Dependency test graph resolves."
 
+  verify-todos-workflow-contract:
+    name: 🧾 Verify TODO Workflow Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.todos-contract == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # -count=1 is load-bearing: this test's real subject is a YAML file the Go build graph
+      # cannot see, so a cached PASS from an earlier run would be replayed over a changed
+      # workflow and report success without executing anything.
+      - name: 🧾 Verify TODO workflow contract
+        run: |
+          if ! go test ./internal/ciharness/... -count=1; then
+            echo "::error::The TODO scanner workflow no longer matches the contract in internal/ciharness."
+            echo "Fix: reconcile .github/workflows/todos.yaml with the assertions, or update the assertions if the contract itself changed."
+            exit 1
+          fi
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1705,11 +1756,12 @@ jobs:
         verify-desktop-tidy,
         validate-calico-chart,
         verify-dependency-test-graph,
+        verify-todos-workflow-contract,
         cask-pr-handoff,
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@56665ea3f455622d6ff0cc0fb2b90fc3be6e41e7 # v13.2.2
+      - uses: devantler-tech/actions/aggregate-job-checks@3ee6cb9bbd616c2a38779be41a5e41f3e77282d0 # v13.2.3
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -1734,4 +1786,5 @@ jobs:
             ${{ needs.verify-desktop-tidy.result }}
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
+            ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.cask-pr-handoff.result }}
