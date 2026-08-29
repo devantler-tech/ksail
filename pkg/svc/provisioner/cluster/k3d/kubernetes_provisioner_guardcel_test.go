@@ -19,11 +19,19 @@ import (
 // provisioner actually ships and check the admit/reject decision for concrete pods.
 
 const (
-	guardTestCluster    = "nested-k3s"
-	guardTestNamespace  = "k3k-nested-k3s"
-	guardServerPodName  = "k3k-nested-k3s-server-0"
-	controllerUsername  = "system:serviceaccount:kube-system:statefulset-controller"
-	regularUserUsername = "kubernetes-admin"
+	guardTestCluster   = "nested-k3s"
+	guardTestNamespace = "k3k-nested-k3s"
+	guardServerPodName = "k3k-nested-k3s-server-0"
+	controllerUsername = "system:serviceaccount:kube-system:statefulset-controller"
+	// kubeControllerManagerUsername is the identity kube-controller-manager presents when it runs
+	// without --use-service-account-credentials, where every built-in controller shares one
+	// identity instead of getting a per-controller service account.
+	kubeControllerManagerUsername = "system:kube-controller-manager"
+	// hostileServiceAccountUsername is a service account any user able to create a pod in the
+	// namespace can obtain a token for. It satisfies the class-level startsWith check while not
+	// being the StatefulSet controller.
+	hostileServiceAccountUsername = "system:serviceaccount:k3k-nested-k3s:default"
+	regularUserUsername           = "kubernetes-admin"
 )
 
 // guardExpressions returns the isUnsafePod variable expression and the validation expression from
@@ -266,6 +274,25 @@ func exemptionCases(t *testing.T) []exemptionCase {
 
 	return []exemptionCase{
 		{
+			// The StatefulSet controller shares one identity with every other built-in
+			// controller when --use-service-account-credentials is off, so the guard admits
+			// that spelling too rather than letting the host distribution decide whether
+			// k3k provisions at all.
+			name:     "server pod created by a shared kube-controller-manager identity is admitted",
+			object:   unsafePodNamed(t, guardServerPodName, serverLabels),
+			username: kubeControllerManagerUsername,
+			admitted: true,
+		},
+		{
+			// The residual #6261 left behind: the class-level startsWith check proves only
+			// that some service account made the request, so any service account holding
+			// pod-create in this namespace reached the privileged exemption.
+			name:     "non-controller service account spoofing the server pod is rejected",
+			object:   unsafePodNamed(t, guardServerPodName, serverLabels),
+			username: hostileServiceAccountUsername,
+			admitted: false,
+		},
+		{
 			name:     "controller-created server pod is admitted",
 			object:   unsafePodNamed(t, guardServerPodName, serverLabels),
 			username: controllerUsername,
@@ -394,4 +421,53 @@ func TestGuardCEL_UnlabelledUnsafePodIsRejectedNotErrored(t *testing.T) {
 	_, err = evalGuardExpr(t, env, unguarded, input)
 	require.Error(t, err, "control must reproduce the missing-key failure the guards prevent")
 	assert.Contains(t, err.Error(), "no such key")
+}
+
+// Identity-narrowing regression. #6261 proved only that *a* service account made the request, so
+// every service account holding pod-create in the namespace reached the privileged exemption. The
+// negative control pins that the class-level form really did admit a hostile service account, so
+// this test fails if the exemption is ever widened back to a startsWith check.
+func TestGuardCEL_ExemptionPinsTheStatefulSetControllerIdentity(t *testing.T) {
+	t.Parallel()
+
+	_, validationExpr := guardExpressions(t)
+	env := guardEnv(t)
+
+	input := map[string]any{
+		"object": unsafePodNamed(
+			t,
+			guardServerPodName,
+			map[string]any{"cluster": guardTestCluster, "role": "server"},
+		),
+		"request": map[string]any{
+			"userInfo": map[string]any{"username": hostileServiceAccountUsername},
+		},
+		"variables": map[string]any{"isUnsafePod": true},
+	}
+
+	got, err := evalGuardExpr(t, env, validationExpr, input)
+	require.NoError(t, err)
+	assert.False(t, got, "a non-controller service account must not reach the exemption")
+
+	// Negative control: the class-level form this replaced admitted the same pod.
+	classLevel := fmt.Sprintf(
+		"!variables.isUnsafePod || "+
+			"(request.userInfo.username.startsWith('system:serviceaccount:') && "+
+			"object.metadata.name.startsWith('%s') && "+
+			"has(object.metadata.labels) && "+
+			"'cluster' in object.metadata.labels && "+
+			"object.metadata.labels['cluster'] == '%s' && "+
+			"'role' in object.metadata.labels && "+
+			"object.metadata.labels['role'] == 'server')",
+		"k3k-"+guardTestCluster+"-server-",
+		guardTestCluster,
+	)
+
+	admittedByControl, err := evalGuardExpr(t, env, classLevel, input)
+	require.NoError(t, err)
+	assert.True(
+		t,
+		admittedByControl,
+		"control must reproduce the residual the narrowed identity check closes",
+	)
 }
