@@ -772,8 +772,12 @@ func filterEnvVarsCases() []filterEnvVarsCase {
 			expected:   []string{"PATH=/bin", "BAREWORD"},
 		},
 		{
-			name:       "COPILOT_GITHUB_TOKEN filtered, user vars preserved",
-			environ:    []string{"PATH=/bin", "COPILOT_GITHUB_TOKEN=t", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+			name: "COPILOT_GITHUB_TOKEN filtered, user vars preserved",
+			environ: []string{
+				"PATH=/bin",
+				"COPILOT_GITHUB_TOKEN=t",
+				"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d",
+			},
 			filterList: []string{"COPILOT_GITHUB_TOKEN"},
 			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
 		},
