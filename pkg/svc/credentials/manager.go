@@ -160,6 +160,21 @@ func (m *Manager) EnvVar(key Key) string {
 	return DefaultEnvVar(key)
 }
 
+// chatAPIKeyEnvVar returns the API-key variable name configured in the chat preferences, or
+// the empty string when none is set. This is deliberately separate from EnvVar: EnvVar reads
+// the per-credential name override, while this reads the chat settings that
+// chat.ResolveProvider consults exclusively once set.
+func (m *Manager) chatAPIKeyEnvVar() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.settings.Chat == nil {
+		return ""
+	}
+
+	return m.settings.Chat.APIKeyEnvVar
+}
+
 // Value returns the resolved value for key: a stored secure-store value when present, otherwise the
 // process-environment value for the configured variable name. "" when unset.
 func (m *Manager) Value(key Key) string {
@@ -214,6 +229,16 @@ func (m *Manager) Overlay() error {
 		// stored value usable for creation even when a custom variable name is configured.
 		desired[m.EnvVar(key)] = value
 		desired[DefaultEnvVar(key)] = value
+
+		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
+		// name a variable, it consults that one and nothing else. That name lives in the chat
+		// preferences, NOT in the per-credential EnvVars override m.EnvVar reads, so without
+		// this export a user who stores a key AND names a variable is told the key is missing.
+		if key == AIProviderAPIKey {
+			if name := m.chatAPIKeyEnvVar(); name != "" {
+				desired[name] = value
+			}
+		}
 	}
 
 	m.mu.Lock()

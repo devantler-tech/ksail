@@ -215,7 +215,7 @@ spec:
     reasoningEffort: medium
 ``````
 
-For an Azure resource or custom endpoint:
+For a custom OpenAI-compatible endpoint:
 
 ``````yaml
 spec:
@@ -225,6 +225,18 @@ spec:
     baseUrl: https://ai.example.com/v1
     apiKeyEnvVar: TEAM_AI_KEY  # variable name only; never put the key here
     wireApi: responses
+``````
+
+For an Azure OpenAI resource, give the resource host with no path, and set the API version:
+
+``````yaml
+spec:
+  chat:
+    provider: azure-openai
+    model: my-deployment
+    baseUrl: https://my-resource.openai.azure.com
+    azureApiVersion: 2024-10-21
+    apiKeyEnvVar: AZURE_OPENAI_API_KEY  # variable name only; never put the key here
 ``````
 
 The same fields are available under **Settings → Editor & AI** for the web and desktop interfaces.

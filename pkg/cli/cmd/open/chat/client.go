@@ -366,11 +366,22 @@ func filterEnvVars(env []string, remove []string) []string {
 	filtered := make([]string, 0, len(env))
 
 	for _, entry := range env {
+		name, _, hasValue := strings.Cut(entry, "=")
+		if !hasValue {
+			filtered = append(filtered, entry)
+
+			continue
+		}
+
+		// Windows environment variable names are case-insensitive, so an exact-case match
+		// leaves a mixed-case credential (Github_Token=...) in the child environment of a BYOK
+		// session — the one place these names are removed precisely because the provider is
+		// not GitHub. Fold the case: over-removing a same-named variable that differs only by
+		// case on a case-sensitive OS is far cheaper than forwarding a token.
 		exclude := false
 
-		for _, name := range remove {
-			prefix := name + "="
-			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
+		for _, removeName := range remove {
+			if strings.EqualFold(name, removeName) {
 				exclude = true
 
 				break

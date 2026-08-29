@@ -48,6 +48,9 @@ func TestAvailableFailsClosedForIncompleteBYOK(t *testing.T) {
 	t.Setenv("KSAIL_COPILOT_TOKEN", "")
 	t.Setenv("COPILOT_TOKEN", "")
 	t.Setenv("OPENAI_API_KEY", "")
+	// resolveAPIKey tries the generic KSAIL_AI_API_KEY before any provider-conventional
+	// variable, so an inherited generic key would make this fails-closed case resolve.
+	t.Setenv("KSAIL_AI_API_KEY", "")
 
 	runner := New(nil, WithSessionDefaults(func() v1alpha1.ChatSpec {
 		return v1alpha1.ChatSpec{Provider: v1alpha1.AIProviderOpenAI, Model: "gpt-5"}

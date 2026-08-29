@@ -249,3 +249,29 @@ func TestManager_UpdateAppSettingsRejectsInvalidProviderFields(t *testing.T) {
 	err = manager.UpdateAppSettings(credentials.AppSettings{ChatAPIKeyEnvVar: "TEAM=KEY"})
 	require.ErrorIs(t, err, credentials.ErrInvalidEnvVarName)
 }
+
+// A stored BYOK key must be reachable under the name the chat settings name, because
+// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when one is configured it consults
+// that variable and nothing else. Chat.APIKeyEnvVar is a separate setting from the per-credential
+// EnvVars override that Manager.EnvVar reads, so without this export a user who stores a key AND
+// names a variable gets "AI provider API key is required" while holding a stored key.
+func TestManager_OverlayExportsAIKeyUnderChatConfiguredEnvVar(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEAM_AI_KEY", "")
+
+	manager, store := newManager(t)
+
+	require.NoError(t, manager.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:     v1alpha1.AIProviderOpenAI,
+		ChatModel:        "gpt-5",
+		ChatAPIKeyEnvVar: "TEAM_AI_KEY",
+	}))
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+	require.NoError(t, manager.Overlay())
+
+	assert.Equal(t, "stored-ai-key", os.Getenv("TEAM_AI_KEY"),
+		"overlay must export the stored AI key under the chat-configured variable name")
+	assert.Equal(t, "stored-ai-key",
+		os.Getenv(credentials.DefaultEnvVar(credentials.AIProviderAPIKey)),
+		"overlay must still export under the default name")
+}
