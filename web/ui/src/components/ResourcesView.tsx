@@ -34,9 +34,16 @@ function ResourceStatusBadge({ obj }: { obj: K8sObject }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <StatusDot tone={status.ok ? "ok" : "warn"} />
-      <span className={status.ok ? "text-slate-600 dark:text-slate-300" : "text-amber-700 dark:text-amber-400"}>
+    <span className="flex min-w-0 max-w-full items-start gap-1.5">
+      <span className="mt-0.5 shrink-0">
+        <StatusDot tone={status.ok ? "ok" : "warn"} />
+      </span>
+      <span
+        className={cx(
+          "min-w-0 break-words",
+          status.ok ? "text-slate-600 dark:text-slate-300" : "text-amber-700 dark:text-amber-400",
+        )}
+      >
         {status.label}
       </span>
     </span>

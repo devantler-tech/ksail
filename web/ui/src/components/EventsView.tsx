@@ -101,7 +101,7 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
                   <EventTypeBadge type={event.type} />
                 </td>
                 <td className={cx(td, "min-w-0 text-slate-900 dark:text-white")}>
-                  <span className="block truncate font-medium" title={event.reason}>
+                  <span className="block break-words font-medium sm:truncate" title={event.reason}>
                     {event.reason || "—"}
                   </span>
                   {event.objectName ? (

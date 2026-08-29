@@ -3,7 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 const CLUSTER_NAME = "production-observability-control-plane-with-a-very-long-generated-cluster-name";
 const NAMESPACE = "n".repeat(63);
 const POD_NAME = "metrics-exporter-with-an-intentionally-long-unbroken-generated-pod-name-7f9c8d6b5f-qwert";
-const PLUGIN_ACTION_LABEL = "PluginActionWithoutAnyNaturalBreakOpportunity".repeat(3);
+const PLUGIN_ACTION_LABELS = [
+  "PluginActionWithoutAnyNaturalBreakOpportunity".repeat(3),
+  "SecondPluginActionWithoutAnyNaturalBreakOpportunity".repeat(3),
+];
+const RESOURCE_READY_REASON = "ControllerReportedAnExceptionallyLongUnbrokenReadinessFailureReason".repeat(2);
+const RESOURCE_STATUS_LABEL = `Not Ready: ${RESOURCE_READY_REASON}`;
 
 const cluster = {
   metadata: {
@@ -20,7 +25,7 @@ const cluster = {
     },
   },
   status: {
-    phase: "Ready",
+    phase: "Provisioning",
     endpoint: `https://${CLUSTER_NAME}.example.invalid:6443`,
     nodesReady: 15,
     nodesTotal: 15,
@@ -67,6 +72,7 @@ const pod = {
   },
   status: {
     phase: "Running",
+    conditions: [{ type: "Ready", status: "False", reason: RESOURCE_READY_REASON }],
     containerStatuses: [{ name: "metrics-exporter", ready: true }],
   },
 };
@@ -149,7 +155,10 @@ async function mockOperatorApi(page: Page) {
     if (url.pathname === "/api/v1/plugins/wide-action/main.js") {
       await route.fulfill({
         contentType: "application/javascript",
-        body: `window.pluginLib.registerAppBarAction(window.pluginLib.React.createElement("button", { type: "button", "aria-label": "${PLUGIN_ACTION_LABEL}" }, "${PLUGIN_ACTION_LABEL}"));`,
+        body: PLUGIN_ACTION_LABELS.map(
+          (label) =>
+            `window.pluginLib.registerAppBarAction(window.pluginLib.React.createElement("button", { type: "button", "aria-label": "${label}" }, "${label}"));`,
+        ).join("\n"),
       });
       return;
     }
@@ -226,9 +235,15 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   const pageTitle = page.getByRole("heading", { name: "Clusters", level: 1 });
   await expect(pageTitle).toBeVisible();
   await expect(pageTitle).toBeInViewport({ ratio: 1 });
-  const pluginAction = page.getByRole("button", { name: PLUGIN_ACTION_LABEL });
-  await expect(pluginAction).toBeVisible();
-  await expect(pluginAction).toBeInViewport({ ratio: 1 });
+  const pluginActions = page.getByRole("button", { name: "Plugin actions" });
+  await expect(pluginActions).toBeInViewport({ ratio: 1 });
+  await pluginActions.click();
+  for (const label of PLUGIN_ACTION_LABELS) {
+    const action = page.getByRole("button", { name: label });
+    await expect(action).toBeVisible();
+    await expect(action).toBeInViewport({ ratio: 1 });
+  }
+  await pluginActions.click();
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByRole("button", { name: "New cluster", exact: true })).toBeInViewport({ ratio: 1 });
   await expectPageAndTableToFit(page);
@@ -236,6 +251,8 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Namespace" })).toBeHidden();
+  const clusterStatusCell = page.getByRole("cell", { name: "Provisioning" });
+  expect(await clusterStatusCell.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.getByText(CLUSTER_NAME, { exact: true }).click();
 
   const specCard = page.getByText("Spec", { exact: true }).locator("..");
@@ -265,10 +282,20 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Age" })).toBeHidden();
+  const resourceStatusCell = page.getByRole("cell", {
+    name: RESOURCE_STATUS_LABEL,
+  });
+  expect(await resourceStatusCell.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await expectPageAndTableToFit(page);
 
   await navigateFromDrawer(page, "Events");
-  await expect(page.getByText(event.reason, { exact: true })).toBeVisible();
+  const eventReason = page.getByText(event.reason, { exact: true });
+  await expect(eventReason).toBeVisible();
+  expect(
+    await eventReason.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight,
+    ),
+  ).toBe(true);
   await expect(page.getByText(event.message, { exact: true }).filter({ visible: true })).toBeVisible();
   await expectPageAndTableToFit(page);
 });
