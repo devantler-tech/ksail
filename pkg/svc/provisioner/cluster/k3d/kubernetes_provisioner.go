@@ -726,20 +726,33 @@ const unsafePodExpression = "object.spec.hostPID == true || " +
 	"(has(object.spec.ephemeralContainers) && object.spec.ephemeralContainers.exists(c, " +
 	unsafeContainerPredicate + "))"
 
+// statefulSetControllerPrincipals are the identities that can create the k3k server pod.
+//
+// k3k runs the server as a StatefulSet (rancher/k3k pkg/controller/cluster/server: StatefulServer
+// builds an appsv1.StatefulSet named <cluster>-server), and a StatefulSet controller creates its
+// pods directly rather than through an intermediate ReplicaSet. The creator is therefore always
+// kube-controller-manager's StatefulSet controller, under one of two spellings: the per-controller
+// service account when the host runs with --use-service-account-credentials, and the shared
+// component identity when it does not. Both are populated by the API server from the authenticated
+// request, so neither can be forged, and neither is obtainable by a namespace user.
+const statefulSetControllerPrincipals = "['system:serviceaccount:kube-system:statefulset-controller', " +
+	"'system:kube-controller-manager']"
+
 // serverPodExemptionTemplate is the CEL expression admitting an unsafe pod only when it is a
 // KSail-managed k3k server pod. Formatted with the server pod name prefix and the cluster name.
 //
 // The pod name and labels are attacker-controlled: anyone able to create a Pod in this namespace
 // can reproduce them. They are therefore paired with `request.userInfo`, which the API server
 // populates from the authenticated request and a requester cannot forge, so a pod hand-crafted by
-// a namespace user no longer satisfies the exemption. The k3k server pod is created by a
-// controller acting as a service account, which is what this admits.
+// a namespace user no longer satisfies the exemption. The username is additionally pinned to the
+// exact principals in statefulSetControllerPrincipals, so a compromised or hostile service account
+// that merely holds pod-create in this namespace no longer reaches the exemption either.
 //
 // Every map lookup is key-guarded. CEL raises "no such key" on a missing map key, and because
 // FailurePolicy is Fail an evaluation error becomes a rejection carrying that error instead of the
 // guard's own message.
 const serverPodExemptionTemplate = "!variables.isUnsafePod || " +
-	"(request.userInfo.username.startsWith('system:serviceaccount:') && " +
+	"(request.userInfo.username in " + statefulSetControllerPrincipals + " && " +
 	"object.metadata.name.startsWith('%s') && " +
 	"has(object.metadata.labels) && " +
 	"'cluster' in object.metadata.labels && " +
