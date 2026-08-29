@@ -205,6 +205,8 @@ async function mockOperatorApi(page: Page) {
 }
 
 async function expectPageAndTableToFit(page: Page) {
+  await expect(page.locator("table")).toBeVisible();
+
   const widths = await page.evaluate(() => {
     const table = document.querySelector("table");
     const scroller = table?.parentElement;
