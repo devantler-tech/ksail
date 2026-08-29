@@ -9,7 +9,8 @@
     "gen:types": "node scripts/gen-types.mjs",
     "build": "npm run gen:types && tsc && vite build",
     "preview": "vite preview",
-    "lint": "npm run gen:types && tsc --noEmit"
+    "lint": "npm run gen:types && tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -32,6 +33,7 @@
     "redux": "^5.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.1.13",
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^19.1.10",
