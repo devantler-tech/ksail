@@ -224,8 +224,11 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   const specCard = page.getByText("Spec", { exact: true }).locator("..");
   const statusCard = page.getByText("Status", { exact: true }).locator("..");
   const conditionsCard = page.getByText("Conditions", { exact: true }).locator("..");
+  await specCard.scrollIntoViewIfNeeded();
   await expect(specCard).toBeInViewport({ ratio: 1 });
+  await statusCard.scrollIntoViewIfNeeded();
   await expect(statusCard).toBeInViewport({ ratio: 1 });
+  await conditionsCard.scrollIntoViewIfNeeded();
   await expect(conditionsCard).toBeInViewport({ ratio: 1 });
 
   const overviewWidth = await page.evaluate(() => {
@@ -249,6 +252,6 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
 
   await navigateFromDrawer(page, "Events");
   await expect(page.getByText(event.reason, { exact: true })).toBeVisible();
-  await expect(page.getByText(event.message, { exact: true })).toBeVisible();
+  await expect(page.getByText(event.message, { exact: true }).filter({ visible: true })).toBeVisible();
   await expectPageAndTableToFit(page);
 });

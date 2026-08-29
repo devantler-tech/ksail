@@ -294,7 +294,7 @@ export function ResourcesView({
         emptyIcon={<Layers className="size-6" aria-hidden />}
         onRetry={refresh}
       >
-        <TableCard>
+        <TableCard tableClassName="w-full table-fixed sm:table-auto">
           <thead className="bg-slate-50 dark:bg-slate-800/50">
             <tr>
               <SortHeader label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
@@ -307,7 +307,14 @@ export function ResourcesView({
                 className="hidden sm:table-cell"
               />
               <SortHeader label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
-              <SortHeader label="Age" sortKey="age" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader
+                label="Age"
+                sortKey="age"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="hidden sm:table-cell"
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -325,14 +332,26 @@ export function ResourcesView({
                 }}
                 className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
               >
-                <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>{item.metadata?.name ?? "—"}</td>
+                <td className={cx(td, "min-w-0 font-medium text-slate-900 dark:text-white")}>
+                  <span className="block truncate" title={item.metadata?.name}>
+                    {item.metadata?.name ?? "—"}
+                  </span>
+                  {item.metadata?.namespace ? (
+                    <span
+                      className="mt-1 block truncate text-xs font-normal text-slate-500 sm:hidden dark:text-slate-400"
+                      title={item.metadata.namespace}
+                    >
+                      {item.metadata.namespace}
+                    </span>
+                  ) : null}
+                </td>
                 <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
                   {item.metadata?.namespace ?? "—"}
                 </td>
                 <td className={cx(td, "text-sm")}>
                   <ResourceStatusBadge obj={item} />
                 </td>
-                <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
+                <td className={cx(td, "hidden text-sm text-slate-500 tabular-nums sm:table-cell dark:text-slate-400")}>
                   {format(item.metadata?.creationTimestamp)}
                 </td>
               </tr>

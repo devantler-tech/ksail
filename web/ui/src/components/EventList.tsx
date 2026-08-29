@@ -30,7 +30,7 @@ function EventRow({ event }: { event: EventFields }) {
       <EventTypeBadge type={event.type} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2">
-          <span className="font-medium text-slate-700 dark:text-slate-200">{event.reason || "Event"}</span>
+          <span className="min-w-0 break-words font-medium text-slate-700 dark:text-slate-200">{event.reason || "Event"}</span>
           {event.objectName ? (
             <span className="truncate text-xs text-slate-500 dark:text-slate-400">
               {event.objectKind ? `${event.objectKind}/` : ""}

@@ -345,7 +345,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/80">
-          <div className="flex min-w-0 items-center gap-2 md:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
             <IconButton label="Open navigation" onClick={() => setDrawerOpen(true)} className="md:hidden">
               <MenuIcon className="size-5" />
             </IconButton>
@@ -359,7 +359,7 @@ export function AppShell({
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             {onOpenCommandPalette ? (
               <button
                 type="button"
@@ -396,7 +396,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main id="main-content" className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

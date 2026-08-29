@@ -92,17 +92,27 @@ export function ClustersTable({
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+        <table className="w-full table-fixed divide-y divide-slate-200 sm:table-auto dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-800/50">
             <tr>
               <SortHeader {...headerProps} label="Name" sortKey="name" />
-              <SortHeader {...headerProps} label="Namespace" sortKey="namespace" />
-              <SortHeader {...headerProps} label="Distribution" sortKey="distribution" />
+              <SortHeader
+                {...headerProps}
+                label="Namespace"
+                sortKey="namespace"
+                className="hidden sm:table-cell"
+              />
+              <SortHeader
+                {...headerProps}
+                label="Distribution"
+                sortKey="distribution"
+                className="hidden sm:table-cell"
+              />
               <SortHeader {...headerProps} label="Provider" sortKey="provider" className="hidden sm:table-cell" />
-              <SortHeader {...headerProps} label="Status" sortKey="status" />
-              <SortHeader {...headerProps} label="Nodes" sortKey="nodes" />
-              <SortHeader {...headerProps} label="Age" sortKey="age" />
-              <th className={cx(th, "w-10")}>
+              <SortHeader {...headerProps} label="Status" sortKey="status" className="w-24" />
+              <SortHeader {...headerProps} label="Nodes" sortKey="nodes" className="hidden sm:table-cell" />
+              <SortHeader {...headerProps} label="Age" sortKey="age" className="hidden sm:table-cell" />
+              <th className={cx(th, "w-20 sm:w-10")}>
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -129,16 +139,24 @@ export function ClustersTable({
                 }}
                 className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
               >
-                <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>
-                  <span className="inline-flex items-center gap-2">
-                    {cluster.metadata.name}
+                <td className={cx(td, "min-w-0 font-medium text-slate-900 dark:text-white")}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate" title={cluster.metadata.name}>
+                      {cluster.metadata.name}
+                    </span>
                     {isHostCluster(cluster) ? <HostBadge /> : null}
                   </span>
+                  <span
+                    className="mt-1 block truncate text-xs font-normal text-slate-500 sm:hidden dark:text-slate-400"
+                    title={cluster.metadata.namespace ?? "default"}
+                  >
+                    {cluster.metadata.namespace ?? "default"}
+                  </span>
                 </td>
-                <td className={cx(td, "text-sm text-slate-600 dark:text-slate-300")}>
+                <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
                   {cluster.metadata.namespace ?? "default"}
                 </td>
-                <td className={cx(td, "text-sm text-slate-600 dark:text-slate-300")}>
+                <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
                   {cluster.spec?.cluster?.distribution ?? "—"}
                 </td>
                 <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
@@ -147,10 +165,10 @@ export function ClustersTable({
                 <td className={td}>
                   <StatusBadge phase={clusterPhase(cluster)} />
                 </td>
-                <td className={cx(td, "text-sm")}>
+                <td className={cx(td, "hidden text-sm sm:table-cell")}>
                   <NodeCount cluster={cluster} />
                 </td>
-                <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
+                <td className={cx(td, "hidden text-sm text-slate-500 tabular-nums sm:table-cell dark:text-slate-400")}>
                   {format(cluster.metadata.creationTimestamp)}
                 </td>
                 <td className={cx(td, "text-right")}>
