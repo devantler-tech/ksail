@@ -412,7 +412,7 @@ require (
 	github.com/hashicorp/hcl/v2 v2.24.0 // indirect
 	github.com/hashicorp/vault/api v1.23.0 // indirect
 	github.com/henvic/httpretty v0.1.4 // indirect
-	github.com/hetznercloud/hcloud-go/v2 v2.44.0 // indirect
+	github.com/hetznercloud/hcloud-go/v2 v2.47.0 // indirect
 	github.com/hhrutter/lzw v1.0.0 // indirect
 	github.com/hhrutter/tiff v1.0.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
