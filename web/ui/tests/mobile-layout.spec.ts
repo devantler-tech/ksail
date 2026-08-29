@@ -226,7 +226,9 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   const pageTitle = page.getByRole("heading", { name: "Clusters", level: 1 });
   await expect(pageTitle).toBeVisible();
   await expect(pageTitle).toBeInViewport({ ratio: 1 });
-  await expect(page.getByRole("button", { name: PLUGIN_ACTION_LABEL })).toBeVisible();
+  const pluginAction = page.getByRole("button", { name: PLUGIN_ACTION_LABEL });
+  await expect(pluginAction).toBeVisible();
+  await expect(pluginAction).toBeInViewport({ ratio: 1 });
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByRole("button", { name: "New cluster", exact: true })).toBeInViewport({ ratio: 1 });
   await expectPageAndTableToFit(page);

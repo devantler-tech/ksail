@@ -375,7 +375,7 @@ export function AppShell({
               </button>
             ) : null}
             {/* Plugin-contributed app-bar actions (Headlamp registerAppBarAction); renders nothing until a plugin adds one. */}
-            <div className="flex min-w-0 max-w-10 shrink items-center overflow-hidden sm:max-w-32 lg:max-w-64">
+            <div className="flex min-w-0 max-w-10 shrink items-center overflow-hidden sm:max-w-32 lg:max-w-64 [&>*]:max-w-full [&>*]:truncate">
               <PluginAppBarActions />
             </div>
             {headerActions}
