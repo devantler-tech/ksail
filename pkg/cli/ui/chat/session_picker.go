@@ -356,13 +356,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 // resumeOrCreateSession resumes an existing session or creates a new one.
 // Returns true if a session was successfully created/resumed.
 func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
-	resumeConfig := &copilot.ResumeSessionConfig{
-		Tools:               m.sessionConfig.Tools,
-		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
-		ReasoningEffort:     m.sessionConfig.ReasoningEffort,
-		InfiniteSessions:    m.sessionConfig.InfiniteSessions,
-		Hooks:               m.sessionConfig.Hooks,
-	}
+	resumeConfig := buildResumeSessionConfig(m.sessionConfig)
 
 	session, err := m.client.ResumeSessionWithOptions(
 		m.ctx,
@@ -384,6 +378,17 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 	m.session = session
 
 	return true
+}
+
+func buildResumeSessionConfig(sessionConfig *copilot.SessionConfig) *copilot.ResumeSessionConfig {
+	return &copilot.ResumeSessionConfig{
+		Tools:               sessionConfig.Tools,
+		OnPermissionRequest: sessionConfig.OnPermissionRequest,
+		ReasoningEffort:     sessionConfig.ReasoningEffort,
+		Provider:            sessionConfig.Provider,
+		InfiniteSessions:    sessionConfig.InfiniteSessions,
+		Hooks:               sessionConfig.Hooks,
+	}
 }
 
 // loadSessionMessages loads and renders messages from a resumed session.

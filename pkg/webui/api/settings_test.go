@@ -156,7 +156,11 @@ func TestGetAppSettingsReturnsPreferences(t *testing.T) {
 
 	settings := &fakeSettings{app: api.AppSettings{
 		Editor: "code --wait",
-		Chat:   api.ChatSettings{Model: "gpt-5", ReasoningEffort: "high"},
+		Chat: api.ChatSettings{
+			Provider: "openai", Model: "gpt-5", ReasoningEffort: "high",
+			BaseURL: "https://gateway.example.test/v1", APIKeyEnvVar: "TEAM_AI_KEY",
+			WireAPI: "responses",
+		},
 	}}
 	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
 
@@ -164,7 +168,9 @@ func TestGetAppSettingsReturnsPreferences(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"editor":"code --wait"`)
+	assert.Contains(t, recorder.Body.String(), `"provider":"openai"`)
 	assert.Contains(t, recorder.Body.String(), `"reasoningEffort":"high"`)
+	assert.Contains(t, recorder.Body.String(), `"apiKeyEnvVar":"TEAM_AI_KEY"`)
 }
 
 func TestUpdateAppSettingsDecodesAndDelegates(t *testing.T) {
@@ -173,14 +179,30 @@ func TestUpdateAppSettingsDecodesAndDelegates(t *testing.T) {
 	settings := &fakeSettings{}
 	server := &api.Server{Service: operator.NewCRClusterService(newClient(t)), Settings: settings}
 
-	body := `{"editor":"vim","chat":{"model":"gpt-5-mini","reasoningEffort":"low"}}`
+	body := `{
+		"editor": "vim",
+		"chat": {
+			"provider": "azure-openai",
+			"model": "gpt-5-mini",
+			"reasoningEffort": "low",
+			"baseUrl": "https://resource.openai.azure.com",
+			"apiKeyEnvVar": "TEAM_AZURE_KEY",
+			"wireApi": "responses",
+			"azureApiVersion": "2025-04-01-preview"
+		}
+	}`
 	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/settings/app", body)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	require.NotNil(t, settings.lastAppUpdate)
 	assert.Equal(t, "vim", settings.lastAppUpdate.Editor)
+	assert.Equal(t, "azure-openai", settings.lastAppUpdate.Chat.Provider)
 	assert.Equal(t, "gpt-5-mini", settings.lastAppUpdate.Chat.Model)
 	assert.Equal(t, "low", settings.lastAppUpdate.Chat.ReasoningEffort)
+	assert.Equal(t, "https://resource.openai.azure.com", settings.lastAppUpdate.Chat.BaseURL)
+	assert.Equal(t, "TEAM_AZURE_KEY", settings.lastAppUpdate.Chat.APIKeyEnvVar)
+	assert.Equal(t, "responses", settings.lastAppUpdate.Chat.WireAPI)
+	assert.Equal(t, "2025-04-01-preview", settings.lastAppUpdate.Chat.AzureAPIVersion)
 }
 
 func TestUpdateAppSettingsMapsInvalidToUnprocessable(t *testing.T) {

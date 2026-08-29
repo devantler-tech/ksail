@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/browser"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
@@ -82,10 +83,10 @@ func runWebCmd(cmd *cobra.Command, port int, noBrowser bool) error {
 	// Copilot is configured; the subprocess is stopped on shutdown.
 	// Seed the assistant's model/effort from the saved app settings (Settings → Editor & AI), read
 	// fresh per turn so a change applies without restarting the server.
-	chatRunner := webchat.New(cmd.Root(), webchat.WithSessionDefaults(func() (string, string) {
+	chatRunner := webchat.New(cmd.Root(), webchat.WithSessionDefaults(func() v1alpha1.ChatSpec {
 		app := credentials.LoadAppSettings()
 
-		return app.ChatModel, app.ChatReasoningEffort
+		return app.ChatSpec()
 	}))
 	if service, ok := server.Service.(*clusterapi.Service); ok {
 		service.UseChat(chatRunner)

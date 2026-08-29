@@ -289,10 +289,24 @@ type FluxConfig struct {
 
 // ChatSpec defines AI chat assistant configuration.
 type ChatSpec struct {
-	Model string `json:"model,omitzero" jsonschema_description:"Chat model (empty or 'auto' for API default)"`
+	// Provider selects the API backing the chat assistant. Empty preserves the historical Copilot
+	// default. OpenAI-compatible accepts any compatible endpoint, including self-hosted services.
+	Provider AIProvider `json:"provider,omitzero" jsonschema:"enum=,enum=copilot,enum=openai,enum=anthropic,enum=gemini,enum=azure-openai,enum=openrouter,enum=ollama,enum=openai-compatible" jsonschema_description:"AI provider for chat. Empty defaults to copilot."` //nolint:lll
+
+	Model string `json:"model,omitzero" jsonschema_description:"Chat model identifier. API providers require it; empty or 'auto' uses the Copilot default."` //nolint:lll
 	// ReasoningEffort specifies the reasoning effort level for chat responses.
 	// Valid values: "low", "medium", "high"
 	ReasoningEffort string `json:"reasoningEffort,omitzero" jsonschema:"enum=low,enum=medium,enum=high" jsonschema_description:"Reasoning effort level for chat responses (low, medium, or high)"` //nolint:lll // Long description required for JSON schema
+	// BaseURL overrides the provider's API endpoint. It is required for Azure OpenAI and custom
+	// OpenAI-compatible providers. Azure expects the resource host without /openai/v1.
+	BaseURL string `json:"baseUrl,omitzero" jsonschema_description:"Provider API base URL. Required for azure-openai and openai-compatible; optional override for other BYOK providers."` //nolint:lll
+	// APIKeyEnvVar names the environment variable holding the provider key. The key itself is never
+	// persisted in ksail.yaml. Empty uses KSAIL_AI_API_KEY, then the provider's conventional variable.
+	APIKeyEnvVar string `json:"apiKeyEnvVar,omitzero" jsonschema_description:"Environment variable containing the AI provider API key. Empty uses KSAIL_AI_API_KEY then the provider default."` //nolint:lll
+	// WireAPI chooses the OpenAI-compatible request format. Empty uses chat completions.
+	WireAPI string `json:"wireApi,omitzero" jsonschema:"enum=,enum=completions,enum=responses" jsonschema_description:"OpenAI-compatible wire API (completions or responses). Empty defaults to completions."` //nolint:lll
+	// AzureAPIVersion optionally overrides the Azure OpenAI API version.
+	AzureAPIVersion string `json:"azureApiVersion,omitzero" jsonschema_description:"Azure OpenAI API version. Empty uses the runtime default."` //nolint:lll
 }
 
 // Connection defines connection options for a KSail cluster.

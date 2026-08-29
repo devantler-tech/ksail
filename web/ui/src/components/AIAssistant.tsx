@@ -25,10 +25,10 @@ interface PendingConfirm {
 }
 
 // AIAssistant is the web UI's AI chat panel, streaming the assistant's reply from the backend's chat
-// endpoint (GitHub Copilot). It is cluster-aware: the active cluster is sent as context so the
+// endpoint (Copilot or a configured API provider). It is cluster-aware: the active cluster is sent as context so the
 // assistant scopes its answers. When allowWrite is set the assistant may request write actions, each
 // gated behind an inline Approve/Deny confirmation; otherwise it stays read-only. When `available` is
-// false (no Copilot token configured) it renders a "how to enable" panel instead of the chat, so the
+// false (no complete provider configuration) it renders a "how to enable" panel instead of the chat, so the
 // feature stays discoverable rather than the nav entry vanishing.
 export function AIAssistant({
   clusterName,
@@ -124,7 +124,7 @@ export function AIAssistant({
     }
   }, [available]);
 
-  // No Copilot token configured on the serving backend: the chat cannot run, so explain how to enable
+  // No complete provider configuration on the serving backend: explain how to enable
   // it instead of showing a dead input. The hooks above still run unconditionally (rules of hooks).
   if (!available) {
     return <AssistantUnavailable />;
@@ -240,8 +240,8 @@ function appendToAssistant(
   });
 }
 
-// AssistantUnavailable is shown when the backend reports the AI assistant is not configured (no
-// Copilot token). It keeps the feature discoverable — explaining how to turn it on — instead of the
+// AssistantUnavailable is shown when the backend reports the AI assistant is not configured. It
+// keeps the feature discoverable — explaining how to turn it on — instead of the
 // nav entry silently disappearing.
 function AssistantUnavailable() {
   return (
@@ -253,12 +253,14 @@ function AssistantUnavailable() {
         <div>
           <p className="font-medium text-slate-900 dark:text-white">AI assistant not configured</p>
           <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
-            The KSail assistant runs on GitHub Copilot. Add a Copilot token under{" "}
+            Choose GitHub Copilot or an API provider under{" "}
+            <span className="font-medium text-slate-700 dark:text-slate-300">
+              Settings → Editor &amp; AI
+            </span>
+            . Add its key under{" "}
             <span className="font-medium text-slate-700 dark:text-slate-300">Settings → Credentials</span>{" "}
-            to enable it — it applies right away. Or set{" "}
-            <code className="font-mono text-xs">KSAIL_COPILOT_TOKEN</code> /{" "}
-            <code className="font-mono text-xs">COPILOT_TOKEN</code> in the environment before
-            starting KSail. Choose the model under Settings → Editor &amp; AI.
+            or set the provider's environment variable, then reload. Ollama and other local endpoints can
+            be keyless.
           </p>
         </div>
         <a

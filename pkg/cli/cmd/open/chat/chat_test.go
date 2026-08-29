@@ -721,18 +721,17 @@ func assertResolveReasoningEffort(
 	}
 }
 
-// TestFilterEnvVars verifies environment variable filtering.
-func TestFilterEnvVars(t *testing.T) {
-	t.Parallel()
+// filterEnvVarsCase is one row of the filterEnvVars table. Named (rather than an anonymous struct
+// inline in the test) so the table can live in its own function and keep the test itself short.
+type filterEnvVarsCase struct {
+	name       string
+	environ    []string
+	filterList []string
+	expected   []string
+}
 
-	filter := chat.GetFilterEnvVars()
-
-	for _, testCase := range []struct {
-		name       string
-		environ    []string
-		filterList []string
-		expected   []string
-	}{
+func filterEnvVarsCases() []filterEnvVarsCase {
+	return []filterEnvVarsCase{
 		{
 			name:       "filters matching vars",
 			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=s", "GH_TOKEN=s2", "HOME=/h"},
@@ -758,12 +757,40 @@ func TestFilterEnvVars(t *testing.T) {
 			expected:   []string{"PATH=/bin", "HOME=/h"},
 		},
 		{
-			name:       "COPILOT_GITHUB_TOKEN filtered, user vars preserved",
-			environ:    []string{"PATH=/bin", "COPILOT_GITHUB_TOKEN=t", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+			// Windows env names are case-insensitive, so an exact-case match would forward a
+			// mixed-case credential into a BYOK session's child environment.
+			name:       "mixed-case credential is still removed",
+			environ:    []string{"PATH=/bin", "Github_Token=s", "gh_token=s2", "HOME=/h"},
+			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
+			expected:   []string{"PATH=/bin", "HOME=/h"},
+		},
+		{
+			// A name-only entry has no value to protect and must survive the split.
+			name:       "entry without a value is preserved",
+			environ:    []string{"PATH=/bin", "BAREWORD"},
+			filterList: []string{"GITHUB_TOKEN"},
+			expected:   []string{"PATH=/bin", "BAREWORD"},
+		},
+		{
+			name: "COPILOT_GITHUB_TOKEN filtered, user vars preserved",
+			environ: []string{
+				"PATH=/bin",
+				"COPILOT_GITHUB_TOKEN=t",
+				"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d",
+			},
 			filterList: []string{"COPILOT_GITHUB_TOKEN"},
 			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
 		},
-	} {
+	}
+}
+
+// TestFilterEnvVars verifies environment variable filtering.
+func TestFilterEnvVars(t *testing.T) {
+	t.Parallel()
+
+	filter := chat.GetFilterEnvVars()
+
+	for _, testCase := range filterEnvVarsCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

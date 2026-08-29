@@ -374,6 +374,27 @@ func schemaValidationCases() []schemaValidationCase {
 				`"metadata":{"name":"` + strings.Repeat("a", 64) + `"}}`,
 			wantValid: false,
 		},
+		// Both fields document an empty value as selecting the default, and the runtime accepts it,
+		// so the schema has to accept it too or a config the CLI runs fails validation.
+		{
+			name: "chat provider and wire API accept the documented empty default",
+			instance: `{"apiVersion":"ksail.io/v1alpha1","kind":"Cluster",` +
+				`"spec":{"chat":{"provider":"","wireApi":""}}}`,
+			wantValid: true,
+		},
+		// Control: widening the enums to admit "" must not admit anything else.
+		{
+			name: "chat provider outside the enum",
+			instance: `{"apiVersion":"ksail.io/v1alpha1","kind":"Cluster",` +
+				`"spec":{"chat":{"provider":"not-a-provider"}}}`,
+			wantValid: false,
+		},
+		{
+			name: "chat wire API outside the enum",
+			instance: `{"apiVersion":"ksail.io/v1alpha1","kind":"Cluster",` +
+				`"spec":{"chat":{"wireApi":"messages"}}}`,
+			wantValid: false,
+		},
 	}
 }
 

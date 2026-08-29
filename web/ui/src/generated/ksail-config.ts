@@ -921,13 +921,42 @@ export interface KSailClusterConfiguration {
      */
     chat?: {
       /**
-       * Chat model (empty or 'auto' for API default)
+       * AI provider for chat. Empty defaults to copilot.
+       */
+      provider?:
+        | ""
+        | "copilot"
+        | "openai"
+        | "anthropic"
+        | "gemini"
+        | "azure-openai"
+        | "openrouter"
+        | "ollama"
+        | "openai-compatible";
+      /**
+       * Chat model identifier. API providers require it; empty or 'auto' uses the Copilot default.
        */
       model?: string;
       /**
        * Reasoning effort level for chat responses (low, medium, or high)
        */
       reasoningEffort?: "low" | "medium" | "high";
+      /**
+       * Provider API base URL. Required for azure-openai and openai-compatible; optional override for other BYOK providers.
+       */
+      baseUrl?: string;
+      /**
+       * Environment variable containing the AI provider API key. Empty uses KSAIL_AI_API_KEY then the provider default.
+       */
+      apiKeyEnvVar?: string;
+      /**
+       * OpenAI-compatible wire API (completions or responses). Empty defaults to completions.
+       */
+      wireApi?: "" | "completions" | "responses";
+      /**
+       * Azure OpenAI API version. Empty uses the runtime default.
+       */
+      azureApiVersion?: string;
     };
   };
 }

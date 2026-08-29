@@ -228,6 +228,10 @@ func BuildTUICommandOptions() map[string]CommandOptionProvider {
 			}
 		},
 		cmdModel: func(model *Model) []CommandOption {
+			if model.sessionConfig.Provider != nil {
+				return nil
+			}
+
 			if len(model.availableModels) == 0 {
 				allModels, err := model.client.ListModels(model.ctx)
 				if err == nil {

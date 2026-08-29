@@ -246,6 +246,15 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.sessionConfig.Provider != nil {
+		m.modelUnavailableReason = "API providers do not expose a shared model catalog; use /model <model-id>"
+		m.showModelUnavailableFeedback = true
+
+		return m, tea.Tick(feedbackResetMillis*time.Millisecond, func(_ time.Time) tea.Msg {
+			return modelUnavailableClearMsg{}
+		})
+	}
+
 	// Lazy-load models on first use (or retry after a previous failure)
 	if len(m.availableModels) == 0 {
 		allModels, err := m.client.ListModels(m.ctx)

@@ -103,14 +103,14 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
 
 KSail embeds common Kubernetes tools as Go libraries — including kubectl, helm, kind (Vanilla), k3d (K3s), vcluster/Vind (VCluster), flux, argocd, sops, and others — so no separate installation is needed. All tools are accessible through KSail's unified CLI.
 
-## Optional: GitHub Copilot CLI (for AI Chat)
+## Optional: AI provider credentials (for AI Chat)
 
-Install the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli) and run `copilot auth login`. Set `COPILOT_CLI_PATH` if the CLI is not in your PATH.
+The [AI Chat Assistant](/integrations/ai-chat/) works with OpenAI, Anthropic, Google Gemini, Azure OpenAI, OpenRouter, Ollama, any OpenAI-compatible endpoint, or GitHub Copilot. API-provider users set their own model and API key; no Copilot subscription is required.
 
 > [!NOTE]
-> An active GitHub Copilot subscription is required. All other KSail features work without it.
+> GitHub Copilot remains the default for compatibility and requires Copilot access. Choose another provider to use your existing API account or a local model instead.
 
-In headless environments (CI, remote servers, containers), use token-based authentication instead — see [AI Chat Assistant](/integrations/ai-chat/#token-authentication-headless-environments).
+For Copilot, run `copilot auth login` or configure token authentication. See [AI Chat Assistant](/integrations/ai-chat/#authentication) for every provider path.
 
 ## VSCode Extension
 

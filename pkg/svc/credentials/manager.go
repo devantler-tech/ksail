@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"slices"
 	"sync"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
 // settingsFileMode and settingsDirMode keep the on-disk settings (env-var-name overrides — not
@@ -33,9 +35,29 @@ var ErrUnknownCredential = errors.New("unknown credential")
 // ErrInvalidReasoningEffort indicates a chat reasoning-effort value outside the allowed set.
 var ErrInvalidReasoningEffort = errors.New("invalid reasoning effort")
 
+// ErrInvalidAIProvider indicates an app setting outside the supported provider set.
+var ErrInvalidAIProvider = errors.New("invalid AI provider")
+
+// ErrInvalidAIWireAPI indicates an app setting outside completions/responses.
+var ErrInvalidAIWireAPI = errors.New("invalid AI wire API")
+
 // editorEnvVar is the conventional environment variable KSail's editor resolution honors; Overlay
 // exports the configured editor command under it so CLI editor flows (and subprocesses) pick it up.
 const editorEnvVar = "EDITOR"
+
+// editorSource labels the EDITOR overlay entry, whose value is a preference rather than a stored
+// credential. Deliberately NOT a Key: Key enumerates the credentials, and adding a non-credential
+// member to it makes every exhaustive switch over Key wrong.
+const editorSource = "editor"
+
+// envExport is one variable Overlay should set. The source label travels with the value so a failed
+// export can report WHICH credential could not be exported instead of the variable name: that name
+// is read from ui-settings.json without validation (unlike UpdateAppSettings, which rejects a
+// malformed one), and Overlay's error is logged verbatim by the local UI's credential manager.
+type envExport struct {
+	value  string
+	source string
+}
 
 // validReasoningEffort reports whether effort is one UpdateAppSettings accepts (matching
 // ChatSpec.ReasoningEffort); "" means "leave to the runtime default".
@@ -46,6 +68,14 @@ func validReasoningEffort(effort string) bool {
 	default:
 		return false
 	}
+}
+
+func validAIProvider(provider v1alpha1.AIProvider) bool {
+	return provider == "" || slices.Contains(v1alpha1.ValidAIProviders(), provider)
+}
+
+func validAIWireAPI(wireAPI string) bool {
+	return wireAPI == "" || wireAPI == "completions" || wireAPI == "responses"
 }
 
 // settings holds the non-secret, file-persisted configuration: per-credential overrides of the
@@ -62,16 +92,39 @@ type settings struct {
 
 // chatPrefs holds the AI assistant model selection and reasoning effort.
 type chatPrefs struct {
-	Model           string `json:"model,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	Provider        v1alpha1.AIProvider `json:"provider,omitempty"`
+	Model           string              `json:"model,omitempty"`
+	ReasoningEffort string              `json:"reasoningEffort,omitempty"`
+	BaseURL         string              `json:"baseUrl,omitempty"`
+	APIKeyEnvVar    string              `json:"apiKeyEnvVar,omitempty"`
+	WireAPI         string              `json:"wireApi,omitempty"`
+	AzureAPIVersion string              `json:"azureApiVersion,omitempty"`
 }
 
 // AppSettings is the local UI's non-credential preferences (editor command + chat model/effort),
 // persisted alongside the env-var overrides in ui-settings.json.
 type AppSettings struct {
 	Editor              string
+	ChatProvider        v1alpha1.AIProvider
 	ChatModel           string
 	ChatReasoningEffort string
+	ChatBaseURL         string
+	ChatAPIKeyEnvVar    string
+	ChatWireAPI         string
+	ChatAzureAPIVersion string
+}
+
+// ChatSpec returns the provider-neutral chat settings in the shared API shape.
+func (s AppSettings) ChatSpec() v1alpha1.ChatSpec {
+	return v1alpha1.ChatSpec{
+		Provider:        s.ChatProvider,
+		Model:           s.ChatModel,
+		ReasoningEffort: s.ChatReasoningEffort,
+		BaseURL:         s.ChatBaseURL,
+		APIKeyEnvVar:    s.ChatAPIKeyEnvVar,
+		WireAPI:         s.ChatWireAPI,
+		AzureAPIVersion: s.ChatAzureAPIVersion,
+	}
 }
 
 // envSnapshot records what a process environment variable held before Overlay first overrode it, so
@@ -157,24 +210,9 @@ func (m *Manager) ExplicitValue(key Key) string {
 // launched from the Dock/Finder, which does not inherit the shell environment. Call it at startup
 // and after each update.
 func (m *Manager) Overlay() error {
-	desired := make(map[string]string)
-
-	for _, key := range AllKeys() {
-		value, ok, err := m.store.Get(key)
-		if err != nil {
-			return fmt.Errorf("read %q from store: %w", key, err)
-		}
-
-		if !ok || value == "" {
-			continue
-		}
-
-		// Export under the configured variable name (what discovery resolves) and also under the
-		// provider's default name. The create path builds provider specs with the default *EnvVar
-		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
-		// stored value usable for creation even when a custom variable name is configured.
-		desired[m.EnvVar(key)] = value
-		desired[DefaultEnvVar(key)] = value
+	desired, err := m.desiredExports()
+	if err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -194,7 +232,7 @@ func (m *Manager) Overlay() error {
 		delete(m.exported, name)
 	}
 
-	for name, value := range desired {
+	for name, export := range desired {
 		// Capture the pre-override value the first time we set a given variable so a later clear can
 		// restore it. If we already track the name, the current value is our own override from a prior
 		// Overlay, not the inherited original — so do not recapture it.
@@ -203,9 +241,9 @@ func (m *Manager) Overlay() error {
 			m.exported[name] = envSnapshot{value: original, present: present}
 		}
 
-		setErr := os.Setenv(name, value)
+		setErr := os.Setenv(name, export.value)
 		if setErr != nil {
-			return fmt.Errorf("export %q to environment: %w", name, setErr)
+			return fmt.Errorf("export %s credential to environment: %w", export.source, setErr)
 		}
 	}
 
@@ -347,17 +385,34 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 		return fmt.Errorf("%w: %q", ErrInvalidReasoningEffort, next.ChatReasoningEffort)
 	}
 
+	if !validAIProvider(next.ChatProvider) {
+		return fmt.Errorf("%w: %q", ErrInvalidAIProvider, next.ChatProvider)
+	}
+
+	if !validAIWireAPI(next.ChatWireAPI) {
+		return fmt.Errorf("%w: %q", ErrInvalidAIWireAPI, next.ChatWireAPI)
+	}
+
+	if next.ChatAPIKeyEnvVar != "" && !envVarNamePattern.MatchString(next.ChatAPIKeyEnvVar) {
+		return fmt.Errorf("%w: %q", ErrInvalidEnvVarName, next.ChatAPIKeyEnvVar)
+	}
+
 	m.mu.Lock()
 
 	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
 	m.settings.Editor = next.Editor
 
-	if next.ChatModel == "" && next.ChatReasoningEffort == "" {
+	if next.chatIsEmpty() {
 		m.settings.Chat = nil
 	} else {
 		m.settings.Chat = &chatPrefs{
+			Provider:        next.ChatProvider,
 			Model:           next.ChatModel,
 			ReasoningEffort: next.ChatReasoningEffort,
+			BaseURL:         next.ChatBaseURL,
+			APIKeyEnvVar:    next.ChatAPIKeyEnvVar,
+			WireAPI:         next.ChatWireAPI,
+			AzureAPIVersion: next.ChatAzureAPIVersion,
 		}
 	}
 
@@ -376,12 +431,80 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 	return m.Overlay()
 }
 
+func (s AppSettings) chatIsEmpty() bool {
+	return s.ChatProvider == "" && s.ChatModel == "" && s.ChatReasoningEffort == "" &&
+		s.ChatBaseURL == "" && s.ChatAPIKeyEnvVar == "" && s.ChatWireAPI == "" &&
+		s.ChatAzureAPIVersion == ""
+}
+
+// desiredExports reads every stored credential and returns the environment variables it should
+// be exported under. Split out of Overlay so the name-selection policy lives in one place and
+// Overlay itself stays within the repo's complexity budget. Takes no lock: the accessors it
+// calls take m.mu.RLock themselves, so the caller must NOT hold m.mu.
+func (m *Manager) desiredExports() (map[string]envExport, error) {
+	desired := make(map[string]envExport)
+
+	for _, key := range AllKeys() {
+		value, ok, err := m.store.Get(key)
+		if err != nil {
+			return nil, fmt.Errorf("read %q from store: %w", key, err)
+		}
+
+		if !ok || value == "" {
+			continue
+		}
+
+		// Export under the configured variable name (what discovery resolves) and also under the
+		// provider's default name. The create path builds provider specs with the default *EnvVar
+		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
+		// stored value usable for creation even when a custom variable name is configured.
+		desired[m.EnvVar(key)] = envExport{value: value, source: string(key)}
+		desired[DefaultEnvVar(key)] = envExport{value: value, source: string(key)}
+
+		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
+		// name a variable, it consults that one and nothing else. That name lives in the chat
+		// preferences, NOT in the per-credential EnvVars override m.EnvVar reads, so without
+		// this export a user who stores a key AND names a variable is told the key is missing.
+		if key == AIProviderAPIKey {
+			// AIProviderAPIKey is last in AllKeys, so a chat alias naming a variable another
+			// credential already exports under would overwrite it and hand subprocesses the AI key
+			// where they expect that credential. The owning credential keeps the name; skipping the
+			// alias costs chat resolution under a misconfigured name, while clobbering would
+			// silently replace an unrelated stored secret. Deliberately not an error: Overlay's
+			// caller persists settings before calling it and does not roll them back, so failing
+			// here would leave every later Overlay exporting nothing at all.
+			if name := m.chatAPIKeyEnvVar(); name != "" {
+				if existing, taken := desired[name]; !taken || existing.source == string(key) {
+					desired[name] = envExport{value: value, source: string(key)}
+				}
+			}
+		}
+	}
+
+	return desired, nil
+}
+
+// chatAPIKeyEnvVar returns the API-key variable name configured in the chat preferences, or the
+// empty string when none is set. Deliberately separate from EnvVar: EnvVar reads the
+// per-credential name override, while this reads the chat settings that chat.ResolveProvider
+// consults exclusively once set.
+func (m *Manager) chatAPIKeyEnvVar() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.settings.Chat == nil {
+		return ""
+	}
+
+	return m.settings.Chat.APIKeyEnvVar
+}
+
 // addEditorOverlay adds the configured editor command to the desired environment under EDITOR so
 // KSail's editor resolution (and any editor subprocess) honors it — important for a Dock/Finder-
 // launched desktop app with no shell env. The caller must hold m.mu.
-func (m *Manager) addEditorOverlay(desired map[string]string) {
+func (m *Manager) addEditorOverlay(desired map[string]envExport) {
 	if m.settings.Editor != "" {
-		desired[editorEnvVar] = m.settings.Editor
+		desired[editorEnvVar] = envExport{value: m.settings.Editor, source: editorSource}
 	}
 }
 
@@ -418,8 +541,13 @@ func (m *Manager) applyEnvVarOverrides(updates []CredentialUpdate) error {
 func (s settings) appSettings() AppSettings {
 	out := AppSettings{Editor: s.Editor}
 	if s.Chat != nil {
+		out.ChatProvider = s.Chat.Provider
 		out.ChatModel = s.Chat.Model
 		out.ChatReasoningEffort = s.Chat.ReasoningEffort
+		out.ChatBaseURL = s.Chat.BaseURL
+		out.ChatAPIKeyEnvVar = s.Chat.APIKeyEnvVar
+		out.ChatWireAPI = s.Chat.WireAPI
+		out.ChatAzureAPIVersion = s.Chat.AzureAPIVersion
 	}
 
 	return out

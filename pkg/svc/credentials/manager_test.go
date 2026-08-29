@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -203,4 +204,133 @@ func TestManager_SettingsPersistAcrossInstances(t *testing.T) {
 	second, err := credentials.NewManager(credentials.NewMemoryStore())
 	require.NoError(t, err)
 	assert.Equal(t, "MY_OMNI_ENDPOINT", second.EnvVar(credentials.OmniEndpoint))
+}
+
+//nolint:gosec // APIKeyEnvVar is an environment-variable name, not a credential.
+func TestManager_ChatProviderSettingsPersistAcrossInstances(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	first, err := credentials.NewManager(credentials.NewMemoryStore())
+	require.NoError(t, err)
+	require.NoError(t, first.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:        v1alpha1.AIProviderAzureOpenAI,
+		ChatModel:           "production-deployment",
+		ChatReasoningEffort: "high",
+		ChatBaseURL:         "https://resource.openai.azure.com",
+		ChatAPIKeyEnvVar:    "TEAM_AZURE_KEY",
+		ChatWireAPI:         "responses",
+		ChatAzureAPIVersion: "2025-04-01-preview",
+	}))
+
+	second, err := credentials.NewManager(credentials.NewMemoryStore())
+	require.NoError(t, err)
+	assert.Equal(t, credentials.AppSettings{
+		ChatProvider:        v1alpha1.AIProviderAzureOpenAI,
+		ChatModel:           "production-deployment",
+		ChatReasoningEffort: "high",
+		ChatBaseURL:         "https://resource.openai.azure.com",
+		ChatAPIKeyEnvVar:    "TEAM_AZURE_KEY",
+		ChatWireAPI:         "responses",
+		ChatAzureAPIVersion: "2025-04-01-preview",
+	}, second.AppSettings())
+}
+
+func TestManager_UpdateAppSettingsRejectsInvalidProviderFields(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	manager, _ := newManager(t)
+
+	err := manager.UpdateAppSettings(credentials.AppSettings{ChatProvider: "unknown"})
+	require.ErrorIs(t, err, credentials.ErrInvalidAIProvider)
+
+	err = manager.UpdateAppSettings(credentials.AppSettings{ChatWireAPI: "messages"})
+	require.ErrorIs(t, err, credentials.ErrInvalidAIWireAPI)
+
+	err = manager.UpdateAppSettings(credentials.AppSettings{ChatAPIKeyEnvVar: "TEAM=KEY"})
+	require.ErrorIs(t, err, credentials.ErrInvalidEnvVarName)
+}
+
+// A stored BYOK key must be reachable under the name the chat settings name, because
+// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when one is configured it consults
+// that variable and nothing else. Chat.APIKeyEnvVar is a separate setting from the per-credential
+// EnvVars override that Manager.EnvVar reads, so without this export a user who stores a key AND
+// names a variable gets "AI provider API key is required" while holding a stored key.
+func TestManager_OverlayExportsAIKeyUnderChatConfiguredEnvVar(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEAM_AI_KEY", "")
+
+	manager, store := newManager(t)
+
+	require.NoError(t, manager.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:     v1alpha1.AIProviderOpenAI,
+		ChatModel:        "gpt-5",
+		ChatAPIKeyEnvVar: "TEAM_AI_KEY",
+	}))
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+	require.NoError(t, manager.Overlay())
+
+	assert.Equal(t, "stored-ai-key", os.Getenv("TEAM_AI_KEY"),
+		"overlay must export the stored AI key under the chat-configured variable name")
+	assert.Equal(t, "stored-ai-key",
+		os.Getenv(credentials.DefaultEnvVar(credentials.AIProviderAPIKey)),
+		"overlay must still export under the default name")
+}
+
+// Overlay's error is logged verbatim by newCredentialManager, and the api-key variable name it used
+// to carry comes straight out of ui-settings.json — a file the load path does not validate, unlike
+// UpdateAppSettings. Naming the credential instead keeps the diagnostic that matters (which
+// credential failed) while keeping unvalidated file content out of the log line.
+func TestManager_OverlayErrorNamesCredentialNotConfiguredVariable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Written directly rather than through UpdateAppSettings: that path rejects the name, and the
+	// gap under test is precisely that the load path does not.
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ksail"), 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(home, ".ksail", "ui-settings.json"),
+		[]byte(`{"chat":{"apiKeyEnvVar":"BAD=NAME"}}`),
+		0o600,
+	))
+
+	manager, store := newManager(t)
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+
+	err := manager.Overlay()
+	require.Error(t, err, "a variable name os.Setenv rejects must surface as an error")
+	assert.NotContains(t, err.Error(), "BAD=NAME",
+		"the export error must not echo the settings-file variable name into a logged line")
+	assert.Contains(t, err.Error(), string(credentials.AIProviderAPIKey),
+		"the export error must still name which credential could not be exported")
+}
+
+// AIProviderAPIKey is last in AllKeys, so its chat-configured alias is written into the desired
+// export map after every other credential has already claimed its own names. An alias naming a
+// variable another credential exports under therefore overwrites that credential deterministically,
+// handing KSail's subprocesses the AI key where they expect (here) the AWS access key — a stored
+// credential silently replaced by an unrelated secret. The credential that owns the name keeps it.
+func TestManager_OverlayChatAliasDoesNotClobberAnotherCredential(t *testing.T) {
+	awsVar := credentials.DefaultEnvVar(credentials.AWSAccessKeyID)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(awsVar, "")
+
+	manager, store := newManager(t)
+
+	require.NoError(t, manager.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:     v1alpha1.AIProviderOpenAI,
+		ChatModel:        "gpt-5",
+		ChatAPIKeyEnvVar: awsVar,
+	}))
+	require.NoError(t, store.Set(credentials.AWSAccessKeyID, "stored-aws-key"))
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+
+	require.NoError(t, manager.Overlay(),
+		"a colliding alias is a settings mistake, not a reason to export no credentials at all")
+
+	assert.Equal(t, "stored-aws-key", os.Getenv(awsVar),
+		"the credential that owns the variable must keep it; the chat alias must not overwrite it")
+	assert.Equal(t, "stored-ai-key",
+		os.Getenv(credentials.DefaultEnvVar(credentials.AIProviderAPIKey)),
+		"the AI key must still be exported under its own default name")
 }

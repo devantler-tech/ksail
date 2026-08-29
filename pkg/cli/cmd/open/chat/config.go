@@ -19,8 +19,13 @@ var errInvalidReasoningEffort = errors.New(
 
 // flags holds parsed flags for the chat command.
 type flags struct {
+	provider        v1alpha1.AIProvider
 	model           string
 	reasoningEffort string
+	baseURL         string
+	apiKeyEnvVar    string
+	wireAPI         string
+	azureAPIVersion string
 	streaming       bool
 	timeout         time.Duration
 	useTUI          bool
@@ -28,8 +33,13 @@ type flags struct {
 
 // parseChatFlags extracts and resolves chat command flags.
 func parseChatFlags(cmd *cobra.Command) (flags, error) {
+	providerFlag, _ := cmd.Flags().GetString("provider")
 	modelFlag, _ := cmd.Flags().GetString("model")
 	reasoningEffortFlag, _ := cmd.Flags().GetString("reasoning-effort")
+	baseURLFlag, _ := cmd.Flags().GetString("base-url")
+	apiKeyEnvVarFlag, _ := cmd.Flags().GetString("api-key-env")
+	wireAPIFlag, _ := cmd.Flags().GetString("wire-api")
+	azureAPIVersionFlag, _ := cmd.Flags().GetString("azure-api-version")
 
 	// Validate reasoning effort if provided via flag
 	err := validateReasoningEffort(reasoningEffortFlag)
@@ -54,12 +64,49 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	}
 
 	return flags{
+		provider: v1alpha1.AIProvider(resolveString(
+			providerFlag,
+			string(cfg.Provider),
+			cmd.Flags().Changed("provider"),
+		)),
 		model:           model,
 		reasoningEffort: reasoningEffort,
-		streaming:       streaming,
-		timeout:         timeout,
-		useTUI:          useTUI,
+		baseURL:         resolveString(baseURLFlag, cfg.BaseURL, cmd.Flags().Changed("base-url")),
+		apiKeyEnvVar: resolveString(
+			apiKeyEnvVarFlag,
+			cfg.APIKeyEnvVar,
+			cmd.Flags().Changed("api-key-env"),
+		),
+		wireAPI: resolveString(wireAPIFlag, cfg.WireAPI, cmd.Flags().Changed("wire-api")),
+		azureAPIVersion: resolveString(
+			azureAPIVersionFlag,
+			cfg.AzureAPIVersion,
+			cmd.Flags().Changed("azure-api-version"),
+		),
+		streaming: streaming,
+		timeout:   timeout,
+		useTUI:    useTUI,
 	}, nil
+}
+
+func (f flags) chatSpec() v1alpha1.ChatSpec {
+	return v1alpha1.ChatSpec{
+		Provider:        f.provider,
+		Model:           f.model,
+		ReasoningEffort: f.reasoningEffort,
+		BaseURL:         f.baseURL,
+		APIKeyEnvVar:    f.apiKeyEnvVar,
+		WireAPI:         f.wireAPI,
+		AzureAPIVersion: f.azureAPIVersion,
+	}
+}
+
+func resolveString(flagValue, configValue string, flagChanged bool) string {
+	if flagChanged {
+		return flagValue
+	}
+
+	return configValue
 }
 
 func validateReasoningEffort(effort string) error {
@@ -105,10 +152,7 @@ func resolveReasoningEffort(flagValue, configValue string) (string, error) {
 }
 
 // chatConfig holds configuration values loaded from ksail.yaml.
-type chatConfig struct {
-	Model           string
-	ReasoningEffort string
-}
+type chatConfig = v1alpha1.ChatSpec
 
 // loadChatConfig loads chat configuration from ksail.yaml.
 // Returns empty strings if config doesn't exist or values are not set.
@@ -130,8 +174,5 @@ func loadChatConfig() chatConfig {
 		return chatConfig{}
 	}
 
-	return chatConfig{
-		Model:           config.Spec.Chat.Model,
-		ReasoningEffort: config.Spec.Chat.ReasoningEffort,
-	}
+	return config.Spec.Chat
 }

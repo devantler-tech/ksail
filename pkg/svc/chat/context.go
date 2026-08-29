@@ -14,6 +14,22 @@ func BuildSystemSections(rootCmd *cobra.Command) map[string]copilot.SectionOverr
 	return BuildSystemSectionsFromConfig(DefaultSystemContextConfig(rootCmd))
 }
 
+// BuildSystemSectionsForProvider builds the chat context for provider. API providers omit the full
+// embedded documentation corpus: it alone can exceed a provider model's usable input window before
+// the first user turn. The compact path retains KSail's identity, live config, CLI help, behavioral
+// instructions, and generated tools. Copilot keeps the historical full-documentation context.
+func BuildSystemSectionsForProvider(
+	rootCmd *cobra.Command,
+	provider ResolvedProvider,
+) map[string]copilot.SectionOverride {
+	config := DefaultSystemContextConfig(rootCmd)
+	if !provider.UsesCopilot() {
+		config.Documentation = ""
+	}
+
+	return BuildSystemSectionsFromConfig(config)
+}
+
 // DefaultSystemContextConfig returns the default KSail system context configuration.
 // The CLI help section is rendered from the in-process root command instead of
 // spawning a ksail subprocess, so it works regardless of PATH or install location.

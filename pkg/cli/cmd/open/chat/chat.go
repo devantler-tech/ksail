@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -27,7 +29,7 @@ const (
 
 // buildSessionConfig creates the Copilot session configuration.
 func buildSessionConfig(
-	model string,
+	provider chatsvc.ResolvedProvider,
 	reasoningEffort string,
 	streaming bool,
 	sections map[string]copilot.SectionOverride,
@@ -37,6 +39,7 @@ func buildSessionConfig(
 
 	config := &copilot.SessionConfig{
 		Streaming: &streaming,
+		Provider:  provider.SDK,
 		SystemMessage: &copilot.SystemMessageConfig{
 			Mode:     "customize",
 			Sections: sections,
@@ -48,8 +51,8 @@ func buildSessionConfig(
 		},
 	}
 
-	if model != "" {
-		config.Model = model
+	if provider.Model != "" {
+		config.Model = provider.Model
 	}
 
 	if reasoningEffort != "" {
@@ -64,7 +67,7 @@ func NewChatCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat",
 		Short: "Start an AI-assisted chat session",
-		Long: `Start an interactive AI chat session powered by GitHub Copilot.
+		Long: `Start an interactive AI chat session using GitHub Copilot or your own AI provider API key.
 
 The assistant understands KSail's CLI, configuration schemas, and can help with:
   - Guided cluster configuration and setup
@@ -72,8 +75,10 @@ The assistant understands KSail's CLI, configuration schemas, and can help with:
   - Explaining KSail concepts and features
   - Running KSail commands with your approval
 
-Prerequisites:
-  - An active GitHub Copilot subscription
+Providers:
+  - GitHub Copilot (default; subscription or Copilot token)
+  - OpenAI, Anthropic, Google Gemini, Azure OpenAI, or OpenRouter (API key)
+  - Ollama or any OpenAI-compatible endpoint
 
 Write operations require explicit confirmation before execution.`,
 		SilenceUsage: true,
@@ -83,7 +88,15 @@ Write operations require explicit confirmation before execution.`,
 	}
 
 	// Optional flags
+	cmd.Flags().String(
+		"provider", "",
+		"AI provider (copilot, openai, anthropic, gemini, azure-openai, openrouter, ollama, openai-compatible)",
+	)
 	cmd.Flags().StringP("model", "m", "", "Model to use (e.g., gpt-5, claude-sonnet-4)")
+	cmd.Flags().String("base-url", "", "AI provider base URL (required for Azure/custom providers)")
+	cmd.Flags().String("api-key-env", "", "Environment variable containing the AI provider API key")
+	cmd.Flags().String("wire-api", "", "OpenAI-compatible wire API (completions or responses)")
+	cmd.Flags().String("azure-api-version", "", "Azure OpenAI API version override")
 	cmd.Flags().StringP(
 		"reasoning-effort", "r", "",
 		"Reasoning effort level for models that support it (low, medium, high)",
@@ -119,7 +132,12 @@ func handleChatRunE(cmd *cobra.Command) error {
 		notifyNonTUIStartup(writer)
 	}
 
-	client, loginName, cleanup, err := setupCopilotClient(ctx)
+	provider, err := chatsvc.ResolveProvider(flags.chatSpec(), os.Getenv)
+	if err != nil {
+		return fmt.Errorf("resolve AI provider: %w", err)
+	}
+
+	client, identity, cleanup, err := setupChatClient(ctx, provider)
 	if err != nil {
 		return err
 	}
@@ -127,17 +145,22 @@ func handleChatRunE(cmd *cobra.Command) error {
 	defer cleanup()
 
 	if !flags.useTUI {
+		message := "Using " + identity
+		if provider.UsesCopilot() {
+			message = "Authenticated as " + identity
+		}
+
 		notify.WriteMessage(notify.Message{
 			Type:    notify.InfoType,
-			Content: "Authenticated as " + loginName,
+			Content: message,
 			Writer:  writer,
 		})
 	}
 
-	sections := chatsvc.BuildSystemSections(cmd.Root())
+	sections := chatsvc.BuildSystemSectionsForProvider(cmd.Root(), provider)
 
 	sessionConfig := buildSessionConfig(
-		flags.model,
+		provider,
 		flags.reasoningEffort,
 		flags.streaming,
 		sections,

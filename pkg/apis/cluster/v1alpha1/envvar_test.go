@@ -75,6 +75,19 @@ func TestCluster_ExpandEnvVars_ChatModel(t *testing.T) {
 	assert.Equal(t, "gpt-4", cluster.Spec.Chat.Model)
 }
 
+func TestCluster_ExpandEnvVars_ChatProviderEndpoint(t *testing.T) {
+	t.Setenv("TEST_AI_HOST", "ai.example.com")
+
+	cluster := v1alpha1.NewCluster()
+	cluster.Spec.Chat.BaseURL = "https://${TEST_AI_HOST}/v1"
+	cluster.Spec.Chat.APIKeyEnvVar = "${TEST_AI_KEY_VAR}"
+
+	cluster.ExpandEnvVars()
+
+	assert.Equal(t, "https://ai.example.com/v1", cluster.Spec.Chat.BaseURL)
+	assert.Equal(t, "${TEST_AI_KEY_VAR}", cluster.Spec.Chat.APIKeyEnvVar)
+}
+
 func TestCluster_ExpandEnvVars_LocalRegistry(t *testing.T) {
 	t.Setenv("TEST_REGISTRY_USER", "testuser")
 	t.Setenv("TEST_REGISTRY_PASS", "testpass")

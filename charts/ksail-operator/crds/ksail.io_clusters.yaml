@@ -66,12 +66,35 @@ spec:
                   Chat configures the KSail AI chat assistant.
                   CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it).
                 properties:
+                  apiKeyEnvVar:
+                    description: |-
+                      APIKeyEnvVar names the environment variable holding the provider key. The key itself is never
+                      persisted in ksail.yaml. Empty uses KSAIL_AI_API_KEY, then the provider's conventional variable.
+                    type: string
+                  azureApiVersion:
+                    description: AzureAPIVersion optionally overrides the Azure OpenAI
+                      API version.
+                    type: string
+                  baseUrl:
+                    description: |-
+                      BaseURL overrides the provider's API endpoint. It is required for Azure OpenAI and custom
+                      OpenAI-compatible providers. Azure expects the resource host without /openai/v1.
+                    type: string
                   model:
+                    type: string
+                  provider:
+                    description: |-
+                      Provider selects the API backing the chat assistant. Empty preserves the historical Copilot
+                      default. OpenAI-compatible accepts any compatible endpoint, including self-hosted services.
                     type: string
                   reasoningEffort:
                     description: |-
                       ReasoningEffort specifies the reasoning effort level for chat responses.
                       Valid values: "low", "medium", "high"
+                    type: string
+                  wireApi:
+                    description: WireAPI chooses the OpenAI-compatible request format.
+                      Empty uses chat completions.
                     type: string
                 type: object
               cluster:

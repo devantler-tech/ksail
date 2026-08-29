@@ -98,10 +98,18 @@ func (s settingsService) UpdateAppSettings(
 ) (api.AppSettings, error) {
 	err := s.manager.UpdateAppSettings(credentials.AppSettings{
 		Editor:              request.Editor,
+		ChatProvider:        v1alpha1.AIProvider(request.Chat.Provider),
 		ChatModel:           request.Chat.Model,
 		ChatReasoningEffort: request.Chat.ReasoningEffort,
+		ChatBaseURL:         request.Chat.BaseURL,
+		ChatAPIKeyEnvVar:    request.Chat.APIKeyEnvVar,
+		ChatWireAPI:         request.Chat.WireAPI,
+		ChatAzureAPIVersion: request.Chat.AzureAPIVersion,
 	})
-	if errors.Is(err, credentials.ErrInvalidReasoningEffort) {
+	if errors.Is(err, credentials.ErrInvalidReasoningEffort) ||
+		errors.Is(err, credentials.ErrInvalidAIProvider) ||
+		errors.Is(err, credentials.ErrInvalidAIWireAPI) ||
+		errors.Is(err, credentials.ErrInvalidEnvVarName) {
 		return api.AppSettings{}, fmt.Errorf("%w: %w", api.ErrInvalid, err)
 	}
 
@@ -151,8 +159,13 @@ func toAPIAppSettings(app credentials.AppSettings) api.AppSettings {
 	return api.AppSettings{
 		Editor: app.Editor,
 		Chat: api.ChatSettings{
+			Provider:        string(app.ChatProvider),
 			Model:           app.ChatModel,
 			ReasoningEffort: app.ChatReasoningEffort,
+			BaseURL:         app.ChatBaseURL,
+			APIKeyEnvVar:    app.ChatAPIKeyEnvVar,
+			WireAPI:         app.ChatWireAPI,
+			AzureAPIVersion: app.ChatAzureAPIVersion,
 		},
 	}
 }

@@ -51,6 +51,16 @@ func TestDefaultEnvVar_MatchesCanonicalSources(t *testing.T) {
 	)
 	// The Copilot token has no external canonical source; it mirrors webchat's primary token variable.
 	assert.Equal(t, "KSAIL_COPILOT_TOKEN", credentials.DefaultEnvVar(credentials.CopilotToken))
+	assert.Equal(t, "KSAIL_AI_API_KEY", credentials.DefaultEnvVar(credentials.AIProviderAPIKey))
+}
+
+func TestAIProviderAPIKeyMetadata(t *testing.T) {
+	t.Parallel()
+
+	assert.Contains(t, credentials.AllKeys(), credentials.AIProviderAPIKey)
+	assert.True(t, credentials.IsSecret(credentials.AIProviderAPIKey))
+	assert.Equal(t, "AI providers", credentials.ProviderFor(credentials.AIProviderAPIKey))
+	assert.Equal(t, "API key", credentials.Label(credentials.AIProviderAPIKey))
 }
 
 func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {

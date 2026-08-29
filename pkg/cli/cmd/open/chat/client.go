@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	copilot "github.com/github/copilot-sdk/go"
 )
 
@@ -49,14 +50,19 @@ const (
 )
 
 // Sentinel errors for the Copilot client bootstrap.
-var errNotAuthenticated = errors.New("not authenticated with GitHub Copilot")
+var (
+	errNotAuthenticated   = errors.New("not authenticated with GitHub Copilot")
+	errStartCopilotClient = errors.New("failed to start Copilot client")
+	errStartChatRuntime   = errors.New("failed to start chat runtime")
+)
 
-// setupCopilotClient starts the Copilot client, validates authentication,
-// and returns a cleanup function that should be deferred.
-func setupCopilotClient(
+// setupChatClient starts the shared chat runtime. Copilot sessions validate GitHub authentication;
+// BYOK sessions deliberately skip that check and run with logged-in-user discovery disabled.
+func setupChatClient(
 	ctx context.Context,
+	provider chatsvc.ResolvedProvider,
 ) (*copilot.Client, string, func(), error) {
-	client, err := startCopilotClient(ctx)
+	client, err := startCopilotClient(ctx, provider.UsesCopilot())
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -70,14 +76,26 @@ func setupCopilotClient(
 		}
 	}
 
-	loginName, err := validateCopilotAuth(ctx, client)
+	identity, err := authenticateClient(ctx, client, provider)
 	if err != nil {
 		cleanup()
 
 		return nil, "", nil, err
 	}
 
-	return client, loginName, cleanup, nil
+	return client, identity, cleanup, nil
+}
+
+func authenticateClient(
+	ctx context.Context,
+	client *copilot.Client,
+	provider chatsvc.ResolvedProvider,
+) (string, error) {
+	if !provider.UsesCopilot() {
+		return chatsvc.ProviderDisplayName(provider.Name), nil
+	}
+
+	return validateCopilotAuth(ctx, client)
 }
 
 // startCopilotClient creates and starts a Copilot client.
@@ -88,7 +106,13 @@ func setupCopilotClient(
 // GITHUB_TOKEN is intentionally NOT used: it is a general-purpose PAT that
 // may lack Copilot-specific scopes, causing API endpoints like models.list
 // to return 400.
-func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
+func startCopilotClient(ctx context.Context, useCopilot bool) (*copilot.Client, error) {
+	opts := buildClientOptions(useCopilot)
+
+	return startClientWithOptions(ctx, opts)
+}
+
+func buildClientOptions(useCopilot bool) *copilot.ClientOptions {
 	// Environment variables to check for explicit Copilot tokens (priority order).
 	tokenEnvVars := []string{"KSAIL_COPILOT_TOKEN", "COPILOT_TOKEN"}
 
@@ -104,13 +128,37 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// all COPILOT_* prefixed vars, so that user-configurable settings like
 	// COPILOT_CUSTOM_INSTRUCTIONS_DIRS are preserved.
 	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN"}
+	if !useCopilot {
+		filteredEnvVars = append(filteredEnvVars, tokenEnvVars...)
+		filteredEnvVars = append(filteredEnvVars, "COPILOT_SDK_AUTH_TOKEN")
+	}
 
 	opts := &copilot.ClientOptions{
 		LogLevel:                  "error",
 		Env:                       filterEnvVars(os.Environ(), filteredEnvVars),
 		SessionIdleTimeoutSeconds: sessionIdleTimeoutSeconds,
 	}
+	if !useCopilot {
+		opts.UseLoggedInUser = new(false)
 
+		return opts
+	}
+
+	for _, envVar := range tokenEnvVars {
+		if token := os.Getenv(envVar); token != "" {
+			opts.GitHubToken = token
+
+			break
+		}
+	}
+
+	return opts
+}
+
+func startClientWithOptions(
+	ctx context.Context,
+	opts *copilot.ClientOptions,
+) (*copilot.Client, error) {
 	// Resolve CLI path explicitly so we get a clear error if it's missing,
 	// rather than the opaque "CLI process exited: exit status 1" from the SDK.
 	// This checks COPILOT_CLI_PATH, the SDK cache directory, and system PATH.
@@ -130,7 +178,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 			return nil, verifyErr
 		}
 
-		opts.Connection = &copilot.StdioConnection{Path: cliPath}
+		configureStdioConnection(opts, cliPath)
 	}
 
 	cwd, cwdErr := os.Getwd()
@@ -138,26 +186,49 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		opts.WorkingDirectory = cwd
 	}
 
-	for _, envVar := range tokenEnvVars {
-		if token := os.Getenv(envVar); token != "" {
-			opts.GitHubToken = token
-
-			break
-		}
-	}
-
 	client := copilot.NewClient(opts)
 
 	err := client.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(
-			startupErrFmt,
+		return nil, buildClientStartupError(
+			opts,
 			err,
 			buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env),
 		)
 	}
 
 	return client, nil
+}
+
+// configureStdioConnection uses the SDK's value form deliberately. Its RuntimeConnection interface
+// also admits *StdioConnection, but NewClient's type switch accepts only StdioConnection and panics
+// when handed the pointer form.
+func configureStdioConnection(opts *copilot.ClientOptions, cliPath string) {
+	opts.Connection = copilot.StdioConnection{Path: cliPath}
+}
+
+func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnostic string) error {
+	if opts.UseLoggedInUser != nil && !*opts.UseLoggedInUser && opts.GitHubToken == "" {
+		return fmt.Errorf(
+			"%w: %w\n\n%sTo fix:\n"+
+				"  - Install the Copilot CLI runtime: npm install -g @github/copilot\n"+
+				"  - Verify the CLI works without logging in: copilot --version\n"+
+				"  - Check the selected AI provider endpoint and API key",
+			errStartChatRuntime,
+			cause,
+			diagnostic,
+		)
+	}
+
+	return fmt.Errorf(
+		"%w: %w\n\n%sTo fix:\n"+
+			"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+			"  - Install the Copilot CLI: npm install -g @github/copilot\n"+
+			"  - Verify the CLI works: copilot --version",
+		errStartCopilotClient,
+		cause,
+		diagnostic,
+	)
 }
 
 // verifyCopilotCLI runs a quick version check on the resolved copilot binary
@@ -295,11 +366,22 @@ func filterEnvVars(env []string, remove []string) []string {
 	filtered := make([]string, 0, len(env))
 
 	for _, entry := range env {
+		name, _, hasValue := strings.Cut(entry, "=")
+		if !hasValue {
+			filtered = append(filtered, entry)
+
+			continue
+		}
+
+		// Windows environment variable names are case-insensitive, so an exact-case match
+		// leaves a mixed-case credential (Github_Token=...) in the child environment of a BYOK
+		// session — the one place these names are removed precisely because the provider is
+		// not GitHub. Fold the case: over-removing a same-named variable that differs only by
+		// case on a case-sensitive OS is far cheaper than forwarding a token.
 		exclude := false
 
-		for _, name := range remove {
-			prefix := name + "="
-			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
+		for _, removeName := range remove {
+			if strings.EqualFold(name, removeName) {
 				exclude = true
 
 				break
