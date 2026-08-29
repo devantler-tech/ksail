@@ -387,8 +387,23 @@ jobs:
             mv "$file.tmp" "$file"
           }
 
-          git config user.name "devantler-tech-bot[bot]"
-          git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
+          # The manifests this job rewrites, in one place so the bump, the
+          # already-committed check and the commit payload cannot drift apart.
+          FILES="copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json .github/plugin/marketplace.json .claude-plugin/marketplace.json"
+
+          # A FileAddition carries a path and contents only, so a file mode is not
+          # expressible and a symlink would be dereferenced. Assert the shape of
+          # what is in the repository BEFORE bumping: `bump` writes a temp file and
+          # `mv`s it into place, which silently normalises mode and replaces a
+          # symlink with a regular file, so the same check placed after the bump
+          # can never fire — it would read as protection while asserting nothing.
+          # shellcheck disable=SC2086 # FILES is a deliberate word-split list
+          for entry_path in $FILES; do
+            if [ -L "$entry_path" ] || [ ! -f "$entry_path" ] || [ -x "$entry_path" ]; then
+              echo "::error file=${entry_path}::Version-bumped file is not a regular non-executable file"
+              exit 1
+            fi
+          done
 
           # Skip if the repo already carries an equal-or-newer version to
           # prevent a slow-merging older-tag PR from downgrading the plugin.
@@ -411,19 +426,102 @@ jobs:
 
           BRANCH="chore/copilot-plugin-v${VERSION}"
 
-          git checkout -b "${BRANCH}"
-          git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
-            .github/plugin/marketplace.json .claude-plugin/marketplace.json
-          git commit -m "chore(copilot-plugin): release v${VERSION}"
-          # Fetch the remote branch only when it exists (i.e. a prior job
-          # attempt already pushed it) so --force-with-lease has up-to-date
-          # tracking info on re-runs.  git ls-remote exits 2 when no matching
-          # ref is found, so auth/network failures still surface immediately
-          # via stderr instead of being silently swallowed.
+          # Commit through the GraphQL createCommitOnBranch mutation instead of
+          # `git commit` on the runner. A runner-made commit is unsigned whatever
+          # token pushes it; a commit created through the API with an App token is
+          # signed by GitHub. Requiring commit signatures on branches is therefore
+          # a policy choice rather than a breaking change for this lane (#6631).
+          # The same pattern is already proven in this repository's ci.yaml.
+          BASE_OID="$(git rev-parse HEAD)"
+
+          # createCommitOnBranch needs the branch to exist, and the OID read here
+          # IS the lease that replaces --force-with-lease: the mutation refuses
+          # when the branch has moved since, rather than overwriting it.
+          # git ls-remote exits 2 when no matching ref is found, so auth/network
+          # failures still surface via stderr instead of being read as "absent".
           if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null; then
-            git fetch origin "${BRANCH}"
+            git fetch --no-tags origin "${BRANCH}"
+            HEAD_OID="$(git rev-parse FETCH_HEAD)"
+            # A re-run after a successful commit re-derives the identical bump.
+            # Committing it again would be an empty change, so compare what the
+            # branch already holds against what this run produced.
+            # shellcheck disable=SC2086 # FILES is a deliberate word-split list
+            if git diff --quiet FETCH_HEAD -- $FILES; then
+              echo "Branch ${BRANCH} already carries the v${VERSION} bump"
+              HEAD_OID=""
+            fi
+          else
+            gh api "repos/{owner}/{repo}/git/refs" --method POST \
+              -f "ref=refs/heads/${BRANCH}" -f "sha=${BASE_OID}" --silent
+            HEAD_OID="${BASE_OID}"
           fi
-          git push --force-with-lease origin "${BRANCH}"
+
+          if [ -n "${HEAD_OID}" ]; then
+            workdir="$(mktemp -d)"
+            additions="${workdir}/additions.json"
+            : >"$additions"
+            for entry_path in $FILES; do
+              # Shape was asserted above, before `bump` normalised these files.
+              # Keep file content off argv: Linux caps a single argv entry at
+              # 128 KiB independently of ARG_MAX. --rawfile reads from disk, and
+              # base64 output is ASCII so the round trip is exact.
+              base64 -w0 <"$entry_path" >"${workdir}/content.b64"
+              jq -n --arg p "$entry_path" --rawfile c "${workdir}/content.b64" \
+                '{path: $p, contents: ($c | gsub("\\s"; ""))}' >>"$additions"
+            done
+
+            jq -n \
+              --arg repo "${GITHUB_REPOSITORY}" \
+              --arg branch "${BRANCH}" \
+              --arg oid "${HEAD_OID}" \
+              --arg headline "chore(copilot-plugin): release v${VERSION}" \
+              --slurpfile additions "$additions" \
+              '{
+                query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+                variables: {
+                  input: {
+                    branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                    message: { headline: $headline },
+                    expectedHeadOid: $oid,
+                    fileChanges: { additions: $additions }
+                  }
+                }
+              }' >"${workdir}/mutation.json"
+
+            # `gh api graphql` exits non-zero on a GraphQL error, so the assignment
+            # would abort under `set -e` and skip these diagnostics. Handle the
+            # failure inline so the operator gets a labelled annotation.
+            if ! response="$(gh api graphql --input "${workdir}/mutation.json" 2>"${workdir}/stderr")"; then
+              echo "::error::createCommitOnBranch failed"
+              cat "${workdir}/stderr" >&2
+              printf '%s\n' "$response"
+              exit 1
+            fi
+            # Capture, then assert with a builtin: `jq -e` as an if-condition
+            # cannot tell "filter was false" from "jq itself failed", so a
+            # truncated response would take the no-errors path and continue.
+            errors="$(jq -c '.errors // empty' <<<"$response")"
+            if [ -n "$errors" ]; then
+              echo "::error::createCommitOnBranch failed"
+              printf '%s\n' "$errors"
+              exit 1
+            fi
+            COMMIT_OID="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$response")"
+            if [ -z "${COMMIT_OID}" ]; then
+              echo "::error::createCommitOnBranch returned no commit oid"
+              printf '%s\n' "$response"
+              exit 1
+            fi
+
+            # The whole point of using the API is that the commit is signed, so
+            # prove it rather than assuming it.
+            VERIFIED="$(gh api "repos/{owner}/{repo}/commits/${COMMIT_OID}" --jq '.commit.verification.verified')"
+            if [ "${VERIFIED}" != "true" ]; then
+              echo "::error::Release commit ${COMMIT_OID} is not signed (verified=${VERIFIED})."
+              exit 1
+            fi
+            echo "Committed v${VERSION} as ${COMMIT_OID}, signature verified."
+          fi
 
           # Create PR if one doesn't already exist for this branch.
           EXISTING_PR="$(gh pr list --head "${BRANCH}" --json number --jq '.[0].number // empty')"
