@@ -32,11 +32,11 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 
 	job, found := workflow.Jobs["todos"]
 	require.True(t, found, "TODO workflow must define the todos job")
-	require.Equal(
+	require.Regexp(
 		t,
-		"devantler-tech/actions/.github/workflows/scan-for-todo-comments.yaml@"+
-			"56665ea3f455622d6ff0cc0fb2b90fc3be6e41e7",
+		`^devantler-tech/actions/\.github/workflows/scan-for-todo-comments\.yaml@[0-9a-f]{40}$`,
 		job.Uses,
+		"shared scanner must use the reviewed workflow pinned to an immutable commit",
 	)
 	assert.Empty(t, job.RunsOn, "reusable workflow callers cannot configure runs-on")
 	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
@@ -49,5 +49,11 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, compiled.MatchString("third_party/go-archive/archive/tar/reader.go"))
 	assert.False(t, compiled.MatchString("internal/maintenance/todos.go"))
-	assert.Contains(t, string(contents), "# v13.2.2")
+	assert.Regexp(
+		t,
+		`(?m)^\s*uses:\s+devantler-tech/actions/\.github/workflows/`+
+			`scan-for-todo-comments\.yaml@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+\s*$`,
+		string(contents),
+		"workflow pin must retain its release annotation",
+	)
 }
