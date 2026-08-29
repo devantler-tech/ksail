@@ -23,6 +23,18 @@ type todosWorkflow struct {
 	} `yaml:"jobs"`
 }
 
+// TestTODOScannerExcludesOnlyVendoredSources pins the scanner's delegation and its blast radius.
+//
+// KSail calls the shared scanner in devantler-tech/actions instead of carrying its own copy, so the
+// job must stay a bare reusable-workflow call: a runs-on or steps key here would mean the
+// implementation had been forked and could drift from the reviewed one. The pin is required to be an
+// immutable 40-character commit that keeps its release annotation, so the workflow KSail runs is
+// always the workflow that was reviewed.
+//
+// The ignore pattern is asserted exactly rather than loosely, because widening it fails silently: a
+// pattern that also swallowed first-party paths would leave real to-do comments unscanned with no
+// check going red anywhere. third_party/ is vendored source KSail does not own; internal/ is its own
+// code and must stay covered.
 func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	t.Parallel()
 
