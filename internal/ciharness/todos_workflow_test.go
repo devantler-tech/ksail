@@ -23,7 +23,12 @@ type todosWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-// TestTODOScannerExcludesOnlyVendoredSources pins the scanner's delegation and its blast radius.
+// Pins the shared scanner's delegation and the blast radius of its ignore pattern.
+//
+// This comment deliberately does not open with the function's own name, the way a doc comment
+// normally would: that name embeds the uppercase marker, and the scanner keys on the marker
+// wherever it appears in a comment. See TestCIFilterCommentDoesNotSpellTheScannerMarker below,
+// which pins the same trap after it fired once for real.
 //
 // KSail calls the shared scanner in devantler-tech/actions instead of carrying its own copy, so the
 // job must stay a bare reusable-workflow call: a runs-on or steps key here would mean the
