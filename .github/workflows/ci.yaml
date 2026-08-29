@@ -163,7 +163,7 @@ jobs:
               - 'go.sum'
               - '.govulncheck-allow.txt'
               - '.github/actions/**'
-            # The Go harness in internal/ciharness asserts the shape of the TODO scanner
+            # The Go harness in internal/ciharness asserts the shape of the to-do scanner
             # caller. Its subject is a WORKFLOW file, not a Go file, so the org-required
             # validate-go-project run cannot reach it: that workflow gates its own test job
             # on a `go` filter of **/*.go|go.mod|go.sum|.golangci.* and skips everything
@@ -176,6 +176,9 @@ jobs:
             # filter would otherwise not match, so a PR editing only one of them could
             # weaken or delete the gate while the aggregator recorded it as an ordinary
             # skip.
+            # ("to-do" is deliberately lowercase and hyphenated here: the scanner keys on the
+            # uppercase marker, so spelling it out in prose files an issue against this very
+            # comment. ksail#6763 was exactly that — a false positive with no work behind it.)
             todos-contract:
               - '.github/workflows/todos.yaml'
               - '.github/workflows/ci.yaml'
