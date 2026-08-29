@@ -721,18 +721,17 @@ func assertResolveReasoningEffort(
 	}
 }
 
-// TestFilterEnvVars verifies environment variable filtering.
-func TestFilterEnvVars(t *testing.T) {
-	t.Parallel()
+// filterEnvVarsCase is one row of the filterEnvVars table. Named (rather than an anonymous struct
+// inline in the test) so the table can live in its own function and keep the test itself short.
+type filterEnvVarsCase struct {
+	name       string
+	environ    []string
+	filterList []string
+	expected   []string
+}
 
-	filter := chat.GetFilterEnvVars()
-
-	for _, testCase := range []struct {
-		name       string
-		environ    []string
-		filterList []string
-		expected   []string
-	}{
+func filterEnvVarsCases() []filterEnvVarsCase {
+	return []filterEnvVarsCase{
 		{
 			name:       "filters matching vars",
 			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=s", "GH_TOKEN=s2", "HOME=/h"},
@@ -778,7 +777,16 @@ func TestFilterEnvVars(t *testing.T) {
 			filterList: []string{"COPILOT_GITHUB_TOKEN"},
 			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
 		},
-	} {
+	}
+}
+
+// TestFilterEnvVars verifies environment variable filtering.
+func TestFilterEnvVars(t *testing.T) {
+	t.Parallel()
+
+	filter := chat.GetFilterEnvVars()
+
+	for _, testCase := range filterEnvVarsCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

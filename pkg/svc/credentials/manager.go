@@ -160,21 +160,6 @@ func (m *Manager) EnvVar(key Key) string {
 	return DefaultEnvVar(key)
 }
 
-// chatAPIKeyEnvVar returns the API-key variable name configured in the chat preferences, or
-// the empty string when none is set. This is deliberately separate from EnvVar: EnvVar reads
-// the per-credential name override, while this reads the chat settings that
-// chat.ResolveProvider consults exclusively once set.
-func (m *Manager) chatAPIKeyEnvVar() string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.settings.Chat == nil {
-		return ""
-	}
-
-	return m.settings.Chat.APIKeyEnvVar
-}
-
 // Value returns the resolved value for key: a stored secure-store value when present, otherwise the
 // process-environment value for the configured variable name. "" when unset.
 func (m *Manager) Value(key Key) string {
@@ -211,34 +196,9 @@ func (m *Manager) ExplicitValue(key Key) string {
 // launched from the Dock/Finder, which does not inherit the shell environment. Call it at startup
 // and after each update.
 func (m *Manager) Overlay() error {
-	desired := make(map[string]string)
-
-	for _, key := range AllKeys() {
-		value, ok, err := m.store.Get(key)
-		if err != nil {
-			return fmt.Errorf("read %q from store: %w", key, err)
-		}
-
-		if !ok || value == "" {
-			continue
-		}
-
-		// Export under the configured variable name (what discovery resolves) and also under the
-		// provider's default name. The create path builds provider specs with the default *EnvVar
-		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
-		// stored value usable for creation even when a custom variable name is configured.
-		desired[m.EnvVar(key)] = value
-		desired[DefaultEnvVar(key)] = value
-
-		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
-		// name a variable, it consults that one and nothing else. That name lives in the chat
-		// preferences, NOT in the per-credential EnvVars override m.EnvVar reads, so without
-		// this export a user who stores a key AND names a variable is told the key is missing.
-		if key == AIProviderAPIKey {
-			if name := m.chatAPIKeyEnvVar(); name != "" {
-				desired[name] = value
-			}
-		}
+	desired, err := m.desiredExports()
+	if err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -461,6 +421,59 @@ func (s AppSettings) chatIsEmpty() bool {
 	return s.ChatProvider == "" && s.ChatModel == "" && s.ChatReasoningEffort == "" &&
 		s.ChatBaseURL == "" && s.ChatAPIKeyEnvVar == "" && s.ChatWireAPI == "" &&
 		s.ChatAzureAPIVersion == ""
+}
+
+// desiredExports reads every stored credential and returns the environment variables it should
+// be exported under. Split out of Overlay so the name-selection policy lives in one place and
+// Overlay itself stays within the repo's complexity budget. Takes no lock: the accessors it
+// calls take m.mu.RLock themselves, so the caller must NOT hold m.mu.
+func (m *Manager) desiredExports() (map[string]string, error) {
+	desired := make(map[string]string)
+
+	for _, key := range AllKeys() {
+		value, ok, err := m.store.Get(key)
+		if err != nil {
+			return nil, fmt.Errorf("read %q from store: %w", key, err)
+		}
+
+		if !ok || value == "" {
+			continue
+		}
+
+		// Export under the configured variable name (what discovery resolves) and also under the
+		// provider's default name. The create path builds provider specs with the default *EnvVar
+		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
+		// stored value usable for creation even when a custom variable name is configured.
+		desired[m.EnvVar(key)] = value
+		desired[DefaultEnvVar(key)] = value
+
+		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
+		// name a variable, it consults that one and nothing else. That name lives in the chat
+		// preferences, NOT in the per-credential EnvVars override m.EnvVar reads, so without
+		// this export a user who stores a key AND names a variable is told the key is missing.
+		if key == AIProviderAPIKey {
+			if name := m.chatAPIKeyEnvVar(); name != "" {
+				desired[name] = value
+			}
+		}
+	}
+
+	return desired, nil
+}
+
+// chatAPIKeyEnvVar returns the API-key variable name configured in the chat preferences, or the
+// empty string when none is set. Deliberately separate from EnvVar: EnvVar reads the
+// per-credential name override, while this reads the chat settings that chat.ResolveProvider
+// consults exclusively once set.
+func (m *Manager) chatAPIKeyEnvVar() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.settings.Chat == nil {
+		return ""
+	}
+
+	return m.settings.Chat.APIKeyEnvVar
 }
 
 // addEditorOverlay adds the configured editor command to the desired environment under EDITOR so
