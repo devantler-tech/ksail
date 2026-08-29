@@ -174,7 +174,7 @@ export function OverviewView({
             <StatusBadge phase={clusterPhase(cluster)} />
             {hostCluster ? <HostBadge /> : null}
           </div>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 break-words text-sm text-slate-500 dark:text-slate-400">
             {distribution} · {provider} · namespace {namespace}
           </p>
         </div>

@@ -375,7 +375,9 @@ export function AppShell({
               </button>
             ) : null}
             {/* Plugin-contributed app-bar actions (Headlamp registerAppBarAction); renders nothing until a plugin adds one. */}
-            <PluginAppBarActions />
+            <div className="flex min-w-0 max-w-10 shrink items-center overflow-hidden sm:max-w-32 lg:max-w-64">
+              <PluginAppBarActions />
+            </div>
             {headerActions}
             <IconButton
               label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}

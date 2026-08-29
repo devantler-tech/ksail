@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const CLUSTER_NAME = "production-observability-control-plane-with-a-very-long-generated-cluster-name";
-const NAMESPACE = "platform-observability-and-security-services";
+const NAMESPACE = "n".repeat(63);
 const POD_NAME = "metrics-exporter-with-an-intentionally-long-unbroken-generated-pod-name-7f9c8d6b5f-qwert";
+const PLUGIN_ACTION_LABEL = "PluginActionWithoutAnyNaturalBreakOpportunity".repeat(3);
 
 const cluster = {
   metadata: {
@@ -126,7 +127,7 @@ async function mockOperatorApi(page: Page) {
             workloadExec: true,
             clusterStartStop: false,
             componentsInstall: true,
-            plugins: false,
+            plugins: true,
             aiChat: false,
             kubeProxy: false,
             pluginInstall: false,
@@ -136,6 +137,19 @@ async function mockOperatorApi(page: Page) {
             wsMultiplexer: false,
           },
         },
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/v1/plugins") {
+      await route.fulfill({ json: { plugins: [{ name: "wide-action", main: "main.js" }] } });
+      return;
+    }
+
+    if (url.pathname === "/api/v1/plugins/wide-action/main.js") {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `window.pluginLib.registerAppBarAction(window.pluginLib.React.createElement("button", { type: "button", "aria-label": "${PLUGIN_ACTION_LABEL}" }, "${PLUGIN_ACTION_LABEL}"));`,
       });
       return;
     }
@@ -212,6 +226,7 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   const pageTitle = page.getByRole("heading", { name: "Clusters", level: 1 });
   await expect(pageTitle).toBeVisible();
   await expect(pageTitle).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole("button", { name: PLUGIN_ACTION_LABEL })).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByRole("button", { name: "New cluster", exact: true })).toBeInViewport({ ratio: 1 });
   await expectPageAndTableToFit(page);
