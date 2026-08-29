@@ -46,17 +46,17 @@ var ErrInvalidAIWireAPI = errors.New("invalid AI wire API")
 const editorEnvVar = "EDITOR"
 
 // editorSource labels the EDITOR overlay entry, whose value is a preference rather than a stored
-// credential. It exists so every desired export carries a source, and no export has to fall back to
-// naming the variable itself.
-const editorSource Key = "editor"
+// credential. Deliberately NOT a Key: Key enumerates the credentials, and adding a non-credential
+// member to it makes every exhaustive switch over Key wrong.
+const editorSource = "editor"
 
-// envExport is one variable Overlay should set. The source credential travels with the value so a
-// failed export can report WHICH credential could not be exported instead of the variable name: that
-// name is read from ui-settings.json without validation (unlike UpdateAppSettings, which rejects a
+// envExport is one variable Overlay should set. The source label travels with the value so a failed
+// export can report WHICH credential could not be exported instead of the variable name: that name
+// is read from ui-settings.json without validation (unlike UpdateAppSettings, which rejects a
 // malformed one), and Overlay's error is logged verbatim by the local UI's credential manager.
 type envExport struct {
 	value  string
-	source Key
+	source string
 }
 
 // validReasoningEffort reports whether effort is one UpdateAppSettings accepts (matching
@@ -458,8 +458,8 @@ func (m *Manager) desiredExports() (map[string]envExport, error) {
 		// provider's default name. The create path builds provider specs with the default *EnvVar
 		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
 		// stored value usable for creation even when a custom variable name is configured.
-		desired[m.EnvVar(key)] = envExport{value: value, source: key}
-		desired[DefaultEnvVar(key)] = envExport{value: value, source: key}
+		desired[m.EnvVar(key)] = envExport{value: value, source: string(key)}
+		desired[DefaultEnvVar(key)] = envExport{value: value, source: string(key)}
 
 		// chat.ResolveProvider fails closed on an explicit APIKeyEnvVar: when the chat settings
 		// name a variable, it consults that one and nothing else. That name lives in the chat
@@ -467,7 +467,7 @@ func (m *Manager) desiredExports() (map[string]envExport, error) {
 		// this export a user who stores a key AND names a variable is told the key is missing.
 		if key == AIProviderAPIKey {
 			if name := m.chatAPIKeyEnvVar(); name != "" {
-				desired[name] = envExport{value: value, source: key}
+				desired[name] = envExport{value: value, source: string(key)}
 			}
 		}
 	}
