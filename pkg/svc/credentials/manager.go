@@ -466,8 +466,17 @@ func (m *Manager) desiredExports() (map[string]envExport, error) {
 		// preferences, NOT in the per-credential EnvVars override m.EnvVar reads, so without
 		// this export a user who stores a key AND names a variable is told the key is missing.
 		if key == AIProviderAPIKey {
+			// AIProviderAPIKey is last in AllKeys, so a chat alias naming a variable another
+			// credential already exports under would overwrite it and hand subprocesses the AI key
+			// where they expect that credential. The owning credential keeps the name; skipping the
+			// alias costs chat resolution under a misconfigured name, while clobbering would
+			// silently replace an unrelated stored secret. Deliberately not an error: Overlay's
+			// caller persists settings before calling it and does not roll them back, so failing
+			// here would leave every later Overlay exporting nothing at all.
 			if name := m.chatAPIKeyEnvVar(); name != "" {
-				desired[name] = envExport{value: value, source: string(key)}
+				if existing, taken := desired[name]; !taken || existing.source == string(key) {
+					desired[name] = envExport{value: value, source: string(key)}
+				}
 			}
 		}
 	}

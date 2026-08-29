@@ -303,3 +303,34 @@ func TestManager_OverlayErrorNamesCredentialNotConfiguredVariable(t *testing.T) 
 	assert.Contains(t, err.Error(), string(credentials.AIProviderAPIKey),
 		"the export error must still name which credential could not be exported")
 }
+
+// AIProviderAPIKey is last in AllKeys, so its chat-configured alias is written into the desired
+// export map after every other credential has already claimed its own names. An alias naming a
+// variable another credential exports under therefore overwrites that credential deterministically,
+// handing KSail's subprocesses the AI key where they expect (here) the AWS access key — a stored
+// credential silently replaced by an unrelated secret. The credential that owns the name keeps it.
+func TestManager_OverlayChatAliasDoesNotClobberAnotherCredential(t *testing.T) {
+	awsVar := credentials.DefaultEnvVar(credentials.AWSAccessKeyID)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(awsVar, "")
+
+	manager, store := newManager(t)
+
+	require.NoError(t, manager.UpdateAppSettings(credentials.AppSettings{
+		ChatProvider:     v1alpha1.AIProviderOpenAI,
+		ChatModel:        "gpt-5",
+		ChatAPIKeyEnvVar: awsVar,
+	}))
+	require.NoError(t, store.Set(credentials.AWSAccessKeyID, "stored-aws-key"))
+	require.NoError(t, store.Set(credentials.AIProviderAPIKey, "stored-ai-key"))
+
+	require.NoError(t, manager.Overlay(),
+		"a colliding alias is a settings mistake, not a reason to export no credentials at all")
+
+	assert.Equal(t, "stored-aws-key", os.Getenv(awsVar),
+		"the credential that owns the variable must keep it; the chat alias must not overwrite it")
+	assert.Equal(t, "stored-ai-key",
+		os.Getenv(credentials.DefaultEnvVar(credentials.AIProviderAPIKey)),
+		"the AI key must still be exported under its own default name")
+}
