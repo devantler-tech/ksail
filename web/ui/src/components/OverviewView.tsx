@@ -50,7 +50,7 @@ function CopyableEndpoint({ endpoint }: { endpoint: string }) {
           .then(() => toast.success("Endpoint copied"))
           .catch(() => toast.error("Copy failed"));
       }}
-      className="group inline-flex max-w-full items-center gap-1.5"
+      className="group inline-flex min-w-0 max-w-full items-center gap-1.5"
     >
       <span className="truncate font-mono text-xs text-slate-700 dark:text-slate-300">{endpoint}</span>
       <Copy className="size-3.5 shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" aria-hidden />
@@ -163,16 +163,18 @@ export function OverviewView({
   const createdAt = cluster.metadata.creationTimestamp ?? health?.createdAt;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-5">
       {/* Cluster header: identity, status, and lifecycle actions. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <h2 className="truncate text-xl font-semibold text-slate-900 dark:text-white">{cluster.metadata.name}</h2>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h2 className="min-w-0 truncate text-xl font-semibold text-slate-900 dark:text-white">
+              {cluster.metadata.name}
+            </h2>
             <StatusBadge phase={clusterPhase(cluster)} />
             {hostCluster ? <HostBadge /> : null}
           </div>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 break-words text-sm text-slate-500 dark:text-slate-400">
             {distribution} · {provider} · namespace {namespace}
           </p>
         </div>
@@ -218,7 +220,7 @@ export function OverviewView({
 
       {/* Live health (workload-read only). */}
       {canBrowse ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card title="Nodes" icon={<Boxes className="size-3.5" aria-hidden />}>
             <div className="flex items-baseline gap-2">
               <span
@@ -273,7 +275,7 @@ export function OverviewView({
       ) : null}
 
       {/* Cluster spec, status, conditions, and (when available) recent warnings. */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="Spec" icon={<Server className="size-3.5" aria-hidden />}>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
             <Field label="Distribution">{distribution}</Field>
@@ -340,7 +342,9 @@ export function OverviewView({
                     {conditionIcon(condition.status)}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{condition.type}</span>
+                        <span className="min-w-0 break-words text-sm font-medium text-slate-800 dark:text-slate-100">
+                          {condition.type}
+                        </span>
                         {condition.lastTransitionTime ? (
                           <span className="shrink-0 text-xs tabular-nums text-slate-400">
                             {format(condition.lastTransitionTime)}
@@ -348,10 +352,10 @@ export function OverviewView({
                         ) : null}
                       </div>
                       {condition.reason ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{condition.reason}</p>
+                        <p className="break-words text-xs text-slate-500 dark:text-slate-400">{condition.reason}</p>
                       ) : null}
                       {condition.message ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{condition.message}</p>
+                        <p className="break-words text-xs text-slate-500 dark:text-slate-400">{condition.message}</p>
                       ) : null}
                     </div>
                   </li>

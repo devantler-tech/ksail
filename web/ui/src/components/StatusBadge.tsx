@@ -152,12 +152,14 @@ export function StatusBadge({ phase }: { phase?: string }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
         meta.badge,
       )}
     >
-      <Icon className={cx("size-3.5", meta.spin && "animate-spin")} aria-hidden />
-      {meta.label}
+      <Icon className={cx("size-3.5 shrink-0", meta.spin && "animate-spin")} aria-hidden />
+      <span className="truncate" title={meta.label}>
+        {meta.label}
+      </span>
     </span>
   );
 }

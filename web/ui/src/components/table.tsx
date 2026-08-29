@@ -158,11 +158,13 @@ export function SortHeader<K extends string>({
 }
 
 // TableCard wraps table markup (thead/tbody) in the standard bordered, horizontally-scrollable card.
-export function TableCard({ children }: { children: ReactNode }) {
+export function TableCard({ children, tableClassName }: { children: ReactNode; tableClassName?: string }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">{children}</table>
+        <table className={cx("min-w-full divide-y divide-slate-200 dark:divide-slate-800", tableClassName)}>
+          {children}
+        </table>
       </div>
     </div>
   );

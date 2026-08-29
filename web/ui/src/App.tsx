@@ -538,14 +538,14 @@ export function App() {
   const headerActions =
     view === "clusters" ? (
       <>
-        <Button variant="secondary" size="sm" onClick={() => void refresh()} loading={refreshing}>
+        <Button variant="secondary" size="sm" aria-label="Refresh" onClick={() => void refresh()} loading={refreshing}>
           {refreshing ? null : <RotateCw className="size-4" aria-hidden />}
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
         {!readOnly ? (
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" aria-label="New cluster" onClick={openCreate}>
             <Plus className="size-4" aria-hidden />
-            New cluster
+            <span className="hidden sm:inline">New cluster</span>
           </Button>
         ) : null}
       </>

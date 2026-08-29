@@ -6,8 +6,8 @@ import type { Theme } from "../hooks/useTheme.ts";
 import { clusterViews, globalViews, viewTitle, type RegisteredView, type View, type ViewGates } from "../lib/views.tsx";
 import { PluginAppBarActions } from "../lib/plugins/PluginSlots.tsx";
 import { activeSidebarId } from "../lib/plugins/pluginNavigation.ts";
-import type { SidebarNode } from "../lib/plugins/registry.ts";
-import { usePluginLocation } from "../lib/plugins/usePlugins.ts";
+import { registry, type SidebarNode } from "../lib/plugins/registry.ts";
+import { usePluginLocation, usePluginRegistry } from "../lib/plugins/usePlugins.ts";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { KSailMark } from "./Logo.tsx";
 import { IconButton, NavButton } from "./ui.tsx";
@@ -212,6 +212,8 @@ export function AppShell({
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  usePluginRegistry();
+  const hasPluginActions = registry.getAppBarActions().length > 0;
 
   // The active plugin sidebar item + header title follow the live plugin-router location (so an in-plugin
   // <Link> to a detail page still highlights the right section). activeSidebarId maps the current plugin
@@ -345,7 +347,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/80">
-          <div className="flex min-w-0 items-center gap-2 md:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
             <IconButton label="Open navigation" onClick={() => setDrawerOpen(true)} className="md:hidden">
               <MenuIcon className="size-5" />
             </IconButton>
@@ -359,7 +361,7 @@ export function AppShell({
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             {onOpenCommandPalette ? (
               <button
                 type="button"
@@ -375,7 +377,23 @@ export function AppShell({
               </button>
             ) : null}
             {/* Plugin-contributed app-bar actions (Headlamp registerAppBarAction); renders nothing until a plugin adds one. */}
-            <PluginAppBarActions />
+            {hasPluginActions ? (
+              <details className="group relative sm:contents">
+                <summary
+                  className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 sm:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 [&::-webkit-details-marker]:hidden"
+                  role="button"
+                  aria-label="Plugin actions"
+                >
+                  <Puzzle className="size-4" aria-hidden />
+                </summary>
+                <div
+                  className="fixed left-4 right-4 top-14 z-40 hidden flex-col items-stretch gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:flex sm:static sm:flex sm:w-auto sm:max-w-64 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none dark:border-slate-700 dark:bg-slate-900 sm:dark:bg-transparent [&>*]:min-h-10 [&>*]:min-w-0 [&>*]:max-w-full [&>*]:truncate sm:[&>*]:min-h-0"
+                  onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}
+                >
+                  <PluginAppBarActions />
+                </div>
+              </details>
+            ) : null}
             {headerActions}
             <IconButton
               label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
@@ -396,7 +414,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main id="main-content" className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   );
