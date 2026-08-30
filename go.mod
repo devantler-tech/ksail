@@ -51,6 +51,7 @@ require (
 )
 
 require (
+	cel.dev/cel-go v0.32.0
 	cloud.google.com/go/container v1.53.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.22.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.0
@@ -77,7 +78,6 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.11
 	github.com/go-jose/go-jose/v4 v4.1.4
-	github.com/google/cel-go v0.31.0
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.23.0
 	github.com/gopacket/gopacket v1.7.1
@@ -479,6 +479,7 @@ require (
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
+	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
