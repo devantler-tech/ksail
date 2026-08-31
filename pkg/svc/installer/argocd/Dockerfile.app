@@ -4,4 +4,4 @@
 # Image mappings:
 # - quay.io/argoproj/argocd → ArgoCD application image (used by CMP sidecar)
 
-FROM quay.io/argoproj/argocd:v3.5.1
+FROM quay.io/argoproj/argocd:v3.5.2
