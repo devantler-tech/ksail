@@ -30,6 +30,18 @@ updates:
         patterns:
           - "k8s.io/*"
           - "sigs.k8s.io/*"
+      # The Talos module and its machinery module are released together from one
+      # repository and share a version tag, and talos itself compiles against
+      # machinery's config API - so bumping either alone leaves a skew that fails to
+      # build inside the dependency's own source (ksail#6801). omni/client joins the
+      # set because it constrains machinery transitively and drags it forward on its
+      # own bumps. The standalone siderolabs utility modules (crypto, gen, go-retry,
+      # net, ...) version independently and are deliberately NOT grouped.
+      talos:
+        patterns:
+          - "github.com/siderolabs/talos"
+          - "github.com/siderolabs/talos/pkg/machinery"
+          - "github.com/siderolabs/omni/client"
 
   - package-ecosystem: github-actions
     directory: /
