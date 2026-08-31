@@ -459,7 +459,6 @@ require (
 	github.com/knqyf263/go-apk-version v0.0.0-20200609155635-041fdbb8563f // indirect
 	github.com/knqyf263/go-deb-version v0.0.0-20241115132648-6f4aee6ccd23 // indirect
 	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075 // indirect
-	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0 // indirect
 	github.com/kubescape/backend v0.0.20 // indirect
 	github.com/kubescape/go-git-url v0.0.31 // indirect
 	github.com/kubescape/go-logger v0.0.25 // indirect
@@ -483,16 +482,16 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.1.3 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260528181747-b79df92c20c5 // indirect
-	github.com/loft-sh/agentapi/v4 v4.10.0-alpha.12 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260707131545-11a67ade9341 // indirect
+	github.com/loft-sh/agentapi/v4 v4.11.0-rc.1 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.10.0-alpha.12 // indirect
-	github.com/loft-sh/apiserver v0.0.0-20260424174643-365191901530 // indirect
+	github.com/loft-sh/api/v4 v4.11.0-rc.1 // indirect
+	github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d // indirect
 	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
-	github.com/loft-sh/vcluster v0.35.2 // indirect
+	github.com/loft-sh/vcluster v0.36.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mackerelio/go-osstat v0.2.6 // indirect
 	github.com/magefile/mage v1.17.2 // indirect
