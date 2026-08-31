@@ -37,6 +37,12 @@ updates:
       # set because it constrains machinery transitively and drags it forward on its
       # own bumps. The standalone siderolabs utility modules (crypto, gen, go-retry,
       # net, ...) version independently and are deliberately NOT grouped.
+      # Scope: grouping batches whichever of these modules have an update available
+      # into ONE pull request. It does not enforce version equality and does not
+      # require every module to move, so a partial bump is still possible and would
+      # fail to build exactly as an ungrouped one does. What this buys is fewer
+      # duplicate failing PRs and a failure that reads for the real reason - not a
+      # lockstep guarantee. The standing upstream ceiling is tracked in ksail#6728.
       talos:
         patterns:
           - "github.com/siderolabs/talos"
