@@ -32,7 +32,7 @@ require (
 	cloud.google.com/go/auth v0.22.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	cloud.google.com/go/container v1.53.0 // indirect
+	cloud.google.com/go/container v1.53.1 // indirect
 	cloud.google.com/go/iam v1.12.0 // indirect
 	cloud.google.com/go/kms v1.32.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
