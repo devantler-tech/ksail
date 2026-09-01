@@ -17,6 +17,13 @@ replace (
 	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
 	// Mirrors the parent module's local v0.3.0 compatibility module.
 	github.com/moby/go-archive => ../third_party/go-archive
+
+	// dockertest imports runc's libcontainer/user, removed in runc v1.4.0, through the tests
+	// of a dependency (sops/v3/hcvault.test). `go mod tidy` resolves that graph, so without
+	// this pin it falls back to runc@latest, which no longer provides the package, and tidy
+	// fails. Mirrors the parent module's replace, where the full rationale and its security
+	// trade-off are recorded.
+	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 )
 
 require (
