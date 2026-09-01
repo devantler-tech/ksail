@@ -390,7 +390,7 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.18 // indirect
-	github.com/googleapis/gax-go/v2 v2.23.0 // indirect
+	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gopacket/gopacket v1.7.1 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
