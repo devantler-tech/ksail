@@ -48,6 +48,14 @@ updates:
           - "github.com/siderolabs/talos"
           - "github.com/siderolabs/talos/pkg/machinery"
           - "github.com/siderolabs/omni/client"
+    # Kubernetes modules share APIs across repositories but Dependabot groups
+    # only the updates eligible in a given run. A minor-line bump can therefore
+    # move one module ahead of the rest and make the graph uncompilable
+    # (ksail#6837). Keep automated patch and security updates; minor upgrades
+    # are deliberate compatibility work that moves the coupled set together.
+    ignore:
+      - dependency-name: "k8s.io/*"
+        update-types: ["version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: /
