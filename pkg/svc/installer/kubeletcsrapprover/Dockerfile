@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/postfinance/kubelet-csr-approver → chart version (strip v prefix from tag)
 
-FROM ghcr.io/postfinance/kubelet-csr-approver:v1.2.14@sha256:c0f6aa1abdc225a32f9a29992fd97f711e78e2df21434f9ce7bc60981f96a5f8
+FROM ghcr.io/postfinance/kubelet-csr-approver:v1.2.15@sha256:6469ef517d2b6d3cb108fce8a913483533a48b1cd78b5d4af307fa09e04a7818
