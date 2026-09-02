@@ -65,7 +65,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.38
 	github.com/aws/aws-sdk-go-v2/service/eks v1.92.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.8
-	github.com/aws/smithy-go v1.27.10
+	github.com/aws/smithy-go v1.28.1
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
