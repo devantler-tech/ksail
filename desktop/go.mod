@@ -471,7 +471,7 @@ require (
 	github.com/kubescape/go-logger v0.0.25 // indirect
 	github.com/kubescape/k8s-interface v0.0.195 // indirect
 	github.com/kubescape/kubescape/v3 v3.0.48 // indirect
-	github.com/kubescape/opa-utils v0.0.308 // indirect
+	github.com/kubescape/opa-utils v0.0.312 // indirect
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 // indirect
 	github.com/kubescape/regolibrary/v2 v2.0.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
