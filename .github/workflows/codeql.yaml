@@ -1,0 +1,90 @@
+name: 🔍 CodeQL
+
+# Advanced setup (replaces CodeQL default setup), running the same extended
+# suite over the same languages — see .github/codeql/codeql-config.yml.
+#
+# Why this exists rather than default setup: a managed default-setup run lives
+# outside this repository, so when its runner is preempted mid-analysis GitHub
+# refuses to re-run it ("This workflow run cannot be retried", HTTP 403). The
+# `code_scanning` ruleset on `main` then blocks the PR with no recovery short of
+# inventing a new head commit — which a bot-authored release PR will never
+# produce. Owning the workflow here makes a preempted run re-runnable. See
+# #6767.
+#
+# CodeQL default setup must stay DISABLED for this to run: the two are mutually
+# exclusive, and advanced setup cannot upload results while default setup is
+# configured.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  schedule:
+    - cron: "30 1 * * 1" # weekly, mirroring the former default-setup schedule
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Default setup listed actions, go, javascript, javascript-typescript
+          # and typescript. `javascript`, `typescript` and `javascript-typescript`
+          # are the same CodeQL analysis, so advanced setup expresses them once.
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: 🛡️ Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: 📑 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🐹 Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🔍 Initialize CodeQL
+        uses: github/codeql-action/init@c35d1b164463ee62a100735382aaaa525c5d3496 # codeql-bundle-v2.25.6
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Emit BOTH code-scanning (security) AND code-quality results — matching
+          # what default setup produced — so this repository's "Require code
+          # scanning results" and "Require code quality results" rulesets are both
+          # satisfied. analysis-kinds is flagged internal/subject-to-change in
+          # codeql-action, but it is the only way to produce code-quality from
+          # advanced setup; safe here because the action is SHA-pinned above and
+          # Dependabot bumps are CI-gated.
+          analysis-kinds: code-scanning,code-quality
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: 🔬 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@c35d1b164463ee62a100735382aaaa525c5d3496 # codeql-bundle-v2.25.6
+        with:
+          category: "/language:${{ matrix.language }}"

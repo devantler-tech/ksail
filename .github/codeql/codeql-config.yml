@@ -1,0 +1,11 @@
+name: "CodeQL config — devantler-tech/ksail"
+
+# Mirrors what CodeQL default setup ran for this repository, with NO query
+# exclusions: default setup was configured with query_suite "extended", which is
+# the `security-extended` suite below.
+#
+# Default setup also declared threat_model "remote". That is CodeQL's own
+# default threat model, so it needs no explicit key here — stating it would
+# change nothing about which sources are treated as tainted.
+queries:
+  - uses: security-extended
