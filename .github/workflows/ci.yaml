@@ -760,7 +760,9 @@ jobs:
       # modes are not expressible. Reject anything other than a regular 0644 file below
       # rather than dereferencing a symlink or silently losing an executable bit.
       - name: 📤 Commit and push generated changes (PR branch)
-        if: github.event_name == 'pull_request'
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           BRANCH: ${{ github.head_ref }}
