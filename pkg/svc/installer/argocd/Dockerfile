@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/argoproj/argo-helm/argo-cd → chart version (OCI chart artifact tag)
 
-FROM ghcr.io/argoproj/argo-helm/argo-cd:10.6.4@sha256:ed318aad4eb5f2cc344f015d602d03634e71dca514f386a05895583c7c435f1b
+FROM ghcr.io/argoproj/argo-helm/argo-cd:10.7.1@sha256:526e6777213771aeaf5deade65dc360803cd5fb69e1bc14fd3975571778e1749
