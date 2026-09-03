@@ -311,8 +311,6 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 
 // autoCommitWorkflow captures the auto-commit job's step surface, which decides
 // whether CI pushes a generated-file commit onto a pull request's own branch.
-//
-//nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type autoCommitWorkflow struct {
 	Jobs map[string]struct {
 		Steps []map[string]any `yaml:"steps"`
