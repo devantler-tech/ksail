@@ -308,3 +308,91 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		})
 	}
 }
+
+// autoCommitWorkflow captures the auto-commit job's step surface, which decides
+// whether CI pushes a generated-file commit onto a pull request's own branch.
+type autoCommitWorkflow struct {
+	Jobs map[string]struct {
+		Steps []map[string]any `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+// The exact conditions the two auto-commit delivery paths must carry.
+//
+// The PR-branch push is the one that has to exclude Dependabot; the protected-branch
+// path is asserted alongside it because it is where a skipped Dependabot sync is
+// expected to land instead, and silently losing it would turn this fix into a
+// generated-file correctness regression on the default branch.
+const (
+	approvedAutoCommitPRBranchCondition = "github.event_name == 'pull_request'" +
+		" && github.event.pull_request.user.login != 'dependabot[bot]'"
+	approvedAutoCommitProtectedBranchCondition = "github.event_name != 'pull_request'"
+)
+
+// stepCondition returns the `if:` of the uniquely-named step in the given job.
+//
+// It requires exactly one match rather than taking the first: two steps sharing a
+// name would make the assertion below silently describe whichever came first.
+func stepCondition(t *testing.T, job []map[string]any, stepName string) string {
+	t.Helper()
+
+	var found []map[string]any
+
+	for _, step := range job {
+		if name, ok := step["name"].(string); ok && name == stepName {
+			found = append(found, step)
+		}
+	}
+
+	require.Lenf(t, found, 1, "expected exactly one step named %q", stepName)
+
+	condition, ok := found[0]["if"].(string)
+	require.Truef(t, ok, "step %q must carry a string `if:` condition", stepName)
+
+	return condition
+}
+
+// Pins Dependabot's ownership of its own branches.
+//
+// GitHub permanently revokes Dependabot's ability to rebase a pull request once any
+// other actor pushes to its branch ("this PR has been edited by someone other than
+// Dependabot"). CI's generated-file sync used to push onto every same-repo PR branch,
+// Dependabot's included, so a synced bump could never recover from base drift: the
+// moment anything else merged it went behind base, auto-merge could never fire, and
+// the ordinary `@dependabot rebase` remedy was refused. Roughly half of Dependabot
+// PRs carried the sync commit, and because the ecosystem is capped at an open-PR
+// limit, the stranded ones throttled dependency intake generally (issue #6832).
+//
+// The condition is asserted whole rather than by substring for the reason the
+// concurrency tests above record: a fragment match admits inverted and appended
+// forms that still push to Dependabot's branch. A generated-file change on a
+// Dependabot bump is not lost by this exclusion — it lands through the
+// protected-branch path after the bump merges, which is why that path is pinned here
+// too.
+func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/ci.yaml")
+
+	var workflow autoCommitWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	job, found := workflow.Jobs["auto-commit"]
+	require.True(t, found, "ci workflow must define the auto-commit job")
+
+	assert.Equal(
+		t,
+		approvedAutoCommitPRBranchCondition,
+		stepCondition(t, job.Steps, "📤 Commit and push generated changes (PR branch)"),
+		"the PR-branch push must skip Dependabot-authored pull requests so Dependabot keeps"+
+			" the ability to rebase its own branch",
+	)
+
+	assert.Equal(
+		t,
+		approvedAutoCommitProtectedBranchCondition,
+		stepCondition(t, job.Steps, "📤 Open PR for generated changes (protected branch)"),
+		"the protected-branch sync must stay reachable: it is where a Dependabot bump's"+
+			" generated changes land once the bump has merged",
+	)
+}
