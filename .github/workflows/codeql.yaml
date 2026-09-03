@@ -26,7 +26,11 @@ on:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  # Only ever cancel superseded PR runs. Cancelling a run on main, in the merge
+  # queue, or on the weekly schedule would leave that ref with no uploaded
+  # results, which is the exact "code scanning has no results" block this
+  # workflow exists to remove.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
 
