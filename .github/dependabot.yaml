@@ -56,6 +56,14 @@ updates:
     ignore:
       - dependency-name: "k8s.io/*"
         update-types: ["version-update:semver-minor"]
+      # k3k v1.2.0 splits pkg/apis into its own module but publishes a go.mod that
+      # requires it at v0.0.0-00010101000000-000000000000, resolved only by k3k's OWN
+      # `replace ... => ./pkg/apis`. Go honours replace only in the main module, so every
+      # consumer gets `unknown revision 000000000000`, and pkg/apis publishes no version
+      # to require instead — the bump is unsatisfiable for anyone, not a compatibility
+      # gap here (ksail#6607). Scoped to 1.2.0 so a fixed 1.2.1 still comes through.
+      - dependency-name: "github.com/rancher/k3k"
+        versions: ["1.2.0"]
 
   - package-ecosystem: github-actions
     directory: /
