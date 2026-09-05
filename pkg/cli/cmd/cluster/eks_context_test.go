@@ -44,7 +44,7 @@ func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 				state.SaveEKSOwnershipState(clusterName, "ap-southeast-2", ownership),
 			)
 			persistStandaloneEKSIdentityInRegion(
-				t, clusterName, "us-east-1", "123456789012", immutableIdentityTime(),
+				t, clusterName, "us-east-1", immutableIdentityTime(),
 			)
 			t.Setenv("AWS_REGION", "us-east-1")
 			t.Setenv("KSAIL_REGION", "")
@@ -80,7 +80,7 @@ func TestSelectedEKSContextRestoresItsOwnRegionMapping(t *testing.T) {
 	ownership.AWSOptions.RegionEnvVar = "KSAIL_REGION"
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, "ap-southeast-2", ownership))
 	persistStandaloneEKSIdentityInRegion(
-		t, clusterName, "us-east-1", "123456789012", immutableIdentityTime(),
+		t, clusterName, "us-east-1", immutableIdentityTime(),
 	)
 	t.Setenv("AWS_REGION", "us-east-1")
 
