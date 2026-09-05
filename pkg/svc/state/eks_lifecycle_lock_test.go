@@ -17,6 +17,7 @@ import (
 
 var errLifecycleAction = errors.New("lifecycle action failed")
 
+// TestEKSLifecycleLockCancelsBeforeStateMutation rejects cancellation before creating lock state.
 func TestEKSLifecycleLockCancelsBeforeStateMutation(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("HOME", stateHome)
@@ -36,6 +37,8 @@ func TestEKSLifecycleLockCancelsBeforeStateMutation(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+// TestEKSLifecycleLockRejectsInvalidTarget rejects names that cannot identify safe state paths.
+//
 //nolint:paralleltest // subtests share the parent's temporary HOME.
 func TestEKSLifecycleLockRejectsInvalidTarget(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -54,6 +57,7 @@ func TestEKSLifecycleLockRejectsInvalidTarget(t *testing.T) {
 	}
 }
 
+// TestEKSLifecycleLockPreservesActionFailureAndReleases preserves errors and releases ownership.
 func TestEKSLifecycleLockPreservesActionFailureAndReleases(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	err := state.WithEKSLifecycleLock(t.Context(), "demo", func() error {
@@ -67,6 +71,7 @@ func TestEKSLifecycleLockPreservesActionFailureAndReleases(t *testing.T) {
 	require.NoError(t, state.WithEKSLifecycleLock(ctx, "demo", func() error { return nil }))
 }
 
+// TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit checks inode stability and OS process-exit cleanup.
 func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	child, readyFile := startEKSLifecycleLockProcess(t)
@@ -117,6 +122,7 @@ func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 	require.NoError(t, state.WithEKSLifecycleLock(ctx, "demo", func() error { return nil }))
 }
 
+// startEKSLifecycleLockProcess starts this test binary with an inherited readiness descriptor.
 func startEKSLifecycleLockProcess(t *testing.T) (*exec.Cmd, *os.File) {
 	t.Helper()
 
@@ -146,6 +152,7 @@ func startEKSLifecycleLockProcess(t *testing.T) (*exec.Cmd, *os.File) {
 	return child, readyFile
 }
 
+// TestEKSLifecycleLockProcess holds a lock in the subprocess until its parent terminates it.
 func TestEKSLifecycleLockProcess(t *testing.T) {
 	if os.Getenv("KSAIL_LOCK_PROCESS") != "1" {
 		return

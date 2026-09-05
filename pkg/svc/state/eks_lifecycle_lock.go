@@ -15,6 +15,10 @@ import (
 
 const eksLockRetryInterval = 25 * time.Millisecond
 
+// DefaultEKSLifecycleLockTimeout lets brief contention settle while returning a retryable failure
+// when another long-running transition owns the cluster. It only bounds acquisition, not the action.
+const DefaultEKSLifecycleLockTimeout = 30 * time.Second
+
 // WithEKSLifecycleLock serializes an EKS lifecycle transition across processes using this user's
 // state store. The name-scoped lock covers region/ownership resolution as well as mutations:
 // spec.json and the local API are keyed by name, so account or region selectors cannot safely
@@ -22,6 +26,7 @@ const eksLockRetryInterval = 25 * time.Millisecond
 //
 // Lock files live outside the removable cluster directory and are never unlinked. The operating
 // system releases ownership on process exit; an existing file does not indicate a stale lock.
+// Acquisition waits at most DefaultEKSLifecycleLockTimeout, or the caller's shorter deadline.
 func WithEKSLifecycleLock(
 	ctx context.Context,
 	clusterName string,
@@ -46,20 +51,26 @@ func WithEKSLifecycleLock(
 		}
 	}()
 
-	_, err = lock.TryLockContext(ctx, eksLockRetryInterval)
+	lockCtx, cancel := context.WithTimeout(ctx, DefaultEKSLifecycleLockTimeout)
+	defer cancel()
+
+	_, err = lock.TryLockContext(lockCtx, eksLockRetryInterval)
 	if err != nil {
 		return fmt.Errorf("wait for EKS lifecycle operation on %q: %w", clusterName, err)
 	}
 
 	// Cancellation can race the successful OS lock attempt. Do not enter the transition after it.
-	err = ctx.Err()
+	err = lockCtx.Err()
 	if err != nil {
 		return fmt.Errorf("enter EKS lifecycle operation: %w", err)
 	}
 
+	cancel()
+
 	return action()
 }
 
+// eksLifecycleLockPath validates the name and keeps the lock outside removable cluster state.
 func eksLifecycleLockPath(clusterName string) (string, error) {
 	if strings.TrimSpace(clusterName) == "" || clusterName == "." {
 		return "", ErrInvalidClusterName

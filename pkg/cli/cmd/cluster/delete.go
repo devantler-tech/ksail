@@ -110,6 +110,15 @@ func runDeleteAction(
 	}
 
 	if resolved.Provider == v1alpha1.ProviderAWS {
+		// The AWS preview only needs the resolved target name. Keep operator think time outside
+		// the lock; both the initial ownership guard and its final reverification stay inside it.
+		if !confirm.ShouldSkipPrompt(flags.force) {
+			err := promptForDeletion(cmd, resolved, nil, false)
+			if err != nil {
+				return err
+			}
+		}
+
 		err := state.WithEKSLifecycleLock(cmd.Context(), resolved.ClusterName, func() error {
 			return runResolvedDeleteAction(cmd, flags, tmr, resolved)
 		})
@@ -123,6 +132,7 @@ func runDeleteAction(
 	return runResolvedDeleteAction(cmd, flags, tmr, resolved)
 }
 
+// runResolvedDeleteAction guards and deletes a resolved target, with AWS callers holding its lock.
 func runResolvedDeleteAction(
 	cmd *cobra.Command,
 	flags *deleteFlags,
@@ -179,6 +189,8 @@ func runResolvedDeleteAction(
 	return nil
 }
 
+// confirmAndReverifyDeleteTarget confirms non-AWS targets and rechecks the captured AWS identity.
+// AWS confirmation has already completed before the caller acquired the lifecycle lock.
 func confirmAndReverifyDeleteTarget(
 	cmd *cobra.Command,
 	flags *deleteFlags,
@@ -187,7 +199,7 @@ func confirmAndReverifyDeleteTarget(
 	isKindCluster bool,
 ) error {
 	// Show confirmation prompt unless force flag is set or non-TTY.
-	if !confirm.ShouldSkipPrompt(flags.force) {
+	if resolved.Provider != v1alpha1.ProviderAWS && !confirm.ShouldSkipPrompt(flags.force) {
 		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
 		if err != nil {
 			return err

@@ -485,6 +485,7 @@ func resolveFromKubecontext(
 	}
 }
 
+// runSimpleLifecycleAction resolves the target and serializes AWS transitions before guarding them.
 func runSimpleLifecycleAction(
 	cmd *cobra.Command,
 	nameFlag string,
@@ -522,6 +523,7 @@ func runSimpleLifecycleAction(
 	return runResolvedSimpleLifecycleAction(cmd, config, resolved)
 }
 
+// runResolvedSimpleLifecycleAction guards a resolved target and performs the requested transition.
 func runResolvedSimpleLifecycleAction(
 	cmd *cobra.Command,
 	config SimpleLifecycleConfig,

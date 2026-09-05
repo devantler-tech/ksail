@@ -15,6 +15,11 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// SetEKSLifecycleLockTimeoutForTest shortens the acquisition budget for contention tests.
+func (s *Service) SetEKSLifecycleLockTimeoutForTest(timeout time.Duration) {
+	s.eksLifecycleLockTimeout = timeout
+}
+
 // RunGuardedProvisionerForTest exercises the full mutation boundary synchronously.
 func (s *Service) RunGuardedProvisionerForTest(
 	ctx context.Context,

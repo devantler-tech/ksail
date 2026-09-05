@@ -100,6 +100,9 @@ type Service struct {
 	// deadline path without waiting the real budget.
 	eksOwnershipTimeout time.Duration
 
+	// eksLifecycleLockTimeout bounds acquisition without limiting the lifecycle operation.
+	eksLifecycleLockTimeout time.Duration
+
 	// captureEKSIdentity records the immutable AWS identity of a cluster this backend just created,
 	// so the guard above has something to verify against. Injectable alongside resolveEKSGuard.
 	captureEKSIdentity eksCaptureFunc
@@ -188,6 +191,7 @@ func NewService() *Service {
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard
 	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
+	service.eksLifecycleLockTimeout = state.DefaultEKSLifecycleLockTimeout
 	service.captureEKSIdentity = service.defaultEKSCapture
 	service.resolveEKSCreateAccount = service.defaultEKSCreateAccount
 	service.useDefaultClients()
@@ -1059,7 +1063,10 @@ func (s *Service) runGuardedProvisioner(
 	}
 
 	if spec.Cluster.Distribution == v1alpha1.DistributionEKS {
-		err := state.WithEKSLifecycleLock(ctx, name, run)
+		lockCtx, cancel := context.WithTimeout(ctx, s.eksLifecycleLockTimeout)
+		defer cancel()
+
+		err := state.WithEKSLifecycleLock(lockCtx, name, run)
 		if err != nil {
 			return fmt.Errorf("EKS lifecycle operation: %w", err)
 		}
