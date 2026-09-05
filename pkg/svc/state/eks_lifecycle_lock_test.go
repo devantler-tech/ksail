@@ -69,23 +69,7 @@ func TestEKSLifecycleLockPreservesActionFailureAndReleases(t *testing.T) {
 
 func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	readyPath := filepath.Join(t.TempDir(), "ready")
-	executable, err := os.Executable()
-	require.NoError(t, err)
-	//nolint:gosec // run this test binary with a private readiness marker.
-	child := exec.CommandContext(
-		t.Context(),
-		executable,
-		"-test.run=^TestEKSLifecycleLockProcess$",
-		"-test.timeout=30s",
-	)
-
-	child.Env = append(
-		os.Environ(),
-		"KSAIL_LOCK_READY="+readyPath,
-		"KSAIL_LOCK_HOME="+os.Getenv("HOME"),
-	)
-	require.NoError(t, child.Start())
+	child, readyFile := startEKSLifecycleLockProcess(t)
 
 	waited := false
 
@@ -96,9 +80,9 @@ func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 		}
 	})
 	require.Eventually(t, func() bool {
-		_, statErr := os.Stat(readyPath)
+		info, statErr := os.Stat(readyFile.Name())
 
-		return statErr == nil
+		return statErr == nil && info.Size() > 0
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Removing and recreating cluster state must not replace the inode holding the lock.
@@ -108,7 +92,7 @@ func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 	defer cancel()
 
 	called := false
-	err = state.WithEKSLifecycleLock(ctx, "demo", func() error {
+	err := state.WithEKSLifecycleLock(ctx, "demo", func() error {
 		called = true
 
 		return nil
@@ -133,17 +117,45 @@ func TestEKSLifecycleLockSurvivesStateDeletionAndProcessExit(t *testing.T) {
 	require.NoError(t, state.WithEKSLifecycleLock(ctx, "demo", func() error { return nil }))
 }
 
+func startEKSLifecycleLockProcess(t *testing.T) (*exec.Cmd, *os.File) {
+	t.Helper()
+
+	readyFile, err := os.CreateTemp(t.TempDir(), "ready")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, readyFile.Close()) })
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	//nolint:gosec // run this test binary with a private readiness marker.
+	child := exec.CommandContext(
+		t.Context(),
+		executable,
+		"-test.run=^TestEKSLifecycleLockProcess$",
+		"-test.timeout=30s",
+	)
+	// Pass an already-open marker to the child instead of an environment-controlled write path.
+	child.Stdout = readyFile
+
+	child.Env = append(
+		os.Environ(),
+		"KSAIL_LOCK_PROCESS=1",
+		"KSAIL_LOCK_HOME="+os.Getenv("HOME"),
+	)
+	require.NoError(t, child.Start())
+
+	return child, readyFile
+}
+
 func TestEKSLifecycleLockProcess(t *testing.T) {
-	readyPath := os.Getenv("KSAIL_LOCK_READY")
-	if readyPath == "" {
+	if os.Getenv("KSAIL_LOCK_PROCESS") != "1" {
 		return
 	}
 
 	t.Setenv("HOME", os.Getenv("KSAIL_LOCK_HOME"))
 	err := state.WithEKSLifecycleLock(t.Context(), "demo", func() error {
-		writeErr := os.WriteFile(readyPath, nil, 0o600)
+		_, writeErr := fmt.Fprintln(os.Stdout, "ready")
 		if writeErr != nil {
-			return fmt.Errorf("write readiness marker: %w", writeErr)
+			return fmt.Errorf("signal readiness: %w", writeErr)
 		}
 
 		<-t.Context().Done()
