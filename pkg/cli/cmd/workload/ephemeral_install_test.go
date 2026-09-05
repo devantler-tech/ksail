@@ -280,6 +280,21 @@ func recordAdmission(
 	}
 }
 
+func admissionWorkload(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(root, "config.yaml"),
+			[]byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n"),
+			0o600,
+		),
+	)
+
+	return root
+}
+
 //nolint:paralleltest // replaces the ephemeral lifecycle and client factories
 func TestValidateAdmissionIsOptInAndAlwaysCleansUp(t *testing.T) {
 	for _, outcome := range []string{"offline", "accepted", "rejected", "cancelled"} {
@@ -301,15 +316,7 @@ func TestValidateAdmissionIsOptInAndAlwaysCleansUp(t *testing.T) {
 				},
 			)
 			t.Cleanup(restore)
-			root := t.TempDir()
-			require.NoError(
-				t,
-				os.WriteFile(
-					filepath.Join(root, "config.yaml"),
-					[]byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n"),
-					0o600,
-				),
-			)
+			root := admissionWorkload(t)
 
 			args := []string{root, "--skip-kinds", "ConfigMap"}
 			if outcome != "offline" {
