@@ -24,6 +24,11 @@ var errControlPlaneReadyBudgetExhausted = errors.New(
 	"timeout budget exhausted before checking argocd control-plane readiness",
 )
 
+// errUnknownControlPlaneComponentKind is returned for a component kind the gate
+// has no readiness check for; it can only come from a programming error in
+// controlPlaneComponents.
+var errUnknownControlPlaneComponentKind = errors.New("unknown argocd control-plane component kind")
+
 // newControlPlaneClientset builds a typed clientset for the readiness gate.
 //
 //nolint:gochecknoglobals // Allows mocking for tests.
@@ -41,21 +46,60 @@ var newControlPlaneClientset = func(kubeconfigPath string) (kubernetes.Interface
 	return clientset, nil
 }
 
-// controlPlaneComponents returns the ArgoCD control-plane Deployments whose
+// controlPlaneComponentKind is the workload kind a control-plane component runs as.
+type controlPlaneComponentKind string
+
+const (
+	componentDeployment  controlPlaneComponentKind = "deployment"
+	componentStatefulSet controlPlaneComponentKind = "statefulset"
+)
+
+// controlPlaneComponent names one ArgoCD control-plane workload the gate waits for.
+type controlPlaneComponent struct {
+	kind controlPlaneComponentKind
+	name string
+}
+
+// controlPlaneComponents returns the ArgoCD control-plane workloads whose
 // cold-start (not-yet-Ready) state produces the transient signals — "connection
 // refused" (redis), "unable to resolve"/"failed to fetch" (repo-server) — that the
 // app-sync poll would otherwise misclassify as a permanent source-unavailable
-// failure. The gate waits for them before the first poll so the cold-start window
-// is closed at the root. Absent components (custom or renamed installs, e.g. HA
-// redis) are tolerated and skipped.
-func controlPlaneComponents() []string {
-	return []string{"argocd-repo-server", "argocd-redis", "argocd-server"}
+// failure, plus the application controller, which is the component that writes
+// the Application status the poll reads: until it is Ready a cold-start
+// ComparisonError it recorded earlier stays on the Application and can be
+// classified before it clears. The gate waits for them before the first poll so
+// the cold-start window is closed at the root. Absent components (custom or
+// renamed installs, e.g. HA redis) are tolerated and skipped.
+func controlPlaneComponents() []controlPlaneComponent {
+	return []controlPlaneComponent{
+		{kind: componentDeployment, name: "argocd-repo-server"},
+		{kind: componentDeployment, name: "argocd-redis"},
+		{kind: componentDeployment, name: "argocd-server"},
+		{kind: componentStatefulSet, name: "argocd-application-controller"},
+	}
 }
 
-// WaitForControlPlaneReady waits (bounded) for the ArgoCD control-plane Deployments
-// to be Ready before app-sync polling begins, so a just-started repo-server/redis
-// does not emit transient errors that ksail's poll loop treats as a permanent
-// source-unavailable failure (issue #5948).
+// ControlPlaneGateBudget returns how much of reconcileTimeout the readiness gate
+// may spend before the app-sync poll begins: at most half of it, and never more
+// than maxControlPlaneReadyWait. Sharing the reconcile deadline this way keeps one
+// reconcile attempt inside its --timeout while still reserving at least half of
+// that window for the reconcile itself, so a slow control-plane can delay the poll
+// but never starve it. A non-positive timeout falls back to the gate maximum.
+func ControlPlaneGateBudget(reconcileTimeout time.Duration) time.Duration {
+	if reconcileTimeout <= 0 {
+		return maxControlPlaneReadyWait
+	}
+
+	return min(reconcileTimeout/2, maxControlPlaneReadyWait)
+}
+
+// WaitForControlPlaneReady waits (bounded by timeout, at most
+// maxControlPlaneReadyWait) for the ArgoCD control-plane workloads to be Ready
+// before app-sync polling begins, so a just-started repo-server/redis does not
+// emit transient errors that ksail's poll loop treats as a permanent
+// source-unavailable failure, and a cold-start ComparisonError left on an
+// Application is not read before the application controller has cleared it
+// (issue #5948).
 //
 // It is intended to be used fail-open: the caller treats a returned error as a
 // warning and proceeds with reconcile, so the gate can only reduce the cold-start
@@ -86,25 +130,45 @@ func waitForControlPlaneReady(
 
 	deadline := time.Now().Add(budget)
 
-	for _, name := range controlPlaneComponents() {
+	for _, component := range controlPlaneComponents() {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return fmt.Errorf(
 				"%w (last: %s/%s)",
-				errControlPlaneReadyBudgetExhausted, DefaultNamespace, name,
+				errControlPlaneReadyBudgetExhausted, DefaultNamespace, component.name,
 			)
 		}
 
-		err := readiness.WaitForDeploymentReadyIfExists(
-			ctx, clientset, DefaultNamespace, name, remaining,
-		)
+		err := waitForComponentReady(ctx, clientset, component, remaining)
 		if err != nil {
 			return fmt.Errorf(
-				"argocd control-plane component %s/%s not ready: %w",
-				DefaultNamespace, name, err,
+				"argocd control-plane %s %s/%s not ready: %w",
+				component.kind, DefaultNamespace, component.name, err,
 			)
 		}
 	}
 
 	return nil
+}
+
+// waitForComponentReady waits for one control-plane component by its kind,
+// tolerating its absence.
+func waitForComponentReady(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	component controlPlaneComponent,
+	remaining time.Duration,
+) error {
+	switch component.kind {
+	case componentStatefulSet:
+		return readiness.WaitForStatefulSetReadyIfExists( //nolint:wrapcheck // caller wraps with the component
+			ctx, clientset, DefaultNamespace, component.name, remaining,
+		)
+	case componentDeployment:
+		return readiness.WaitForDeploymentReadyIfExists( //nolint:wrapcheck // caller wraps with the component
+			ctx, clientset, DefaultNamespace, component.name, remaining,
+		)
+	default:
+		return fmt.Errorf("%w: %q", errUnknownControlPlaneComponentKind, component.kind)
+	}
 }

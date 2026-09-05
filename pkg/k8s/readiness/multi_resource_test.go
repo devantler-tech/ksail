@@ -284,3 +284,35 @@ func TestWaitForMultipleResources_MixedTypes(t *testing.T) {
 
 	require.NoError(t, err)
 }
+
+// TestWaitForMultipleResources_SingleStatefulSetReady tests single ready statefulset.
+func TestWaitForMultipleResources_SingleStatefulSetReady(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace = "argocd"
+		name      = "argocd-application-controller"
+	)
+
+	client := fake.NewClientset(&appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        1,
+			ReadyReplicas:   1,
+			UpdatedReplicas: 1,
+			CurrentRevision: "rev-1",
+			UpdateRevision:  "rev-1",
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	checks := []readiness.Check{
+		{Type: "statefulset", Namespace: namespace, Name: name},
+	}
+
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 500*time.Millisecond)
+
+	require.NoError(t, err)
+}
