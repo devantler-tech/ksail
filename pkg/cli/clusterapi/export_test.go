@@ -51,6 +51,12 @@ func (s *Service) SetRESTConfigForClusterForTest(
 	s.restConfigForCluster = build
 }
 
+// RESTConfigForClusterForTest drives the PRODUCTION kubeconfig seam (name → context → rest.Config)
+// so a test can assert which API server a cluster name resolves to, without overriding the seam.
+func (s *Service) RESTConfigForClusterForTest(clusterName string) (*rest.Config, error) {
+	return s.restConfigForCluster(clusterName)
+}
+
 // SetApplyClientForTest overrides the apply-client builder so manifest-apply tests can inject a fake
 // dynamic client + a static REST mapper instead of resolving a real cluster.
 func (s *Service) SetApplyClientForTest(

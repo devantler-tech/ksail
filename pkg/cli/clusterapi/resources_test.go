@@ -366,6 +366,119 @@ func TestContextForCluster(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "kind-prod", contextName)
 
+	// A managed row addressed by its full context name resolves through the raw-name fallback:
+	// detection yields "prod" for kind-prod, so the detected-name pass alone would reject it.
+	contextName, err = clusterapi.ContextForCluster(path, "kind-prod")
+	require.NoError(t, err)
+	assert.Equal(t, "kind-prod", contextName)
+
 	_, err = clusterapi.ContextForCluster(path, "missing")
+	require.ErrorIs(t, err, api.ErrNotFound)
+}
+
+// unmanagedContextKubeconfig carries a managed kind-prod context plus an unmanaged context whose name
+// follows no distribution pattern (an EKS/kubeadm/colleague cluster), the shape List surfaces as an
+// unmanaged row keyed by the raw context name.
+const unmanagedContextKubeconfig = `apiVersion: v1
+kind: Config
+current-context: kind-prod
+clusters:
+  - name: kind-prod
+    cluster:
+      server: https://127.0.0.1:6443
+  - name: colleague
+    cluster:
+      server: https://cluster.example.com:6443
+contexts:
+  - name: kind-prod
+    context:
+      cluster: kind-prod
+      user: kind-prod
+  - name: colleague-cluster
+    context:
+      cluster: colleague
+      user: colleague
+users:
+  - name: kind-prod
+    user: {}
+  - name: colleague
+    user: {}
+`
+
+// TestContextForClusterResolvesUnmanagedRawContextName pins the fix for #6116: an unmanaged
+// kubeconfig context is listed under its raw context name, and every resource operation must
+// resolve that same name back to the context instead of reporting 404 for a row List advertised.
+func TestContextForClusterResolvesUnmanagedRawContextName(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(unmanagedContextKubeconfig), 0o600))
+
+	contextName, err := clusterapi.ContextForCluster(path, "colleague-cluster")
+	require.NoError(t, err)
+	assert.Equal(t, "colleague-cluster", contextName)
+
+	// The raw-name fallback is exact: a substring or the cluster entry's name is not a context.
+	_, err = clusterapi.ContextForCluster(path, "colleague")
+	require.ErrorIs(t, err, api.ErrNotFound)
+}
+
+// TestContextForClusterDetectedNameKeepsPrecedence pins the ordering of the two passes: a managed
+// cluster keeps resolving to its distribution context even when a stray context is literally named
+// after the cluster, so the fallback never hijacks a ksail-managed name.
+func TestContextForClusterDetectedNameKeepsPrecedence(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: v1
+kind: Config
+clusters:
+  - name: kind-prod
+    cluster:
+      server: https://127.0.0.1:6443
+  - name: stray
+    cluster:
+      server: https://127.0.0.1:6444
+contexts:
+  - name: kind-prod
+    context:
+      cluster: kind-prod
+      user: kind-prod
+  - name: prod
+    context:
+      cluster: stray
+      user: stray
+users:
+  - name: kind-prod
+    user: {}
+  - name: stray
+    user: {}
+`), 0o600))
+
+	contextName, err := clusterapi.ContextForCluster(path, "prod")
+	require.NoError(t, err)
+	assert.Equal(t, "kind-prod", contextName)
+}
+
+// TestRESTConfigForUnmanagedClusterTargetsItsContext drives the production restConfigForCluster seam
+// (the one every default client — dynamic, apply, log, exec, proxy, watch — derives from) for an
+// unmanaged row and asserts the resulting REST config points at that context's API server. This is
+// the user-visible half of #6116: the row List surfaces is now operable rather than a 404.
+func TestRESTConfigForUnmanagedClusterTargetsItsContext(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(unmanagedContextKubeconfig), 0o600))
+
+	service := newTestService(nil)
+	service.SetKubeconfigPathForTest(path)
+
+	restConfig, err := service.RESTConfigForClusterForTest("colleague-cluster")
+	require.NoError(t, err)
+	assert.Equal(t, "https://cluster.example.com:6443", restConfig.Host)
+
+	// A name no context carries still reports not-found (→ 404) rather than falling back to the
+	// current context and silently operating on the wrong cluster.
+	_, err = service.RESTConfigForClusterForTest("ghost")
 	require.ErrorIs(t, err, api.ErrNotFound)
 }
