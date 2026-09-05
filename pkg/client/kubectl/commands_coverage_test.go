@@ -56,6 +56,18 @@ func TestCreateWaitCommandHasFlags(t *testing.T) {
 	require.NotNil(t, flags)
 	assert.NotNil(t, flags.Lookup("for"), "expected --for flag")
 	assert.NotNil(t, flags.Lookup("timeout"), "expected --timeout flag")
+
+	// Kubernetes config flags must be registered, not only read through configFlags,
+	// or wait cannot target a namespace or context other than the current one (#6144).
+	namespaceFlag := flags.Lookup("namespace")
+	require.NotNil(t, namespaceFlag, "expected --namespace flag")
+	assert.Equal(t, "n", namespaceFlag.Shorthand, "expected -n shorthand for --namespace")
+	assert.NotNil(t, flags.Lookup("context"), "expected --context flag")
+
+	kubeconfigFlag := flags.Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	assert.Equal(t, "/tmp/kubeconfig", kubeconfigFlag.DefValue,
+		"expected the resolved kubeconfig path as the --kubeconfig default")
 }
 
 func TestCreateDebugCommand_WithKubeconfig(t *testing.T) {
