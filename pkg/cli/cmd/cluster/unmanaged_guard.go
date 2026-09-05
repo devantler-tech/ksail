@@ -403,10 +403,10 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 	return current
 }
 
-func selectPersistedAWSOwnership(
+func requestedAWSOwnershipRegions(
 	ownerships []*state.EKSOwnershipState,
 	contextRegion string,
-) (*state.EKSOwnershipState, error) {
+) map[string]struct{} {
 	requestedRegions := make(map[string]struct{})
 
 	for _, ownership := range ownerships {
@@ -421,6 +421,15 @@ func selectPersistedAWSOwnership(
 	if len(requestedRegions) == 0 && contextRegion != "" {
 		requestedRegions[contextRegion] = struct{}{}
 	}
+
+	return requestedRegions
+}
+
+func selectPersistedAWSOwnership(
+	ownerships []*state.EKSOwnershipState,
+	contextRegion string,
+) (*state.EKSOwnershipState, error) {
+	requestedRegions := requestedAWSOwnershipRegions(ownerships, contextRegion)
 
 	if len(requestedRegions) == 1 {
 		for requestedRegion := range requestedRegions {

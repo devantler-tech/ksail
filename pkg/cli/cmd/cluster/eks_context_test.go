@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:paralleltest // The real command reads the process environment and working directory.
 func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		if testCase.name == "delete" {
@@ -20,6 +19,7 @@ func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 
 		t.Run(testCase.name, func(t *testing.T) {
 			const clusterName = "eks-context-6226"
+
 			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			require.NoError(t, os.Remove("ksail.yaml"))
 			require.NoError(t, os.Remove("eks.yaml"))
@@ -29,6 +29,7 @@ func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 			}))
 			ownership, err := state.LoadEKSOwnershipState(clusterName, "ap-southeast-2")
 			require.NoError(t, err)
+
 			ownership.AWSOptions = v1alpha1.OptionsAWS{
 				ProfileEnvVar:         "KSAIL_PROFILE",
 				RegionEnvVar:          "KSAIL_REGION",
@@ -46,6 +47,7 @@ func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 				"operator@" + clusterName + ".ap-southeast-2.eksctl.io",
 				clusterName + ".us-west-2.eksctl.io",
 			})
+
 			kubeconfigPath, err := filepath.Abs("kubeconfig")
 			require.NoError(t, err)
 			t.Setenv("KUBECONFIG", kubeconfigPath)

@@ -33,6 +33,7 @@ func TestResolveClusterInfoFromSelectedEksctlContext(t *testing.T) {
 
 	t.Run("environment region overrides selected context", func(t *testing.T) {
 		t.Setenv("AWS_REGION", "eu-west-1")
+
 		resolved, err := lifecycle.ResolveClusterInfoStrict(nil, "", "", kubeconfigPath)
 		require.NoError(t, err)
 		assert.Equal(t, "eu-west-1", resolved.AWSRegion)
@@ -63,13 +64,13 @@ func TestResolveClusterInfoFromSelectedEksctlContext(t *testing.T) {
 	})
 }
 
-//nolint:paralleltest // Cobra exercises the standalone environment and working-directory path.
 func TestSimpleLifecycleEksctlContextReachesGuard(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("KUBECONFIG", writeSelectedEKSContext(t))
 
 	var guarded *lifecycle.ResolvedClusterInfo
+
 	cmd := lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use: "start",
 		Guard: func(_ context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
@@ -92,6 +93,7 @@ func writeSelectedEKSContext(t *testing.T) string {
 	t.Helper()
 
 	const selected = "arn:aws:iam::123456789012:role/operator@demo.us-west-2.eksctl.io"
+
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = selected
 	config.Clusters["eks"] = &clientcmdapi.Cluster{

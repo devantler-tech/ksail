@@ -40,10 +40,12 @@ func TestDetectInfoEksctlContext(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, v1alpha1.DistributionEKS, info.Distribution)
 			assert.Equal(t, v1alpha1.ProviderAWS, info.Provider)
+
 			wantName := "demo"
 			if contextName == "kind-demo.us-west-2.eksctl.io" {
 				wantName = "kind-demo"
 			}
+
 			assert.Equal(t, wantName, info.ClusterName)
 			assert.Equal(t, contextName, info.Context)
 		})
