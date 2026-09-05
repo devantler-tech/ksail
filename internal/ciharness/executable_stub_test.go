@@ -54,11 +54,7 @@ func TestWriteExecutableStub_ExecutesUnderConcurrentForks(t *testing.T) {
 	errs := make(chan error, workers)
 
 	for worker := range workers {
-		waitGroup.Add(1)
-
-		go func() {
-			defer waitGroup.Done()
-
+		waitGroup.Go(func() {
 			stubPath := filepath.Join(dir, "stub-"+strconv.Itoa(worker))
 
 			err := writeExecutableFile(t.Context(), stubPath, "#!/bin/sh\nexit 0\n")
@@ -70,7 +66,7 @@ func TestWriteExecutableStub_ExecutesUnderConcurrentForks(t *testing.T) {
 
 			//nolint:gosec // stubPath is a test-owned temp file the writer under test just created.
 			errs <- exec.CommandContext(t.Context(), stubPath).Run()
-		}()
+		})
 	}
 
 	waitGroup.Wait()
