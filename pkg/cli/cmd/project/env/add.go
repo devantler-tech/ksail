@@ -288,11 +288,7 @@ func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Clu
 // cause's error chain (ErrSourceConfigLoad) and returns it unchanged when discovery
 // fails or finds no other environments.
 func enrichSourceConfigError(cmd *cobra.Command, repoRoot string, cause error) error {
-	loader := func(configFile string) (*v1alpha1.Cluster, error) {
-		return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, configFile))
-	}
-
-	envs, err := environment.DeriveEnvironments(repoRoot, loader)
+	envs, err := discoverWorkspaceEnvironments(cmd, repoRoot)
 	if err != nil || len(envs) == 0 {
 		return cause
 	}
@@ -303,6 +299,24 @@ func enrichSourceConfigError(cmd *cobra.Command, repoRoot string, cause error) e
 	}
 
 	return fmt.Errorf("%w (available environments: %s)", cause, strings.Join(names, ", "))
+}
+
+// discoverWorkspaceEnvironments loads declared environments relative to the resolved
+// workspace root, preserving the same config-loading behavior for listing and errors.
+func discoverWorkspaceEnvironments(
+	cmd *cobra.Command,
+	repoRoot string,
+) ([]environment.Environment, error) {
+	loader := func(configFile string) (*v1alpha1.Cluster, error) {
+		return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, configFile))
+	}
+
+	envs, err := environment.DeriveEnvironments(repoRoot, loader)
+	if err != nil {
+		return nil, fmt.Errorf("discovering environments: %w", err)
+	}
+
+	return envs, nil
 }
 
 // cloneEnvironment derives the structured rewrites and clones the source overlay
