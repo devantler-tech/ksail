@@ -83,6 +83,7 @@ jobs:
           test-kubernetes-provider: "true"
           kubernetes-provider-distributions: K3s
           kubernetes-provider-cni: Calico
+          assert-k3k-server-creator: "true"
           ghcr-user: ${{ github.actor }}
           ghcr-token: >-
             ${{ github.event_name != 'pull_request'
