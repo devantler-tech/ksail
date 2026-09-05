@@ -109,11 +109,31 @@ func runDeleteAction(
 		return fmt.Errorf("validate standalone AWS target: %w", err)
 	}
 
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		err := state.WithEKSLifecycleLock(cmd.Context(), resolved.ClusterName, func() error {
+			return runResolvedDeleteAction(cmd, flags, tmr, resolved)
+		})
+		if err != nil {
+			return fmt.Errorf("EKS delete operation: %w", err)
+		}
+
+		return nil
+	}
+
+	return runResolvedDeleteAction(cmd, flags, tmr, resolved)
+}
+
+func runResolvedDeleteAction(
+	cmd *cobra.Command,
+	flags *deleteFlags,
+	tmr timer.Timer,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
 	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
 	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
 	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally
 	// deletes a cluster it does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	err := deleteUnmanagedGuardFunc(cmd.Context(), resolved)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -245,6 +246,194 @@ func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {
 	_, err := state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
+
+// TestStandaloneEKSLifecycleSerializesProcesses holds stop after the snapshot is saved but
+// before AWS scales down. A concurrent start must not clear that snapshot, and delete must not
+// remove ownership state while stop can still write to the cluster.
+func TestStandaloneEKSLifecycleSerializesProcesses(t *testing.T) {
+	for _, action := range []string{"start", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			const clusterName = "eks-concurrent-lifecycle"
+
+			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			barrierDir := t.TempDir()
+			t.Setenv("KSAIL_EKS_BARRIER_DIR", barrierDir)
+
+			binary, err := exec.LookPath("eksctl")
+			require.NoError(t, err)
+			writeExecutableFixture(t, binary, concurrentEKSEksctlFixture)
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(barrierDir, "capacity"), []byte("2"), 0o600),
+			)
+
+			waitForStop := startBlockedEKSStop(t, barrierDir)
+			require.Eventually(t, func() bool {
+				_, statErr := os.Stat(filepath.Join(barrierDir, "stopping"))
+
+				return statErr == nil
+			}, 10*time.Second, 10*time.Millisecond)
+
+			beforeCalls := readStandaloneEKSCalls(t, markerPath)
+			competitor := standaloneEKSProcess(t, action, true)
+			output, runErr := competitor.CombinedOutput()
+			require.NoError(t, runErr, "%s", output)
+			assert.Equal(t, beforeCalls, readStandaloneEKSCalls(t, markerPath),
+				"a canceled waiter must not query or mutate AWS")
+
+			snapshot, snapshotErr := state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
+			require.NoError(t, snapshotErr, "the waiting operation must preserve restart capacity")
+			assert.Equal(t, []state.EKSNodegroupCapacity{{
+				Name: "workers", DesiredCapacity: 2, MinSize: 2, MaxSize: 4,
+			}}, snapshot.Nodegroups)
+
+			require.NoError(t, os.WriteFile(filepath.Join(barrierDir, "continue"), nil, 0o600))
+			waitForStop()
+
+			output, runErr = standaloneEKSProcess(t, "start", false).CombinedOutput()
+			require.NoError(t, runErr, "%s", output)
+
+			//nolint:gosec // the capacity file belongs to this test's private barrier directory.
+			capacity, readErr := os.ReadFile(filepath.Join(barrierDir, "capacity"))
+			require.NoError(t, readErr)
+			assert.Equal(t, "2", string(capacity), "start must restore the original capacity")
+
+			_, snapshotErr = state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
+			require.ErrorIs(t, snapshotErr, state.ErrEKSNodegroupStateNotFound)
+		})
+	}
+}
+
+func startBlockedEKSStop(t *testing.T, barrierDir string) func() {
+	t.Helper()
+
+	stop := standaloneEKSProcess(t, "stop", false)
+
+	var output bytes.Buffer
+
+	stop.Stdout = &output
+	stop.Stderr = &output
+	require.NoError(t, stop.Start())
+
+	waited := false
+
+	t.Cleanup(func() {
+		if !waited {
+			_ = os.WriteFile(filepath.Join(barrierDir, "continue"), nil, 0o600)
+			_ = stop.Process.Kill()
+			_ = stop.Wait()
+		}
+	})
+
+	return func() {
+		t.Helper()
+
+		err := stop.Wait()
+		waited = true
+
+		require.NoError(t, err, "%s", output.String())
+	}
+}
+
+func standaloneEKSProcess(t *testing.T, action string, expectTimeout bool) *exec.Cmd {
+	t.Helper()
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	//nolint:gosec // the executable is this test binary, never an external program.
+	cmd := exec.CommandContext(
+		t.Context(),
+		executable,
+		"-test.run=^TestStandaloneEKSLifecycleProcess$",
+		"-test.timeout=2m",
+	)
+
+	cmd.Env = append(os.Environ(), "KSAIL_EKS_PROCESS_ACTION="+action,
+		fmt.Sprintf("KSAIL_EKS_PROCESS_TIMEOUT=%t", expectTimeout),
+		"KSAIL_EKS_PROCESS_HOME="+os.Getenv("HOME"))
+
+	return cmd
+}
+
+// TestStandaloneEKSLifecycleProcess executes the real Cobra command in a fresh process while
+// replacing only AWS identity responses and the external eksctl binary with offline fixtures.
+func TestStandaloneEKSLifecycleProcess(t *testing.T) {
+	action := os.Getenv("KSAIL_EKS_PROCESS_ACTION")
+	if action == "" {
+		return
+	}
+
+	t.Setenv("HOME", os.Getenv("KSAIL_EKS_PROCESS_HOME"))
+	clusterName := os.Getenv("KSAIL_EKS_CLUSTER")
+	setEKSIdentityClient(t, &fakeEKSIdentityClient{
+		accountID: "123456789012",
+		cluster:   immutableEKSCluster(clusterName, immutableIdentityTime()),
+	})
+
+	constructors := map[string]func() *cobra.Command{
+		"start": cluster.NewStartCmd, "stop": cluster.NewStopCmd, "delete": cluster.NewDeleteCmd,
+	}
+	constructor, found := constructors[action]
+	require.True(t, found)
+
+	cmd := constructor()
+
+	args := []string{"--name", clusterName, "--provider", "AWS"}
+	if action == "delete" {
+		args = append(args, "--force")
+	}
+
+	cmd.SetArgs(args)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	ctx := t.Context()
+
+	if os.Getenv("KSAIL_EKS_PROCESS_TIMEOUT") == "true" {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+
+		cmd.SetContext(ctx)
+		require.ErrorIs(t, cmd.Execute(), context.DeadlineExceeded)
+
+		return
+	}
+
+	cmd.SetContext(ctx)
+	require.NoError(t, cmd.Execute())
+}
+
+const concurrentEKSEksctlFixture = `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$KSAIL_EKSCTL_MARKER"
+case "$1 $2" in
+  'get cluster')
+    printf '[{"Name":"%s","Region":"ap-southeast-2","EksctlCreated":"True"}]\n' "$KSAIL_EKS_CLUSTER"
+    ;;
+  'get nodegroup')
+    capacity=$(cat "$KSAIL_EKS_BARRIER_DIR/capacity")
+    printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
+    printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"NodeGroupType":"managed"}]\n' "$capacity" "$capacity"
+    ;;
+  'scale nodegroup')
+    case " $* " in
+      *' --nodes 0 '*)
+        touch "$KSAIL_EKS_BARRIER_DIR/stopping"
+        while [ ! -f "$KSAIL_EKS_BARRIER_DIR/continue" ]; do sleep 0.01; done
+        printf 0 > "$KSAIL_EKS_BARRIER_DIR/capacity"
+        ;;
+      *' --nodes 2 --nodes-min 2 --nodes-max 4 '*)
+        printf 2 > "$KSAIL_EKS_BARRIER_DIR/capacity"
+        ;;
+      *) exit 51 ;;
+    esac
+    ;;
+  'delete cluster') touch "$KSAIL_EKS_BARRIER_DIR/deleted" ;;
+  *) exit 52 ;;
+esac
+`
 
 // TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors covers each command's
 // user-facing error path after routing has reached eksctl.

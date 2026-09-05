@@ -8,11 +8,22 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+// RunGuardedProvisionerForTest exercises the full mutation boundary synchronously.
+func (s *Service) RunGuardedProvisionerForTest(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+) error {
+	return s.runGuardedProvisioner(ctx, name, spec, action)
+}
 
 // SetDynamicClientForTest overrides the dynamic-client builder so resource-browser tests can inject a
 // fake client instead of resolving a real kubeconfig context.

@@ -23,6 +23,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -507,8 +508,27 @@ func runSimpleLifecycleAction(
 		return err
 	}
 
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		err := state.WithEKSLifecycleLock(cmd.Context(), resolved.ClusterName, func() error {
+			return runResolvedSimpleLifecycleAction(cmd, config, resolved)
+		})
+		if err != nil {
+			return fmt.Errorf("EKS lifecycle operation: %w", err)
+		}
+
+		return nil
+	}
+
+	return runResolvedSimpleLifecycleAction(cmd, config, resolved)
+}
+
+func runResolvedSimpleLifecycleAction(
+	cmd *cobra.Command,
+	config SimpleLifecycleConfig,
+	resolved *ResolvedClusterInfo,
+) error {
 	if config.Guard != nil {
-		err = config.Guard(cmd.Context(), resolved)
+		err := config.Guard(cmd.Context(), resolved)
 		if err != nil {
 			return err
 		}
