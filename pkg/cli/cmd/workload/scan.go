@@ -141,20 +141,11 @@ func addScanFlags(
 			"objects) forwarded to Kubescape's --exceptions "+
 			"(overrides spec.workload.scan.exceptions from ksail.yaml)")
 	cmd.Flags().BoolVar(ephemeral, "ephemeral", false,
-		"EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of "+
-			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
-			"into it, so declared operators' CRDs are registered. Applying rendered manifests "+
-			"and scanning operator-rendered children is the next slice — off by default.")
+		ephemeralFlagDescription)
 }
 
-// runScanCmd dispatches to runScanCmdInner directly, or — when --ephemeral is
-// set — wraps it in an isolated throwaway Kind cluster that is guaranteed to be torn
-// down afterwards (see withEphemeralCluster, shared with the validate
-// command). While the cluster is live, the workload's declared charts are
-// installed into it first (installDeclaredCharts, ksail#5919 Phase 3b-2) so
-// the declared operators' CRDs are registered; applying the rendered
-// manifests and scanning their operator-rendered children is the remaining
-// Phase 3b-3.
+// runScanCmd runs the offline security gate and, when explicitly requested,
+// checks admission in an isolated cluster with guaranteed teardown.
 func runScanCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -171,7 +162,7 @@ func runScanCmd(
 }
 
 // runScanCmdInner runs the scan itself — config load, target resolution, and
-// the Kubescape pass — after any ephemeral-cluster preparation has completed.
+// the Kubescape pass — before optional ephemeral-cluster provisioning.
 func runScanCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,

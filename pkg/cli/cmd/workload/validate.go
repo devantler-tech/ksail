@@ -157,20 +157,12 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		&flags.ephemeral,
 		"ephemeral",
 		false,
-		"EXPERIMENTAL (ksail#5919): provision an isolated throwaway Kind cluster for the duration of "+
-			"this command (guaranteed teardown) and install the workload's declared Helm charts "+
-			"into it, so declared operators' CRDs are registered. Applying rendered manifests "+
-			"and validating operator-rendered children is the next slice — off by default.",
+		ephemeralFlagDescription,
 	)
 }
 
-// runValidateCmd dispatches to runValidateCmdInner directly, or — when
-// --ephemeral is set — wraps it in an isolated throwaway Kind cluster that is
-// guaranteed to be torn down afterwards (see withEphemeralCluster). While the
-// cluster is live, the workload's declared charts are installed into it first
-// (installDeclaredCharts, ksail#5919 Phase 3b-2) so the declared operators'
-// CRDs are registered; applying the rendered manifests and validating their
-// operator-rendered children is the remaining Phase 3b-3.
+// runValidateCmd runs the offline schema gate and, when explicitly requested,
+// checks admission in an isolated cluster with guaranteed teardown.
 func runValidateCmd(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -187,8 +179,8 @@ func runValidateCmd(
 }
 
 // runValidateCmdInner runs the validation itself — config load, target
-// resolution, and the kubeconform pass — after any ephemeral-cluster
-// preparation has completed.
+// resolution, and the kubeconform pass — before optional ephemeral-cluster
+// provisioning.
 func runValidateCmdInner(
 	ctx context.Context,
 	cmd *cobra.Command,
