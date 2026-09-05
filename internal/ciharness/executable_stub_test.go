@@ -1,10 +1,14 @@
 package ciharness_test
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,11 +41,12 @@ func TestWriteExecutableStub_ProducesRunnableOwnerOnlyStub(t *testing.T) {
 	assert.Equal(t, "stub ran now\n", string(output))
 }
 
-// TestWriteExecutableStub_ExecutesUnderConcurrentForks is the regression
-// signal for #6199: many goroutines write a stub and execute it at once, while
-// every other goroutine's fork is a candidate to inherit a still-open write
-// descriptor. With the descriptor confined to a child shell, no exec can observe
-// the stub open for writing, so this must pass without a single ETXTBSY.
+// TestWriteExecutableStub_ExecutesUnderConcurrentForks is a load smoke for #6199:
+// many goroutines write a stub and execute it at once, so every other goroutine's
+// fork is a candidate to inherit a still-open write descriptor. It samples the
+// race rather than forcing it — the deterministic reproduction is
+// TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec — so it must simply
+// never fail, however the scheduler interleaves the workers.
 func TestWriteExecutableStub_ExecutesUnderConcurrentForks(t *testing.T) {
 	t.Parallel()
 
@@ -75,4 +80,74 @@ func TestWriteExecutableStub_ExecutesUnderConcurrentForks(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err, "a stub written under concurrent forks must execute cleanly")
 	}
+}
+
+// TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec is the coordinated
+// regression behind #6199. It forces the race instead of sampling it: this
+// process holds a stub open for writing while it starts a child that inherits
+// that descriptor (ExtraFiles survives exec, unlike Go's default close-on-exec
+// descriptors), then closes its own copy and only then lets the child execute
+// the stub. The child still holds the inherited descriptor, so the kernel refuses
+// the exec with ETXTBSY — the exact "bad interpreter: Text file busy" the
+// harness hit. A stub written by writeExecutableFile leaves this process with no
+// descriptor to inherit, so the same executor runs it cleanly.
+func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
+	t.Parallel()
+
+	// Linux refuses to execute a file that any process holds open for writing;
+	// macOS does not (verified: the control below succeeds there), and the CI
+	// runners that hit #6199 are Linux.
+	if runtime.GOOS != "linux" {
+		t.Skip("ETXTBSY on exec of a file open for writing is Linux semantics")
+	}
+
+	dir := t.TempDir()
+	content := "#!/bin/sh\nexit 0\n"
+
+	// The hazard: an open writer in this process at the moment a child is forked.
+	heldPath := filepath.Join(dir, "held-open")
+	require.NoError(t, os.WriteFile(heldPath, []byte(content), 0o700)) //nolint:gosec // Test-owned temp path.
+
+	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0)
+	require.NoError(t, err)
+
+	var stderr bytes.Buffer
+
+	executor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", heldPath)
+	executor.ExtraFiles = []*os.File{writer}
+	executor.Stderr = &stderr
+
+	stdin, err := executor.StdinPipe()
+	require.NoError(t, err)
+	require.NoError(t, executor.Start())
+
+	// This process releases the writer first; only the child's inherited copy remains.
+	require.NoError(t, writer.Close())
+
+	_, err = io.WriteString(stdin, "go\n")
+	require.NoError(t, err)
+	require.NoError(t, stdin.Close())
+
+	err = executor.Wait()
+	require.Error(t, err, "a child holding an inherited write descriptor must not execute the stub")
+	assert.Contains(t, strings.ToLower(stderr.String()), "text file busy")
+
+	// The fix: the helper never gives this process a descriptor a child could inherit.
+	safePath := filepath.Join(dir, "helper-written")
+	require.NoError(t, writeExecutableFile(t.Context(), safePath, content))
+
+	var safeStderr bytes.Buffer
+
+	safeExecutor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", safePath)
+	safeExecutor.Stderr = &safeStderr
+
+	safeStdin, err := safeExecutor.StdinPipe()
+	require.NoError(t, err)
+	require.NoError(t, safeExecutor.Start())
+
+	_, err = io.WriteString(safeStdin, "go\n")
+	require.NoError(t, err)
+	require.NoError(t, safeStdin.Close())
+
+	require.NoError(t, safeExecutor.Wait(), "helper-written stub must execute: %s", safeStderr.String())
 }
