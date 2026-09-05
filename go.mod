@@ -460,7 +460,7 @@ require (
 	github.com/gocsaf/csaf/v3 v3.5.1 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.1 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
+	github.com/gofrs/flock v0.13.0
 	github.com/gohugoio/hashstructure v0.6.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect

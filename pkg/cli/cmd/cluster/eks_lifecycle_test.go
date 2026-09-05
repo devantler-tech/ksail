@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
@@ -170,7 +172,7 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-routing-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 
 			if testCase.name == "start" {
@@ -206,7 +208,7 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {
 	const clusterName = "ksail-eks-stop-start-roundtrip-6087"
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_EKS_NODEGROUP_DESIRED", "2")
 	t.Setenv("KSAIL_EKS_NODEGROUP_MIN", "2")
 	runStandaloneEKSCommand(t, cluster.NewStopCmd, "--name", clusterName, "--provider", "AWS")
@@ -246,6 +248,228 @@ func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
+// TestStandaloneEKSDeletePromptsBeforeLock verifies thinking at the prompt cannot block a lifecycle.
+//
+//nolint:paralleltest // fixture and confirmation hooks mutate process-wide state.
+func TestStandaloneEKSDeletePromptsBeforeLock(t *testing.T) {
+	const clusterName = "eks-delete-prompt"
+	setupStandaloneEKSLifecycleFixture(t, clusterName)
+	t.Cleanup(confirm.SetTTYCheckerForTests(func() bool { return true }))
+	t.Cleanup(confirm.SetStdinReaderForTests(eksPromptLockReader{t: t, name: clusterName}))
+
+	cmd := cluster.NewDeleteCmd()
+	cmd.SetArgs([]string{"--name", clusterName, "--provider", "AWS"})
+	cmd.SetContext(t.Context())
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	require.ErrorIs(t, cmd.Execute(), confirm.ErrDeletionCancelled)
+}
+
+// eksPromptLockReader tries a competing transition while the interactive prompt is reading.
+type eksPromptLockReader struct {
+	t    *testing.T
+	name string
+}
+
+// Read refuses deletion after verifying the prompt has not reserved the lifecycle lock.
+func (r eksPromptLockReader) Read(buffer []byte) (int, error) {
+	ctx, cancel := context.WithTimeout(r.t.Context(), 100*time.Millisecond)
+	defer cancel()
+
+	err := state.WithEKSLifecycleLock(ctx, r.name, func() error { return nil })
+	require.NoError(r.t, err, "delete held the lock while waiting for confirmation")
+
+	return copy(buffer, "no\n"), nil
+}
+
+// TestStandaloneEKSLifecycleSerializesProcesses holds stop after the snapshot is saved but
+// before AWS scales down. A concurrent start must not clear that snapshot, and delete must not
+// remove ownership state while stop can still write to the cluster.
+func TestStandaloneEKSLifecycleSerializesProcesses(t *testing.T) {
+	for _, action := range []string{"start", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			const clusterName = "eks-concurrent-lifecycle"
+
+			markerPath, eksctlPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			barrierDir := t.TempDir()
+			t.Setenv("KSAIL_EKS_BARRIER_DIR", barrierDir)
+
+			writeExecutableFixture(t, eksctlPath, concurrentEKSEksctlFixture)
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(barrierDir, "capacity"), []byte("2"), 0o600),
+			)
+
+			waitForStop := startBlockedEKSStop(t, barrierDir)
+			require.Eventually(t, func() bool {
+				_, statErr := os.Stat(filepath.Join(barrierDir, "stopping"))
+
+				return statErr == nil
+			}, 10*time.Second, 10*time.Millisecond)
+
+			beforeCalls := readStandaloneEKSCalls(t, markerPath)
+			competitor := standaloneEKSProcess(t, action, true)
+			output, runErr := competitor.CombinedOutput()
+			require.NoError(t, runErr, "%s", output)
+			assert.Equal(t, beforeCalls, readStandaloneEKSCalls(t, markerPath),
+				"a canceled waiter must not query or mutate AWS")
+
+			snapshot, snapshotErr := state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
+			require.NoError(t, snapshotErr, "the waiting operation must preserve restart capacity")
+			assert.Equal(t, []state.EKSNodegroupCapacity{{
+				Name: "workers", DesiredCapacity: 2, MinSize: 2, MaxSize: 4,
+			}}, snapshot.Nodegroups)
+
+			require.NoError(t, os.WriteFile(filepath.Join(barrierDir, "continue"), nil, 0o600))
+			waitForStop()
+
+			output, runErr = standaloneEKSProcess(t, "start", false).CombinedOutput()
+			require.NoError(t, runErr, "%s", output)
+
+			//nolint:gosec // the capacity file belongs to this test's private barrier directory.
+			capacity, readErr := os.ReadFile(filepath.Join(barrierDir, "capacity"))
+			require.NoError(t, readErr)
+			assert.Equal(t, "2", string(capacity), "start must restore the original capacity")
+
+			_, snapshotErr = state.LoadEKSNodegroupState(clusterName, "ap-southeast-2")
+			require.ErrorIs(t, snapshotErr, state.ErrEKSNodegroupStateNotFound)
+		})
+	}
+}
+
+// startBlockedEKSStop pauses a child stop operation and guarantees process cleanup.
+func startBlockedEKSStop(t *testing.T, barrierDir string) func() {
+	t.Helper()
+
+	stop := standaloneEKSProcess(t, "stop", false)
+
+	var output bytes.Buffer
+
+	stop.Stdout = &output
+	stop.Stderr = &output
+	require.NoError(t, stop.Start())
+
+	waited := false
+
+	t.Cleanup(func() {
+		if !waited {
+			_ = os.WriteFile(filepath.Join(barrierDir, "continue"), nil, 0o600)
+			_ = stop.Process.Kill()
+			_ = stop.Wait()
+		}
+	})
+
+	return func() {
+		t.Helper()
+
+		err := stop.Wait()
+		waited = true
+
+		require.NoError(t, err, "%s", output.String())
+	}
+}
+
+// standaloneEKSProcess prepares a hermetic child process running the selected lifecycle command.
+func standaloneEKSProcess(t *testing.T, action string, expectTimeout bool) *exec.Cmd {
+	t.Helper()
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	//nolint:gosec // the executable is this test binary, never an external program.
+	cmd := exec.CommandContext(
+		t.Context(),
+		executable,
+		"-test.run=^TestStandaloneEKSLifecycleProcess$",
+		"-test.timeout=2m",
+	)
+
+	cmd.Env = append(os.Environ(), "KSAIL_EKS_PROCESS_ACTION="+action,
+		fmt.Sprintf("KSAIL_EKS_PROCESS_TIMEOUT=%t", expectTimeout),
+		"KSAIL_EKS_PROCESS_HOME="+os.Getenv("HOME"))
+
+	return cmd
+}
+
+// TestStandaloneEKSLifecycleProcess executes the real Cobra command in a fresh process while
+// replacing only AWS identity responses and the external eksctl binary with offline fixtures.
+func TestStandaloneEKSLifecycleProcess(t *testing.T) {
+	action := os.Getenv("KSAIL_EKS_PROCESS_ACTION")
+	if action == "" {
+		return
+	}
+
+	t.Setenv("HOME", os.Getenv("KSAIL_EKS_PROCESS_HOME"))
+	clusterName := os.Getenv("KSAIL_EKS_CLUSTER")
+	setEKSIdentityClient(t, &fakeEKSIdentityClient{
+		accountID: "123456789012",
+		cluster:   immutableEKSCluster(clusterName, immutableIdentityTime()),
+	})
+
+	constructors := map[string]func() *cobra.Command{
+		"start": cluster.NewStartCmd, "stop": cluster.NewStopCmd, "delete": cluster.NewDeleteCmd,
+	}
+	constructor, found := constructors[action]
+	require.True(t, found)
+
+	cmd := constructor()
+
+	args := []string{"--name", clusterName, "--provider", "AWS"}
+	if action == "delete" {
+		args = append(args, "--force")
+	}
+
+	cmd.SetArgs(args)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	ctx := t.Context()
+
+	if os.Getenv("KSAIL_EKS_PROCESS_TIMEOUT") == "true" {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+
+		cmd.SetContext(ctx)
+		require.ErrorIs(t, cmd.Execute(), context.DeadlineExceeded)
+
+		return
+	}
+
+	cmd.SetContext(ctx)
+	require.NoError(t, cmd.Execute())
+}
+
+const concurrentEKSEksctlFixture = `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$KSAIL_EKSCTL_MARKER"
+case "$1 $2" in
+  'get cluster')
+    printf '[{"Name":"%s","Region":"ap-southeast-2","EksctlCreated":"True"}]\n' "$KSAIL_EKS_CLUSTER"
+    ;;
+  'get nodegroup')
+    capacity=$(cat "$KSAIL_EKS_BARRIER_DIR/capacity")
+    printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
+    printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"NodeGroupType":"managed"}]\n' "$capacity" "$capacity"
+    ;;
+  'scale nodegroup')
+    case " $* " in
+      *' --nodes 0 '*)
+        touch "$KSAIL_EKS_BARRIER_DIR/stopping"
+        while [ ! -f "$KSAIL_EKS_BARRIER_DIR/continue" ]; do sleep 0.01; done
+        printf 0 > "$KSAIL_EKS_BARRIER_DIR/capacity"
+        ;;
+      *' --nodes 2 --nodes-min 2 --nodes-max 4 '*)
+        printf 2 > "$KSAIL_EKS_BARRIER_DIR/capacity"
+        ;;
+      *) exit 51 ;;
+    esac
+    ;;
+  'delete cluster') touch "$KSAIL_EKS_BARRIER_DIR/deleted" ;;
+  *) exit 52 ;;
+esac
+`
+
 // TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors covers each command's
 // user-facing error path after routing has reached eksctl.
 func TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors(t *testing.T) {
@@ -280,7 +504,7 @@ func TestStandaloneEKSLifecycleCommandsPropagateEksctlErrors(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-error-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			t.Setenv("KSAIL_EKSCTL_FAIL", testCase.failOn)
 
@@ -314,7 +538,7 @@ func TestStandaloneEKSLifecycleCommandsRejectUnmanagedEKSContext(t *testing.T) {
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-unmanaged-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			writeStandaloneEKSKubeconfig(t, clusterName, "ap-southeast-2")
 			t.Setenv("KSAIL_EKSCTL_CLUSTER_ABSENT", "1")
 
@@ -358,7 +582,7 @@ func TestStandaloneEKSLifecycleCommandsRejectConfigRegionForDifferentExplicitNam
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-region-mismatch-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			require.NoError(
 				t,
 				os.WriteFile(
@@ -399,7 +623,7 @@ func TestStandaloneEKSLifecycleCommandsRequireLocalOwnershipEvidence(t *testing.
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-no-local-owner-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			t.Setenv("HOME", t.TempDir())
 			writeStandaloneEKSEksConfig(t, "unrelated-local-cluster-6087")
 
@@ -426,7 +650,7 @@ func TestStandaloneEKSLifecycleCommandsRequireLocalOwnershipEvidence(t *testing.
 func TestStandaloneEKSRejectsSameNamedNonEKSConfig(t *testing.T) {
 	const clusterName = "same-name-kind-and-eks-6087"
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("HOME", t.TempDir())
 	require.NoError(
 		t,
@@ -474,7 +698,7 @@ name: %s
 // TestStandaloneEKSRejectsSyntheticNameFromNamelessConfig verifies ConfigManager's fallback
 // `eks-default` name is not mistaken for a name explicitly authorized by an actual eks.yaml source.
 func TestStandaloneEKSRejectsSyntheticNameFromNamelessConfig(t *testing.T) {
-	markerPath := setupStandaloneEKSLifecycleFixture(t, "eks-default")
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, "eks-default")
 	t.Setenv("HOME", t.TempDir())
 	require.NoError(
 		t,
@@ -549,7 +773,7 @@ func testStandaloneEKSLifecycleCommandsRejectConfig(
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-" + testSuffix + "-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			require.NoError(t, os.WriteFile("eks.yaml", configContent(clusterName), 0o600))
 
 			cmd := testCase.newCommand()
@@ -577,7 +801,7 @@ func TestStandaloneEKSLifecycleCommandsIgnoreRegionFromNamelessConfig(t *testing
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-nameless-region-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("KSAIL_REGION", "")
@@ -863,7 +1087,7 @@ func TestEKSMutationCommandsRejectNameOverrideMismatch(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			const sourceName = "eks-source-mutation-6087"
 
-			markerPath := setupStandaloneEKSLifecycleFixture(t, sourceName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, sourceName)
 
 			cmd := testCase.newCommand()
 			cmd.SetArgs([]string{"--name", "different-eks-mutation-6087"})
@@ -928,7 +1152,7 @@ func testEKSMutationCommandsRejectConfigSource(t *testing.T, eksConfig, wantErro
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			markerPath := setupStandaloneEKSLifecycleFixture(t, "config-file-name")
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, "config-file-name")
 			require.NoError(t, os.WriteFile("eks.yaml", []byte(eksConfig), 0o600))
 
 			cmd := testCase.newCommand()
@@ -954,7 +1178,7 @@ func TestStandaloneEKSLifecycleCommandsUseEKSConfigNameWhenMetadataDrifts(t *tes
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "eks-source-name-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			require.NoError(
 				t,
@@ -997,7 +1221,7 @@ func TestStandaloneEKSLifecycleCommandsRejectMalformedPresentConfig(t *testing.T
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-malformed-config-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			require.NoError(t, os.WriteFile("ksail.yaml", []byte("spec: [\n"), 0o600))
 
 			cmd := testCase.newCommand()
@@ -1082,7 +1306,7 @@ func TestAutoDeleteEKSUsesCreatedTargetAndCreationRegion(t *testing.T) {
 		staleAlias = "ttl-stale-alias-6087"
 	)
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, actualName)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KSAIL_REGION", "us-east-1")
 	configureStandaloneEKSIdentityInRegion(t, actualName, "ap-southeast-2")
@@ -1211,7 +1435,7 @@ func TestAutoDeleteEKSFailsClosedWithoutOwnership(t *testing.T) {
 func testAutoDeleteEKSRejectsUnmanagedProvenance(t *testing.T) {
 	const actualName = "ttl-unmanaged-eks-6087"
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, actualName)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KSAIL_EKSCTL_CREATED", "False")
 	require.NoError(t, state.SaveClusterSpec(actualName, &v1alpha1.ClusterSpec{}))
@@ -1254,7 +1478,7 @@ func testAutoDeleteEKSRejectsUnmanagedProvenance(t *testing.T) {
 func testAutoDeleteEKSRejectsMissingConfig(t *testing.T) {
 	const actualName = "ttl-missing-config-eks-6087"
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, actualName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, actualName)
 	t.Setenv("HOME", t.TempDir())
 	require.NoError(t, state.SaveClusterSpec(actualName, &v1alpha1.ClusterSpec{}))
 
@@ -1302,7 +1526,7 @@ func TestStandaloneEKSLifecycleCommandsFailClosedWhenAWSOwnershipCheckFails(t *t
 	for _, testCase := range standaloneEKSLifecycleCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-ownership-error-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			t.Setenv("KSAIL_EKSCTL_FAIL", "get")
 
 			cmd := testCase.newCommand()
@@ -1335,7 +1559,7 @@ func TestStandaloneEKSLifecycleCommandsFailClosedWhenAWSOwnershipCheckFails(t *t
 // the command must not continue to nodegroup discovery or scaling.
 func TestStandaloneEKSStartRejectsOwnershipRegionMismatch(t *testing.T) {
 	clusterName := "ksail-eks-start-region-query-mismatch-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "us-east-1")
 
 	cmd := cluster.NewStartCmd()
@@ -1364,7 +1588,7 @@ func TestStandaloneEKSStartRejectsOwnershipRegionMismatch(t *testing.T) {
 
 func TestStandaloneEKSStartRejectsOwnershipNameMismatch(t *testing.T) {
 	clusterName := "ksail-eks-start-name-query-mismatch-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_EKS_DISCOVERED_CLUSTER", "different-visible-cluster")
 
 	cmd := cluster.NewStartCmd()
@@ -1393,7 +1617,7 @@ func TestStandaloneEKSStartRejectsOwnershipNameMismatch(t *testing.T) {
 
 func TestStandaloneEKSStartUsesUniqueBareContextRegionFallback(t *testing.T) {
 	clusterName := "ksail-eks-start-context-region-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_REGION", "")
 	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "us-west-2")
 	writeStandaloneEKSEksConfig(t, clusterName)
@@ -1434,7 +1658,7 @@ func TestStandaloneEKSStartUsesUniqueBareContextRegionFallback(t *testing.T) {
 
 func TestStandaloneEKSStartRejectsAmbiguousContextRegions(t *testing.T) {
 	clusterName := "ksail-eks-start-ambiguous-context-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_REGION", "")
 	writeStandaloneEKSEksConfig(t, clusterName)
 	writeStandaloneEKSKubeconfigContexts(
@@ -1461,7 +1685,7 @@ func TestStandaloneEKSStartRejectsAmbiguousContextRegions(t *testing.T) {
 
 func TestStandaloneEKSStartBindsRegionFromExactQueryWithoutContext(t *testing.T) {
 	clusterName := "ksail-eks-start-query-region-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_REGION", "")
 	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "eu-north-1")
 	writeStandaloneEKSEksConfig(t, clusterName)
@@ -1494,7 +1718,7 @@ func TestStandaloneEKSStartBindsRegionFromExactQueryWithoutContext(t *testing.T)
 
 func TestStandaloneEKSStartRejectsEmptyRegionFromExactQuery(t *testing.T) {
 	clusterName := "ksail-eks-start-empty-query-region-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	t.Setenv("KSAIL_REGION", "")
 	t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "")
 	writeStandaloneEKSEksConfig(t, clusterName)
@@ -1519,7 +1743,7 @@ func TestStandaloneEKSStartRejectsEmptyRegionFromExactQuery(t *testing.T) {
 //nolint:paralleltest // setup mutates process environment and the working directory
 func TestStandaloneEKSExplicitRegionWinsContextFallback(t *testing.T) {
 	clusterName := "ksail-eks-start-explicit-region-test-6087"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	writeStandaloneEKSKubeconfigContexts(
 		t,
 		clusterName,
@@ -1614,7 +1838,7 @@ func TestStandaloneEKSStartRejectsMissingEksctlOwnership(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-start-" + testCase.name + "-ownership-test-6087"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			t.Setenv("KSAIL_EKSCTL_CREATED", testCase.created)
 
 			cmd := cluster.NewStartCmd()
@@ -1639,10 +1863,11 @@ func TestStandaloneEKSStartRejectsMissingEksctlOwnership(t *testing.T) {
 	}
 }
 
+// setupStandaloneEKSLifecycleFixture returns the call log and exact private eksctl fixture path.
 func setupStandaloneEKSLifecycleFixture(
 	t *testing.T,
 	clusterName string,
-) string {
+) (string, string) {
 	t.Helper()
 
 	workingDir := t.TempDir()
@@ -1697,7 +1922,7 @@ func setupStandaloneEKSLifecycleFixture(
 		),
 	})
 
-	return markerPath
+	return markerPath, eksctlPath
 }
 
 func configureStandaloneEKSNodegroupAction(t *testing.T, action string) {

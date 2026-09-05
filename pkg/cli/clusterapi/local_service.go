@@ -100,6 +100,9 @@ type Service struct {
 	// deadline path without waiting the real budget.
 	eksOwnershipTimeout time.Duration
 
+	// eksLifecycleLockTimeout bounds acquisition without limiting the lifecycle operation.
+	eksLifecycleLockTimeout time.Duration
+
 	// captureEKSIdentity records the immutable AWS identity of a cluster this backend just created,
 	// so the guard above has something to verify against. Injectable alongside resolveEKSGuard.
 	captureEKSIdentity eksCaptureFunc
@@ -188,6 +191,7 @@ func NewService() *Service {
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard
 	service.eksOwnershipTimeout = defaultEKSOwnershipTimeout
+	service.eksLifecycleLockTimeout = state.DefaultEKSLifecycleLockTimeout
 	service.captureEKSIdentity = service.defaultEKSCapture
 	service.resolveEKSCreateAccount = service.defaultEKSCreateAccount
 	service.useDefaultClients()
@@ -984,21 +988,9 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 		name,
 		spec,
 		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
-			return p.Delete(actionCtx, name)
+			return deleteProvisionerAndState(actionCtx, p, name, spec.Cluster.Distribution)
 		},
 	)
-	if spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
-		(err == nil || errors.Is(err, clustererr.ErrClusterNotFound)) {
-		cleanupErr := state.DeleteClusterState(name)
-		if cleanupErr != nil {
-			// The cloud cluster is already gone, so the deletion itself succeeded. Turning a
-			// local-state cleanup failure (read-only home, permissions) into a job failure would
-			// pin an undismissable Failed row for a cluster that no longer exists — exactly the
-			// trap the idempotency note below describes. Warn, but still clear the job.
-			slog.Warn("failed to clean up local EKS cluster state after deletion",
-				"cluster", name, "error", cleanupErr)
-		}
-	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1024,6 +1016,31 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 	delete(s.jobs, name)
 }
 
+// deleteProvisionerAndState keeps state cleanup inside the same lock as the cloud deletion.
+func deleteProvisionerAndState(
+	ctx context.Context,
+	provisioner clusterprovisioner.Provisioner,
+	name string,
+	distribution v1alpha1.Distribution,
+) error {
+	err := provisioner.Delete(ctx, name)
+	if distribution == v1alpha1.DistributionEKS &&
+		(err == nil || errors.Is(err, clustererr.ErrClusterNotFound)) {
+		cleanupErr := state.DeleteClusterState(name)
+		if cleanupErr != nil {
+			// Cloud deletion succeeded. Warn about local cleanup without stranding a failed job.
+			slog.Warn("failed to clean up local EKS cluster state after deletion",
+				"cluster", name, "error", cleanupErr)
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("delete cluster: %w", err)
+	}
+
+	return nil
+}
+
 // runGuardedProvisioner runs a mutating action (delete, start, stop) behind the EKS ownership
 // guard. Resolving the guard first means an unverifiable target is refused before any provisioner
 // is built, and the same verified identity travels into the provisioner for its own re-check.
@@ -1036,12 +1053,28 @@ func (s *Service) runGuardedProvisioner(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
-	guard, err := s.resolveEKSMutationGuard(ctx, spec.Cluster.Distribution, name)
-	if err != nil {
-		return err
+	run := func() error {
+		guard, err := s.resolveEKSMutationGuard(ctx, spec.Cluster.Distribution, name)
+		if err != nil {
+			return err
+		}
+
+		return s.runProvisionerWithGuard(ctx, name, spec, guard, action)
 	}
 
-	return s.runProvisionerWithGuard(ctx, name, spec, guard, action)
+	if spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		lockCtx, cancel := context.WithTimeout(ctx, s.eksLifecycleLockTimeout)
+		defer cancel()
+
+		err := state.WithEKSLifecycleLock(lockCtx, name, run)
+		if err != nil {
+			return fmt.Errorf("EKS lifecycle operation: %w", err)
+		}
+
+		return nil
+	}
+
+	return run()
 }
 
 // runProvisioner builds a provisioner for the requested spec and runs the supplied action against

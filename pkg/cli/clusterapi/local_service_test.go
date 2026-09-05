@@ -45,6 +45,91 @@ var (
 	errSimulatedDeleteFailure = errors.New("docker refused to remove container")
 )
 
+// TestGuardedLifecycleBoundsDetachedLockWait verifies background jobs leave contention promptly.
+func TestGuardedLifecycleBoundsDetachedLockWait(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(nil)
+	service.SetEKSLifecycleLockTimeoutForTest(25 * time.Millisecond)
+
+	result := make(chan error, 1)
+	finished := make(chan struct{})
+
+	require.NoError(t, state.WithEKSLifecycleLock(t.Context(), "demo", func() error {
+		t.Cleanup(func() { <-finished })
+
+		go func() {
+			defer close(finished)
+
+			result <- service.RunGuardedProvisionerForTest(context.WithoutCancel(t.Context()), "demo",
+				v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionEKS}},
+				func(context.Context, clusterprovisioner.Provisioner) error { return nil })
+		}()
+
+		select {
+		case err := <-result:
+			assert.ErrorIs(t, err, context.DeadlineExceeded)
+		case <-time.After(time.Second):
+			t.Error("detached lifecycle did not bound lock acquisition")
+		}
+
+		return nil
+	}))
+}
+
+// TestGuardedLifecycleKeepsOperationContext verifies acquisition deadlines do not cancel cloud work.
+func TestGuardedLifecycleKeepsOperationContext(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(nil)
+	service.SetEKSLifecycleLockTimeoutForTest(100 * time.Millisecond)
+
+	ctx := context.WithoutCancel(t.Context())
+	err := service.RunGuardedProvisionerForTest(ctx, "demo",
+		v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionEKS}},
+		func(actionCtx context.Context, _ clusterprovisioner.Provisioner) error {
+			_, hasDeadline := actionCtx.Deadline()
+			assert.False(t, hasDeadline, "the action must keep the detached lifecycle context")
+			time.Sleep(150 * time.Millisecond)
+
+			return actionCtx.Err()
+		})
+	require.NoError(t, err)
+}
+
+//nolint:paralleltest // subtests share the parent's temporary HOME.
+func TestGuardedLifecycleWaitsForEKSStateOwnership(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(nil)
+
+	for _, distribution := range []v1alpha1.Distribution{v1alpha1.DistributionEKS, v1alpha1.DistributionVanilla} {
+		t.Run(string(distribution), func(t *testing.T) {
+			called := false
+
+			err := state.WithEKSLifecycleLock(t.Context(), "demo", func() error {
+				ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+				defer cancel()
+
+				return service.RunGuardedProvisionerForTest(ctx, "demo", v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{Distribution: distribution},
+				}, func(context.Context, clusterprovisioner.Provisioner) error {
+					called = true
+
+					return nil
+				})
+			})
+			if distribution == v1alpha1.DistributionEKS {
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+				assert.False(t, called, "the local API must join the CLI's state lock")
+			} else {
+				require.NoError(t, err)
+				assert.True(t, called, "non-EKS lifecycles do not share the EKS lock")
+			}
+		})
+	}
+}
+
 // fakeProvisioner is an in-memory clusterprovisioner.Provisioner. Its List reflects the clusters it
 // has created and not yet deleted, so the Service's live enumeration behaves like a real provider.
 // Optional gates let tests hold Create/Delete in-flight to observe intermediate phases.
