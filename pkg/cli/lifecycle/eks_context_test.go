@@ -65,6 +65,28 @@ func TestResolveClusterInfoFromSelectedEksctlContext(t *testing.T) {
 }
 
 func TestSimpleLifecycleEksctlContextReachesGuard(t *testing.T) {
+	guarded := executeSimpleLifecycleGuard(t, []string{"--provider", "AWS"})
+
+	assert.Equal(t, v1alpha1.ProviderAWS, guarded.Provider)
+	assert.Equal(t, "demo", guarded.ClusterName)
+	assert.Equal(t, "us-west-2", guarded.AWSRegion)
+}
+
+// TestSimpleLifecycleEksctlContextInfersProviderWithoutFlags covers the documented
+// standalone form: with no flags at all, the selected eksctl context alone must
+// identify the cluster, its region, and the AWS provider that reaches the guard.
+func TestSimpleLifecycleEksctlContextInfersProviderWithoutFlags(t *testing.T) {
+	guarded := executeSimpleLifecycleGuard(t, []string{})
+
+	assert.Equal(t, v1alpha1.ProviderAWS, guarded.Provider)
+	assert.Equal(t, "demo", guarded.ClusterName)
+	assert.Equal(t, "us-west-2", guarded.AWSRegion)
+}
+
+// executeSimpleLifecycleGuard runs a simple lifecycle command against a kubeconfig
+// whose selected context is an eksctl cluster and returns what reached the guard.
+func executeSimpleLifecycleGuard(t *testing.T, args []string) *lifecycle.ResolvedClusterInfo {
+	t.Helper()
 	t.Chdir(t.TempDir())
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("KUBECONFIG", writeSelectedEKSContext(t))
@@ -79,14 +101,14 @@ func TestSimpleLifecycleEksctlContextReachesGuard(t *testing.T) {
 			return errTestError
 		},
 	})
-	cmd.SetArgs([]string{"--provider", "AWS"})
+	cmd.SetArgs(args)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetErr(new(bytes.Buffer))
 
 	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errTestError)
 	require.NotNil(t, guarded)
-	assert.Equal(t, "demo", guarded.ClusterName)
-	assert.Equal(t, "us-west-2", guarded.AWSRegion)
+
+	return guarded
 }
 
 func writeSelectedEKSContext(t *testing.T) string {
