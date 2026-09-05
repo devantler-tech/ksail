@@ -343,8 +343,13 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 		return nil
 	}
 
+	restored, err := restoreSelectedAWSContextOptions(resolved)
+	if err != nil || restored {
+		return err
+	}
+
 	region := strings.TrimSpace(resolved.AWSRegion)
-	if region != "" && resolved.AWSContextRegion == "" {
+	if region != "" {
 		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
 		if err != nil {
 			if isRestorableOwnershipStateAbsence(err) {
@@ -368,7 +373,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
 	}
 
-	ownership, err := selectPersistedAWSOwnership(ownerships, resolved.AWSContextRegion)
+	ownership, err := selectPersistedAWSOwnership(ownerships)
 	if err != nil {
 		return err
 	}
@@ -377,6 +382,32 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	resolved.AWSRegion = strings.TrimSpace(ownership.Region)
 
 	return nil
+}
+
+// restoreSelectedAWSContextOptions restores the selected target's mapping before consulting
+// region variables. Mappings captured for other regions must not influence this context's target.
+func restoreSelectedAWSContextOptions(resolved *lifecycle.ResolvedClusterInfo) (bool, error) {
+	if resolved.AWSContextRegion == "" {
+		return false, nil
+	}
+
+	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, resolved.AWSContextRegion)
+	if err != nil {
+		if isRestorableOwnershipStateAbsence(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("load selected EKS context's AWS credential mappings: %w", err)
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+	resolved.AWSRegion = lifecycle.ResolveAWSRegion(resolved.AWSOpts, nil)
+	if resolved.AWSRegion == "" {
+		resolved.AWSRegion = resolved.AWSContextRegion
+	}
+
+	return true, nil
 }
 
 func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
@@ -403,10 +434,9 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 	return current
 }
 
-func requestedAWSOwnershipRegions(
+func selectPersistedAWSOwnership(
 	ownerships []*state.EKSOwnershipState,
-	contextRegion string,
-) map[string]struct{} {
+) (*state.EKSOwnershipState, error) {
 	requestedRegions := make(map[string]struct{})
 
 	for _, ownership := range ownerships {
@@ -415,21 +445,6 @@ func requestedAWSOwnershipRegions(
 			requestedRegions[region] = struct{}{}
 		}
 	}
-
-	// A selected context is a fallback only after the stored environment mappings
-	// have been consulted. Ambient canonical variables must not replace custom mappings.
-	if len(requestedRegions) == 0 && contextRegion != "" {
-		requestedRegions[contextRegion] = struct{}{}
-	}
-
-	return requestedRegions
-}
-
-func selectPersistedAWSOwnership(
-	ownerships []*state.EKSOwnershipState,
-	contextRegion string,
-) (*state.EKSOwnershipState, error) {
-	requestedRegions := requestedAWSOwnershipRegions(ownerships, contextRegion)
 
 	if len(requestedRegions) == 1 {
 		for requestedRegion := range requestedRegions {

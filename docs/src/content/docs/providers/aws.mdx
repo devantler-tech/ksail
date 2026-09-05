@@ -47,7 +47,7 @@ ksail cluster start
 ksail cluster stop
 ```
 
-An explicit `--name` or a loaded project configuration takes precedence over context-based name detection. When the name comes from the selected EKS context, its region is the fallback after the configured AWS region environment variable and project configuration. Other contexts for the same name do not override that selected region. An explicit name still requires an unambiguous region; it does not inherit an unrelated selected context's region.
+An explicit `--name` or a loaded project configuration takes precedence over context-based name detection. Outside a project, KSail restores the AWS environment-variable mappings saved for the selected context's cluster and region. That mapped region variable can override the context's region; when it is unset, the context's region is used. Mappings or contexts for other regions do not override that selection. An explicit name still requires an unambiguous region; it does not inherit an unrelated selected context's region.
 
 Context detection identifies the target. Start and stop still require KSail's persisted ownership record and a matching live AWS cluster identity before changing node-group capacity.
 
