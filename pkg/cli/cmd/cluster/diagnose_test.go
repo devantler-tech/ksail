@@ -330,29 +330,32 @@ func fakeAPIServer(t *testing.T) (*httptest.Server, *[]string) {
 	t.Helper()
 
 	var (
-		mu    sync.Mutex
-		paths []string
+		pathsMutex sync.Mutex
+		paths      []string
 	)
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		paths = append(paths, r.URL.Path)
-		mu.Unlock()
+	handler := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		pathsMutex.Lock()
 
-		w.Header().Set("Content-Type", "application/json")
+		paths = append(paths, request.URL.Path)
+		pathsMutex.Unlock()
 
-		switch r.URL.Path {
+		response.Header().Set("Content-Type", "application/json")
+
+		switch request.URL.Path {
 		case "/api/v1/nodes":
-			_, _ = w.Write([]byte(`{"kind":"NodeList","apiVersion":"v1","items":[]}`))
+			_, _ = response.Write([]byte(`{"kind":"NodeList","apiVersion":"v1","items":[]}`))
 		case "/api/v1/namespaces":
-			_, _ = w.Write([]byte(`{"kind":"NamespaceList","apiVersion":"v1",` +
+			_, _ = response.Write([]byte(`{"kind":"NamespaceList","apiVersion":"v1",` +
 				`"items":[{"metadata":{"name":"default"}}]}`))
 		case "/api/v1/namespaces/default/pods":
-			_, _ = w.Write([]byte(`{"kind":"PodList","apiVersion":"v1","items":[]}`))
+			_, _ = response.Write([]byte(`{"kind":"PodList","apiVersion":"v1","items":[]}`))
 		case "/api/v1/namespaces/default/persistentvolumeclaims":
-			_, _ = w.Write([]byte(`{"kind":"PersistentVolumeClaimList","apiVersion":"v1","items":[]}`))
+			_, _ = response.Write(
+				[]byte(`{"kind":"PersistentVolumeClaimList","apiVersion":"v1","items":[]}`),
+			)
 		default:
-			http.NotFound(w, r)
+			http.NotFound(response, request)
 		}
 	})
 
@@ -367,8 +370,6 @@ func fakeAPIServer(t *testing.T) (*httptest.Server, *[]string) {
 // not the kubeconfig's current context. The current context points at an
 // address nothing listens on, so a client that followed it would fail, while the
 // named cluster's context points at a fake API server that records the calls.
-//
-//nolint:paralleltest // uses t.Setenv and t.Chdir to isolate kubeconfig/config discovery
 func TestDiagnoseCmd_NameSelectsThatClustersContext(t *testing.T) {
 	server, paths := fakeAPIServer(t)
 
@@ -423,8 +424,6 @@ users:
 // TestDiagnoseCmd_NameNotInKubeconfigFails pins the other half of #6117: a --name
 // that matches no kubeconfig context is an error, never a silent fallback to the
 // current context.
-//
-//nolint:paralleltest // uses t.Setenv and t.Chdir to isolate kubeconfig/config discovery
 func TestDiagnoseCmd_NameNotInKubeconfigFails(t *testing.T) {
 	server, paths := fakeAPIServer(t)
 
