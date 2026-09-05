@@ -1275,13 +1275,43 @@ jobs:
               console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
             }
 
+            // The delete is verified by READING THE TAG BACK, never by the delete call's own status.
+            // The repository's "Protect release tags" ruleset carries a deletion rule with no bypass
+            // actors, so the workflow token's delete is refused with a 422 — the same status the API
+            // uses for "reference does not exist". Treating that status as "already absent" reported
+            // every refused delete as a success and left the orphaned tag behind (v7.178.26 logged
+            // exactly that while the tag survived; #6136). Only a 404 on the read-back proves the tag
+            // is gone; anything else fails the job and names the manual cleanup.
+            let deleteError = null;
             try {
               await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
-              console.log(`Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
             } catch (error) {
-              if (error.status === 404 || error.status === 422) {
-                console.log(`Tag ${tag} already absent; nothing to delete.`);
-              } else {
+              deleteError = error;
+            }
+
+            let stillPresent = true;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) {
                 throw error;
               }
+              stillPresent = false;
             }
+
+            if (!stillPresent) {
+              console.log(deleteError
+                ? `Tag ${tag} already absent; nothing to delete.`
+                : `Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
+              return;
+            }
+
+            const detail = deleteError ? ` (delete refused: ${deleteError.status} ${deleteError.message})` : '';
+            core.setFailed(
+              `Orphaned tag ${tag} still exists after the cleanup${detail}. ` +
+              `It has no release, so tag-tracking consumers would see an empty release. ` +
+              `A repository ruleset protecting tag deletion blocks this workflow token; ` +
+              `delete it with a bypass-capable identity ` +
+              `(gh api -X DELETE repos/${owner}/${repo}/git/refs/tags/${tag}) ` +
+              `or grant this workflow a bypass on that ruleset.`
+            );
