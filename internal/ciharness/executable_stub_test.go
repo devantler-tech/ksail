@@ -108,11 +108,12 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 	heldPath := filepath.Join(dir, "held-open")
 	require.NoError(t, os.WriteFile(heldPath, []byte(content), 0o700)) //nolint:gosec // Test-owned temp path.
 
-	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0)
+	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0) //nolint:gosec // Test-owned temp path.
 	require.NoError(t, err)
 
 	var stderr bytes.Buffer
 
+	//nolint:gosec // heldPath is a test-owned temp file; the shell fragment is a constant.
 	executor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", heldPath)
 	executor.ExtraFiles = []*os.File{writer}
 	executor.Stderr = &stderr
@@ -138,6 +139,7 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 
 	var safeStderr bytes.Buffer
 
+	//nolint:gosec // safePath is a test-owned temp file the writer under test just created.
 	safeExecutor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", safePath)
 	safeExecutor.Stderr = &safeStderr
 
