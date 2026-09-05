@@ -49,7 +49,8 @@ evidence_file="${evidence_dir}/k3k-server-pod-creator.json"
 if [ -n "${KSAIL_K3K_SERVER_POD_JSON:-}" ]; then
 	pods_json="$(cat "${KSAIL_K3K_SERVER_POD_JSON}")"
 else
-	pods_json="$("${kubectl_cmd}" get pods -n "${namespace}" -l "${selector}" -o json)"
+	# kubectl strips managedFields from JSON by default; retain the creator evidence.
+	pods_json="$("${kubectl_cmd}" get pods -n "${namespace}" -l "${selector}" -o json --show-managed-fields=true)"
 fi
 
 # Keep only what the assertion reads (and what a reader needs to re-derive it): the

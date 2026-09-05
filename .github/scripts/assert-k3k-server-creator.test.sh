@@ -130,14 +130,18 @@ expect_fail "second-pod-bad" \
 	"k3k-${cluster}-server-1 is controlled by [ReplicaSet]"
 
 # Live path — the real read goes through kubectl with the namespace and label
-# selector the guard's exemption is written against. A fake kubectl records
-# its arguments and serves the GREEN fixture.
+# selector the guard's exemption is written against. Like real kubectl, the fake
+# omits managedFields unless the caller explicitly requests them. Without that
+# flag, even the valid StatefulSet pod must fail the creator assertion.
 fake_bin="${tmp_dir}/bin"
 mkdir -p "${fake_bin}"
 cat >"${fake_bin}/kubectl" <<FAKE
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >"${tmp_dir}/kubectl.args"
-cat "${tmp_dir}/good.json"
+case " \$* " in
+*" --show-managed-fields=true "*) cat "${tmp_dir}/good.json" ;;
+*) jq 'del(.items[].metadata.managedFields)' "${tmp_dir}/good.json" ;;
+esac
 FAKE
 chmod +x "${fake_bin}/kubectl"
 
@@ -146,7 +150,7 @@ if ! KUBECTL="${fake_bin}/kubectl" "${assert}" "${cluster}" "${tmp_dir}/evidence
 	cat "${tmp_dir}/live.out" >&2
 	exit 1
 fi
-expected_args="get pods -n k3k-${cluster} -l role=server,cluster=${cluster} -o json"
+expected_args="get pods -n k3k-${cluster} -l role=server,cluster=${cluster} -o json --show-managed-fields=true"
 if [ "$(cat "${tmp_dir}/kubectl.args")" != "${expected_args}" ]; then
 	printf 'FAIL: kubectl was invoked as %q, expected %q\n' "$(cat "${tmp_dir}/kubectl.args")" "${expected_args}" >&2
 	exit 1
