@@ -64,6 +64,7 @@ func TestResolveClusterInfoFromSelectedEksctlContext(t *testing.T) {
 	})
 }
 
+//nolint:paralleltest // The helper changes the process working directory and environment.
 func TestSimpleLifecycleEksctlContextReachesGuard(t *testing.T) {
 	guarded := executeSimpleLifecycleGuard(t, []string{"--provider", "AWS"})
 
@@ -75,6 +76,8 @@ func TestSimpleLifecycleEksctlContextReachesGuard(t *testing.T) {
 // TestSimpleLifecycleEksctlContextInfersProviderWithoutFlags covers the documented
 // standalone form: with no flags at all, the selected eksctl context alone must
 // identify the cluster, its region, and the AWS provider that reaches the guard.
+//
+//nolint:paralleltest // The helper changes the process working directory and environment.
 func TestSimpleLifecycleEksctlContextInfersProviderWithoutFlags(t *testing.T) {
 	guarded := executeSimpleLifecycleGuard(t, []string{})
 
