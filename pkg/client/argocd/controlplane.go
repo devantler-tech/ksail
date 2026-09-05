@@ -17,6 +17,9 @@ import (
 // when it is smaller.
 const maxControlPlaneReadyWait = 3 * time.Minute
 
+// controlPlaneBudgetDivisor reserves half the reconcile timeout for app sync.
+const controlPlaneBudgetDivisor = 2
+
 // errControlPlaneReadyBudgetExhausted is returned when the gate's time budget is
 // spent before a component could even be checked. It is handled fail-open by the
 // caller (a warning, then reconcile proceeds), so it never aborts a reconcile.
@@ -90,7 +93,7 @@ func ControlPlaneGateBudget(reconcileTimeout time.Duration) time.Duration {
 		return maxControlPlaneReadyWait
 	}
 
-	return min(reconcileTimeout/2, maxControlPlaneReadyWait)
+	return min(reconcileTimeout/controlPlaneBudgetDivisor, maxControlPlaneReadyWait)
 }
 
 // WaitForControlPlaneReady waits (bounded by timeout, at most
@@ -162,11 +165,19 @@ func waitForComponentReady(
 	switch component.kind {
 	case componentStatefulSet:
 		return readiness.WaitForStatefulSetReadyIfExists( //nolint:wrapcheck // caller wraps with the component
-			ctx, clientset, DefaultNamespace, component.name, remaining,
+			ctx,
+			clientset,
+			DefaultNamespace,
+			component.name,
+			remaining,
 		)
 	case componentDeployment:
 		return readiness.WaitForDeploymentReadyIfExists( //nolint:wrapcheck // caller wraps with the component
-			ctx, clientset, DefaultNamespace, component.name, remaining,
+			ctx,
+			clientset,
+			DefaultNamespace,
+			component.name,
+			remaining,
 		)
 	default:
 		return fmt.Errorf("%w: %q", errUnknownControlPlaneComponentKind, component.kind)

@@ -3,6 +3,7 @@ package readiness_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,8 +26,8 @@ const (
 var errStatefulSetAPI = errors.New("apiserver unavailable")
 
 // statefulSetFixture builds a StatefulSet whose controller has observed the
-// current generation, with the given replica counters and revisions.
-func statefulSetFixture(replicas, ready, updated int32, current, update string) *appsv1.StatefulSet {
+// current generation, with the given replica counters and update revision.
+func statefulSetFixture(replicas, ready, updated int32, update string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: statefulSetName, Namespace: statefulSetNamespace, Generation: 1,
@@ -36,14 +37,14 @@ func statefulSetFixture(replicas, ready, updated int32, current, update string) 
 			Replicas:           replicas,
 			ReadyReplicas:      ready,
 			UpdatedReplicas:    updated,
-			CurrentRevision:    current,
+			CurrentRevision:    "rev-1",
 			UpdateRevision:     update,
 		},
 	}
 }
 
 func readyStatefulSet() *appsv1.StatefulSet {
-	return statefulSetFixture(1, 1, 1, "rev-1", "rev-1")
+	return statefulSetFixture(1, 1, 1, "rev-1")
 }
 
 func waitIfExists(t *testing.T, objects ...runtime.Object) error {
@@ -54,9 +55,14 @@ func waitIfExists(t *testing.T, objects ...runtime.Object) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	return readiness.WaitForStatefulSetReadyIfExists(
+	err := readiness.WaitForStatefulSetReadyIfExists(
 		ctx, client, statefulSetNamespace, statefulSetName, statefulSetShortWait,
 	)
+	if err != nil {
+		return fmt.Errorf("wait for test statefulset: %w", err)
+	}
+
+	return nil
 }
 
 // TestWaitForStatefulSetReadyIfExists_Absent verifies an absent StatefulSet is
@@ -81,7 +87,7 @@ func TestWaitForStatefulSetReadyIfExists_Ready(t *testing.T) {
 func TestWaitForStatefulSetReadyIfExists_NotReady(t *testing.T) {
 	t.Parallel()
 
-	err := waitIfExists(t, statefulSetFixture(1, 0, 1, "rev-1", "rev-1"))
+	err := waitIfExists(t, statefulSetFixture(1, 0, 1, "rev-1"))
 
 	require.Error(t, err, "a statefulset with no Ready replicas must not read as ready")
 }
@@ -107,7 +113,7 @@ func TestWaitForStatefulSetReadyIfExists_StaleObservedGeneration(t *testing.T) {
 func TestWaitForStatefulSetReadyIfExists_RollingUpdateInProgress(t *testing.T) {
 	t.Parallel()
 
-	err := waitIfExists(t, statefulSetFixture(2, 2, 1, "rev-1", "rev-2"))
+	err := waitIfExists(t, statefulSetFixture(2, 2, 1, "rev-2"))
 
 	require.Error(t, err, "diverged revisions under RollingUpdate must not read as ready")
 }
@@ -118,7 +124,7 @@ func TestWaitForStatefulSetReadyIfExists_RollingUpdateInProgress(t *testing.T) {
 func TestWaitForStatefulSetReadyIfExists_OnDeleteIgnoresRevisions(t *testing.T) {
 	t.Parallel()
 
-	onDelete := statefulSetFixture(2, 2, 0, "rev-1", "rev-2")
+	onDelete := statefulSetFixture(2, 2, 0, "rev-2")
 	onDelete.Spec.UpdateStrategy.Type = appsv1.OnDeleteStatefulSetStrategyType
 
 	require.NoError(t, waitIfExists(t, onDelete))
@@ -132,7 +138,7 @@ func TestWaitForStatefulSetReadyIfExists_PartitionedRollout(t *testing.T) {
 
 	partition := int32(1)
 
-	complete := statefulSetFixture(3, 3, 2, "rev-1", "rev-2")
+	complete := statefulSetFixture(3, 3, 2, "rev-2")
 	complete.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{
 		Type:          appsv1.RollingUpdateStatefulSetStrategyType,
 		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{Partition: &partition},
@@ -140,7 +146,7 @@ func TestWaitForStatefulSetReadyIfExists_PartitionedRollout(t *testing.T) {
 
 	require.NoError(t, waitIfExists(t, complete), "2 of 3 updated satisfies partition 1")
 
-	incomplete := statefulSetFixture(3, 3, 1, "rev-1", "rev-2")
+	incomplete := statefulSetFixture(3, 3, 1, "rev-2")
 	incomplete.Spec.UpdateStrategy = complete.Spec.UpdateStrategy
 
 	require.Error(t, waitIfExists(t, incomplete), "1 of 3 updated does not satisfy partition 1")
@@ -185,5 +191,9 @@ func TestWaitForStatefulSetReady_APIErrorPropagates(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, errStatefulSetAPI)
-	assert.Contains(t, err.Error(), "failed to check statefulset argocd/argocd-application-controller")
+	assert.Contains(
+		t,
+		err.Error(),
+		"failed to check statefulset argocd/argocd-application-controller",
+	)
 }

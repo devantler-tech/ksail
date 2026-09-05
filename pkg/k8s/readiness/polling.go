@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -14,6 +15,29 @@ const (
 	// readinessPollInterval is the interval between readiness checks.
 	readinessPollInterval = 2 * time.Second
 )
+
+// pollIfExists shares one deadline between the initial lookup and readiness polling.
+// The lookup supplies resource-specific error context; a missing resource is skipped.
+func pollIfExists(
+	ctx context.Context,
+	deadline time.Duration,
+	lookup func(context.Context) error,
+	poll func(context.Context) (bool, error),
+) error {
+	deadlineCtx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+
+	err := lookup(deadlineCtx)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	return PollForReadiness(deadlineCtx, 0, poll)
+}
 
 // PollForReadiness polls a check function until ready or timeout.
 //

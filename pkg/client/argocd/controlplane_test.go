@@ -228,7 +228,11 @@ func TestControlPlaneGateBudget(t *testing.T) {
 		{name: "half equal to the cap", timeout: 6 * time.Minute, want: 3 * time.Minute},
 		{name: "large timeout is capped", timeout: 10 * time.Minute, want: 3 * time.Minute},
 		{name: "zero timeout falls back to the cap", timeout: 0, want: 3 * time.Minute},
-		{name: "negative timeout falls back to the cap", timeout: -time.Second, want: 3 * time.Minute},
+		{
+			name:    "negative timeout falls back to the cap",
+			timeout: -time.Second,
+			want:    3 * time.Minute,
+		},
 	}
 
 	for _, testCase := range cases {
@@ -237,7 +241,12 @@ func TestControlPlaneGateBudget(t *testing.T) {
 
 			got := argocd.ControlPlaneGateBudget(testCase.timeout)
 			if got != testCase.want {
-				t.Fatalf("ControlPlaneGateBudget(%v) = %v, want %v", testCase.timeout, got, testCase.want)
+				t.Fatalf(
+					"ControlPlaneGateBudget(%v) = %v, want %v",
+					testCase.timeout,
+					got,
+					testCase.want,
+				)
 			}
 		})
 	}
