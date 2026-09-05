@@ -31,6 +31,7 @@ func TestWriteExecutableStub_ProducesRunnableOwnerOnlyStub(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm(), "stub must be owner-only executable")
 
+	//nolint:gosec // stubPath is a test-owned temp file the writer under test just created.
 	output, err := exec.CommandContext(t.Context(), stubPath, "now").CombinedOutput()
 	require.NoError(t, err, "stub must be executable right after it is written: %s", output)
 	assert.Equal(t, "stub ran now\n", string(output))
@@ -67,6 +68,7 @@ func TestWriteExecutableStub_ExecutesUnderConcurrentForks(t *testing.T) {
 				return
 			}
 
+			//nolint:gosec // stubPath is a test-owned temp file the writer under test just created.
 			errs <- exec.CommandContext(t.Context(), stubPath).Run()
 		}()
 	}
