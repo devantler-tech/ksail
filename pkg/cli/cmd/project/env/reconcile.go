@@ -116,9 +116,13 @@ func HandleReconcileRunE(cmd *cobra.Command) error {
 
 // resolveWorkspaceRoot walks upward from workDir to the nearest directory
 // containing the workspace base config (ksail.yaml), mirroring the config
-// manager's parent-directory traversal that the explicit per-file loads here
-// skip. It returns workDir unchanged when no ksail.yaml exists on the walk —
-// the base-config load then fails with its normal error.
+// manager's parent-directory traversal that the env verbs' explicit per-file
+// loads (loadEnvironmentConfig) skip. Every env verb resolves its repository
+// root through it so add, list, rm and reconcile all operate on the same tree
+// from any subdirectory of the workspace. It returns workDir unchanged when no
+// ksail.yaml exists on the walk — a workspace declaring only ksail.<name>.yaml
+// files keeps resolving against the current directory, and a base-config load
+// then fails with its normal error.
 func resolveWorkspaceRoot(workDir string) string {
 	for dir := workDir; ; dir = filepath.Dir(dir) {
 		_, statErr := os.Stat(filepath.Join(dir, "ksail.yaml"))

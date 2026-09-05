@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"text/tabwriter"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -119,13 +120,18 @@ func HandleListRunE(cmd *cobra.Command) error {
 
 	// Canonicalise so the workspace root matches the symlink-resolved paths the
 	// config loader derives, mirroring `env add`.
-	repoRoot, err := fsutil.EvalCanonicalPath(workDir)
+	canonWorkDir, err := fsutil.EvalCanonicalPath(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve current directory: %w", err)
 	}
 
+	// Discovery enumerates the workspace root, not the current directory, so the
+	// list is the same from any subdirectory of the workspace (the nearest
+	// ancestor holding ksail.yaml — the traversal the config manager would do).
+	repoRoot := resolveWorkspaceRoot(canonWorkDir)
+
 	loader := func(configFile string) (*v1alpha1.Cluster, error) {
-		return loadEnvironmentConfig(cmd, configFile)
+		return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, configFile))
 	}
 
 	envs, err := environment.DeriveEnvironments(repoRoot, loader)

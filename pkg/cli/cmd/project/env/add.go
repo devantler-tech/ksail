@@ -156,15 +156,22 @@ func resolveAddEnvironmentParams(
 		return addEnvironmentParams{}, fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// Canonicalise the repository root so it matches the symlink-resolved paths the
-	// clone's containment guard derives (on macOS os.Getwd() returns the unresolved
-	// /var/... path while the guard resolves to /private/var/...).
-	repoRoot, err := fsutil.EvalCanonicalPath(workDir)
+	// Canonicalise the working directory so the repository root matches the
+	// symlink-resolved paths the clone's containment guard derives (on macOS
+	// os.Getwd() returns the unresolved /var/... path while the guard resolves to
+	// /private/var/...).
+	canonWorkDir, err := fsutil.EvalCanonicalPath(workDir)
 	if err != nil {
 		return addEnvironmentParams{}, fmt.Errorf("failed to resolve current directory: %w", err)
 	}
 
-	srcCfg, err := loadSourceConfig(cmd, srcName)
+	// The explicit per-file loads below skip the config manager's
+	// parent-directory traversal, so resolve the workspace root the same way it
+	// would — the nearest ancestor holding ksail.yaml — letting the command run
+	// from any subdirectory of the workspace and clone into the real tree.
+	repoRoot := resolveWorkspaceRoot(canonWorkDir)
+
+	srcCfg, err := loadSourceConfig(cmd, repoRoot, srcName)
 	if err != nil {
 		return addEnvironmentParams{}, enrichSourceConfigError(cmd, repoRoot, err)
 	}
@@ -236,18 +243,21 @@ func repoRelativeSourceDir(repoRoot, sourceDir string) (string, error) {
 	return rel, nil
 }
 
-// loadSourceConfig reads the source environment's root config (ksail.<src>.yaml)
-// to resolve its provider, distribution and source directory. Validation and
-// distribution-specific config (e.g. Talos PKI) are skipped because the clone only
-// needs the structured identity, not a provisioning-ready config.
-func loadSourceConfig(cmd *cobra.Command, srcName string) (*v1alpha1.Cluster, error) {
-	return loadEnvironmentConfig(cmd, "ksail."+srcName+".yaml")
+// loadSourceConfig reads the source environment's root config
+// (<repoRoot>/ksail.<src>.yaml) to resolve its provider, distribution and source
+// directory. Validation and distribution-specific config (e.g. Talos PKI) are
+// skipped because the clone only needs the structured identity, not a
+// provisioning-ready config.
+func loadSourceConfig(cmd *cobra.Command, repoRoot, srcName string) (*v1alpha1.Cluster, error) {
+	return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, "ksail."+srcName+".yaml"))
 }
 
-// loadEnvironmentConfig loads a single ksail.<name>.yaml root config by file name.
+// loadEnvironmentConfig loads a single ksail.<name>.yaml root config by path.
 // It is the shared loader behind loadSourceConfig and the environment.ConfigLoader
 // that enrichSourceConfigError feeds to DeriveEnvironments, so both resolve a config
-// the same silent, validation-skipping way.
+// the same silent, validation-skipping way. The path is loaded as given — it does
+// not traverse parent directories — so callers join it onto the resolved workspace
+// root (see resolveWorkspaceRoot) rather than passing a bare file name.
 func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Cluster, error) {
 	manager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
 
@@ -279,7 +289,7 @@ func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Clu
 // fails or finds no other environments.
 func enrichSourceConfigError(cmd *cobra.Command, repoRoot string, cause error) error {
 	loader := func(configFile string) (*v1alpha1.Cluster, error) {
-		return loadEnvironmentConfig(cmd, configFile)
+		return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, configFile))
 	}
 
 	envs, err := environment.DeriveEnvironments(repoRoot, loader)
