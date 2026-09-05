@@ -28,10 +28,21 @@ var errStatefulSetAPI = errors.New("apiserver unavailable")
 // statefulSetFixture builds a StatefulSet whose controller has observed the
 // current generation, with the given replica counters and update revision.
 func statefulSetFixture(replicas, ready, updated int32, update string) *appsv1.StatefulSet {
+	return statefulSetFixtureWithDesired(replicas, replicas, ready, updated, update)
+}
+
+// statefulSetFixtureWithDesired is statefulSetFixture with an explicit
+// Spec.Replicas, for the scale-up case where the pods created so far
+// (Status.Replicas) trail the desired count.
+func statefulSetFixtureWithDesired(
+	desired, replicas, ready, updated int32,
+	update string,
+) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: statefulSetName, Namespace: statefulSetNamespace, Generation: 1,
 		},
+		Spec: appsv1.StatefulSetSpec{Replicas: &desired},
 		Status: appsv1.StatefulSetStatus{
 			ObservedGeneration: 1,
 			Replicas:           replicas,
@@ -196,4 +207,28 @@ func TestWaitForStatefulSetReady_APIErrorPropagates(t *testing.T) {
 		err.Error(),
 		"failed to check statefulset argocd/argocd-application-controller",
 	)
+}
+
+// TestWaitForStatefulSetReadyIfExists_ScaleUpInProgress verifies that a
+// StatefulSet whose controller has only created some of the desired pods is not
+// ready even though every pod created so far is Ready: readiness is judged
+// against Spec.Replicas, not against the pods that happen to exist yet.
+func TestWaitForStatefulSetReadyIfExists_ScaleUpInProgress(t *testing.T) {
+	t.Parallel()
+
+	err := waitIfExists(t, statefulSetFixtureWithDesired(3, 1, 1, 1, "rev-1"))
+
+	require.Error(t, err, "1 of 3 desired pods ready must not read as ready")
+}
+
+// TestWaitForStatefulSetReadyIfExists_NilSpecReplicasDefaultsToOne verifies the
+// API-server default: a nil Spec.Replicas means one desired pod, so a single
+// Ready pod satisfies it.
+func TestWaitForStatefulSetReadyIfExists_NilSpecReplicasDefaultsToOne(t *testing.T) {
+	t.Parallel()
+
+	unset := readyStatefulSet()
+	unset.Spec.Replicas = nil
+
+	require.NoError(t, waitIfExists(t, unset))
 }

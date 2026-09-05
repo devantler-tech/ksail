@@ -13,8 +13,8 @@ import (
 
 // statefulSetReadyCheck returns a poll function that checks whether a StatefulSet is ready.
 // A StatefulSet is considered ready when the controller has observed the current spec, it
-// has at least one replica, every replica is Ready, and its rollout is complete. NotFound
-// errors are tolerated (returns false to continue polling).
+// wants at least one replica, every desired replica is Ready, and its rollout is complete.
+// NotFound errors are tolerated (returns false to continue polling).
 func statefulSetReadyCheck(
 	clientset kubernetes.Interface,
 	namespace, name string,
@@ -38,15 +38,20 @@ func statefulSetReadyCheck(
 			return false, nil
 		}
 
-		if statefulSet.Status.Replicas == 0 {
+		// Compare against the DESIRED count, not Status.Replicas: during a scale-up
+		// the controller creates pods one ordinal at a time, so Status.Replicas trails
+		// Spec.Replicas and a partially created StatefulSet would otherwise read as
+		// ready once its first pod is.
+		desired := desiredStatefulSetReplicas(statefulSet)
+		if desired == 0 || statefulSet.Status.Replicas == 0 {
 			return false, nil
 		}
 
-		if statefulSet.Status.ReadyReplicas < statefulSet.Status.Replicas {
+		if statefulSet.Status.ReadyReplicas < desired {
 			return false, nil
 		}
 
-		return isStatefulSetRolloutComplete(statefulSet), nil
+		return isStatefulSetRolloutComplete(statefulSet, desired), nil
 	}
 }
 
@@ -56,7 +61,7 @@ func statefulSetReadyCheck(
 // so revisions are not compared there. A partitioned RollingUpdate deliberately
 // leaves the ordinals below the partition on the old revision, so only the pods
 // above it are required to be updated.
-func isStatefulSetRolloutComplete(statefulSet *appsv1.StatefulSet) bool {
+func isStatefulSetRolloutComplete(statefulSet *appsv1.StatefulSet, desired int32) bool {
 	strategy := statefulSet.Spec.UpdateStrategy
 	if strategy.Type == appsv1.OnDeleteStatefulSetStrategyType {
 		return true
@@ -64,8 +69,7 @@ func isStatefulSetRolloutComplete(statefulSet *appsv1.StatefulSet) bool {
 
 	if strategy.RollingUpdate != nil && strategy.RollingUpdate.Partition != nil &&
 		*strategy.RollingUpdate.Partition > 0 {
-		return statefulSet.Status.UpdatedReplicas >=
-			statefulSet.Status.Replicas-*strategy.RollingUpdate.Partition
+		return statefulSet.Status.UpdatedReplicas >= desired-*strategy.RollingUpdate.Partition
 	}
 
 	return statefulSet.Status.UpdateRevision == statefulSet.Status.CurrentRevision
@@ -124,4 +128,15 @@ func WaitForStatefulSetReadyIfExists(
 	}
 
 	return pollIfExists(ctx, deadline, lookup, statefulSetReadyCheck(clientset, namespace, name))
+}
+
+// desiredStatefulSetReplicas returns the replica count the StatefulSet is meant
+// to reach. Spec.Replicas is a pointer that the API server defaults to 1 when
+// unset, so a nil value means one replica, not zero.
+func desiredStatefulSetReplicas(statefulSet *appsv1.StatefulSet) int32 {
+	if statefulSet.Spec.Replicas == nil {
+		return 1
+	}
+
+	return *statefulSet.Spec.Replicas
 }
