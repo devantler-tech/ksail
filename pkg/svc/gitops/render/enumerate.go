@@ -52,6 +52,7 @@ func EnumerateChartSpecs(stream []byte) ([]*helm.ChartSpec, []Degradation) {
 		}
 
 		specs = append(specs, spec)
+		degradations = append(degradations, unresolvedValueRefs(&helmRelease, index)...)
 	}
 
 	return specs, degradations

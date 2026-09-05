@@ -3,58 +3,45 @@ package workload
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/spf13/cobra"
 )
 
-// newEphemeralHelmClient builds the install-capable Helm client an --ephemeral
-// run uses against the throwaway cluster. A package var so tests can
-// substitute a fake without a live cluster.
+const ephemeralAdmissionTimeout = 10 * time.Minute
+
+const ephemeralFlagDescription = "EXPERIMENTAL: run offline checks, then check workload admission " +
+	"in an isolated throwaway Kind cluster with declared Helm charts installed and ready " +
+	"(guaranteed teardown; off by default). Operator-generated children are not inspected."
+
+// newEphemeralHelmClient constructs a client pinned to the throwaway cluster.
 //
-//nolint:gochecknoglobals // test seam, mirrors newEphemeralProvisioner in this package
+//nolint:gochecknoglobals // lifecycle test seam
 var newEphemeralHelmClient = func(kubeconfigPath, kubeContext string) (helm.Interface, error) {
 	return helm.NewClient(kubeconfigPath, kubeContext)
 }
 
-// installDeclaredCharts installs every chart the workload's HelmReleases
-// declare under sourcePath into the ephemeral cluster, so the declared
-// operators are present (their CRDs registered) before the workload's
-// manifests are exercised against the cluster (ksail#5919 Phase 3b-2; Phase
-// 3b-3 applies the rendered manifests and scans their children).
+// newEphemeralAdmissionClient constructs a client pinned to the throwaway cluster.
 //
-// Failure semantics mirror the offline render pipeline: a HelmRelease whose
-// chart source cannot be resolved from the stream degrades with a warning
-// (the offline validate/scan still covers it), and a kustomization that fails
-// to build is skipped here because the validation step that follows reports
-// that same failure with proper attribution. A chart that RESOLVES but fails
-// to install is a hard error — the run promised cluster-backed coverage for
-// it and silently skipping would be a silent no-op.
-//
-// Installs do not yet wait for workload readiness (Wait stays false): this
-// slice registers the operators' CRDs and admission surface. The following
-// Phase 3b-3 slice owns waiting for real controller reconciliation before it
-// inventories operator-rendered children from the Kind cluster.
-func installDeclaredCharts(
+//nolint:gochecknoglobals // lifecycle test seam
+var newEphemeralAdmissionClient = func(kubeconfigPath, kubeContext string) (ephemeral.Client, error) {
+	return ephemeral.NewApplier(kubeconfigPath, kubeContext)
+}
+
+// installEphemeralChart waits for a declared chart's workloads and jobs before admission checks.
+func installEphemeralChart(
 	ctx context.Context,
 	cmd *cobra.Command,
 	cluster ephemeralCluster,
-	sourcePath string,
+	spec *helm.ChartSpec,
 ) error {
-	specs, degradations, err := enumerateDeclaredCharts(ctx, sourcePath)
+	err := ctx.Err()
 	if err != nil {
-		return err
-	}
-
-	warnDegradations(cmd, degradations)
-
-	if len(specs) == 0 {
-		return nil
+		return fmt.Errorf("ephemeral chart installation cancelled: %w", err)
 	}
 
 	client, err := newEphemeralHelmClient(cluster.KubeconfigPath, cluster.Context)
@@ -62,60 +49,102 @@ func installDeclaredCharts(
 		return fmt.Errorf("create helm client for ephemeral cluster %q: %w", cluster.Name, err)
 	}
 
-	for _, spec := range specs {
-		notify.Infof(
-			cmd.OutOrStdout(),
-			"installing declared chart %q into ephemeral cluster %q...",
-			spec.ReleaseName, cluster.Name,
+	readySpec := *spec
+	readySpec.CreateNamespace = true
+	readySpec.Wait = true
+	readySpec.WaitForJobs = true
+
+	readySpec.Timeout = helm.DefaultTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		readySpec.Timeout = min(readySpec.Timeout, time.Until(deadline))
+	}
+
+	notify.Infof(
+		cmd.OutOrStdout(),
+		"installing and waiting for declared chart %q...",
+		spec.ReleaseName,
+	)
+
+	err = helm.InstallChartWithRetry(ctx, client, &readySpec, spec.ChartName)
+	if err != nil {
+		return fmt.Errorf(
+			"install declared chart %q into ephemeral cluster %q: %w",
+			spec.ReleaseName,
+			cluster.Name,
+			err,
 		)
-
-		spec.CreateNamespace = true
-
-		installErr := helm.InstallChartWithRetry(ctx, client, spec, spec.ChartName)
-		if installErr != nil {
-			return fmt.Errorf(
-				"install declared chart %q into ephemeral cluster %q: %w",
-				spec.ReleaseName, cluster.Name, installErr,
-			)
-		}
 	}
 
 	return nil
 }
 
-// withPreparedEphemeralCluster wraps runFn in a throwaway cluster whose
-// declared charts are installed first (resolve source → installDeclaredCharts
-// → run), the sequence the validate and scan commands share for their
-// --ephemeral mode (ksail#5919 Phase 3b-2).
+// withPreparedEphemeralCluster verifies the selected input and offline gate before
+// provisioning. All admission operations share a bounded context, and the lifecycle
+// owns teardown independently of admission success or cancellation.
 func withPreparedEphemeralCluster(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,
-	runFn func(ctx context.Context) error,
+	runFn func(context.Context) error,
 ) error {
+	sourcePath, err := resolveEphemeralSourcePath(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	plan, err := ephemeral.Load(ctx, sourcePath)
+	if err != nil {
+		return fmt.Errorf("prepare ephemeral admission: %w", err)
+	}
+
+	err = runFn(ctx)
+	if err != nil {
+		return err
+	}
+
 	return withEphemeralCluster(
 		ctx,
 		cmd,
 		func(ctx context.Context, cluster ephemeralCluster) error {
-			sourcePath, pathErr := resolveEphemeralSourcePath(cmd, args)
-			if pathErr != nil {
-				return pathErr
+			admissionCtx, cancel := context.WithTimeout(ctx, ephemeralAdmissionTimeout)
+			defer cancel()
+
+			var client ephemeral.Client
+
+			if len(plan.Namespaces)+len(plan.CRDs)+len(plan.Configuration)+len(plan.Resources) > 0 {
+				var err error
+
+				client, err = newEphemeralAdmissionClient(cluster.KubeconfigPath, cluster.Context)
+				if err != nil {
+					return fmt.Errorf("create ephemeral admission client: %w", err)
+				}
 			}
 
-			installErr := installDeclaredCharts(ctx, cmd, cluster, sourcePath)
-			if installErr != nil {
-				return installErr
+			notify.Infof(
+				cmd.OutOrStdout(),
+				"checking workload admission in ephemeral cluster %q...",
+				cluster.Name,
+			)
+
+			err := plan.Run(
+				admissionCtx,
+				client,
+				func(ctx context.Context, spec *helm.ChartSpec) error {
+					return installEphemeralChart(ctx, cmd, cluster, spec)
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("ephemeral admission failed: %w", err)
 			}
 
-			return runFn(ctx)
+			notify.Infof(cmd.OutOrStdout(), "ephemeral admission checks passed")
+
+			return nil
 		},
 	)
 }
 
-// resolveEphemeralSourcePath derives the workload source path an --ephemeral
-// run installs declared charts from, mirroring exactly how the inner
-// validate/scan run derives its own target: single silent config load →
-// args/config/cwd precedence → canonicalized.
+// resolveEphemeralSourcePath uses the same argument/config/cwd precedence as offline checks.
 func resolveEphemeralSourcePath(cmd *cobra.Command, args []string) (string, error) {
 	cfg, configFound, loadErr := loadValidateConfigSilently(cmd)
 
@@ -130,53 +159,4 @@ func resolveEphemeralSourcePath(cmd *cobra.Command, args []string) (string, erro
 	}
 
 	return canonPath, nil
-}
-
-// enumerateDeclaredCharts builds every kustomization under sourcePath and
-// enumerates the install-ready chart specs their HelmReleases declare,
-// deduplicated by release namespace/name (several kustomizations under one
-// tree can include the same base). Build failures are skipped — the
-// validation that follows the install step reports them with attribution.
-func enumerateDeclaredCharts(
-	ctx context.Context,
-	sourcePath string,
-) ([]*helm.ChartSpec, []render.Degradation, error) {
-	kustomizations, err := findKustomizations(sourcePath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("find kustomizations: %w", err)
-	}
-
-	kustomizeClient := kustomize.NewClient()
-
-	var (
-		specs        []*helm.ChartSpec
-		degradations []render.Degradation
-	)
-
-	seen := make(map[string]bool)
-
-	for _, kustDir := range kustomizations {
-		output, buildErr := kustomizeClient.Build(ctx, kustDir)
-		if buildErr != nil {
-			continue
-		}
-
-		stream := fluxsubst.ExpandFluxSubstitutions(output.Bytes())
-
-		dirSpecs, dirDegradations := render.EnumerateChartSpecs(stream)
-		degradations = append(degradations, dirDegradations...)
-
-		for _, spec := range dirSpecs {
-			key := spec.Namespace + "/" + spec.ReleaseName
-			if seen[key] {
-				continue
-			}
-
-			seen[key] = true
-
-			specs = append(specs, spec)
-		}
-	}
-
-	return specs, degradations, nil
 }

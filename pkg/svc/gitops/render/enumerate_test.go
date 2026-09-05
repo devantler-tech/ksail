@@ -76,3 +76,33 @@ func TestEnumerateChartSpecsEmptyStream(t *testing.T) {
 	assert.Empty(t, specs)
 	assert.Empty(t, degradations)
 }
+
+func TestEnumerateChartSpecsReportsUnresolvedValues(t *testing.T) {
+	t.Parallel()
+
+	stream := `apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: operator
+spec:
+  chart:
+    spec:
+      chart: operator
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+  valuesFrom:
+    - kind: Secret
+      name: missing-values
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: charts
+spec:
+  url: https://example.com/charts
+`
+	_, degradations := render.EnumerateChartSpecs([]byte(stream))
+	require.Len(t, degradations, 1)
+	assert.Equal(t, render.DegradationPartialValues, degradations[0].Kind)
+}

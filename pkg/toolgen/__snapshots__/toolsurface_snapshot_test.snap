@@ -1628,7 +1628,7 @@ workload_write
         "type": "string"
       },
       "ephemeral": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: scan, validate)",
+        "description": "EXPERIMENTAL: run offline checks, then check workload admission in an isolated throwaway Kind cluster with declared Helm charts installed and ready (guaranteed teardown; off by default)... (applies to: scan, validate)",
         "type": "boolean"
       },
       "exceptions": {

@@ -37,9 +37,8 @@ const ephemeralDeleteTimeout = 2 * time.Minute
 var waitForEphemeralCluster = k8s.WaitForClusterReady
 
 // ephemeralCluster describes how a --ephemeral run reaches its throwaway Kind
-// cluster once provisioned. Phase 3b-2 of ksail#5919 consumes this handle to
-// install the workload's declared operators into the cluster; Phase 3b-3
-// applies the rendered manifests and scans their children.
+// cluster once provisioned. Chart installation and workload admission both use
+// this explicit connection instead of the user's current kubeconfig context.
 type ephemeralCluster struct {
 	// Name is the throwaway cluster's own name (ksail-ephemeral-<nanos>).
 	Name string
@@ -117,9 +116,8 @@ func createEphemeralBackend(name string) (ephemeralBackend, error) {
 // genuinely ready, runs runFn with the cluster's connection handle while it
 // is live, and guarantees the cluster is deleted afterwards — on success, on
 // an error from any step, and on SIGINT/SIGTERM. runFn receives a verified
-// ephemeralCluster (kubeconfig path + context). Applying workload manifests,
-// waiting for operator reconciliation, and inspecting generated children are
-// deliberately left to ksail#5919 Phase 3b-3.
+// ephemeralCluster (kubeconfig path + context). The callback owns chart
+// installation and workload admission; this lifecycle owns their cleanup.
 //
 // ctx should be the caller's own context (typically cmd.Context()); cmd is
 // used only for output (notify) and is not read for its context here, so the
