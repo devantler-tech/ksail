@@ -1,6 +1,8 @@
 package ciharness_test
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -261,11 +263,7 @@ func runCleanupScriptWithoutCreate(t *testing.T) (string, []string) {
 	// Any of these running at all means the guard let execution through.
 	for _, name := range []string{"ksail", "eksctl", "aws"} {
 		stub := "#!/bin/sh\nprintf '%s\\n' '" + name + "' >> \"$KSAIL_CLEANUP_CALL_LOG\"\nexit 0\n"
-		stubPath := filepath.Join(binDir, name)
-
-		require.NoError(t, os.WriteFile(stubPath, []byte(stub), 0o600))
-		//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
-		require.NoError(t, os.Chmod(stubPath, 0o700))
+		writeExecutableStub(t, filepath.Join(binDir, name), stub)
 	}
 
 	scriptPath := filepath.Join("..", "..", ".github", "scripts", "delete-eks-smoke-cluster.sh")
@@ -809,10 +807,7 @@ esac
 	awsPath := filepath.Join(tempDir, "aws")
 	outputPath := filepath.Join(tempDir, "github-output")
 
-	require.NoError(
-		t,
-		os.WriteFile(awsPath, []byte(awsStub), 0o700), //nolint:gosec // Test-owned path.
-	)
+	writeExecutableStub(t, awsPath, awsStub)
 	require.NoError(
 		t,
 		os.WriteFile(outputPath, nil, 0o600),
@@ -1045,4 +1040,39 @@ func stringValue(value any) string {
 	}
 
 	return strings.TrimSpace(text)
+}
+
+// writeExecutableStub writes an executable PATH stub without this process ever
+// holding a write descriptor on it.
+//
+// Tests in this package run in parallel and fork subprocesses constantly. On
+// Linux a child forked while another goroutine still holds a file open for
+// writing inherits that descriptor until its own exec completes, and executing
+// the file inside that window fails with ETXTBSY ("bad interpreter: Text file
+// busy", #6199). os.WriteFile closes before it returns, but it cannot stop a
+// concurrent fork from copying the descriptor first. Writing through a
+// short-lived child shell moves the write descriptor into a process nothing
+// here forks from, so no sibling subprocess can inherit it, and the file is
+// closed by the time the child has exited.
+func writeExecutableStub(t *testing.T, path, content string) {
+	t.Helper()
+
+	require.NoError(t, writeExecutableFile(t.Context(), path, content))
+}
+
+// writeExecutableFile is the fork-safe writer behind writeExecutableStub, kept
+// free of testing assertions so it can run inside worker goroutines.
+func writeExecutableFile(ctx context.Context, path, content string) error {
+	//nolint:gosec // path is a test-owned temp file; the shell fragment is a constant.
+	command := exec.CommandContext(
+		ctx, "sh", "-c", `umask 077 && cat >"$1" && chmod 0700 "$1"`, "sh", path,
+	)
+	command.Stdin = strings.NewReader(content)
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("write executable stub %s: %w (%s)", path, err, output)
+	}
+
+	return nil
 }
