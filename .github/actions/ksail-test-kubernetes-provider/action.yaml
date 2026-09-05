@@ -42,6 +42,17 @@ inputs:
       that enables the MutatingAdmissionPolicy / v1beta1 admissionregistration API.
     required: false
     default: ""
+  assert-k3k-server-creator:
+    description: |
+      After each successful nested K3s (k3k) create, assert that the k3k server pod
+      is owned by a StatefulSet and written by kube-controller-manager, and record
+      that evidence in the kubernetes-provider log directory. The k3k privileged-pod
+      guard pins exactly that principal with FailurePolicy Fail, so a k3k release that
+      changed who creates the pod would make every k3k cluster unprovisionable; this
+      keeps the premise asserted by CI rather than by a comment. A failed assertion
+      counts as a failed distribution. Off by default.
+    required: false
+    default: "false"
   dockerhub-user:
     description: Docker Hub username for authenticated nested pull-through mirrors.
     required: false
@@ -72,6 +83,7 @@ runs:
         # runner contention is not failed prematurely at the 10m default. See #4891.
         KSAIL_NESTED_READY_TIMEOUT: ${{ inputs.ready-timeout }}
         CNI: ${{ inputs.cni }}
+        ASSERT_K3K_SERVER_CREATOR: ${{ inputs.assert-k3k-server-creator }}
         # Mirror proxy credentials. Exported here so ksail expands the ${...}
         # placeholders in the --mirror-registry specs from its own process env,
         # keeping the secret values out of argv and the command log.
@@ -160,6 +172,20 @@ runs:
               PASSED=$((PASSED + 1))
             else
               echo "  ❌ $DIST info FAILED"
+              FAILED=$((FAILED + 1))
+            fi
+          fi
+
+          # Pin the premise the k3k privileged-pod guard depends on: the server pod is
+          # created by the StatefulSet controller. Runs while the nested cluster is still
+          # up, and a failure adds to FAILED rather than masking an earlier one.
+          if [ "$create_ok" = "true" ] && [ "$ASSERT_K3K_SERVER_CREATOR" = "true" ] && [ "${DIST,,}" = "k3s" ]; then
+            echo "  ⏳ Asserting the k3k server pod creating principal..."
+            CREATOR_LOG="$LOG_DIR/${DIST,,}-server-creator.log"
+            if "$GITHUB_WORKSPACE/.github/scripts/assert-k3k-server-creator.sh" "$NESTED_NAME" "$LOG_DIR" 2>&1 | tee "$CREATOR_LOG"; then
+              echo "  ✅ $DIST server pod creator matches the guard pinned principal"
+            else
+              echo "  ❌ $DIST server pod creator assertion FAILED"
               FAILED=$((FAILED + 1))
             fi
           fi

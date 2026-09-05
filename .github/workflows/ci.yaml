@@ -146,6 +146,7 @@ jobs:
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
       cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
+      k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -328,6 +329,10 @@ jobs:
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
               - '.github/workflows/system-test-eks.yaml'
               - '.github/workflows/ci.yaml'
+            k3k-sentinel-scripts:
+              - '.github/scripts/assert-k3k-server-creator.sh'
+              - '.github/scripts/assert-k3k-server-creator.test.sh'
+              - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -349,6 +354,27 @@ jobs:
             .github/scripts/delete-eks-smoke-cluster.sh \
             .github/scripts/delete-eks-smoke-cluster.test.sh
           .github/scripts/delete-eks-smoke-cluster.test.sh
+
+  k3k-sentinel-scripts:
+    name: 🔐 Validate k3k Sentinel Scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.k3k-sentinel-scripts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Verify the k3k server-creator assertion rejects every wrong principal
+        run: |
+          shellcheck \
+            .github/scripts/assert-k3k-server-creator.sh \
+            .github/scripts/assert-k3k-server-creator.test.sh
+          .github/scripts/assert-k3k-server-creator.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
@@ -1763,6 +1789,7 @@ jobs:
         verify-dependency-test-graph,
         verify-todos-workflow-contract,
         cask-pr-handoff,
+        k3k-sentinel-scripts,
       ]
     if: ${{ always() }}
     steps:
@@ -1793,3 +1820,4 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.k3k-sentinel-scripts.result }}
