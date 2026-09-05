@@ -1185,7 +1185,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.operator-chart == 'true'
+    # The merge queue is the one run that validates the MERGED tree, and `changes` is skipped there
+    # (no PR diff for its path filter to inspect), so gate on the event rather than on the filter:
+    # helm lint plus a handful of template renders cost seconds, cheap enough to re-validate every
+    # queued merge against whatever landed before it. Without this the required aggregate check
+    # counted the skipped job as a pass, so a chart change was never validated at the point it
+    # merged. `!cancelled()` is what lets the job run when its `changes` dependency was skipped
+    # instead of being skipped along with it (mirrors operator-chart-e2e).
+    if: >-
+      !cancelled()
+      && (
+        github.event_name == 'merge_group'
+        || needs.changes.outputs.operator-chart == 'true'
+      )
     permissions:
       contents: read
     steps:
