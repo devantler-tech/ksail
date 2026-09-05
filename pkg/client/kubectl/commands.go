@@ -295,6 +295,12 @@ func (c *Client) CreateWaitCommand(kubeConfigPath string) *cobra.Command {
 
 	waitCmd := wait.NewCmdWait(configFlags, c.ioStreams)
 
+	// Register the Kubernetes config flags (--namespace, --context, --kubeconfig, …)
+	// on the command, as every other kubectl-backed workload command does. NewCmdWait
+	// reads them through configFlags but does not add them itself, which left wait
+	// unable to target a namespace or context other than the current one (#6144).
+	configFlags.AddFlags(waitCmd.Flags())
+
 	waitCmd.Use = "wait"
 	waitCmd.Short = "Wait for a specific condition on one or many resources"
 	waitCmd.Long = "Wait for a specific condition on one or many resources. " +
