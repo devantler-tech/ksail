@@ -2,9 +2,12 @@ package cluster_test
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
@@ -318,4 +321,142 @@ func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
 	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
 	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
+}
+
+// fakeAPIServer serves the empty node/namespace/pod/PVC lists DiagnoseClusterReport
+// walks, recording every path it was asked for so a test can prove which cluster
+// the diagnosis actually talked to.
+func fakeAPIServer(t *testing.T) (*httptest.Server, *[]string) {
+	t.Helper()
+
+	var (
+		mu    sync.Mutex
+		paths []string
+	)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		switch r.URL.Path {
+		case "/api/v1/nodes":
+			_, _ = w.Write([]byte(`{"kind":"NodeList","apiVersion":"v1","items":[]}`))
+		case "/api/v1/namespaces":
+			_, _ = w.Write([]byte(`{"kind":"NamespaceList","apiVersion":"v1",` +
+				`"items":[{"metadata":{"name":"default"}}]}`))
+		case "/api/v1/namespaces/default/pods":
+			_, _ = w.Write([]byte(`{"kind":"PodList","apiVersion":"v1","items":[]}`))
+		case "/api/v1/namespaces/default/persistentvolumeclaims":
+			_, _ = w.Write([]byte(`{"kind":"PersistentVolumeClaimList","apiVersion":"v1","items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	return server, &paths
+}
+
+// TestDiagnoseCmd_NameSelectsThatClustersContext pins the fix for #6117: with
+// --name, the diagnosis must be built against THAT cluster's kubeconfig context,
+// not the kubeconfig's current context. The current context points at an
+// address nothing listens on, so a client that followed it would fail, while the
+// named cluster's context points at a fake API server that records the calls.
+//
+//nolint:paralleltest // uses t.Setenv and t.Chdir to isolate kubeconfig/config discovery
+func TestDiagnoseCmd_NameSelectsThatClustersContext(t *testing.T) {
+	server, paths := fakeAPIServer(t)
+
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: kind-other
+clusters:
+- name: kind-other
+  cluster:
+    server: http://127.0.0.1:1
+- name: kind-target
+  cluster:
+    server: ` + server.URL + `
+contexts:
+- name: kind-other
+  context:
+    cluster: kind-other
+    user: kind-other
+- name: kind-target
+  context:
+    cluster: kind-target
+    user: kind-target
+users:
+- name: kind-other
+  user: {}
+- name: kind-target
+  user: {}
+`
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+	// No ksail.yaml in scope: the cluster is identified by --name alone.
+	t.Chdir(t.TempDir())
+
+	var out strings.Builder
+
+	diagnoseCmd := cluster.NewDiagnoseCmd()
+	diagnoseCmd.SetOut(&out)
+	diagnoseCmd.SetErr(io.Discard)
+	diagnoseCmd.SetArgs([]string{"--name", "target"})
+
+	err := diagnoseCmd.Execute()
+	require.NoError(t, err)
+
+	assert.Contains(t, out.String(), `Cluster "target" looks healthy`)
+	assert.Contains(t, out.String(), "Health score: 100/100")
+	// The named cluster's API server — not the current context's — answered the diagnosis.
+	assert.Contains(t, *paths, "/api/v1/nodes")
+}
+
+// TestDiagnoseCmd_NameNotInKubeconfigFails pins the other half of #6117: a --name
+// that matches no kubeconfig context is an error, never a silent fallback to the
+// current context.
+//
+//nolint:paralleltest // uses t.Setenv and t.Chdir to isolate kubeconfig/config discovery
+func TestDiagnoseCmd_NameNotInKubeconfigFails(t *testing.T) {
+	server, paths := fakeAPIServer(t)
+
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: kind-other
+clusters:
+- name: kind-other
+  cluster:
+    server: ` + server.URL + `
+contexts:
+- name: kind-other
+  context:
+    cluster: kind-other
+    user: kind-other
+users:
+- name: kind-other
+  user: {}
+`
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+	t.Chdir(t.TempDir())
+
+	diagnoseCmd := cluster.NewDiagnoseCmd()
+	diagnoseCmd.SetOut(io.Discard)
+	diagnoseCmd.SetErr(io.Discard)
+	diagnoseCmd.SetArgs([]string{"--name", "ghost"})
+
+	err := diagnoseCmd.Execute()
+	require.ErrorIs(t, err, cluster.ErrContextNotFound)
+	// The current context was never consulted for a cluster that does not exist.
+	assert.Empty(t, *paths)
 }
