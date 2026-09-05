@@ -181,33 +181,9 @@ func kubeconfigHasResolvedClusterContext(resolved *lifecycle.ResolvedClusterInfo
 	return false
 }
 
-// parseEksctlContextTarget recognizes both identity-qualified and bare eksctl kubeconfig contexts.
-// Parsing from the last @ keeps IAM identities opaque; parsing the target at its last dot avoids
-// prefix matches between different cluster names.
+// parseEksctlContextTarget shares exact EKS target parsing with lifecycle detection.
 func parseEksctlContextTarget(contextName string) (string, string, bool) {
-	target := contextName
-	if identityEnd := strings.LastIndex(target, "@"); identityEnd >= 0 {
-		target = target[identityEnd+1:]
-	}
-
-	target, found := strings.CutSuffix(target, ".eksctl.io")
-	if !found {
-		return "", "", false
-	}
-
-	regionStart := strings.LastIndex(target, ".")
-	if regionStart <= 0 || regionStart == len(target)-1 {
-		return "", "", false
-	}
-
-	clusterName := target[:regionStart]
-	region := target[regionStart+1:]
-
-	if strings.Contains(clusterName, ".") || strings.Contains(region, ".") {
-		return "", "", false
-	}
-
-	return clusterName, region, true
+	return clusterdetector.ParseEksctlContextTarget(contextName)
 }
 
 // eksctlContextMatchesCluster recognizes eksctl's real kubeconfig context shape without treating a
@@ -368,7 +344,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	}
 
 	region := strings.TrimSpace(resolved.AWSRegion)
-	if region != "" {
+	if region != "" && resolved.AWSContextRegion == "" {
 		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
 		if err != nil {
 			if isRestorableOwnershipStateAbsence(err) {
@@ -392,7 +368,7 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
 	}
 
-	ownership, err := selectPersistedAWSOwnership(ownerships)
+	ownership, err := selectPersistedAWSOwnership(ownerships, resolved.AWSContextRegion)
 	if err != nil {
 		return err
 	}
@@ -429,6 +405,7 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 
 func selectPersistedAWSOwnership(
 	ownerships []*state.EKSOwnershipState,
+	contextRegion string,
 ) (*state.EKSOwnershipState, error) {
 	requestedRegions := make(map[string]struct{})
 
@@ -437,6 +414,12 @@ func selectPersistedAWSOwnership(
 		if region := strings.TrimSpace(os.Getenv(options.RegionEnvVar)); region != "" {
 			requestedRegions[region] = struct{}{}
 		}
+	}
+
+	// A selected context is a fallback only after the stored environment mappings
+	// have been consulted. Ambient canonical variables must not replace custom mappings.
+	if len(requestedRegions) == 0 && contextRegion != "" {
+		requestedRegions[contextRegion] = struct{}{}
 	}
 
 	if len(requestedRegions) == 1 {

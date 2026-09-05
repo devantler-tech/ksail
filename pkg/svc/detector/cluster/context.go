@@ -18,6 +18,34 @@ const k3kContextPrefix = "k3k-"
 // cluster-name slot can be stripped, leaving just the prefix.
 const contextNameSentinel = "\x00"
 
+// ParseEksctlContextTarget recognizes identity-qualified and bare eksctl contexts.
+// The final @ separates the opaque IAM identity from the exact cluster and region.
+func ParseEksctlContextTarget(contextName string) (string, string, bool) {
+	target := contextName
+	if identityEnd := strings.LastIndex(target, "@"); identityEnd >= 0 {
+		target = target[identityEnd+1:]
+	}
+
+	target, found := strings.CutSuffix(target, ".eksctl.io")
+	if !found {
+		return "", "", false
+	}
+
+	regionStart := strings.LastIndex(target, ".")
+	if regionStart <= 0 || regionStart == len(target)-1 {
+		return "", "", false
+	}
+
+	clusterName := target[:regionStart]
+	region := target[regionStart+1:]
+
+	if strings.Contains(clusterName, ".") || strings.Contains(region, ".") {
+		return "", "", false
+	}
+
+	return clusterName, region, true
+}
+
 // contextPrefix is a single inverse-mapping entry: the prefix written to a
 // kubeconfig context name and the distribution it resolves back to.
 type contextPrefix struct {

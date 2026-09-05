@@ -38,6 +38,19 @@ spec:
 
 All cluster-specific metadata (region, version, nodegroups, addons) lives in `eks.yaml` — not in `ksail.yaml`. See the [EKS distribution guide](/distributions/eks/) for the full `eks.yaml` configuration reference.
 
+### Standalone lifecycle commands
+
+Outside a KSail project, `cluster start` and `cluster stop` can use the selected kubeconfig context without `--name` or `--provider`. Both `demo.us-west-2.eksctl.io` and identity-qualified contexts such as `operator@demo.us-west-2.eksctl.io` select the EKS cluster `demo` in `us-west-2`.
+
+```bash
+ksail cluster start
+ksail cluster stop
+```
+
+An explicit `--name` or a loaded project configuration takes precedence over context-based name detection. When the name comes from the selected EKS context, its region is the fallback after the configured AWS region environment variable and project configuration. Other contexts for the same name do not override that selected region. An explicit name still requires an unambiguous region; it does not inherit an unrelated selected context's region.
+
+Context detection identifies the target. Start and stop still require KSail's persisted ownership record and a matching live AWS cluster identity before changing node-group capacity.
+
 ## Characteristics
 
 | Property                     | Value                                       |
