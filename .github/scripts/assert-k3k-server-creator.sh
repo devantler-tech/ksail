@@ -27,6 +27,7 @@
 
 set -euo pipefail
 
+# Print the required arguments to stderr and reject an invalid invocation with exit 2.
 usage() {
 	printf 'usage: %s <cluster-name> <evidence-dir>\n' "${0##*/}" >&2
 	exit 2

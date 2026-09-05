@@ -53,6 +53,7 @@ list_json() {
 
 good_pod="$(pod_json "k3k-${cluster}-server-0" StatefulSet kube-controller-manager kubelet:status)"
 
+# fixture NAME POD_JSON... — write a temporary pod list and print its path.
 fixture() {
 	local name="$1"
 	shift
@@ -61,6 +62,7 @@ fixture() {
 	printf '%s' "${file}"
 }
 
+# expect_pass LABEL FILE — require a successful assertion and a nonempty evidence file.
 expect_pass() {
 	local label="$1" file="$2" evidence="${tmp_dir}/evidence-$1"
 	if ! KSAIL_K3K_SERVER_POD_JSON="${file}" "${assert}" "${cluster}" "${evidence}" >"${tmp_dir}/${label}.out" 2>&1; then
@@ -74,6 +76,7 @@ expect_pass() {
 	}
 }
 
+# expect_fail LABEL FILE NEEDLE — require rejection with the expected diagnostic.
 expect_fail() {
 	local label="$1" file="$2" needle="$3" evidence="${tmp_dir}/evidence-$1"
 	if KSAIL_K3K_SERVER_POD_JSON="${file}" "${assert}" "${cluster}" "${evidence}" >"${tmp_dir}/${label}.out" 2>&1; then
