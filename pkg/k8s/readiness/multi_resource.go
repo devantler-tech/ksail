@@ -11,7 +11,7 @@ import (
 // Check defines a check to perform for a Kubernetes resource.
 type Check struct {
 	// Type specifies the kind of Kubernetes resource to check for readiness.
-	// Valid values are "deployment" or "daemonset".
+	// Valid values are "deployment", "daemonset" or "statefulset".
 	Type string
 	// Namespace is the Kubernetes namespace where the resource resides.
 	Namespace string
@@ -58,6 +58,10 @@ func WaitForMultipleResources(
 			)
 		case "daemonset":
 			err = WaitForDaemonSetReady(
+				resourceCtx, clientset, check.Namespace, check.Name, remainingTimeout,
+			)
+		case "statefulset":
+			err = WaitForStatefulSetReady(
 				resourceCtx, clientset, check.Namespace, check.Name, remainingTimeout,
 			)
 		default:

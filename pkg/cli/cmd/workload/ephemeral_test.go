@@ -513,7 +513,7 @@ func TestValidateCmdRegistersEphemeralFlagDefaultOff(t *testing.T) {
 	require.NotNil(t, flag)
 	assert.Equal(t, "false", flag.DefValue)
 	assert.Contains(t, flag.Usage, "Kind")
-	assert.Contains(t, flag.Usage, "next slice")
+	assert.Contains(t, flag.Usage, "workload admission")
 	assert.NotContains(t, flag.Usage, "KWOK")
 }
 
@@ -523,7 +523,7 @@ func TestScanCmdRegistersEphemeralFlagDefaultOff(t *testing.T) {
 	require.NotNil(t, flag)
 	assert.Equal(t, "false", flag.DefValue)
 	assert.Contains(t, flag.Usage, "Kind")
-	assert.Contains(t, flag.Usage, "next slice")
+	assert.Contains(t, flag.Usage, "workload admission")
 	assert.NotContains(t, flag.Usage, "KWOK")
 }
 

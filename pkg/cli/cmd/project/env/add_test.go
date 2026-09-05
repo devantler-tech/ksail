@@ -279,3 +279,68 @@ func TestNewAddCmd_Structure(t *testing.T) {
 	// The write annotation marks the command as state-modifying.
 	assert.Equal(t, "write", cmd.Annotations[annotations.AnnotationPermission])
 }
+
+// addEnvBaseConfig is the workspace base config (ksail.yaml) whose presence marks
+// the repository root for the env verbs' upward traversal.
+const addEnvBaseConfig = `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: base
+spec:
+  cluster:
+    distribution: Vanilla
+    provider: Docker
+  workload:
+    sourceDirectory: k8s
+`
+
+// writeAddEnvWorkspace materialises the source "prod" environment plus the base
+// ksail.yaml that marks the workspace root, and returns the repo root.
+func writeAddEnvWorkspace(t *testing.T) string {
+	t.Helper()
+
+	repoRoot := writeAddEnvSourceRepo(t)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(repoRoot, "ksail.yaml"), []byte(addEnvBaseConfig), 0o600,
+	))
+
+	return repoRoot
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleAddEnvironmentRunE_RunsFromSubdirectory(t *testing.T) {
+	repoRoot := writeAddEnvWorkspace(t)
+	subDir := filepath.Join(repoRoot, "k8s", "clusters", "prod")
+	t.Chdir(subDir)
+
+	_, err := runAddEnvironment(t, "staging", "--from", "prod")
+	require.NoError(t, err)
+
+	// The workspace root was resolved by upward traversal, so the source config
+	// was found and the clone landed at the repo root — not relative to the
+	// subdirectory.
+	config := readAddEnv(t, repoRoot, "ksail.staging.yaml")
+	assert.Contains(t, config, "name: staging")
+
+	overlay := readAddEnv(t, repoRoot, "k8s/clusters/staging/kustomization.yaml")
+	assert.Contains(t, overlay, "cluster_name: staging")
+
+	_, statErr := os.Stat(filepath.Join(subDir, "ksail.staging.yaml"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	_, statErr = os.Stat(filepath.Join(subDir, "k8s"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleAddEnvironmentRunE_MissingSourceFromSubdirectoryListsAvailable(t *testing.T) {
+	repoRoot := writeAddEnvWorkspace(t)
+	t.Chdir(filepath.Join(repoRoot, "k8s"))
+
+	_, err := runAddEnvironment(t, "staging", "--from", "ghost")
+	require.ErrorIs(t, err, env.ErrSourceConfigLoad)
+
+	// The available-environments hint is discovered at the workspace root, so a
+	// mistyped --from still reports what exists from a subdirectory.
+	assert.Contains(t, err.Error(), "available environments: prod")
+}
