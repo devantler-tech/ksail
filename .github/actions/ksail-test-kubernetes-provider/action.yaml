@@ -180,12 +180,19 @@ runs:
           # created by the StatefulSet controller. Runs while the nested cluster is still
           # up, and a failure adds to FAILED rather than masking an earlier one.
           if [ "$create_ok" = "true" ] && [ "$ASSERT_K3K_SERVER_CREATOR" = "true" ] && [ "${DIST,,}" = "k3s" ]; then
-            echo "  ⏳ Asserting the k3k server pod creating principal..."
-            CREATOR_LOG="$LOG_DIR/${DIST,,}-server-creator.log"
-            if "$GITHUB_WORKSPACE/.github/scripts/assert-k3k-server-creator.sh" "$NESTED_NAME" "$LOG_DIR" 2>&1 | tee "$CREATOR_LOG"; then
-              echo "  ✅ $DIST server pod creator matches the guard pinned principal"
+            # An explicit host context can leave the nested cluster selected after
+            # creation. The server pod lives on the host, so bind the query first.
+            if kubectl config use-context "$HOST_CONTEXT"; then
+              echo "  ⏳ Asserting the k3k server pod creating principal..."
+              CREATOR_LOG="$LOG_DIR/${DIST,,}-server-creator.log"
+              if "$GITHUB_WORKSPACE/.github/scripts/assert-k3k-server-creator.sh" "$NESTED_NAME" "$LOG_DIR" 2>&1 | tee "$CREATOR_LOG"; then
+                echo "  ✅ $DIST server pod creator matches the guard pinned principal"
+              else
+                echo "  ❌ $DIST server pod creator assertion FAILED"
+                FAILED=$((FAILED + 1))
+              fi
             else
-              echo "  ❌ $DIST server pod creator assertion FAILED"
+              echo "  ❌ $DIST host context restoration FAILED; skipping server pod creator assertion"
               FAILED=$((FAILED + 1))
             fi
           fi

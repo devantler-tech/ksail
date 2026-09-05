@@ -332,6 +332,7 @@ jobs:
             k3k-sentinel-scripts:
               - '.github/scripts/assert-k3k-server-creator.sh'
               - '.github/scripts/assert-k3k-server-creator.test.sh'
+              - '.github/actions/ksail-test-kubernetes-provider/action.yaml'
               - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:

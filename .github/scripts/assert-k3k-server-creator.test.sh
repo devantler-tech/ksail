@@ -165,4 +165,76 @@ if "${assert}" "${cluster}" >/dev/null 2>&1; then
 	exit 1
 fi
 
-printf 'OK: assert-k3k-server-creator.sh — 1 positive control, 7 negative controls, live-path arguments pinned\n'
+# Exercise the real composite-action assertion block after nested creation has
+# selected its own context. Only kubectl is faked; the creator assertion is real.
+action="${script_dir}/../actions/ksail-test-kubernetes-provider/action.yaml"
+awk -v bash_version="${BASH_VERSINFO[0]}" '
+  /# Pin the premise the k3k privileged-pod guard depends on/ { block = 1 }
+  /# Always attempt delete/ { block = 0 }
+  block {
+    sub(/^        /, "")
+    # macOS Bash 3 lacks case conversion; this fixture always selects K3s.
+    if (bash_version < 4) gsub(/\$\{DIST,,\}/, "k3s")
+    print
+  }
+' "${action}" >"${tmp_dir}/creator-block.sh"
+[ -s "${tmp_dir}/creator-block.sh" ]
+
+cat >"${fake_bin}/kubectl" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+"config use-context custom-host")
+  [ "${RESTORE_FAIL}" = "false" ] || exit 1
+  printf 'custom-host\n' >"${CASE_DIR}/context"
+  ;;
+"get pods -n k3k-nested-k3s -l role=server,cluster=nested-k3s -o json --show-managed-fields=true")
+  cat "${CASE_DIR}/context" >"${CASE_DIR}/queried-context"
+  if [ "$(cat "${CASE_DIR}/context")" = "custom-host" ]; then
+    cat "${POD_FIXTURE}"
+  else
+    printf '{"items":[]}\n'
+  fi
+  ;;
+*) printf 'unexpected kubectl request: %s\n' "$*" >&2; exit 2 ;;
+esac
+FAKE
+chmod +x "${fake_bin}/kubectl"
+
+for restore_fail in false true; do
+	case_dir="${tmp_dir}/host-context-${restore_fail}"
+	mkdir -p "${case_dir}"
+	printf 'nested-context\n' >"${case_dir}/context"
+	if ! PATH="${fake_bin}:${PATH}" KUBECTL="${fake_bin}/kubectl" \
+		RESTORE_FAIL="${restore_fail}" CASE_DIR="${case_dir}" POD_FIXTURE="${tmp_dir}/good.json" \
+		GITHUB_WORKSPACE="$(cd "${script_dir}/../.." && pwd)" \
+		bash -euo pipefail -c '
+          create_ok=true
+          ASSERT_K3K_SERVER_CREATOR=true
+          DIST=K3s
+          NESTED_NAME=nested-k3s
+          HOST_CONTEXT=custom-host
+          LOG_DIR="$CASE_DIR"
+          FAILED=0
+          source "$1"
+          printf "%s\n" "$FAILED" >"$CASE_DIR/failed"
+        ' bash "${tmp_dir}/creator-block.sh" >"${case_dir}/output" 2>&1; then
+		cat "${case_dir}/output" >&2
+		exit 1
+	fi
+	if [ "${restore_fail}" = false ]; then
+		if [ "$(cat "${case_dir}/failed")" != 0 ] ||
+			[ "$(cat "${case_dir}/queried-context")" != custom-host ]; then
+			printf 'FAIL: creator assertion did not query the restored host context\n' >&2
+			cat "${case_dir}/output" >&2
+			exit 1
+		fi
+	else
+		if [ "$(cat "${case_dir}/failed")" != 1 ] || [ -e "${case_dir}/queried-context" ]; then
+			printf 'FAIL: failed host-context restoration must fail and skip the creator assertion\n' >&2
+			exit 1
+		fi
+	fi
+done
+
+printf 'OK: creator fixtures, live-path arguments, and composite-action host-context handling\n'
