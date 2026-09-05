@@ -106,7 +106,10 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 
 	// The hazard: an open writer in this process at the moment a child is forked.
 	heldPath := filepath.Join(dir, "held-open")
-	require.NoError(t, os.WriteFile(heldPath, []byte(content), 0o700)) //nolint:gosec // Test-owned temp path.
+	require.NoError(
+		t,
+		os.WriteFile(heldPath, []byte(content), 0o700),
+	) //nolint:gosec // Test-owned temp path.
 
 	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0) //nolint:gosec // Test-owned temp path.
 	require.NoError(t, err)
@@ -114,7 +117,14 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 	var stderr bytes.Buffer
 
 	//nolint:gosec // heldPath is a test-owned temp file; the shell fragment is a constant.
-	executor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", heldPath)
+	executor := exec.CommandContext(
+		t.Context(),
+		"sh",
+		"-c",
+		`read -r line && exec "$1"`,
+		"sh",
+		heldPath,
+	)
 	executor.ExtraFiles = []*os.File{writer}
 	executor.Stderr = &stderr
 
@@ -140,7 +150,14 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 	var safeStderr bytes.Buffer
 
 	//nolint:gosec // safePath is a test-owned temp file the writer under test just created.
-	safeExecutor := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", safePath)
+	safeExecutor := exec.CommandContext(
+		t.Context(),
+		"sh",
+		"-c",
+		`read -r line && exec "$1"`,
+		"sh",
+		safePath,
+	)
 	safeExecutor.Stderr = &safeStderr
 
 	safeStdin, err := safeExecutor.StdinPipe()
@@ -151,5 +168,10 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, safeStdin.Close())
 
-	require.NoError(t, safeExecutor.Wait(), "helper-written stub must execute: %s", safeStderr.String())
+	require.NoError(
+		t,
+		safeExecutor.Wait(),
+		"helper-written stub must execute: %s",
+		safeStderr.String(),
+	)
 }
