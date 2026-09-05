@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
@@ -544,13 +546,37 @@ func ExportSetEphemeralHelmClient(
 	return func() { newEphemeralHelmClient = original }
 }
 
-// ExportInstallDeclaredCharts exposes installDeclaredCharts for
-// external-package tests exercising the Phase 3b-2 install step directly.
+// ExportInstallDeclaredCharts exercises selected-input chart installation.
 func ExportInstallDeclaredCharts(
 	ctx context.Context,
 	cmd *cobra.Command,
 	cluster EphemeralCluster,
 	sourcePath string,
 ) error {
-	return installDeclaredCharts(ctx, cmd, cluster, sourcePath)
+	plan, err := ephemeral.Load(ctx, sourcePath)
+	if err != nil {
+		return fmt.Errorf("load selected chart input: %w", err)
+	}
+
+	for _, spec := range plan.Charts {
+		err := installEphemeralChart(ctx, cmd, cluster, spec)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
+
+// ExportSetEphemeralAdmissionClient replaces the isolated admission client in lifecycle tests.
+func ExportSetEphemeralAdmissionClient(
+	factory func(string, string) (ephemeral.Client, error),
+) func() {
+	original := newEphemeralAdmissionClient
+	newEphemeralAdmissionClient = factory
+
+	return func() { newEphemeralAdmissionClient = original }
+}
+
+// ExportWithPreparedEphemeralCluster exposes the shared validate/scan admission lifecycle.
+var ExportWithPreparedEphemeralCluster = withPreparedEphemeralCluster //nolint:gochecknoglobals // test export

@@ -92,19 +92,16 @@ func WaitForDeploymentReadyIfExists(
 	namespace, name string,
 	deadline time.Duration,
 ) error {
-	deadlineCtx, cancel := context.WithTimeout(ctx, deadline)
-	defer cancel()
-
-	_, err := clientset.AppsV1().
-		Deployments(namespace).
-		Get(deadlineCtx, name, metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
+	lookup := func(lookupCtx context.Context) error {
+		_, err := clientset.AppsV1().
+			Deployments(namespace).
+			Get(lookupCtx, name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to check deployment %s/%s: %w", namespace, name, err)
 		}
 
-		return fmt.Errorf("failed to check deployment %s/%s: %w", namespace, name, err)
+		return nil
 	}
 
-	return PollForReadiness(deadlineCtx, 0, deploymentReadyCheck(clientset, namespace, name))
+	return pollIfExists(ctx, deadline, lookup, deploymentReadyCheck(clientset, namespace, name))
 }
