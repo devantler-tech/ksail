@@ -367,3 +367,31 @@ cluster:
 		require.ErrorContains(t, err, "alias")
 	})
 }
+
+func TestKubernetesPatchSetSkipsEmptyMergeDocuments(t *testing.T) {
+	t.Parallel()
+	configs, err := loadVariantPatches(t, map[string]string{"cluster/api.yaml": `<<: {}
+---
+cluster:
+  apiServer:
+    certSANs: [retained.example.com]
+    extraArgs:
+      audit-log-maxage: "10"
+---
+cluster:
+  apiServer:
+    extraArgs:
+      audit-log-maxage: "30"
+`}, nil)
+	require.NoError(t, err)
+	assert.Contains(
+		t,
+		configs.ControlPlane().K8sAPIServerConfig().CertSANs(),
+		"retained.example.com",
+	)
+	assert.Equal(
+		t,
+		[]string{"30"},
+		configs.ControlPlane().K8sAPIServerConfig().ExtraArgs()["audit-log-maxage"],
+	)
+}

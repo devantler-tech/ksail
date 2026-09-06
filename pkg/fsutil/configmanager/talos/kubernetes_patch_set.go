@@ -75,43 +75,98 @@ func prepareKubernetesPatchSet(patches []Patch) ([]Patch, error) {
 func decodeKubernetesPatchSet(patches []Patch) ([]kubernetesPatchDocument, error) {
 	records := make([]kubernetesPatchDocument, 0, len(patches))
 	for _, patch := range patches {
-		documents, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
+		documents, err := decodeOrderedPatchDocuments(patch)
 		if err != nil {
 			return nil, err
 		}
 
-		if !mapDocuments {
-			return nil, fmt.Errorf(
-				"migrate Kubernetes patch %q: %w",
-				patch.Path,
-				errRFC6902Migration,
-			)
-		}
-
-		contents, err := orderedKubernetesDocuments(patch, len(documents))
-		if err != nil {
-			return nil, err
-		}
-
-		for idx, document := range documents {
-			if hasLegacyKubernetesValues(document) && ambiguousListDeletion(document) {
-				return nil, fmt.Errorf(
-					"migrate Kubernetes patch %q: %w",
-					patch.Path,
-					errMigrationDeletion,
-				)
-			}
-
-			part := patch
-			if len(documents) > 1 {
-				part.Content = contents[idx]
-			}
-
-			records = append(records, kubernetesPatchDocument{patch: part, document: document})
-		}
+		records = append(records, documents...)
 	}
 
 	return records, nil
+}
+
+// Derive the decoded map and ordered YAML from the same document. Empty merge
+// documents and aliases must never shift a separate content index.
+func decodeOrderedPatchDocuments(patch Patch) ([]kubernetesPatchDocument, error) {
+	decoder := yamlv3.NewDecoder(bytes.NewReader(patch.Content))
+
+	var (
+		records []kubernetesPatchDocument
+		nodes   []*yamlv3.Node
+	)
+
+	documentCount := 0
+
+	for {
+		var node yamlv3.Node
+
+		err := decoder.Decode(&node)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("decode Kubernetes patch %q: %w", patch.Path, err)
+		}
+
+		documentCount++
+
+		document, err := decodeKubernetesDocument(&node, patch.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(document) == 0 {
+			continue
+		}
+
+		records = append(records, kubernetesPatchDocument{patch: patch, document: document})
+		nodes = append(nodes, &node)
+	}
+
+	if documentCount <= 1 {
+		return records, nil
+	}
+
+	for idx, node := range nodes {
+		if containsYAMLAlias(node) {
+			return nil, fmt.Errorf("migrate Kubernetes patch %q: %w", patch.Path, errMigrationAlias)
+		}
+
+		content, err := yamlv3.Marshal(node)
+		if err != nil {
+			return nil, fmt.Errorf("encode Kubernetes patch %q: %w", patch.Path, err)
+		}
+
+		records[idx].patch.Content = content
+	}
+
+	return records, nil
+}
+
+func decodeKubernetesDocument(node *yamlv3.Node, path string) (map[string]any, error) {
+	var value any
+
+	err := node.Decode(&value)
+	if err != nil {
+		return nil, fmt.Errorf("decode Kubernetes patch %q: %w", path, err)
+	}
+
+	if value == nil {
+		return map[string]any{}, nil
+	}
+
+	document, isMap := value.(map[string]any)
+	if !isMap {
+		return nil, fmt.Errorf("migrate Kubernetes patch %q: %w", path, errRFC6902Migration)
+	}
+
+	if hasLegacyKubernetesValues(document) && ambiguousListDeletion(document) {
+		return nil, fmt.Errorf("migrate Kubernetes patch %q: %w", path, errMigrationDeletion)
+	}
+
+	return document, nil
 }
 
 func resolvePatchSetOIDC(records []kubernetesPatchDocument) ([]Patch, error) {
@@ -364,46 +419,6 @@ func nonemptyKubernetesPatches(patches []Patch) []Patch {
 	return nonempty
 }
 
-// Keep YAML key order when splitting documents: Talos deletion selectors can
-// depend on the first field of a list entry.
-func orderedKubernetesDocuments(patch Patch, count int) ([][]byte, error) {
-	if count <= 1 {
-		return nil, nil
-	}
-
-	decoder := yamlv3.NewDecoder(bytes.NewReader(patch.Content))
-	contents := make([][]byte, 0, count)
-
-	for {
-		var document yamlv3.Node
-
-		err := decoder.Decode(&document)
-		if errors.Is(err, io.EOF) {
-			return contents, nil
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("decode Kubernetes patch %q: %w", patch.Path, err)
-		}
-
-		if containsYAMLAlias(&document) {
-			return nil, fmt.Errorf("migrate Kubernetes patch %q: %w", patch.Path, errMigrationAlias)
-		}
-
-		if len(document.Content) == 0 || document.Content[0].Kind != yamlv3.MappingNode ||
-			len(document.Content[0].Content) == 0 {
-			continue
-		}
-
-		content, err := yamlv3.Marshal(&document)
-		if err != nil {
-			return nil, fmt.Errorf("encode Kubernetes patch %q: %w", patch.Path, err)
-		}
-
-		contents = append(contents, content)
-	}
-}
-
 func rejectOIDCDeletions(records []kubernetesPatchDocument) error {
 	for _, record := range records {
 		cluster, _ := mapValue(record.document, "cluster")
@@ -487,11 +502,5 @@ func containsYAMLAlias(node *yamlv3.Node) bool {
 		return true
 	}
 
-	for _, child := range node.Content {
-		if containsYAMLAlias(child) {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(node.Content, containsYAMLAlias)
 }
