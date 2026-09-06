@@ -58,8 +58,9 @@ func TestResolveKubeconfigFlag_CanonicalizesExplicitPath(t *testing.T) {
 // TestResolveKubeconfigFlag_CanonicalizesRelativePath verifies the same for a
 // relative path, which client-go would otherwise resolve against the process's
 // working directory at open time.
+//
+//nolint:paralleltest // uses t.Chdir to set the working directory
 func TestResolveKubeconfigFlag_CanonicalizesRelativePath(t *testing.T) {
-	//nolint:paralleltest // uses t.Chdir to set the working directory
 	dir := t.TempDir()
 	name := "relative-kubeconfig"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("apiVersion: v1\n"), 0o600))
