@@ -96,7 +96,12 @@ func runDiagnoseCmd(
 		return fmt.Errorf("resolve cluster info: %w", err)
 	}
 
-	clientset, err := k8s.NewClientset(resolved.KubeconfigPath, "")
+	contextName, err := diagnoseKubeContext(resolved, nameFlag)
+	if err != nil {
+		return err
+	}
+
+	clientset, err := k8s.NewClientset(resolved.KubeconfigPath, contextName)
 	if err != nil {
 		return fmt.Errorf("build kubernetes client: %w", err)
 	}
@@ -113,6 +118,33 @@ func runDiagnoseCmd(
 	}
 
 	return runDiagnoseTextReport(report, writer)
+}
+
+// diagnoseKubeContext returns the kubeconfig context the diagnosis must target.
+//
+// An explicit --name selects THAT cluster's context, resolved with the same
+// name→context rule 'cluster info' and 'cluster switch' use. An empty context
+// would make the client follow the kubeconfig's current context, so the report
+// would describe whatever cluster happens to be active while carrying the
+// requested name — a silent wrong-cluster diagnosis. A name that does not
+// resolve to exactly one context is an error (not found, or ambiguous), never a
+// fallback to the current context.
+//
+// Without --name the resolved name came from ksail.yaml or from the current
+// context itself; that path keeps following the current context, as before.
+func diagnoseKubeContext(resolved *lifecycle.ResolvedClusterInfo, nameFlag string) (string, error) {
+	if nameFlag == "" {
+		return "", nil
+	}
+
+	contextName, err := resolveClusterContext(resolved.KubeconfigPath, resolved.ClusterName)
+	if err != nil {
+		return "", fmt.Errorf(
+			"resolve kubeconfig context for cluster %q: %w", resolved.ClusterName, err,
+		)
+	}
+
+	return contextName, nil
 }
 
 // runDiagnoseTextReport writes a human-readable diagnostic report including
