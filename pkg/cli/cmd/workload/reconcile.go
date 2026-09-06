@@ -813,9 +813,8 @@ func buildArgoCDApplicationTasks(
 // pollUntilApplicationReady polls a named ArgoCD Application until it is
 // synced and healthy, or the context's deadline expires. On permanent failure,
 // it returns an actionable error including the resource name and failure details.
-// A source-availability error inside the cold-start warm-up window is treated as
-// "not ready yet" rather than a permanent failure, because ArgoCD resolves those
-// itself within seconds of the control plane coming up.
+// Recognized transport failures are retried inside the cold-start warm-up window;
+// a timeout retains the latest failure so the user can diagnose the unavailable source.
 //
 // The caller is expected to provide a context with a deadline (shared across all
 // application tasks) so that the total reconcile time is bounded.
@@ -833,17 +832,16 @@ func pollUntilApplicationReady(
 			ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
 			if err != nil {
 				if argocd.IsColdStartTransient(err, time.Since(start), argoCDSourceWarmupGrace) {
-					return reconcilerclient.CheckResult{Ready: false}, nil
+					return reconcilerclient.CheckResult{Status: err.Error()}, nil
 				}
 
-				return reconcilerclient.CheckResult{}, err //nolint:wrapcheck // identity preserved
+				return reconcilerclient.CheckResult{}, fmt.Errorf("application %q: %w", name, err)
 			}
 
-			// ArgoCD exposes no per-poll status, so Status is left empty.
 			return reconcilerclient.CheckResult{Ready: ready}, nil
 		},
-		func(string) error {
-			return applicationReadinessTimeoutError(name)
+		func(lastStatus string) error {
+			return applicationReadinessTimeoutError(name, lastStatus)
 		},
 	)
 }
@@ -851,10 +849,14 @@ func pollUntilApplicationReady(
 // applicationReadinessTimeoutError returns the actionable error for an ArgoCD
 // Application that did not become ready within the timeout. Hoisted out of the
 // poll loop so the message is defined once instead of duplicated per branch.
-func applicationReadinessTimeoutError(name string) error {
+func applicationReadinessTimeoutError(name, lastStatus string) error {
+	if lastStatus != "" {
+		lastStatus = ": " + lastStatus
+	}
+
 	return fmt.Errorf(
-		"%w — "+
+		"%w%s — "+
 			"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
-		argocd.ErrReconcileTimeout, name,
+		argocd.ErrReconcileTimeout, lastStatus, name,
 	)
 }

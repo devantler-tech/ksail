@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -290,10 +291,9 @@ const (
 	defaultReconcileTimeout       = 5 * time.Minute
 	fluxKustomizationPollInterval = 500 * time.Millisecond
 	argoCDApplicationPollInterval = 500 * time.Millisecond
-	// argoCDSourceWarmupGrace bounds how long a source-availability error is
-	// treated as a control-plane cold start rather than a real failure. ArgoCD
-	// self-heals these within seconds; a source still unavailable after this
-	// window is a genuine misconfiguration and fails with an actionable error.
+	// argoCDSourceWarmupGrace bounds retries for recognized source transport
+	// failures while the control plane starts. Missing sources, access failures,
+	// and unclassified operation failures remain terminal throughout the window.
 	argoCDSourceWarmupGrace = 90 * time.Second
 	reconcileConcurrency    = 5
 	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +
@@ -349,7 +349,7 @@ func retryOnTransientError(
 
 		lastErr = err
 
-		if !netretry.IsRetryable(lastErr) || attempt == maxAttempts {
+		if !isRetryableReconcileError(lastErr) || attempt == maxAttempts {
 			break
 		}
 
@@ -359,11 +359,18 @@ func retryOnTransientError(
 		}
 	}
 
-	if !netretry.IsRetryable(lastErr) {
+	if !isRetryableReconcileError(lastErr) {
 		return lastErr
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// isRetryableReconcileError preserves ArgoCD's permanent and timeout outcomes
+// even when an aggregated diagnostic contains an earlier transport failure.
+func isRetryableReconcileError(err error) bool {
+	return !errors.Is(err, argocd.ErrReconcileTimeout) &&
+		!argocd.IsPermanentApplicationError(err) && netretry.IsRetryable(err)
 }
 
 // waitBeforeRetry blocks for the exponential backoff delay before the next
