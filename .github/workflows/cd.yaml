@@ -22,6 +22,20 @@ permissions:
   contents: read
 
 jobs:
+  validate-release-ref:
+    name: 🏷️ Validate release ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 🏷️ Validate release ref
+        run: .github/scripts/validate-release-ref.sh
+
   # A reused evergreen cask PR can still be ready-for-review (auto-merge armed by the tap) from a
   # previous release that never merged. Demote it to draft BEFORE GoReleaser rewrites its branch —
   # otherwise the tap could auto-merge freshly rewritten, not-yet-validated cask content while this
@@ -29,6 +43,7 @@ jobs:
   # safe and the release run is simply re-run after the wedge is cleared.
   cask-checkpoint:
     name: 🍺 Re-arm cask PR draft checkpoint
+    needs: [validate-release-ref]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -163,6 +178,7 @@ jobs:
 
   vscode-extension:
     name: 🧩 Release VSCode Extension
+    needs: [validate-release-ref]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -281,6 +297,7 @@ jobs:
   # is present before the release is locked by immutable releases (see #4874).
   desktop:
     name: 🧩 Release Desktop App
+    needs: [validate-release-ref]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     permissions:
@@ -342,6 +359,7 @@ jobs:
 
   copilot-plugin:
     name: 🧩 Release Copilot CLI Plugin
+    needs: [validate-release-ref]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Runs in parallel with the other releases — it only opens an auto-merging version-bump
@@ -667,6 +685,7 @@ jobs:
 
   pages-build:
     name: 📄 Build Pages
+    needs: [validate-release-ref]
     runs-on: ubuntu-latest
     # Runs in parallel with the other releases (no GoReleaser artifact dependency). The
     # gated `pages-deploy` and `publish-release` jobs both list it in `needs`, so a docs
@@ -1236,8 +1255,8 @@ jobs:
     name: 🧹 Clean up incomplete release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [publish-release]
-    if: always() && needs.publish-release.result != 'success'
+    needs: [validate-release-ref, publish-release]
+    if: always() && needs.publish-release.result != 'success' && needs.validate-release-ref.result == 'success'
     permissions:
       contents: write
     steps:
