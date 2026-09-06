@@ -14,12 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newNodegroupHTTPClient(t *testing.T, handler http.HandlerFunc) *eksclient.Client {
+func newNodegroupHTTPClient(
+	t *testing.T, handler http.HandlerFunc, options ...eksclient.Option,
+) *eksclient.Client {
 	t.Helper()
 
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	client, err := eksclient.NewClient(t.Context(), "us-east-1", eksclient.WithAWSConfig(aws.Config{
+	options = append(options, eksclient.WithAWSConfig(aws.Config{
 		Region:       "stale-region",
 		BaseEndpoint: aws.String(server.URL),
 		HTTPClient:   server.Client(),
@@ -30,6 +32,7 @@ func newNodegroupHTTPClient(t *testing.T, handler http.HandlerFunc) *eksclient.C
 		),
 		RetryMaxAttempts: 1,
 	}))
+	client, err := eksclient.NewClient(t.Context(), "us-east-1", options...)
 	require.NoError(t, err)
 
 	return client
@@ -167,4 +170,45 @@ func TestListManagedNodegroupsMissingNamesAreUnknown(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInjectedClientsKeepExplicitInventoryConfiguration checks that optional seams
+// do not suppress frozen EKS and CloudFormation inventory client construction.
+//
+
+func TestInjectedClientsKeepExplicitInventoryConfiguration(t *testing.T) {
+	t.Setenv("AWS_PROFILE", "missing-injected-profile")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AMBIENTACCESS")
+
+	calls := 0
+	client := newNodegroupHTTPClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		calls++
+
+		assert.Contains(t, request.Header.Get("Authorization"), "Credential=FROZENACCESS/")
+
+		if request.Method == http.MethodGet {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"nodegroups":[]}`))
+
+			return
+		}
+
+		writer.Header().Set("Content-Type", "text/xml")
+		_, _ = writer.Write([]byte(stackResponseStart + `<StackSummaries/>` + stackResponseEnd))
+	}, eksclient.WithClusterDescriber(fakeDescriber{}), eksclient.WithCallerIdentityPresigner(fakePresigner{}))
+	_, err := client.ListManagedNodegroups(t.Context(), "demo")
+	require.NoError(t, err)
+	exists, err := client.NodegroupStackExists(t.Context(), "demo", "workers")
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Equal(t, 2, calls)
+	_, err = eksclient.NewClient(
+		t.Context(),
+		"us-east-1",
+		eksclient.WithClusterDescriber(
+			fakeDescriber{},
+		),
+		eksclient.WithCallerIdentityPresigner(fakePresigner{}),
+	)
+	require.NoError(t, err, "injected-only construction must not load ambient configuration")
 }

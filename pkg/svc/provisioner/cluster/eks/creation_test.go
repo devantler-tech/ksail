@@ -606,3 +606,31 @@ func TestManagedNodegroupCreationRequiresAuthoritativeStackAbsence(t *testing.T)
 		})
 	}
 }
+
+// TestManagedNodegroupCreationMissingConfigIsNoOp preserves the optional-config
+// behavior for both planning and update without making inventory or mutation calls.
+func TestManagedNodegroupCreationMissingConfigIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	for _, dryRun := range []bool{false, true} {
+		t.Run(strconv.FormatBool(dryRun), func(t *testing.T) {
+			t.Parallel()
+			provisioner, runner, path := newCreationProvisioner(t, creationConfig, allowCreation)
+			require.NoError(t, os.Remove(path))
+			result, err := provisioner.DiffConfig(
+				t.Context(),
+				"",
+				&v1alpha1.ClusterSpec{},
+				&v1alpha1.ClusterSpec{},
+			)
+			require.NoError(t, err)
+			assert.Zero(t, result.TotalChanges())
+			result, err = runCreationUpdate(t, provisioner, dryRun)
+			require.NoError(t, err)
+			assert.Zero(t, result.TotalChanges())
+			assert.Zero(t, runner.gets)
+			assert.Zero(t, runner.creates)
+			assert.Zero(t, runner.scales)
+		})
+	}
+}

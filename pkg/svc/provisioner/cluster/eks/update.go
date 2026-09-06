@@ -98,9 +98,9 @@ type managedNodeGroupConfig struct {
 }
 
 // Update applies configuration changes to a running EKS cluster.
-// The first supported in-place dimension is managed node-group scaling
-// (desiredCapacity/minSize/maxSize); everything else reports as
-// recreate-required and is handled by the orchestrator's recreate flow.
+// Managed node-group scaling is in-place. Experimental managed node-group
+// creation additionally permits verified additions; removals and immutable
+// field changes require the orchestrator's recreate flow.
 func (u *UpdatableProvisioner) Update(
 	ctx context.Context,
 	name string,

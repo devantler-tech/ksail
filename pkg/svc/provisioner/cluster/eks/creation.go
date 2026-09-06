@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -88,6 +89,10 @@ func (u *UpdatableProvisioner) planNodegroupCreation(
 	}
 
 	plan, err := readNodegroupCreationPlan(u.configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, result, nil
+	}
+
 	if err != nil {
 		return nil, result, err
 	}

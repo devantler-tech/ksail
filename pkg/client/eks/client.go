@@ -201,7 +201,7 @@ func NewClientWithCredentialRequirement(
 }
 
 // NewClient constructs a Client. Unless the existing DescribeCluster and token-presigning seams are
-// both injected, it resolves the AWS configuration once and builds the missing SDK clients. A
+// both injected without WithAWSConfig, it resolves the AWS configuration once and builds missing SDK clients. A
 // deliberately partial injected client must also provide WithCallerIdentityGetter before using
 // CallerAccountID; preserving that test seam avoids an unexpected config dependency for older
 // consumers that only need DescribeCluster and MintToken.
@@ -303,7 +303,7 @@ func (c *Client) MintToken(ctx context.Context, clusterName string) (string, err
 }
 
 func (c *Client) configureMissingSDKClients(ctx context.Context, region string) error {
-	if c.describer != nil && c.presigner != nil {
+	if c.describer != nil && c.presigner != nil && c.awsConfig == nil {
 		return nil
 	}
 
