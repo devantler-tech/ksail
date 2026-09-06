@@ -321,7 +321,7 @@ export interface KSailClusterConfiguration {
        */
       workers?: number;
       /**
-       * Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version.
+       * Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. EKS refuses downgrades. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version.
        */
       kubernetesVersion?: string;
       /**

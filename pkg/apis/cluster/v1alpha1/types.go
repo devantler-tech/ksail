@@ -178,7 +178,7 @@ type ClusterSpec struct {
 	// confirmation-gated recreation for Kind/K3d). Override per invocation with the
 	// --kubernetes-version flag (precedence: flag > env > config > default).
 	// EKS never discovers a latest version automatically and refuses downgrades.
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version."` //nolint:lll
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. EKS refuses downgrades. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags
