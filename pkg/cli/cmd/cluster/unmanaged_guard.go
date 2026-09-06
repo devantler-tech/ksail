@@ -181,33 +181,9 @@ func kubeconfigHasResolvedClusterContext(resolved *lifecycle.ResolvedClusterInfo
 	return false
 }
 
-// parseEksctlContextTarget recognizes both identity-qualified and bare eksctl kubeconfig contexts.
-// Parsing from the last @ keeps IAM identities opaque; parsing the target at its last dot avoids
-// prefix matches between different cluster names.
+// parseEksctlContextTarget shares exact EKS target parsing with lifecycle detection.
 func parseEksctlContextTarget(contextName string) (string, string, bool) {
-	target := contextName
-	if identityEnd := strings.LastIndex(target, "@"); identityEnd >= 0 {
-		target = target[identityEnd+1:]
-	}
-
-	target, found := strings.CutSuffix(target, ".eksctl.io")
-	if !found {
-		return "", "", false
-	}
-
-	regionStart := strings.LastIndex(target, ".")
-	if regionStart <= 0 || regionStart == len(target)-1 {
-		return "", "", false
-	}
-
-	clusterName := target[:regionStart]
-	region := target[regionStart+1:]
-
-	if strings.Contains(clusterName, ".") || strings.Contains(region, ".") {
-		return "", "", false
-	}
-
-	return clusterName, region, true
+	return clusterdetector.ParseEksctlContextTarget(contextName)
 }
 
 // eksctlContextMatchesCluster recognizes eksctl's real kubeconfig context shape without treating a
@@ -367,6 +343,11 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 		return nil
 	}
 
+	restored, err := restoreSelectedAWSContextOptions(resolved)
+	if err != nil || restored {
+		return err
+	}
+
 	region := strings.TrimSpace(resolved.AWSRegion)
 	if region != "" {
 		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
@@ -401,6 +382,32 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	resolved.AWSRegion = strings.TrimSpace(ownership.Region)
 
 	return nil
+}
+
+// restoreSelectedAWSContextOptions restores the selected target's mapping before consulting
+// region variables. Mappings captured for other regions must not influence this context's target.
+func restoreSelectedAWSContextOptions(resolved *lifecycle.ResolvedClusterInfo) (bool, error) {
+	if resolved.AWSContextRegion == "" {
+		return false, nil
+	}
+
+	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, resolved.AWSContextRegion)
+	if err != nil {
+		if isRestorableOwnershipStateAbsence(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("load selected EKS context's AWS credential mappings: %w", err)
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+	resolved.AWSRegion = lifecycle.ResolveAWSRegion(resolved.AWSOpts, nil)
+	if resolved.AWSRegion == "" {
+		resolved.AWSRegion = resolved.AWSContextRegion
+	}
+
+	return true, nil
 }
 
 func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {

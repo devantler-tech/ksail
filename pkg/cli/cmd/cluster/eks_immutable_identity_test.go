@@ -455,17 +455,18 @@ func persistStandaloneEKSIdentity(
 		t,
 		clusterName,
 		"ap-southeast-2",
-		"123456789012",
 		createdAt,
 	)
 }
 
 func persistStandaloneEKSIdentityInRegion(
 	t *testing.T,
-	clusterName, region, accountID string,
+	clusterName, region string,
 	createdAt time.Time,
 ) {
 	t.Helper()
+
+	const accountID = "123456789012"
 
 	require.NoError(t, state.SaveEKSOwnershipState(
 		clusterName,
@@ -492,7 +493,6 @@ func configureStandaloneEKSIdentityInRegion(
 		t,
 		clusterName,
 		region,
-		"123456789012",
 		immutableIdentityTime(),
 	)
 	setEKSIdentityClient(t, &fakeEKSIdentityClient{

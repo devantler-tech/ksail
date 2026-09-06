@@ -132,6 +132,9 @@ type ResolvedClusterInfo struct {
 	// AWSRegion is the resolved AWS region for EKS operations.
 	// Empty defers region resolution to eksctl (AWS_REGION env / active profile).
 	AWSRegion string
+	// AWSContextRegion is the region of the context that supplied ClusterName. The ownership
+	// guard uses it as a fallback after restoring the target's saved AWS environment mappings.
+	AWSContextRegion string
 	// AWSRegionFromConfig reports that AWSRegion came from the loaded EKS config rather than the
 	// configured region environment variable. Mutating standalone commands use this provenance to
 	// avoid applying one config's region to a different resolved target.
@@ -254,12 +257,7 @@ func resolveClusterInfo(
 
 	// Fall back to kubeconfig context detection
 	if resolved.ClusterName == "" {
-		resolveFromKubecontext(
-			commandContext(cmd),
-			&resolved.ClusterName,
-			&resolved.Provider,
-			resolved.KubeconfigPath,
-		)
+		resolveFromKubecontext(commandContext(cmd), &resolved)
 	}
 
 	if resolved.ClusterName == "" {
@@ -468,19 +466,33 @@ func commandContext(cmd *cobra.Command) context.Context {
 // resolveFromKubecontext fills missing cluster info from the current kubeconfig context.
 func resolveFromKubecontext(
 	ctx context.Context,
-	clusterName *string,
-	provider *v1alpha1.Provider,
-	kubeconfigPath string,
+	resolved *ResolvedClusterInfo,
 ) {
-	clusterInfo, err := clusterdetector.DetectInfo(ctx, kubeconfigPath, "")
+	clusterInfo, err := clusterdetector.DetectInfo(ctx, resolved.KubeconfigPath, "")
 	if err != nil || clusterInfo == nil {
 		return
 	}
 
-	*clusterName = clusterInfo.ClusterName
+	resolved.ClusterName = clusterInfo.ClusterName
 
-	if *provider == "" {
-		*provider = clusterInfo.Provider
+	if resolved.Provider == "" {
+		resolved.Provider = clusterInfo.Provider
+	}
+
+	if resolved.Provider == v1alpha1.ProviderAWS &&
+		clusterInfo.Distribution == v1alpha1.DistributionEKS {
+		_, resolved.AWSContextRegion, _ = clusterdetector.ParseEksctlContextTarget(
+			clusterInfo.Context,
+		)
+		if resolved.AWSRegion == "" {
+			resolved.AWSRegion = ResolveAWSRegion(resolved.AWSOpts, nil)
+		}
+
+		if resolved.AWSRegion == "" {
+			// Keep the name and region from the same selected context. Other contexts
+			// for this name are not alternative targets for an implicit selection.
+			resolved.AWSRegion = resolved.AWSContextRegion
+		}
 	}
 }
 
