@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	stackResponseStart = `<ListStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">` +
+	maxStackRequestBytes = 1 << 10
+	stackResponseStart   = `<ListStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">` +
 		`<ListStacksResult>`
 	stackResponseEnd = `</ListStacksResult></ListStacksResponse>`
 )
@@ -37,6 +38,8 @@ func TestNodegroupStackExistsFindsCollisionAfterFirstPage(t *testing.T) {
 						request.Header.Get("Authorization"),
 						"/us-east-1/cloudformation/aws4_request",
 					)
+
+					request.Body = http.MaxBytesReader(writer, request.Body, maxStackRequestBytes)
 
 					if !assert.NoError(t, request.ParseForm()) {
 						return

@@ -343,6 +343,13 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 		}
 	}
 
+	c.configureMissingEKSClients(cfg)
+	c.configureMissingSTSClients(cfg)
+
+	return nil
+}
+
+func (c *Client) configureMissingEKSClients(cfg aws.Config) {
 	if c.describer == nil {
 		c.describer = awseks.NewFromConfig(cfg)
 	}
@@ -354,10 +361,6 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 	if c.nodegroupStacks == nil {
 		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 	}
-
-	c.configureMissingSTSClients(cfg)
-
-	return nil
 }
 
 func (c *Client) configureMissingSTSClients(cfg aws.Config) {
