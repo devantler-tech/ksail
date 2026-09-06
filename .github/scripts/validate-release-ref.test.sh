@@ -6,6 +6,7 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 validator="$script_dir/validate-release-ref.sh"
 checks=0
 
+# expect_accept checks that a valid ref passes the production validator.
 expect_accept() {
 	local ref=$1 output
 	if ! output=$(GITHUB_REF="$ref" bash "$validator" 2>&1); then
@@ -15,6 +16,7 @@ expect_accept() {
 	checks=$((checks + 1))
 }
 
+# expect_reject checks rejection and a safe, single-line diagnostic naming the ref.
 expect_reject() {
 	local ref=$1 output quoted
 	if output=$(GITHUB_REF="$ref" bash "$validator" 2>&1); then

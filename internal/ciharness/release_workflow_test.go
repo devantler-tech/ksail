@@ -21,6 +21,7 @@ type releaseJob struct {
 	Steps           []harnessStep     `yaml:"steps"`
 }
 
+// readReleaseJobs loads the release dependency graph from the real CD workflow.
 func readReleaseJobs(t *testing.T) map[string]releaseJob {
 	t.Helper()
 
@@ -34,6 +35,7 @@ func readReleaseJobs(t *testing.T) map[string]releaseJob {
 	return workflow.Jobs
 }
 
+// TestReleaseJobsRequireValidatedRef prevents publish or cleanup paths from bypassing validation.
 func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +72,7 @@ func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 	}
 }
 
+// releaseDependsOnValidation follows dependencies without looping through cyclic graphs.
 func releaseDependsOnValidation(
 	jobs map[string]releaseJob,
 	name string,
@@ -94,6 +97,7 @@ func releaseDependsOnValidation(
 	return false
 }
 
+// TestReleaseRefValidationStep verifies the runner executes validation and propagates rejection.
 func TestReleaseRefValidationStep(t *testing.T) {
 	t.Parallel()
 	requireTestExecutable(t, "bash")
@@ -139,6 +143,7 @@ func TestReleaseRefValidationStep(t *testing.T) {
 	}
 }
 
+// envWithoutReleaseRef isolates each fixture from a release ref inherited from CI.
 func envWithoutReleaseRef() []string {
 	var result []string
 
@@ -151,6 +156,7 @@ func envWithoutReleaseRef() []string {
 	return result
 }
 
+// TestReleaseRefScript exercises valid, malformed, and boundary refs through the shell validator.
 func TestReleaseRefScript(t *testing.T) {
 	t.Parallel()
 	requireTestExecutable(t, "bash")
