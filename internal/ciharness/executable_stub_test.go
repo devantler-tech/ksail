@@ -137,7 +137,14 @@ func execAfterSignal(t *testing.T, stubPath string, inherit *os.File) (string, e
 	var stderr bytes.Buffer
 
 	//nolint:gosec // stubPath is a test-owned temp file; the shell fragment is a constant.
-	child := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", stubPath)
+	child := exec.CommandContext(
+		t.Context(),
+		"sh",
+		"-c",
+		`read -r line && exec "$1"`,
+		"sh",
+		stubPath,
+	)
 	child.Stderr = &stderr
 
 	if inherit != nil {
