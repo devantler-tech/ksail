@@ -14,7 +14,11 @@ import (
 
 // newKubeconfigFlagCommand builds a command carrying the kubectl --kubeconfig
 // flag, optionally marked as explicitly set by the user.
-func newKubeconfigFlagCommand(t *testing.T, value string, changed bool) (*cobra.Command, *pflag.Flag) {
+func newKubeconfigFlagCommand(
+	t *testing.T,
+	value string,
+	changed bool,
+) (*cobra.Command, *pflag.Flag) {
 	t.Helper()
 
 	cmd := &cobra.Command{Use: "wait"}
