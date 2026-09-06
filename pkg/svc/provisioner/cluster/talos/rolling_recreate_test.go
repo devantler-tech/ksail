@@ -71,22 +71,23 @@ func TestRollingReplaceSingleNode_CleanupFailurePreservesServer(t *testing.T) {
 				)
 			}
 
-			node, getErr := clientset.CoreV1().
-				Nodes().
-				Get(t.Context(), server.Name, metav1.GetOptions{})
-			require.NoError(t, getErr)
-			assert.Equal(t, "original-node", string(node.UID))
-			assert.True(
-				t,
-				node.Spec.Unschedulable,
-				"uncertain membership must not automatically uncordon the node",
-			)
+			assertOriginalNodeRemainsCordoned(t, clientset, server.Name)
 
 			if leaveFailure {
 				assert.ErrorIs(t, err, errMembershipUnavailable)
 			}
 		})
 	}
+}
+
+func assertOriginalNodeRemainsCordoned(t *testing.T, clientset *fake.Clientset, name string) {
+	t.Helper()
+
+	node, err := clientset.CoreV1().Nodes().Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "original-node", string(node.UID))
+	assert.True(t, node.Spec.Unschedulable,
+		"uncertain membership must not automatically uncordon the node")
 }
 
 const (
