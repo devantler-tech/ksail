@@ -36,7 +36,9 @@ func TestRollingReplaceSingleNode_CleanupFailurePreservesServer(t *testing.T) {
 
 			transport := &membershipCloudTransport{address: "192.0.2.1"}
 
-			provisioner := newClientErrProvisioner(t)
+			provisioner := newClientErrProvisioner(t).
+				WithTalosConfigsForTest(loadConfigs(t)).
+				WithTalosOptions(v1alpha1.OptionsTalos{ISO: v1alpha1.DefaultTalosISO})
 			if leaveFailure {
 				provisioner.WithEtcdClientFactoryForTest(
 					func(context.Context, string) (talosprovisioner.EtcdMembershipClientForTest, error) {

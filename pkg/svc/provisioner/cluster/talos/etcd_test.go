@@ -140,8 +140,9 @@ func membershipContainer(index, address string) container.Summary {
 // membershipCloudTransport serves provider reads entirely in memory and records
 // every attempted write, so a forbidden server deletion is directly observable.
 type membershipCloudTransport struct {
-	address string
-	writes  []string
+	address   string
+	writes    []string
+	isoStatus int
 }
 
 func (transport *membershipCloudTransport) RoundTrip(
@@ -157,6 +158,24 @@ func (transport *membershipCloudTransport) RoundTrip(
 		}]}`,
 		transport.address,
 	)
+	if request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/isos/") {
+		body = `{"iso":{"id":` + strings.TrimPrefix(request.URL.Path, "/isos/") + `}}`
+
+		if transport.isoStatus != 0 {
+			statusCode = transport.isoStatus
+
+			code := "forbidden"
+			if statusCode == http.StatusNotFound {
+				code = "not_found"
+			}
+
+			body = fmt.Sprintf(
+				`{"error":{"code":%q,"message":"ISO lookup rejected by fixture"}}`,
+				code,
+			)
+		}
+	}
+
 	if request.Method != http.MethodGet {
 		transport.writes = append(transport.writes, request.Method+" "+request.URL.Path)
 		statusCode = http.StatusForbidden
