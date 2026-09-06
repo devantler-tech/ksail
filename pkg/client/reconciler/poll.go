@@ -81,7 +81,9 @@ func PollUntilReady(
 			return nil
 		}
 
-		lastStatus = result.Status
+		if result.Status != "" {
+			lastStatus = result.Status
+		}
 
 		select {
 		case <-ctx.Done():

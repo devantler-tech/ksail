@@ -118,3 +118,28 @@ func TestPollUntilReadyTimeoutUsesLastStatus(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "last status: Progressing")
 }
+
+func TestPollUntilReadyRetainsMostRecentNonEmptyStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, statuses := range [][]string{{"connection refused", ""}, {"connection refused", "recovering", ""}} {
+		t.Run(statuses[len(statuses)-2], func(t *testing.T) {
+			t.Parallel()
+
+			index := 0
+			err := reconciler.PollUntilReady(t.Context(), testPollInterval,
+				func(context.Context) (reconciler.CheckResult, error) {
+					if index == len(statuses) {
+						return reconciler.CheckResult{}, context.DeadlineExceeded
+					}
+
+					status := statuses[index]
+					index++
+
+					return reconciler.CheckResult{Status: status}, nil
+				}, timeoutErr)
+			require.ErrorIs(t, err, errTimeoutPoll)
+			assert.Contains(t, err.Error(), statuses[len(statuses)-2])
+		})
+	}
+}

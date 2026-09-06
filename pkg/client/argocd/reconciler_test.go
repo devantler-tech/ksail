@@ -558,6 +558,42 @@ func TestApplicationTransportErrors(t *testing.T) {
 	}
 }
 
+func TestComparisonTransportFormsPreserveTheirLocationContext(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		"unexpected EOF", "rpc error: desc = EOF", "EOF", "context deadline exceeded",
+		"rpc error: code = DeadlineExceeded desc = context deadline exceeded",
+	} {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+
+			for _, location := range []string{"ComparisonError", "SyncError", "Failed", "Error"} {
+				t.Run(location, func(t *testing.T) {
+					t.Parallel()
+
+					app := newFakeApplicationWithOperation("test-app", location, message)
+					if location == "ComparisonError" || location == "SyncError" {
+						app = newFakeApplicationWithConditions("test-app", []map[string]any{
+							{"type": location, "message": message},
+						})
+					}
+
+					client := newTestArgoCDReconciler(app)
+					_, err := client.CheckNamedApplicationReady(t.Context(), "test-app")
+					require.Error(t, err)
+					assert.Equal(
+						t,
+						location == "ComparisonError",
+						argocd.IsColdStartTransient(err, 0, time.Minute),
+					)
+					assert.False(t, argocd.IsColdStartTransient(err, time.Minute, time.Minute))
+				})
+			}
+		})
+	}
+}
+
 // TestApplicationPermanentErrors keeps absence, denied access, and ambiguous failures terminal.
 func TestApplicationPermanentErrors(t *testing.T) {
 	t.Parallel()
@@ -566,8 +602,6 @@ func TestApplicationPermanentErrors(t *testing.T) {
 		message string
 		source  bool
 	}{
-		{message: "sync hook failed: context deadline exceeded"},
-		{message: "rpc error: code = DeadlineExceeded desc = context deadline exceeded"},
 		{message: "failed to fetch: manifest unknown", source: true},
 		{message: "repository not found", source: true},
 		{message: "unable to resolve revision: does not exist", source: true},
@@ -578,6 +612,7 @@ func TestApplicationPermanentErrors(t *testing.T) {
 		{message: "manifest unknown (previous attempt: i/o timeout)", source: true},
 		{message: "invalid manifest: unknown resource kind"},
 		{message: "comparison failed"},
+		{message: "EOF is not allowed in this manifest"},
 		{message: ""},
 	} {
 		t.Run(testCase.message, func(t *testing.T) {

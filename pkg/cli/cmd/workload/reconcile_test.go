@@ -2,6 +2,8 @@ package workload_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -135,4 +138,54 @@ func TestPollArgoCDApplicationCancellation(t *testing.T) {
 	err := workload.ExportPollUntilApplicationReady(ctx, client, "test-app")
 	require.ErrorIs(t, err, context.Canceled)
 	assert.NotErrorIs(t, err, argocd.ErrReconcileTimeout)
+}
+
+func TestPermanentArgoCDPollFailureDoesNotEscapeIntoOuterRetries(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		"manifest unknown (previous attempt: i/o timeout)",
+		"permission denied (previous attempt: connection refused)",
+	} {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+
+			client := newArgoCDPollClient(func(k8stesting.Action) (bool, runtime.Object, error) {
+				return true, argoCDPollApplication(message), nil
+			})
+			permanent := workload.ExportPollUntilApplicationReady(t.Context(), client, "test-app")
+			require.Error(t, permanent)
+
+			transientClient := newArgoCDPollClient(
+				func(k8stesting.Action) (bool, runtime.Object, error) {
+					return true, argoCDPollApplication("connection refused"), nil
+				},
+			)
+			_, transient := transientClient.CheckNamedApplicationReady(t.Context(), "test-app")
+			require.Error(t, transient)
+
+			for _, failure := range []error{
+				permanent, errors.Join(transient, permanent), errors.Join(permanent, transient),
+			} {
+				attempts := 0
+				cmd := &cobra.Command{}
+				cmd.SetOut(io.Discard)
+				cmd.SetErr(io.Discard)
+				err := workload.ExportRetryOnTransientError(
+					t.Context(),
+					cmd,
+					3,
+					0,
+					0,
+					func() error {
+						attempts++
+
+						return failure
+					},
+				)
+				require.ErrorIs(t, err, permanent)
+				assert.Equal(t, 1, attempts)
+			}
+		})
+	}
 }

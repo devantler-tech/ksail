@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -348,7 +349,7 @@ func retryOnTransientError(
 
 		lastErr = err
 
-		if !netretry.IsRetryable(lastErr) || attempt == maxAttempts {
+		if !isRetryableReconcileError(lastErr) || attempt == maxAttempts {
 			break
 		}
 
@@ -358,11 +359,17 @@ func retryOnTransientError(
 		}
 	}
 
-	if !netretry.IsRetryable(lastErr) {
+	if !isRetryableReconcileError(lastErr) {
 		return lastErr
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// isRetryableReconcileError preserves ArgoCD's permanent classification even
+// when an aggregated diagnostic also contains an earlier transport failure.
+func isRetryableReconcileError(err error) bool {
+	return !argocd.IsPermanentApplicationError(err) && netretry.IsRetryable(err)
 }
 
 // waitBeforeRetry blocks for the exponential backoff delay before the next

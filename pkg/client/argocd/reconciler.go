@@ -158,7 +158,7 @@ func (r *Reconciler) checkOperationState(app *unstructured.Unstructured) error {
 	message, _, _ := unstructured.NestedString(operationState, "message")
 
 	if phase == "Error" || phase == "Failed" {
-		return classifyApplicationError(message)
+		return classifyApplicationError(message, false)
 	}
 
 	return nil
@@ -170,7 +170,10 @@ func (r *Reconciler) checkConditions(app *unstructured.Unstructured) error {
 
 	for _, cond := range reconciler.ParseConditions(app) {
 		if cond.Type == "ComparisonError" || cond.Type == "SyncError" {
-			failure = preferPermanentFailure(failure, classifyApplicationError(cond.Message))
+			failure = preferPermanentFailure(
+				failure,
+				classifyApplicationError(cond.Message, cond.Type == "ComparisonError"),
+			)
 		}
 	}
 
@@ -184,6 +187,8 @@ type sourceAvailabilityError struct {
 	transient bool
 }
 
+var errPermanentApplicationFailure = errors.New("permanent ArgoCD application failure")
+
 // Error includes the source failure and the public sentinel's existing guidance.
 func (e *sourceAvailabilityError) Error() string {
 	return fmt.Sprintf("%s: %s", ErrSourceNotAvailable, e.message)
@@ -194,8 +199,20 @@ func (e *sourceAvailabilityError) Unwrap() error {
 	return ErrSourceNotAvailable
 }
 
+// Is exposes permanent classification through wrappers and errors.Join without
+// changing the diagnostic text or the existing source-availability sentinel.
+func (e *sourceAvailabilityError) Is(target error) bool {
+	return target == errPermanentApplicationFailure && !e.transient
+}
+
+// IsPermanentApplicationError reports whether any wrapped or joined application
+// error is permanent. Outer retries must honor this before matching network text.
+func IsPermanentApplicationError(err error) bool {
+	return errors.Is(err, errPermanentApplicationFailure) || errors.Is(err, ErrOperationFailed)
+}
+
 // classifyApplicationError retries only recognized transport failures and rejects ambiguous errors.
-func classifyApplicationError(message string) error {
+func classifyApplicationError(message string, comparison bool) error {
 	lower := strings.ToLower(message)
 
 	// Explicit absence and denied access stay terminal even when the message also
@@ -215,11 +232,25 @@ func classifyApplicationError(message string) error {
 		return &sourceAvailabilityError{message: message, transient: true}
 	}
 
+	if comparison && comparisonTransportError(lower) {
+		return &sourceAvailabilityError{message: message, transient: true}
+	}
+
 	if containsAny(lower, "failed to fetch", "unable to resolve") {
 		return &sourceAvailabilityError{message: message}
 	}
 
 	return fmt.Errorf("%w: %s", ErrOperationFailed, message)
+}
+
+// comparisonTransportError recognizes transport details whose meaning is
+// ambiguous in sync hooks or failed operation states. EOF must end the detail.
+func comparisonTransportError(message string) bool {
+	lower := strings.TrimSpace(message)
+
+	return strings.Contains(lower, "context deadline exceeded") || lower == "eof" ||
+		strings.HasSuffix(lower, "unexpected eof") || strings.HasSuffix(lower, ": eof") ||
+		strings.HasSuffix(lower, "= eof")
 }
 
 // containsAny matches normalized ArgoCD diagnostics against recognized failure descriptions.
@@ -246,7 +277,7 @@ func preferPermanentFailure(current, candidate error) error {
 func isTransientSourceError(err error) bool {
 	var sourceErr *sourceAvailabilityError
 
-	return errors.As(err, &sourceErr) && sourceErr.transient
+	return !IsPermanentApplicationError(err) && errors.As(err, &sourceErr) && sourceErr.transient
 }
 
 // isApplicationSynced checks if the application is synced and healthy.
