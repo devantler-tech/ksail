@@ -236,7 +236,17 @@ func (p *Provisioner) rollingReplaceSingleNode(
 
 	// 2. Control-plane etcd membership cleanup before removal.
 	if role == RoleControlPlane {
-		p.etcdCleanupBeforeRemoval(ctx, oldIP)
+		cleanupErr := p.etcdCleanupBeforeRemoval(ctx, oldIP)
+		if cleanupErr != nil {
+			// Leave the server and its current scheduling state intact. An
+			// ambiguous leave failure cannot safely authorize either deletion or
+			// automatic uncordon of a node that may already have left etcd.
+			return fmt.Errorf(
+				"retaining control-plane server %s after etcd cleanup failure: %w",
+				oldServer.Name,
+				cleanupErr,
+			)
+		}
 	}
 
 	// 3. Delete the outgoing Hetzner server.
