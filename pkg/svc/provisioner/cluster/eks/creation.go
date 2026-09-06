@@ -104,7 +104,16 @@ func (u *UpdatableProvisioner) planNodegroupCreation(
 
 	for _, group := range plan.desired {
 		_, exists := live.groups[group.Name]
+
 		plan.additions[group.Name] = !exists
+		if exists {
+			continue
+		}
+
+		err = plan.validateCreationTagBudget(group.Name)
+		if err != nil {
+			return nil, result, err
+		}
 	}
 
 	return plan, diffManagedNodegroups(plan.desired, live.groups, true), nil

@@ -157,6 +157,15 @@ reports an addition as applied only after the live managed group is `ACTIVE` and
 its declared capacity and instance type match. A `ksail.io/nodegroup-creation-id`
 tag identifies the group created by that update.
 
+Before applying any changes, KSail checks each addition against a conservative
+50-slot tag budget. It counts metadata tags both in the stack and in the merged
+group tags, includes the ownership marker and eksctl node-group identifiers, and
+reserves four slots for eksctl stack identifiers and generated resource names.
+This reserve also applies when an external role or launch template needs fewer
+tags. With no metadata tags, up to 43 distinct user tag keys fit this budget;
+metadata tags reduce that allowance. Existing groups and scaling are unaffected.
+Other AWS and eksctl tag restrictions still apply.
+
 The selected AWS identity also needs `eks:ListNodegroups`,
 `eks:DescribeNodegroup`, and `cloudformation:ListStacks` read permissions. KSail
 reads every inventory page and refuses creation if a live or unfinished eksctl
