@@ -61,3 +61,62 @@ func assertUnavailableISOPreservesNode(t *testing.T, role string, status int) {
 	assert.Empty(t, membership.calls, "unavailable ISO must prevent membership mutation")
 	assert.Empty(t, transport.writes, "unavailable ISO must prevent server deletion")
 }
+
+func TestRollingReplaceSingleNode_RemainingPrerequisitesPreserveNode(t *testing.T) {
+	t.Parallel()
+
+	for _, failure := range []string{"ISO architecture", "floating IP lookup", "control-plane lookup", "VIP token"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+
+			transport := &membershipCloudTransport{address: "192.0.2.1"}
+			floatingIP := failure != "ISO architecture"
+			expected := "hcloud API token"
+
+			if failure == "ISO architecture" {
+				transport.isoArchitecture = "x86"
+				transport.serverArchitecture = "arm"
+				expected = "architecture"
+			}
+
+			if failure == "floating IP lookup" {
+				transport.floatingIPStatus = http.StatusForbidden
+				expected = "floating IP"
+			}
+
+			if failure == "control-plane lookup" {
+				transport.serverStatus = http.StatusForbidden
+				expected = "listing control planes"
+			}
+
+			membership := &membershipClient{leaveErr: errMembershipUnavailable}
+			missingEnvironmentVariable := "KSAIL_TEST_ABSENT_REPLACEMENT_ENV"
+			provisioner := newClientErrProvisioner(t).
+				WithTalosConfigsForTest(loadConfigs(t)).
+				WithTalosOptions(v1alpha1.OptionsTalos{ISO: v1alpha1.DefaultTalosISO}).
+				WithHetznerOptions(v1alpha1.OptionsHetzner{
+					ControlPlaneServerType: "cax11", FloatingIPEnabled: floatingIP,
+					TokenEnvVar: missingEnvironmentVariable,
+				}).WithEtcdClientFactoryForTest(func(
+				context.Context, string,
+			) (talosprovisioner.EtcdMembershipClientForTest, error) {
+				return membership, nil
+			})
+			server := &hcloud.Server{ID: 1, Name: "scale-cluster-control-plane-1"}
+			server.PublicNet.IPv4.IP = net.ParseIP(transport.address)
+			clientset := fake.NewClientset()
+			err := provisioner.RollingReplaceSingleNodeForTest(
+				t.Context(),
+				clientset,
+				newMembershipCloud(transport),
+				"scale-cluster",
+				talosprovisioner.RoleControlPlane,
+				server,
+			)
+			require.ErrorContains(t, err, expected)
+			assert.Empty(t, clientset.Actions())
+			assert.Empty(t, membership.calls)
+			assert.Empty(t, transport.writes)
+		})
+	}
+}

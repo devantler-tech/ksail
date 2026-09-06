@@ -140,9 +140,13 @@ func membershipContainer(index, address string) container.Summary {
 // membershipCloudTransport serves provider reads entirely in memory and records
 // every attempted write, so a forbidden server deletion is directly observable.
 type membershipCloudTransport struct {
-	address   string
-	writes    []string
-	isoStatus int
+	address            string
+	writes             []string
+	isoStatus          int
+	isoArchitecture    string
+	serverArchitecture string
+	floatingIPStatus   int
+	serverStatus       int
 }
 
 func (transport *membershipCloudTransport) RoundTrip(
@@ -159,20 +163,29 @@ func (transport *membershipCloudTransport) RoundTrip(
 		transport.address,
 	)
 	if request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/isos/") {
-		body = `{"iso":{"id":` + strings.TrimPrefix(request.URL.Path, "/isos/") + `}}`
+		body, statusCode = transport.isoResponse(request)
+	}
 
-		if transport.isoStatus != 0 {
-			statusCode = transport.isoStatus
+	if request.URL.Path == "/servers" && transport.serverStatus != 0 {
+		statusCode = transport.serverStatus
+		body = `{"error":{"code":"forbidden","message":"server lookup rejected by fixture"}}`
+	}
 
-			code := "forbidden"
-			if statusCode == http.StatusNotFound {
-				code = "not_found"
-			}
+	if request.URL.Path == "/server_types" {
+		body = fmt.Sprintf(
+			`{"server_types":[{"id":1,"name":%q,"architecture":%q}]}`,
+			request.URL.Query().Get("name"),
+			transport.serverArchitecture,
+		)
+	}
 
-			body = fmt.Sprintf(
-				`{"error":{"code":%q,"message":"ISO lookup rejected by fixture"}}`,
-				code,
-			)
+	if request.URL.Path == "/floating_ips" {
+		body = `{"floating_ips":[{"id":7,"name":"scale-cluster-api","ip":"192.0.2.10","type":"ipv4",
+			"labels":{"ksail.owned":"true","ksail.cluster.name":"scale-cluster"}}]}`
+
+		if transport.floatingIPStatus != 0 {
+			statusCode = transport.floatingIPStatus
+			body = `{"error":{"code":"forbidden","message":"floating IP lookup rejected by fixture"}}`
 		}
 	}
 
@@ -194,4 +207,38 @@ func newMembershipCloud(transport *membershipCloudTransport) *hetzner.Provider {
 		hcloud.WithEndpoint("https://membership.invalid"),
 		hcloud.WithHTTPClient(&http.Client{Transport: transport}),
 	))
+}
+
+func (transport *membershipCloudTransport) isoResponse(request *http.Request) (string, int) {
+	var body string
+
+	statusCode := http.StatusOK
+
+	body = `{"iso":{"id":` + strings.TrimPrefix(
+		request.URL.Path,
+		"/isos/",
+	) + `,"type":"custom"}}`
+	if transport.isoArchitecture != "" {
+		body = fmt.Sprintf(
+			`{"iso":{"id":%s,"type":"public","architecture":%q}}`,
+			strings.TrimPrefix(request.URL.Path, "/isos/"),
+			transport.isoArchitecture,
+		)
+	}
+
+	if transport.isoStatus != 0 {
+		statusCode = transport.isoStatus
+
+		code := "forbidden"
+		if statusCode == http.StatusNotFound {
+			code = "not_found"
+		}
+
+		body = fmt.Sprintf(
+			`{"error":{"code":%q,"message":"ISO lookup rejected by fixture"}}`,
+			code,
+		)
+	}
+
+	return body, statusCode
 }

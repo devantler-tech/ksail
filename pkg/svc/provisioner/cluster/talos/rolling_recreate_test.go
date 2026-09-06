@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -384,6 +385,7 @@ func TestReattachFloatingIPAfterControlPlaneReplacement_Unassigned(t *testing.T)
 		"fip-cluster",
 		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
 		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+		0,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), assignCalls.Load())
@@ -411,6 +413,7 @@ func TestReattachFloatingIPAfterControlPlaneReplacement_DoesNotCreate(t *testing
 		"fip-cluster",
 		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
 		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+		0,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), calls.create.Load())
@@ -458,6 +461,7 @@ func TestReattachFloatingIPAfterControlPlaneReplacement_PreservesSurvivor(t *tes
 		"fip-cluster",
 		&hcloud.Server{ID: 11, Name: "fip-cluster-cp-0"},
 		&hcloud.Server{ID: 12, Name: "fip-cluster-cp-0"},
+		0,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), assignCalls.Load())
@@ -541,4 +545,27 @@ func TestNodeIsReady(t *testing.T) {
 
 	assert.False(t, talosprovisioner.NodeIsReadyForTest(&corev1.Node{}),
 		"node with no conditions is not ready")
+}
+
+func TestReplacementFloatingIPIdentityDriftPreventsReassignment(t *testing.T) {
+	t.Parallel()
+
+	for _, exists := range []bool{false, true} {
+		t.Run(fmt.Sprintf("exists=%t", exists), func(t *testing.T) {
+			t.Parallel()
+
+			calls := &fipUpdateCalls{}
+			server := fipUpdateTestServer(t, exists, calls)
+			provisioner := talosprovisioner.NewProvisioner(nil, nil).
+				WithHetznerOptions(v1alpha1.OptionsHetzner{FloatingIPEnabled: true}).
+				WithLogWriter(io.Discard)
+			err := provisioner.ReattachFloatingIPAfterControlPlaneReplacementForTest(
+				t.Context(), newFipUpdateProvider(server.URL), "fip-cluster",
+				&hcloud.Server{ID: 11}, &hcloud.Server{ID: 12}, 8,
+			)
+			require.ErrorIs(t, err, talosprovisioner.ErrFloatingIPMissingForControlPlaneConfig)
+			assert.Zero(t, calls.assign.Load())
+			assert.Zero(t, calls.create.Load())
+		})
+	}
 }
