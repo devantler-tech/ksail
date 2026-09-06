@@ -283,10 +283,10 @@ func (r eksPromptLockReader) Read(buffer []byte) (int, error) {
 }
 
 // TestStandaloneEKSLifecycleSerializesProcesses holds stop after the snapshot is saved but
-// before AWS scales down. A concurrent start must not clear that snapshot, and delete must not
-// remove ownership state while stop can still write to the cluster.
+// before AWS scales down. A concurrent start must not clear that snapshot, and ordinary or TTL
+// deletion must not remove ownership state while stop can still write to the cluster.
 func TestStandaloneEKSLifecycleSerializesProcesses(t *testing.T) {
-	for _, action := range []string{"start", "delete"} {
+	for _, action := range []string{"start", "delete", "ttl-delete"} {
 		t.Run(action, func(t *testing.T) {
 			const clusterName = "eks-concurrent-lifecycle"
 
@@ -390,7 +390,7 @@ func standaloneEKSProcess(t *testing.T, action string, expectTimeout bool) *exec
 	return cmd
 }
 
-// TestStandaloneEKSLifecycleProcess executes the real Cobra command in a fresh process while
+// TestStandaloneEKSLifecycleProcess executes the real Cobra command or TTL entrypoint while
 // replacing only AWS identity responses and the external eksctl binary with offline fixtures.
 func TestStandaloneEKSLifecycleProcess(t *testing.T) {
 	action := os.Getenv("KSAIL_EKS_PROCESS_ACTION")
@@ -407,6 +407,7 @@ func TestStandaloneEKSLifecycleProcess(t *testing.T) {
 
 	constructors := map[string]func() *cobra.Command{
 		"start": cluster.NewStartCmd, "stop": cluster.NewStopCmd, "delete": cluster.NewDeleteCmd,
+		"ttl-delete": func() *cobra.Command { return &cobra.Command{Use: "ttl-delete"} },
 	}
 	constructor, found := constructors[action]
 	require.True(t, found)
@@ -422,6 +423,19 @@ func TestStandaloneEKSLifecycleProcess(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 
+	execute := cmd.Execute
+	if action == "ttl-delete" {
+		execute = func() error {
+			return cluster.ExportAutoDeleteCluster(
+				cmd, "stale-alias", standaloneEKSTTLClusterConfig(),
+				&clusterprovisioner.EKSConfig{
+					Name: clusterName, NameFromConfig: true, Region: "ap-southeast-2",
+					ConfigPath: "eks.yaml", KubeconfigPath: "kubeconfig",
+				},
+			)
+		}
+	}
+
 	ctx := t.Context()
 
 	if os.Getenv("KSAIL_EKS_PROCESS_TIMEOUT") == "true" {
@@ -431,13 +445,13 @@ func TestStandaloneEKSLifecycleProcess(t *testing.T) {
 		defer cancel()
 
 		cmd.SetContext(ctx)
-		require.ErrorIs(t, cmd.Execute(), context.DeadlineExceeded)
+		require.ErrorIs(t, execute(), context.DeadlineExceeded)
 
 		return
 	}
 
 	cmd.SetContext(ctx)
-	require.NoError(t, cmd.Execute())
+	require.NoError(t, execute())
 }
 
 const concurrentEKSEksctlFixture = `#!/bin/sh
