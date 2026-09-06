@@ -290,10 +290,9 @@ const (
 	defaultReconcileTimeout       = 5 * time.Minute
 	fluxKustomizationPollInterval = 500 * time.Millisecond
 	argoCDApplicationPollInterval = 500 * time.Millisecond
-	// argoCDSourceWarmupGrace bounds how long a source-availability error is
-	// treated as a control-plane cold start rather than a real failure. ArgoCD
-	// self-heals these within seconds; a source still unavailable after this
-	// window is a genuine misconfiguration and fails with an actionable error.
+	// argoCDSourceWarmupGrace bounds retries for recognized source transport
+	// failures while the control plane starts. Missing sources, access failures,
+	// and unclassified operation failures remain terminal throughout the window.
 	argoCDSourceWarmupGrace = 90 * time.Second
 	reconcileConcurrency    = 5
 	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +

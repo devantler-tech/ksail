@@ -120,7 +120,9 @@ func (r *Reconciler) ListApplications(
 
 // CheckNamedApplicationReady performs a single-poll readiness check for
 // a specific ArgoCD Application CR identified by name.
-// Returns (ready, error) where error is non-nil for permanent failures.
+// Active operation and comparison failures return an error even when sync and
+// health fields still describe a successful comparison. Callers may use
+// IsColdStartTransient to retry recognized transport failures within a deadline.
 func (r *Reconciler) CheckNamedApplicationReady(
 	ctx context.Context,
 	name string,
@@ -132,12 +134,7 @@ func (r *Reconciler) CheckNamedApplicationReady(
 		return false, fmt.Errorf("get argocd application %q: %w", name, err)
 	}
 
-	err = r.checkOperationState(app)
-	if err != nil {
-		return false, err
-	}
-
-	err = r.checkConditions(app)
+	err = preferPermanentFailure(r.checkOperationState(app), r.checkConditions(app))
 	if err != nil {
 		return false, err
 	}
@@ -161,12 +158,7 @@ func (r *Reconciler) checkOperationState(app *unstructured.Unstructured) error {
 	message, _, _ := unstructured.NestedString(operationState, "message")
 
 	if phase == "Error" || phase == "Failed" {
-		// Check if this is a source-related error
-		if isSourceRelatedError(message) {
-			return fmt.Errorf("%w: %s", ErrSourceNotAvailable, message)
-		}
-
-		return fmt.Errorf("%w: %s", ErrOperationFailed, message)
+		return classifyApplicationError(message)
 	}
 
 	return nil
@@ -174,38 +166,87 @@ func (r *Reconciler) checkOperationState(app *unstructured.Unstructured) error {
 
 // checkConditions checks for error conditions.
 func (r *Reconciler) checkConditions(app *unstructured.Unstructured) error {
+	var failure error
+
 	for _, cond := range reconciler.ParseConditions(app) {
-		// Look for error conditions
 		if cond.Type == "ComparisonError" || cond.Type == "SyncError" {
-			if isSourceRelatedError(cond.Message) {
-				return fmt.Errorf("%w: %s", ErrSourceNotAvailable, cond.Message)
-			}
+			failure = preferPermanentFailure(failure, classifyApplicationError(cond.Message))
 		}
 	}
 
-	return nil
+	return failure
 }
 
-// isSourceRelatedError checks if the error message indicates a source availability issue.
-func isSourceRelatedError(message string) bool {
-	sourceProblemPatterns := []string{
-		"manifest unknown",
-		"not found",
-		"does not exist",
-		"failed to fetch",
-		"repository not found",
-		"unable to resolve",
-		"connection refused",
+// sourceAvailabilityError preserves the public sentinel while recording whether
+// the source failed for a recognized transport reason.
+type sourceAvailabilityError struct {
+	message   string
+	transient bool
+}
+
+// Error includes the source failure and the public sentinel's existing guidance.
+func (e *sourceAvailabilityError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrSourceNotAvailable, e.message)
+}
+
+// Unwrap preserves errors.Is compatibility for callers checking source availability.
+func (e *sourceAvailabilityError) Unwrap() error {
+	return ErrSourceNotAvailable
+}
+
+// classifyApplicationError retries only recognized transport failures and rejects ambiguous errors.
+func classifyApplicationError(message string) error {
+	lower := strings.ToLower(message)
+
+	// Explicit absence and denied access stay terminal even when the message also
+	// contains a transport failure from an earlier attempt.
+	if containsAny(lower, "manifest unknown", "not found", "does not exist") {
+		return &sourceAvailabilityError{message: message}
 	}
 
-	lowerMessage := strings.ToLower(message)
-	for _, pattern := range sourceProblemPatterns {
-		if strings.Contains(lowerMessage, pattern) {
+	if containsAny(lower, "unauthorized", "unauthenticated", "authentication required",
+		"permission denied", "permissiondenied", "access denied", "forbidden", "x509:") {
+		return fmt.Errorf("%w: %s", ErrOperationFailed, message)
+	}
+
+	if containsAny(lower, "connection refused", "connection reset by peer", "i/o timeout",
+		"no such host", "temporary failure in name resolution", "network is unreachable",
+		"tls handshake timeout") {
+		return &sourceAvailabilityError{message: message, transient: true}
+	}
+
+	if containsAny(lower, "failed to fetch", "unable to resolve") {
+		return &sourceAvailabilityError{message: message}
+	}
+
+	return fmt.Errorf("%w: %s", ErrOperationFailed, message)
+}
+
+// containsAny matches normalized ArgoCD diagnostics against recognized failure descriptions.
+func containsAny(message string, patterns ...string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(message, pattern) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// preferPermanentFailure prevents a retryable error from hiding another failure on the same Application.
+func preferPermanentFailure(current, candidate error) error {
+	if candidate != nil && (current == nil || isTransientSourceError(current)) {
+		return candidate
+	}
+
+	return current
+}
+
+// isTransientSourceError accepts only source failures classified as transport errors.
+func isTransientSourceError(err error) bool {
+	var sourceErr *sourceAvailabilityError
+
+	return errors.As(err, &sourceErr) && sourceErr.transient
 }
 
 // isApplicationSynced checks if the application is synced and healthy.
@@ -225,24 +266,10 @@ func isApplicationSynced(app *unstructured.Unstructured) bool {
 	return true
 }
 
-// IsColdStartTransient reports whether err is a source-availability failure
-// that ArgoCD is expected to resolve on its own, given how long the caller has
-// been polling.
-//
-// During a control-plane cold start ArgoCD's repo-server and redis are still
-// coming up, so the first comparison of the root Application briefly reports a
-// connection failure. ArgoCD retries internally and self-heals seconds later,
-// but the message is indistinguishable from a genuinely unreachable source, so
-// the classifier cannot tell the two apart from the text alone. Elapsed poll
-// time is what separates them: a source that is still unavailable once the
-// warm-up window has passed is a real misconfiguration.
-//
-// Only ErrSourceNotAvailable is eligible. A failed operation, or any other
-// error, stays terminal so a genuine failure is never masked into a timeout.
+// IsColdStartTransient reports whether err is a recognized transport failure
+// within the caller's cold-start grace period. ArgoCD retries these failures as
+// its services start. Explicit source absence, access failures, and unclassified
+// errors remain terminal; elapsed time never makes those failures retryable.
 func IsColdStartTransient(err error, elapsed, grace time.Duration) bool {
-	if err == nil {
-		return false
-	}
-
-	return errors.Is(err, ErrSourceNotAvailable) && elapsed < grace
+	return isTransientSourceError(err) && elapsed < grace
 }
