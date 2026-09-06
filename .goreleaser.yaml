@@ -70,8 +70,7 @@ homebrew_casks:
     custom_block: |
       postflight_steps do
         on_macos do
-          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"],
-                               must_succeed: false
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"]
         end
       end
     commit_author:

@@ -112,8 +112,7 @@ homebrew_casks:
       uninstall quit: "tech.devantler.ksail.desktop"
       postflight_steps do
         on_macos do
-          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{appdir}}" }}/KSail.app"],
-                               must_succeed: false
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{appdir}}" }}/KSail.app"]
         end
       end
     # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
