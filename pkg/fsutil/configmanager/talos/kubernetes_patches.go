@@ -13,9 +13,6 @@ import (
 )
 
 var (
-	errLegacyAPIServerMultipleDocuments = errors.New(
-		"multiple legacy cluster.apiServer documents are not supported",
-	)
 	errLegacyOIDCRequiredFields        = errors.New("issuer URL and client ID are required")
 	errLegacyOIDCCAMissing             = errors.New("CA content is missing")
 	errLegacyOIDCUnsupportedExtraArg   = errors.New("unsupported legacy OIDC extra argument")
@@ -203,14 +200,7 @@ func migrateLegacyKubernetesPatch(
 
 	cniMigrated := migrateDisableDefaultCNIDocuments(documents)
 
-	values, found, err := findLegacyAPIServerValues(documents)
-	if err != nil {
-		return nil, false, fmt.Errorf(
-			"migrate legacy Kubernetes patch %q: %w",
-			patch.Path,
-			err,
-		)
-	}
+	values, found := findLegacyAPIServerValues(documents)
 
 	if !found && !cniMigrated {
 		return patch.Content, false, nil
@@ -361,11 +351,8 @@ func decodeLegacyKubernetesDocuments(patch Patch) ([]map[string]any, bool, error
 	return documents, true, nil
 }
 
-func findLegacyAPIServerValues(
-	documents []map[string]any,
-) (*legacyAPIServerPatchValues, bool, error) {
-	var values *legacyAPIServerPatchValues
-
+// Each input patch has already been split into independent documents.
+func findLegacyAPIServerValues(documents []map[string]any) (*legacyAPIServerPatchValues, bool) {
 	for _, document := range documents {
 		cluster, found := mapValue(document, "cluster")
 		if !found {
@@ -379,19 +366,12 @@ func findLegacyAPIServerValues(
 
 		extraArgs, _ := mapValue(apiServer, "extraArgs")
 
-		if values != nil {
-			return nil, false, errLegacyAPIServerMultipleDocuments
-		}
-
-		values = &legacyAPIServerPatchValues{
-			clusterDocument: document,
-			cluster:         cluster,
-			apiServer:       apiServer,
-			extraArgs:       extraArgs,
-		}
+		return &legacyAPIServerPatchValues{
+			clusterDocument: document, cluster: cluster, apiServer: apiServer, extraArgs: extraArgs,
+		}, true
 	}
 
-	return values, values != nil, nil
+	return nil, false
 }
 
 func (values *legacyAPIServerPatchValues) rejectUnsupportedOIDCArgument(patchPath string) error {

@@ -137,6 +137,7 @@ func TestKubernetesPatchSetRejectsCrossScopeOIDCCompletion(t *testing.T) {
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "issuer URL and client ID are required")
+	require.ErrorContains(t, err, "resolve OIDC scope control-planes/")
 }
 
 func loadVariantPatches(
@@ -346,26 +347,56 @@ func TestKubernetesPatchSetRejectsIncompleteSharedOIDC(t *testing.T) {
 		"control-planes/client.yaml": legacyOIDCArgs("oidc-client-id: control-plane"),
 	}, nil)
 	require.ErrorContains(t, err, "shared settings must be complete")
+	require.ErrorContains(t, err, "resolve OIDC scope cluster/")
 	require.ErrorContains(t, err, "control-planes/")
 }
 
 func TestKubernetesPatchSetRejectsCrossDocumentAliases(t *testing.T) {
 	t.Parallel()
 
-	patches := []talos.Patch{{Path: "aliases.yaml", Content: []byte(`&base
+	tests := map[string]string{
+		"cross-document": `&base
 cluster:
   apiServer:
     extraArgs:
       audit-log-maxage: "10"
 ---
 *base
-`)}}
+`,
+		"within-document": `cluster:
+  apiServer:
+    certSANs: &names [api.example.com]
+    env:
+      EXAMPLE: example
+machine:
+  certSANs: *names
+---
+cluster:
+  apiServer:
+    extraArgs:
+      audit-log-maxage: "30"
+`,
+	}
+	for name, content := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	require.NotPanics(t, func() {
-		_, err := talos.MigrateKubernetesPatchesForContract(patches, talosconfig.TalosVersion1_14)
-		require.ErrorContains(t, err, "aliases.yaml")
-		require.ErrorContains(t, err, "alias")
-	})
+			patches := []talos.Patch{{Path: "shared.yaml", Content: []byte(content)}}
+
+			require.NotPanics(t, func() {
+				_, err := talos.MigrateKubernetesPatchesForContract(
+					patches,
+					talosconfig.TalosVersion1_14,
+				)
+				require.ErrorContains(t, err, "shared.yaml")
+				require.ErrorContains(
+					t,
+					err,
+					"expand YAML aliases before migrating a multi-document patch",
+				)
+			})
+		})
+	}
 }
 
 func TestKubernetesPatchSetSkipsEmptyMergeDocuments(t *testing.T) {

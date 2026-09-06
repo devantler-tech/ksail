@@ -261,9 +261,9 @@ func resolveScopeOIDC(records []kubernetesPatchDocument, scope PatchScope) (Patc
 	config, err := resolvedOIDCConfig(arguments, records, source)
 	if err != nil {
 		return Patch{}, false, fmt.Errorf(
-			"resolve OIDC scope %d (shared settings must be complete; "+
+			"resolve OIDC scope %s/ (shared settings must be complete; "+
 				"put role-only settings together in control-planes/ or workers/): %w",
-			scope,
+			patchScopeDirectory(scope),
 			err,
 		)
 	}
@@ -503,4 +503,17 @@ func containsYAMLAlias(node *yamlv3.Node) bool {
 	}
 
 	return slices.ContainsFunc(node.Content, containsYAMLAlias)
+}
+
+func patchScopeDirectory(scope PatchScope) string {
+	switch scope {
+	case PatchScopeCluster:
+		return PatchSubdirCluster
+	case PatchScopeControlPlane:
+		return PatchSubdirControlPlanes
+	case PatchScopeWorker:
+		return PatchSubdirWorkers
+	default:
+		return "unknown"
+	}
 }
