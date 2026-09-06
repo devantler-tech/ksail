@@ -484,6 +484,12 @@ func TestIsColdStartTransient(t *testing.T) {
 
 	const grace = 90 * time.Second
 
+	client := newTestArgoCDReconciler(newFakeApplicationWithConditions("warming", []map[string]any{
+		{"type": "ComparisonError", "message": "connection refused"},
+	}))
+	_, transportErr := client.CheckNamedApplicationReady(t.Context(), "warming")
+	require.ErrorIs(t, transportErr, argocd.ErrSourceNotAvailable)
+
 	tests := []struct {
 		name    string
 		err     error
@@ -492,7 +498,7 @@ func TestIsColdStartTransient(t *testing.T) {
 	}{
 		{
 			name:    "source unavailable inside the warm-up window is retryable",
-			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "connection refused"),
+			err:     fmt.Errorf("wrapped: %w", transportErr),
 			elapsed: 5 * time.Second,
 			want:    true,
 		},
@@ -500,31 +506,27 @@ func TestIsColdStartTransient(t *testing.T) {
 			name:    "source unavailable outside the warm-up window stays terminal",
 			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "repository not found"),
 			elapsed: grace + time.Second,
-			want:    false,
 		},
 		{
 			name:    "a failed operation is never masked, even inside the window",
 			err:     fmt.Errorf("%w: %s", argocd.ErrOperationFailed, "sync operation failed"),
 			elapsed: time.Second,
-			want:    false,
 		},
 		{
 			name:    "an unrelated error is never masked",
 			err:     errSimulatedAPIFailure,
 			elapsed: time.Second,
-			want:    false,
 		},
-		{
-			name:    "no error is not a transient",
-			err:     nil,
-			elapsed: time.Second,
-			want:    false,
-		},
+		{name: "no error is not a transient", elapsed: time.Second},
 		{
 			name:    "the window boundary itself is already terminal",
-			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "connection refused"),
+			err:     transportErr,
 			elapsed: grace,
-			want:    false,
+		},
+		{
+			name:    "an unclassified source sentinel does not authorize retry",
+			err:     argocd.ErrSourceNotAvailable,
+			elapsed: time.Second,
 		},
 	}
 
@@ -535,5 +537,168 @@ func TestIsColdStartTransient(t *testing.T) {
 			got := argocd.IsColdStartTransient(testCase.err, testCase.elapsed, grace)
 			assert.Equal(t, testCase.want, got)
 		})
+	}
+}
+
+// TestApplicationTransportErrors identifies retryable network failures in every error location.
+func TestApplicationTransportErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		"lookup registry.example: no such host",
+		"read tcp: i/o timeout",
+		"failed to fetch: connection refused",
+		"read tcp: connection reset by peer",
+		"temporary failure in name resolution",
+	} {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+			assertApplicationErrorClassification(t, message, true, true)
+		})
+	}
+}
+
+func TestComparisonTransportFormsPreserveTheirLocationContext(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		"unexpected EOF", "rpc error: desc = EOF", "EOF", "context deadline exceeded",
+		"rpc error: code = DeadlineExceeded desc = context deadline exceeded",
+		"429 Too Many Requests", "503 Service Unavailable", "Bad Gateway", "Gateway Timeout",
+		"Internal Server Error", "unexpected status code: 502", "HTTP/2 504", "HTTP 500",
+		"response status: 429",
+	} {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+
+			for _, location := range []string{"ComparisonError", "SyncError", "Failed", "Error"} {
+				t.Run(location, func(t *testing.T) {
+					t.Parallel()
+
+					app := newFakeApplicationWithOperation("test-app", location, message)
+					if location == "ComparisonError" || location == "SyncError" {
+						app = newFakeApplicationWithConditions("test-app", []map[string]any{
+							{"type": location, "message": message},
+						})
+					}
+
+					client := newTestArgoCDReconciler(app)
+					_, err := client.CheckNamedApplicationReady(t.Context(), "test-app")
+					require.Error(t, err)
+					assert.Equal(
+						t,
+						location == "ComparisonError",
+						argocd.IsColdStartTransient(err, 0, time.Minute),
+					)
+					assert.False(t, argocd.IsColdStartTransient(err, time.Minute, time.Minute))
+				})
+			}
+		})
+	}
+}
+
+// TestApplicationPermanentErrors keeps absence, denied access, and ambiguous failures terminal.
+func TestApplicationPermanentErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		message string
+		source  bool
+	}{
+		{message: "failed to fetch: manifest unknown", source: true},
+		{message: "repository not found", source: true},
+		{message: "unable to resolve revision: does not exist", source: true},
+		{message: "failed to fetch repository", source: true},
+		{message: "unable to resolve revision", source: true},
+		{message: "authentication required"},
+		{message: "permission denied (previous attempt: connection refused)"},
+		{message: "manifest unknown (previous attempt: i/o timeout)", source: true},
+		{message: "manifest unknown (previous attempt: 503 Service Unavailable)", source: true},
+		{message: "forbidden (previous attempt: 429 Too Many Requests)"},
+		{message: "invalid manifest at line 503"},
+		{message: "fetch registry.example:5000 failed"},
+		{message: "invalid manifest: unknown resource kind"},
+		{message: "comparison failed"},
+		{message: "EOF is not allowed in this manifest"},
+		{message: ""},
+	} {
+		t.Run(testCase.message, func(t *testing.T) {
+			t.Parallel()
+			assertApplicationErrorClassification(t, testCase.message, false, testCase.source)
+		})
+	}
+}
+
+// assertApplicationErrorClassification checks readiness, sentinel compatibility, and retry bounds.
+func assertApplicationErrorClassification(t *testing.T, message string, transient, source bool) {
+	t.Helper()
+
+	for _, location := range []string{"ComparisonError", "SyncError", "Failed", "Error"} {
+		t.Run(location, func(t *testing.T) {
+			t.Parallel()
+
+			var app *unstructured.Unstructured
+			if location == "Failed" || location == "Error" {
+				app = newFakeApplicationWithOperation("test-app", location, message)
+			} else {
+				// Synced/Healthy fields may outlive the failed comparison.
+				app = newFakeApplicationWithConditions("test-app", []map[string]any{
+					{"type": location, "message": message},
+				})
+			}
+
+			client := newTestArgoCDReconciler(app)
+			ready, err := client.CheckNamedApplicationReady(t.Context(), "test-app")
+			require.Error(t, err)
+			assert.False(t, ready)
+			assert.Contains(t, err.Error(), message)
+
+			if source {
+				require.ErrorIs(t, err, argocd.ErrSourceNotAvailable)
+			} else {
+				require.ErrorIs(t, err, argocd.ErrOperationFailed)
+			}
+
+			assert.Equal(t, transient, argocd.IsColdStartTransient(err, 0, time.Second))
+			assert.False(t, argocd.IsColdStartTransient(err, time.Second, time.Second))
+		})
+	}
+}
+
+// TestApplicationPermanentErrorTakesPrecedence checks mixed errors in both condition orders.
+func TestApplicationPermanentErrorTakesPrecedence(t *testing.T) {
+	t.Parallel()
+
+	for _, operationMessage := range []string{"", "connection refused", "manifest unknown"} {
+		for _, reverse := range []bool{false, true} {
+			t.Run(
+				fmt.Sprintf("operation=%s/reverse=%t", operationMessage, reverse),
+				func(t *testing.T) {
+					t.Parallel()
+
+					conditions := []map[string]any{
+						{"type": "ComparisonError", "message": "connection refused"},
+						{"type": "SyncError", "message": "manifest unknown"},
+					}
+					if reverse {
+						conditions[0], conditions[1] = conditions[1], conditions[0]
+					}
+
+					app := newFakeApplicationWithConditions("mixed", conditions)
+					if operationMessage != "" {
+						require.NoError(t, unstructured.SetNestedMap(app.Object, map[string]any{
+							"phase": "Error", "message": operationMessage,
+						}, "status", "operationState"))
+					}
+
+					client := newTestArgoCDReconciler(app)
+					ready, err := client.CheckNamedApplicationReady(t.Context(), "mixed")
+					require.ErrorIs(t, err, argocd.ErrSourceNotAvailable)
+					assert.False(t, ready)
+					assert.Contains(t, err.Error(), "manifest unknown")
+					assert.False(t, argocd.IsColdStartTransient(err, 0, time.Minute))
+				},
+			)
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
@@ -28,6 +29,15 @@ import (
 // These seams cover validation/expansion helpers, debounce/watch behavior, and
 // source/Flux path resolution and formatting. They are only compiled during
 // testing and should be changed together with the tests that depend on them.
+
+// ExportPollUntilApplicationReady exposes the production ArgoCD polling path.
+func ExportPollUntilApplicationReady(
+	ctx context.Context,
+	client *argocd.Reconciler,
+	name string,
+) error {
+	return pollUntilApplicationReady(ctx, client, name)
+}
 
 // The Flux-substitution engine now lives in pkg/svc/fluxsubst; these shims
 // delegate to its exported API so existing command-package tests keep working.
