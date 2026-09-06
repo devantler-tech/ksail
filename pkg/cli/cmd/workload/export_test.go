@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -580,3 +581,12 @@ func ExportSetEphemeralAdmissionClient(
 
 // ExportWithPreparedEphemeralCluster exposes the shared validate/scan admission lifecycle.
 var ExportWithPreparedEphemeralCluster = withPreparedEphemeralCluster //nolint:gochecknoglobals // test export
+
+// ExportResolveKubeconfigFlag exposes resolveKubeconfigFlag for testing.
+func ExportResolveKubeconfigFlag(
+	child *cobra.Command,
+	kubeconfigFlag *pflag.Flag,
+	resolvedPath string,
+) error {
+	return resolveKubeconfigFlag(child, kubeconfigFlag, resolvedPath)
+}
