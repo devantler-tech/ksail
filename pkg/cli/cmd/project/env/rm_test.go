@@ -245,3 +245,27 @@ func TestHandleRmRunE_PurgeAppliesDefaultSourceDirectory(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "prod"))
 	require.ErrorIs(t, statErr, os.ErrNotExist, "the real overlay must be purged")
 }
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleRmRunE_RunsFromSubdirectory(t *testing.T) {
+	repoRoot := writeAddEnvWorkspace(t)
+	t.Chdir(filepath.Join(repoRoot, "k8s"))
+
+	out, err := runRm(t, "prod", "--purge")
+	require.NoError(t, err)
+
+	// The removal targets the workspace root (resolved by upward traversal), so
+	// both the root config and its overlay are gone even though the command ran
+	// from a subdirectory.
+	_, statErr := os.Stat(filepath.Join(repoRoot, "ksail.prod.yaml"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	_, statErr = os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "prod"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	// The base config that marks the root is untouched.
+	_, statErr = os.Stat(filepath.Join(repoRoot, "ksail.yaml"))
+	require.NoError(t, statErr)
+
+	assert.Contains(t, out, "removed environment")
+}

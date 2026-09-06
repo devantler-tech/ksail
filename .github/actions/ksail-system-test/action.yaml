@@ -100,6 +100,13 @@ inputs:
       "Calico"). Only used when test-kubernetes-provider is 'true'.
     required: false
     default: ""
+  assert-k3k-server-creator:
+    description: |
+      Assert the k3k server pod creating principal after each nested K3s create and
+      record the evidence (see the ksail-test-kubernetes-provider action). Only used
+      when test-kubernetes-provider is 'true'.
+    required: false
+    default: "false"
   rolling-resize-server-type:
     description: |
       Hetzner only. When set to a server type (e.g. "cx33"), runs an additional
@@ -616,6 +623,7 @@ runs:
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
         cni: ${{ inputs.kubernetes-provider-cni }}
+        assert-k3k-server-creator: ${{ inputs.assert-k3k-server-creator }}
         dockerhub-user: ${{ inputs.dockerhub-user }}
         dockerhub-token: ${{ inputs.dockerhub-token }}
         ghcr-user: ${{ inputs.ghcr-user }}

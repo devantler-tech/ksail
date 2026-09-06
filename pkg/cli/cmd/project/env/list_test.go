@@ -184,3 +184,20 @@ func TestNewListCmd_Structure(t *testing.T) {
 	assert.False(t, cmd.Hidden)
 	assert.Empty(t, cmd.Annotations[annotations.AnnotationPermission])
 }
+
+//nolint:paralleltest // uses t.Chdir to set the working directory
+func TestHandleListEnvironmentsRunE_RunsFromSubdirectory(t *testing.T) {
+	repoRoot := writeListEnvRepo(t)
+	subDir := filepath.Join(repoRoot, "k8s", "clusters", "prod")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+	t.Chdir(subDir)
+
+	out, err := runListEnvironments(t)
+	require.NoError(t, err)
+
+	// Discovery enumerates the workspace root (resolved by upward traversal), so
+	// the list is identical to running at the root rather than empty.
+	assert.Contains(t, out, "prod")
+	assert.Contains(t, out, "staging")
+	assert.NotContains(t, out, "no environments declared")
+}

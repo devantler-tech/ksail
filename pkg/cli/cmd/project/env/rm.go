@@ -82,10 +82,15 @@ func HandleRmRunE(cmd *cobra.Command, name string) error {
 
 	// Canonicalise so the repository root matches the symlink-resolved paths the
 	// config loader derives, mirroring `env add`.
-	repoRoot, err := fsutil.EvalCanonicalPath(workDir)
+	canonWorkDir, err := fsutil.EvalCanonicalPath(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve current directory: %w", err)
 	}
+
+	// The removal targets the workspace root, not the current directory, so the
+	// command finds (and deletes) the same files from any subdirectory of the
+	// workspace — the nearest ancestor holding ksail.yaml.
+	repoRoot := resolveWorkspaceRoot(canonWorkDir)
 
 	configRel := "ksail." + name + ".yaml"
 
@@ -107,7 +112,7 @@ func HandleRmRunE(cmd *cobra.Command, name string) error {
 // directory (sourceDirectory/clusters/<name>) relative to the repository root,
 // enriching a load failure with the environments that are actually declared.
 func resolveOverlayRel(cmd *cobra.Command, repoRoot, name string) (string, error) {
-	cfg, err := loadEnvironmentConfig(cmd, "ksail."+name+".yaml")
+	cfg, err := loadEnvironmentConfig(cmd, filepath.Join(repoRoot, "ksail."+name+".yaml"))
 	if err != nil {
 		return "", enrichSourceConfigError(cmd, repoRoot, err)
 	}

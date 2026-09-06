@@ -1,13 +1,14 @@
 // Package readiness provides Kubernetes resource readiness polling utilities.
 //
 // This package offers reusable utilities for waiting until Kubernetes resources
-// become ready. It supports deployments, daemonsets, nodes, and the API server,
+// become ready. It supports deployments, daemonsets, statefulsets, nodes, and the API server,
 // and provides a generic polling mechanism that can be extended.
 //
 // Key features:
 //   - Generic polling mechanism (PollForReadiness)
 //   - Deployment readiness polling (WaitForDeploymentReady)
 //   - DaemonSet readiness polling (WaitForDaemonSetReady)
+//   - StatefulSet readiness polling (WaitForStatefulSetReady)
 //   - Node readiness polling (WaitForNodeReady)
 //   - API server readiness and stability polling (WaitForAPIServerReady, WaitForAPIServerStable)
 //   - In-cluster API connectivity verification (WaitForInClusterAPIConnectivity)
