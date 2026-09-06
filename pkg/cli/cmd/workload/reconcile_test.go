@@ -3,6 +3,7 @@ package workload_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -201,4 +202,96 @@ func TestPermanentArgoCDPollFailureDoesNotEscapeIntoOuterRetries(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestArgoCDReadinessTimeoutIsNotRetried preserves the completed polling budget
+// even when retained diagnostics contain an earlier transient transport failure.
+func TestArgoCDReadinessTimeoutIsNotRetried(t *testing.T) {
+	t.Parallel()
+	timeoutErr := expiredArgoCDPollingError(t)
+	client := newArgoCDPollClient(func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, argoCDPollApplication("connection refused"), nil
+	})
+	_, transient := client.CheckNamedApplicationReady(t.Context(), "test-app")
+	require.Error(t, transient)
+
+	for _, testCase := range []struct {
+		name         string
+		failure      error
+		wantAttempts int
+	}{
+		{"timeout", timeoutErr, 1},
+		{"wrapped", fmt.Errorf("reconcile application: %w", timeoutErr), 1},
+		{"joined_first", errors.Join(timeoutErr, transient), 1},
+		{"joined_last", errors.Join(transient, timeoutErr), 1},
+		{"active_transient", transient, 3},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertReconcileRetryAttempts(t, testCase.failure, testCase.wantAttempts)
+		})
+	}
+}
+
+// expiredArgoCDPollingError exercises a transient failure followed by clean but
+// unsynced status and an expired read, retaining the earlier diagnostic.
+func expiredArgoCDPollingError(t *testing.T) error {
+	t.Helper()
+
+	calls := 0
+	client := newArgoCDPollClient(func(k8stesting.Action) (bool, runtime.Object, error) {
+		calls++
+		switch calls {
+		case 1:
+			return true, argoCDPollApplication("connection refused"), nil
+		case 2:
+			application := argoCDPollApplication("")
+			require.NoError(
+				t,
+				unstructured.SetNestedField(
+					application.Object,
+					"OutOfSync",
+					"status",
+					"sync",
+					"status",
+				),
+			)
+
+			return true, application, nil
+		default:
+			return true, nil, context.DeadlineExceeded
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	failure := workload.ExportPollUntilApplicationReady(ctx, client, "test-app")
+	require.ErrorIs(t, failure, argocd.ErrReconcileTimeout)
+	require.ErrorContains(t, failure, "connection refused")
+	require.ErrorContains(
+		t,
+		failure,
+		"ksail workload get applications.argoproj.io test-app -n argocd",
+	)
+	require.Equal(t, 3, calls)
+
+	//nolint:wrapcheck // Preserve the real polling error for wrapping and joining regressions.
+	return failure
+}
+
+func assertReconcileRetryAttempts(t *testing.T, failure error, want int) {
+	t.Helper()
+
+	attempts := 0
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := workload.ExportRetryOnTransientError(t.Context(), cmd, 3, 0, 0, func() error {
+		attempts++
+
+		return failure
+	})
+	require.ErrorIs(t, err, failure)
+	assert.Equal(t, want, attempts)
 }

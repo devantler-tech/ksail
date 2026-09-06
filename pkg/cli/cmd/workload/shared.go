@@ -366,10 +366,11 @@ func retryOnTransientError(
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
-// isRetryableReconcileError preserves ArgoCD's permanent classification even
-// when an aggregated diagnostic also contains an earlier transport failure.
+// isRetryableReconcileError preserves ArgoCD's permanent and timeout outcomes
+// even when an aggregated diagnostic contains an earlier transport failure.
 func isRetryableReconcileError(err error) bool {
-	return !argocd.IsPermanentApplicationError(err) && netretry.IsRetryable(err)
+	return !errors.Is(err, argocd.ErrReconcileTimeout) &&
+		!argocd.IsPermanentApplicationError(err) && netretry.IsRetryable(err)
 }
 
 // waitBeforeRetry blocks for the exponential backoff delay before the next
