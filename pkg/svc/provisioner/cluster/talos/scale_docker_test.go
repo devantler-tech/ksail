@@ -12,12 +12,91 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 var errDockerDaemonUnavailable = errors.New("docker: connection refused")
+
+//nolint:funlen // Keep the table-driven input, transport, and deletion assertions together.
+func TestRemoveDockerNodes_ControlPlaneCleanupFailurePreservesContainers(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name    string
+		address string
+	}{
+		{name: "missing address"},
+		{name: "invalid address", address: "not-an-ip"},
+		{name: "connection failure", address: "192.0.2.2"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			mockClient := docker.NewMockAPIClient(t)
+			mockClient.On("ContainerList", mock.Anything, mock.Anything).
+				Return([]container.Summary{
+					{ID: "cp-1", Names: []string{"/scale-cluster-control-plane-1"}},
+					{
+						ID: "cp-2", Names: []string{"/scale-cluster-control-plane-2"},
+						NetworkSettings: &container.NetworkSettingsSummary{
+							Networks: map[string]*network.EndpointSettings{
+								"scale-cluster": {IPAddress: testCase.address},
+							},
+						},
+					},
+				}, nil).Once()
+			mockClient.On("ContainerStop", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil).Maybe()
+			mockClient.On("ContainerRemove", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil).Maybe()
+
+			provisioner := newClientErrProvisioner(t).WithDockerClient(mockClient)
+
+			var cleanupTargets []string
+
+			if testCase.name != "connection failure" {
+				provisioner.WithEtcdClientFactoryForTest(
+					func(_ context.Context, target string) (talosprovisioner.EtcdMembershipClientForTest, error) {
+						cleanupTargets = append(cleanupTargets, target)
+
+						return &membershipClient{}, nil
+					},
+				)
+			}
+
+			result := clusterupdate.NewEmptyUpdateResult()
+			err := provisioner.RemoveDockerNodesForTest(
+				t.Context(), "scale-cluster", talosprovisioner.RoleControlPlane, 2, result,
+			)
+
+			require.Error(t, err)
+			assert.Empty(t, result.AppliedChanges)
+			assert.Len(t, result.FailedChanges, 1)
+			assert.Empty(
+				t,
+				cleanupTargets,
+				"invalid target must not fall back to a default endpoint",
+			)
+			mockClient.AssertNotCalled(
+				t,
+				"ContainerStop",
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+			)
+			mockClient.AssertNotCalled(
+				t,
+				"ContainerRemove",
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+			)
+		})
+	}
+}
 
 // newScaleProvisioner builds a Provisioner wired with the given mock Docker client.
 // TalosConfigs are generated fresh so every test has valid CP/worker configs.

@@ -338,11 +338,21 @@ func (p *Provisioner) removeHetznerNodes(
 	for i := len(existing) - 1; i >= len(existing)-count; i-- {
 		server := existing[i]
 
-		// Best-effort etcd cleanup for control-plane nodes
+		// Address resolution and etcd cleanup must succeed before destruction.
 		if role == RoleControlPlane {
-			serverIP, addrErr := hetznerNodeTalosAddress(server)
-			if addrErr == nil {
-				p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			serverIP, cleanupErr := hetznerNodeTalosAddress(server)
+			if cleanupErr == nil {
+				cleanupErr = p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			}
+
+			if cleanupErr != nil {
+				recordFailedChange(result, role, server.Name, cleanupErr)
+
+				return fmt.Errorf(
+					"retaining control-plane server %s after etcd cleanup failure: %w",
+					server.Name,
+					cleanupErr,
+				)
 			}
 		}
 

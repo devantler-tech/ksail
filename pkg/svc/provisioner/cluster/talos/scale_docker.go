@@ -327,7 +327,17 @@ func (p *Provisioner) removeControlPlaneNodesSequentially(
 		ctr := existing[idx]
 		nodeName := containerName(ctr)
 		nodeIP := containerIP(ctr, clusterName)
-		p.etcdCleanupBeforeRemoval(ctx, nodeIP)
+
+		cleanupErr := p.etcdCleanupBeforeRemoval(ctx, nodeIP)
+		if cleanupErr != nil {
+			recordFailedChange(result, RoleControlPlane, nodeName, cleanupErr)
+
+			return fmt.Errorf(
+				"retaining control-plane node %s after etcd cleanup failure: %w",
+				nodeName,
+				cleanupErr,
+			)
+		}
 
 		removeErr := p.removeDockerContainer(ctx, ctr.ID)
 		if removeErr != nil {
