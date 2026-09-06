@@ -123,9 +123,30 @@ KSail invokes eksctl to provision the cluster from `eks.yaml` and waits for comp
 | `ksail cluster update` | Applies managed node-group capacity changes in-place               |
 | `ksail cluster delete` | Deletes the cluster, unwinding the eksctl CloudFormation stacks     |
 | `ksail cluster stop`   | Scales every managed nodegroup to zero to halt node costs           |
-| `ksail cluster start`  | Restores the managed nodegroups to their configured capacity        |
+| `ksail cluster start`  | Restores the desired, minimum, and maximum capacity saved by stop   |
 | `ksail cluster list`   | Lists clusters in the configured region (all regions when unset)    |
 | `ksail cluster info`   | Shows cluster details                                               |
+
+### Concurrent lifecycle operations
+
+EKS `start`, `stop`, and `delete` operations from the CLI and the local web/desktop
+backend share an operating-system lock for each cluster name in the current user's
+KSail state directory. A competing process waits before resolving ownership,
+reading capacity snapshots, or changing the cluster. Canceling a CLI command while
+it waits leaves the cluster and its saved state unchanged. A second operation in
+the same local API service still reports an immediate conflict.
+
+The lock covers the complete operation, including restoration verification and
+state cleanup after deletion. AWS account, cluster ARN, and creation-time identity
+checks still verify the selected target before mutation. Same-named clusters in
+different regions serialize because their local metadata shares a name-scoped
+directory; changing a region or credential selector does not bypass the lock.
+
+Lock files remain under `~/.ksail/locks/eks/`, outside the removable cluster state.
+The operating system releases the lock when the process exits, including after a
+crash. An existing lock file is normal; do not remove it to interrupt an operation.
+This coordination applies to processes sharing that local state store. Other
+machines, direct AWS operations, `create`, and `update` are outside this lock.
 
 ## kubeconfig Context
 

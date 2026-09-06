@@ -17,7 +17,7 @@ import (
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestRebindEKSOwnershipIsOffByDefault(t *testing.T) {
 	clusterName := "eks-rebind-disabled-6202"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	require.NoError(t, state.DeleteClusterState(clusterName))
 
 	cmd := cluster.NewRebindEKSOwnershipCmd()
@@ -63,7 +63,7 @@ func TestRebindEKSOwnershipPrintsIdentityBeforeConfirmation(t *testing.T) {
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestRebindEKSOwnershipPersistsOnlyAfterExplicitConfirmation(t *testing.T) {
 	clusterName := "eks-rebind-confirmed-6202"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	require.NoError(t, state.DeleteClusterState(clusterName))
 	require.NoError(t, state.SaveEKSNodegroupState(
 		clusterName,

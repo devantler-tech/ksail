@@ -66,6 +66,29 @@ func autoDeleteCluster(
 		return fmt.Errorf("TTL auto-delete: resolve target: %w", err)
 	}
 
+	deleteAction := func() error {
+		return autoDeleteResolvedCluster(cmd, clusterName, clusterCfg, eksConfig)
+	}
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		err = state.WithEKSLifecycleLock(cmd.Context(), clusterName, deleteAction)
+		if err != nil {
+			return fmt.Errorf("TTL EKS delete operation: %w", err)
+		}
+
+		return nil
+	}
+
+	return deleteAction()
+}
+
+// autoDeleteResolvedCluster keeps ownership resolution, cloud deletion and state cleanup within
+// the caller's lifecycle lock for EKS. The TTL wait happens before this operation is entered.
+func autoDeleteResolvedCluster(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+) error {
 	notify.Infof(cmd.OutOrStdout(),
 		"TTL expired; auto-destroying cluster %q...", clusterName)
 

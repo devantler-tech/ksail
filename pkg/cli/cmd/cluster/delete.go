@@ -109,11 +109,41 @@ func runDeleteAction(
 		return fmt.Errorf("validate standalone AWS target: %w", err)
 	}
 
+	if resolved.Provider == v1alpha1.ProviderAWS {
+		// The AWS preview only needs the resolved target name. Keep operator think time outside
+		// the lock; both the initial ownership guard and its final reverification stay inside it.
+		if !confirm.ShouldSkipPrompt(flags.force) {
+			err := promptForDeletion(cmd, resolved, nil, false)
+			if err != nil {
+				return err
+			}
+		}
+
+		err := state.WithEKSLifecycleLock(cmd.Context(), resolved.ClusterName, func() error {
+			return runResolvedDeleteAction(cmd, flags, tmr, resolved)
+		})
+		if err != nil {
+			return fmt.Errorf("EKS delete operation: %w", err)
+		}
+
+		return nil
+	}
+
+	return runResolvedDeleteAction(cmd, flags, tmr, resolved)
+}
+
+// runResolvedDeleteAction guards and deletes a resolved target, with AWS callers holding its lock.
+func runResolvedDeleteAction(
+	cmd *cobra.Command,
+	flags *deleteFlags,
+	tmr timer.Timer,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
 	// Refuse to destroy a cluster ksail did not provision. When the resolved context is an unmanaged
 	// cluster (a managed cloud cluster, a kubeadm cluster, a colleague's cluster) the guard rejects
 	// here — before any provisioner is created or the cluster is touched — so ksail never accidentally
 	// deletes a cluster it does not own. Read-only operations still work. (ksail#5885, epic #5654.)
-	err = deleteUnmanagedGuardFunc(cmd.Context(), resolved)
+	err := deleteUnmanagedGuardFunc(cmd.Context(), resolved)
 	if err != nil {
 		return err
 	}
@@ -159,6 +189,8 @@ func runDeleteAction(
 	return nil
 }
 
+// confirmAndReverifyDeleteTarget confirms non-AWS targets and rechecks the captured AWS identity.
+// AWS confirmation has already completed before the caller acquired the lifecycle lock.
 func confirmAndReverifyDeleteTarget(
 	cmd *cobra.Command,
 	flags *deleteFlags,
@@ -167,7 +199,7 @@ func confirmAndReverifyDeleteTarget(
 	isKindCluster bool,
 ) error {
 	// Show confirmation prompt unless force flag is set or non-TTY.
-	if !confirm.ShouldSkipPrompt(flags.force) {
+	if resolved.Provider != v1alpha1.ProviderAWS && !confirm.ShouldSkipPrompt(flags.force) {
 		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
 		if err != nil {
 			return err

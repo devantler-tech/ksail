@@ -22,7 +22,7 @@ func TestStandaloneEKSLifecycleUsesSelectedContextWithoutConfig(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			const clusterName = "eks-context-6226"
 
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			require.NoError(t, os.Remove("ksail.yaml"))
 			require.NoError(t, os.Remove("eks.yaml"))
 			require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{

@@ -65,7 +65,7 @@ func TestStandaloneEKSLifecycleRejectsImmutableIdentityMismatchBeforeMutation(t 
 		//nolint:paralleltest // each case mutates process environment, working directory, and shared hooks.
 		t.Run(testCase.name+" account mismatch", func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-account-identity-6202"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 			persistStandaloneEKSIdentity(t, clusterName, immutableIdentityTime())
 			setEKSIdentityClient(t, &fakeEKSIdentityClient{accountID: "210987654321"})
@@ -96,7 +96,7 @@ func TestStandaloneEKSLifecycleRechecksSameARNReplacementImmediatelyBeforeMutati
 		//nolint:paralleltest // each case mutates process environment, working directory, and shared hooks.
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-" + testCase.name + "-replacement-identity-6202"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 
 			replacementTime := immutableIdentityTime().Add(time.Minute)
@@ -159,7 +159,7 @@ func setDefaultAWSOptionsOnOwnership(t *testing.T, clusterName, region string) {
 func TestStandaloneEKSLifecycleFreezesCustomAWSCredentialsForEveryConsumer(t *testing.T) {
 	const clusterName = "ksail-eks-start-frozen-credentials-6202"
 
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	setDefaultAWSOptionsOnOwnership(t, clusterName, "ap-southeast-2")
 
 	identityClient := &fakeEKSIdentityClient{
@@ -240,7 +240,7 @@ func TestStandaloneEKSLifecycleIdentityQueryFailuresNeverReachMutation(t *testin
 		for _, queryCase := range queryCases {
 			t.Run(lifecycleCase.name+" "+queryCase.name, func(t *testing.T) {
 				clusterName := "ksail-eks-" + lifecycleCase.name + "-query-error-6202"
-				markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+				markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 				configureStandaloneEKSNodegroupAction(t, lifecycleCase.name)
 				setEKSIdentityClient(t, queryCase.client())
 
@@ -304,7 +304,7 @@ func TestStandaloneEKSStartRejectsLegacyAndMalformedOwnershipState(t *testing.T)
 		//nolint:paralleltest // each case mutates process environment, working directory, and shared hooks.
 		t.Run(testCase.name, func(t *testing.T) {
 			clusterName := "ksail-eks-start-" + testCase.slug + "-6202"
-			markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 			testCase.corrupt(t, clusterName)
 
 			cmd := cluster.NewStartCmd()
@@ -327,7 +327,7 @@ func TestStandaloneEKSStartRejectsLegacyAndMalformedOwnershipState(t *testing.T)
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestEKSUpdateRejectsImmutableIdentityMismatchBeforePlanning(t *testing.T) {
 	clusterName := "ksail-eks-update-account-identity-6202"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	setEKSIdentityClient(t, &fakeEKSIdentityClient{accountID: "210987654321"})
 
 	cmd := cluster.NewUpdateCmd()
@@ -347,7 +347,7 @@ func TestEKSUpdateRejectsImmutableIdentityMismatchBeforePlanning(t *testing.T) {
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestEKSTTLCleanupRejectsImmutableIdentityMismatchBeforeDelete(t *testing.T) {
 	clusterName := "ksail-eks-ttl-account-identity-6202"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	setEKSIdentityClient(t, &fakeEKSIdentityClient{accountID: "210987654321"})
 
 	cmd := &cobra.Command{}
@@ -377,7 +377,7 @@ func TestEKSTTLCleanupRejectsImmutableIdentityMismatchBeforeDelete(t *testing.T)
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestEKSTTLCleanupRechecksSameARNReplacementImmediatelyBeforeDelete(t *testing.T) {
 	clusterName := "ksail-eks-ttl-replacement-identity-6202"
-	markerPath := setupStandaloneEKSLifecycleFixture(t, clusterName)
+	markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
 	identityClient := &fakeEKSIdentityClient{
 		accountID: "123456789012",
 		clusters: []*ekstypes.Cluster{
