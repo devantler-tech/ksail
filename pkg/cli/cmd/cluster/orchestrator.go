@@ -161,7 +161,7 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 // (the runtime must support the target Kubernetes version). Returns true when the
 // cluster was recreated, in which case the caller skips the regular update flow.
 //
-// Distributions without an Upgrader (e.g. KWOK, EKS) have no version
+// Distributions without an Upgrader (e.g. KWOK or EKS without its opt-in) have no version
 // reconciliation; the regular update flow handles their changes.
 func (o *updateOrchestrator) reconcileClusterVersions(
 	provisioner clusterprovisioner.Provisioner,
@@ -237,6 +237,15 @@ func (o *updateOrchestrator) reconcileKubernetesVersion(
 	}
 
 	if pin != "" {
+		if planner, ok := upgrader.(clusterupdate.KubernetesUpgradePlanner); ok {
+			var err error
+
+			pin, err = planner.ValidateKubernetesUpgrade(currentVersions.KubernetesVersion, pin)
+			if err != nil {
+				return false, fmt.Errorf("validate pinned Kubernetes upgrade: %w", err)
+			}
+		}
+
 		return o.executePinnedUpgrade(
 			upgrader, "Kubernetes", "Kubernetes", upgrader.UpgradeKubernetes, pin,
 			currentVersions.KubernetesVersion,

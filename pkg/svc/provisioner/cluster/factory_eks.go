@@ -49,11 +49,7 @@ func (f DefaultFactory) createEKSProvisioner(
 		)
 	}
 
-	infraProvider, err := awsprovider.NewProvider(
-		client,
-		eksConfig.Region,
-		providerOptions...,
-	)
+	infraProvider, err := awsprovider.NewProvider(client, eksConfig.Region, providerOptions...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
@@ -75,10 +71,23 @@ func (f DefaultFactory) createEKSProvisioner(
 	// only a declared eksctl config path, which is what the diff is computed from.
 	managedNodegroupUpdates := eksConfig.ConfigPath != ""
 
-	return eksprovisioner.NewUpdatableProvisioner(
+	updatable := eksprovisioner.NewUpdatableProvisioner(
 		provisioner,
 		eksprovisioner.WithManagedNodegroupUpdates(managedNodegroupUpdates),
+	)
+
+	return withEKSControlPlaneUpgrades(
+		updatable,
+		cluster.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade,
 	), eksConfig, nil
+}
+
+func withEKSControlPlaneUpgrades(p *eksprovisioner.UpdatableProvisioner, enabled bool) Provisioner {
+	if enabled {
+		return eksprovisioner.NewUpgradableProvisioner(p)
+	}
+
+	return p
 }
 
 // resolveEKSCredentialOptions snapshots one AWS resolution and derives aligned

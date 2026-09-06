@@ -340,18 +340,53 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 		}
 	}
 
-	if c.describer == nil {
-		c.describer = awseks.NewFromConfig(cfg)
+	err = c.configureMissingDescriber(ctx, cfg)
+	if err != nil {
+		return err
 	}
 
-	c.configureMissingSTSClients(cfg)
+	return c.configureMissingSTSClients(ctx, cfg)
+}
+
+func (c *Client) configureMissingDescriber(ctx context.Context, cfg aws.Config) error {
+	if c.describer != nil {
+		return nil
+	}
+
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "EKS")
+	if err != nil {
+		return fmt.Errorf("resolve frozen EKS endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if eksOptions, ok := options.(*awseks.Options); ok {
+				eksOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
+	}
+
+	c.describer = awseks.NewFromConfig(cfg)
 
 	return nil
 }
 
-func (c *Client) configureMissingSTSClients(cfg aws.Config) {
+func (c *Client) configureMissingSTSClients(ctx context.Context, cfg aws.Config) error {
 	if c.presigner != nil && c.identityGetter != nil {
-		return
+		return nil
+	}
+
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "STS")
+	if err != nil {
+		return fmt.Errorf("resolve frozen STS endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if stsOptions, ok := options.(*sts.Options); ok {
+				stsOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
 	}
 
 	stsClient := sts.NewFromConfig(cfg)
@@ -362,6 +397,8 @@ func (c *Client) configureMissingSTSClients(cfg aws.Config) {
 	if c.identityGetter == nil {
 		c.identityGetter = stsClient
 	}
+
+	return nil
 }
 
 // withTokenHeaders adds the signed headers that turn a plain presigned

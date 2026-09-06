@@ -93,6 +93,7 @@ func freezeAWSResolution(
 		credentialValues.SessionToken,
 	)
 	cfg = sanitizeAWSConfigIdentity(cfg, selection.Region)
+	cfg = awsconfigutil.FreezeEndpointSources(cfg)
 	cfg.Region = selection.Region
 	cfg.Credentials = aws.NewCredentialsCache(frozenProvider)
 	selection.sdkConfig = &cfg

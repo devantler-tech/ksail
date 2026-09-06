@@ -321,7 +321,7 @@ export interface KSailClusterConfiguration {
        */
       workers?: number;
       /**
-       * Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version.
+       * Kubernetes version to deploy. When set: cluster create/update reconcile toward it. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade; EKS creation uses eks.yaml and never discovers upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version.
        */
       kubernetesVersion?: string;
       /**
@@ -487,6 +487,10 @@ export interface KSailClusterConfiguration {
        * EKS holds options specific to the EKS distribution.
        */
       eks?: {
+        /**
+         * Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation.
+         */
+        experimentalControlPlaneUpgrade?: boolean;
         /**
          * Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create.
          */

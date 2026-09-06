@@ -7,6 +7,13 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 )
 
+// KubernetesUpgradePlanner validates distribution-specific pinned targets before
+// dry-run and no-op handling, and reports their effect in cluster diff.
+type KubernetesUpgradePlanner interface {
+	ValidateKubernetesUpgrade(current, target string) (string, error)
+	KubernetesUpgradeCategory() ChangeCategory
+}
+
 // UpgraderMetadata is the static-per-call descriptor an Upgrader exposes for the
 // version-reconciliation orchestrator: the OCI image references used for version
 // discovery, the version pins implied by the distribution itself, and the image

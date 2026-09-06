@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,33 @@ func eksTestCluster() *v1alpha1.Cluster {
 	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionEKS
 
 	return cluster
+}
+
+// TestEKSUpgradeCapabilityRequiresOptIn exercises the actual factory return type.
+func TestEKSUpgradeCapabilityRequiresOptIn(t *testing.T) {
+	t.Parallel()
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "default", true: "enabled"}[enabled], func(t *testing.T) {
+			t.Parallel()
+
+			cfg := eksTestCluster()
+			cfg.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade = enabled
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: &clusterprovisioner.DistributionConfig{
+					EKS: &clusterprovisioner.EKSConfig{Name: "demo", Region: "us-east-1"},
+				},
+			}
+			provisioner, _, err := factory.Create(t.Context(), cfg)
+			require.NoError(t, err)
+
+			_, upgrades := provisioner.(clusterupdate.Upgrader)
+			assert.Equal(t, enabled, upgrades)
+
+			_, updates := provisioner.(clusterprovisioner.Updater)
+			assert.True(t, updates)
+		})
+	}
 }
 
 //nolint:paralleltest // exercises explicit process environment isolation for the child eksctl binary.

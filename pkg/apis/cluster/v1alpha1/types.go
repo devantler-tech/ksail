@@ -162,8 +162,9 @@ type ClusterSpec struct {
 
 	// KubernetesVersion pins the Kubernetes version to deploy. Accepts values with
 	// or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Honored by the Talos
-	// distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is set in the
-	// distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
+	// distribution (Docker/Hetzner); for Kind and K3d the create-time version is set
+	// in kind.yaml/k3d.yaml instead. EKS creation uses eks.yaml; experimental EKS
+	// updates require an explicit minor here and eks.experimentalControlPlaneUpgrade.
 	//
 	// When set, KSail reconciles toward this version: `cluster create` provisions at
 	// it and `cluster update` upgrades the cluster toward it (skipping downgrades).
@@ -176,7 +177,8 @@ type ClusterSpec struct {
 	// available in the OCI registry (an in-place rolling upgrade for Talos; a
 	// confirmation-gated recreation for Kind/K3d). Override per invocation with the
 	// --kubernetes-version flag (precedence: flag > env > config > default).
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
+	// EKS never discovers a latest version automatically and refuses downgrades.
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version to deploy. When set: cluster create/update reconcile toward it. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade; EKS creation uses eks.yaml and never discovers upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags

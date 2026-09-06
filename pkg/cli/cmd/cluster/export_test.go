@@ -28,6 +28,40 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// ExportReconcileClusterVersions exercises the real version-update orchestration.
+func ExportReconcileClusterVersions(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	provisioner clusterprovisioner.Provisioner,
+	dryRun bool,
+) (bool, error) {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         &localregistry.Context{ClusterCfg: cfg},
+		clusterName: "demo",
+		dryRun:      dryRun,
+	}
+
+	return orchestrator.reconcileClusterVersions(provisioner)
+}
+
+// ExportSetupMutationCmdFlags exposes the command's real configuration/flag bindings.
+func ExportSetupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager {
+	return setupMutationCmdFlags(cmd)
+}
+
+// ExportPlannedVersionDrift exercises explicit-pin drift without registry discovery.
+func ExportPlannedVersionDrift(cmd *cobra.Command, cfg *v1alpha1.Cluster,
+	upgrader clusterupdate.Upgrader, current *clusterupdate.VersionInfo,
+) *clusterupdate.UpdateResult {
+	result := &clusterupdate.UpdateResult{}
+	for _, dimension := range versionDimensions(&localregistry.Context{ClusterCfg: cfg}, upgrader, current) {
+		mergeDimensionDrift(cmd, result, nil, dimension)
+	}
+
+	return result
+}
+
 // ExportSetEKSIdentityClientFactory replaces SDK client construction for offline lifecycle tests.
 func ExportSetEKSIdentityClientFactory(
 	factory func(

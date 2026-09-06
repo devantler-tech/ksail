@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfigutil "github.com/devantler-tech/ksail/v7/pkg/awsconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -180,7 +181,7 @@ func TestFrozenAWSConfigOptionPreservesNonIdentitySettings(t *testing.T) {
 	assert.Equal(t, "selected-access", selected.AccessKeyID)
 	assert.Equal(t, "selected-secret", selected.SecretAccessKey)
 
-	environmentSource, isEnvironmentConfig := options[0].ConfigSources[0].(config.EnvConfig)
+	environmentSource, isEnvironmentConfig := options[0].ConfigSources[0].(awsconfigutil.FrozenEnvironmentConfig)
 	require.True(t, isEnvironmentConfig)
 	assert.Empty(t, environmentSource.Credentials.AccessKeyID)
 	assert.Equal(t, baseEndpoint, environmentSource.BaseEndpoint)

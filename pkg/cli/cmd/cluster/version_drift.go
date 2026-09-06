@@ -28,6 +28,8 @@ type versionDimension struct {
 	// rolling reports whether reaching the target rolls nodes (Talos OS upgrade)
 	// rather than recreating; it selects the change impact category.
 	rolling bool
+	// planner validates pinned targets and reports a distribution-specific impact.
+	planner clusterupdate.KubernetesUpgradePlanner
 }
 
 // mergeVersionDrift computes read-only version-reconciliation drift — the same
@@ -78,7 +80,7 @@ func loadVersionUpgrader(
 
 	upgrader, ok := provisioner.(clusterupdate.Upgrader)
 	if !ok {
-		// Distributions without an Upgrader (e.g. KWOK, EKS) have no version
+		// Distributions without an Upgrader (e.g. KWOK or EKS without its opt-in) have no version
 		// reconciliation; nothing to report.
 		return nil, nil, false
 	}
@@ -107,6 +109,8 @@ func versionDimensions(
 		kubePin = strings.TrimSpace(upgrader.PinnedKubernetesVersion())
 	}
 
+	planner, _ := upgrader.(clusterupdate.KubernetesUpgradePlanner)
+
 	return []versionDimension{
 		{
 			label:          distributionLabel,
@@ -126,6 +130,7 @@ func versionDimensions(
 			suffix:         upgrader.VersionSuffix(),
 			pinnedVersion:  kubePin,
 			rolling:        false,
+			planner:        planner,
 		},
 	}
 }
@@ -161,6 +166,23 @@ func resolveDimensionTarget(
 	dimension versionDimension,
 ) (string, string, bool) {
 	if dimension.pinnedVersion != "" {
+		if dimension.planner != nil {
+			target, err := dimension.planner.ValidateKubernetesUpgrade(
+				dimension.currentVersion, dimension.pinnedVersion,
+			)
+			if err != nil {
+				notify.Warningf(
+					cmd.ErrOrStderr(),
+					"Cannot compute Kubernetes version drift: %v",
+					err,
+				)
+
+				return "", "", false
+			}
+
+			return target, "pinned via configuration", true
+		}
+
 		return normalizeVersionTag(dimension.pinnedVersion), "pinned via configuration", true
 	}
 
@@ -201,12 +223,21 @@ func appendVersionChange(
 
 	if dimension.rolling {
 		change.Category = clusterupdate.ChangeCategoryRebootRequired
-		mainDiff.RebootRequired = append(mainDiff.RebootRequired, change)
-
-		return
 	}
 
-	mainDiff.RecreateRequired = append(mainDiff.RecreateRequired, change)
+	if dimension.planner != nil {
+		change.Category = dimension.planner.KubernetesUpgradeCategory()
+	}
+
+	switch change.Category {
+	case clusterupdate.ChangeCategoryInPlace:
+		mainDiff.InPlaceChanges = append(mainDiff.InPlaceChanges, change)
+	case clusterupdate.ChangeCategoryRebootRequired:
+		mainDiff.RebootRequired = append(mainDiff.RebootRequired, change)
+	case clusterupdate.ChangeCategoryRecreateRequired, clusterupdate.ChangeCategoryWipeRequired,
+		clusterupdate.ChangeCategoryUnknown, clusterupdate.ChangeCategoryRollingRecreate:
+		mainDiff.RecreateRequired = append(mainDiff.RecreateRequired, change)
+	}
 }
 
 // normalizeVersionTag ensures the tag carries a leading "v" so comparisons match
