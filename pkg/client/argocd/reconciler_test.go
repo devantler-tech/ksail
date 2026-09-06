@@ -506,13 +506,11 @@ func TestIsColdStartTransient(t *testing.T) {
 			name:    "source unavailable outside the warm-up window stays terminal",
 			err:     fmt.Errorf("%w: %s", argocd.ErrSourceNotAvailable, "repository not found"),
 			elapsed: grace + time.Second,
-			want:    false,
 		},
 		{
 			name:    "a failed operation is never masked, even inside the window",
 			err:     fmt.Errorf("%w: %s", argocd.ErrOperationFailed, "sync operation failed"),
 			elapsed: time.Second,
-			want:    false,
 		},
 		{
 			name:    "an unrelated error is never masked",
@@ -524,13 +522,11 @@ func TestIsColdStartTransient(t *testing.T) {
 			name:    "the window boundary itself is already terminal",
 			err:     transportErr,
 			elapsed: grace,
-			want:    false,
 		},
 		{
 			name:    "an unclassified source sentinel does not authorize retry",
 			err:     argocd.ErrSourceNotAvailable,
 			elapsed: time.Second,
-			want:    false,
 		},
 	}
 
