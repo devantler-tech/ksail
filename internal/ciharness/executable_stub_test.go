@@ -156,5 +156,31 @@ func execAfterSignal(t *testing.T, stubPath string, inherit *os.File) (string, e
 	require.NoError(t, err)
 	require.NoError(t, stdin.Close())
 
-	return stderr.String(), child.Wait()
+	// Wait first: the child is still writing to stderr until it exits, so reading
+	// the buffer in the same return statement would race the exec failure message
+	// (Go evaluates the operands left to right).
+	waitErr := child.Wait()
+
+	return stderr.String(), waitErr
+}
+
+// TestExecAfterSignal_CapturesStderrAfterExit pins the helper's contract on any
+// platform: the child is still writing while it runs, so the returned stderr
+// must be read after it exits. Reading it in the same return statement as
+// Wait() captures an empty buffer, which silently turns the ETXTBSY assertion
+// above into a vacuous one.
+func TestExecAfterSignal_CapturesStderrAfterExit(t *testing.T) {
+	t.Parallel()
+
+	stubPath := filepath.Join(t.TempDir(), "late-writer")
+	require.NoError(t, writeExecutableFile(
+		t.Context(), stubPath,
+		"#!/bin/sh\nsleep 0.2\necho 'stub failed late' >&2\nexit 3\n",
+	))
+
+	stderr, err := execAfterSignal(t, stubPath, nil)
+
+	require.Error(t, err, "the stub exits non-zero")
+	assert.Contains(t, stderr, "stub failed late",
+		"stderr must be read after the child exits, not while it is still running")
 }
