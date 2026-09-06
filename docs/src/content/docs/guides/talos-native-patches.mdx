@@ -104,6 +104,39 @@ When you run `ksail cluster update`, KSail:
    - **Wipe-required** — requires partition wipe (disk encryption migration)
 4. Applies changes using the appropriate Talos SDK mode
 
+## Talos 1.14 Kubernetes Patch Migration
+
+When generating a Talos 1.14 or newer configuration, KSail converts supported legacy
+`cluster.apiServer` settings into native Kubernetes configuration documents. Patches
+for older Talos version contracts keep their original content.
+
+Files are applied in filename order within each directory. Shared `cluster/` patches
+are applied before `control-planes/` and `workers/` patches, including shared patches
+supplied at runtime. Documents separated by `---` are applied in their original order
+as separate patches, so repeated API-server settings follow Talos's native merge rules.
+
+Legacy OIDC flags may be split across files or documents in the same scope. KSail
+resolves the complete issuer, client, claim mappings, and CA before emitting structured
+authentication. Role patches override shared settings without changing the other role.
+A shared OIDC configuration must be complete on its own; put settings intended only for
+control planes together in `control-planes/`.
+
+Some layouts require an explicit conversion:
+
+- **RFC 6902 YAML or JSON lists:** Talos cannot apply these to its multi-document
+  configuration. Convert them to strategic-merge Talos configuration documents. KSail
+  reports the source file during migration, including for operations on unrelated fields.
+- **YAML aliases in multi-document files:** expand aliases to explicit values before
+  migration so each resulting patch is self-contained.
+- **Mixed authentication formats:** consolidate legacy OIDC flags and an explicit
+  `KubeAuthenticationConfig` into one structured configuration.
+- **OIDC CA appends or deletions:** provide the complete CA as literal file content
+  using `create` or `overwrite`. KSail cannot resolve a CA from existing machine state.
+  An empty final CA does not fall back to earlier content.
+- **Deletion selectors overlapping OIDC:** consolidate the remaining authentication
+  settings before migration. Multi-key list deletions in a legacy document being
+  converted must be moved to a separate strategic-merge patch to preserve their selector.
+
 ## Backward Compatibility
 
 Deprecated fields continue to work. When a deprecated field is set:

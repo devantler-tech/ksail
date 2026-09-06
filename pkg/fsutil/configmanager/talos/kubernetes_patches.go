@@ -152,14 +152,10 @@ func migrateKubernetesPatchesForContract(
 		return patches, nil
 	}
 
-	migrated := make([]Patch, len(patches))
-	copy(migrated, patches)
-
-	// Legacy patches may split a value across files — most notably an OIDC CA whose
-	// machine.files entry lives in a different patch than the kube-apiserver args that
-	// reference it. Decode the whole set up front so per-patch migration can resolve
-	// against every patch, not just the one being migrated.
-	patchSetDocuments := decodePatchSetDocuments(patches)
+	migrated, err := prepareKubernetesPatchSet(patches)
+	if err != nil {
+		return nil, err
+	}
 
 	for idx := range migrated {
 		content := strings.TrimSpace(string(migrated[idx].Content))
@@ -172,7 +168,6 @@ func migrateKubernetesPatchesForContract(
 		default:
 			content, found, migrationErr := migrateLegacyKubernetesPatch(
 				migrated[idx],
-				patchSetDocuments,
 			)
 			if migrationErr != nil {
 				return nil, migrationErr
@@ -184,40 +179,18 @@ func migrateKubernetesPatchesForContract(
 		}
 	}
 
-	return migrated, nil
+	return nonemptyKubernetesPatches(migrated), nil
 }
 
 type legacyAPIServerPatchValues struct {
-	documents         []map[string]any
-	patchSetDocuments []map[string]any
-	clusterDocument   map[string]any
-	cluster           map[string]any
-	apiServer         map[string]any
-	extraArgs         map[string]any
-}
-
-// decodePatchSetDocuments decodes every patch in the set into a flat document list,
-// used to resolve references that span patches. Patches that fail to decode, or that
-// are not map documents, are skipped: migrating each patch reports its own decode
-// error, and this lookup must not turn an unrelated malformed patch into a failure.
-func decodePatchSetDocuments(patches []Patch) []map[string]any {
-	documents := []map[string]any{}
-
-	for _, patch := range patches {
-		patchDocuments, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
-		if err != nil || !mapDocuments {
-			continue
-		}
-
-		documents = append(documents, patchDocuments...)
-	}
-
-	return documents
+	clusterDocument map[string]any
+	cluster         map[string]any
+	apiServer       map[string]any
+	extraArgs       map[string]any
 }
 
 func migrateLegacyKubernetesPatch(
 	patch Patch,
-	patchSetDocuments []map[string]any,
 ) ([]byte, bool, error) {
 	documents, mapDocuments, err := decodeLegacyKubernetesDocuments(patch)
 	if err != nil {
@@ -239,15 +212,11 @@ func migrateLegacyKubernetesPatch(
 		)
 	}
 
-	if values != nil {
-		values.patchSetDocuments = patchSetDocuments
-	}
-
 	if !found && !cniMigrated {
 		return patch.Content, false, nil
 	}
 
-	apiServerDocument, structuredDocuments, authenticationDocument, err := migrateAPIServerDocuments(
+	apiServerDocument, structuredDocuments, err := migrateAPIServerDocuments(
 		values,
 		found,
 		patch.Path,
@@ -266,7 +235,6 @@ func migrateLegacyKubernetesPatch(
 		documents,
 		apiServerDocument,
 		structuredDocuments,
-		authenticationDocument,
 		cniDeleteDocument,
 	)
 	if err != nil {
@@ -276,41 +244,41 @@ func migrateLegacyKubernetesPatch(
 	return content, true, nil
 }
 
-// migrateAPIServerDocuments migrates the OIDC/authentication, structured, and API-server
+// migrateAPIServerDocuments migrates structured and API-server
 // documents for a legacy kube-apiserver patch, returning them for marshaling. It is a no-op
 // (all-nil) when the patch carries no legacy API-server values.
 func migrateAPIServerDocuments(
 	values *legacyAPIServerPatchValues,
 	found bool,
 	patchPath string,
-) (map[string]any, []map[string]any, []byte, error) {
+) (map[string]any, []map[string]any, error) {
 	if !found {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
-	authenticationDocument, err := values.migrateOIDCAuthenticationDocument(patchPath)
+	err := values.rejectUnsupportedOIDCArgument(patchPath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	err = values.rejectDeniedAPIServerExtraArgs(patchPath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	structuredDocuments, err := values.migrateStructuredAPIServerDocuments(patchPath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	apiServerDocument, err := values.migrateAPIServerDocument(patchPath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	values.removeMigratedValues()
 
-	return apiServerDocument, structuredDocuments, authenticationDocument, nil
+	return apiServerDocument, structuredDocuments, nil
 }
 
 // migrateDisableDefaultCNIDocuments structurally detects a disable-default-CNI edit
@@ -416,7 +384,6 @@ func findLegacyAPIServerValues(
 		}
 
 		values = &legacyAPIServerPatchValues{
-			documents:       documents,
 			clusterDocument: document,
 			cluster:         cluster,
 			apiServer:       apiServer,
@@ -427,22 +394,9 @@ func findLegacyAPIServerValues(
 	return values, values != nil, nil
 }
 
-func (values *legacyAPIServerPatchValues) migrateOIDCAuthenticationDocument(
-	patchPath string,
-) ([]byte, error) {
-	var authenticationDocument []byte
-
-	if _, hasOIDCIssuer := values.extraArgs["oidc-issuer-url"]; hasOIDCIssuer {
-		config, err := values.oidcConfig(patchPath)
-		if err != nil {
-			return nil, err
-		}
-
-		authenticationDocument = StructuredOIDCPatchYAML(config)
-	}
-
+func (values *legacyAPIServerPatchValues) rejectUnsupportedOIDCArgument(patchPath string) error {
 	if extraArg := unsupportedLegacyOIDCExtraArg(values.extraArgs); extraArg != "" {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"migrate legacy OIDC patch %q: %w %q",
 			patchPath,
 			errLegacyOIDCUnsupportedExtraArg,
@@ -450,47 +404,7 @@ func (values *legacyAPIServerPatchValues) migrateOIDCAuthenticationDocument(
 		)
 	}
 
-	return authenticationDocument, nil
-}
-
-func (values *legacyAPIServerPatchValues) oidcConfig(patchPath string) (OIDCPatchConfig, error) {
-	config := OIDCPatchConfig{
-		IssuerURL:      popString(values.extraArgs, "oidc-issuer-url"),
-		ClientID:       popString(values.extraArgs, "oidc-client-id"),
-		UsernameClaim:  popString(values.extraArgs, "oidc-username-claim"),
-		UsernamePrefix: popString(values.extraArgs, "oidc-username-prefix"),
-		GroupsClaim:    popString(values.extraArgs, "oidc-groups-claim"),
-		GroupsPrefix:   popString(values.extraArgs, "oidc-groups-prefix"),
-	}
-	caPath := popString(values.extraArgs, "oidc-ca-file")
-
-	if config.IssuerURL == "" || config.ClientID == "" {
-		return OIDCPatchConfig{}, fmt.Errorf(
-			"migrate legacy OIDC patch %q: %w",
-			patchPath,
-			errLegacyOIDCRequiredFields,
-		)
-	}
-
-	if caPath != "" {
-		// Prefer the patch being migrated, then fall back to the rest of the set: the
-		// machine.files entry backing oidc-ca-file may live in a different patch.
-		config.CertificateAuthority = machineFileContent(values.documents, caPath)
-		if config.CertificateAuthority == "" {
-			config.CertificateAuthority = machineFileContent(values.patchSetDocuments, caPath)
-		}
-
-		if config.CertificateAuthority == "" {
-			return OIDCPatchConfig{}, fmt.Errorf(
-				"migrate legacy OIDC patch %q for %q: %w",
-				patchPath,
-				caPath,
-				errLegacyOIDCCAMissing,
-			)
-		}
-	}
-
-	return config, nil
+	return nil
 }
 
 // rejectDeniedAPIServerExtraArgs fails the migration when extraArgs still carries an
@@ -775,7 +689,6 @@ func marshalMigratedKubernetesDocuments(
 	legacyDocuments []map[string]any,
 	apiServerDocument map[string]any,
 	structuredDocuments []map[string]any,
-	authenticationDocument []byte,
 	cniDeleteDocument []byte,
 ) ([]byte, error) {
 	documents := make(
@@ -823,10 +736,6 @@ func marshalMigratedKubernetesDocuments(
 		documents = append(documents, bytes.TrimSpace(encoded))
 	}
 
-	if len(authenticationDocument) > 0 {
-		documents = append(documents, bytes.TrimSpace(authenticationDocument))
-	}
-
 	return append(bytes.Join(documents, []byte("\n---\n")), '\n'), nil
 }
 
@@ -858,44 +767,4 @@ func removeEmptyMap(parent map[string]any, key string, value map[string]any) {
 	if len(value) == 0 {
 		delete(parent, key)
 	}
-}
-
-func machineFileContent(documents []map[string]any, path string) string {
-	for _, document := range documents {
-		if content := machineFileContentInDocument(document, path); content != "" {
-			return content
-		}
-	}
-
-	return ""
-}
-
-func machineFileContentInDocument(document map[string]any, path string) string {
-	machine, found := mapValue(document, "machine")
-	if !found {
-		return ""
-	}
-
-	files, found := machine["files"].([]any)
-	if !found {
-		return ""
-	}
-
-	for _, item := range files {
-		file, isMap := item.(map[string]any)
-		if !isMap {
-			continue
-		}
-
-		filePath, _ := file["path"].(string)
-		if filePath != path {
-			continue
-		}
-
-		content, _ := file["content"].(string)
-
-		return content
-	}
-
-	return ""
 }
