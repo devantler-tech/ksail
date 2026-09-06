@@ -78,6 +78,9 @@ func (f DefaultFactory) createEKSProvisioner(
 	return eksprovisioner.NewUpdatableProvisioner(
 		provisioner,
 		eksprovisioner.WithManagedNodegroupUpdates(managedNodegroupUpdates),
+		eksprovisioner.WithManagedNodegroupCreation(
+			cluster.Spec.Cluster.EKS.ExperimentalManagedNodegroupCreation,
+		),
 	), eksConfig, nil
 }
 

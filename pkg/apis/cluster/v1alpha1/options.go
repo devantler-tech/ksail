@@ -14,6 +14,14 @@ type OptionsVanilla struct {
 
 // OptionsEKS defines options specific to the EKS distribution.
 type OptionsEKS struct {
+	// ExperimentalManagedNodegroupCreation allows cluster update to create managed
+	// node groups added to eksctl.yaml. Default false: additions require recreation.
+	// Existing managed node-group scaling does not require this option. Removals
+	// and instance-type changes still require recreation. Creation requires a
+	// verified cluster identity and remains experimental pending live EKS validation.
+	// Graduation: https://github.com/devantler-tech/ksail/issues/6923.
+	ExperimentalManagedNodegroupCreation bool `json:"experimentalManagedNodegroupCreation,omitzero" jsonschema_description:"Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation."` //nolint:lll // generated-schema description
+
 	// ExperimentalAWSLoadBalancerController enables installing the AWS Load
 	// Balancer Controller as the cluster's LoadBalancer component when
 	// spec.cluster.loadBalancer is Enabled. Default false: EKS keeps its

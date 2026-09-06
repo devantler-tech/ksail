@@ -11,6 +11,7 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	awscredentials "github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	awseks "github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -79,6 +80,8 @@ type callerIdentityGetter interface {
 // Client reads EKS cluster connection details and mints bearer tokens for
 // them, hiding the SDK's request shapes and the token encoding scheme.
 type Client struct {
+	nodegroupStacks           *cloudformation.Client
+	nodegroups                *awseks.Client
 	describer                 clusterDescriber
 	presigner                 callerIdentityPresigner
 	identityGetter            callerIdentityGetter
@@ -342,6 +345,14 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 
 	if c.describer == nil {
 		c.describer = awseks.NewFromConfig(cfg)
+	}
+
+	if c.nodegroups == nil {
+		c.nodegroups = awseks.NewFromConfig(cfg)
+	}
+
+	if c.nodegroupStacks == nil {
+		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 	}
 
 	c.configureMissingSTSClients(cfg)

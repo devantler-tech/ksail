@@ -28,7 +28,8 @@ import (
 type UpdatableProvisioner struct {
 	*Provisioner
 
-	managedNodegroupUpdates bool
+	managedNodegroupUpdates  bool
+	managedNodegroupCreation bool
 
 	// componentDetector probes the running cluster's components for the
 	// update baseline; injected by the orchestrator via SetComponentDetector.
@@ -46,9 +47,17 @@ func WithManagedNodegroupUpdates(enabled bool) UpdatableOption {
 	}
 }
 
+// WithManagedNodegroupCreation enables experimental in-place additions. It
+// defaults to false and does not enable updates without a declared config.
+func WithManagedNodegroupCreation(enabled bool) UpdatableOption {
+	return func(provisioner *UpdatableProvisioner) {
+		provisioner.managedNodegroupCreation = enabled
+	}
+}
+
 // NewUpdatableProvisioner wraps an EKS provisioner with component update
-// support. Managed node-group updates default to enabled for compatibility;
-// the cluster factory supplies the user's explicit experimental opt-in.
+// support. Managed node-group scaling defaults to enabled; additions require
+// the separate experimental opt-in supplied by the cluster factory.
 func NewUpdatableProvisioner(
 	provisioner *Provisioner,
 	options ...UpdatableOption,
@@ -98,6 +107,10 @@ func (u *UpdatableProvisioner) Update(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	opts clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
+	if u.managedNodegroupUpdates && u.managedNodegroupCreation {
+		return u.updateWithNodegroupCreation(ctx, name, oldSpec, newSpec, opts)
+	}
+
 	//nolint:wrapcheck // error context added inside RunUpdate.
 	return clusterupdate.RunUpdate(
 		ctx, name, oldSpec, newSpec, opts, clustererr.ErrRecreationRequired,
@@ -107,8 +120,8 @@ func (u *UpdatableProvisioner) Update(
 
 // DiffConfig computes the differences between the declared eksctl.yaml
 // managed node groups and the live cluster state. Scaling changes on an
-// existing managed node group are in-place; adding or removing node groups
-// is classified recreate-required (not supported in-place yet).
+// existing managed node group are in-place. Additions require the experimental
+// opt-in; removals and supported immutable-field changes require recreation.
 func (u *UpdatableProvisioner) DiffConfig(
 	ctx context.Context,
 	name string,
@@ -117,6 +130,12 @@ func (u *UpdatableProvisioner) DiffConfig(
 	result := clusterupdate.NewEmptyUpdateResult()
 	if !u.managedNodegroupUpdates {
 		return result, nil
+	}
+
+	if u.managedNodegroupCreation {
+		_, diff, err := u.planNodegroupCreation(ctx, name)
+
+		return diff, err
 	}
 
 	desired, declared, err := u.desiredNodegroups()
@@ -135,11 +154,28 @@ func (u *UpdatableProvisioner) DiffConfig(
 		return result, fmt.Errorf("failed to list nodegroups: %w", err)
 	}
 
-	liveByName := liveManagedNodegroups(live)
+	return diffManagedNodegroups(desired, liveManagedNodegroups(live), false), nil
+}
+
+func diffManagedNodegroups(
+	desired []managedNodeGroupConfig,
+	liveByName map[string]eksctl.NodegroupSummary,
+	allowCreation bool,
+) *clusterupdate.UpdateResult {
+	result := clusterupdate.NewEmptyUpdateResult()
 
 	for _, group := range desired {
 		liveGroup, exists := liveByName[group.Name]
 		if !exists {
+			if allowCreation {
+				result.InPlaceChanges = append(
+					result.InPlaceChanges,
+					nodegroupCreationChange(group.Name),
+				)
+
+				continue
+			}
+
 			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 				Field:    nodegroupField(group.Name),
 				NewValue: group.Name,
@@ -171,7 +207,7 @@ func (u *UpdatableProvisioner) DiffConfig(
 		})
 	}
 
-	return result, nil
+	return result
 }
 
 // GetCurrentConfig retrieves the current cluster configuration: component
