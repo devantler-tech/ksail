@@ -226,11 +226,8 @@ func TestWriteExecutableStub_ConcurrentWriteBlocksExec(t *testing.T) {
 	closeErr := make(chan error, 1)
 
 	go func() {
-		handle, err := os.OpenFile(
-			inProcess,
-			os.O_WRONLY,
-			0,
-		) //nolint:gosec // Test-owned temp path.
+		//nolint:gosec // inProcess is a test-owned temp file this test just created.
+		handle, err := os.OpenFile(inProcess, os.O_WRONLY, 0)
 
 		openErr <- err
 
