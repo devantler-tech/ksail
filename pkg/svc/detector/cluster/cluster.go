@@ -36,7 +36,7 @@ var (
 
 	// ErrUnknownContextPattern indicates the context name doesn't match any known distribution pattern.
 	ErrUnknownContextPattern = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, admin@, vcluster-docker_, or kwok- pattern",
+		"unknown distribution: context does not match a known KSail distribution pattern",
 	)
 
 	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
@@ -187,6 +187,7 @@ func DetectInfoWithResolver(
 //   - admin@<cluster-name> → Talos
 //   - vcluster-docker_<cluster-name> → VCluster
 //   - kwok-<cluster-name> → KWOK
+//   - [<identity>@]<cluster-name>.<region>.eksctl.io → EKS
 //
 // The standard per-distribution prefixes are single-sourced through
 // standardContextPrefixes (derived from v1alpha1.Distribution.ContextName). The
@@ -197,6 +198,16 @@ func DetectInfoWithResolver(
 //
 // Returns an error if the pattern is unrecognized or if the extracted cluster name is empty.
 func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, string, error) {
+	// Match the complete eksctl shape before prefixes: an IAM identity may be admin,
+	// and an EKS cluster name may itself begin with kind- or another local prefix.
+	if strings.HasSuffix(contextName, ".eksctl.io") {
+		if clusterName, _, ok := ParseEksctlContextTarget(contextName); ok {
+			return v1alpha1.DistributionEKS, clusterName, nil
+		}
+
+		return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
+	}
+
 	for _, entry := range standardContextPrefixes() {
 		if clusterName, ok := strings.CutPrefix(contextName, entry.prefix); ok {
 			if clusterName == "" {
@@ -260,6 +271,12 @@ func detectProviderFromEndpoint(
 	serverURL string,
 	clusterName string,
 ) (v1alpha1.Provider, error) {
+	// EKS is AWS-managed, including private endpoints and local tunnels. Context
+	// detection selects a target; mutating callers separately verify ownership.
+	if distribution == v1alpha1.DistributionEKS {
+		return v1alpha1.ProviderAWS, nil
+	}
+
 	// Kind, K3d, VCluster, and KWOK always use Docker
 	if distribution == v1alpha1.DistributionVanilla ||
 		distribution == v1alpha1.DistributionK3s ||

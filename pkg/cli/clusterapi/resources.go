@@ -84,8 +84,16 @@ func (s *Service) defaultDynamicClient(
 	return client, nil
 }
 
-// contextForCluster finds the kubeconfig context whose detected cluster name matches clusterName.
-// Returns an ErrNotFound-wrapped error (→ 404) when no context matches.
+// contextForCluster finds the kubeconfig context for clusterName. A ksail-managed cluster is keyed
+// by its detected cluster name (kind-<name> → <name>, k3d-<name> → <name>, admin@<name> → <name>, …),
+// so the detected-name match is tried first. An unmanaged cluster — a kubeconfig context ksail did
+// not provision (EKS, kubeadm, a colleague's cluster) — is surfaced by List keyed by its RAW context
+// name (see newUnmanagedCluster), and an arbitrary context follows no distribution pattern at all,
+// so the lookup falls back to an exact raw-context-name match. Without that fallback every
+// unmanaged row List advertises would 404 the moment a surface tried to operate on it. The same
+// fallback also resolves a managed row addressed by its full context name (kind-foo), which the
+// detected-name pass alone rejects because detection yields "foo". Returns an ErrNotFound-wrapped
+// error (→ 404) when neither pass matches.
 func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
@@ -97,6 +105,12 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 		if detectErr == nil && name == clusterName {
 			return contextName, nil
 		}
+	}
+
+	// The detected-name pass keeps precedence so a managed cluster "prod" still resolves to
+	// kind-prod even if a stray context happens to be literally named "prod".
+	if _, exists := config.Contexts[clusterName]; exists {
+		return clusterName, nil
 	}
 
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)

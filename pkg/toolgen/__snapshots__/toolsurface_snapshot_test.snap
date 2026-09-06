@@ -1546,7 +1546,7 @@ workload_write
         "type": "string"
       },
       "cluster": {
-        "description": "The name of the kubeconfig cluster to use (applies to: describe, explain, forward, get, logs)",
+        "description": "The name of the kubeconfig cluster to use (applies to: describe, explain, forward, get, logs, wait)",
         "type": "string"
       },
       "clusterip": {
@@ -1571,7 +1571,7 @@ workload_write
         "type": "string"
       },
       "context": {
-        "description": "The name of the kubeconfig context to use (applies to: describe, explain, forward, get, logs)",
+        "description": "The name of the kubeconfig context to use (applies to: describe, explain, forward, get, logs, wait)",
         "type": "string"
       },
       "crds": {
@@ -1762,7 +1762,7 @@ workload_write
       },
       "kubeconfig": {
         "default": "~/.kube/config",
-        "description": "Path to the kubeconfig file to use for CLI requests. (applies to: describe, explain, forward, get, logs)",
+        "description": "Path to the kubeconfig file to use for CLI requests. (applies to: describe, explain, forward, get, logs, wait)",
         "type": "string"
       },
       "kubeconfig-secret-ref": {
@@ -1816,7 +1816,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network, wait)",
         "type": "string"
       },
       "no-headers": {

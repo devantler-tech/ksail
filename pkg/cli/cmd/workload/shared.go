@@ -22,6 +22,7 @@ import (
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
@@ -178,13 +179,11 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 		resolvedPath := kubeconfig.GetKubeconfigPathSilently(child)
 
 		kubeconfigFlag := child.Flags().Lookup("kubeconfig")
-		if kubeconfigFlag != nil && !child.Flags().Changed("kubeconfig") {
-			err := kubeconfigFlag.Value.Set(resolvedPath)
+		if kubeconfigFlag != nil {
+			err := resolveKubeconfigFlag(child, kubeconfigFlag, resolvedPath)
 			if err != nil {
-				return fmt.Errorf("failed to set kubeconfig flag: %w", err)
+				return err
 			}
-
-			kubeconfigFlag.DefValue = resolvedPath
 		}
 
 		if origPersistentPreRunE != nil {
@@ -199,6 +198,52 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	}
 
 	cmd.PersistentPreRun = nil
+}
+
+// resolveKubeconfigFlag settles the kubeconfig flag's value before the command
+// runs. An unset flag takes the path KSail resolved from the config; a value the
+// user supplied is canonicalized, because client-go opens it directly and a
+// relative path or a symlink would otherwise reach the filesystem unresolved
+// (AGENTS.md requires every user-supplied path argument to go through
+// fsutil.EvalCanonicalPath). Canonicalization tolerates a path that does not
+// exist yet — it resolves the parent — so an unreadable kubeconfig still fails
+// downstream with client-go's own message rather than here.
+func resolveKubeconfigFlag(
+	child *cobra.Command,
+	kubeconfigFlag *pflag.Flag,
+	resolvedPath string,
+) error {
+	if child.Flags().Changed("kubeconfig") {
+		supplied := kubeconfigFlag.Value.String()
+
+		// An explicitly empty value is not a path: canonicalizing it would yield
+		// the working directory, which client-go would then try to load as a
+		// kubeconfig. Leave it empty so its own default resolution applies.
+		if supplied == "" {
+			return nil
+		}
+
+		canonical, err := fsutil.EvalCanonicalPath(supplied)
+		if err != nil {
+			return fmt.Errorf("failed to canonicalize kubeconfig flag: %w", err)
+		}
+
+		err = kubeconfigFlag.Value.Set(canonical)
+		if err != nil {
+			return fmt.Errorf("failed to set kubeconfig flag: %w", err)
+		}
+
+		return nil
+	}
+
+	err := kubeconfigFlag.Value.Set(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("failed to set kubeconfig flag: %w", err)
+	}
+
+	kubeconfigFlag.DefValue = resolvedPath
+
+	return nil
 }
 
 // resolveGitOpsEngine determines the GitOps engine from config, normalizing an
