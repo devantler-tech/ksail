@@ -6,11 +6,66 @@ import (
 	"net"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRemoveHetznerNodes_CleanupFailurePreservesServer(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name         string
+		address      string
+		leaveFailure bool
+	}{
+		{name: "missing target address"},
+		{name: "connection failure", address: "192.0.2.1"},
+		{name: "leave failure", address: "192.0.2.1", leaveFailure: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := &membershipCloudTransport{address: testCase.address}
+
+			provisioner := newClientErrProvisioner(
+				t,
+			).WithInfraProvider(newMembershipCloud(transport))
+			if testCase.leaveFailure {
+				provisioner.WithEtcdClientFactoryForTest(
+					func(context.Context, string) (talosprovisioner.EtcdMembershipClientForTest, error) {
+						return &membershipClient{leaveErr: errMembershipUnavailable}, nil
+					},
+				)
+			}
+
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := provisioner.RemoveHetznerNodesForTest(
+				t.Context(),
+				"scale-cluster",
+				talosprovisioner.RoleControlPlane,
+				1,
+				result,
+			)
+
+			require.Error(t, err)
+			assert.Empty(
+				t,
+				transport.writes,
+				"membership failure must precede every infrastructure mutation",
+			)
+			assert.Empty(t, result.AppliedChanges)
+			assert.Len(t, result.FailedChanges, 1)
+
+			if testCase.leaveFailure {
+				assert.ErrorIs(t, err, errMembershipUnavailable)
+			}
+		})
+	}
+}
 
 // TestWaitForNewHetznerNodesReachable_NoServersIsNoOp verifies the post-config
 // reachability wait is a no-op (no dialing, no error) when there are no new nodes.

@@ -27,6 +27,41 @@ import (
 
 var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
 
+// EtcdMembershipClientForTest exposes the membership transport boundary.
+type EtcdMembershipClientForTest = etcdMembershipClient
+
+// WithEtcdClientFactoryForTest injects an offline membership RPC client.
+func (p *Provisioner) WithEtcdClientFactoryForTest(
+	factory func(context.Context, string) (EtcdMembershipClientForTest, error),
+) *Provisioner {
+	p.etcdClientFactory = factory
+
+	return p
+}
+
+// RemoveHetznerNodesForTest exposes the scale-down orchestration.
+func (p *Provisioner) RemoveHetznerNodesForTest(
+	ctx context.Context, clusterName, role string, count int, result *clusterupdate.UpdateResult,
+) error {
+	return p.removeHetznerNodes(ctx, clusterName, role, count, result)
+}
+
+// RollingReplaceSingleNodeForTest exposes the destructive replacement boundary.
+func (p *Provisioner) RollingReplaceSingleNodeForTest(
+	ctx context.Context, clientset kubernetes.Interface, hzProvider *hetzner.Provider,
+	clusterName, role string, oldServer *hcloud.Server,
+) error {
+	return p.rollingReplaceSingleNode(
+		ctx,
+		clientset,
+		hzProvider,
+		clusterName,
+		role,
+		oldServer,
+		HetznerInfra{},
+	)
+}
+
 // ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest exposes the stable error
 // identity expected when the persisted ownership marker is JSON null.
 var ErrManagedNodeAnnotationKeysExpectedJSONArrayForTest = errManagedNodeAnnotationKeysExpectedJSONArray
