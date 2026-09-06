@@ -191,3 +191,69 @@ func TestExecAfterSignal_CapturesStderrAfterExit(t *testing.T) {
 	assert.Contains(t, stderr, "stub failed late",
 		"stderr must be read after the child exits, not while it is still running")
 }
+
+// TestWriteExecutableStub_ConcurrentWriteBlocksExec is the regression that
+// separates the two writers, and the reason writeExecutableFile exists.
+//
+// The kernel refuses to exec a file while any process holds it open for writing.
+// An in-process writer therefore poisons every concurrent exec of that stub for
+// as long as it is open — and the harness's tests fork constantly, which is how
+// #6199 surfaced. The control below makes that window explicit: a goroutine holds
+// the descriptor while this test execs the same path, and the exec fails.
+// writeExecutableFile cannot reproduce it, because the only descriptor lives in a
+// child shell that has exited by the time the call returns, so the same exec of
+// the same path succeeds.
+func TestWriteExecutableStub_ConcurrentWriteBlocksExec(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("ETXTBSY on exec of a file open for writing is Linux semantics")
+	}
+
+	dir := t.TempDir()
+	content := "#!/bin/sh\nexit 0\n"
+
+	// Control: this process holds the write descriptor across the exec.
+	inProcess := filepath.Join(dir, "in-process-writer")
+	require.NoError(t, os.WriteFile(inProcess, []byte(content), 0o600))
+	//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
+	require.NoError(t, os.Chmod(inProcess, 0o700))
+
+	// The writer goroutine reports through channels rather than asserting:
+	// testify's require must only run on the test goroutine.
+	execDone := make(chan struct{})
+	openErr := make(chan error, 1)
+	closeErr := make(chan error, 1)
+
+	go func() {
+		handle, err := os.OpenFile(inProcess, os.O_WRONLY, 0) //nolint:gosec // Test-owned temp path.
+
+		openErr <- err
+
+		if err != nil {
+			closeErr <- nil
+
+			return
+		}
+
+		<-execDone
+		closeErr <- handle.Close()
+	}()
+
+	require.NoError(t, <-openErr, "could not hold the stub open for writing")
+
+	//nolint:gosec // inProcess is a test-owned temp file this test just created.
+	output, err := exec.CommandContext(t.Context(), inProcess).CombinedOutput()
+	close(execDone)
+	require.NoError(t, <-closeErr)
+
+	require.Error(t, err, "exec must fail while a writer holds the stub open: %s", output)
+
+	// The fix: writeExecutableFile leaves no writer anywhere once it returns.
+	viaHelper := filepath.Join(dir, "helper-writer")
+	require.NoError(t, writeExecutableFile(t.Context(), viaHelper, content))
+
+	//nolint:gosec // viaHelper is a test-owned temp file the writer under test just created.
+	output, err = exec.CommandContext(t.Context(), viaHelper).CombinedOutput()
+	require.NoError(t, err, "helper-written stub must exec cleanly: %s", output)
+}
