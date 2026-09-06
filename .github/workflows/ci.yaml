@@ -164,7 +164,7 @@ jobs:
               - 'go.sum'
               - '.govulncheck-allow.txt'
               - '.github/actions/**'
-            # The Go harness in internal/ciharness asserts the shape of the to-do scanner
+            # The Go harness in internal/ciharness checks release-ref safety and the to-do scanner
             # caller. Its subject is a WORKFLOW file, not a Go file, so the org-required
             # validate-go-project run cannot reach it: that workflow gates its own test job
             # on a `go` filter of **/*.go|go.mod|go.sum|.golangci.* and skips everything
@@ -183,6 +183,9 @@ jobs:
             todos-contract:
               - '.github/workflows/todos.yaml'
               - '.github/workflows/ci.yaml'
+              - '.github/workflows/cd.yaml'
+              - '.github/scripts/validate-release-ref.sh'
+              - '.github/scripts/validate-release-ref.test.sh'
               - 'internal/ciharness/**'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
@@ -1728,7 +1731,7 @@ jobs:
           echo "Dependency test graph resolves."
 
   verify-todos-workflow-contract:
-    name: 🧾 Verify TODO Workflow Contract
+    name: 🧾 Verify Workflow Contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [changes]
@@ -1752,11 +1755,11 @@ jobs:
       # -count=1 is load-bearing: this test's real subject is a YAML file the Go build graph
       # cannot see, so a cached PASS from an earlier run would be replayed over a changed
       # workflow and report success without executing anything.
-      - name: 🧾 Verify TODO workflow contract
+      - name: 🧾 Verify workflow contracts
         run: |
           if ! go test ./internal/ciharness/... -count=1; then
-            echo "::error::The TODO scanner workflow no longer matches the contract in internal/ciharness."
-            echo "Fix: reconcile .github/workflows/todos.yaml with the assertions, or update the assertions if the contract itself changed."
+            echo "::error::A workflow no longer matches its contract in internal/ciharness."
+            echo "Fix the reported workflow or script failure while preserving its safety properties."
             exit 1
           fi
 
