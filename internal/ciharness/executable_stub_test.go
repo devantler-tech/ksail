@@ -104,74 +104,57 @@ func TestWriteExecutableStub_InheritedWriteDescriptorBlocksExec(t *testing.T) {
 	dir := t.TempDir()
 	content := "#!/bin/sh\nexit 0\n"
 
-	// The hazard: an open writer in this process at the moment a child is forked.
+	// The hazard: a writer this process opened, inherited by the child that execs.
 	heldPath := filepath.Join(dir, "held-open")
-	require.NoError(
-		t,
-		os.WriteFile(heldPath, []byte(content), 0o700),
-	) //nolint:gosec // Test-owned temp path.
+	require.NoError(t, os.WriteFile(heldPath, []byte(content), 0o600))
+	//nolint:gosec // Owner execute is required for a PATH stub in a private temp dir.
+	require.NoError(t, os.Chmod(heldPath, 0o700))
 
 	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0) //nolint:gosec // Test-owned temp path.
 	require.NoError(t, err)
 
-	var stderr bytes.Buffer
-
-	//nolint:gosec // heldPath is a test-owned temp file; the shell fragment is a constant.
-	executor := exec.CommandContext(
-		t.Context(),
-		"sh",
-		"-c",
-		`read -r line && exec "$1"`,
-		"sh",
-		heldPath,
-	)
-	executor.ExtraFiles = []*os.File{writer}
-	executor.Stderr = &stderr
-
-	stdin, err := executor.StdinPipe()
-	require.NoError(t, err)
-	require.NoError(t, executor.Start())
-
-	// This process releases the writer first; only the child's inherited copy remains.
-	require.NoError(t, writer.Close())
-
-	_, err = io.WriteString(stdin, "go\n")
-	require.NoError(t, err)
-	require.NoError(t, stdin.Close())
-
-	err = executor.Wait()
+	stderr, err := execAfterSignal(t, heldPath, writer)
 	require.Error(t, err, "a child holding an inherited write descriptor must not execute the stub")
-	assert.Contains(t, strings.ToLower(stderr.String()), "text file busy")
+	assert.Contains(t, strings.ToLower(stderr), "text file busy")
 
 	// The fix: the helper never gives this process a descriptor a child could inherit.
 	safePath := filepath.Join(dir, "helper-written")
 	require.NoError(t, writeExecutableFile(t.Context(), safePath, content))
 
-	var safeStderr bytes.Buffer
+	stderr, err = execAfterSignal(t, safePath, nil)
+	require.NoError(t, err, "helper-written stub must execute: %s", stderr)
+}
 
-	//nolint:gosec // safePath is a test-owned temp file the writer under test just created.
-	safeExecutor := exec.CommandContext(
-		t.Context(),
-		"sh",
-		"-c",
-		`read -r line && exec "$1"`,
-		"sh",
-		safePath,
-	)
-	safeExecutor.Stderr = &safeStderr
+// execAfterSignal starts a child that waits for a line on stdin before exec'ing
+// stubPath, so the caller controls exactly when the exec happens. When inherit is
+// non-nil the child receives it as an extra descriptor (ExtraFiles survives exec,
+// unlike Go's default close-on-exec descriptors) and this process closes its own
+// copy before releasing the child, leaving the child's inherited descriptor as the
+// only writer open on the stub. It returns the child's stderr and its wait error.
+func execAfterSignal(t *testing.T, stubPath string, inherit *os.File) (string, error) {
+	t.Helper()
 
-	safeStdin, err := safeExecutor.StdinPipe()
+	var stderr bytes.Buffer
+
+	//nolint:gosec // stubPath is a test-owned temp file; the shell fragment is a constant.
+	child := exec.CommandContext(t.Context(), "sh", "-c", `read -r line && exec "$1"`, "sh", stubPath)
+	child.Stderr = &stderr
+
+	if inherit != nil {
+		child.ExtraFiles = []*os.File{inherit}
+	}
+
+	stdin, err := child.StdinPipe()
 	require.NoError(t, err)
-	require.NoError(t, safeExecutor.Start())
+	require.NoError(t, child.Start())
 
-	_, err = io.WriteString(safeStdin, "go\n")
+	if inherit != nil {
+		require.NoError(t, inherit.Close())
+	}
+
+	_, err = io.WriteString(stdin, "go\n")
 	require.NoError(t, err)
-	require.NoError(t, safeStdin.Close())
+	require.NoError(t, stdin.Close())
 
-	require.NoError(
-		t,
-		safeExecutor.Wait(),
-		"helper-written stub must execute: %s",
-		safeStderr.String(),
-	)
+	return stderr.String(), child.Wait()
 }
