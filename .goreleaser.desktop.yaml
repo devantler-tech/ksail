@@ -105,18 +105,18 @@ homebrew_casks:
     # `<version>.upgrading` staging dir that blocks every subsequent `brew upgrade` (a real cascade
     # observed in the field). The cd.yaml `homebrew` job runs `brew style --fix`, which reorders these
     # stanzas into canonical position before the cask lands in the tap.
+    # Escape Homebrew's install-time token through GoReleaser's template pass.
     custom_block: |
       depends_on macos: :big_sur
       app "KSail.app"
       uninstall quit: "tech.devantler.ksail.desktop"
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{appdir}}" }}/KSail.app"]
+        end
+      end
     # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
     # so `ksail-desktop` is on PATH and `ksail open desktop` finds it. Without this, GoReleaser would
     # default the symlink to the bare basename, which does not exist at the archive root.
     binaries:
       - "#{appdir}/KSail.app/Contents/MacOS/ksail-desktop"
-    hooks:
-      post:
-        # Single-line body: use the modifier form so `brew style`
-        # (Style/IfUnlessModifier) is satisfied.
-        install: |
-          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/KSail.app"] if OS.mac?

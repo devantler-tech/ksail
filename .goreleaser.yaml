@@ -66,12 +66,13 @@ homebrew_casks:
         # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
         # the tap deletes the branch on merge, so it is recreated fresh from main next release).
         draft: true
-    hooks:
-      post:
-        # Single-line body: use the modifier form so `brew style`
-        # (Style/IfUnlessModifier) is satisfied.
-        install: |
-          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"] if OS.mac?
+    # Escape Homebrew's install-time token through GoReleaser's template pass.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"]
+        end
+      end
     commit_author:
       signing:
         enabled: true
