@@ -166,6 +166,7 @@ func endpointSnapshotHTTPFixture(
 		}
 
 		assert.Equal(t, want, request.URL.Host)
+		assert.Equal(t, "https", request.URL.Scheme)
 		assert.Contains(t, request.Header.Get("Authorization"), "Credential=FROZENENDPOINT/")
 
 		return &http.Response{

@@ -394,8 +394,8 @@ spec:
                       in kind.yaml/k3d.yaml instead. EKS creation uses eks.yaml; experimental EKS
                       updates require an explicit minor here and eks.experimentalControlPlaneUpgrade.
 
-                      When set, KSail reconciles toward this version: `cluster create` provisions at
-                      it and `cluster update` upgrades the cluster toward it (skipping downgrades).
+                      When set, `cluster update` reconciles toward this version. Talos creation also
+                      honors this field; EKS, Kind and K3d creation use their distribution config.
                       For brand-new Talos clusters an unset value uses a built-in default capped to a
                       version compatible with the pinned Talos release (spec.cluster.talos.version),
                       so a pinned older Talos version is never paired with a Kubernetes version it

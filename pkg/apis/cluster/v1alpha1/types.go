@@ -166,8 +166,8 @@ type ClusterSpec struct {
 	// in kind.yaml/k3d.yaml instead. EKS creation uses eks.yaml; experimental EKS
 	// updates require an explicit minor here and eks.experimentalControlPlaneUpgrade.
 	//
-	// When set, KSail reconciles toward this version: `cluster create` provisions at
-	// it and `cluster update` upgrades the cluster toward it (skipping downgrades).
+	// When set, `cluster update` reconciles toward this version. Talos creation also
+	// honors this field; EKS, Kind and K3d creation use their distribution config.
 	// For brand-new Talos clusters an unset value uses a built-in default capped to a
 	// version compatible with the pinned Talos release (spec.cluster.talos.version),
 	// so a pinned older Talos version is never paired with a Kubernetes version it
@@ -178,7 +178,7 @@ type ClusterSpec struct {
 	// confirmation-gated recreation for Kind/K3d). Override per invocation with the
 	// --kubernetes-version flag (precedence: flag > env > config > default).
 	// EKS never discovers a latest version automatically and refuses downgrades.
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version to deploy. When set: cluster create/update reconcile toward it. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade; EKS creation uses eks.yaml and never discovers upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version."` //nolint:lll
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema_description:"Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags

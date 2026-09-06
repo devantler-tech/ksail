@@ -121,9 +121,9 @@ func TestControlPlaneUpdateRejectsMissingPayloadAndCancellation(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	_, err = client.UpdateClusterVersion(t.Context(), "demo", "1.35", "token")
-	require.Error(t, err)
+	require.ErrorIs(t, err, eksclient.ErrInvalidClusterUpdate)
 	_, err = client.DescribeClusterUpdate(t.Context(), "demo", "id")
-	require.Error(t, err)
+	require.ErrorIs(t, err, eksclient.ErrInvalidClusterUpdate)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 

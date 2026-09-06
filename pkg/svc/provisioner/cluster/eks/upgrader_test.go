@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,26 +24,28 @@ var (
 func TestControlPlaneUpgradeWaitsThroughUpdateAndClusterConvergence(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
 
-	api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
-	api.afterPoll = func() {
-		switch api.polls {
-		case 1:
-			api.result.Status = ekstypes.UpdateStatusInProgress
-		case 2:
-			api.result.Status = ekstypes.UpdateStatusSuccessful
-			api.cluster.Status = ekstypes.ClusterStatusUpdating
-		default:
-			api.cluster.Status = ekstypes.ClusterStatusActive
-			api.cluster.Version = aws.String("1.35")
+		api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+		api.afterPoll = func() {
+			switch api.polls {
+			case 1:
+				api.result.Status = ekstypes.UpdateStatusInProgress
+			case 2:
+				api.result.Status = ekstypes.UpdateStatusSuccessful
+				api.cluster.Status = ekstypes.ClusterStatusUpdating
+			default:
+				api.cluster.Status = ekstypes.ClusterStatusActive
+				api.cluster.Version = aws.String("1.35")
+			}
 		}
-	}
-	provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
-	require.NoError(t, provisioner.UpgradeKubernetes(ctx, "demo", "1.34", "1.35"))
-	assert.Equal(t, 3, api.polls)
-	assert.Equal(t, 1, api.submitted)
+		provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
+		require.NoError(t, provisioner.UpgradeKubernetes(ctx, "demo", "1.34", "1.35"))
+		assert.Equal(t, 3, api.polls)
+		assert.Equal(t, 1, api.submitted)
+	})
 }
 
 func TestControlPlaneUpgradeRejectsFinalOwnershipChange(t *testing.T) {
