@@ -213,25 +213,35 @@ func resolveKubeconfigFlag(
 	kubeconfigFlag *pflag.Flag,
 	resolvedPath string,
 ) error {
-	value := resolvedPath
-
 	if child.Flags().Changed("kubeconfig") {
-		canonical, err := fsutil.EvalCanonicalPath(kubeconfigFlag.Value.String())
+		supplied := kubeconfigFlag.Value.String()
+
+		// An explicitly empty value is not a path: canonicalizing it would yield
+		// the working directory, which client-go would then try to load as a
+		// kubeconfig. Leave it empty so its own default resolution applies.
+		if supplied == "" {
+			return nil
+		}
+
+		canonical, err := fsutil.EvalCanonicalPath(supplied)
 		if err != nil {
 			return fmt.Errorf("failed to canonicalize kubeconfig flag: %w", err)
 		}
 
-		value = canonical
+		err = kubeconfigFlag.Value.Set(canonical)
+		if err != nil {
+			return fmt.Errorf("failed to set kubeconfig flag: %w", err)
+		}
+
+		return nil
 	}
 
-	err := kubeconfigFlag.Value.Set(value)
+	err := kubeconfigFlag.Value.Set(resolvedPath)
 	if err != nil {
 		return fmt.Errorf("failed to set kubeconfig flag: %w", err)
 	}
 
-	if !child.Flags().Changed("kubeconfig") {
-		kubeconfigFlag.DefValue = value
-	}
+	kubeconfigFlag.DefValue = resolvedPath
 
 	return nil
 }

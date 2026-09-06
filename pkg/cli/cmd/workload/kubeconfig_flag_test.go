@@ -108,5 +108,23 @@ func TestResolveKubeconfigFlag_MissingExplicitFileStillResolves(t *testing.T) {
 
 	require.NoError(t, workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"))
 
-	assert.Contains(t, flag.Value.String(), "absent-kubeconfig")
+	// The whole canonical path is asserted: a Contains check on the basename
+	// would also pass if resolution picked a different parent directory.
+	canonicalDir, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(canonicalDir, "absent-kubeconfig"), flag.Value.String())
+}
+
+// TestResolveKubeconfigFlag_ExplicitEmptyStaysEmpty verifies that `--kubeconfig ""`
+// is left alone. Canonicalizing an empty string yields the working directory,
+// which client-go would then try to load as a kubeconfig file.
+func TestResolveKubeconfigFlag_ExplicitEmptyStaysEmpty(t *testing.T) {
+	t.Parallel()
+
+	cmd, flag := newKubeconfigFlagCommand(t, "", true)
+
+	require.NoError(t, workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"))
+
+	assert.Empty(t, flag.Value.String(),
+		"an explicitly empty --kubeconfig must stay empty, not become the working directory")
 }
