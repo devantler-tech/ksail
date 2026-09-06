@@ -251,6 +251,10 @@ func TestWriteExecutableStub_ConcurrentWriteBlocksExec(t *testing.T) {
 	require.NoError(t, <-closeErr)
 
 	require.Error(t, err, "exec must fail while a writer holds the stub open: %s", output)
+	// Specifically ETXTBSY: any other execution failure would pass a bare
+	// Error check while hiding a regression in this exact behaviour.
+	assert.Contains(t, strings.ToLower(err.Error()), "text file busy",
+		"the failure must be ETXTBSY, got: %v (output: %s)", err, output)
 
 	// The fix: writeExecutableFile leaves no writer anywhere once it returns.
 	viaHelper := filepath.Join(dir, "helper-writer")
