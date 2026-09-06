@@ -55,27 +55,40 @@ func argoCDPollApplication(message string) *unstructured.Unstructured {
 func TestPollArgoCDApplicationRecoversFromTransportFailure(t *testing.T) {
 	t.Parallel()
 
-	var calls atomic.Int32
+	for _, message := range []string{
+		"lookup registry.example: no such host", "429 Too Many Requests", "503 Service Unavailable",
+	} {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
 
-	client := newArgoCDPollClient(func(action k8stesting.Action) (bool, runtime.Object, error) {
-		assert.Equal(t, "argocd", action.GetNamespace())
-		getAction, ok := action.(k8stesting.GetAction)
-		require.True(t, ok)
-		assert.Equal(t, "test-app", getAction.GetName())
+			var calls atomic.Int32
 
-		if calls.Add(1) == 1 {
-			return true, argoCDPollApplication("lookup registry.example: no such host"), nil
-		}
+			client := newArgoCDPollClient(
+				func(action k8stesting.Action) (bool, runtime.Object, error) {
+					assert.Equal(t, "argocd", action.GetNamespace())
+					getAction, ok := action.(k8stesting.GetAction)
+					require.True(t, ok)
+					assert.Equal(t, "test-app", getAction.GetName())
 
-		return true, argoCDPollApplication(""), nil
-	})
+					if calls.Add(1) == 1 {
+						return true, argoCDPollApplication(message), nil
+					}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+					return true, argoCDPollApplication(""), nil
+				},
+			)
 
-	err := workload.ExportPollUntilApplicationReady(ctx, client, "test-app")
-	require.NoError(t, err)
-	assert.Equal(t, int32(2), calls.Load(), "stale healthy status must not finish the first poll")
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+
+			err := workload.ExportPollUntilApplicationReady(ctx, client, "test-app")
+			require.NoError(t, err)
+			assert.Equal(
+				t, int32(2), calls.Load(),
+				"stale healthy status must not finish the first poll",
+			)
+		})
+	}
 }
 
 // TestPollArgoCDApplicationFailsFastOnMissingArtifact rejects permanent failures on the first poll.

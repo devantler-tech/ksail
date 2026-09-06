@@ -564,6 +564,9 @@ func TestComparisonTransportFormsPreserveTheirLocationContext(t *testing.T) {
 	for _, message := range []string{
 		"unexpected EOF", "rpc error: desc = EOF", "EOF", "context deadline exceeded",
 		"rpc error: code = DeadlineExceeded desc = context deadline exceeded",
+		"429 Too Many Requests", "503 Service Unavailable", "Bad Gateway", "Gateway Timeout",
+		"Internal Server Error", "unexpected status code: 502", "HTTP/2 504", "HTTP 500",
+		"response status: 429",
 	} {
 		t.Run(message, func(t *testing.T) {
 			t.Parallel()
@@ -610,6 +613,10 @@ func TestApplicationPermanentErrors(t *testing.T) {
 		{message: "authentication required"},
 		{message: "permission denied (previous attempt: connection refused)"},
 		{message: "manifest unknown (previous attempt: i/o timeout)", source: true},
+		{message: "manifest unknown (previous attempt: 503 Service Unavailable)", source: true},
+		{message: "forbidden (previous attempt: 429 Too Many Requests)"},
+		{message: "invalid manifest at line 503"},
+		{message: "fetch registry.example:5000 failed"},
 		{message: "invalid manifest: unknown resource kind"},
 		{message: "comparison failed"},
 		{message: "EOF is not allowed in this manifest"},

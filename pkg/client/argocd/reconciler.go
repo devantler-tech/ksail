@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -189,6 +190,12 @@ type sourceAvailabilityError struct {
 
 var errPermanentApplicationFailure = errors.New("permanent ArgoCD application failure")
 
+// comparisonHTTPStatus requires an HTTP/status label so line numbers and ports
+// do not turn invalid manifests into transient transport failures.
+var comparisonHTTPStatus = regexp.MustCompile(
+	`\b(?:http(?:/[0-9.]+)?|status(?:\s+code)?)[\s:=]+(?:429|5[0-9]{2})\b`,
+)
+
 // Error includes the source failure and the public sentinel's existing guidance.
 func (e *sourceAvailabilityError) Error() string {
 	return fmt.Sprintf("%s: %s", ErrSourceNotAvailable, e.message)
@@ -248,7 +255,9 @@ func classifyApplicationError(message string, comparison bool) error {
 func comparisonTransportError(message string) bool {
 	lower := strings.TrimSpace(message)
 
-	return strings.Contains(lower, "context deadline exceeded") || lower == "eof" ||
+	return containsAny(lower, "context deadline exceeded", "too many requests",
+		"internal server error", "bad gateway", "service unavailable", "gateway timeout") ||
+		comparisonHTTPStatus.MatchString(lower) || lower == "eof" ||
 		strings.HasSuffix(lower, "unexpected eof") || strings.HasSuffix(lower, ": eof") ||
 		strings.HasSuffix(lower, "= eof")
 }
