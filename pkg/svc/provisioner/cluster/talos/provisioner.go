@@ -160,6 +160,9 @@ type Provisioner struct {
 	// talosClientFactory creates a Talos client for the given node IP.
 	// Tests can override this via export_test.go to inject a mock.
 	talosClientFactory func(ctx context.Context, ip string) (kubeconfigFetcher, error)
+	// etcdClientFactory optionally supplies the membership RPC client. A nil
+	// factory uses the ordinary authenticated connection and Version probe.
+	etcdClientFactory func(context.Context, string) (etcdMembershipClient, error)
 	// nodeReachabilityCheck reports when a node's Talos API (apid) is accepting
 	// connections at ip:talosAPIPort, retrying until it succeeds or the context is
 	// done. It gates Docker scale-up: a freshly started container returns from

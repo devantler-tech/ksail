@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,7 +18,77 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+func TestRollingReplaceSingleNode_CleanupFailurePreservesServer(t *testing.T) {
+	t.Parallel()
+
+	for _, leaveFailure := range []bool{false, true} {
+		name := "connection failure"
+		if leaveFailure {
+			name = "leave failure"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := &membershipCloudTransport{address: "192.0.2.1"}
+
+			provisioner := newClientErrProvisioner(t)
+			if leaveFailure {
+				provisioner.WithEtcdClientFactoryForTest(
+					func(context.Context, string) (talosprovisioner.EtcdMembershipClientForTest, error) {
+						return &membershipClient{leaveErr: errMembershipUnavailable}, nil
+					},
+				)
+			}
+
+			server := &hcloud.Server{ID: 1, Name: "scale-cluster-control-plane-1"}
+			server.PublicNet.IPv4.IP = net.ParseIP(transport.address)
+			clientset := fake.NewClientset(&corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: server.Name, UID: "original-node"},
+				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+					{Type: corev1.NodeInternalIP, Address: transport.address},
+				}},
+			})
+
+			err := provisioner.RollingReplaceSingleNodeForTest(
+				t.Context(), clientset, newMembershipCloud(transport), "scale-cluster",
+				talosprovisioner.RoleControlPlane, server,
+			)
+
+			require.Error(t, err)
+			assert.Empty(t, transport.writes, "failed cleanup must prevent server replacement")
+
+			for _, action := range clientset.Actions() {
+				assert.NotEqual(
+					t,
+					"delete",
+					action.GetVerb(),
+					"must preserve the Kubernetes node object",
+				)
+			}
+
+			assertOriginalNodeRemainsCordoned(t, clientset, server.Name)
+
+			if leaveFailure {
+				assert.ErrorIs(t, err, errMembershipUnavailable)
+			}
+		})
+	}
+}
+
+func assertOriginalNodeRemainsCordoned(t *testing.T, clientset *fake.Clientset, name string) {
+	t.Helper()
+
+	node, err := clientset.CoreV1().Nodes().Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "original-node", string(node.UID))
+	assert.True(t, node.Spec.Unschedulable,
+		"uncertain membership must not automatically uncordon the node")
+}
 
 const (
 	testTypeCX22                 = "cx22"
