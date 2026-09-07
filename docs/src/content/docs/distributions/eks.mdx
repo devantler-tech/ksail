@@ -127,6 +127,63 @@ KSail invokes eksctl to provision the cluster from `eks.yaml` and waits for comp
 | `ksail cluster list`   | Lists clusters in the configured region (all regions when unset)    |
 | `ksail cluster info`   | Shows cluster details                                               |
 
+### Add a managed node group (experimental)
+
+To create a new managed node group on an existing cluster, enable the opt-in in
+`ksail.yaml`:
+
+```yaml
+spec:
+  cluster:
+    eks:
+      experimentalManagedNodegroupCreation: true
+```
+
+Add the group to `managedNodeGroups` in `eks.yaml`, keeping the existing groups in
+the file. Each group must have a unique name. Review the planned changes before
+applying them:
+
+```bash
+ksail cluster update --dry-run
+ksail cluster update
+```
+
+KSail verifies the existing cluster's ownership and uses
+[`eksctl create nodegroup`](https://docs.aws.amazon.com/eks/latest/eksctl/general-nodegroups.html)
+to create each missing managed group separately. The configuration preserves the
+new group's instance, networking, storage, labels, taints, and IAM settings.
+Self-managed groups under `nodeGroups` are not created by this operation. KSail
+reports an addition as applied only after the live managed group is `ACTIVE` and
+its declared capacity and instance type match. A `ksail.io/nodegroup-creation-id`
+tag identifies the group created by that update.
+
+Before applying any changes, KSail checks each addition against a conservative
+50-slot tag budget. It counts metadata tags both in the stack and in the merged
+group tags, includes the ownership marker and eksctl node-group identifiers, and
+reserves four slots for eksctl stack identifiers and generated resource names.
+This reserve also applies when an external role or launch template needs fewer
+tags. With no metadata tags, up to 43 distinct user tag keys fit this budget;
+metadata tags reduce that allowance. Existing groups and scaling are unaffected.
+Other AWS and eksctl tag restrictions still apply.
+
+The selected AWS identity also needs `eks:ListNodegroups`,
+`eks:DescribeNodegroup`, and `cloudformation:ListStacks` read permissions. KSail
+reads every inventory page and refuses creation if a live or unfinished eksctl
+node-group stack already uses the new group's name.
+
+If the source file changes during the update, ownership verification fails, or the
+live inventory is ambiguous, the update stops. After a failed or interrupted
+creation, inspect the group in EKS before retrying. An unfinished or failed group
+blocks the next update; an active group already matching the supported settings
+is not created again. Earlier successful additions remain in place when a later
+addition fails.
+
+This option defaults to `false` and is pending
+[live EKS validation](https://github.com/devantler-tech/ksail/issues/6923). Scaling
+existing groups does not require the option. Removing a managed group or changing
+its instance type still requires recreation and prevents additions in the same
+update. Changes to other settings on existing groups are not currently detected.
+
 ### Concurrent lifecycle operations
 
 EKS `start`, `stop`, and `delete` operations from the CLI and the local web/desktop
@@ -157,7 +214,7 @@ EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>
 - EKS is a cloud distribution — **local mirror registries and local registry containers are not supported**. Use external registry URLs (e.g., `docker.io=https://registry-1.docker.io`)
 - EKS only supports the **AWS provider** — the Docker, Hetzner, and Omni providers are not available
 - The control plane keeps running (and billing) while nodegroups are stopped — use `ksail cluster delete` to tear down the cluster and stop its cluster-related charges (resources provisioned by workloads, such as load balancers or persistent volumes, may need separate cleanup)
-- `ksail cluster update` applies `desiredCapacity`, `minSize`, and `maxSize` changes to existing managed node groups in-place. Changing an instance type or adding/removing a managed node group requires cluster recreation. Other managed-node-group fields (including AMI family, volumes, labels, taints, subnets, and IAM) are not currently diffed, so update will not detect those changes.
+- `ksail cluster update` applies `desiredCapacity`, `minSize`, and `maxSize` changes to existing managed node groups in-place. Adding a managed node group requires the experimental opt-in above; without it, additions require cluster recreation. Changing an instance type or removing a managed node group still requires recreation. Other fields on existing groups (including AMI family, volumes, labels, taints, subnets, and IAM) are not currently diffed, so update will not detect those changes.
 - KSail-managed component installation (CNI/CSI/GitOps/security add-ons beyond eksctl's built-ins) is still in progress — the AWS Load Balancer Controller is available behind the experimental `spec.cluster.eks.experimentalAWSLoadBalancerController` opt-in; see [Support Matrix](/support-matrix/)
 
 ## Related
