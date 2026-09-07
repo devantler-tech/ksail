@@ -43,8 +43,10 @@ func (p *Provider) ValidateISO(ctx context.Context, isoID int64, serverTypeName 
 func (p *Provider) validateISOArchitecture(
 	ctx context.Context, iso *hcloud.ISO, serverTypeName string,
 ) error {
-	// Custom ISOs explicitly support an architecture wildcard in the API.
-	if iso.Architecture == nil && iso.Type == "custom" {
+	// An uploaded (private) ISO carries no architecture and the API treats that
+	// as a wildcard. A public ISO always declares one, so a missing architecture
+	// there is unusable metadata rather than a wildcard.
+	if iso.Architecture == nil && iso.Type == hcloud.ISOTypePrivate {
 		return nil
 	}
 

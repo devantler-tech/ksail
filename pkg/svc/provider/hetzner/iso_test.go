@@ -21,8 +21,9 @@ func TestValidateISOArchitecture(t *testing.T) {
 		{"matching x86", "public", `"x86"`, "x86", true},
 		{"matching arm", "public", `"arm"`, "arm", true},
 		{"incompatible", "public", `"x86"`, "arm", false},
-		{"custom wildcard", "custom", `null`, "arm", true},
+		{"private (uploaded) wildcard", "private", `null`, "arm", true},
 		{"missing public metadata", "public", `null`, "arm", false},
+		{"unknown type is not a wildcard", "custom", `null`, "arm", false},
 		{"missing target metadata", "public", `"x86"`, "", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
