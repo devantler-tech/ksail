@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
-	"k8s.io/client-go/rest"
 )
 
 // kubeProxyTimeout bounds a single proxied apiserver read.
@@ -33,7 +32,7 @@ func (s *Service) ProxyKubeGet(
 		return api.KubeProxyResponse{}, fmt.Errorf("resolve cluster %q: %w", name, err)
 	}
 
-	transport, err := rest.TransportFor(config)
+	transport, err := apiserverTransportFor(config)
 	if err != nil {
 		return api.KubeProxyResponse{}, fmt.Errorf("build apiserver transport: %w", err)
 	}
