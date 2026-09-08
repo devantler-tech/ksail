@@ -86,7 +86,9 @@ func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 
 	// Put an idle keep-alive connection on the process-global pool, so closing it below is a real
 	// event rather than a no-op.
-	warm, err := http.DefaultClient.Get(server.URL) //nolint:noctx // fixture warm-up, not production code
+	warm, err := http.DefaultClient.Get(
+		server.URL,
+	) //nolint:noctx // fixture warm-up, not production code
 	if err != nil {
 		t.Fatalf("warm-up request: %v", err)
 	}
@@ -107,7 +109,11 @@ func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 			url.Values{"labelSelector": {"app=x"}},
 		)
 		if err != nil {
-			t.Fatalf("iteration %d: WatchKube broken by an unrelated CloseIdleConnections: %v", iteration, err)
+			t.Fatalf(
+				"iteration %d: WatchKube broken by an unrelated CloseIdleConnections: %v",
+				iteration,
+				err,
+			)
 		}
 
 		_, _ = io.Copy(io.Discard, stream)
