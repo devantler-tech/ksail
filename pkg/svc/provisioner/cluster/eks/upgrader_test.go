@@ -135,10 +135,15 @@ type upgradeAPI struct {
 	cluster          *ekstypes.Cluster
 	result           *ekstypes.Update
 	submitted, polls int
+	describes        int
 	afterSubmit      func()
 	afterPoll        func()
 	pollErr          func(polls int) error
-	submission       func() *ekstypes.Update
+	// describeErr fails a DescribeCluster call. It receives the poll count so a
+	// test can target the confirming read that follows a successful poll while
+	// leaving the pre-upgrade snapshot read (polls == 0) alone.
+	describeErr func(describes, polls int) error
+	submission  func() *ekstypes.Update
 }
 
 func upgradeCluster() *ekstypes.Cluster {
@@ -167,6 +172,15 @@ func upgradeResult() *ekstypes.Update {
 }
 
 func (api *upgradeAPI) DescribeCluster(context.Context, string) (*ekstypes.Cluster, error) {
+	api.describes++
+
+	if api.describeErr != nil {
+		err := api.describeErr(api.describes, api.polls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return api.cluster, nil
 }
 func (api *upgradeAPI) MintToken(context.Context, string) (string, error) { return "", nil }

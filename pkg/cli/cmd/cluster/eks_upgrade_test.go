@@ -364,3 +364,87 @@ func TestEKSUpgradeReportsSuccessWithUnknownComponentBaseline(t *testing.T) {
 	assert.NotContains(t, output.String(), "No changes applied")
 	assert.NotContains(t, output.String(), "No changes detected")
 }
+
+// The recreation guard exists to stop a recreation discarding the cluster an
+// upgrade is being applied to. Once the control plane already sits at the
+// pinned version there is no upgrade to conflict with, so a recreation must be
+// admissible without first removing the pin or disabling the feature — the
+// documented two-step workflow depends on it.
+//
+//nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
+func TestEKSRecreationAllowedWhenPinnedVersionIsReached(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dry_run_%t", dryRun), func(t *testing.T) {
+			mutations := 0
+			factory := eksUpgradeFactory(t, &mutations)
+			cmd, cfg := loadEKSUpgradeConfig(t, eksUpgradeCase{
+				target:  eksUpgradeStartingVersion, // already at the pin
+				enabled: true,
+			})
+			p, _, err := factory.Create(t.Context(), cfg)
+			require.NoError(t, err)
+
+			upgrader, ok := p.(*eksprovisioner.UpgradableProvisioner)
+			require.True(t, ok)
+
+			pipeline := &eksUpdatePipeline{
+				UpgradableProvisioner: upgrader,
+				current:               cfg.Spec.Cluster,
+				recreate:              true,
+			}
+
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetIn(strings.NewReader("n\n"))
+			err = cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, dryRun)
+			require.NotErrorIs(t, err, cluster.ExportErrEKSUpgradeWithRecreation,
+				"a satisfied pin must not block a recreation-required change")
+			assert.Zero(t, mutations, "no control-plane upgrade is planned at the pinned version")
+		})
+	}
+}
+
+// displayChangesSummary writes the machine-readable document to stdout in JSON
+// mode. The upgrade confirmation shares that stream, so emitting it there would
+// leave stdout unparseable for the documented CI/MCP output mode.
+func TestEKSUpgradeNotificationKeepsJSONOutputValid(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = []clusterupdate.Change{
+		{Field: "kubernetes.version", OldValue: "1.34", NewValue: "1.35"},
+	}
+
+	cmd := &cobra.Command{Use: "update"}
+	cmd.Flags().String("output", cluster.ExportOutputFormatJSON, "")
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+
+	cluster.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportReportEKSUpgraded(cmd, "1.35")
+
+	var decoded map[string]any
+
+	require.NoError(t, json.Unmarshal(out.Bytes(), &decoded),
+		"stdout must stay valid JSON after the upgrade confirmation: %q", out.String())
+}
+
+// The counterpart: text mode still confirms the upgrade to the user.
+func TestEKSUpgradeNotificationReportedInTextMode(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{Use: "update"}
+	cmd.Flags().String("output", cluster.ExportOutputFormatText, "")
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+
+	cluster.ExportReportEKSUpgraded(cmd, "1.35")
+
+	assert.Contains(t, out.String(), "upgraded to pinned version 1.35")
+}

@@ -102,3 +102,60 @@ func TestControlPlaneUpgradeDeadlineErrorIsNotTransient(t *testing.T) {
 			"a timed-out wait must not classify as a transient poll failure")
 	})
 }
+
+// The confirming DescribeCluster that follows a Successful update is subject to
+// the same throttling as the poll before it, and by then AWS has already
+// finished the upgrade. One bad read must not fail a completed upgrade.
+func TestControlPlaneUpgradeRetriesTransientConfirmingRead(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		defer cancel()
+
+		api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+		api.afterPoll = func() { api.cluster.Version = aws.String("1.35") }
+
+		throttled := false
+		// polls >= 1 selects the confirming read; the pre-upgrade snapshot read
+		// happens before any poll and must be left alone.
+		api.describeErr = func(_, polls int) error {
+			if polls >= 1 && !throttled {
+				throttled = true
+
+				return throttlingError()
+			}
+
+			return nil
+		}
+
+		provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
+		require.NoError(t, provisioner.UpgradeKubernetes(ctx, "demo", "1.34", "1.35"))
+		assert.True(t, throttled, "fixture never injected the throttled confirming read")
+		assert.Greater(t, api.polls, 1, "the wait must poll again after a throttled confirming read")
+	})
+}
+
+// The counterpart guard: retrying the confirming read must not swallow a
+// permanent failure such as a revoked permission.
+func TestControlPlaneUpgradeFailsFastOnTerminalConfirmingRead(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+		api.afterPoll = func() { api.cluster.Version = aws.String("1.35") }
+		api.describeErr = func(_, polls int) error {
+			if polls >= 1 {
+				return &smithy.GenericAPIError{Code: "AccessDeniedException", Message: "denied"}
+			}
+
+			return nil
+		}
+
+		provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
+		err := provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35")
+		require.Error(t, err)
+		require.NotErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, 1, api.polls, "a terminal confirming read must not be retried")
+	})
+}

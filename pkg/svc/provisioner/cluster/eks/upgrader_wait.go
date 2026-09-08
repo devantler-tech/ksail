@@ -201,6 +201,15 @@ func (p *UpgradableProvisioner) controlPlaneUpgradeComplete(
 
 	actual, err := p.readControlPlane(ctx, api, p.name)
 	if err != nil {
+		// AWS has already reported the update Successful, so a throttled or
+		// otherwise retryable failure on this confirming read says nothing
+		// about the control plane. Keep polling to the deadline instead of
+		// failing an upgrade that completed. Identity mismatches and version
+		// errors are not retryable and still fail immediately.
+		if isRetryablePollFailure(err) {
+			return false, &transientPollError{err: err}
+		}
+
 		return false, err
 	}
 
