@@ -33,7 +33,6 @@ const (
 
 const (
 	multiDocumentAPIVersion  = "v1alpha1"
-	migratedDocumentSlack    = 2
 	kubeAuthorizerConfigKind = "KubeAuthorizerConfig"
 	apiVersionField          = "apiVersion"
 	kindField                = "kind"
@@ -671,11 +670,7 @@ func marshalMigratedKubernetesDocuments(
 	structuredDocuments []map[string]any,
 	cniDeleteDocument []byte,
 ) ([]byte, error) {
-	documents := make(
-		[][]byte,
-		0,
-		len(legacyDocuments)+len(structuredDocuments)+migratedDocumentSlack,
-	)
+	documents := make([][]byte, 0, len(legacyDocuments))
 
 	for _, document := range legacyDocuments {
 		if len(document) == 0 {
