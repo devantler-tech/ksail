@@ -90,10 +90,13 @@ func formatUpdateErrors(details []ekstypes.ErrorDetail) string {
 	return strings.Join(messages, "; ")
 }
 
-// pollRetryables classifies a poll failure with the SDK's own retry rules, so
-// the wait loop retries exactly the transport and throttling classes the
-// standard retryer would have retried had its attempt budget not run out.
-var pollRetryables = retry.IsErrorRetryables(retry.DefaultRetryables)
+// isRetryablePollFailure classifies a poll failure with the SDK's own retry
+// rules, so the wait loop retries exactly the transport and throttling classes
+// the standard retryer would have retried had its attempt budget not run out.
+func isRetryablePollFailure(err error) bool {
+	return retry.IsErrorRetryables(retry.DefaultRetryables).
+		IsErrorRetryable(err) == aws.TrueTernary
+}
 
 // transientPollError marks a DescribeClusterUpdate failure that says nothing
 // about the upgrade itself, only about reaching the API.
@@ -175,7 +178,7 @@ func (p *UpgradableProvisioner) controlPlaneUpgradeComplete(
 	update, err := api.DescribeClusterUpdate(ctx, p.name, updateID)
 	if err != nil {
 		wrapped := fmt.Errorf("poll EKS version update: %w", err)
-		if pollRetryables.IsErrorRetryable(err) == aws.TrueTernary {
+		if isRetryablePollFailure(err) {
 			return false, &transientPollError{err: wrapped}
 		}
 
