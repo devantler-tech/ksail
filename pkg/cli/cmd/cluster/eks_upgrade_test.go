@@ -397,7 +397,7 @@ func TestEKSRecreationAllowedWhenPinnedVersionIsReached(t *testing.T) {
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetIn(strings.NewReader("n\n"))
 			err = cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, dryRun)
-			require.NotErrorIs(t, err, cluster.ExportErrEKSUpgradeWithRecreation,
+			require.NotErrorIs(t, err, cluster.ErrEKSUpgradeWithRecreation,
 				"a satisfied pin must not block a recreation-required change")
 			assert.Zero(t, mutations, "no control-plane upgrade is planned at the pinned version")
 		})

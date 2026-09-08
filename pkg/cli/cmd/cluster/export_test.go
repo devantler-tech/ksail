@@ -880,10 +880,10 @@ func ExportRunVerifiedUpdate(cmd *cobra.Command, cfg *v1alpha1.Cluster,
 	return orchestrator.runVerifiedProvisioner(provisioner, nil)
 }
 
-// ExportErrEKSUpgradeWithRecreation exposes the recreation-conflict sentinel for testing.
+// ErrEKSUpgradeWithRecreation exposes the recreation-conflict sentinel for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern requires globals to expose internals
-var ExportErrEKSUpgradeWithRecreation = errEKSUpgradeWithRecreation
+var ErrEKSUpgradeWithRecreation = errEKSUpgradeWithRecreation
 
 // ExportReportEKSUpgraded exports reportEKSUpgraded for testing.
 func ExportReportEKSUpgraded(cmd *cobra.Command, version string) {
