@@ -137,6 +137,7 @@ type upgradeAPI struct {
 	submitted, polls int
 	afterSubmit      func()
 	afterPoll        func()
+	pollErr          func(polls int) error
 	submission       func() *ekstypes.Update
 }
 
@@ -199,6 +200,14 @@ func (api *upgradeAPI) DescribeClusterUpdate(
 	}
 
 	api.polls++
+
+	if api.pollErr != nil {
+		err := api.pollErr(api.polls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if api.afterPoll != nil {
 		api.afterPoll()
 	}

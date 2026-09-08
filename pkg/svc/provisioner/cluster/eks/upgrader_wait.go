@@ -2,11 +2,13 @@ package eksprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
@@ -88,6 +90,39 @@ func formatUpdateErrors(details []ekstypes.ErrorDetail) string {
 	return strings.Join(messages, "; ")
 }
 
+// pollRetryables classifies a poll failure with the SDK's own retry rules, so
+// the wait loop retries exactly the transport and throttling classes the
+// standard retryer would have retried had its attempt budget not run out.
+var pollRetryables = retry.IsErrorRetryables(retry.DefaultRetryables)
+
+// transientPollError marks a DescribeClusterUpdate failure that says nothing
+// about the upgrade itself, only about reaching the API.
+type transientPollError struct{ err error }
+
+func (e *transientPollError) Error() string { return e.err.Error() }
+
+func (e *transientPollError) Unwrap() error { return e.err }
+
+func isTransientPollError(err error) bool {
+	var transient *transientPollError
+
+	return errors.As(err, &transient)
+}
+
+// waitDeadlineError keeps the context error in the chain, because callers match
+// on context.DeadlineExceeded, while still naming the poll failure that was
+// recurring when time ran out.
+func waitDeadlineError(updateID string, ctxErr, lastPollErr error) error {
+	if lastPollErr != nil {
+		return fmt.Errorf(
+			"wait for EKS update %s: %w (last poll error: %v)",
+			updateID, ctxErr, lastPollErr,
+		)
+	}
+
+	return fmt.Errorf("wait for EKS update %s: %w", updateID, ctxErr)
+}
+
 func (p *UpgradableProvisioner) waitForControlPlaneUpgrade(
 	ctx context.Context,
 	api AWSClusterVersionAPI,
@@ -97,24 +132,35 @@ func (p *UpgradableProvisioner) waitForControlPlaneUpgrade(
 	ticker := time.NewTicker(controlPlaneUpgradePollInterval)
 	defer ticker.Stop()
 
+	var lastPollErr error
+
 	for {
 		err := ctx.Err()
 		if err != nil {
-			return fmt.Errorf("wait for EKS update %s: %w", updateID, err)
+			return waitDeadlineError(updateID, err, lastPollErr)
 		}
 
 		done, err := p.controlPlaneUpgradeComplete(ctx, api, expected, target, updateID)
-		if err != nil {
-			return err
-		}
 
-		if done {
-			return nil
+		switch {
+		case err == nil:
+			if done {
+				return nil
+			}
+
+			lastPollErr = nil
+		case isTransientPollError(err):
+			// The SDK retryer has already spent its attempts on this poll. The
+			// upgrade itself is unaffected, so keep polling until the deadline
+			// rather than abandoning a control plane that is still converging.
+			lastPollErr = err
+		default:
+			return err
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("wait for EKS update %s: %w", updateID, ctx.Err())
+			return waitDeadlineError(updateID, ctx.Err(), lastPollErr)
 		case <-ticker.C:
 		}
 	}
@@ -128,7 +174,12 @@ func (p *UpgradableProvisioner) controlPlaneUpgradeComplete(
 ) (bool, error) {
 	update, err := api.DescribeClusterUpdate(ctx, p.name, updateID)
 	if err != nil {
-		return false, fmt.Errorf("poll EKS version update: %w", err)
+		wrapped := fmt.Errorf("poll EKS version update: %w", err)
+		if pollRetryables.IsErrorRetryable(err) == aws.TrueTernary {
+			return false, &transientPollError{err: wrapped}
+		}
+
+		return false, wrapped
 	}
 
 	err = validateVersionUpdate(update, updateID, target)
