@@ -118,7 +118,7 @@ func isTransientPollError(err error) bool {
 func waitDeadlineError(updateID string, ctxErr, lastPollErr error) error {
 	if lastPollErr != nil {
 		return fmt.Errorf(
-			"wait for EKS update %s: %w (last poll error: %v)",
+			"wait for EKS update %s: %w (last poll error: %w)",
 			updateID, ctxErr, lastPollErr,
 		)
 	}
