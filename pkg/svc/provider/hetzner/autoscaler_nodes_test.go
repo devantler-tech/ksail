@@ -107,7 +107,7 @@ func TestListAutoscalerNodes_MissingNetworkReturnsNothing(t *testing.T) {
 	srv := newAutoscalerNodesTestServer(t, map[string][]schema.Server{
 		autoscalerPoolA: {schemaServer(1, "as-1", autoscalerNetworkID)},
 	})
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	servers, err := prov.ListAutoscalerNodes(
 		context.Background(), "absent-cluster", []string{autoscalerPoolA},
@@ -133,7 +133,7 @@ func TestListAutoscalerNodes_FiltersByNetworkAndDedupes(t *testing.T) {
 			schemaServer(4, "as-4", autoscalerNetworkID),
 		},
 	})
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	servers, err := prov.ListAutoscalerNodes(
 		context.Background(), autoscalerTestCluster, []string{autoscalerPoolA, autoscalerPoolB},

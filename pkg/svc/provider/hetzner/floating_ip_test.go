@@ -129,7 +129,7 @@ func newFloatingIPProvider(
 		&counters.lastCreateBody,
 	)
 
-	return hetzner.NewProvider(newTestHcloudClient(srv.URL)), counters
+	return hetzner.NewProvider(newTestHcloudClient(t, srv.URL)), counters
 }
 
 // TestEnsureFloatingIP_CreatesWhenAbsent verifies the full create request and
@@ -413,7 +413,7 @@ func TestDeleteFloatingIP_PropagatesLookupError(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	err := prov.DeleteFloatingIPForTest(t.Context(), "test-cluster")
 

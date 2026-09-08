@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,7 +52,7 @@ func TestValidateISOArchitecture(t *testing.T) {
 			)
 			t.Cleanup(server.Close)
 			provider := hetzner.NewProvider(
-				hcloud.NewClient(hcloud.WithToken("test"), hcloud.WithEndpoint(server.URL)),
+				newTestHcloudClient(t, server.URL),
 			)
 
 			err := provider.ValidateISO(t.Context(), 42, "target")

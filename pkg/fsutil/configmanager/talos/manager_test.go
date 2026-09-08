@@ -440,7 +440,7 @@ func TestConfigManager_Load_MigratesLegacyAPIServerPatchWithoutOIDC(t *testing.T
 	assert.Equal(t, map[string][]string{"audit-log-maxage": {"30"}}, apiServer.ExtraArgs())
 }
 
-func TestConfigManager_Load_RejectsDuplicateLegacyAPIServerDocuments(t *testing.T) {
+func TestConfigManager_Load_MigratesDuplicateLegacyAPIServerDocuments(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -466,9 +466,14 @@ cluster:
 	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
 		WithVersionContract(talosconfig.TalosVersion1_14)
 
-	_, err := manager.Load(configmanager.LoadOptions{})
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "multiple legacy cluster.apiServer documents are not supported")
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, configs.ControlPlane().K8sAPIServerConfig().CertSANs(), "api.example.com")
+	assert.Equal(
+		t,
+		[]string{"30"},
+		configs.ControlPlane().K8sAPIServerConfig().ExtraArgs()["audit-log-maxage"],
+	)
 }
 
 func TestConfigManager_Load_PreservesLegacyAPIServerPatchBeforeMultiDocumentConfig(t *testing.T) {

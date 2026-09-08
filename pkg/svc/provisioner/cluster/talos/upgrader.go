@@ -191,9 +191,9 @@ func (p *Provisioner) UpgradeKubernetes(
 		cluster.K8sProvider
 	}{
 		ClientProvider: clientProvider,
-		K8sProvider: &cluster.KubernetesClient{
+		K8sProvider: kubernetesUpgradeProvider(&cluster.KubernetesClient{
 			ClientProvider: clientProvider,
-		},
+		}),
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter,

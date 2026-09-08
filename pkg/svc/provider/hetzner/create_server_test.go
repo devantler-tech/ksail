@@ -105,7 +105,7 @@ func TestCreateServer_ISOBoot(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 	_, err := prov.CreateServer(context.Background(), hetzner.CreateServerOpts{
 		Name:       "test-node",
 		ServerType: "cx22",
