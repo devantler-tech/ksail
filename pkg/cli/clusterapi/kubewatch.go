@@ -10,7 +10,6 @@ import (
 	"path"
 
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
-	"k8s.io/client-go/rest"
 )
 
 // Ensure the local backend exposes the read-only kube-apiserver watch alongside the kube-proxy.
@@ -36,7 +35,7 @@ func (s *Service) WatchKube(
 		return nil, fmt.Errorf("resolve cluster %q: %w", name, err)
 	}
 
-	transport, err := rest.TransportFor(config)
+	transport, err := apiserverTransportFor(config)
 	if err != nil {
 		return nil, fmt.Errorf("build apiserver transport: %w", err)
 	}
