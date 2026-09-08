@@ -156,7 +156,12 @@ func (p *UpgradableProvisioner) waitForControlPlaneUpgrade(
 			// The SDK retryer has already spent its attempts on this poll. The
 			// upgrade itself is unaffected, so keep polling until the deadline
 			// rather than abandoning a control plane that is still converging.
-			lastPollErr = err
+			//
+			// Keep the UNDERLYING error, not the marker. waitDeadlineError wraps
+			// this with %w, so retaining the marker would make the returned
+			// deadline error satisfy isTransientPollError — a wait that ran out of
+			// time reporting itself as a retryable poll blip.
+			lastPollErr = errors.Unwrap(err)
 		default:
 			return err
 		}

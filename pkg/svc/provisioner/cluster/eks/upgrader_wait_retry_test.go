@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/smithy-go"
+	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,5 +79,26 @@ func TestControlPlaneUpgradeSurfacesLastPollErrorAtDeadline(t *testing.T) {
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Contains(t, err.Error(), "rate exceeded")
 		assert.Greater(t, api.polls, 1)
+	})
+}
+
+// waitDeadlineError wraps the last poll failure with %w, so retaining the
+// internal marker there would make a wait that ran out of time classify as a
+// retryable poll blip — the opposite of what it is.
+func TestControlPlaneUpgradeDeadlineErrorIsNotTransient(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+		api.pollErr = func(int) error { return throttlingError() }
+
+		provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
+		err := provisioner.UpgradeKubernetes(ctx, "demo", "1.34", "1.35")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.False(t, eksprovisioner.IsTransientPollErrorForTest(err),
+			"a timed-out wait must not classify as a transient poll failure")
 	})
 }
