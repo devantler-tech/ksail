@@ -164,19 +164,20 @@ func TestInstaller_Images_K3s(t *testing.T) {
 func TestInstaller_Images_Success(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		30*time.Second,
-		v1alpha1.DistributionVanilla,
-	)
+	installer, hits := newFixtureInstaller(t, v1alpha1.DistributionVanilla)
 
 	ctx := context.Background()
 	images, err := installer.Images(ctx)
 
 	require.NoError(t, err)
-	assert.NotEmpty(t, images, "Should extract images from real manifest")
-	// The real manifest should contain the local-path-provisioner image
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
+	assert.NotEmpty(t, images, "Should extract images from the manifest")
+	// The manifest should contain the local-path-provisioner image
 	foundProvisionerImage := false
 
 	for _, img := range images {
@@ -193,28 +194,28 @@ func TestInstaller_Images_Success(t *testing.T) {
 func TestInstaller_Images_Talos(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		30*time.Second,
-		v1alpha1.DistributionTalos,
-	)
+	installer, hits := newFixtureInstaller(t, v1alpha1.DistributionTalos)
 
 	ctx := context.Background()
 	images, err := installer.Images(ctx)
 
 	require.NoError(t, err)
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.NotEmpty(t, images, "Talos should also fetch images from manifest")
 }
 
 func TestInstaller_Images_ShortTimeout(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		1*time.Nanosecond,
+	installer, _ := newFixtureInstallerWithTimeout(
+		t,
 		v1alpha1.DistributionVanilla,
+		1*time.Nanosecond,
 	)
 
 	ctx := context.Background()
@@ -227,12 +228,7 @@ func TestInstaller_Images_ShortTimeout(t *testing.T) {
 func TestInstaller_Images_CanceledContext(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		30*time.Second,
-		v1alpha1.DistributionVanilla,
-	)
+	installer, _ := newFixtureInstaller(t, v1alpha1.DistributionVanilla)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

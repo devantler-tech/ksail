@@ -30,15 +30,17 @@ func TestInstaller_Install_VClusterDistribution(t *testing.T) {
 func TestInstaller_Images_VClusterDistribution(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		30*time.Second,
-		v1alpha1.DistributionVCluster,
-	)
+	installer, hits := newFixtureInstaller(t, v1alpha1.DistributionVCluster)
 
 	images, err := installer.Images(context.Background())
+
 	require.NoError(t, err)
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.NotEmpty(t, images, "VCluster should fetch images (same as Vanilla)")
 }
 
@@ -74,12 +76,7 @@ func TestInstaller_Uninstall_CanceledContext(t *testing.T) {
 func TestInstaller_Images_CanceledContext_VCluster(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewInstaller(
-		"/path/to/kubeconfig",
-		"test-context",
-		30*time.Second,
-		v1alpha1.DistributionVCluster,
-	)
+	installer, _ := newFixtureInstaller(t, v1alpha1.DistributionVCluster)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

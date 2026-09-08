@@ -49,6 +49,9 @@ type Installer struct {
 	context      string
 	timeout      time.Duration
 	distribution v1alpha1.Distribution
+	// manifestURL is the upstream manifest location. It is a field rather than a
+	// package function call so unit tests can serve the manifest locally.
+	manifestURL string
 }
 
 // NewInstaller creates a new local-path-storage installer instance.
@@ -62,6 +65,7 @@ func NewInstaller(
 		context:      context,
 		timeout:      timeout,
 		distribution: distribution,
+		manifestURL:  localPathProvisionerManifestURL(),
 	}
 }
 
@@ -92,7 +96,7 @@ func (l *Installer) Images(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		localPathProvisionerManifestURL(),
+		l.manifestURL,
 		nil,
 	)
 	if err != nil {
