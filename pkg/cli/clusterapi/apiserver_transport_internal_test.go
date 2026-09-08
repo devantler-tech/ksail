@@ -86,9 +86,8 @@ func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 
 	// Put an idle keep-alive connection on the process-global pool, so closing it below is a real
 	// event rather than a no-op.
-	warm, err := http.DefaultClient.Get(
-		server.URL,
-	) //nolint:noctx // fixture warm-up, not production code
+	//nolint:noctx // fixture warm-up, not production code
+	warm, err := http.DefaultClient.Get(server.URL)
 	if err != nil {
 		t.Fatalf("warm-up request: %v", err)
 	}
