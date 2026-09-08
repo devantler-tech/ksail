@@ -767,7 +767,11 @@
               "properties": {
                 "experimentalControlPlaneUpgrade": {
                   "type": "boolean",
-                  "description": "Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation."
+                  "description": "Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. CLI-only; ignored by the operator. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation."
+                },
+                "experimentalManagedNodegroupCreation": {
+                  "type": "boolean",
+                  "description": "Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation."
                 },
                 "experimentalAWSLoadBalancerController": {
                   "type": "boolean",

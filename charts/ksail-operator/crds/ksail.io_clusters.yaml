@@ -364,8 +364,18 @@ spec:
                       experimentalControlPlaneUpgrade:
                         description: |-
                           ExperimentalControlPlaneUpgrade enables explicit, one-minor control-plane
-                          upgrades during cluster update. Default false; requires verified ownership.
+                          upgrades during cluster update. CLI-only; ignored by the operator.
+                          Default false; requires verified ownership.
                           Worker nodes and add-ons are managed separately. Pending live AWS validation.
+                        type: boolean
+                      experimentalManagedNodegroupCreation:
+                        description: |-
+                          ExperimentalManagedNodegroupCreation allows cluster update to create managed
+                          node groups added to eksctl.yaml. Default false: additions require recreation.
+                          Existing managed node-group scaling does not require this option. Removals
+                          and instance-type changes still require recreation. Creation requires a
+                          verified cluster identity and remains experimental pending live EKS validation.
+                          Graduation: https://github.com/devantler-tech/ksail/issues/6923.
                         type: boolean
                     type: object
                   gitOpsEngine:

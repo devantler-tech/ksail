@@ -15,9 +15,17 @@ type OptionsVanilla struct {
 // OptionsEKS defines options specific to the EKS distribution.
 type OptionsEKS struct {
 	// ExperimentalControlPlaneUpgrade enables explicit, one-minor control-plane
-	// upgrades during cluster update. Default false; requires verified ownership.
+	// upgrades during cluster update. CLI-only; ignored by the operator.
+	// Default false; requires verified ownership.
 	// Worker nodes and add-ons are managed separately. Pending live AWS validation.
-	ExperimentalControlPlaneUpgrade bool `json:"experimentalControlPlaneUpgrade,omitzero" jsonschema_description:"Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation."` //nolint:lll // generated-schema description
+	ExperimentalControlPlaneUpgrade bool `json:"experimentalControlPlaneUpgrade,omitzero" jsonschema_description:"Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. CLI-only; ignored by the operator. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation."` //nolint:lll // generated-schema description
+	// ExperimentalManagedNodegroupCreation allows cluster update to create managed
+	// node groups added to eksctl.yaml. Default false: additions require recreation.
+	// Existing managed node-group scaling does not require this option. Removals
+	// and instance-type changes still require recreation. Creation requires a
+	// verified cluster identity and remains experimental pending live EKS validation.
+	// Graduation: https://github.com/devantler-tech/ksail/issues/6923.
+	ExperimentalManagedNodegroupCreation bool `json:"experimentalManagedNodegroupCreation,omitzero" jsonschema_description:"Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation."` //nolint:lll // generated-schema description
 
 	// ExperimentalAWSLoadBalancerController enables installing the AWS Load
 	// Balancer Controller as the cluster's LoadBalancer component when

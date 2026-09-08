@@ -488,9 +488,13 @@ export interface KSailClusterConfiguration {
        */
       eks?: {
         /**
-         * Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation.
+         * Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. CLI-only; ignored by the operator. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation.
          */
         experimentalControlPlaneUpgrade?: boolean;
+        /**
+         * Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation.
+         */
+        experimentalManagedNodegroupCreation?: boolean;
         /**
          * Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create.
          */

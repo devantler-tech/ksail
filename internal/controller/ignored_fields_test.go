@@ -70,3 +70,38 @@ func TestReconcile_IgnoredFieldsConditionTrueWhenCLIOnlyFieldsSet(t *testing.T) 
 	assert.Equal(t, metav1.ConditionTrue, ready.Status)
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
 }
+
+func TestReconcile_IgnoredEKSUpgradeClearsWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	cluster := newCluster(true)
+	cluster.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade = true
+	fakeClient := newFakeClient(scheme, cluster)
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+
+	for _, enabled := range []bool{true, false} {
+		cluster.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade = enabled
+		require.NoError(t, fakeClient.Update(t.Context(), cluster))
+		_, err := reconciler.Reconcile(t.Context(), request())
+		require.NoError(t, err)
+		require.NoError(t, fakeClient.Get(t.Context(), request().NamespacedName, cluster))
+
+		ignored := apimeta.FindStatusCondition(
+			cluster.Status.Conditions,
+			v1alpha1.ConditionIgnoredFields,
+		)
+		require.NotNil(t, ignored)
+
+		if enabled {
+			assert.Equal(t, metav1.ConditionTrue, ignored.Status)
+			assert.Contains(t, ignored.Message, "spec.cluster.eks.experimentalControlPlaneUpgrade")
+		} else {
+			assert.Equal(t, metav1.ConditionFalse, ignored.Status)
+		}
+
+		ready := apimeta.FindStatusCondition(cluster.Status.Conditions, v1alpha1.ConditionReady)
+		require.NotNil(t, ready)
+		assert.Equal(t, metav1.ConditionTrue, ready.Status)
+	}
+}

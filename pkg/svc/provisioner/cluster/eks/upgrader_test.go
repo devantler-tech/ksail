@@ -210,17 +210,33 @@ func newUpgradeProvisioner(
 	t *testing.T,
 	api *upgradeAPI,
 	verifier eksidentity.Verifier,
+	options ...eksprovisioner.Option,
 ) *eksprovisioner.UpgradableProvisioner {
 	t.Helper()
 
+	options = append([]eksprovisioner.Option{
+		eksprovisioner.WithAWSClusterAPI(api),
+		eksprovisioner.WithOwnershipVerifier(verifier),
+		eksprovisioner.WithAWSConfig(
+			aws.Config{
+				Credentials: aws.CredentialsProviderFunc(
+					func(context.Context) (aws.Credentials, error) {
+						return aws.Credentials{
+							AccessKeyID:     "permanent",
+							SecretAccessKey: "secret",
+						}, nil
+					},
+				),
+			},
+		),
+	}, options...)
 	provisioner, err := eksprovisioner.NewProvisioner(
 		"demo",
 		"us-east-1",
 		"",
 		eksctl.NewClient(),
 		nil,
-		eksprovisioner.WithAWSClusterAPI(api),
-		eksprovisioner.WithOwnershipVerifier(verifier),
+		options...,
 	)
 	require.NoError(t, err)
 
@@ -397,6 +413,56 @@ func TestControlPlaneUpgradeRejectsMalformedSubmission(t *testing.T) {
 			require.Error(t, provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35"))
 			assert.Equal(t, 1, api.submitted)
 			assert.Zero(t, api.polls)
+		})
+	}
+}
+
+func TestControlPlaneUpgradeRequiresCredentialsThroughWait(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name      string
+		canExpire bool
+		lifetime  time.Duration
+		token     string
+		wantErr   bool
+	}{
+		{name: "permanent"},
+		{name: "sufficient_session", canExpire: true, lifetime: 2 * time.Hour, token: "session"},
+		{name: "short_session", canExpire: true, lifetime: 30 * time.Minute, token: "session", wantErr: true},
+		{name: "expired_session", canExpire: true, lifetime: -time.Minute, token: "session", wantErr: true},
+		{name: "unknown_session", token: "session", wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+			api.afterPoll = func() { api.cluster.Version = aws.String("1.35") }
+			values := aws.Credentials{
+				AccessKeyID: "test", SecretAccessKey: "secret", SessionToken: testCase.token,
+				CanExpire: testCase.canExpire, Expires: time.Now().Add(testCase.lifetime),
+			}
+			provisioner := newUpgradeProvisioner(
+				t,
+				api,
+				func(context.Context) error { return nil },
+				eksprovisioner.WithAWSConfig(
+					aws.Config{
+						Credentials: aws.CredentialsProviderFunc(
+							func(context.Context) (aws.Credentials, error) { return values, nil },
+						),
+					},
+				),
+			)
+
+			err := provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35")
+			if testCase.wantErr {
+				require.ErrorContains(t, err, "credential")
+				assert.Zero(t, api.submitted)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 1, api.submitted)
+			}
 		})
 	}
 }

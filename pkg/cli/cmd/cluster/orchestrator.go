@@ -88,6 +88,17 @@ func (o *updateOrchestrator) run(outputTimer timer.Timer) error {
 		return err
 	}
 
+	return o.runVerifiedProvisioner(provisioner, outputTimer)
+}
+
+func (o *updateOrchestrator) runVerifiedProvisioner(
+	provisioner clusterprovisioner.Provisioner,
+	outputTimer timer.Timer,
+) error {
+	if o.ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		return o.runEKSUpdate(provisioner, outputTimer)
+	}
+
 	// Reconcile cluster versions declaratively on every update: each dimension
 	// follows the latest supported version when unset, or the pinned value when set
 	// (spec.cluster.kubernetesVersion / spec.cluster.talos.version, overridable via

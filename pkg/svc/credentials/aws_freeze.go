@@ -87,15 +87,14 @@ func freezeAWSResolution(
 	selection.SessionToken = credentialValues.SessionToken
 	selection.frozen = true
 
-	frozenProvider := awscredentials.NewStaticCredentialsProvider(
-		credentialValues.AccessKeyID,
-		credentialValues.SecretAccessKey,
-		credentialValues.SessionToken,
-	)
+	// Retain expiry metadata without re-entering the original identity provider.
+	frozenProvider := aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+		return credentialValues, nil
+	})
 	cfg = sanitizeAWSConfigIdentity(cfg, selection.Region)
 	cfg = awsconfigutil.FreezeEndpointSources(cfg)
 	cfg.Region = selection.Region
-	cfg.Credentials = aws.NewCredentialsCache(frozenProvider)
+	cfg.Credentials = frozenProvider
 	selection.sdkConfig = &cfg
 
 	return selection, nil

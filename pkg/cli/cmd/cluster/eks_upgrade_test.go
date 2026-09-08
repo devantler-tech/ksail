@@ -17,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,7 +140,7 @@ func eksUpgradeFactory(t *testing.T, mutations *int) clusterprovisioner.DefaultF
 	t.Setenv("AWS_ENDPOINT_URL_EKS", eksUpgradeHTTPFixture(t, mutations))
 	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "false")
 	frozen, err := credentials.FreezeAWS(t.Context(), credentials.AWSResolution{
-		AccessKeyID: "FROZENUPGRADE", SecretAccessKey: "secret", SessionToken: "session",
+		AccessKeyID: "FROZENUPGRADE", SecretAccessKey: "secret",
 	}, "us-east-1")
 	require.NoError(t, err)
 	t.Setenv("AWS_ACCESS_KEY_ID", "CHANGEDAMBIENT")
@@ -195,4 +196,171 @@ func eksUpgradeHTTPFixture(t *testing.T, mutations *int) string {
 	t.Cleanup(server.Close)
 
 	return server.URL
+}
+
+//nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
+func TestEKSUpdateChecksFullDiffBeforeUpgrade(t *testing.T) {
+	mutations := 0
+	factory := eksUpgradeFactory(t, &mutations)
+	cmd, cfg := loadEKSUpgradeConfig(t, eksUpgradeCase{target: "1.35", enabled: true})
+	p, _, err := factory.Create(t.Context(), cfg)
+	require.NoError(t, err)
+
+	upgrader, ok := p.(*eksprovisioner.UpgradableProvisioner)
+	require.True(t, ok)
+
+	wantErr := assert.AnError
+	pipeline := &eksUpdatePipeline{
+		UpgradableProvisioner: upgrader,
+		current:               cfg.Spec.Cluster,
+		diffErr:               wantErr,
+	}
+
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	require.ErrorIs(t, cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, false), wantErr)
+	assert.Zero(
+		t,
+		mutations,
+		"an unreadable full diff must abort before the control-plane mutation",
+	)
+}
+
+//nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
+func TestEKSDryRunReportsVersionInFinalDiff(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			mutations := 0
+			factory := eksUpgradeFactory(t, &mutations)
+			cmd, cfg := loadEKSUpgradeConfig(t, eksUpgradeCase{target: "1.35", enabled: true})
+			cmd.Flags().String("output", format, "")
+
+			p, _, err := factory.Create(t.Context(), cfg)
+			require.NoError(t, err)
+
+			upgrader, ok := p.(*eksprovisioner.UpgradableProvisioner)
+			require.True(t, ok)
+
+			pipeline := &eksUpdatePipeline{
+				UpgradableProvisioner: upgrader,
+				current:               cfg.Spec.Cluster,
+			}
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&bytes.Buffer{})
+			require.NoError(t, cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, true))
+			assert.Zero(t, mutations)
+			assert.NotContains(t, output.String(), "No changes detected")
+
+			if format == "json" {
+				var diff cluster.DiffJSONOutput
+				require.NoError(t, json.Unmarshal(output.Bytes(), &diff))
+				require.Len(t, diff.InPlaceChanges, 1)
+				assert.Equal(t, "kubernetes.version", diff.InPlaceChanges[0].Field)
+			} else {
+				assert.Contains(t, output.String(), "kubernetes.version")
+			}
+		})
+	}
+}
+
+type eksUpdatePipeline struct {
+	*eksprovisioner.UpgradableProvisioner
+
+	current  v1alpha1.ClusterSpec
+	diffErr  error
+	recreate bool
+	unknown  bool
+}
+
+func (p *eksUpdatePipeline) GetCurrentConfig(
+	context.Context,
+	string,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
+	if p.unknown {
+		current := p.current
+		clusterupdate.MarkComponentsUnknown(&current)
+
+		return &current, nil, nil
+	}
+
+	return &p.current, &v1alpha1.ProviderSpec{}, nil
+}
+
+func (p *eksUpdatePipeline) DiffConfig(
+	context.Context,
+	string,
+	*v1alpha1.ClusterSpec,
+	*v1alpha1.ClusterSpec,
+) (*clusterupdate.UpdateResult, error) {
+	result := clusterupdate.NewEmptyUpdateResult()
+	if p.recreate {
+		result.RecreateRequired = []clusterupdate.Change{
+			{
+				Field:    "eks.managedNodeGroups[workers].instanceType",
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+			},
+		}
+	}
+
+	return result, p.diffErr
+}
+
+//nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
+func TestEKSUpgradeRejectsConcurrentRecreation(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dry_run_%t", dryRun), func(t *testing.T) {
+			mutations := 0
+			factory := eksUpgradeFactory(t, &mutations)
+			cmd, cfg := loadEKSUpgradeConfig(t, eksUpgradeCase{target: "1.35", enabled: true})
+			p, _, err := factory.Create(t.Context(), cfg)
+			require.NoError(t, err)
+
+			upgrader, ok := p.(*eksprovisioner.UpgradableProvisioner)
+			require.True(t, ok)
+
+			pipeline := &eksUpdatePipeline{
+				UpgradableProvisioner: upgrader,
+				current:               cfg.Spec.Cluster,
+				recreate:              true,
+			}
+
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetIn(strings.NewReader("n\n"))
+			err = cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, dryRun)
+			require.ErrorContains(t, err, "separate")
+			assert.Zero(t, mutations)
+		})
+	}
+}
+
+//nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
+func TestEKSUpgradeReportsSuccessWithUnknownComponentBaseline(t *testing.T) {
+	mutations := 0
+	factory := eksUpgradeFactory(t, &mutations)
+	cmd, cfg := loadEKSUpgradeConfig(t, eksUpgradeCase{target: "1.35", enabled: true})
+	cfg.Spec.Cluster.CNI = v1alpha1.CNICilium
+	p, _, err := factory.Create(t.Context(), cfg)
+	require.NoError(t, err)
+
+	upgrader, ok := p.(*eksprovisioner.UpgradableProvisioner)
+	require.True(t, ok)
+
+	pipeline := &eksUpdatePipeline{
+		UpgradableProvisioner: upgrader,
+		current:               cfg.Spec.Cluster,
+		unknown:               true,
+	}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	require.NoError(t, cluster.ExportRunVerifiedUpdate(cmd, cfg, pipeline, false))
+	assert.Equal(t, 1, mutations)
+	assert.Contains(t, output.String(), "upgraded to pinned version")
+	assert.Contains(t, output.String(), "Unknown")
+	assert.NotContains(t, output.String(), "No changes applied")
+	assert.NotContains(t, output.String(), "No changes detected")
 }

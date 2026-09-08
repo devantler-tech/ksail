@@ -862,3 +862,20 @@ func ExportFluxReassertMemoized(
 
 	return first, second
 }
+
+// ExportRunVerifiedUpdate runs the update pipeline after identity and kubeconfig verification.
+func ExportRunVerifiedUpdate(cmd *cobra.Command, cfg *v1alpha1.Cluster,
+	provisioner clusterprovisioner.Provisioner, dryRun bool,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd: cmd,
+		ctx: &localregistry.Context{
+			ClusterCfg: cfg, EKSAccountID: "123456789012",
+			EKSConfig: &clusterprovisioner.EKSConfig{Name: "demo", Region: "us-east-1"},
+		},
+		clusterName: "demo",
+		dryRun:      dryRun,
+	}
+
+	return orchestrator.runVerifiedProvisioner(provisioner, nil)
+}

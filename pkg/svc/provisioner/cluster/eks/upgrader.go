@@ -127,6 +127,11 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 		return err
 	}
 
+	err = p.validateUpgradeCredentialLifetime(ctx)
+	if err != nil {
+		return err
+	}
+
 	update, err := api.UpdateClusterVersion(
 		ctx, p.name, strings.TrimSuffix(strings.TrimPrefix(target, "v"), ".0"), token,
 	)
@@ -287,6 +292,48 @@ func (p *UpgradableProvisioner) validateControlPlaneIdentity(cluster *ekstypes.C
 		arn.Resource != "cluster/"+p.name ||
 		arn.AccountID == "" {
 		return eksidentity.ErrInvalidLiveIdentity
+	}
+
+	return nil
+}
+
+var errUpgradeCredentialLifetime = errors.New(
+	"EKS upgrade credentials must remain valid through the bounded wait plus one minute; " +
+		"use a credential provider with a sufficient known session expiry",
+)
+
+// validateUpgradeCredentialLifetime rejects credentials that could expire after AWS accepts
+// the upgrade. The selected credential generation stays fixed for ownership and mutation.
+func (p *UpgradableProvisioner) validateUpgradeCredentialLifetime(ctx context.Context) error {
+	if p.upgradeCredentials == nil {
+		return errUpgradeCredentialLifetime
+	}
+
+	values, err := p.upgradeCredentials.Retrieve(ctx)
+	if err != nil {
+		return fmt.Errorf("read frozen EKS upgrade credentials: %w", err)
+	}
+
+	if values.AccessKeyID == "" || values.SecretAccessKey == "" {
+		return errUpgradeCredentialLifetime
+	}
+
+	if !values.CanExpire {
+		if values.SessionToken != "" {
+			return errUpgradeCredentialLifetime
+		}
+
+		return nil
+	}
+
+	deadline, ok := ctx.Deadline()
+	if !ok || !values.Expires.After(deadline.Add(time.Minute)) {
+		return errUpgradeCredentialLifetime
+	}
+
+	err = ctx.Err()
+	if err != nil {
+		return fmt.Errorf("validate EKS upgrade credential lifetime: %w", err)
 	}
 
 	return nil

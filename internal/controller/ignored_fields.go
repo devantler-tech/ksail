@@ -34,6 +34,10 @@ var ignoredCLIFields = []struct {
 		func(c *v1alpha1.Cluster) bool { return c.Spec.Cluster.DistributionConfig != "" },
 	},
 	{
+		"spec.cluster.eks.experimentalControlPlaneUpgrade",
+		func(c *v1alpha1.Cluster) bool { return c.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade },
+	},
+	{
 		"spec.workload.watch.hooks",
 		func(c *v1alpha1.Cluster) bool { return len(c.Spec.Workload.Watch.Hooks) > 0 },
 	},
