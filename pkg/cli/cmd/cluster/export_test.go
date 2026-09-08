@@ -882,7 +882,7 @@ func ExportRunVerifiedUpdate(cmd *cobra.Command, cfg *v1alpha1.Cluster,
 
 // ErrEKSUpgradeWithRecreation exposes the recreation-conflict sentinel for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires globals to expose internals
+
 var ErrEKSUpgradeWithRecreation = errEKSUpgradeWithRecreation
 
 // ExportReportEKSUpgraded exports reportEKSUpgraded for testing.

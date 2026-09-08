@@ -132,7 +132,12 @@ func TestControlPlaneUpgradeRetriesTransientConfirmingRead(t *testing.T) {
 		provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
 		require.NoError(t, provisioner.UpgradeKubernetes(ctx, "demo", "1.34", "1.35"))
 		assert.True(t, throttled, "fixture never injected the throttled confirming read")
-		assert.Greater(t, api.polls, 1, "the wait must poll again after a throttled confirming read")
+		assert.Greater(
+			t,
+			api.polls,
+			1,
+			"the wait must poll again after a throttled confirming read",
+		)
 	})
 }
 
