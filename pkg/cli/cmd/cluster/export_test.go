@@ -880,14 +880,6 @@ func ExportRunVerifiedUpdate(cmd *cobra.Command, cfg *v1alpha1.Cluster,
 	return orchestrator.runVerifiedProvisioner(provisioner, nil)
 }
 
-// ExportValidateEKSRecreation exports validateEKSRecreation for testing.
-func ExportValidateEKSRecreation(
-	upgradePlanned bool,
-	diff *clusterupdate.UpdateResult,
-) error {
-	return validateEKSRecreation(upgradePlanned, diff)
-}
-
 // ExportErrEKSUpgradeWithRecreation exposes the recreation-conflict sentinel for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern requires globals to expose internals
