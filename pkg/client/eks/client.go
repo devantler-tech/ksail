@@ -388,6 +388,7 @@ func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config)
 	if c.describer == nil {
 		c.describer = c.nodegroups
 	}
+
 	if c.nodegroupStacks == nil {
 		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 	}
