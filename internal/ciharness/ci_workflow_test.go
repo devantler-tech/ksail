@@ -431,8 +431,8 @@ func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
 
 	applyPatches := step(t, job.Steps, "📋 Apply patches")
 
-	env, ok := applyPatches["env"].(map[string]any)
-	require.True(t, ok, "📋 Apply patches must carry an `env:` mapping")
+	env, hasEnv := applyPatches["env"].(map[string]any)
+	require.True(t, hasEnv, "📋 Apply patches must carry an `env:` mapping")
 
 	assert.Equal(
 		t,
@@ -443,8 +443,8 @@ func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
 			" (#6832) or withholds the desktop tidy from everyone (#6974)",
 	)
 
-	run, ok := applyPatches["run"].(string)
-	require.True(t, ok, "📋 Apply patches must carry a string `run:` script")
+	run, hasRun := applyPatches["run"].(string)
+	require.True(t, hasRun, "📋 Apply patches must carry a string `run:` script")
 
 	assert.Contains(
 		t,
@@ -492,8 +492,8 @@ func TestApplyPatchesDeliversDesktopTidyToDependabotBranches(t *testing.T) {
 	job, found := workflow.Jobs["auto-commit"]
 	require.True(t, found, "ci workflow must define the auto-commit job")
 
-	run, ok := step(t, job.Steps, "📋 Apply patches")["run"].(string)
-	require.True(t, ok, "📋 Apply patches must carry a string `run:` script")
+	run, hasRun := step(t, job.Steps, "📋 Apply patches")["run"].(string)
+	require.True(t, hasRun, "📋 Apply patches must carry a string `run:` script")
 
 	// The restriction names the one patch that survives it. If verify-desktop-tidy's
 	// artifact is ever renamed, the guard silently starts skipping every patch on a
