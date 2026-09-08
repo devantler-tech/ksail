@@ -67,7 +67,7 @@ func TestCheckServerAvailabilityWithRetry_SucceedsAfterRetry(t *testing.T) {
 	var calls atomic.Int32
 
 	srv := newCountingAvailabilityServer(t, 3, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	err := prov.CheckServerAvailabilityWithRetryForTest(
 		context.Background(),
@@ -90,7 +90,7 @@ func TestCheckServerAvailabilityWithRetry_ExhaustsRetries(t *testing.T) {
 
 	// availableAfter 0 => never available, so every attempt fails.
 	srv := newCountingAvailabilityServer(t, 0, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	err := prov.CheckServerAvailabilityWithRetryForTest(
 		context.Background(),
@@ -113,7 +113,7 @@ func TestCheckServerAvailabilityWithRetry_PermanentErrorNotRetried(t *testing.T)
 
 	// The queried type is never returned, so the lookup yields ErrServerTypeNotFound.
 	srv := newCountingAvailabilityServer(t, 1, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	err := prov.CheckServerAvailabilityWithRetryForTest(
 		context.Background(),
@@ -135,7 +135,7 @@ func TestCheckServerAvailabilityWithRetry_ContextCancelledDuringWait(t *testing.
 	var calls atomic.Int32
 
 	srv := newCountingAvailabilityServer(t, 0, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Cancel the context during the backoff wait of the first attempt.
@@ -165,7 +165,7 @@ func TestCheckServerAvailabilityWithRetry_ClampsNonPositiveMaxAttempts(t *testin
 	var calls atomic.Int32
 
 	srv := newCountingAvailabilityServer(t, 0, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	err := prov.CheckServerAvailabilityWithRetryForTest(
 		context.Background(),
@@ -187,7 +187,7 @@ func TestCheckServerAvailabilityWithRetry_PublicWrapperSucceeds(t *testing.T) {
 	var calls atomic.Int32
 
 	srv := newCountingAvailabilityServer(t, 1, &calls)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	// maxAttempts of 1 means the public wrapper never sleeps even though it uses
 	// the real backoff delay function.

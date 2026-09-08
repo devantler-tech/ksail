@@ -7,7 +7,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/apricote/hcloud-upload-image/hcloudimages"
@@ -49,11 +51,68 @@ type hcloudImageSchema struct {
 var errServerQuotaExceeded = errors.New("server quota exceeded")
 
 // newTestHcloudClient creates an hcloud.Client pointing at a test HTTP server.
-func newTestHcloudClient(serverURL string) *hcloudtest.Client {
+func newTestHcloudClient(t *testing.T, serverURL string) *hcloudtest.Client {
+	t.Helper()
+
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	require.True(t, ok, "the default HTTP transport must support cloning")
+
+	transport := defaultTransport.Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+
 	return hcloudtest.NewClient(
 		hcloudtest.WithToken("test-token"),
 		hcloudtest.WithEndpoint(serverURL),
+		hcloudtest.WithHTTPClient(&http.Client{Transport: transport}),
 	)
+}
+
+// Test clients must own their pools while retaining keep-alive within each client.
+// This test runs alone because parallel httptest cleanup closes the global pool.
+//
+//nolint:paralleltest // The regression observes ownership of process-global idle connections.
+func TestNewTestHcloudClientIsolatesConnectionPools(t *testing.T) {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			assert.Equal(t, http.MethodGet, request.Method)
+			assert.Equal(t, "/images", request.URL.Path)
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"images":[{"id":10}]}`))
+		}),
+	)
+	t.Cleanup(server.Close)
+
+	firstClient := newTestHcloudClient(t, server.URL)
+	secondClient := newTestHcloudClient(t, server.URL)
+
+	listImages := func(client *hcloudtest.Client) bool {
+		var connection atomic.Pointer[httptrace.GotConnInfo]
+
+		ctx := httptrace.WithClientTrace(t.Context(), &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) {
+				connection.Store(&info)
+			},
+		})
+
+		images, _, err := client.Image.List(ctx, hcloudtest.ImageListOpts{})
+		require.NoError(t, err)
+		require.Len(t, images, 1)
+		assert.Equal(t, int64(10), images[0].ID)
+
+		info := connection.Load()
+		require.NotNil(t, info, "the SDK request must acquire an HTTP connection")
+
+		return info.Reused
+	}
+
+	assert.False(t, listImages(firstClient), "the first request must establish a connection")
+	assert.True(t, listImages(firstClient), "one client must reuse its own idle connection")
+	assert.False(
+		t,
+		listImages(secondClient),
+		"independent clients must not share an idle connection",
+	)
+	assert.True(t, listImages(secondClient), "the second client must reuse its own idle connection")
 }
 
 func marshalJSON(t *testing.T, v any) []byte {
@@ -99,7 +158,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_ExistingFound(t *testing.T) {
 		_, _ = responseWriter.Write(marshalJSON(t, resp))
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{}
 
 	var logBuf bytes.Buffer
@@ -135,7 +194,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_BuildsNew(t *testing.T) {
 		_, _ = w.Write(marshalJSON(t, hcloudImageListResponse{Images: []hcloudImageSchema{}}))
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{
 		image: &hcloudtest.Image{ID: builtID},
 	}
@@ -172,7 +231,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_UploaderError(t *testing.T) {
 		)
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{err: errServerQuotaExceeded}
 
 	var logBuf bytes.Buffer
@@ -246,7 +305,7 @@ func TestSnapshotManager_DeleteTalosSnapshots_DeletesImages(t *testing.T) {
 
 	registerDeleteTestHandlers(t, mux, clusterName, deletedIDs)
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{}
 
 	var logBuf bytes.Buffer
@@ -281,7 +340,7 @@ func TestSnapshotManager_DeleteTalosSnapshots_NoOp(t *testing.T) {
 		_, _ = w.Write(marshalJSON(t, hcloudImageListResponse{Images: []hcloudImageSchema{}}))
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{}
 
 	var logBuf bytes.Buffer
@@ -363,7 +422,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_SkipsNonAvailableSnapshot(t *testin
 		_, _ = responseWriter.Write(marshalJSON(t, resp))
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{image: &hcloudtest.Image{ID: builtID}}
 
 	var logBuf bytes.Buffer
@@ -423,7 +482,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_SHA256SchematicID(t *testing.T) {
 		_, _ = responseWriter.Write(marshalJSON(t, resp))
 	})
 
-	client := newTestHcloudClient(srv.URL)
+	client := newTestHcloudClient(t, srv.URL)
 	uploader := &mockUploader{}
 
 	var logBuf bytes.Buffer

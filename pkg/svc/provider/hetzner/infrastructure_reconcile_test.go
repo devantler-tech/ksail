@@ -74,7 +74,7 @@ func TestEnsureNetwork_ReconcilesMissingSubnetOnExisting(t *testing.T) {
 		&addSubnetCalls,
 		&lastAddSubnetBody,
 	)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	network, err := prov.EnsureNetwork(context.Background(), "test-cluster", defaultNetworkCIDR)
 
@@ -101,7 +101,7 @@ func TestEnsureNetwork_SkipsSubnetWhenPresent(t *testing.T) {
 	srv := newNetworkReconcileServer(
 		t, defaultNetworkCIDR, existingSubnet, &addSubnetCalls, &lastAddSubnetBody,
 	)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	network, err := prov.EnsureNetwork(context.Background(), "test-cluster", defaultNetworkCIDR)
 
@@ -124,7 +124,7 @@ func TestEnsureNetwork_CustomCIDRAddsFirstSlash24(t *testing.T) {
 	)
 
 	srv := newNetworkReconcileServer(t, "10.100.0.0/16", `[]`, &addSubnetCalls, &lastAddSubnetBody)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	network, err := prov.EnsureNetwork(context.Background(), "test-cluster", "10.100.0.0/16")
 
@@ -150,7 +150,7 @@ func TestEnsureNetwork_CustomCIDRSkipsWhenFirstSlash24Present(t *testing.T) {
 	srv := newNetworkReconcileServer(
 		t, "10.100.0.0/16", existingSubnet, &addSubnetCalls, &lastAddSubnetBody,
 	)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	network, err := prov.EnsureNetwork(context.Background(), "test-cluster", "10.100.0.0/16")
 
@@ -172,7 +172,7 @@ func TestEnsureNetwork_CustomSlash24UsesWholeRange(t *testing.T) {
 	)
 
 	srv := newNetworkReconcileServer(t, "10.200.5.0/24", `[]`, &addSubnetCalls, &lastAddSubnetBody)
-	prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	network, err := prov.EnsureNetwork(context.Background(), "test-cluster", "10.200.5.0/24")
 

@@ -142,7 +142,7 @@ func TestCheckServerAvailability(t *testing.T) {
 			t.Parallel()
 
 			srv := newAvailabilityTestServer(t, testCase.types)
-			prov := hetzner.NewProvider(newTestHcloudClient(srv.URL))
+			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 			err := prov.CheckServerAvailability(
 				context.Background(),

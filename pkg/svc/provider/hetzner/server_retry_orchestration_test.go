@@ -69,7 +69,7 @@ func newRetryTestProvider(t *testing.T, handler http.Handler) *hetzner.Provider 
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return hetzner.NewProvider(newTestHcloudClient(srv.URL))
+	return hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 }
 
 // decodeServerCreateBody parses a POST /servers request body into a generic map.
