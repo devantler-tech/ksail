@@ -403,9 +403,10 @@ func (p *Provisioner) ReattachFloatingIPAfterControlPlaneReplacementForTest(
 	hzProvider *hetzner.Provider,
 	clusterName string,
 	oldServer, newServer *hcloud.Server,
+	expectedID int64,
 ) error {
 	return p.reattachFloatingIPAfterControlPlaneReplacement(
-		ctx, hzProvider, clusterName, oldServer, newServer,
+		ctx, hzProvider, clusterName, oldServer, newServer, expectedID,
 	)
 }
 
@@ -1124,4 +1125,9 @@ func (p *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
 	raw []byte,
 ) error {
 	return p.publishConnectorKubeconfig(ctx, clusterName, raw)
+}
+
+// AddReplacementCertSANForTest exposes the prepared-config completion step.
+func (p *Provisioner) AddReplacementCertSANForTest(server *hcloud.Server, role string) error {
+	return p.addReplacementCertSAN(server, role)
 }

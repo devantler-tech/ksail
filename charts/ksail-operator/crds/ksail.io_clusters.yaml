@@ -361,6 +361,15 @@ spec:
                           and by `cluster update` when the opt-in changes. Not yet validated against
                           a live EKS cluster.
                         type: boolean
+                      experimentalManagedNodegroupCreation:
+                        description: |-
+                          ExperimentalManagedNodegroupCreation allows cluster update to create managed
+                          node groups added to eksctl.yaml. Default false: additions require recreation.
+                          Existing managed node-group scaling does not require this option. Removals
+                          and instance-type changes still require recreation. Creation requires a
+                          verified cluster identity and remains experimental pending live EKS validation.
+                          Graduation: https://github.com/devantler-tech/ksail/issues/6923.
+                        type: boolean
                     type: object
                   gitOpsEngine:
                     description: 'GitOpsEngine selects the GitOps engine KSail bootstraps:

@@ -491,7 +491,7 @@ func TestListNodegroups_HappyPath(t *testing.T) {
 	runner := &fakeRunner{
 		stdout: []byte(`[{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE",
 			"DesiredCapacity":2,"MinSize":1,"MaxSize":3,
-			"InstanceType":"t3.medium","NodeGroupType":"managed","Version":"1.31"}]`),
+			"InstanceType":"t3.medium","Type":"managed","Version":"1.31"}]`),
 	}
 	client := newTestClient(runner)
 

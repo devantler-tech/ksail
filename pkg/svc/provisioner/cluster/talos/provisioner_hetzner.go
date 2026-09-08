@@ -246,34 +246,49 @@ func (p *Provisioner) prepareFloatingIPConfigForNewControlPlane(
 		return nil
 	}
 
+	_, err := p.prepareFloatingIPConfig(ctx, hzProvider, clusterName)
+
+	return err
+}
+
+// prepareFloatingIPConfig resolves and renders existing endpoint prerequisites
+// without changing cloud resources. The returned identity can fence later reads.
+func (p *Provisioner) prepareFloatingIPConfig(
+	ctx context.Context, hzProvider *hetzner.Provider, clusterName string,
+) (*hcloud.FloatingIP, error) {
 	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("looking up floating IP before control-plane config apply: %w", err)
+		return nil, fmt.Errorf("looking up floating IP before control-plane config apply: %w", err)
 	}
 
 	if floatingIP == nil {
-		return fmt.Errorf("%w: %s", ErrFloatingIPMissingForControlPlaneConfig, clusterName)
+		return nil, fmt.Errorf("%w: %s", ErrFloatingIPMissingForControlPlaneConfig, clusterName)
 	}
 
 	controlPlaneServers, err := p.listHetznerNodesByRole(
 		ctx, hzProvider, clusterName, RoleControlPlane,
 	)
 	if err != nil {
-		return fmt.Errorf("listing control planes before config apply: %w", err)
+		return nil, fmt.Errorf("listing control planes before config apply: %w", err)
 	}
 
 	if len(controlPlaneServers) == 0 {
-		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
+		return nil, fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
 	endpointIP := floatingIP.IP.String()
 
 	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
+	err = p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
+	if err != nil {
+		return nil, err
+	}
+
+	return floatingIP, nil
 }
 
 // withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
