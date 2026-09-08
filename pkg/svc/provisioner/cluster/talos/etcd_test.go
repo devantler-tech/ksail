@@ -217,7 +217,7 @@ func (transport *membershipCloudTransport) isoResponse(request *http.Request) (s
 	body = `{"iso":{"id":` + strings.TrimPrefix(
 		request.URL.Path,
 		"/isos/",
-	) + `,"type":"custom"}}`
+	) + `,"type":"private"}}`
 	if transport.isoArchitecture != "" {
 		body = fmt.Sprintf(
 			`{"iso":{"id":%s,"type":"public","architecture":%q}}`,
