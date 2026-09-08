@@ -747,11 +747,31 @@ jobs:
           path: /tmp/patches
 
       - name: 📋 Apply patches
+        env:
+          # Dependabot loses its rebase ability permanently once anything else pushes to
+          # its branch, so its branches are left alone (#6832) — with one exception.
+          #
+          # That exclusion assumed every patch here is cosmetic drift the protected-branch
+          # sync repairs after the bump merges. The desktop tidy is not: desktop/ is a
+          # separate module vendoring the root via `replace => ../`, so a root bump leaves
+          # desktop/go.{mod,sum} stale and fails the bump's OWN required checks. Deferring
+          # it means the bump can never merge, so the post-merge path it was deferred to is
+          # never reached, and the PR sits red in the ecosystem's open-PR cap (#6974).
+          #
+          # Apply only the desktop tidy on a Dependabot branch: the one patch Dependabot
+          # cannot produce itself and cannot merge without. When desktop is already tidy
+          # this patch is empty, nothing is staged, and the branch is never touched — so
+          # Dependabot keeps its rebase ability in exactly the cases #6832 was about.
+          DESKTOP_TIDY_ONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
 
           for patch in /tmp/patches/*.patch; do
+            if [ "${DESKTOP_TIDY_ONLY}" = "true" ] && [ "$(basename "$patch")" != "desktop-tidy.patch" ]; then
+              echo "Skipping $(basename "$patch"): Dependabot branch — only the desktop tidy is applied here."
+              continue
+            fi
             if [ -s "$patch" ]; then
               patch_name="$(basename "$patch")"
               echo "Applying ${patch_name}..."
@@ -790,9 +810,12 @@ jobs:
       # modes are not expressible. Reject anything other than a regular 0644 file below
       # rather than dereferencing a symlink or silently losing an executable bit.
       - name: 📤 Commit and push generated changes (PR branch)
-        if: >-
-          github.event_name == 'pull_request'
-          && github.event.pull_request.user.login != 'dependabot[bot]'
+        # Dependabot is no longer excluded here; the exclusion moved into 📋 Apply patches,
+        # which restricts a Dependabot branch to the desktop tidy. That keeps the decision
+        # about WHAT may be pushed in one place and lets this step stay a plain "commit
+        # whatever was applied" — on a Dependabot bump with a tidy desktop module nothing
+        # is applied, so this step finds no changes and pushes nothing (#6974).
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           BRANCH: ${{ github.head_ref }}
