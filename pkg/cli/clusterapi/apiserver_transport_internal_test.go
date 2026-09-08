@@ -67,6 +67,8 @@ func TestApiserverTransportLeavesCustomConfigsOnClientGoCache(t *testing.T) {
 // A watch must not be broken by an unrelated goroutine closing the process-global pool's idle
 // connections. The loop reuses keep-alive connections and interleaves the close, which is the
 // sequence that produced the CI failure.
+//
+//nolint:paralleltest // Mutates the process-global http.DefaultTransport; cannot run in parallel.
 func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -92,7 +94,7 @@ func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 	_, _ = io.Copy(io.Discard, warm.Body)
 	_ = warm.Body.Close()
 
-	for i := range 25 {
+	for iteration := range 25 {
 		if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
 			defaultTransport.CloseIdleConnections()
 		}
@@ -105,7 +107,7 @@ func TestWatchKubeSurvivesDefaultTransportCloseIdleConnections(t *testing.T) {
 			url.Values{"labelSelector": {"app=x"}},
 		)
 		if err != nil {
-			t.Fatalf("iteration %d: WatchKube broken by an unrelated CloseIdleConnections: %v", i, err)
+			t.Fatalf("iteration %d: WatchKube broken by an unrelated CloseIdleConnections: %v", iteration, err)
 		}
 
 		_, _ = io.Copy(io.Discard, stream)

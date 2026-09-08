@@ -1,6 +1,7 @@
 package clusterapi
 
 import (
+	"fmt"
 	"net/http"
 
 	"k8s.io/client-go/rest"
@@ -20,7 +21,7 @@ import (
 func apiserverTransportFor(config *rest.Config) (http.RoundTripper, error) {
 	transport, err := rest.TransportFor(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build apiserver transport: %w", err)
 	}
 
 	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok &&
