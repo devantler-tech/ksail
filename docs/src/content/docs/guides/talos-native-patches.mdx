@@ -136,6 +136,9 @@ Some layouts require an explicit conversion:
 - **Deletion selectors overlapping OIDC:** consolidate the remaining authentication
   settings before migration. Multi-key list deletions in a legacy document being
   converted must be moved to a separate strategic-merge patch to preserve their selector.
+  When OIDC references a CA file, a deletion selected only by another file's `path`
+  is preserved. Deletions of the CA, the whole file list, or the machine remain
+  unsupported, as do selectors without a path or with additional selector fields.
 
 ## Backward Compatibility
 

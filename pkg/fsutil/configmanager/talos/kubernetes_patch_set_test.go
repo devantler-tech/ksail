@@ -211,6 +211,35 @@ func TestKubernetesPatchSetResolvesRoleCertificateOverrides(t *testing.T) {
 	assertJWTIssuer(t, configs.Worker(), "shared", "shared-ca")
 }
 
+func TestKubernetesPatchSetPreservesOIDCCAWithUnrelatedDeletion(t *testing.T) {
+	t.Parallel()
+	configs, err := loadVariantPatches(t, map[string]string{
+		"cluster/oidc.yaml": legacyOIDCArgs(sharedOIDCWithCA),
+		"cluster/files.yaml": oidcCAFile("shared-ca", "overwrite") + `    - path: /etc/obsolete.conf
+      op: overwrite
+      content: obsolete
+`,
+		"control-planes/delete.yaml": `machine:
+  files:
+    - path: /etc/obsolete.conf
+      $patch: delete
+`,
+	}, nil)
+	require.NoError(t, err)
+	assertJWTIssuer(t, configs.ControlPlane(), "shared", "shared-ca")
+	assertJWTIssuer(t, configs.Worker(), "shared", "shared-ca")
+
+	files, err := configs.ControlPlane().Machine().Files()
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	assert.Equal(t, "/etc/oidc.crt", files[0].Path())
+	assert.Equal(t, "shared-ca", files[0].Content())
+
+	workerFiles, err := configs.Worker().Machine().Files()
+	require.NoError(t, err)
+	require.Len(t, workerFiles, 2)
+}
+
 func TestKubernetesPatchSetRejectsAmbiguousOIDC(t *testing.T) {
 	t.Parallel()
 
@@ -230,8 +259,28 @@ func TestKubernetesPatchSetRejectsAmbiguousOIDC(t *testing.T) {
 		{"empty CA", oidcCAFile("", "overwrite"), "CA content is missing"},
 		{"delete API server", "cluster:\n  apiServer:\n    $patch: delete\n", "deletion"},
 		{
+			"delete referenced CA",
+			"machine:\n  files:\n    - path: /etc/oidc.crt\n      $patch: delete\n",
+			"deletion",
+		},
+		{
 			"delete CA by selector",
 			"machine:\n  files:\n    - op: overwrite\n      $patch: delete\n",
+			"deletion",
+		},
+		{
+			"operation selector before unrelated path",
+			"machine:\n  files:\n    - op: overwrite\n      path: /etc/obsolete.conf\n      $patch: delete\n",
+			"deletion",
+		},
+		{
+			"path selector before operation",
+			"machine:\n  files:\n    - path: /etc/obsolete.conf\n      op: overwrite\n      $patch: delete\n",
+			"deletion",
+		},
+		{
+			"delete files",
+			"machine:\n  files:\n    $patch: delete\n",
 			"deletion",
 		},
 		{"delete machine", "machine:\n  $patch: delete\n", "deletion"},

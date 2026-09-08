@@ -382,7 +382,7 @@ func resolveOIDCCA(records []kubernetesPatchDocument, path string) (string, erro
 
 	for _, record := range records {
 		machine, _ := mapValue(record.document, "machine")
-		if machine["$patch"] != nil || containsDeletion(machine["files"]) {
+		if machine["$patch"] != nil || containsOIDCCADeletion(machine["files"], path) {
 			return "", fmt.Errorf("CA patch %q: %w", record.patch.Path, errOIDCDeletion)
 		}
 
@@ -406,6 +406,30 @@ func resolveOIDCCA(records []kubernetesPatchDocument, path string) (string, erro
 	}
 
 	return content, nil
+}
+
+// containsOIDCCADeletion permits only an unambiguous selector for another path.
+// Talos selects by the first non-$patch key, whose order a decoded map cannot retain.
+func containsOIDCCADeletion(value any, path string) bool {
+	files, ok := value.([]any)
+	if !ok {
+		return containsDeletion(value)
+	}
+
+	for _, item := range files {
+		if !containsDeletion(item) {
+			continue
+		}
+
+		file, _ := item.(map[string]any)
+
+		filePath, _ := file["path"].(string)
+		if len(file) != 2 || file["$patch"] == nil || filePath == "" || filePath == path {
+			return true
+		}
+	}
+
+	return false
 }
 
 func nonemptyKubernetesPatches(patches []Patch) []Patch {
