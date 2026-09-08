@@ -308,40 +308,9 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 		return nil
 	}
 
-	var (
-		cfg aws.Config
-		err error
-	)
-
-	switch {
-	case c.awsConfig != nil:
-		cfg = *c.awsConfig
-		cfg.ConfigSources = append(cfg.ConfigSources[:0:0], cfg.ConfigSources...)
-
-		cfg.APIOptions = append(cfg.APIOptions[:0:0], cfg.APIOptions...)
-		if strings.TrimSpace(region) != "" {
-			cfg.Region = strings.TrimSpace(region)
-		}
-	case c.staticCredentialProvider != nil:
-		cfg, err = awsconfigutil.LoadNeutral(
-			ctx,
-			config.LoadDefaultConfig,
-			region,
-			c.staticCredentialProvider,
-		)
-		if err != nil {
-			return fmt.Errorf("loading aws configuration: %w", err)
-		}
-	default:
-		loadOptions := append(
-			[]func(*config.LoadOptions) error{config.WithRegion(region)},
-			c.loadOptions...,
-		)
-
-		cfg, err = config.LoadDefaultConfig(ctx, loadOptions...)
-		if err != nil {
-			return fmt.Errorf("loading aws configuration: %w", err)
-		}
+	cfg, err := c.resolveAWSConfig(ctx, region)
+	if err != nil {
+		return err
 	}
 
 	err = c.configureMissingEKSClients(ctx, cfg)
@@ -350,6 +319,48 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 	}
 
 	return c.configureMissingSTSClients(ctx, cfg)
+}
+
+// resolveAWSConfig builds the AWS configuration the SDK clients are constructed from:
+// an explicitly supplied config wins, then a static credential provider, and otherwise
+// the default credential chain is loaded for the region.
+func (c *Client) resolveAWSConfig(ctx context.Context, region string) (aws.Config, error) {
+	switch {
+	case c.awsConfig != nil:
+		cfg := *c.awsConfig
+		cfg.ConfigSources = append(cfg.ConfigSources[:0:0], cfg.ConfigSources...)
+
+		cfg.APIOptions = append(cfg.APIOptions[:0:0], cfg.APIOptions...)
+		if strings.TrimSpace(region) != "" {
+			cfg.Region = strings.TrimSpace(region)
+		}
+
+		return cfg, nil
+	case c.staticCredentialProvider != nil:
+		cfg, err := awsconfigutil.LoadNeutral(
+			ctx,
+			config.LoadDefaultConfig,
+			region,
+			c.staticCredentialProvider,
+		)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("loading aws configuration: %w", err)
+		}
+
+		return cfg, nil
+	default:
+		loadOptions := append(
+			[]func(*config.LoadOptions) error{config.WithRegion(region)},
+			c.loadOptions...,
+		)
+
+		cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("loading aws configuration: %w", err)
+		}
+
+		return cfg, nil
+	}
 }
 
 func (c *Client) hasExplicitAWSConfiguration() bool {

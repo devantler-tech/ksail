@@ -35,19 +35,11 @@ func (f DefaultFactory) createEKSProvisioner(
 		return nil, nil, err
 	}
 
-	provisionerOptions = append(provisionerOptions,
-		eksprovisioner.WithKubeconfigPath(eksConfig.KubeconfigPath),
+	providerOptions, provisionerOptions = f.applyEKSFactoryOptions(
+		eksConfig.KubeconfigPath,
+		providerOptions,
+		provisionerOptions,
 	)
-	if f.AWSOwnershipVerifier != nil {
-		providerOptions = append(
-			providerOptions,
-			awsprovider.WithOwnershipVerifier(f.AWSOwnershipVerifier),
-		)
-		provisionerOptions = append(
-			provisionerOptions,
-			eksprovisioner.WithOwnershipVerifier(f.AWSOwnershipVerifier),
-		)
-	}
 
 	infraProvider, err := awsprovider.NewProvider(client, eksConfig.Region, providerOptions...)
 	if err != nil {
@@ -66,14 +58,21 @@ func (f DefaultFactory) createEKSProvisioner(
 		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
 	}
 
-	// EKS always exposes Updater so component-only changes can reconcile. Scaling
-	// existing managed node groups requires a declared eksctl config path. Creating
-	// missing groups additionally requires the experimental creation option below.
-	managedNodegroupUpdates := eksConfig.ConfigPath != ""
+	return decorateEKSProvisioner(provisioner, cluster, eksConfig.ConfigPath), eksConfig, nil
+}
 
+// decorateEKSProvisioner wraps the base provisioner in the capabilities the cluster opts
+// into. EKS always exposes Updater so component-only changes can reconcile; scaling
+// existing managed node groups requires a declared eksctl config path, and creating
+// missing groups additionally requires the experimental creation option.
+func decorateEKSProvisioner(
+	provisioner *eksprovisioner.Provisioner,
+	cluster *v1alpha1.Cluster,
+	eksctlConfigPath string,
+) Provisioner {
 	updatable := eksprovisioner.NewUpdatableProvisioner(
 		provisioner,
-		eksprovisioner.WithManagedNodegroupUpdates(managedNodegroupUpdates),
+		eksprovisioner.WithManagedNodegroupUpdates(eksctlConfigPath != ""),
 		eksprovisioner.WithManagedNodegroupCreation(
 			cluster.Spec.Cluster.EKS.ExperimentalManagedNodegroupCreation,
 		),
@@ -82,7 +81,33 @@ func (f DefaultFactory) createEKSProvisioner(
 	return withEKSControlPlaneUpgrades(
 		updatable,
 		cluster.Spec.Cluster.EKS.ExperimentalControlPlaneUpgrade,
-	), eksConfig, nil
+	)
+}
+
+// applyEKSFactoryOptions layers the factory-level options — the kubeconfig path and,
+// when one is configured, the ownership verifier — onto the options already resolved
+// from the cluster's credentials.
+func (f DefaultFactory) applyEKSFactoryOptions(
+	kubeconfigPath string,
+	providerOptions []awsprovider.Option,
+	provisionerOptions []eksprovisioner.Option,
+) ([]awsprovider.Option, []eksprovisioner.Option) {
+	provisionerOptions = append(provisionerOptions,
+		eksprovisioner.WithKubeconfigPath(kubeconfigPath),
+	)
+
+	if f.AWSOwnershipVerifier != nil {
+		providerOptions = append(
+			providerOptions,
+			awsprovider.WithOwnershipVerifier(f.AWSOwnershipVerifier),
+		)
+		provisionerOptions = append(
+			provisionerOptions,
+			eksprovisioner.WithOwnershipVerifier(f.AWSOwnershipVerifier),
+		)
+	}
+
+	return providerOptions, provisionerOptions
 }
 
 func withEKSControlPlaneUpgrades(p *eksprovisioner.UpdatableProvisioner, enabled bool) Provisioner {
