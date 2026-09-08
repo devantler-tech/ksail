@@ -317,17 +317,30 @@ type autoCommitWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-// The exact conditions the two auto-commit delivery paths must carry.
+// The exact conditions the two auto-commit delivery paths must carry, plus the
+// restriction that decides what may be applied on a Dependabot branch.
 //
-// The PR-branch push is the one that has to exclude Dependabot; the protected-branch
-// path is asserted alongside it because it is where a skipped Dependabot sync is
-// expected to land instead, and silently losing it would turn this fix into a
-// generated-file correctness regression on the default branch.
+// Dependabot's exclusion lives in 📋 Apply patches rather than on the PR-branch push:
+// what may reach a Dependabot branch is a per-patch question, not a per-step one, and
+// pinning it on the push could only express "all patches or none". The protected-branch
+// path is asserted alongside because it is where a skipped generated-file sync lands
+// instead, and silently losing it would turn this into a generated-file correctness
+// regression on the default branch.
 const (
-	approvedAutoCommitPRBranchCondition = "github.event_name == 'pull_request'" +
-		" && github.event.pull_request.user.login != 'dependabot[bot]'"
+	approvedAutoCommitPRBranchCondition        = "github.event_name == 'pull_request'"
 	approvedAutoCommitProtectedBranchCondition = "github.event_name != 'pull_request'"
+	approvedDesktopTidyOnlyRestriction         = "${{ github.event_name == 'pull_request'" +
+		" && github.event.pull_request.user.login == 'dependabot[bot]' }}"
 )
+
+// The guard 📋 Apply patches must carry, pinned as a whole block.
+//
+// A substring match on the variable name alone would pass against an inverted test, a
+// negated comparison, or a guard that logs without skipping — each of which pushes a
+// generated-file commit onto a Dependabot branch and re-opens #6832. Requiring the
+// `continue` in the same block is what makes this an assertion about behaviour.
+const approvedDesktopTidyOnlyGuard = `if [ "${DESKTOP_TIDY_ONLY}" = "true" ] && ` +
+	`[ "$(basename "$patch")" != "desktop-tidy.patch" ]; then`
 
 // stepCondition returns the `if:` of the uniquely-named step in the given job.
 //
@@ -350,6 +363,26 @@ func stepCondition(t *testing.T, job []map[string]any, stepName string) string {
 	require.Truef(t, ok, "step %q must carry a string `if:` condition", stepName)
 
 	return condition
+}
+
+// step returns the uniquely-named step in the given job.
+//
+// Same uniqueness requirement as stepCondition, and for the same reason: two steps
+// sharing a name would make the caller silently assert against whichever came first.
+func step(t *testing.T, job []map[string]any, stepName string) map[string]any {
+	t.Helper()
+
+	var found []map[string]any
+
+	for _, candidate := range job {
+		if name, ok := candidate["name"].(string); ok && name == stepName {
+			found = append(found, candidate)
+		}
+	}
+
+	require.Lenf(t, found, 1, "expected exactly one step named %q", stepName)
+
+	return found[0]
 }
 
 // Pins Dependabot's ownership of its own branches.
@@ -384,8 +417,8 @@ func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
 		t,
 		approvedAutoCommitPRBranchCondition,
 		stepCondition(t, job.Steps, "📤 Commit and push generated changes (PR branch)"),
-		"the PR-branch push must skip Dependabot-authored pull requests so Dependabot keeps"+
-			" the ability to rebase its own branch",
+		"the PR-branch push must commit whatever was applied; restricting WHICH patches"+
+			" reach a Dependabot branch is 📋 Apply patches' job, asserted below",
 	)
 
 	assert.Equal(
@@ -394,5 +427,91 @@ func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
 		stepCondition(t, job.Steps, "📤 Open PR for generated changes (protected branch)"),
 		"the protected-branch sync must stay reachable: it is where a Dependabot bump's"+
 			" generated changes land once the bump has merged",
+	)
+
+	applyPatches := step(t, job.Steps, "📋 Apply patches")
+
+	env, ok := applyPatches["env"].(map[string]any)
+	require.True(t, ok, "📋 Apply patches must carry an `env:` mapping")
+
+	assert.Equal(
+		t,
+		approvedDesktopTidyOnlyRestriction,
+		env["DESKTOP_TIDY_ONLY"],
+		"the Dependabot restriction must key on the pull request's author; any other"+
+			" expression either leaks generated-file commits onto Dependabot branches"+
+			" (#6832) or withholds the desktop tidy from everyone (#6974)",
+	)
+
+	run, ok := applyPatches["run"].(string)
+	require.True(t, ok, "📋 Apply patches must carry a string `run:` script")
+
+	assert.Contains(
+		t,
+		run,
+		approvedDesktopTidyOnlyGuard,
+		"📋 Apply patches must actually skip non-desktop patches when the restriction is"+
+			" set — an unread DESKTOP_TIDY_ONLY is a restriction in name only",
+	)
+
+	assert.Contains(
+		t,
+		run,
+		"continue",
+		"the guard must skip the patch rather than only logging about it",
+	)
+}
+
+// Pins the desktop tidy's delivery onto Dependabot branches.
+//
+// desktop/ is a separate Go module that vendors the root via `replace => ../`, so a root
+// dependency bump leaves desktop/go.{mod,sum} stale. ci.yaml's verify-desktop-tidy job
+// computes the fix and uploads it as desktop-tidy.patch, and desktop.yaml deliberately
+// SKIPS its own hard `go mod tidy -diff` gate on same-repo PRs on the stated grounds that
+// this self-heal covers them.
+//
+// Between 2026-09-03 and 2026-09-08 it did not: the PR-branch push excluded Dependabot,
+// so on a bump the patch was computed, uploaded, applied — and then never committed, while
+// the job reported success. The bump's own required checks failed on the stale module, so
+// it could never merge, and the protected-branch path that was supposed to repair it only
+// runs after a merge. Three bumps (#6971, #6972, #6973) stalled on one root cause, with a
+// clean before/after: every bump merged before the exclusion carried an automated tidy
+// commit, every one after needed a hand-pushed one.
+//
+// The two workflows defer to each other, so this test exists to keep at least one of them
+// honest: if the self-heal is ever restricted away from Dependabot again, desktop.yaml's
+// skipped gate means nothing catches it until a bump goes red.
+func TestApplyPatchesDeliversDesktopTidyToDependabotBranches(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/ci.yaml")
+
+	var workflow autoCommitWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	job, found := workflow.Jobs["auto-commit"]
+	require.True(t, found, "ci workflow must define the auto-commit job")
+
+	run, ok := step(t, job.Steps, "📋 Apply patches")["run"].(string)
+	require.True(t, ok, "📋 Apply patches must carry a string `run:` script")
+
+	// The restriction names the one patch that survives it. If verify-desktop-tidy's
+	// artifact is ever renamed, the guard silently starts skipping every patch on a
+	// Dependabot branch — including the desktop tidy — and the stall returns.
+	assert.Contains(
+		t,
+		run,
+		`!= "desktop-tidy.patch"`,
+		"the guard must admit desktop-tidy.patch by name; a rename of the uploaded"+
+			" artifact must break this test rather than silently restore the stall",
+	)
+
+	desktopTidy := readRepoFile(t, ".github/workflows/ci.yaml")
+	assert.Contains(
+		t,
+		string(desktopTidy),
+		"name: desktop-tidy-patch",
+		"verify-desktop-tidy must keep uploading the artifact under the name the guard"+
+			" admits; the two are only connected by this string",
 	)
 }
