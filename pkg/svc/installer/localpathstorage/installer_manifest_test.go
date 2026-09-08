@@ -81,7 +81,12 @@ func TestInstaller_Images_ServesManifestFromFixture(t *testing.T) {
 	images, err := installer.Images(context.Background())
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), hits.Load(), "manifest must come from the test server, not the network")
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.Contains(t, images, "docker.io/rancher/local-path-provisioner:v0.0.37")
 	assert.Contains(t, images, "docker.io/library/busybox:latest")
 }

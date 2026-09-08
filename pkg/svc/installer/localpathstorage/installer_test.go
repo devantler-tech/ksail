@@ -170,7 +170,12 @@ func TestInstaller_Images_Success(t *testing.T) {
 	images, err := installer.Images(ctx)
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), hits.Load(), "manifest must come from the test server, not the network")
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.NotEmpty(t, images, "Should extract images from the manifest")
 	// The manifest should contain the local-path-provisioner image
 	foundProvisionerImage := false
@@ -195,7 +200,12 @@ func TestInstaller_Images_Talos(t *testing.T) {
 	images, err := installer.Images(ctx)
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), hits.Load(), "manifest must come from the test server, not the network")
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.NotEmpty(t, images, "Talos should also fetch images from manifest")
 }
 

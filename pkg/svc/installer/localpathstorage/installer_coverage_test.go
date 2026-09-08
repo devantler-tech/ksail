@@ -35,7 +35,12 @@ func TestInstaller_Images_VClusterDistribution(t *testing.T) {
 	images, err := installer.Images(context.Background())
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), hits.Load(), "manifest must come from the test server, not the network")
+	assert.Equal(
+		t,
+		int64(1),
+		hits.Load(),
+		"manifest must come from the test server, not the network",
+	)
 	assert.NotEmpty(t, images, "VCluster should fetch images (same as Vanilla)")
 }
 
