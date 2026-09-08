@@ -1438,3 +1438,59 @@ func TestAllControlPlanesHaveHetznerFloatingIPConfig_LegacyEth0FormIsDrift(t *te
 		[]talosconfig.Provider{legacy}, "192.0.2.10",
 	), "the legacy eth0 form must read as drift so deployed clusters get migrated")
 }
+
+func TestReplacementCertSANRetainsPreparedConfig(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServerWithServers(
+		t,
+		true,
+		calls,
+		fipUpdateControlPlaneServerJSON,
+		fipUpdateSecondControlPlaneServerJSON,
+	)
+	hzProvider := newFipUpdateProvider(server.URL)
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled: true, TokenEnvVar: testFloatingIPTokenEnvVar,
+	})
+	require.NoError(
+		t,
+		provisioner.PrepareFloatingIPConfigForNewControlPlaneForTest(
+			t.Context(),
+			hzProvider,
+			"fip-cluster",
+			talosprovisioner.RoleControlPlane,
+		),
+	)
+	before := provisioner.TalosConfigsForTest().ControlPlane()
+	certificate := before.Machine().Security().IssuingCA().Crt
+	// No provider access or credential reload is available after preparation.
+	server.Close()
+	t.Setenv(testFloatingIPTokenEnvVar, "")
+	require.NoError(
+		t,
+		provisioner.AddReplacementCertSANForTest(
+			controlPlaneServer(13, "fip-cluster-cp-2", "203.0.113.7"),
+			talosprovisioner.RoleControlPlane,
+		),
+	)
+	after := provisioner.TalosConfigsForTest().ControlPlane()
+	assert.Equal(t, "192.0.2.10", after.Cluster().Endpoint().Hostname())
+	assert.Equal(t, certificate, after.Machine().Security().IssuingCA().Crt)
+	assert.Subset(
+		t,
+		after.K8sAPIServerConfig().CertSANs(),
+		[]string{"192.0.2.10", "203.0.113.5", "203.0.113.6", "203.0.113.7"},
+	)
+	assert.Contains(t, after.RawV1Alpha1().MachineConfig.MachineCertSANs, "203.0.113.7")
+	assert.True(
+		t,
+		talosprovisioner.AllControlPlanesHaveHetznerFloatingIPConfigForTest(
+			[]talosconfig.Provider{after},
+			"192.0.2.10",
+		),
+	)
+	assert.Zero(t, calls.assign.Load())
+	assert.Zero(t, calls.create.Load())
+}

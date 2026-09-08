@@ -49,7 +49,7 @@ type NodegroupSummary struct {
 	InstanceType  string `json:"InstanceType"`
 	ImageID       string `json:"ImageID"`
 	CreationTime  string `json:"CreationTime"`
-	NodeGroupType string `json:"NodeGroupType"`
+	NodeGroupType string `json:"Type"`
 	Version       string `json:"Version"`
 }
 
@@ -83,6 +83,18 @@ func (c *Client) createCluster(
 	}
 
 	_, _, err := c.Exec(ctx, args...)
+
+	return err
+}
+
+// CreateNodegroup creates the node groups in a config file. The caller supplies
+// a config containing only the intended additions and the verified target.
+func (c *Client) CreateNodegroup(ctx context.Context, configPath string) error {
+	if strings.TrimSpace(configPath) == "" {
+		return ErrEmptyConfigPath
+	}
+
+	_, _, err := c.Exec(ctx, "create", "nodegroup", "--config-file", configPath)
 
 	return err
 }

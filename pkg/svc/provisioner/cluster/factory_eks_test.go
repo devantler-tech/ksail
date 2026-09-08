@@ -2,13 +2,17 @@ package clusterprovisioner_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/stretchr/testify/assert"
@@ -299,4 +303,83 @@ func TestCreateEKSProvisionerRejectsOwnershipVerifierWithoutResolution(t *testin
 	provisioner, _, err := factory.Create(context.Background(), eksTestCluster())
 	require.ErrorIs(t, err, clusterprovisioner.ErrUnfrozenAWSResolution)
 	assert.Nil(t, provisioner)
+}
+
+// TestEKSNodegroupCreationOptInReachesUpdater checks both configuration states through the real factory.
+//
+//nolint:paralleltest // the eksctl fixture uses a private PATH for this process.
+func TestEKSNodegroupCreationOptInReachesUpdater(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script eksctl fixture is not portable to Windows")
+	}
+
+	frozen := configureEKSNodegroupInventory(t)
+
+	binDir := t.TempDir()
+	writeExecutableFixture(t, filepath.Join(binDir, "eksctl"), "#!/bin/sh\nprintf '[]\\n'\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	configPath := filepath.Join(t.TempDir(), "eks.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata: {name: test-eks, region: eu-west-1}
+managedNodeGroups:
+  - name: workers
+    desiredCapacity: 1
+`), 0o600))
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			cluster := eksTestCluster()
+			require.NoError(t, yaml.Unmarshal([]byte(
+				"experimentalManagedNodegroupCreation: "+strconv.FormatBool(enabled),
+			), &cluster.Spec.Cluster.EKS))
+			factory := clusterprovisioner.DefaultFactory{
+				AWSResolution: &frozen,
+				DistributionConfig: &clusterprovisioner.DistributionConfig{
+					EKS: &clusterprovisioner.EKSConfig{
+						Name: "test-eks", Region: "eu-west-1", ConfigPath: configPath,
+					},
+				},
+			}
+			provisioner, _, err := factory.Create(t.Context(), cluster)
+			require.NoError(t, err)
+
+			updater, ok := provisioner.(*eksprovisioner.UpdatableProvisioner)
+			require.True(t, ok)
+			diff, err := updater.DiffConfig(
+				t.Context(),
+				"test-eks",
+				&cluster.Spec.Cluster,
+				&cluster.Spec.Cluster,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, enabled, diff.HasInPlaceChanges())
+			assert.Equal(t, !enabled, diff.HasRecreateRequired())
+		})
+	}
+}
+
+func configureEKSNodegroupInventory(t *testing.T) credentials.AWSResolution {
+	t.Helper()
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			assert.Equal(t, "/clusters/test-eks/node-groups", request.URL.Path)
+			assert.Contains(t, request.Header.Get("Authorization"), "Credential=factory-test-key/")
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"nodegroups":[]}`))
+		}),
+	)
+	t.Cleanup(server.Close)
+	t.Setenv("AWS_ENDPOINT_URL_EKS", server.URL)
+	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "false")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "credentials"))
+	frozen, err := credentials.FreezeAWS(t.Context(), credentials.AWSResolution{
+		AccessKeyID: "factory-test-key", SecretAccessKey: "factory-test-secret",
+	}, "eu-west-1")
+	require.NoError(t, err)
+
+	return frozen
 }

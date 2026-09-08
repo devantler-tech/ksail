@@ -41,7 +41,7 @@ managedNodeGroups:
 
 const liveNodegroupsJSON = `[{"Cluster":"ksail-test","Name":"ng-1","Status":"ACTIVE",` +
 	`"DesiredCapacity":2,"MinSize":1,"MaxSize":3,"InstanceType":"t3.medium",` +
-	`"NodeGroupType":"managed"}]`
+	`"Type":"managed"}]`
 
 // writeUpdateTestConfig writes an eksctl.yaml into a temp dir and returns its path.
 func writeUpdateTestConfig(t *testing.T, content string) string {
@@ -163,8 +163,8 @@ func TestDiffConfig_RemovedNodegroupRequiresRecreate(t *testing.T) {
 	t.Parallel()
 
 	liveTwoGroups := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
-		`"NodeGroupType":"managed"},{"Name":"ng-old","DesiredCapacity":1,"MinSize":1,` +
-		`"MaxSize":1,"NodeGroupType":"managed"}]`
+		`"Type":"managed"},{"Name":"ng-old","DesiredCapacity":1,"MinSize":1,` +
+		`"MaxSize":1,"Type":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	prov, _ := newTestProvisioner(t, map[string][]response{
@@ -185,8 +185,8 @@ func TestDiffConfig_UnmanagedLiveGroupIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	liveWithUnmanaged := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
-		`"NodeGroupType":"managed"},{"Name":"legacy","DesiredCapacity":1,"MinSize":1,` +
-		`"MaxSize":1,"NodeGroupType":"unmanaged"}]`
+		`"Type":"managed"},{"Name":"legacy","DesiredCapacity":1,"MinSize":1,` +
+		`"MaxSize":1,"Type":"unmanaged"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	prov, _ := newTestProvisioner(t, map[string][]response{
@@ -341,7 +341,7 @@ func TestUpdate_NoChangesIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	liveMatchingConfig := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
-		`"NodeGroupType":"managed"}]`
+		`"Type":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	prov, runner := newTestProvisioner(t, map[string][]response{
@@ -369,7 +369,7 @@ func TestDiffConfig_InstanceTypeChangeRequiresRecreate(t *testing.T) {
 	t.Parallel()
 
 	liveOtherType := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
-		`"InstanceType":"t3.large","NodeGroupType":"managed"}]`
+		`"InstanceType":"t3.large","Type":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	prov, _ := newTestProvisioner(t, map[string][]response{
@@ -429,7 +429,7 @@ managedNodeGroups:
 `
 
 	liveBelowNewMin := `[{"Name":"ng-1","DesiredCapacity":2,"MinSize":1,"MaxSize":3,` +
-		`"NodeGroupType":"managed"}]`
+		`"Type":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, minOnlyConfig)
 	prov, runner := newTestProvisioner(t, map[string][]response{
@@ -462,9 +462,9 @@ func TestDiffConfig_RemovalsAreEmittedInSortedOrder(t *testing.T) {
 	t.Parallel()
 
 	liveThreeGroups := `[{"Name":"ng-1","DesiredCapacity":3,"MinSize":1,"MaxSize":3,` +
-		`"InstanceType":"t3.medium","NodeGroupType":"managed"},` +
-		`{"Name":"zeta","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"NodeGroupType":"managed"},` +
-		`{"Name":"alpha","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"NodeGroupType":"managed"}]`
+		`"InstanceType":"t3.medium","Type":"managed"},` +
+		`{"Name":"zeta","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"Type":"managed"},` +
+		`{"Name":"alpha","DesiredCapacity":1,"MinSize":1,"MaxSize":1,"Type":"managed"}]`
 
 	configPath := writeUpdateTestConfig(t, updateTestConfig)
 	prov, _ := newTestProvisioner(t, map[string][]response{

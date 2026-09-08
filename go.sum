@@ -443,6 +443,8 @@ github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.1 h1:K0JsbZQj+1h208Ro1zH
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.1/go.mod h1:W3/vL6EtCIatICGy9ab29QhMuae+cOKPWcMxv02CO+Q=
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.1 h1:yhw5KD1phVyP9vijxOUzDfEtJx+bt+L63k+VfuiYFAA=
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.1/go.mod h1:ZW2e0d7DYlRxlS9hEiMXE47gTdX5KRN4byUiNbUpG+Q=
+github.com/aws/aws-sdk-go-v2/service/cloudformation v1.79.0 h1:QdGV83ods5B0cb1KIc79QhabvneqkRk8FR1bi3w2k30=
+github.com/aws/aws-sdk-go-v2/service/cloudformation v1.79.0/go.mod h1:Qu13pjg01PcSNWKQVqdC19JK/FkT5q9m+J+dyTwfZjw=
 github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3 h1:RtGctYMmkTerGClvdY6bHXdtly4FeYw9wz/NPz62LF8=
 github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3/go.mod h1:vBfBu24Ka3/5UZtepbTV0gnc9VPLT8ok+0oDDaYAzn4=
 github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.38.10 h1:1A/sI3LNMi3fhRI5TFLMwwo7ALAALSFVCSGvFlr1Iys=
