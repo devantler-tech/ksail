@@ -228,6 +228,17 @@ func (p *Provisioner) rollingReplaceSingleNode(
 		return fmt.Errorf("resolving address for %s: %w", oldServer.Name, addrErr)
 	}
 
+	prepared, prepareErr := p.prepareReplacementBoot(
+		ctx,
+		hzProvider,
+		clusterName,
+		role,
+		oldServer.Name,
+	)
+	if prepareErr != nil {
+		return prepareErr
+	}
+
 	// 1. Cordon and drain the outgoing node before removing it.
 	oldNodeName, drainErr := p.drainResolvedNode(ctx, clientset, oldIP)
 	if drainErr != nil {
@@ -241,11 +252,7 @@ func (p *Provisioner) rollingReplaceSingleNode(
 			// Leave the server and its current scheduling state intact. An
 			// ambiguous leave failure cannot safely authorize either deletion or
 			// automatic uncordon of a node that may already have left etcd.
-			return fmt.Errorf(
-				"retaining control-plane server %s after etcd cleanup failure: %w",
-				oldServer.Name,
-				cleanupErr,
-			)
+			return fmt.Errorf("etcd cleanup failed; retaining %s: %w", oldServer.Name, cleanupErr)
 		}
 	}
 
@@ -261,14 +268,80 @@ func (p *Provisioner) rollingReplaceSingleNode(
 	}
 
 	// 5. Provision the replacement server with the new type and let it rejoin.
-	newServer, createErr := p.createReplacementServer(ctx, hzProvider, clusterName, role, infra)
+	newServer, createErr := p.createReplacementServer(
+		ctx,
+		hzProvider,
+		clusterName,
+		role,
+		infra,
+		prepared.imageID,
+	)
 	if createErr != nil {
 		return createErr
 	}
 
 	return p.configureAndWaitReplacement(
-		ctx, clientset, hzProvider, clusterName, oldServer, newServer, role,
+		ctx, clientset, hzProvider, clusterName, oldServer, newServer, role, prepared.floatingIPID,
 	)
+}
+
+type replacementBoot struct {
+	imageID      int64
+	floatingIPID int64
+}
+
+// prepareReplacementBoot checks that the loaded role config can be serialized
+// and resolves the boot image before cordon, drain, or membership mutation. A
+// missing snapshot may be built here: this is apply preparation, not a read-only
+// plan. A successfully built image is retained for reuse if a later step fails.
+func (p *Provisioner) prepareReplacementBoot(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role, serverName string,
+) (replacementBoot, error) {
+	prepared := replacementBoot{}
+
+	var err error
+
+	prepared.floatingIPID, err = p.prepareReplacementFloatingIP(ctx, hzProvider, clusterName, role)
+	if err != nil {
+		return prepared, err
+	}
+
+	config := p.configForRole(role)
+	if config == nil {
+		return prepared, fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
+	}
+
+	// Exercise the same serialization and hostname patch used at config apply.
+	// The secret-bearing bytes remain in memory and are never written or logged.
+	_, configErr := marshalConfigWithHostname(config, serverName)
+	if configErr != nil {
+		return prepared, fmt.Errorf("prepare replacement role config: %w", configErr)
+	}
+
+	imageID, imageErr := p.ensureSnapshotImage(ctx, clusterName)
+	if imageErr != nil {
+		return prepared, fmt.Errorf("prepare replacement boot image: %w", imageErr)
+	}
+
+	if imageID == 0 && (p.talosOpts == nil || p.talosOpts.ISO <= 0) {
+		return prepared, fmt.Errorf(
+			"prepare replacement boot image: %w",
+			hetzner.ErrImageOrISORequired,
+		)
+	}
+
+	if imageID == 0 {
+		isoErr := hzProvider.ValidateISO(ctx, p.talosOpts.ISO, p.hetznerServerType(role))
+		if isoErr != nil {
+			return prepared, fmt.Errorf("prepare replacement ISO: %w", isoErr)
+		}
+	}
+
+	prepared.imageID = imageID
+
+	return prepared, nil
 }
 
 // reattachFloatingIPAfterControlPlaneReplacement restores the stable API
@@ -282,6 +355,7 @@ func (p *Provisioner) reattachFloatingIPAfterControlPlaneReplacement(
 	hzProvider *hetzner.Provider,
 	clusterName string,
 	oldServer, newServer *hcloud.Server,
+	expectedFloatingIPID int64,
 ) error {
 	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled {
 		return nil
@@ -290,6 +364,10 @@ func (p *Provisioner) reattachFloatingIPAfterControlPlaneReplacement(
 	floatingIP, lookupErr := hzProvider.GetOwnedFloatingIP(ctx, clusterName)
 	if lookupErr != nil {
 		return fmt.Errorf("looking up floating IP after control-plane replacement: %w", lookupErr)
+	}
+
+	if !replacementFloatingIPMatches(floatingIP, expectedFloatingIPID) {
+		return ErrFloatingIPMissingForControlPlaneConfig
 	}
 
 	if floatingIP == nil {
@@ -333,10 +411,9 @@ func (p *Provisioner) configureAndWaitReplacement(
 	clusterName string,
 	oldServer, newServer *hcloud.Server,
 	role string,
+	expectedFloatingIPID int64,
 ) error {
-	prepareErr := p.prepareFloatingIPConfigForNewControlPlane(
-		ctx, hzProvider, clusterName, role,
-	)
+	prepareErr := p.addReplacementCertSAN(newServer, role)
 	if prepareErr != nil {
 		return prepareErr
 	}
@@ -365,7 +442,7 @@ func (p *Provisioner) configureAndWaitReplacement(
 
 	reattach := func() error {
 		reattachErr := p.reattachFloatingIPAfterControlPlaneReplacement(
-			ctx, hzProvider, clusterName, oldServer, newServer,
+			ctx, hzProvider, clusterName, oldServer, newServer, expectedFloatingIPID,
 		)
 		if reattachErr != nil {
 			_, _ = fmt.Fprintf(p.logWriter,
@@ -497,6 +574,7 @@ func (p *Provisioner) createReplacementServer(
 	hzProvider *hetzner.Provider,
 	clusterName, role string,
 	infra HetznerInfra,
+	imageID int64,
 ) (*hcloud.Server, error) {
 	existing, listErr := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
 	if listErr != nil {
@@ -505,14 +583,8 @@ func (p *Provisioner) createReplacementServer(
 
 	indices := availableHetznerNodeIndices(existing, clusterName, role, 1)
 
-	// Boot the replacement from the cluster's Talos snapshot image (when configured)
-	// rather than the maintenance-mode ISO, so it runs the same Talos version as the
-	// node it replaces and can parse the cluster's machine config (see hetznerBootSource).
-	imageID, snapErr := p.ensureSnapshotImage(ctx, clusterName)
-	if snapErr != nil {
-		return nil, snapErr
-	}
-
+	// Use the image resolved before the outgoing server was removed. Do not
+	// perform a late lookup or build that could strand the replacement sequence.
 	creationResults, createErr := p.launchHetznerScaleCreation(
 		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), indices, imageID,
 	)
@@ -620,4 +692,8 @@ func nodeIsReady(node *corev1.Node) bool {
 	}
 
 	return false
+}
+
+func replacementFloatingIPMatches(floatingIP *hcloud.FloatingIP, expectedID int64) bool {
+	return expectedID == 0 || (floatingIP != nil && floatingIP.ID == expectedID)
 }

@@ -488,6 +488,10 @@ export interface KSailClusterConfiguration {
        */
       eks?: {
         /**
+         * Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation.
+         */
+        experimentalManagedNodegroupCreation?: boolean;
+        /**
          * Experimental: install the AWS Load Balancer Controller when spec.cluster.loadBalancer is Enabled, replacing the default in-tree Classic Load Balancer path. Default false (nothing is installed). IAM permissions and subnet tags are prerequisites KSail does not create.
          */
         experimentalAWSLoadBalancerController?: boolean;

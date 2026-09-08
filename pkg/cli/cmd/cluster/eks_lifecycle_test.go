@@ -90,7 +90,7 @@ elif [ "$1 $2" = "get nodegroup" ]; then
 		current_min=2
 	fi
 	printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
-	printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"NodeGroupType":"managed"}]\n' \
+	printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"Type":"managed"}]\n' \
 		"$current_desired" "$current_min"
 fi
 `
@@ -464,7 +464,7 @@ case "$1 $2" in
   'get nodegroup')
     capacity=$(cat "$KSAIL_EKS_BARRIER_DIR/capacity")
     printf '[{"Cluster":"%s","Name":"workers","Status":"ACTIVE",' "$KSAIL_EKS_CLUSTER"
-    printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"NodeGroupType":"managed"}]\n' "$capacity" "$capacity"
+    printf '"DesiredCapacity":%s,"MinSize":%s,"MaxSize":4,"Type":"managed"}]\n' "$capacity" "$capacity"
     ;;
   'scale nodegroup')
     case " $* " in

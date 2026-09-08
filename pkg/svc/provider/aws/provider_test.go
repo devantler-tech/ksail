@@ -166,9 +166,9 @@ func TestListNodes_MapsNodegroupsToNodeInfo(t *testing.T) {
 	prov, _ := newProvider(t, map[string][]response{
 		"get nodegroup": {{stdout: []byte(`[
 			{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE","DesiredCapacity":2,
-			 "MinSize":1,"MaxSize":3,"NodeGroupType":"managed"},
+			 "MinSize":1,"MaxSize":3,"Type":"managed"},
 			{"Cluster":"demo","Name":"ng-2","Status":"CREATING","DesiredCapacity":1,
-			 "MinSize":1,"MaxSize":2,"NodeGroupType":"managed"}
+			 "MinSize":1,"MaxSize":2,"Type":"managed"}
 		]`)}},
 	})
 
