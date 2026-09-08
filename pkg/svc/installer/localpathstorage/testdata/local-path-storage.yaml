@@ -1,0 +1,57 @@
+# Structurally faithful sample of the upstream Rancher local-path-provisioner deploy
+# manifest. It exists so the Images unit tests exercise the fetch-and-extract path
+# without reaching raw.githubusercontent.com. The image tags below are fixture data
+# only; they intentionally do not track the Dockerfile pin.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: local-path-storage
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-path-provisioner-service-account
+  namespace: local-path-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-path-provisioner
+  namespace: local-path-storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: local-path-provisioner
+  template:
+    metadata:
+      labels:
+        app: local-path-provisioner
+    spec:
+      serviceAccountName: local-path-provisioner-service-account
+      containers:
+        - name: local-path-provisioner
+          image: rancher/local-path-provisioner:v0.0.37
+          imagePullPolicy: IfNotPresent
+          command:
+            - local-path-provisioner
+            - --debug
+            - start
+            - --config
+            - /etc/config/config.json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: local-path-storage
+data:
+  helperPod.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      containers:
+        - name: helper-pod
+          image: busybox
