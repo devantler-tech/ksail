@@ -881,8 +881,6 @@ func ExportRunVerifiedUpdate(cmd *cobra.Command, cfg *v1alpha1.Cluster,
 }
 
 // ErrEKSUpgradeWithRecreation exposes the recreation-conflict sentinel for testing.
-//
-
 var ErrEKSUpgradeWithRecreation = errEKSUpgradeWithRecreation
 
 // ExportReportEKSUpgraded exports reportEKSUpgraded for testing.
