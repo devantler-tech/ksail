@@ -321,7 +321,7 @@ export interface KSailClusterConfiguration {
        */
       workers?: number;
       /**
-       * Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version.
+       * Kubernetes version for cluster updates and Talos creation. EKS, Kind and K3d creation use their distribution config. Experimental EKS updates require an explicit minor and eks.experimentalControlPlaneUpgrade and never discover upgrades automatically. EKS refuses downgrades. Other distributions follow the latest stable version on update when unset; new Talos clusters use a default compatible with the pinned Talos version.
        */
       kubernetesVersion?: string;
       /**
@@ -487,6 +487,10 @@ export interface KSailClusterConfiguration {
        * EKS holds options specific to the EKS distribution.
        */
       eks?: {
+        /**
+         * Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. CLI-only; ignored by the operator. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation.
+         */
+        experimentalControlPlaneUpgrade?: boolean;
         /**
          * Experimental: allow cluster update to create managed node groups added to eksctl.yaml. Default false. Requires verified cluster ownership; removals and instance-type changes still require recreation. Pending live EKS validation.
          */

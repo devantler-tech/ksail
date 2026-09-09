@@ -308,69 +308,110 @@ func (c *Client) configureMissingSDKClients(ctx context.Context, region string) 
 		return nil
 	}
 
-	var (
-		cfg aws.Config
-		err error
-	)
+	cfg, err := c.resolveAWSConfig(ctx, region)
+	if err != nil {
+		return err
+	}
 
+	err = c.configureMissingEKSClients(ctx, cfg)
+	if err != nil {
+		return err
+	}
+
+	return c.configureMissingSTSClients(ctx, cfg)
+}
+
+// resolveAWSConfig builds the AWS configuration the SDK clients are constructed from:
+// an explicitly supplied config wins, then a static credential provider, and otherwise
+// the default credential chain is loaded for the region.
+func (c *Client) resolveAWSConfig(ctx context.Context, region string) (aws.Config, error) {
 	switch {
 	case c.awsConfig != nil:
-		cfg = *c.awsConfig
+		cfg := *c.awsConfig
 		cfg.ConfigSources = append(cfg.ConfigSources[:0:0], cfg.ConfigSources...)
 
 		cfg.APIOptions = append(cfg.APIOptions[:0:0], cfg.APIOptions...)
 		if strings.TrimSpace(region) != "" {
 			cfg.Region = strings.TrimSpace(region)
 		}
+
+		return cfg, nil
 	case c.staticCredentialProvider != nil:
-		cfg, err = awsconfigutil.LoadNeutral(
+		cfg, err := awsconfigutil.LoadNeutral(
 			ctx,
 			config.LoadDefaultConfig,
 			region,
 			c.staticCredentialProvider,
 		)
 		if err != nil {
-			return fmt.Errorf("loading aws configuration: %w", err)
+			return aws.Config{}, fmt.Errorf("loading aws configuration: %w", err)
 		}
+
+		return cfg, nil
 	default:
 		loadOptions := append(
 			[]func(*config.LoadOptions) error{config.WithRegion(region)},
 			c.loadOptions...,
 		)
 
-		cfg, err = config.LoadDefaultConfig(ctx, loadOptions...)
+		cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
 		if err != nil {
-			return fmt.Errorf("loading aws configuration: %w", err)
+			return aws.Config{}, fmt.Errorf("loading aws configuration: %w", err)
 		}
+
+		return cfg, nil
 	}
-
-	c.configureMissingEKSClients(cfg)
-	c.configureMissingSTSClients(cfg)
-
-	return nil
 }
 
 func (c *Client) hasExplicitAWSConfiguration() bool {
 	return c.awsConfig != nil || c.staticCredentialProvider != nil || len(c.loadOptions) > 0
 }
 
-func (c *Client) configureMissingEKSClients(cfg aws.Config) {
-	if c.describer == nil {
-		c.describer = awseks.NewFromConfig(cfg)
+func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config) error {
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "EKS")
+	if err != nil {
+		return fmt.Errorf("resolve frozen EKS endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if eksOptions, ok := options.(*awseks.Options); ok {
+				eksOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
 	}
 
 	if c.nodegroups == nil {
 		c.nodegroups = awseks.NewFromConfig(cfg)
 	}
 
+	if c.describer == nil {
+		c.describer = c.nodegroups
+	}
+
 	if c.nodegroupStacks == nil {
 		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 	}
+
+	return nil
 }
 
-func (c *Client) configureMissingSTSClients(cfg aws.Config) {
+func (c *Client) configureMissingSTSClients(ctx context.Context, cfg aws.Config) error {
 	if c.presigner != nil && c.identityGetter != nil {
-		return
+		return nil
+	}
+
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "STS")
+	if err != nil {
+		return fmt.Errorf("resolve frozen STS endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if stsOptions, ok := options.(*sts.Options); ok {
+				stsOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
 	}
 
 	stsClient := sts.NewFromConfig(cfg)
@@ -381,6 +422,8 @@ func (c *Client) configureMissingSTSClients(cfg aws.Config) {
 	if c.identityGetter == nil {
 		c.identityGetter = stsClient
 	}
+
+	return nil
 }
 
 // withTokenHeaders adds the signed headers that turn a plain presigned

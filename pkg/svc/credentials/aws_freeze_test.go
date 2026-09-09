@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfigutil "github.com/devantler-tech/ksail/v7/pkg/awsconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -180,7 +182,7 @@ func TestFrozenAWSConfigOptionPreservesNonIdentitySettings(t *testing.T) {
 	assert.Equal(t, "selected-access", selected.AccessKeyID)
 	assert.Equal(t, "selected-secret", selected.SecretAccessKey)
 
-	environmentSource, isEnvironmentConfig := options[0].ConfigSources[0].(config.EnvConfig)
+	environmentSource, isEnvironmentConfig := options[0].ConfigSources[0].(awsconfigutil.FrozenEnvironmentConfig)
 	require.True(t, isEnvironmentConfig)
 	assert.Empty(t, environmentSource.Credentials.AccessKeyID)
 	assert.Equal(t, baseEndpoint, environmentSource.BaseEndpoint)
@@ -287,4 +289,40 @@ func TestResolveFrozenAWSFailsClosedForInvalidOrUnavailableSelection(t *testing.
 		)
 		require.ErrorIs(t, err, errFrozenCredentialQuery)
 	})
+}
+
+func TestFrozenSDKCredentialsRetainExpiryWithoutRefreshingIdentity(t *testing.T) {
+	t.Parallel()
+
+	values := aws.Credentials{
+		AccessKeyID:     "selected",
+		SecretAccessKey: "secret",
+		SessionToken:    "session",
+		CanExpire:       true,
+		Expires:         time.Now().Add(2 * time.Hour),
+	}
+	provider := &rotatingCredentialProvider{credentials: []aws.Credentials{values}}
+	frozen, err := credentials.FreezeAWSResolutionForTest(
+		t.Context(),
+		"us-east-1",
+		credentials.AWSResolution{},
+		func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+			return aws.Config{Credentials: provider}, nil
+		},
+	)
+	require.NoError(t, err)
+
+	options := credentials.OptionsForFrozenAWSConfig(frozen,
+		func(cfg aws.Config) aws.Config { return cfg },
+		func(string, string, string, string) aws.Config { return aws.Config{} },
+		func() aws.Config { return aws.Config{} })
+	for range 2 {
+		got, getErr := options[0].Credentials.Retrieve(t.Context())
+		require.NoError(t, getErr)
+		assert.Equal(t, values.AccessKeyID, got.AccessKeyID)
+		assert.Equal(t, values.CanExpire, got.CanExpire)
+		assert.True(t, values.Expires.Equal(got.Expires))
+	}
+
+	assert.Equal(t, 1, provider.calls)
 }

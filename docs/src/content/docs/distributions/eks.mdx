@@ -127,6 +127,66 @@ KSail invokes eksctl to provision the cluster from `eks.yaml` and waits for comp
 | `ksail cluster list`   | Lists clusters in the configured region (all regions when unset)    |
 | `ksail cluster info`   | Shows cluster details                                               |
 
+### Experimental control-plane upgrades
+
+To upgrade an ACTIVE EKS control plane from 1.34 to 1.35, set an explicit target
+and opt in through `ksail.yaml`:
+
+```yaml
+spec:
+  cluster:
+    distribution: EKS
+    kubernetesVersion: "1.35"
+    eks:
+      experimentalControlPlaneUpgrade: true
+```
+
+Preview with `ksail cluster update --dry-run`, then run `ksail cluster update`.
+The existing `--kubernetes-version 1.35` flag overrides the YAML target.
+`ksail cluster diff --include-version-drift` reports the supported control-plane change
+as an in-place update. Without a target, KSail does not discover or select a newer
+EKS version. The opt-in is false by default and applies only to the CLI.
+The operator reports it through `IgnoredFields` and does not perform the upgrade.
+
+Targets may use `1.35`, `v1.35` or the equivalent zero-patch forms. KSail accepts
+one forward minor step or an already-current no-op. It rejects skipped minors,
+nonzero patch versions, prereleases and rollback requests, including in previews.
+The create-time version remains in `eks.yaml`; this target controls updates.
+An explicit upgrade target cannot be combined with changes that require cluster
+recreation. Apply those changes in separate updates and align `eks.yaml`
+`metadata.version` before recreating the cluster.
+
+The AWS caller needs `eks:UpdateClusterVersion`, `eks:DescribeUpdate` and the
+existing cluster-inspection permissions. KSail verifies immutable cluster
+ownership and freezes EKS/STS endpoint and credential selection. It rereads the
+cluster identity, ACTIVE status and starting version immediately before submission.
+AWS readiness checks remain enabled; KSail does not force an upgrade past them.
+
+KSail waits for the exact AWS update to succeed, then checks that the same cluster
+is ACTIVE at the requested version. The wait is capped at 65 minutes and respects
+an earlier caller deadline or cancellation. Canceling KSail stops waiting; an
+accepted AWS update can continue. Inspect its status before retrying. Once ACTIVE
+at the target, another update is a no-op.
+
+Before submitting, KSail requires frozen credentials to cover the wait deadline
+plus one minute. Temporary credentials must come from a provider that reports
+their expiry and have sufficient lifetime remaining. A session-token tuple
+without expiry metadata is rejected for upgrades; dry runs remain available.
+KSail retains the selected credentials throughout verification and does not
+refresh into a different identity.
+
+This operation changes only the control plane. Upgrade worker nodes and add-ons
+separately and check their compatibility; managed node groups must meet AWS's
+version prerequisites. KSail does not repair cluster stacks or change remote
+network configuration as part of this operation. Concurrent direct AWS operations
+are outside KSail's control, and the AWS version API has no conditional
+expected-version parameter.
+
+The feature remains experimental pending
+[live AWS validation](https://github.com/devantler-tech/ksail/issues/6927).
+See [AWS's upgrade guidance](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html)
+for service prerequisites and rollback operations outside this forward-upgrade path.
+
 ### Add a managed node group (experimental)
 
 To create a new managed node group on an existing cluster, enable the opt-in in

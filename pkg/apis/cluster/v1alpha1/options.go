@@ -14,6 +14,11 @@ type OptionsVanilla struct {
 
 // OptionsEKS defines options specific to the EKS distribution.
 type OptionsEKS struct {
+	// ExperimentalControlPlaneUpgrade enables explicit, one-minor control-plane
+	// upgrades during cluster update. CLI-only; ignored by the operator.
+	// Default false; requires verified ownership.
+	// Worker nodes and add-ons are managed separately. Pending live AWS validation.
+	ExperimentalControlPlaneUpgrade bool `json:"experimentalControlPlaneUpgrade,omitzero" jsonschema_description:"Experimental: reconcile an explicit Kubernetes version through a single-minor EKS control-plane upgrade. CLI-only; ignored by the operator. Default false. Requires verified ownership; worker nodes and add-ons are managed separately. Pending live AWS validation."` //nolint:lll // generated-schema description
 	// ExperimentalManagedNodegroupCreation allows cluster update to create managed
 	// node groups added to eksctl.yaml. Default false: additions require recreation.
 	// Existing managed node-group scaling does not require this option. Removals
@@ -366,10 +371,10 @@ type OptionsOmni struct {
 
 // --- AWS Options ---
 //
-// EKS cluster metadata (region, Kubernetes version, nodegroup shape, AMI
-// family, etc.) lives in eks.yaml (eksctl.io/v1alpha5 ClusterConfig), which is
-// the authoritative source of truth. KSail does not duplicate those fields in
-// ksail.yaml; the EKS provisioner loads the eksctl ClusterConfig directly.
+// EKS create-time metadata (region, Kubernetes version, nodegroup shape, AMI
+// family, etc.) lives in eks.yaml (eksctl.io/v1alpha5 ClusterConfig). An explicit
+// spec.cluster.kubernetesVersion selects the control-plane update target when
+// experimentalControlPlaneUpgrade is enabled.
 
 // HetznerNetworkCIDR returns the configured private-network CIDR for the
 // given spec, falling back to DefaultHetznerNetworkCIDR when none is set.

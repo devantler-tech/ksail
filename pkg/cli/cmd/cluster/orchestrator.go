@@ -88,6 +88,17 @@ func (o *updateOrchestrator) run(outputTimer timer.Timer) error {
 		return err
 	}
 
+	return o.runVerifiedProvisioner(provisioner, outputTimer)
+}
+
+func (o *updateOrchestrator) runVerifiedProvisioner(
+	provisioner clusterprovisioner.Provisioner,
+	outputTimer timer.Timer,
+) error {
+	if o.ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		return o.runEKSUpdate(provisioner, outputTimer)
+	}
+
 	// Reconcile cluster versions declaratively on every update: each dimension
 	// follows the latest supported version when unset, or the pinned value when set
 	// (spec.cluster.kubernetesVersion / spec.cluster.talos.version, overridable via
@@ -161,7 +172,7 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 // (the runtime must support the target Kubernetes version). Returns true when the
 // cluster was recreated, in which case the caller skips the regular update flow.
 //
-// Distributions without an Upgrader (e.g. KWOK, EKS) have no version
+// Distributions without an Upgrader (e.g. KWOK or EKS without its opt-in) have no version
 // reconciliation; the regular update flow handles their changes.
 func (o *updateOrchestrator) reconcileClusterVersions(
 	provisioner clusterprovisioner.Provisioner,
@@ -237,6 +248,15 @@ func (o *updateOrchestrator) reconcileKubernetesVersion(
 	}
 
 	if pin != "" {
+		if planner, ok := upgrader.(clusterupdate.KubernetesUpgradePlanner); ok {
+			var err error
+
+			pin, err = planner.ValidateKubernetesUpgrade(currentVersions.KubernetesVersion, pin)
+			if err != nil {
+				return false, fmt.Errorf("validate pinned Kubernetes upgrade: %w", err)
+			}
+		}
+
 		return o.executePinnedUpgrade(
 			upgrader, "Kubernetes", "Kubernetes", upgrader.UpgradeKubernetes, pin,
 			currentVersions.KubernetesVersion,
