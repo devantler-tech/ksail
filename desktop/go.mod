@@ -606,7 +606,7 @@ require (
 	github.com/quay/claircore v1.5.53 // indirect
 	github.com/quay/claircore/toolkit v1.6.1 // indirect
 	github.com/rakyll/hey v0.1.5 // indirect
-	github.com/rancher/k3k v1.1.0 // indirect
+	github.com/rancher/k3k v1.1.1 // indirect
 	github.com/rancher/wharfie v0.7.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.5.3 // indirect
@@ -742,9 +742,9 @@ require (
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
 	go.etcd.io/bbolt v1.5.0-rc.0 // indirect
-	go.etcd.io/etcd/api/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/client/v3 v3.7.0-rc.0 // indirect
+	go.etcd.io/etcd/api/v3 v3.7.1 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.7.1 // indirect
+	go.etcd.io/etcd/client/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/etcdutl/v3 v3.7.0-rc.0 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.7.0-rc.0 // indirect
 	go.etcd.io/etcd/server/v3 v3.7.0-rc.0 // indirect
