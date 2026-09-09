@@ -90,7 +90,7 @@ require (
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.36.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
-	github.com/rancher/k3k v1.1.0
+	github.com/rancher/k3k v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/siderolabs/crypto v0.6.5
 	github.com/siderolabs/gen v0.8.7
@@ -888,9 +888,9 @@ require (
 	go.augendre.info/arangolint v0.3.1 // indirect
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.etcd.io/bbolt v1.5.0-rc.0 // indirect
-	go.etcd.io/etcd/api/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/client/v3 v3.7.0-rc.0 // indirect
+	go.etcd.io/etcd/api/v3 v3.7.1 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.7.1 // indirect
+	go.etcd.io/etcd/client/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/etcdutl/v3 v3.7.0-rc.0 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.7.0-rc.0 // indirect
 	go.etcd.io/etcd/server/v3 v3.7.0-rc.0 // indirect
