@@ -9,12 +9,12 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.41.11",
+    "@astrojs/starlight": "^0.42.0",
     "astro": "^7.2.10",
     "astro-mermaid": "^2.1.0",
     "mermaid": "^11.17.2",
     "sharp": "^0.35.4",
-    "starlight-links-validator": "^0.25.3"
+    "starlight-links-validator": "^0.26.0"
   },
   "devDependencies": {
     "starlight-github-alerts": "^0.4.0"
