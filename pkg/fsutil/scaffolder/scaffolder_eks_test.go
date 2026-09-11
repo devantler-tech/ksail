@@ -108,5 +108,10 @@ func TestRenderEKSConfig_ScaffoldsEBScsiDriverAddon(t *testing.T) {
 		scaffolder.DefaultEKSConfigParams("test-cluster", "us-east-1"),
 	))
 
-	assert.Contains(t, rendered, "- name: aws-ebs-csi-driver", "EKS config must scaffold aws-ebs-csi-driver addon")
+	assert.Contains(
+		t,
+		rendered,
+		"- name: aws-ebs-csi-driver",
+		"EKS config must scaffold aws-ebs-csi-driver addon",
+	)
 }
