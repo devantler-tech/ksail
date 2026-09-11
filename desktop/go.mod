@@ -301,7 +301,7 @@ require (
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.2 // indirect
 	github.com/fluxcd/helm-controller/api v1.6.4 // indirect
-	github.com/fluxcd/kustomize-controller/api v1.9.4 // indirect
+	github.com/fluxcd/kustomize-controller/api v1.9.5 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.2 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.31.0 // indirect
