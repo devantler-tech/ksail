@@ -25,17 +25,26 @@ func TestEKS_EBScsiSupportClaimsReconciled(t *testing.T) {
 	matrix := readOrSkip(t, "src/content/docs/support-matrix.mdx")
 
 	// The matrix must NOT claim Amazon EBS CSI Driver is "Built-in" for EKS
-	assert.NotContains(t, matrix, "| Amazon EBS CSI Driver         | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |",
+	builtInRow := "| Amazon EBS CSI Driver         " +
+		"| ❌      | ❌       | ❌                  " +
+		"| ❌       | ❌       | Built-in         |"
+	assert.NotContains(t, matrix, builtInRow,
 		"support-matrix must not claim EBS CSI driver is Built-in for EKS")
 
 	// The matrix must label it as Add-on
-	assert.Contains(t, matrix, "| Amazon EBS CSI Driver         | ❌      | ❌       | ❌                  | ❌       | ❌       | Add-on¹⁰         |",
+	addonRow := "| Amazon EBS CSI Driver         " +
+		"| ❌      | ❌       | ❌                  " +
+		"| ❌       | ❌       | Add-on¹⁰         |"
+	assert.Contains(t, matrix, addonRow,
 		"support-matrix must label EBS CSI driver as Add-on¹⁰ for EKS")
 
-	// Footnote 10 must describe EBS CSI driver as scaffolded add-on, not as absent or separate add-on you must install yourself
-	assert.NotContains(t, matrix, "Amazon EBS CSI Driver is not installed by default",
+	// Footnote 10 must describe EBS CSI driver as scaffolded add-on,
+	// not as absent or separate add-on you must install yourself.
+	assert.NotContains(t, matrix,
+		"Amazon EBS CSI Driver is not installed by default",
 		"footnote 10 must not claim EBS CSI driver is not installed by default")
-	assert.NotContains(t, matrix, "the EBS CSI driver is a separate add-on you must install yourself",
+	assert.NotContains(t, matrix,
+		"the EBS CSI driver is a separate add-on you must install yourself",
 		"footnote 10 must not claim EBS CSI driver must be installed manually")
 	assert.Contains(t, matrix, "aws-ebs-csi-driver",
 		"footnote 10 must mention the scaffolded aws-ebs-csi-driver addon")
