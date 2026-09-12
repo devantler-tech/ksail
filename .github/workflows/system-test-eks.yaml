@@ -259,7 +259,7 @@ jobs:
 
       - name: 🧪 ksail cluster create
         id: create
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
