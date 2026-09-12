@@ -20,6 +20,7 @@
     "starlight-github-alerts": "^0.4.0"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "satteri": "^0.10.5"
   }
 }
