@@ -100,3 +100,18 @@ func TestScaffoldEKSConfigFallsBackToDefaultName(t *testing.T) {
 
 	assert.Contains(t, rendered, "name: eks-default")
 }
+
+func TestRenderEKSConfig_ScaffoldsEBScsiDriverAddon(t *testing.T) {
+	t.Parallel()
+
+	rendered := string(scaffolder.RenderEKSConfig(
+		scaffolder.DefaultEKSConfigParams("test-cluster", "us-east-1"),
+	))
+
+	assert.Contains(
+		t,
+		rendered,
+		"- name: aws-ebs-csi-driver",
+		"EKS config must scaffold aws-ebs-csi-driver addon",
+	)
+}

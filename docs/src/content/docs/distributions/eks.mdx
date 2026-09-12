@@ -28,9 +28,11 @@ For local development and testing, consider the [Vanilla](/distributions/vanilla
 | Component      | Status   | Details                                                             |
 | -------------- | -------- | ------------------------------------------------------------------- |
 | CNI            | Built-in | Amazon VPC CNI (vpc-cni addon)                                      |
-| CSI            | Built-in | Amazon EBS CSI Driver addon                                         |
+| CSI            | Add-on   | Amazon EBS CSI Driver (`aws-ebs-csi-driver` addon scaffolded in `eks.yaml`) |
 | LoadBalancer   | Built-in | AWS `Service` type `LoadBalancer` support via AWS cloud integration |
 | Metrics Server | ❌       | Not provided by default                                             |
+
+EKS includes the Amazon VPC CNI and in-tree `Service` type `LoadBalancer` support as part of the managed service. The Amazon EBS CSI Driver is an EKS add-on requested by KSail's default `eks.yaml` scaffold (`aws-ebs-csi-driver`) rather than built into the distribution itself.
 
 ## Quick Start
 
