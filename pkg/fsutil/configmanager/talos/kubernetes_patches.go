@@ -175,7 +175,71 @@ func migrateKubernetesPatchesForContract(
 		}
 	}
 
-	return nonemptyKubernetesPatches(migrated), nil
+	return scopeClusterControlPlaneKubernetesDocuments(nonemptyKubernetesPatches(migrated))
+}
+
+// scopeClusterControlPlaneKubernetesDocuments preserves the legacy meaning of
+// cluster.apiServer patches. Before Talos 1.14 those fields lived in a shared
+// patch but only affected control-plane machines. Their multi-document
+// replacements are explicitly control-plane-only, so applying the source patch
+// scope verbatim would make every worker config invalid. Non-API-server content
+// from the same patch remains cluster-scoped.
+func scopeClusterControlPlaneKubernetesDocuments(patches []Patch) ([]Patch, error) {
+	scoped := make([]Patch, 0, len(patches))
+
+	for _, patch := range patches {
+		if patch.Scope != PatchScopeCluster {
+			scoped = append(scoped, patch)
+
+			continue
+		}
+
+		documents, err := decodeOrderedPatchDocuments(patch)
+		if err != nil {
+			return nil, err
+		}
+
+		hasControlPlaneDocument := false
+
+		for _, document := range documents {
+			kind, _ := document.document[kindField].(string)
+			if isMigratedControlPlaneKind(kind) {
+				hasControlPlaneDocument = true
+
+				break
+			}
+		}
+
+		if !hasControlPlaneDocument {
+			scoped = append(scoped, patch)
+
+			continue
+		}
+
+		for _, document := range documents {
+			if kind, _ := document.document[kindField].(string); isMigratedControlPlaneKind(kind) {
+				document.patch.Scope = PatchScopeControlPlane
+			}
+
+			scoped = append(scoped, document.patch)
+		}
+	}
+
+	return scoped, nil
+}
+
+func isMigratedControlPlaneKind(kind string) bool {
+	switch kind {
+	case "KubeAPIServerConfig",
+		"KubeAdmissionControlConfig",
+		"KubeAuditPolicyConfig",
+		"KubeAuthenticationConfig",
+		"KubeAuthorizationConfig",
+		"KubeAuthorizerConfig":
+		return true
+	default:
+		return false
+	}
 }
 
 type legacyAPIServerPatchValues struct {
