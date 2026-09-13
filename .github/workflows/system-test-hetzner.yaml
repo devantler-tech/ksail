@@ -65,10 +65,12 @@ on:
         required: false
         type: string
         default: ""
-  # schedule trigger paused (#4972): HCLOUD_TOKEN has been invalid/expired since ~2026-04-26,
-  # so every scheduled run failed at cluster-existence-check for 6+ consecutive weeks before
-  # any provisioning happened — pure noise, not signal. Re-enable the weekly cron once the
-  # secret is rotated; workflow_dispatch stays available for on-demand runs meanwhile.
+  schedule:
+    # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
+    # created at most once a day. The scheduled run covers the four matrix configurations below;
+    # workflow_dispatch runs a single configuration on demand. Credentials come from the
+    # org-wide HCLOUD_TOKEN, scoped to a dedicated Hetzner test project.
+    - cron: "0 3 * * 0"
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
