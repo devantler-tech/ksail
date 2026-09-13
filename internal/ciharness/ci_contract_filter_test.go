@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -107,13 +108,18 @@ func harnessReadPaths(t *testing.T) []string {
 	require.NoError(t, err)
 	require.NotEmpty(t, sources)
 
+	// Resolve literals through an fs.FS rooted at the repository: fs.Stat rejects any path
+	// that is not a valid, unrooted, dot-dot-free name, so a literal can never reach a file
+	// outside the repository even though it comes from file contents.
+	repo := os.DirFS(filepath.Join("..", ".."))
+
 	for _, source := range sources {
 		// The glob supplies this package's own test sources, never user input.
 		contents, readErr := os.ReadFile(source) //nolint:gosec
 		require.NoError(t, readErr)
 
 		for _, match := range harnessPathLiteral.FindAllStringSubmatch(string(contents), -1) {
-			if _, statErr := os.Stat(filepath.Join("..", "..", match[1])); statErr == nil {
+			if _, statErr := fs.Stat(repo, match[1]); statErr == nil {
 				paths = append(paths, match[1])
 			}
 		}
