@@ -21,6 +21,22 @@ const registryTokenPatchWithDefault = `machine:
           password: ${REGISTRY_CLUSTER_TOKEN:-forbidden-fallback}
 `
 
+const clusterScopedLegacyAPIServerPatch = `machine:
+  sysctls:
+    net.ipv4.ip_forward: "1"
+cluster:
+  apiServer:
+    extraArgs:
+      audit-log-path: /var/log/audit/kube.log
+      oidc-issuer-url: https://dex.example.com
+      oidc-client-id: ksail
+    auditPolicy:
+      apiVersion: audit.k8s.io/v1
+      kind: Policy
+      rules:
+        - level: Metadata
+`
+
 func TestNewConfigManager_WithAllParameters(t *testing.T) {
 	t.Parallel()
 
@@ -889,6 +905,80 @@ func TestConfigManager_Load_MigratesLegacyStructuredAPIServerFields(t *testing.T
 	require.NotNil(t, controlPlane)
 	assertMigratedStructuredAPIServerFields(t, controlPlane)
 }
+
+func TestConfigManager_Load_KeepsClusterScopedLegacyAPIServerMigrationOffWorkers(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, talos.PatchSubdirCluster)
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(clusterDir, "api-server.yaml"),
+			[]byte(clusterScopedLegacyAPIServerPatch),
+			0o600,
+		),
+	)
+
+	manager := talos.NewConfigManager(tmpDir, "talos-114", "1.36.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_14)
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	controlPlane := configs.ControlPlane()
+	worker := configs.Worker()
+
+	require.NotNil(t, controlPlane)
+	require.NotNil(t, worker)
+	assert.Equal(
+		t,
+		[]string{"/var/log/audit/kube.log"},
+		controlPlane.K8sAPIServerConfig().ExtraArgs()["audit-log-path"],
+	)
+
+	controlPlaneKinds := talosDocumentKinds(controlPlane)
+	workerKinds := talosDocumentKinds(worker)
+
+	assert.Contains(t, controlPlaneKinds, "KubeAPIServerConfig")
+	assert.Contains(t, controlPlaneKinds, "KubeAuthenticationConfig")
+	assert.Contains(t, controlPlaneKinds, "KubeAuditPolicyConfig")
+
+	for _, kind := range []string{
+		"KubeAPIServerConfig",
+		"KubeAuthenticationConfig",
+		"KubeAuthorizationConfig",
+		"KubeAuditPolicyConfig",
+	} {
+		assert.NotContains(t, workerKinds, kind)
+	}
+
+	assert.Equal(t, "1", controlPlane.Machine().Sysctls()["net.ipv4.ip_forward"])
+	assert.Equal(t, "1", worker.Machine().Sysctls()["net.ipv4.ip_forward"])
+
+	_, err = controlPlane.ValidateAsClient(talosClientValidationMode{})
+	require.NoError(t, err)
+	_, err = worker.ValidateAsClient(talosClientValidationMode{})
+	require.NoError(t, err)
+}
+
+func talosDocumentKinds(provider talosconfig.Provider) []string {
+	documents := provider.Documents()
+
+	kinds := make([]string, 0, len(documents))
+	for _, document := range documents {
+		kinds = append(kinds, document.Kind())
+	}
+
+	return kinds
+}
+
+type talosClientValidationMode struct{}
+
+func (talosClientValidationMode) String() string        { return "test" }
+func (talosClientValidationMode) RequiresInstall() bool { return false }
+func (talosClientValidationMode) InContainer() bool     { return false }
 
 func assertMigratedStructuredAPIServerFields(
 	t *testing.T,

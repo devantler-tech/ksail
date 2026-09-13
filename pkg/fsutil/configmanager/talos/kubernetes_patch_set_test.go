@@ -208,7 +208,7 @@ func TestKubernetesPatchSetResolvesRoleCertificateOverrides(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 	assertJWTIssuer(t, configs.ControlPlane(), "shared", "control-plane-ca")
-	assertJWTIssuer(t, configs.Worker(), "shared", "shared-ca")
+	assert.Nil(t, configs.Worker().K8sAuthenticationConfig())
 }
 
 func TestKubernetesPatchSetPreservesOIDCCAWithUnrelatedDeletion(t *testing.T) {
@@ -227,7 +227,7 @@ func TestKubernetesPatchSetPreservesOIDCCAWithUnrelatedDeletion(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 	assertJWTIssuer(t, configs.ControlPlane(), "shared", "shared-ca")
-	assertJWTIssuer(t, configs.Worker(), "shared", "shared-ca")
+	assert.Nil(t, configs.Worker().K8sAuthenticationConfig())
 
 	files, err := configs.ControlPlane().Machine().Files()
 	require.NoError(t, err)
