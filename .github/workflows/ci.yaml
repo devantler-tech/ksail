@@ -177,15 +177,19 @@ jobs:
             # filter would otherwise not match, so a PR editing only one of them could
             # weaken or delete the gate while the aggregator recorded it as an ordinary
             # skip.
+            # The harness reads far more than those files: every workflow (one test globs the
+            # whole directory), the system-test composite actions, and the EKS cleanup scripts.
+            # Listing them one by one drifted, and ksail#7008 then broke an EKS workflow contract
+            # with every check green (ksail#7009). The patterns below cover the three trees as a
+            # whole, and TestWorkflowContractFilterCoversEveryFileTheHarnessReads fails if a
+            # file the harness reads is ever left out again.
             # ("to-do" is deliberately lowercase and hyphenated here: the scanner keys on the
             # uppercase marker, so spelling it out in prose files an issue against this very
             # comment. ksail#6763 was exactly that — a false positive with no work behind it.)
             todos-contract:
-              - '.github/workflows/todos.yaml'
-              - '.github/workflows/ci.yaml'
-              - '.github/workflows/cd.yaml'
-              - '.github/scripts/validate-release-ref.sh'
-              - '.github/scripts/validate-release-ref.test.sh'
+              - '.github/workflows/**'
+              - '.github/actions/**'
+              - '.github/scripts/**'
               - 'internal/ciharness/**'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
