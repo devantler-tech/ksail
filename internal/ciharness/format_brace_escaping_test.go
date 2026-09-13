@@ -15,7 +15,7 @@ import (
 // formatCallOpening matches the start of a format() call whose first argument is a string
 // literal. The literal itself is read by readExpressionString, because GitHub expression strings
 // escape a quote by doubling it and a regular expression cannot track that reliably.
-var formatCallOpening = regexp.MustCompile(`\bformat\(\s*'`)
+var formatCallOpening = regexp.MustCompile(`\bformat\s*\(\s*'`)
 
 // TestFormatStringsEscapeLiteralBraces fails when a workflow or composite action passes format()
 // a string with an unescaped literal brace.
@@ -98,11 +98,12 @@ func TestValidateFormatStringRejectsUnescapedBraces(t *testing.T) {
 func TestFormatStringLiteralsReadsDoubledQuotes(t *testing.T) {
 	t.Parallel()
 
-	contents := `run: ${{ format('it''s {0} and {"x"}', github.sha) }} ${{ format( 'b{{}}' ) }}`
+	contents := `run: ${{ format('it''s {0} and {"x"}', github.sha) }} ${{ format( 'b{{}}' ) }}` +
+		` ${{ format ('[{"init":{0}}]', inputs.init) }}`
 
 	assert.Equal(
 		t,
-		[]string{`it's {0} and {"x"}`, `b{{}}`},
+		[]string{`it's {0} and {"x"}`, `b{{}}`, `[{"init":{0}}]`},
 		formatStringLiterals(t, contents, "fixture"),
 	)
 }
