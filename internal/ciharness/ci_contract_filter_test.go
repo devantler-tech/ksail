@@ -17,7 +17,9 @@ import (
 // harnessPathLiteral matches a quoted repository path under the three .github trees this
 // package reads: workflows, composite actions and scripts. Glob characters are excluded so a
 // pattern written in a test (like the filter entries below) is never mistaken for a read path.
-var harnessPathLiteral = regexp.MustCompile(`"(\.github/(?:workflows|actions|scripts)/[^"*?\[\]{}]+)"`)
+var harnessPathLiteral = regexp.MustCompile(
+	`"(\.github/(?:workflows|actions|scripts)/[^"*?\[\]{}]+)"`,
+)
 
 // TestWorkflowContractFilterCoversEveryFileTheHarnessReads keeps the CI gate for this package
 // from drifting away from what the package actually checks.
@@ -119,7 +121,8 @@ func harnessReadPaths(t *testing.T) []string {
 		require.NoError(t, readErr)
 
 		for _, match := range harnessPathLiteral.FindAllStringSubmatch(string(contents), -1) {
-			if _, statErr := fs.Stat(repo, match[1]); statErr == nil {
+			_, statErr := fs.Stat(repo, match[1])
+			if statErr == nil {
 				paths = append(paths, match[1])
 			}
 		}
