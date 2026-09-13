@@ -50,7 +50,7 @@ func TestFormatStringsEscapeLiteralBraces(t *testing.T) {
 		for _, literal := range formatStringLiterals(t, string(contents), path) {
 			checked++
 
-			assert.NoErrorf(
+			require.NoErrorf(
 				t,
 				validateFormatString(literal),
 				"%s passes format() an invalid format string %q; write literal braces as {{ and }}",
@@ -78,7 +78,7 @@ func TestValidateFormatStringRejectsUnescapedBraces(t *testing.T) {
 		`not an index {x}`,
 		`empty {}`,
 	} {
-		assert.Errorf(t, validateFormatString(invalid), "must reject %q", invalid)
+		require.Errorf(t, validateFormatString(invalid), "must reject %q", invalid)
 	}
 
 	for _, valid := range []string{
@@ -89,7 +89,7 @@ func TestValidateFormatStringRejectsUnescapedBraces(t *testing.T) {
 		`{0}}}`,
 		``,
 	} {
-		assert.NoErrorf(t, validateFormatString(valid), "must accept %q", valid)
+		require.NoErrorf(t, validateFormatString(valid), "must accept %q", valid)
 	}
 }
 
@@ -112,9 +112,10 @@ func TestFormatStringLiteralsReadsDoubledQuotes(t *testing.T) {
 func formatStringLiterals(t *testing.T, contents, source string) []string {
 	t.Helper()
 
-	var literals []string
+	matches := formatCallOpening.FindAllStringIndex(contents, -1)
+	literals := make([]string, 0, len(matches))
 
-	for _, match := range formatCallOpening.FindAllStringIndex(contents, -1) {
+	for _, match := range matches {
 		literal, ok := readExpressionString(contents[match[1]:])
 		require.Truef(t, ok, "%s: unterminated format() string literal", source)
 
@@ -164,37 +165,51 @@ func (e formatStringError) Error() string {
 // with a decimal N is a placeholder, and any other brace makes the string invalid.
 func validateFormatString(format string) error {
 	for index := 0; index < len(format); index++ {
+		var err error
+
 		switch format[index] {
 		case '{':
-			if index+1 < len(format) && format[index+1] == '{' {
-				index++
-
-				continue
-			}
-
-			end := index + 1
-			for end < len(format) && format[end] >= '0' && format[end] <= '9' {
-				end++
-			}
-
-			if end == index+1 || end >= len(format) || format[end] != '}' {
-				return formatStringError{
-					position: index,
-					reason:   "unescaped '{' is not a {N} placeholder",
-				}
-			}
-
-			index = end
+			index, err = skipOpeningBrace(format, index)
 		case '}':
-			if index+1 < len(format) && format[index+1] == '}' {
-				index++
+			index, err = skipClosingBrace(format, index)
+		}
 
-				continue
-			}
-
-			return formatStringError{position: index, reason: "unescaped '}'"}
+		if err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// skipOpeningBrace consumes the "{{" escape or "{N}" placeholder that starts at index and returns
+// the index of its last byte. Any other opening brace is an error.
+func skipOpeningBrace(format string, index int) (int, error) {
+	if index+1 < len(format) && format[index+1] == '{' {
+		return index + 1, nil
+	}
+
+	end := index + 1
+	for end < len(format) && format[end] >= '0' && format[end] <= '9' {
+		end++
+	}
+
+	if end == index+1 || end >= len(format) || format[end] != '}' {
+		return index, formatStringError{
+			position: index,
+			reason:   "unescaped '{' is not a {N} placeholder",
+		}
+	}
+
+	return end, nil
+}
+
+// skipClosingBrace consumes the "}}" escape that starts at index and returns the index of its
+// last byte. A lone closing brace is an error.
+func skipClosingBrace(format string, index int) (int, error) {
+	if index+1 < len(format) && format[index+1] == '}' {
+		return index + 1, nil
+	}
+
+	return index, formatStringError{position: index, reason: "unescaped '}'"}
 }
