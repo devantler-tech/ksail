@@ -107,9 +107,11 @@ jobs:
     runs-on: ubuntu-latest
     # Must cover every step budget below, or a worst-case run is cancelled while
     # the always-run cleanup is still deleting the cluster. Worst case (GitOps
-    # engine enabled): 172 minutes of steps before cleanup + 45 for cleanup = 217.
-    # Re-check this sum whenever a step's timeout-minutes changes.
-    timeout-minutes: 230
+    # engine enabled): 172 minutes of steps before cleanup + 45 for cleanup = 217,
+    # plus at least 15 minutes of job-level headroom = 232, rounded up to 235.
+    # Re-check this sum whenever a step's timeout-minutes changes; the ciharness
+    # test TestEKSSmokeReservesCleanupBudgetAndFreshCredentials enforces it.
+    timeout-minutes: 235
     needs: [preflight, build-artifact]
     if: needs.preflight.outputs.aws-credentials == 'true'
     environment: ci
