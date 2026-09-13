@@ -39,23 +39,30 @@ func TestWorkflowContractFilterCoversEveryFileTheHarnessReads(t *testing.T) {
 	t.Parallel()
 
 	patterns := workflowContractFilterPatterns(t)
-	readPaths := harnessReadPaths(t)
+	globbed := globbedWorkflowPaths(t)
+	scanned := scannedLiteralPaths(t)
 
-	// Guard the guard: if discovery ever returned nothing, the loop below would assert nothing.
+	// Guard each discovery source on its own: if either returned nothing, the loop below would
+	// assert less than it claims. The known paths are built by concatenation on purpose. These
+	// test sources are themselves scanned for path literals, and other files in this package
+	// quote the EKS workflow in full, so a merged check could be satisfied by the scanner alone.
+	knownWorkflow := ".github/workflows/" + "system-test-eks.yaml"
 	require.Contains(
 		t,
-		readPaths,
-		".github/workflows/system-test-eks.yaml",
-		"path discovery must find the workflows this package is known to read",
+		globbed,
+		knownWorkflow,
+		"the workflow glob must find the workflows this package is known to read",
 	)
-	// Built by concatenation on purpose: this file is itself scanned for path literals, so a
-	// plain quoted path here would be discovered from this assertion and pass vacuously.
 	require.Contains(
 		t,
-		readPaths,
+		scanned,
 		".github/scripts/"+"delete-old-workflow-runs.test.sh",
-		"path discovery must find scripts the harness executes through a relative ../../ prefix",
+		"literal discovery must find scripts the harness executes through a relative ../../ prefix",
 	)
+
+	readPaths := slices.Concat(globbed, scanned)
+	slices.Sort(readPaths)
+	readPaths = slices.Compact(readPaths)
 
 	var uncovered []string
 
@@ -79,7 +86,7 @@ func TestWorkflowContractFilterCoversEveryFileTheHarnessReads(t *testing.T) {
 	})
 	assert.False(
 		t,
-		contractFilterMatches(t, withoutWorkflows, ".github/workflows/system-test-eks.yaml"),
+		contractFilterMatches(t, withoutWorkflows, knownWorkflow),
 		"negative control: without the workflows pattern the EKS workflow must be uncovered",
 	)
 }
@@ -103,13 +110,12 @@ func workflowContractFilterPatterns(t *testing.T) []string {
 	return patterns
 }
 
-// harnessReadPaths lists the repository files this package reads, sorted and de-duplicated.
-func harnessReadPaths(t *testing.T) []string {
+// globbedWorkflowPaths lists every workflow in the repository as a repository-relative path.
+func globbedWorkflowPaths(t *testing.T) []string {
 	t.Helper()
 
 	workflows, err := filepath.Glob(filepath.Join("..", "..", ".github", "workflows", "*.y*ml"))
 	require.NoError(t, err)
-	require.NotEmpty(t, workflows)
 
 	repoRoot := filepath.Join("..", "..")
 
@@ -122,6 +128,16 @@ func harnessReadPaths(t *testing.T) []string {
 
 		paths = append(paths, filepath.ToSlash(rel))
 	}
+
+	return paths
+}
+
+// scannedLiteralPaths lists the workflow, action and script paths quoted in this package's test
+// sources that exist in the repository, sorted and de-duplicated.
+func scannedLiteralPaths(t *testing.T) []string {
+	t.Helper()
+
+	var paths []string
 
 	sources, err := filepath.Glob("*_test.go")
 	require.NoError(t, err)
