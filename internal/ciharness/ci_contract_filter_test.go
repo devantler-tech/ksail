@@ -101,9 +101,16 @@ func harnessReadPaths(t *testing.T) []string {
 	require.NoError(t, err)
 	require.NotEmpty(t, workflows)
 
+	repoRoot := filepath.Join("..", "..")
+
 	paths := make([]string, 0, len(workflows))
 	for _, workflow := range workflows {
-		paths = append(paths, filepath.ToSlash(strings.TrimPrefix(workflow, "../../")))
+		// Rel before ToSlash: on Windows the glob returns ..\..\ prefixes, which a
+		// slash-based TrimPrefix would leave in place.
+		rel, relErr := filepath.Rel(repoRoot, workflow)
+		require.NoError(t, relErr)
+
+		paths = append(paths, filepath.ToSlash(rel))
 	}
 
 	sources, err := filepath.Glob("*_test.go")
