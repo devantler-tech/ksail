@@ -15,10 +15,12 @@ import (
 )
 
 // harnessPathLiteral matches a quoted repository path under the three .github trees this
-// package reads: workflows, composite actions and scripts. Glob characters are excluded so a
-// pattern written in a test (like the filter entries below) is never mistaken for a read path.
+// package reads: workflows, composite actions and scripts. Tests that execute a script do so
+// from this package's directory, so a literal may carry leading ../ segments; the capture group
+// drops them so every match is repository-relative. Glob characters are excluded so a pattern
+// written in a test (like the filter entries below) is never mistaken for a read path.
 var harnessPathLiteral = regexp.MustCompile(
-	`"(\.github/(?:workflows|actions|scripts)/[^"*?\[\]{}]+)"`,
+	`"(?:\.\./)*(\.github/(?:workflows|actions|scripts)/[^"*?\[\]{}]+)"`,
 )
 
 // TestWorkflowContractFilterCoversEveryFileTheHarnessReads keeps the CI gate for this package
@@ -45,6 +47,14 @@ func TestWorkflowContractFilterCoversEveryFileTheHarnessReads(t *testing.T) {
 		readPaths,
 		".github/workflows/system-test-eks.yaml",
 		"path discovery must find the workflows this package is known to read",
+	)
+	// Built by concatenation on purpose: this file is itself scanned for path literals, so a
+	// plain quoted path here would be discovered from this assertion and pass vacuously.
+	require.Contains(
+		t,
+		readPaths,
+		".github/scripts/"+"delete-old-workflow-runs.test.sh",
+		"path discovery must find scripts the harness executes through a relative ../../ prefix",
 	)
 
 	var uncovered []string
