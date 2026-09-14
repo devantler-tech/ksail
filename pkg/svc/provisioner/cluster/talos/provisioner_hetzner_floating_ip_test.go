@@ -1,6 +1,7 @@
 package talosprovisioner_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
@@ -329,6 +330,123 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabled(t *testing.T) {
 			controlPlaneServer(2, "cp-2", "203.0.113.6"),
 		},
 		"https://192.0.2.10:6443")
+}
+
+// fipStrayFloatingIPJSON is a leaked ksail-owned address labelled for
+// fip-cluster under a different name: reconcile manages the conventionally
+// named address only, so this one is never adopted but is still billed.
+const fipStrayFloatingIPJSON = `{"id":8,"name":"fip-cluster-floating-ip-old","description":"",` +
+	`"ip":"192.0.2.11","type":"ipv4","server":null,"dns_ptr":[],` +
+	`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
+	`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
+	`"blocked":false,"protection":{"delete":false},` +
+	`"labels":{"ksail.owned":"true","ksail.cluster.name":"fip-cluster"},` +
+	`"created":"2026-07-01T00:00:00+00:00"}`
+
+// strayFloatingIPEndpointTestServer answers name lookups with the owned address
+// and label-selector listings with labelStatus/labelBody, and counts assigns.
+func strayFloatingIPEndpointTestServer(
+	t *testing.T,
+	labelStatus int,
+	labelBody string,
+	assignCalls *atomic.Int32,
+) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			if request.URL.Query().Get("label_selector") == "" {
+				_, _ = responseWriter.Write(
+					[]byte(`{"floating_ips":[` + fipUpdateOwnedFloatingIPJSON + `]}`),
+				)
+
+				return
+			}
+
+			responseWriter.WriteHeader(labelStatus)
+			_, _ = responseWriter.Write([]byte(labelBody))
+		},
+	)
+
+	mux.HandleFunc(
+		"/floating_ips/7/actions/assign",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			assignCalls.Add(1)
+			fipUpdateAssignActionResponse(responseWriter)
+		},
+	)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	return server
+}
+
+// runStrayFloatingIPEndpoint drives the enabled endpoint path against the given
+// label-listing response and returns the provisioner output. Callers set the
+// hcloud token the VIP block embeds with t.Setenv, so they cannot run in parallel.
+func runStrayFloatingIPEndpoint(t *testing.T, labelStatus int, labelBody string) (string, int32) {
+	t.Helper()
+
+	var assignCalls atomic.Int32
+
+	server := strayFloatingIPEndpointTestServer(t, labelStatus, labelBody, &assignCalls)
+	client := hcloud.NewClient(
+		hcloud.WithToken("test-token"),
+		hcloud.WithEndpoint(server.URL),
+	)
+
+	var output bytes.Buffer
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
+		FloatingIPEnabled:  true,
+		FloatingIPLocation: "fsn1",
+		TokenEnvVar:        testFloatingIPTokenEnvVar,
+	}).WithLogWriter(&output)
+
+	err := provisioner.UpdateConfigsWithEndpointForTest(
+		t.Context(),
+		hetzner.NewProvider(client),
+		"fip-cluster",
+		[]*hcloud.Server{controlPlaneServer(1, "cp-1", "203.0.113.5")},
+	)
+	require.NoError(t, err, "a stray address must never fail the endpoint reconcile")
+
+	return output.String(), assignCalls.Load()
+}
+
+// TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsAboutStrayAddress verifies
+// that a leaked cluster-labelled address is surfaced by name and IP, while the
+// managed address is still attached and never reported (ksail#6277).
+func TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsAboutStrayAddress(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	output, assigns := runStrayFloatingIPEndpoint(t, http.StatusOK,
+		`{"floating_ips":[`+fipUpdateOwnedFloatingIPJSON+`,`+fipStrayFloatingIPJSON+`]}`)
+
+	assert.Equal(t, int32(1), assigns, "the managed floating IP must still be attached")
+	assert.Contains(t, output, "fip-cluster-floating-ip-old")
+	assert.Contains(t, output, "192.0.2.11")
+	assert.NotContains(t, output, "fip-cluster-floating-ip (192.0.2.10)",
+		"the managed address is not a stray")
+}
+
+// TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsWhenStrayLookupFails
+// verifies that a failed stray listing is reported rather than read as a clean
+// account, without failing the reconcile.
+func TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsWhenStrayLookupFails(t *testing.T) {
+	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
+
+	output, assigns := runStrayFloatingIPEndpoint(t, http.StatusUnauthorized,
+		`{"error":{"code":"unauthorized","message":"unable to authenticate"}}`)
+
+	assert.Equal(t, int32(1), assigns)
+	assert.Contains(t, output, "Failed to check for stray floating IPs")
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledTokenUnset verifies the
