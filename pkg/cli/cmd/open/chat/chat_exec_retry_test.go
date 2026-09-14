@@ -107,7 +107,6 @@ func TestVerifyCopilotCLI(t *testing.T) {
 		assert.Contains(t, err.Error(), "pre-flight check")
 		assert.Contains(t, err.Error(), "broken install")
 	})
-
 }
 
 // TestVerifyCopilotCLIDeadline verifies the pre-flight probe honours the deadline it
