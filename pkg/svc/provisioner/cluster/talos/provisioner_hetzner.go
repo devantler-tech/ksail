@@ -366,12 +366,42 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		controlPlaneServers[0].Name,
 	)
 
+	p.warnAboutStrayFloatingIPs(ctx, hzProvider, clusterName)
+
 	certSANs, err := hetznerFloatingIPEndpointCertSANs(endpointIP, controlPlaneServers)
 	if err != nil {
 		return "", nil, err
 	}
 
 	return endpointIP, certSANs, nil
+}
+
+// warnAboutStrayFloatingIPs surfaces ksail-owned floating IPs labelled for the
+// cluster that reconcile does not manage (ksail#6277). Reconcile adopts by name,
+// so a leaked address under another name is never attached or released, yet it
+// is billed. Releasing an address cannot be undone, so this only reports it; a
+// failed lookup is reported too and never fails the reconcile.
+func (p *Provisioner) warnAboutStrayFloatingIPs(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+) {
+	strays, err := hzProvider.StrayFloatingIPs(ctx, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to check for stray floating IPs: %v\n", err)
+
+		return
+	}
+
+	for _, stray := range strays {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Floating IP %s (%s) is labelled for this cluster but not managed by it;"+
+				" it is billed while it exists, so release it if it is unused\n",
+			stray.Name,
+			stray.IP,
+		)
+	}
 }
 
 // hetznerFloatingIPEndpointCertSANs returns the stable endpoint plus every
