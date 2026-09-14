@@ -370,20 +370,31 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 
 	region := strings.TrimSpace(resolved.AWSRegion)
 	if region != "" {
-		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
-		if err != nil {
-			if isRestorableOwnershipStateAbsence(err) {
-				return nil
-			}
-
-			return fmt.Errorf("load persisted AWS credential mappings: %w", err)
-		}
-
-		resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
-
-		return nil
+		return restoreRegionAWSOptions(resolved, region)
 	}
 
+	return restoreListedAWSOptions(resolved)
+}
+
+// restoreRegionAWSOptions merges the mapping persisted for the target in the configured region.
+func restoreRegionAWSOptions(resolved *lifecycle.ResolvedClusterInfo, region string) error {
+	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+	if err != nil {
+		if isRestorableOwnershipStateAbsence(err) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+	return nil
+}
+
+// restoreListedAWSOptions selects the target's persisted mapping across regions when no region is
+// configured, and adopts that mapping's region.
+func restoreListedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	ownerships, err := state.ListEKSOwnershipStates(resolved.ClusterName)
 	if err != nil {
 		if isRestorableOwnershipStateAbsence(err) {
