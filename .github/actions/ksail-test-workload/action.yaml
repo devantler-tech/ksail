@@ -174,18 +174,42 @@ runs:
       if: contains(inputs.args, '--gitops-engine')
       shell: bash
       env:
+        ARGS: ${{ inputs.args }}
         GITOPS_PATH: ${{ inputs.gitops-path }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
+        set -euo pipefail
         mkdir -p "$GITOPS_PATH"
         if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
           echo "apiVersion: kustomize.config.k8s.io/v1beta1" > "$GITOPS_PATH/kustomization.yaml"
           echo "kind: Kustomization" >> "$GITOPS_PATH/kustomization.yaml"
           echo "resources: []" >> "$GITOPS_PATH/kustomization.yaml"
         fi
+
+        # Push a known fixture so the assertion below can prove the engine deployed it. An
+        # exit-0 push and reconcile alone also pass when the engine manages nothing (#6284).
+        fixture=ksail-gitops-system-test
+        cat > "$GITOPS_PATH/$fixture.yaml" <<EOF
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: $fixture
+          namespace: default
+        data:
+          purpose: GitOps system-test fixture
+        EOF
+        yq -i ".resources = ((.resources // []) + [\"$fixture.yaml\"] | unique)" "$GITOPS_PATH/kustomization.yaml"
+
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
+
+        case "$ARGS" in
+          *"--gitops-engine ArgoCD"*) engine=ArgoCD ;;
+          *"--gitops-engine Flux"*) engine=Flux ;;
+          *) echo "❌ could not determine the GitOps engine from args: $ARGS" >&2; exit 1 ;;
+        esac
+        "$GITHUB_WORKSPACE/.github/scripts/assert-gitops-deployed.sh" "$engine" "$fixture"
 
     - name: 🧪 ksail workload delete
       shell: bash
