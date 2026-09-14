@@ -1121,7 +1121,6 @@ func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
 	t.Setenv("UNRELATED_REGION", unrelatedRegion)
 	savePersistedAWSMappings(t, clusterName, region)
 
-	//nolint:gosec // G101: these are environment-variable names, never credential values.
 	unrelatedOpts := v1alpha1.OptionsAWS{
 		RegionEnvVar:      "UNRELATED_REGION",
 		AccessKeyIDEnvVar: "UNRELATED_ACCESS",
