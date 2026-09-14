@@ -75,7 +75,7 @@ run_case warning-on-stderr-does-not-corrupt-count 0 'rate limit OK — 500 remai
 	'0|500|A new release of gh is available'
 run_case outage-recovers-within-budget 0 'rate limit OK — 500 remaining' 'rate limit exhausted' \
 	'1||HTTP 503: No server is currently available to service your request' '0|500|'
-run_case persistent-outage-is-not-exhaustion 1 'GitHub API is unreachable, so the remaining rate limit is unknown — this is not rate-limit exhaustion (gh exited 1: HTTP 503' 'rate limit exhausted' \
+run_case persistent-outage-is-not-exhaustion 1 'could not determine rate limit: API unreachable — the remaining quota is unknown, so this is not rate-limit exhaustion (gh exited 1: HTTP 503' 'rate limit exhausted' \
 	'1||HTTP 503: No server is currently available to service your request'
 run_case non-numeric-reply-is-not-exhaustion 1 "non-numeric remaining count 'null'" 'rate limit exhausted' \
 	'0|null|'

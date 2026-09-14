@@ -38,7 +38,7 @@ while true; do
 
 	if [ "${elapsed}" -ge "${MAX_WAIT}" ]; then
 		if [ -n "${probe_error}" ]; then
-			echo "::error::GitHub API is unreachable, so the remaining rate limit is unknown — this is not rate-limit exhaustion (${probe_error}). Waited ${elapsed}s (max ${MAX_WAIT}s); re-run once GitHub recovers."
+			echo "::error::could not determine rate limit: API unreachable — the remaining quota is unknown, so this is not rate-limit exhaustion (${probe_error}). Waited ${elapsed}s (max ${MAX_WAIT}s); re-run once GitHub recovers."
 			exit 1
 		fi
 
