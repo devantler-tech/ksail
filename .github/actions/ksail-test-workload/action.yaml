@@ -31,6 +31,12 @@ inputs:
     description: Path for GitOps push (only if --gitops-engine in args)
     required: false
     default: "k8s"
+  distribution:
+    description: |
+      Kubernetes distribution under test. KWOK simulates the GitOps controllers, so reconcile
+      deliberately skips syncing there and the deployment assertion is skipped too.
+    required: false
+    default: ""
   ghcr-user:
     description: GitHub Container Registry username (for external registry auth)
     required: false
@@ -175,6 +181,7 @@ runs:
       shell: bash
       env:
         ARGS: ${{ inputs.args }}
+        DISTRIBUTION: ${{ inputs.distribution }}
         GITOPS_PATH: ${{ inputs.gitops-path }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
@@ -204,10 +211,18 @@ runs:
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
 
+        # KWOK simulates the GitOps controllers, so reconcile deliberately skips syncing and
+        # nothing is ever deployed there. Asserting a deployment on KWOK would always fail.
+        if [ "$DISTRIBUTION" = "KWOK" ]; then
+          echo "ℹ️ KWOK simulates GitOps controllers and reconcile skips syncing — skipping the deployment assertion"
+          exit 0
+        fi
+
+        # Do not echo ARGS: on registry legs it carries GHCR credentials.
         case "$ARGS" in
           *"--gitops-engine ArgoCD"*) engine=ArgoCD ;;
           *"--gitops-engine Flux"*) engine=Flux ;;
-          *) echo "❌ could not determine the GitOps engine from args: $ARGS" >&2; exit 1 ;;
+          *) echo "❌ could not determine the GitOps engine from the action args" >&2; exit 1 ;;
         esac
         "$GITHUB_WORKSPACE/.github/scripts/assert-gitops-deployed.sh" "$engine" "$fixture"
 

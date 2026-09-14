@@ -253,6 +253,7 @@ jobs:
               - 'go.sum'
               - '.github/actions/**'
               - '.github/fixtures/**'
+              - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'

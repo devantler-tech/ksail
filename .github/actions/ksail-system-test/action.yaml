@@ -324,6 +324,7 @@ runs:
         ghcr-user: ${{ inputs.ghcr-user }}
         ghcr-token: ${{ inputs.ghcr-token }}
         gitops-path: ${{ inputs.gitops-path }}
+        distribution: ${{ inputs.distribution }}
 
     - name: 🧪 Workload Mirror Tests
       id: workload-mirror-tests
