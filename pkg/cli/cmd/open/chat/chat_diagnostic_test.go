@@ -98,6 +98,8 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 	})
 }
 
+// TestDiagnoseCLIStartupFailureDeadline verifies the diagnostic probe honours the
+// deadline it is given and keeps its production default.
 func TestDiagnoseCLIStartupFailureDeadline(t *testing.T) {
 	t.Parallel()
 
@@ -113,13 +115,15 @@ func TestDiagnoseCLIStartupFailureDeadline(t *testing.T) {
 		dir := t.TempDir()
 		// exec replaces the shell, so the deadline kills the process holding the
 		// stderr pipe and the probe returns instead of waiting for sleep to end.
-		// It sleeps past probeTimeout, so ignoring the deadline fails the check below.
 		script := writeScript(t, dir, "#!/bin/sh\nexec sleep 120\n")
 		start := time.Now()
 
 		result := diagnose(context.Background(), hangTimeout, script, "", os.Environ())
 		assert.Empty(t, result)
-		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+		// Returning before the production deadline proves the supplied deadline was
+		// used; falling back to the production one takes at least that long.
+		assert.Less(t, time.Since(start), chat.DiagnoseTimeout,
+			"the supplied deadline must stop a hanging CLI")
 	})
 
 	t.Run("production deadline is unchanged", func(t *testing.T) {

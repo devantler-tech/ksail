@@ -77,6 +77,8 @@ func writeSettledExecutable(t *testing.T, content string) string {
 	}
 }
 
+// TestVerifyCopilotCLI verifies the pre-flight probe's outcomes, that it honours
+// the deadline it is given, and that its production default is unchanged.
 func TestVerifyCopilotCLI(t *testing.T) {
 	t.Parallel()
 
@@ -110,14 +112,16 @@ func TestVerifyCopilotCLI(t *testing.T) {
 
 		// exec replaces the shell, so the deadline kills the process holding the
 		// output pipe and the probe returns instead of waiting for sleep to end.
-		// It sleeps past probeTimeout, so ignoring the deadline fails the check below.
 		script := writeExecutable(t, "#!/bin/sh\nexec sleep 120\n")
 		start := time.Now()
 
 		err := verify(context.Background(), hangTimeout, script, os.Environ())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pre-flight check")
-		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+		// Returning before the production deadline proves the supplied deadline was
+		// used; falling back to the production one takes at least that long.
+		assert.Less(t, time.Since(start), chat.VerifyTimeout,
+			"the supplied deadline must stop a hanging CLI")
 	})
 
 	t.Run("production deadline is unchanged", func(t *testing.T) {
