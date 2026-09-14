@@ -59,11 +59,17 @@ run_bounded() {
 while true; do
 	probe_error=""
 	remaining=""
+	reset_at="unknown"
 	budget=$((MAX_WAIT - elapsed))
 	limit=$((budget < 1 ? 1 : (budget > 60 ? 60 : budget)))
 	started=${SECONDS}
-	if run_bounded "${limit}" gh api /rate_limit --jq '.resources.core.remaining'; then
-		remaining="$(cat "${stdout_file}")"
+	# One probe reads the reset time with the count, so reporting exhaustion never needs another call
+	# after the budget is spent.
+	if run_bounded "${limit}" gh api /rate_limit --jq '.resources.core | "\(.remaining) \(.reset | todate)"'; then
+		read -r remaining reset <"${stdout_file}" || true
+		if [[ "${reset:-}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+			reset_at="${reset}"
+		fi
 		if [[ ! "${remaining}" =~ ^[0-9]+$ ]]; then
 			probe_error="non-numeric remaining count '${remaining}'"
 		elif [ "${remaining}" -ge "${MIN_REMAINING}" ]; then
@@ -86,11 +92,6 @@ while true; do
 			exit 1
 		fi
 
-		if run_bounded 10 gh api /rate_limit --jq '.resources.core.reset | todate'; then
-			reset_at="$(cat "${stdout_file}")"
-		else
-			reset_at="unknown"
-		fi
 		echo "::error::GitHub API rate limit exhausted (${remaining} remaining, need ${MIN_REMAINING}). Waited ${elapsed}s (max ${MAX_WAIT}s). Resets at ${reset_at}."
 		exit 1
 	fi

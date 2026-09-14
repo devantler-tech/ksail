@@ -18,10 +18,6 @@ mkdir -p "${fake_bin}"
 cat >"${fake_bin}/gh" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$*" == *reset* ]]; then
-	printf '2026-07-20T01:00:00Z\n'
-	exit 0
-fi
 count=$(($(cat "${FAKE_GH_COUNTER}") + 1))
 printf '%s\n' "${count}" >"${FAKE_GH_COUNTER}"
 total=$(wc -l <"${FAKE_GH_SEQUENCE}")
@@ -85,7 +81,21 @@ run_case persistent-outage-is-not-exhaustion 1 'could not determine rate limit: 
 run_case non-numeric-reply-is-not-exhaustion 1 "non-numeric remaining count 'null'" 'rate limit exhausted' \
 	'0|null|'
 run_case genuine-exhaustion 1 'rate limit exhausted (5 remaining, need 100)' 'unreachable' '0|5|'
-run_case genuine-exhaustion-names-reset 1 'Resets at 2026-07-20T01:00:00Z' '' '0|5|'
+run_case genuine-exhaustion-names-reset 1 'Resets at 2026-07-20T01:00:00Z' '' '0|5 2026-07-20T01:00:00Z|'
+run_case exhaustion-without-reset-time-reports-unknown 1 'Resets at unknown' '' '0|5|'
+
+# Once MAX_WAIT is spent, exhaustion must be reported from the last probe alone: any further gh call
+# (here one that never answers) would push completion past the budget.
+exhaustion_started=${SECONDS}
+CASE_MAX_WAIT=0 run_case exhaustion-starts-no-lookup-after-budget 1 \
+	'rate limit exhausted (5 remaining, need 100). Waited 0s (max 0s). Resets at 2026-07-20T01:00:00Z.' \
+	'unreachable' '0|5 2026-07-20T01:00:00Z|' 'hang||'
+exhaustion_seconds=$((SECONDS - exhaustion_started))
+if [[ "${exhaustion_seconds}" -gt 2 ]]; then
+	printf 'FAIL: exhaustion-starts-no-lookup-after-budget: took %ss; a gh call ran after MAX_WAIT=0 was spent\n' \
+		"${exhaustion_seconds}" >&2
+	exit 1
+fi
 
 # A probe that never answers must be stopped within MAX_WAIT and reported as unreachable.
 hang_started=${SECONDS}
