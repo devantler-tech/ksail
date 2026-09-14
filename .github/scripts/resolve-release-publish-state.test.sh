@@ -139,4 +139,14 @@ fi
 pass_count=$((pass_count + 1))
 printf 'PASS: workflow-gates-release-mutations\n'
 
+# CI must execute this suite, not only lint it: path filter, shellcheck, and the run line.
+ci_workflow="${repo_root}/.github/workflows/ci.yaml"
+executed="$(grep -cxE '[[:space:]]*\.github/scripts/resolve-release-publish-state\.test\.sh' "${ci_workflow}" || true)"
+if [[ "${executed}" -lt 1 ]]; then
+	printf 'FAIL: ci.yaml must execute .github/scripts/resolve-release-publish-state.test.sh\n' >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: ci-executes-release-publish-state-suite\n'
+
 printf 'All %d release publish-state cases passed.\n' "${pass_count}"
