@@ -1104,6 +1104,51 @@ func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
 	assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar)
 }
 
+// TestPersistedAWSMappingsReplaceUnrelatedConfigValues proves that an unrelated ksail.yaml's own AWS
+// variable names and region cannot shadow the target's captured mapping: its names would otherwise
+// win the merge, and its region would load a record the target never had instead of the persisted
+// one (#6288).
+func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
+	const (
+		clusterName      = "unrelated-values-replaced-6288"
+		region           = "eu-north-1"
+		unrelatedRegion  = "us-west-2"
+		unrelatedCluster = "unrelated-local-cluster-6288"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_REGION", region)
+	t.Setenv("UNRELATED_REGION", unrelatedRegion)
+	savePersistedAWSMappings(t, clusterName, region)
+
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	unrelatedOpts := v1alpha1.OptionsAWS{
+		RegionEnvVar:      "UNRELATED_REGION",
+		AccessKeyIDEnvVar: "UNRELATED_ACCESS",
+	}
+
+	// Both cases share the HOME set above, and t.Setenv forbids parallel tests, so they run in
+	// sequence rather than as subtests.
+	for _, contextRegion := range []string{"", region} {
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: unrelatedCluster,
+			ConfigSource:      true,
+			AWSOpts:           unrelatedOpts,
+			AWSRegion:         unrelatedRegion,
+			AWSContextRegion:  contextRegion,
+		}
+
+		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
+			"context region %q", contextRegion)
+		assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar,
+			"context region %q", contextRegion)
+		assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar,
+			"context region %q", contextRegion)
+		assert.Equal(t, region, resolved.AWSRegion, "context region %q", contextRegion)
+	}
+}
+
 // TestPersistedAWSMappingsKeepDefaultsForTargetConfig proves a config that describes the target, or
 // names no cluster at all, still keeps its canonical defaults even when mappings were captured.
 func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {

@@ -355,6 +355,14 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 		return nil
 	}
 
+	// The loaded config describes another cluster, so its variable names and region are not the
+	// target's. Keeping them would let its names win the merge and its region select a record the
+	// target never had. Standalone target validation has already rejected a borrowed eks.yaml region.
+	if resolved.ConfigSource {
+		resolved.AWSOpts = v1alpha1.OptionsAWS{}
+		resolved.AWSRegion = ""
+	}
+
 	restored, err := restoreSelectedAWSContextOptions(resolved)
 	if err != nil || restored {
 		return err
