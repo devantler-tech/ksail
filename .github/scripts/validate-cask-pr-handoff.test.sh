@@ -69,7 +69,55 @@ run_case missing-release-assets 1 'release-asset digest evidence is missing' 'de
 run_case empty-release-assets 1 'release-asset digest evidence is missing' '.releaseAssets = []'
 # Same tag re-run: version already matches, but the published assets carry different
 # digests than the stale cask's sha256 — the handoff must block.
-run_case stale-cask-sha 1 'does not match any published release asset digest' '.releaseAssets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+run_case stale-cask-sha 1 'does not match the published digest of ksail_7.166.1_darwin_arm64.tar.gz' '.releaseAssets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+
+# Each sha256 is bound to the asset its own url downloads, and only active stanzas count.
+digest_a="$(printf 'a%.0s' {1..64})"
+digest_b="$(printf 'b%.0s' {1..64})"
+two_assets=".releaseAssets = [
+  {\"name\":\"ksail_7.166.1_darwin_arm64.tar.gz\",\"digest\":\"sha256:${digest_a}\"},
+  {\"name\":\"ksail_7.166.1_linux_amd64.tar.gz\",\"digest\":\"sha256:${digest_b}\"}
+]"
+download="https://github.com/devantler-tech/ksail/releases/download"
+with_cask() {
+	printf '%s | .headFile.content = %s' "${two_assets}" "$(jq -Rs '@base64' <<<"$1")"
+}
+platform_cask() { # $1 = darwin sha256, $2 = linux sha256, $3 = extra lines after version
+	cat <<EOF
+cask "ksail" do
+  version "7.166.1"
+$3
+  on_macos do
+    on_arm do
+      sha256 "$1"
+      url "${download}/v#{version}/ksail_#{version}_darwin_arm64.tar.gz"
+    end
+  end
+  on_linux do
+    on_intel do
+      url "${download}/v#{version}/ksail_#{version}_linux_amd64.tar.gz"
+      sha256 "$2"
+    end
+  end
+end
+EOF
+}
+run_case goreleaser-platform-blocks 0 'PASS: generated cask PR identity and scope are valid' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '')")"
+run_case commented-fake-version 1 'cask at head must pin version 7.166.1' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|^  version "7.166.1"|  # version "7.166.1"\n  version "7.160.0"|')")"
+run_case duplicate-active-version 1 'cask at head must declare exactly one active version stanza' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '  version "7.166.1"')")"
+run_case swapped-platform-digests 1 'does not match the published digest of ksail_7.166.1_darwin_arm64.tar.gz' \
+	"$(with_cask "$(platform_cask "${digest_b}" "${digest_a}" '')")"
+run_case borrowed-asset-digest 1 'does not match the published digest of ksail_7.166.1_linux_amd64.tar.gz' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_a}" '')")"
+run_case unknown-asset-url 1 'does not name exactly one published release asset' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|linux_amd64.tar.gz|windows_amd64.zip|')")"
+run_case other-release-url 1 'is not a devantler-tech/ksail v7.166.1 release asset' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|/v#{version}/ksail_#{version}_darwin|/v7.160.0/ksail_7.166.1_darwin|')")"
+run_case unpaired-sha256 1 'is not paired with a url' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|^      url "\(.*\)darwin_arm64.tar.gz"|      name "ksail"\n      url "\1darwin_arm64.tar.gz"|')")"
 # base64 of a cask with a version but no sha256 stanza at all.
 run_case no-cask-sha 1 'cask at head must pin at least one sha256' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKCiAgdXJsICJodHRwczovL2dpdGh1Yi5jb20vZGV2YW50bGVyLXRlY2gva3NhaWwvcmVsZWFzZXMvZG93bmxvYWQvdjcuMTY2LjEva3NhaWxfNy4xNjYuMV9kYXJ3aW5fYXJtNjQudGFyLmd6IgplbmQK"'
 run_case empty-head-content 1 'cask head content must not be empty' '.headFile.content = ""'
