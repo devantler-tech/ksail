@@ -254,9 +254,49 @@ func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) erro
 	return errors.Join(cleanupErrs...)
 }
 
+// unboundEKSComponentStatePaths lists every account's component state for one region. The ownership
+// record that binds an account is region-scoped, so when it is absent no account's baseline in this
+// region belongs to a live local binding; keeping any of them would let a later ownership record for
+// that account revive stale controller ownership.
+func unboundEKSComponentStatePaths(clusterName, region string) ([]string, error) {
+	probe, err := eksRegionScopedStatePath(clusterName, region, "%s")
+	if err != nil {
+		return nil, err
+	}
+
+	dir := filepath.Dir(probe)
+	suffix := "-" + filepath.Base(probe) + ".json"
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("list EKS component state: %w", err)
+	}
+
+	var paths []string
+
+	for _, entry := range entries {
+		accountID, ok := strings.CutPrefix(entry.Name(), "eks-components-")
+		if entry.IsDir() || !ok {
+			continue
+		}
+
+		accountID, ok = strings.CutSuffix(accountID, suffix)
+		if ok && awsAccountIDPattern.MatchString(accountID) {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	return paths, nil
+}
+
 // eksRegionStatePaths lists every state file belonging to one exact EKS target. A target with no
-// ownership record and no explicit account ID has no locatable account-scoped component state, so
-// only that file is omitted; its region-scoped and name-scoped state is still returned.
+// ownership record and no explicit account ID has no bound account, so every account's component
+// state for that region is returned instead of one; its region-scoped and name-scoped state is
+// returned either way.
 func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]string, error) {
 	var paths []string
 
@@ -272,6 +312,13 @@ func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]str
 		}
 
 		paths = append(paths, componentPath)
+	} else {
+		unboundPaths, listErr := unboundEKSComponentStatePaths(clusterName, region)
+		if listErr != nil {
+			return nil, listErr
+		}
+
+		paths = append(paths, unboundPaths...)
 	}
 
 	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)

@@ -107,13 +107,18 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 }
 
 // TestDeleteEKSRegionStateWithoutAccountBinding covers a target with no ownership record, such as a
-// cluster created before those records existed. No account-scoped component state can be located
-// for it, but its region-scoped and name-scoped state must still be removed, and another region's
-// state must still survive.
+// cluster created before those records existed. Nothing binds an account in that region, so every
+// account's component state there is removed along with the region-scoped and name-scoped state;
+// otherwise a later ownership record for that account would revive a stale baseline. Another
+// region's state must still survive.
 func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	const clusterName = "unbound-region-delete"
+	const (
+		clusterName = "unbound-region-delete"
+		accountA    = "123456789012"
+		accountB    = "210987654321"
+	)
 
 	for _, region := range []string{"eu-north-1", "us-east-1"} {
 		require.NoError(
@@ -125,6 +130,32 @@ func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 			}),
 		)
 	}
+
+	components := []struct{ region, account string }{
+		{"eu-north-1", accountA},
+		{"eu-north-1", accountB},
+		{"us-east-1", accountA},
+	}
+	for _, component := range components {
+		require.NoError(t, state.SaveEKSComponentState(clusterName, component.region,
+			&state.EKSComponentState{
+				Version:     state.EKSComponentStateVersion,
+				ClusterName: clusterName,
+				Region:      component.region,
+				AccountID:   component.account,
+			}))
+	}
+
+	t.Cleanup(func() {
+		for _, account := range []string{accountA, accountB} {
+			_, err := state.LoadEKSComponentState(clusterName, "eu-north-1", account)
+			assert.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
+				"unbound delete must remove account %s's component state in the deleted region", account)
+		}
+
+		_, err := state.LoadEKSComponentState(clusterName, "us-east-1", accountA)
+		assert.NoError(t, err, "another region's component state must survive")
+	})
 
 	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
 	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
