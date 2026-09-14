@@ -167,6 +167,14 @@ assert_contains '--merged' \
 # the tap's brew-style gate, silently blocking auto-merge — the job must go red, not promote it (#6134).
 assert_contains 'could not ensure it is brew-style-clean' "${homebrew_block}" \
 	'release job must fail red (not promote) when it cannot ensure the cask is brew-style-clean'
+# The tap's CI autocorrects the same branch, so a bare push loses that race and strands a clean cask
+# (#6628). The job must style-clean through the script that re-checks a moved tip.
+assert_contains '.github/scripts/style-clean-cask-branch.sh' "${homebrew_block}" \
+	'release job must style-clean casks through the race-tolerant script (#6628)'
+assert_not_contains 'style: brew style --fix generated cask' "${homebrew_block}" \
+	'release job must not commit and push autocorrections itself; a bare push fails when the tap CI autocorrects first (#6628)'
+assert_contains '.github/scripts/style-clean-cask-branch.test.sh' "${ci_workflow}" \
+	'CI must execute the cask style-clean race suite'
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
