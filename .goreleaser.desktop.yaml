@@ -105,8 +105,19 @@ homebrew_casks:
     # `<version>.upgrading` staging dir that blocks every subsequent `brew upgrade` (a real cascade
     # observed in the field). The cd.yaml `homebrew` job runs `brew style --fix`, which reorders these
     # stanzas into canonical position before the cask lands in the tap.
+    # The `on_intel` branch exists only so Homebrew 6 can load the tap: it refuses the whole tap when
+    # any OS or architecture variant lacks a `url` (#7034). It reuses the Apple Silicon download and
+    # refuses the install by architecture; `.github/scripts/validate-cask-pr-handoff.sh` accepts its
+    # `sha256 :no_check` only because the same url is pinned to a verified digest.
     # Escape Homebrew's install-time token through GoReleaser's template pass.
     custom_block: |
+      on_macos do
+        on_intel do
+          sha256 :no_check
+          url "https://github.com/devantler-tech/ksail/releases/download/v#{version}/KSail_#{version}_darwin_arm64.zip"
+          depends_on arch: :arm64
+        end
+      end
       depends_on macos: :big_sur
       app "KSail.app"
       uninstall quit: "tech.devantler.ksail.desktop"

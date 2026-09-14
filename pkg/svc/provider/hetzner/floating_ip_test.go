@@ -265,6 +265,114 @@ func TestOwnedFloatingIPExists_NilClient(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
+// strayFloatingIPJSON is a second ksail-owned address labelled for the same
+// cluster under a different name — a leaked earlier allocation that reconcile
+// manages by name and therefore never adopts, but which Hetzner still bills.
+const strayFloatingIPJSON = `{"id":8,"name":"test-cluster-floating-ip-old","description":"",` +
+	`"ip":"192.0.2.11","type":"ipv4","server":null,"dns_ptr":[],` +
+	`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
+	`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
+	`"blocked":false,"protection":{"delete":false},` +
+	`"labels":{"ksail.owned":"true","ksail.cluster.name":"test-cluster"},` +
+	`"created":"2026-07-01T00:00:00+00:00"}`
+
+// newStrayFloatingIPProvider builds a provider whose floating IP list answers a
+// label-selector listing with byLabelJSON, recording the selector it was sent.
+func newStrayFloatingIPProvider(
+	t *testing.T,
+	byLabelJSON string,
+) (*hetzner.Provider, *atomic.Value) {
+	t.Helper()
+
+	var selector atomic.Value
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			selector.Store(request.URL.Query().Get("label_selector"))
+			responseWriter.Header().Set("Content-Type", "application/json")
+			_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + byLabelJSON + `]}`))
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return hetzner.NewProvider(newTestHcloudClient(t, srv.URL)), &selector
+}
+
+// TestStrayFloatingIPs_ReturnsClusterLabelledAddressesOtherThanTheManagedOne
+// verifies that a ksail-owned address labelled for the cluster under another
+// name is reported, while the conventionally named address is not.
+func TestStrayFloatingIPs_ReturnsClusterLabelledAddressesOtherThanTheManagedOne(t *testing.T) {
+	t.Parallel()
+
+	prov, selector := newStrayFloatingIPProvider(
+		t, ownedFloatingIPJSON+","+strayFloatingIPJSON,
+	)
+
+	strays, err := prov.StrayFloatingIPs(t.Context(), "test-cluster")
+
+	require.NoError(t, err)
+	require.Len(t, strays, 1)
+	assert.Equal(t, "test-cluster-floating-ip-old", strays[0].Name)
+	assert.Equal(t, "ksail.owned=true,ksail.cluster.name=test-cluster", selector.Load(),
+		"only addresses ksail owns for this cluster may be reported")
+}
+
+// TestStrayFloatingIPs_EmptyWhenOnlyTheManagedAddressExists verifies that the
+// cluster's own address is never reported as a stray.
+func TestStrayFloatingIPs_EmptyWhenOnlyTheManagedAddressExists(t *testing.T) {
+	t.Parallel()
+
+	prov, _ := newStrayFloatingIPProvider(t, ownedFloatingIPJSON)
+
+	strays, err := prov.StrayFloatingIPs(t.Context(), "test-cluster")
+
+	require.NoError(t, err)
+	assert.Empty(t, strays)
+}
+
+// TestStrayFloatingIPs_PropagatesListError verifies that a failed listing is not
+// mistaken for a clean account.
+func TestStrayFloatingIPs_PropagatesListError(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/floating_ips",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+			responseWriter.WriteHeader(http.StatusUnauthorized)
+			_, _ = responseWriter.Write([]byte(
+				`{"error":{"code":"unauthorized","message":"unable to authenticate"}}`))
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	strays, err := prov.StrayFloatingIPs(t.Context(), "test-cluster")
+
+	require.Error(t, err)
+	assert.Nil(t, strays)
+}
+
+// TestStrayFloatingIPs_NilClient verifies that an unavailable provider fails
+// clearly instead of reporting no strays.
+func TestStrayFloatingIPs_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+
+	_, err := prov.StrayFloatingIPs(t.Context(), "test-cluster")
+
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
 // TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned verifies idempotent
 // attachment to the current server.
 func TestAttachFloatingIPToServer_NoopWhenAlreadyAssigned(t *testing.T) {

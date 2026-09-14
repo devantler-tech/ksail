@@ -127,6 +127,7 @@ while IFS= read -r pr; do
 				--evidence "${evidence}" \
 				--tap "${tap}" \
 				--cask-name "${cask_name}" \
+				--source-repo "${source_repo}" \
 				--tag "${tag}" \
 				--merged
 	} >"${candidate_log}" 2>&1; then
