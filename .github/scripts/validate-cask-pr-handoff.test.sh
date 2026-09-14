@@ -215,6 +215,25 @@ run_case merged-wrong-merge-base 1 'pinned main must descend from the merge comm
 run_case merged-stale-main-version 1 'cask on main must pin version 7.166.1' \
 	"${merged_fixture} | .mainFile.content = \"Y2FzayBcImtzYWlsXCIgZG8KICB2ZXJzaW9uIFwiNy4xNjAuMFwiCiAgc2hhMjU2IFwiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMFwiCmVuZAo=\"" \
 	false false true
+# Cask URLs are bound to the release repository the evidence was collected from, not a fixed one.
+source_repo_case() {
+	local name="$1" repo="$2" expected_status="$3" expected_output="$4" output status
+	set +e
+	output="$("${validator}" --evidence "${fixture}" --tap devantler-tech/homebrew-tap --cask-name ksail \
+		--tag v7.166.1 --source-repo "${repo}" 2>&1)"
+	status=$?
+	set -e
+	if [[ "${status}" -ne "${expected_status}" || "${output}" != *"${expected_output}"* ]]; then
+		printf 'FAIL: %s: expected status %s containing %q, got %s:\n%s\n' \
+			"${name}" "${expected_status}" "${expected_output}" "${status}" "${output}" >&2
+		return 1
+	fi
+	pass_count=$((pass_count + 1))
+	printf 'PASS: %s\n' "${name}"
+}
+source_repo_case explicit-source-repo devantler-tech/ksail 0 'PASS: generated cask PR identity and scope are valid'
+source_repo_case other-source-repo someone-else/ksail 1 'is not a someone-else/ksail v7.166.1 release asset'
+
 # In merged mode the digest proof reads current main, so a failure must say so rather than "at head".
 run_case merged-main-without-sha256 1 'cask on main must pin at least one sha256' \
 	"${merged_fixture}"' | .mainFile.content = ("cask \"ksail\" do\n  version \"7.166.1\"\nend\n" | @base64)' \

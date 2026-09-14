@@ -6,7 +6,12 @@ usage() {
 	cat <<'EOF'
 Usage:
   validate-cask-pr-handoff.sh --evidence FILE --tap OWNER/REPO
-                              --cask-name NAME --tag TAG [--prepared] [--ready] [--merged]
+                              --cask-name NAME --tag TAG [--source-repo OWNER/REPO]
+                              [--prepared] [--ready] [--merged]
+
+--source-repo names the repository whose release assets the evidence was
+collected from (default devantler-tech/ksail); every cask URL must download an
+asset of that repository's TAG release.
 
 Fail closed unless a GoReleaser cask PR is the expected trusted draft, from the
 tap itself, into main, with exactly its matching cask file. With --prepared,
@@ -25,6 +30,7 @@ evidence_file=""
 tap=""
 cask_name=""
 tag=""
+source_repo="devantler-tech/ksail"
 prepared=false
 ready=false
 merged=false
@@ -33,6 +39,10 @@ while (($# > 0)); do
 	case "$1" in
 	--evidence)
 		evidence_file="${2:-}"
+		shift 2
+		;;
+	--source-repo)
+		source_repo="${2:-}"
 		shift 2
 		;;
 	--tap)
@@ -321,7 +331,6 @@ fi
 # from a failed earlier attempt already pins this version while its sha256 still points
 # at the deleted draft release's artifacts. Require every URL to name an asset of THIS
 # release and its paired sha256 to equal the digest GitHub reports for that exact asset.
-source_repo="devantler-tech/ksail"
 if [[ -n "${cask_content}" ]]; then
 	if ! jq -e '.releaseAssets | type == "array" and length > 0' \
 		"${evidence_file}" >/dev/null 2>&1; then
