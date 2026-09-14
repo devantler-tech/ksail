@@ -166,6 +166,48 @@ unset RACE_MODE RACE_TIMES RACE_STATE RACE_CLONE
 [[ "$(<"${s}/race")" -eq 2 ]] || fail 'retries must stop at --attempts' "${s}/out"
 grep -Fq 'kept moving' "${s}/out" || fail 'exhausted retries must be named' "${s}/out"
 
+# The branch moves while this run finds nothing to fix: the new, dirty tip must be checked, not the
+# clean one this run cloned.
+s="${tmp_dir}/moved-before-verify"
+new_remote "${s}" 'cask GOOD'
+export RACE_MODE=rewrite RACE_TIMES=1 RACE_STATE="${s}/race" RACE_CLONE="${s}/racer"
+run_subject "${s}"
+unset RACE_MODE RACE_TIMES RACE_STATE RACE_CLONE
+[[ "${run_status}" -eq 0 ]] || fail 'a branch that moved before verification must be re-checked and fixed' "${s}/out"
+grep -Fq 'moved before verification' "${s}/out" || fail 'the move before verification must be named' "${s}/out"
+[[ "$(tip_subject "${s}")" == 'style: brew style --fix generated cask' && "$(tip_subject "${s}" '~1')" == 'racer rewrite 1' ]] ||
+	fail 'the moved tip must be autocorrected, not reported clean from the stale clone' "${s}/out"
+
+# The branch moves right after this run's push lands: verification must judge that new tip.
+s="${tmp_dir}/moved-after-push"
+new_remote "${s}" 'cask BAD'
+cat >"${s}/remote.git/hooks/post-receive" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -f moved-once ]]; then
+	exit 0
+fi
+touch moved-once
+racer="$(cd .. && pwd)/racer"
+# Leave this receive's git environment before driving a second, nested push.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+git -C "${racer}" pull --quiet --ff-only
+printf 'rewrite after push BAD\n' >>"${racer}/Casks/ksail.rb"
+git -C "${racer}" commit --quiet -am 'racer rewrite after push'
+git -C "${racer}" push --quiet
+EOF
+chmod +x "${s}/remote.git/hooks/post-receive"
+run_subject "${s}"
+[[ -f "${s}/remote.git/moved-once" ]] || fail 'fixture: the move after the push must have happened' "${s}/out"
+[[ "${run_status}" -eq 0 ]] || fail 'a branch that moved after the push must be re-checked and fixed' "${s}/out"
+grep -Fq 'moved before verification' "${s}/out" || fail 'the move after the push must be named' "${s}/out"
+[[ "$(tip_subject "${s}")" == 'style: brew style --fix generated cask' && "$(tip_subject "${s}" '~1')" == 'racer rewrite after push' ]] ||
+	fail 'verification must judge the tip that moved after the push' "${s}/out"
+if tip_cask "${s}" | grep -q BAD; then
+	fail 'the tip that moved after the push must end clean' "${s}/out"
+fi
+
 # A refused push that is not a race fails at once, with the reason in the log.
 s="${tmp_dir}/refused"
 new_remote "${s}" 'cask BAD'

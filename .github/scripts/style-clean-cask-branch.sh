@@ -104,6 +104,19 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
 		fi
 	fi
 
+	# Verify the tip the remote holds now, not the one this run last saw: another writer can move
+	# the branch after the clone or right after this run's push.
+	if ! git -C "${tap}" fetch --quiet --depth 1 origin "refs/heads/${branch}" 2>"${work}/fetch.err"; then
+		printf '::warning::Could not fetch %s for final verification: %s\n' "${branch}" "$(reason "${work}/fetch.err")"
+		exit 1
+	fi
+	if [[ "$(git -C "${tap}" rev-parse HEAD)" != "$(git -C "${tap}" rev-parse FETCH_HEAD)" ]]; then
+		printf '::warning::%s moved before verification (attempt %d of %d); re-checking its new tip\n' \
+			"${branch}" "${attempt}" "${attempts}"
+		git -C "${tap}" checkout --quiet --force -B "${branch}" FETCH_HEAD
+		continue
+	fi
+
 	# A pushed fix (or an empty diff) does not prove the cask is clean: only a read-only pass does.
 	if brew style "${cask}"; then
 		printf '%s cask is brew-style-clean\n' "${name}"
