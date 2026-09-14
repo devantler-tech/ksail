@@ -44,6 +44,8 @@ func writeScript(t *testing.T, dir, content string) string {
 	return path
 }
 
+// TestDiagnoseCLIStartupFailure verifies the diagnostic probe captures the CLI's
+// stderr, and returns nothing when there is none or the context is cancelled.
 func TestDiagnoseCLIStartupFailure(t *testing.T) {
 	t.Parallel()
 

@@ -207,6 +207,8 @@ func configureStdioConnection(opts *copilot.ClientOptions, cliPath string) {
 	opts.Connection = copilot.StdioConnection{Path: cliPath}
 }
 
+// buildClientStartupError wraps a Copilot client startup failure with the fix hints
+// that match how the client was configured, including any CLI diagnostic output.
 func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnostic string) error {
 	if opts.UseLoggedInUser != nil && !*opts.UseLoggedInUser && opts.GitHubToken == "" {
 		return fmt.Errorf(
