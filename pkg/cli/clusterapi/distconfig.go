@@ -461,6 +461,62 @@ func writeEKSConfig(name, region string) (string, error) {
 	return configPath, nil
 }
 
+// deleteEKSClusterState removes the local state of the named EKS cluster and nothing else.
+//
+// An EKS cluster name is unique only within a region, so ~/.ksail/clusters/<name> can also hold the
+// state of a same-named cluster in another region. Removing the whole directory would destroy that
+// state (ksail#6224). The region comes from the same binding that built the deleting provisioner.
+func deleteEKSClusterState(name string) error {
+	bound, err := boundEKSConfig(name)
+	if err != nil && !errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
+		return fmt.Errorf("resolve the region of EKS cluster %q for state cleanup: %w", name, err)
+	}
+
+	if bound == nil {
+		// Nothing binds this name to a region: either no create completed, or the cluster has
+		// neither an eks config nor an ownership record. There is no region-scoped identity to
+		// keep apart, so the name's whole state directory is removed. Any other binding failure,
+		// such as records in several regions, stops above instead of guessing.
+		err = state.DeleteClusterState(name)
+		if err != nil {
+			return fmt.Errorf("delete cluster state: %w", err)
+		}
+
+		return nil
+	}
+
+	err = state.DeleteEKSRegionState(name, bound.Region)
+	if err != nil {
+		return fmt.Errorf("delete EKS region state: %w", err)
+	}
+
+	return removeEKSConfigAndEmptyDir(bound.ConfigPath)
+}
+
+// removeEKSConfigAndEmptyDir removes an EKS cluster's eks.yaml, then its state directory only when
+// nothing else is left in it.
+func removeEKSConfigAndEmptyDir(configPath string) error {
+	err := os.Remove(configPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove eks config: %w", err)
+	}
+
+	// The directory goes only once it is empty; another region's state keeps it.
+	dir := filepath.Dir(configPath)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) > 0 {
+		return nil //nolint:nilerr // an unreadable or non-empty directory is left in place.
+	}
+
+	err = os.Remove(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove cluster state directory: %w", err)
+	}
+
+	return nil
+}
+
 // validateClusterSegmentName rejects any cluster name that would not become exactly one directory
 // under ~/.ksail/clusters. filepath.IsLocal alone is insufficient — it still permits multi-segment
 // names like "foo/bar" and ".", which would redirect the path into an unintended nested directory —

@@ -1026,7 +1026,7 @@ func deleteProvisionerAndState(
 	err := provisioner.Delete(ctx, name)
 	if distribution == v1alpha1.DistributionEKS &&
 		(err == nil || errors.Is(err, clustererr.ErrClusterNotFound)) {
-		cleanupErr := state.DeleteClusterState(name)
+		cleanupErr := deleteEKSClusterState(name)
 		if cleanupErr != nil {
 			// Cloud deletion succeeded. Warn about local cleanup without stranding a failed job.
 			slog.Warn("failed to clean up local EKS cluster state after deletion",
