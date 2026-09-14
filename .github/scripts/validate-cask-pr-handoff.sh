@@ -327,7 +327,7 @@ if [[ -n "${cask_content}" ]]; then
 		"${evidence_file}" >/dev/null 2>&1; then
 		block 'release-asset digest evidence is missing'
 	elif ((cask_sha_count == 0)); then
-		block 'cask at head must pin at least one sha256'
+		block "cask ${content_location} must pin at least one sha256"
 	elif ((${#cask_pairs[@]} == 0)); then
 		block 'cask must pair each sha256 with a release asset url'
 	else

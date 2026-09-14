@@ -215,5 +215,9 @@ run_case merged-wrong-merge-base 1 'pinned main must descend from the merge comm
 run_case merged-stale-main-version 1 'cask on main must pin version 7.166.1' \
 	"${merged_fixture} | .mainFile.content = \"Y2FzayBcImtzYWlsXCIgZG8KICB2ZXJzaW9uIFwiNy4xNjAuMFwiCiAgc2hhMjU2IFwiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMFwiCmVuZAo=\"" \
 	false false true
+# In merged mode the digest proof reads current main, so a failure must say so rather than "at head".
+run_case merged-main-without-sha256 1 'cask on main must pin at least one sha256' \
+	"${merged_fixture}"' | .mainFile.content = ("cask \"ksail\" do\n  version \"7.166.1\"\nend\n" | @base64)' \
+	false false true
 
 printf 'All %d cask PR handoff cases passed.\n' "${pass_count}"
