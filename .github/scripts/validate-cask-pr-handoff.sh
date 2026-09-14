@@ -272,8 +272,14 @@ fi
 # supply the version nor a digest. Each url is paired with the sha256 on the line next to it
 # (GoReleaser writes one sha256 + url pair per platform block), so a digest is only ever checked
 # against the asset its own URL downloads.
+#
+# `sha256 :no_check` is accepted only for the macOS-Intel branch the release config adds so Homebrew 6
+# can load the tap (#7034): that branch reuses the Apple Silicon download and refuses the install by
+# architecture. Its url must therefore be identical to a url another stanza pins to a digest, so a
+# skipped checksum can never introduce a download that is not verified somewhere in the cask.
 active_versions=()
 cask_pairs=()
+unchecked_urls=()
 cask_sha_count=0
 if [[ -n "${cask_content}" ]]; then
 	pending_sha=""
@@ -288,8 +294,16 @@ if [[ -n "${cask_content}" ]]; then
 		pending_sha=""
 		pending_url=""
 	}
+	record_pair() { # $1 = sha256 digest or :no_check, $2 = url
+		if [[ "$1" == ":no_check" ]]; then
+			unchecked_urls+=("$2")
+		else
+			cask_pairs+=("$1 $2")
+		fi
+	}
 	version_pattern='^[[:space:]]*version[[:space:]]+"([^"]*)"[[:space:]]*(#.*)?$'
 	sha_pattern='^[[:space:]]*sha256[[:space:]]+"([[:xdigit:]]{64})"[[:space:]]*(#.*)?$'
+	no_check_pattern='^[[:space:]]*sha256[[:space:]]+(:no_check)[[:space:]]*(#.*)?$'
 	url_pattern='^[[:space:]]*url[[:space:]]+"([^"]+)"'
 	while IFS= read -r line; do
 		if [[ "${line}" =~ ^[[:space:]]*(#.*)?$ ]]; then
@@ -297,10 +311,12 @@ if [[ -n "${cask_content}" ]]; then
 		elif [[ "${line}" =~ ${version_pattern} ]]; then
 			flush_pending
 			active_versions+=("${BASH_REMATCH[1]}")
-		elif [[ "${line}" =~ ${sha_pattern} ]]; then
-			cask_sha_count=$((cask_sha_count + 1))
+		elif [[ "${line}" =~ ${sha_pattern} || "${line}" =~ ${no_check_pattern} ]]; then
+			if [[ "${BASH_REMATCH[1]}" != ":no_check" ]]; then
+				cask_sha_count=$((cask_sha_count + 1))
+			fi
 			if [[ -n "${pending_url}" ]]; then
-				cask_pairs+=("${BASH_REMATCH[1]} ${pending_url}")
+				record_pair "${BASH_REMATCH[1]}" "${pending_url}"
 				pending_url=""
 			else
 				flush_pending
@@ -308,7 +324,7 @@ if [[ -n "${cask_content}" ]]; then
 			fi
 		elif [[ "${line}" =~ ${url_pattern} ]]; then
 			if [[ -n "${pending_sha}" ]]; then
-				cask_pairs+=("${pending_sha} ${BASH_REMATCH[1]}")
+				record_pair "${pending_sha}" "${BASH_REMATCH[1]}"
 				pending_sha=""
 			else
 				flush_pending
@@ -361,6 +377,18 @@ if [[ -n "${cask_content}" ]]; then
 			fi
 		done
 	fi
+	for unchecked_url in "${unchecked_urls[@]+"${unchecked_urls[@]}"}"; do
+		pinned=false
+		for pair in "${cask_pairs[@]+"${cask_pairs[@]}"}"; do
+			if [[ "${pair#* }" == "${unchecked_url}" ]]; then
+				pinned=true
+				break
+			fi
+		done
+		if [[ "${pinned}" != true ]]; then
+			block "cask url ${unchecked_url} skips its checksum but no other stanza pins it to a digest"
+		fi
+	done
 fi
 
 if [[ "${prepared}" == true ]]; then
