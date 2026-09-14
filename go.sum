@@ -699,8 +699,8 @@ github.com/containers/storage v1.59.1 h1:11Zu68MXsEQGBBd+GadPrHPpWeqjKS8hJDGiAHg
 github.com/containers/storage v1.59.1/go.mod h1:KoAYHnAjP3/cTsRS+mmWZGkufSY2GACiKQ4V3ZLQnR0=
 github.com/coreos/go-iptables v0.8.0 h1:MPc2P89IhuVpLI7ETL/2tx3XZ61VeICZjYqDEgNsPRc=
 github.com/coreos/go-iptables v0.8.0/go.mod h1:Qe8Bv2Xik5FyTXwgIbLAnv2sWSBmvWdFETJConOQ//Q=
-github.com/coreos/go-oidc/v3 v3.20.0 h1:EtE0WIBHk03N+DqGkY4+UONzzZHk7amKt6IyNd7OsZE=
-github.com/coreos/go-oidc/v3 v3.20.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
+github.com/coreos/go-oidc/v3 v3.21.0 h1:wZo4Q9Pum8dYEj0eMUPrqR+kvuGkeUplbLpNCkBqoWM=
+github.com/coreos/go-oidc/v3 v3.21.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/coreos/go-semver v0.3.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
 github.com/coreos/go-semver v0.3.1 h1:yi21YpKnrx1gt5R+la8n5WgS0kCrsPp33dmEyHReZr4=
 github.com/coreos/go-semver v0.3.1/go.mod h1:irMmmIw/7yzSRPWryHsK7EYSg09caPQL03VsM8rvUec=
@@ -1611,8 +1611,8 @@ github.com/kubescape/go-logger v0.0.25 h1:Bi6F0856LOlvjrbSKD+ZtKKzbfRXDifhVCjK8s
 github.com/kubescape/go-logger v0.0.25/go.mod h1:lk+R5/lAVJo4AgD4eYUJJfVTHf7ZChS73X1MFFbeInY=
 github.com/kubescape/k8s-interface v0.0.195 h1:pJ1PT3x3fd1WatLjyZbKAfE64PWtEbvxiFjOBKSBwuU=
 github.com/kubescape/k8s-interface v0.0.195/go.mod h1:j9snZbH+RxOaa1yG/bWgTClj90q7To0rGgQepxy4b+k=
-github.com/kubescape/opa-utils v0.0.312 h1:zCT3LbtvhOwxhVXRWHAdZv7F0JvnAiWSEMd0LAWK/Ho=
-github.com/kubescape/opa-utils v0.0.312/go.mod h1:dWNcjmiTwGYlNmclXvDvgH7UlLdpDvmEc9T7ACTqLo0=
+github.com/kubescape/opa-utils v0.0.313 h1:/oybTHDloodWSRHV9W52XfQc+ny5iasbPfyLCIvP1zo=
+github.com/kubescape/opa-utils v0.0.313/go.mod h1:dWNcjmiTwGYlNmclXvDvgH7UlLdpDvmEc9T7ACTqLo0=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 h1:SqlwF8G+oFazeYmZQKoPczLEflBQpwpHCU8DoLLyfj8=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520/go.mod h1:wuxMUSDzGUyWd25IJfBzEJ/Udmw2Vy7npj+MV3u3GrU=
 github.com/kubescape/regolibrary/v2 v2.0.1 h1:7lKj171gslgTbbcmmGVHk34AZNqxForOXZIINoQfdzQ=

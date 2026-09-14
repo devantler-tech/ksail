@@ -74,7 +74,7 @@ require (
 	github.com/cilium/cilium v1.20.1
 	github.com/cli/go-gh/v2 v2.16.0
 	github.com/coder/websocket v1.8.15
-	github.com/coreos/go-oidc/v3 v3.20.0
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/cosi-project/runtime v1.16.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.11
@@ -86,7 +86,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.47.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.312
+	github.com/kubescape/opa-utils v0.0.313
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.36.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0

@@ -244,7 +244,7 @@ require (
 	github.com/containers/ocicrypt v1.2.1 // indirect
 	github.com/containers/storage v1.59.1 // indirect
 	github.com/coreos/go-iptables v0.8.0 // indirect
-	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.21.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/cosi-project/runtime v1.16.2 // indirect
@@ -472,7 +472,7 @@ require (
 	github.com/kubescape/go-logger v0.0.25 // indirect
 	github.com/kubescape/k8s-interface v0.0.195 // indirect
 	github.com/kubescape/kubescape/v3 v3.0.48 // indirect
-	github.com/kubescape/opa-utils v0.0.312 // indirect
+	github.com/kubescape/opa-utils v0.0.313 // indirect
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 // indirect
 	github.com/kubescape/regolibrary/v2 v2.0.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
