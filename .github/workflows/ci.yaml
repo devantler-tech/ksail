@@ -147,6 +147,7 @@ jobs:
       cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
       k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
+      rate-limit-gate-script: ${{ steps.filter.outputs.rate-limit-gate-script }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -343,6 +344,9 @@ jobs:
               - '.github/scripts/assert-k3k-server-creator.test.sh'
               - '.github/actions/ksail-test-kubernetes-provider/action.yaml'
               - '.github/workflows/ci.yaml'
+            rate-limit-gate-script:
+              - '.github/actions/rate-limit-gate/**'
+              - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -385,6 +389,27 @@ jobs:
             .github/scripts/assert-k3k-server-creator.sh \
             .github/scripts/assert-k3k-server-creator.test.sh
           .github/scripts/assert-k3k-server-creator.test.sh
+
+  rate-limit-gate-script:
+    name: ⏳ Validate Rate Limit Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.rate-limit-gate-script == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⏳ Verify an unreachable API is never reported as rate-limit exhaustion
+        run: |
+          shellcheck \
+            .github/actions/rate-limit-gate/wait-for-rate-limit.sh \
+            .github/actions/rate-limit-gate/wait-for-rate-limit.test.sh
+          .github/actions/rate-limit-gate/wait-for-rate-limit.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
@@ -1826,6 +1851,7 @@ jobs:
         verify-todos-workflow-contract,
         cask-pr-handoff,
         k3k-sentinel-scripts,
+        rate-limit-gate-script,
       ]
     if: ${{ always() }}
     steps:
@@ -1857,3 +1883,4 @@ jobs:
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
+            ${{ needs.rate-limit-gate-script.result }}
