@@ -1115,29 +1115,20 @@ func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	savePersistedAWSMappings(t, clusterName, region)
 
-	for _, testCase := range []struct {
-		name              string
-		configClusterName string
-	}{
-		{"config names the target", clusterName},
-		{"config names no cluster", ""},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Parallel subtests run after this function returns but before its cleanups, so the
-			// parent's HOME and persisted mappings stay in place; the subtests only read them.
-			t.Parallel()
+	// Both cases share the HOME set above, and t.Setenv forbids parallel tests, so they run in
+	// sequence rather than as subtests.
+	for _, configClusterName := range []string{clusterName, ""} {
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: configClusterName,
+			ConfigSource:      true,
+			AWSRegion:         region,
+		}
 
-			resolved := &lifecycle.ResolvedClusterInfo{
-				ClusterName:       clusterName,
-				ConfigClusterName: testCase.configClusterName,
-				ConfigSource:      true,
-				AWSRegion:         region,
-			}
-
-			require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
-			assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
-			assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
-		})
+		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
+			"config cluster name %q", configClusterName)
+		assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar, "config cluster name %q", configClusterName)
+		assert.Empty(t, resolved.AWSOpts.RegionEnvVar, "config cluster name %q", configClusterName)
 	}
 }
 
