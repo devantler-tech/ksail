@@ -1052,6 +1052,19 @@ func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
+// persistedAWSOptions is the credential variable mapping savePersistedAWSMappings records, so tests
+// can assert the whole restored mapping rather than a subset of its fields.
+func persistedAWSOptions() v1alpha1.OptionsAWS {
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	return v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "AWS_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}
+}
+
 // savePersistedAWSMappings records custom credential variable names for clusterName in region.
 func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
 	t.Helper()
@@ -1063,14 +1076,7 @@ func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
 		AccountID:   "123456789012",
 		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
 		CreatedAt:   time.Now().UTC(),
-		//nolint:gosec // G101: these are environment-variable names, never credential values.
-		AWSOptions: v1alpha1.OptionsAWS{
-			ProfileEnvVar:         "AWS_PROFILE",
-			RegionEnvVar:          "KSAIL_REGION",
-			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
-			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
-			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
-		},
+		AWSOptions:  persistedAWSOptions(),
 	}
 	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
 }
@@ -1100,8 +1106,7 @@ func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
 	resolved.AWSRegion = region
 
 	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
-	assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar)
-	assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar)
+	assert.Equal(t, persistedAWSOptions(), resolved.AWSOpts)
 }
 
 // TestPersistedAWSMappingsReplaceUnrelatedConfigValues proves that an unrelated ksail.yaml's own AWS
@@ -1121,9 +1126,14 @@ func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
 	t.Setenv("UNRELATED_REGION", unrelatedRegion)
 	savePersistedAWSMappings(t, clusterName, region)
 
+	// Every field carries an unrelated name, so a value left behind in any of them fails the assertion.
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
 	unrelatedOpts := v1alpha1.OptionsAWS{
-		RegionEnvVar:      "UNRELATED_REGION",
-		AccessKeyIDEnvVar: "UNRELATED_ACCESS",
+		ProfileEnvVar:         "UNRELATED_PROFILE",
+		RegionEnvVar:          "UNRELATED_REGION",
+		AccessKeyIDEnvVar:     "UNRELATED_ACCESS",
+		SecretAccessKeyEnvVar: "UNRELATED_SECRET",
+		SessionTokenEnvVar:    "UNRELATED_SESSION",
 	}
 
 	// Both cases share the HOME set above, and t.Setenv forbids parallel tests, so they run in
@@ -1140,10 +1150,7 @@ func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
 
 		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
 			"context region %q", contextRegion)
-		assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar,
-			"context region %q", contextRegion)
-		assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar,
-			"context region %q", contextRegion)
+		assert.Equal(t, persistedAWSOptions(), resolved.AWSOpts, "context region %q", contextRegion)
 		assert.Equal(t, region, resolved.AWSRegion, "context region %q", contextRegion)
 	}
 }
