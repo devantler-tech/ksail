@@ -18,12 +18,14 @@ import (
 const (
 	accountScopeClusterName = "same-name-account-scope"
 	accountScopeRegion      = "eu-north-1"
+	// windowsGOOS names the platform where symlink creation needs elevated privileges.
+	windowsGOOS = "windows"
 )
 
 // TestLoadEKSComponentStateRejectsSymlinkEscape proves a state filename cannot
 // redirect the constrained read outside its per-cluster directory.
 func TestLoadEKSComponentStateRejectsSymlinkEscape(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("symlink creation requires elevated privileges on Windows")
 	}
 
@@ -104,6 +106,145 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 		t, err, state.ErrStateNotFound,
 		"deleted EKS targets must not retain a stale name-scoped spec baseline",
 	)
+}
+
+// TestDeleteEKSRegionStateWithoutAccountBinding covers a target with no ownership record, such as a
+// cluster created before those records existed. Nothing binds an account in that region, so every
+// account's component state there is removed along with the region-scoped and name-scoped state;
+// otherwise a later ownership record for that account would revive a stale baseline. Another
+// region's state must still survive.
+func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "unbound-region-delete"
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(
+			t,
+			state.SaveEKSNodegroupState(clusterName, region, &state.EKSNodegroupState{
+				Version:     state.EKSNodegroupStateVersion,
+				ClusterName: clusterName,
+				Region:      region,
+			}),
+		)
+	}
+
+	saveUnboundDeleteComponents(t, clusterName)
+
+	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	assertUnboundDeleteComponents(t, clusterName, "eu-north-1")
+
+	_, err := state.LoadEKSNodegroupState(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+
+	_, err = state.LoadEKSNodegroupState(clusterName, "us-east-1")
+	require.NoError(t, err)
+
+	_, err = state.LoadClusterTTL(clusterName)
+	require.ErrorIs(t, err, state.ErrTTLNotSet)
+
+	_, err = state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, err, state.ErrStateNotFound)
+}
+
+type unboundDeleteComponent struct {
+	region  string
+	account string
+}
+
+// unboundDeleteComponents is the component state seeded for the unbound delete: two accounts in the
+// deleted region and one in a region that must survive.
+func unboundDeleteComponents() []unboundDeleteComponent {
+	return []unboundDeleteComponent{
+		{region: "eu-north-1", account: "123456789012"},
+		{region: "eu-north-1", account: "210987654321"},
+		{region: "us-east-1", account: "123456789012"},
+	}
+}
+
+func saveUnboundDeleteComponents(t *testing.T, clusterName string) {
+	t.Helper()
+
+	for _, component := range unboundDeleteComponents() {
+		require.NoError(t, state.SaveEKSComponentState(clusterName, component.region,
+			&state.EKSComponentState{
+				Version:     state.EKSComponentStateVersion,
+				ClusterName: clusterName,
+				Region:      component.region,
+				AccountID:   component.account,
+			}))
+	}
+}
+
+func assertUnboundDeleteComponents(t *testing.T, clusterName, deletedRegion string) {
+	t.Helper()
+
+	for _, component := range unboundDeleteComponents() {
+		_, err := state.LoadEKSComponentState(clusterName, component.region, component.account)
+		if component.region == deletedRegion {
+			require.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
+				"unbound delete must remove account %s's component state in the deleted region",
+				component.account)
+
+			continue
+		}
+
+		require.NoError(t, err, "another region's component state must survive")
+	}
+}
+
+// TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory proves the unbound cleanup cannot
+// enumerate and remove matching files through a cluster directory that points elsewhere.
+func TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+
+	const clusterName = "unbound-symlinked-cluster-dir"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	outsideDir := t.TempDir()
+	outsidePath := filepath.Join(outsideDir, "eks-components-123456789012-eu-north-1.json")
+	require.NoError(t, os.WriteFile(outsidePath, []byte("{}"), 0o600))
+
+	clustersDir := filepath.Join(home, ".ksail", "clusters")
+	require.NoError(t, os.MkdirAll(clustersDir, 0o700))
+	require.NoError(t, os.Symlink(outsideDir, filepath.Join(clustersDir, clusterName)))
+
+	err := state.DeleteEKSRegionState(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
+
+	_, statErr := os.Stat(outsidePath)
+	require.NoError(t, statErr, "a file outside the state root must survive")
+}
+
+// TestDeleteEKSRegionStateFollowsSymlinkedStateRoot keeps a relocated ~/.ksail working: only a
+// cluster directory that leaves its own root is refused.
+func TestDeleteEKSRegionStateFollowsSymlinkedStateRoot(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+
+	const clusterName = "unbound-symlinked-state-root"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(home, ".ksail")))
+
+	saveUnboundDeleteComponents(t, clusterName)
+
+	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	assertUnboundDeleteComponents(t, clusterName, "eu-north-1")
 }
 
 func TestEKSComponentStateIsScopedByAccountAndRegion(t *testing.T) {

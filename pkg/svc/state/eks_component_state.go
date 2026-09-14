@@ -233,45 +233,14 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 // misconfigure a later same-named cluster, while neither can safely identify
 // another region.
 func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) error {
-	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
-	if err != nil {
-		return err
-	}
-
-	componentPath, err := eksComponentStatePath(clusterName, region, accountID)
-	if err != nil {
-		return err
-	}
-
-	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
-	if err != nil {
-		return err
-	}
-
-	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
-	if err != nil {
-		return err
-	}
-
-	ttlPath, err := clusterTTLPath(clusterName)
-	if err != nil {
-		return err
-	}
-
-	specPath, err := clusterStatePath(clusterName)
+	statePaths, err := eksRegionStatePaths(clusterName, region, accountIDs)
 	if err != nil {
 		return err
 	}
 
 	var cleanupErrs []error
 
-	for _, statePath := range []string{
-		componentPath,
-		nodegroupPath,
-		ownershipPath,
-		ttlPath,
-		specPath,
-	} {
+	for _, statePath := range statePaths {
 		removeErr := os.Remove(statePath)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf(
@@ -283,4 +252,135 @@ func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) erro
 	}
 
 	return errors.Join(cleanupErrs...)
+}
+
+// unboundEKSComponentStatePaths lists every account's component state for one region. The ownership
+// record that binds an account is region-scoped, so when it is absent no account's baseline in this
+// region belongs to a live local binding; keeping any of them would let a later ownership record for
+// that account revive stale controller ownership.
+func unboundEKSComponentStatePaths(clusterName, region string) ([]string, error) {
+	probe, err := eksRegionScopedStatePath(clusterName, region, "%s")
+	if err != nil {
+		return nil, err
+	}
+
+	dir := filepath.Dir(probe)
+	suffix := "-" + filepath.Base(probe) + ".json"
+
+	exists, err := clusterStateDirExists(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("list EKS component state: %w", err)
+	}
+
+	var paths []string
+
+	for _, entry := range entries {
+		accountID, hasPrefix := strings.CutPrefix(entry.Name(), "eks-components-")
+		if entry.IsDir() || !hasPrefix {
+			continue
+		}
+
+		accountID, hasSuffix := strings.CutSuffix(accountID, suffix)
+		if hasSuffix && awsAccountIDPattern.MatchString(accountID) {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	return paths, nil
+}
+
+// clusterStateDirExists reports whether a per-cluster state directory exists, and rejects one that
+// resolves anywhere other than its own entry under the clusters root. Pattern-based cleanup removes
+// whatever matching files it finds, so it must not follow a cluster directory that points elsewhere;
+// a relocated state root still works because the root and the directory resolve together.
+func clusterStateDirExists(dir string) (bool, error) {
+	_, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("inspect cluster state directory: %w", err)
+	}
+
+	canonicalRoot, err := fsutil.EvalCanonicalPath(filepath.Dir(dir))
+	if err != nil {
+		return false, fmt.Errorf("resolve cluster state root: %w", err)
+	}
+
+	canonicalDir, err := fsutil.EvalCanonicalPath(dir)
+	if err != nil {
+		return false, fmt.Errorf("resolve cluster state directory: %w", err)
+	}
+
+	if canonicalDir != filepath.Join(canonicalRoot, filepath.Base(dir)) {
+		return false, fmt.Errorf(
+			"%w: %s resolves to %s",
+			fsutil.ErrPathOutsideBase,
+			dir,
+			canonicalDir,
+		)
+	}
+
+	return true, nil
+}
+
+// eksRegionStatePaths lists every state file belonging to one exact EKS target. A target with no
+// ownership record and no explicit account ID has no bound account, so every account's component
+// state for that region is returned instead of one; its region-scoped and name-scoped state is
+// returned either way.
+func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]string, error) {
+	var paths []string
+
+	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
+	if err != nil && !errors.Is(err, ErrEKSComponentStateNotFound) {
+		return nil, err
+	}
+
+	if accountID != "" {
+		componentPath, pathErr := eksComponentStatePath(clusterName, region, accountID)
+		if pathErr != nil {
+			return nil, pathErr
+		}
+
+		paths = append(paths, componentPath)
+	} else {
+		unboundPaths, listErr := unboundEKSComponentStatePaths(clusterName, region)
+		if listErr != nil {
+			return nil, listErr
+		}
+
+		paths = append(paths, unboundPaths...)
+	}
+
+	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
+	}
+
+	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
+	}
+
+	ttlPath, err := clusterTTLPath(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	specPath, err := clusterStatePath(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(paths, nodegroupPath, ownershipPath, ttlPath, specPath), nil
 }
