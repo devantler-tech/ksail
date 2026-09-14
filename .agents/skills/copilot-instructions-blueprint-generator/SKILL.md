@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: a67fccf32fc28eda70e5868e65e61e2fce3e64ef
+    internal: true
 name: copilot-instructions-blueprint-generator
 ---
 # Copilot Instructions Blueprint Generator

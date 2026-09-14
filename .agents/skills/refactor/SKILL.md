@@ -6,6 +6,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 01cfb6a412faf9d680880cc3f631c419121a9916
+    internal: true
 name: refactor
 ---
 # Refactor

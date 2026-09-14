@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/xixu-me/skills
     github-tree-sha: 518c85da555f91c346813aa5bb3cc62f9db8bfb3
+    internal: true
 name: github-actions-docs
 ---
 GitHub Actions questions are easy to answer from stale memory. Use this skill to ground answers in official GitHub documentation and return the closest authoritative page instead of generic CI/CD advice.

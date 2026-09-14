@@ -8,6 +8,7 @@ metadata:
     github-repo: https://github.com/astrolicious/agent-skills
     github-tree-sha: 81d96cec5008970ed8fbecb23f7fb48536102b84
     version: 0.0.1
+    internal: true
 name: astro
 ---
 # Astro Usage Guide
