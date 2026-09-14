@@ -100,21 +100,39 @@ func TestFilterRegistriesByClusterName_LabelDecidesOwnership(t *testing.T) {
 		"foo must not claim a registry labelled as belonging to foo-bar")
 }
 
-// TestFilterRegistriesByClusterName_LabelOverridesLongerRival is the other direction: cluster "foo"
-// with a mirror host "bar-ghcr.io" next to a real cluster "foo-bar". Name attribution hands the
-// mirror to foo-bar and leaks it on foo's teardown; the label keeps it with foo.
-func TestFilterRegistriesByClusterName_LabelOverridesLongerRival(t *testing.T) {
+// TestFilterRegistriesByClusterName_LabelDoesNotOverrideLiveLongerRival is the other direction:
+// cluster "foo" created "foo-bar-ghcr.io" for its mirror host "bar-ghcr.io", and a live cluster
+// "foo-bar" asking for its "ghcr.io" mirror resolves to the same container name. Registry creation
+// reuses an existing container without recording a second owner, so the label cannot show whether
+// foo-bar shares it. Deleting foo must leave it for foo-bar rather than break a live cluster.
+func TestFilterRegistriesByClusterName_LabelDoesNotOverrideLiveLongerRival(t *testing.T) {
 	t.Parallel()
 
 	onNetwork := []dockerclient.RegistryInfo{
+		labelled("foo-ghcr.io", "foo"),
 		labelled("foo-bar-ghcr.io", "foo"),
 		labelled("foo-bar-docker.io", "foo-bar"),
 	}
 
 	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{"foo-bar"})
 
-	assert.ElementsMatch(t, []string{"foo-bar-ghcr.io"}, names(got),
-		"the label says foo owns foo-bar-ghcr.io, whatever the name suggests")
+	assert.ElementsMatch(t, []string{"foo-ghcr.io"}, names(got),
+		"a container a live foo-bar would reuse must not be deleted with foo")
+}
+
+// TestFilterRegistriesByClusterName_LabelClaimsNameWhenNoLongerRivalExists keeps the label's
+// purpose when nothing else could share the container: foo's "bar-ghcr.io" mirror is removed with
+// foo once no cluster "foo-bar" exists.
+func TestFilterRegistriesByClusterName_LabelClaimsNameWhenNoLongerRivalExists(t *testing.T) {
+	t.Parallel()
+
+	onNetwork := []dockerclient.RegistryInfo{
+		labelled("foo-bar-ghcr.io", "foo"),
+	}
+
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{"baz"})
+
+	assert.ElementsMatch(t, []string{"foo-bar-ghcr.io"}, names(got))
 }
 
 // TestFilterRegistriesByClusterName_UnlabelledFallsBackToName keeps registries created before the

@@ -60,7 +60,7 @@ docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status
 docker inspect --format '{{json .State.Health}}' <container-name>
 ```
 
-Each registry container records the cluster it belongs to, and cluster deletion removes only the registries labelled with that cluster. To list one cluster's registries:
+Each registry container records the cluster that created it, and cluster deletion removes only the registries labelled with that cluster. A registry whose name another existing cluster would also use (for example `foo-bar-ghcr.io` while both `foo` and `foo-bar` exist) is kept, because that cluster may share it. To list one cluster's registries:
 
 ```bash
 docker ps -a --filter label=io.ksail.registry.cluster=<cluster-name> --format 'table {{.Names}}\t{{.Status}}'

@@ -33,8 +33,11 @@ type DiscoveredRegistries struct {
 // skipped and leaked. Mirror hosts are user-configurable, so no name pattern is a safe existence
 // marker.
 //
-// A registry carrying the owning-cluster label (dockerclient.RegistryClusterLabelKey) is decided by
-// that label alone, in both directions: it belongs to clusterName exactly when the label says so.
+// A registry carrying the owning-cluster label (dockerclient.RegistryClusterLabelKey) never belongs
+// to a cluster the label does not name. The label records only the cluster that created the
+// container, though: registry creation reuses an existing container of the same name without
+// recording a second owner, so a live longer-named cluster resolving to that name may share it. A
+// registry labelled for clusterName is therefore still left alone when such a cluster exists.
 // Everything above is the legacy fallback for containers without the label — registries created
 // by older KSail versions, and registries KSail does not manage.
 func filterRegistriesByClusterName(
@@ -51,7 +54,8 @@ func filterRegistriesByClusterName(
 
 	for _, reg := range registries {
 		if reg.ClusterName != "" {
-			if reg.ClusterName == clusterName {
+			if reg.ClusterName == clusterName &&
+				!claimedByLongerCluster(reg.Name, clusterName, otherClusters) {
 				filtered = append(filtered, reg)
 			}
 
