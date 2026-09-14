@@ -123,10 +123,18 @@ awk '/^  publish-release:/ { inside = 1; print; next } inside && /^  [a-z]/ { ex
 line_of() { # prints nothing when the text is absent, so the check below reports it
 	grep -nF -- "$1" "${publish_block}" | head -n 1 | cut -d: -f1 || true
 }
+checkout_line="$(line_of 'uses: actions/checkout@')"
+download_line="$(line_of 'name: 📥 Download release asset artifacts')"
 resolve_line="$(line_of 'resolve-release-publish-state.sh --tag')"
 attach_line="$(line_of 'name: 📤 Attach assets to draft release')"
 publish_line="$(line_of 'name: 📢 Publish draft release')"
-if [[ -z "${resolve_line}" || -z "${attach_line}" || -z "${publish_line}" ]] ||
+# A checkout into a fresh workspace clears it, so it must run before the assets are downloaded.
+if [[ -z "${checkout_line}" || -z "${download_line}" || -z "${resolve_line}" ]] ||
+	((checkout_line >= download_line || download_line >= resolve_line)); then
+	printf 'FAIL: publish-release must check out before downloading the release assets it resolves\n' >&2
+	exit 1
+fi
+if [[ -z "${attach_line}" || -z "${publish_line}" ]] ||
 	((resolve_line >= attach_line || attach_line >= publish_line)); then
 	printf 'FAIL: publish-release must resolve the release state before attaching and publishing\n' >&2
 	exit 1

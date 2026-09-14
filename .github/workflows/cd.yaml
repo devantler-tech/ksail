@@ -779,17 +779,19 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
+      # Check out before downloading: on a fresh workspace checkout clears the directory, which
+      # would delete the downloaded assets the resolver and upload below need.
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: 📥 Download release asset artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
           merge-multiple: true
           path: dist-assets
-
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
       # Rerunning an upstream asset job reruns this one too. If the tag's release is already
       # published and complete, there is nothing left to attach or publish — and an immutable
