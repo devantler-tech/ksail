@@ -248,9 +248,9 @@ fi
 assert_contains 'release-asset digest evidence is missing' \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
 	'the validator must require release-asset digest evidence'
-assert_contains 'does not match any published release asset digest' \
+assert_contains 'does not match the published digest of' \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
-	'the validator must verify cask sha256 stanzas against published asset digests'
+	'the validator must verify each cask sha256 against the digest of the asset its url names'
 
 assert_contains 'if: always() && needs.publish-release.result != '\''success'\''' "${cd_workflow}" \
 	'a pending cask handoff must not delete a published release'

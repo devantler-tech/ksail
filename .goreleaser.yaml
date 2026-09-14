@@ -66,8 +66,21 @@ homebrew_casks:
         # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
         # the tap deletes the branch on merge, so it is recreated fresh from main next release).
         draft: true
+    # macOS builds are Apple Silicon only, so the template emits no macOS-Intel `url`. Homebrew 6 loads
+    # every OS and architecture when adding a tap and refuses the whole tap if any variant lacks a
+    # `url` (#7034). The `on_intel` branch gives Intel Macs the Apple Silicon download and refuses the
+    # install by architecture, so the tap loads everywhere and Intel users get a clear message.
+    # `.github/scripts/validate-cask-pr-handoff.sh` accepts its `sha256 :no_check` only because the
+    # same url is pinned to a verified digest in the Apple Silicon branch.
     # Escape Homebrew's install-time token through GoReleaser's template pass.
     custom_block: |
+      on_macos do
+        on_intel do
+          sha256 :no_check
+          url "https://github.com/devantler-tech/ksail/releases/download/v#{version}/ksail_#{version}_darwin_arm64.tar.gz"
+          depends_on arch: :arm64
+        end
+      end
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"]

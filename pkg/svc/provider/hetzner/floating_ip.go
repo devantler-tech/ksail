@@ -75,6 +75,42 @@ func (p *Provider) GetOwnedFloatingIP(
 	return floatingIP, nil
 }
 
+// StrayFloatingIPs returns every ksail-owned floating IP labelled for the
+// cluster except the conventionally named one reconcile manages. Reconcile
+// adopts by name, so an owned address under any other name — a leaked earlier
+// allocation — is never adopted, attached, or released, yet Hetzner bills it
+// (ksail#6277). Addresses without the ksail labels are out of scope: nothing
+// attributes them to the cluster.
+func (p *Provider) StrayFloatingIPs(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.FloatingIP, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	floatingIPs, err := p.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
+		ListOpts: hcloud.ListOpts{
+			LabelSelector: LabelOwned + "=" + LabelOwnedValue + "," +
+				LabelClusterName + "=" + clusterName,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list floating IPs for cluster %s: %w", clusterName, err)
+	}
+
+	managedName := clusterName + FloatingIPSuffix
+	strays := make([]*hcloud.FloatingIP, 0, len(floatingIPs))
+
+	for _, floatingIP := range floatingIPs {
+		if floatingIP.Name != managedName {
+			strays = append(strays, floatingIP)
+		}
+	}
+
+	return strays, nil
+}
+
 // OwnedFloatingIPExists reports whether the cluster's ksail-owned floating IP
 // currently exists — the read-only companion to EnsureFloatingIP, used by
 // `cluster update` to diff the desired floatingIPEnabled state against what

@@ -6,7 +6,12 @@ usage() {
 	cat <<'EOF'
 Usage:
   validate-cask-pr-handoff.sh --evidence FILE --tap OWNER/REPO
-                              --cask-name NAME --tag TAG [--prepared] [--ready] [--merged]
+                              --cask-name NAME --tag TAG [--source-repo OWNER/REPO]
+                              [--prepared] [--ready] [--merged]
+
+--source-repo names the repository whose release assets the evidence was
+collected from (default devantler-tech/ksail); every cask URL must download an
+asset of that repository's TAG release.
 
 Fail closed unless a GoReleaser cask PR is the expected trusted draft, from the
 tap itself, into main, with exactly its matching cask file. With --prepared,
@@ -25,6 +30,7 @@ evidence_file=""
 tap=""
 cask_name=""
 tag=""
+source_repo="devantler-tech/ksail"
 prepared=false
 ready=false
 merged=false
@@ -33,6 +39,10 @@ while (($# > 0)); do
 	case "$1" in
 	--evidence)
 		evidence_file="${2:-}"
+		shift 2
+		;;
+	--source-repo)
+		source_repo="${2:-}"
 		shift 2
 		;;
 	--tap)
@@ -258,34 +268,127 @@ if [[ "${merged}" == true ]]; then
 		fi
 	fi
 fi
-if [[ -n "${cask_content}" ]] &&
-	! grep -Fq "version \"${expected_version}\"" <<<"${cask_content}"; then
-	block "cask ${content_location} must pin version ${expected_version}"
+# Read only active stanzas: a commented line is not what Homebrew installs, so it can neither
+# supply the version nor a digest. Each url is paired with the sha256 on the line next to it
+# (GoReleaser writes one sha256 + url pair per platform block), so a digest is only ever checked
+# against the asset its own URL downloads.
+#
+# `sha256 :no_check` is accepted only for the macOS-Intel branch the release config adds so Homebrew 6
+# can load the tap (#7034): that branch reuses the Apple Silicon download and refuses the install by
+# architecture. Its url must therefore be identical to a url another stanza pins to a digest, so a
+# skipped checksum can never introduce a download that is not verified somewhere in the cask.
+active_versions=()
+cask_pairs=()
+unchecked_urls=()
+cask_sha_count=0
+if [[ -n "${cask_content}" ]]; then
+	pending_sha=""
+	pending_url=""
+	flush_pending() {
+		if [[ -n "${pending_sha}" ]]; then
+			block "cask sha256 ${pending_sha} is not paired with a url"
+		fi
+		if [[ -n "${pending_url}" ]]; then
+			block "cask url ${pending_url} is not paired with a sha256"
+		fi
+		pending_sha=""
+		pending_url=""
+	}
+	record_pair() { # $1 = sha256 digest or :no_check, $2 = url
+		if [[ "$1" == ":no_check" ]]; then
+			unchecked_urls+=("$2")
+		else
+			cask_pairs+=("$1 $2")
+		fi
+	}
+	version_pattern='^[[:space:]]*version[[:space:]]+"([^"]*)"[[:space:]]*(#.*)?$'
+	sha_pattern='^[[:space:]]*sha256[[:space:]]+"([[:xdigit:]]{64})"[[:space:]]*(#.*)?$'
+	no_check_pattern='^[[:space:]]*sha256[[:space:]]+(:no_check)[[:space:]]*(#.*)?$'
+	url_pattern='^[[:space:]]*url[[:space:]]+"([^"]+)"'
+	while IFS= read -r line; do
+		if [[ "${line}" =~ ^[[:space:]]*(#.*)?$ ]]; then
+			continue
+		elif [[ "${line}" =~ ${version_pattern} ]]; then
+			flush_pending
+			active_versions+=("${BASH_REMATCH[1]}")
+		elif [[ "${line}" =~ ${sha_pattern} || "${line}" =~ ${no_check_pattern} ]]; then
+			if [[ "${BASH_REMATCH[1]}" != ":no_check" ]]; then
+				cask_sha_count=$((cask_sha_count + 1))
+			fi
+			if [[ -n "${pending_url}" ]]; then
+				record_pair "${BASH_REMATCH[1]}" "${pending_url}"
+				pending_url=""
+			else
+				flush_pending
+				pending_sha="${BASH_REMATCH[1]}"
+			fi
+		elif [[ "${line}" =~ ${url_pattern} ]]; then
+			if [[ -n "${pending_sha}" ]]; then
+				record_pair "${pending_sha}" "${BASH_REMATCH[1]}"
+				pending_sha=""
+			else
+				flush_pending
+				pending_url="${BASH_REMATCH[1]}"
+			fi
+		else
+			flush_pending
+		fi
+	done <<<"${cask_content}"
+	flush_pending
+
+	if ((${#active_versions[@]} > 1)); then
+		block "cask ${content_location} must declare exactly one active version stanza"
+	elif ((${#active_versions[@]} == 0)) || [[ "${active_versions[0]}" != "${expected_version}" ]]; then
+		block "cask ${content_location} must pin version ${expected_version}"
+	fi
 fi
 
 # A version match alone is not enough on a rerun of the SAME tag: a stale evergreen PR
 # from a failed earlier attempt already pins this version while its sha256 still points
-# at the deleted draft release's artifacts. Require every sha256 the cask pins to equal
-# a digest GitHub reports for the published release's assets.
+# at the deleted draft release's artifacts. Require every URL to name an asset of THIS
+# release and its paired sha256 to equal the digest GitHub reports for that exact asset.
 if [[ -n "${cask_content}" ]]; then
 	if ! jq -e '.releaseAssets | type == "array" and length > 0' \
 		"${evidence_file}" >/dev/null 2>&1; then
 		block 'release-asset digest evidence is missing'
+	elif ((cask_sha_count == 0)); then
+		block "cask ${content_location} must pin at least one sha256"
+	elif ((${#cask_pairs[@]} == 0)); then
+		block 'cask must pair each sha256 with a release asset url'
 	else
-		cask_shas="$(grep -oE 'sha256 "[[:xdigit:]]{64}"' <<<"${cask_content}" |
-			grep -oE '[[:xdigit:]]{64}' || true)"
-		if [[ -z "${cask_shas}" ]]; then
-			block 'cask at head must pin at least one sha256'
-		else
-			while IFS= read -r cask_sha; do
-				if ! jq -e --arg digest "sha256:${cask_sha}" \
-					'.releaseAssets | any(.digest == $digest)' \
-					"${evidence_file}" >/dev/null 2>&1; then
-					block "cask sha256 ${cask_sha} does not match any published release asset digest"
-				fi
-			done <<<"${cask_shas}"
-		fi
+		download_prefix="https://github.com/${source_repo}/releases/download/${tag}/"
+		for pair in "${cask_pairs[@]}"; do
+			cask_sha="${pair%% *}"
+			cask_url="${pair#* }"
+			resolved_url="${cask_url//\#\{version\}/${expected_version}}"
+			asset_name="${resolved_url#"${download_prefix}"}"
+			if [[ "${asset_name}" == "${resolved_url}" || ! "${asset_name}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+				block "cask url ${cask_url} is not a ${source_repo} ${tag} release asset"
+				continue
+			fi
+			asset_digest="$(jq -r --arg name "${asset_name}" '
+				[.releaseAssets[] | select(.name == $name)]
+				| if length == 1 then .[0].digest // "" else "" end
+			' "${evidence_file}" 2>/dev/null || true)"
+			if [[ -z "${asset_digest}" ]]; then
+				block "cask url ${cask_url} does not name exactly one published release asset"
+			elif [[ "${asset_digest}" != "sha256:${cask_sha}" ]]; then
+				block "cask sha256 ${cask_sha} does not match the published digest of ${asset_name}"
+			fi
+		done
 	fi
+	for unchecked_url in "${unchecked_urls[@]+"${unchecked_urls[@]}"}"; do
+		pinned=false
+		for pair in "${cask_pairs[@]+"${cask_pairs[@]}"}"; do
+			if [[ "${pair#* }" == "${unchecked_url}" ]]; then
+				pinned=true
+				break
+			fi
+		done
+		if [[ "${pinned}" != true ]]; then
+			block "cask url ${unchecked_url} skips its checksum but no other stanza pins it to a digest"
+		fi
+	done
 fi
 
 if [[ "${prepared}" == true ]]; then

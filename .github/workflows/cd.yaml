@@ -951,6 +951,7 @@ jobs:
               --evidence "$evidence"
               --tap "$TAP"
               --cask-name "$name"
+              --source-repo "$GITHUB_REPOSITORY"
               --tag "$TAG"
             )
             case "$mode" in
