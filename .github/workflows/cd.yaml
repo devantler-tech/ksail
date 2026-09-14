@@ -803,7 +803,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-        run: .github/scripts/resolve-release-publish-state.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
+        # The Cluster CRD is attached by GoReleaser rather than downloaded here, so name it explicitly;
+        # GoReleaser's archives are required from the release's own checksums file.
+        run: >-
+          .github/scripts/resolve-release-publish-state.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
+          --extra-assets-glob 'charts/ksail-operator/crds/*.yaml'
 
       # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
       # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
