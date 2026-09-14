@@ -1123,6 +1123,10 @@ func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
 		{"config names no cluster", ""},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
+			// Parallel subtests run after this function returns but before its cleanups, so the
+			// parent's HOME and persisted mappings stay in place; the subtests only read them.
+			t.Parallel()
+
 			resolved := &lifecycle.ResolvedClusterInfo{
 				ClusterName:       clusterName,
 				ConfigClusterName: testCase.configClusterName,
