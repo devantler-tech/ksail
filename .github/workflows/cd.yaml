@@ -830,11 +830,11 @@ jobs:
           script: |
             const tag = process.env.RELEASE_TAG;
 
-            // List releases and find the one(s) matching the tag
+            // List every page of releases and find the one(s) matching the tag
             // Note: getReleaseByTag does not return draft releases, so we use listReleases instead
             let matching;
             try {
-              const { data: releases } = await github.rest.repos.listReleases({
+              const releases = await github.paginate(github.rest.repos.listReleases, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 per_page: 100,
@@ -1254,8 +1254,8 @@ jobs:
             const { owner, repo } = context.repo;
 
             // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
-            // attached to this tag.
-            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            // attached to this tag, reading every page so a release beyond the first 100 is not missed.
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
             const forTag = releases.filter(r => r.tag_name === tag);
             const drafts = forTag.filter(r => r.draft);
             const published = forTag.filter(r => !r.draft);

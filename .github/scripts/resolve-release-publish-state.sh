@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# usage prints the command-line contract, including what makes a published release complete.
 usage() {
 	cat <<'EOF'
 Usage:
@@ -75,6 +76,7 @@ if [[ -n "${assets_dir}" && ! -d "${assets_dir}" ]]; then
 	exit 2
 fi
 
+# blocked reports why the publish job cannot proceed and exits non-zero without writing a state.
 blocked() {
 	printf 'BLOCKED: %s\n' "$1" >&2
 	exit 1
