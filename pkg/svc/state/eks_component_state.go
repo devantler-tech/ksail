@@ -323,7 +323,12 @@ func clusterStateDirExists(dir string) (bool, error) {
 	}
 
 	if canonicalDir != filepath.Join(canonicalRoot, filepath.Base(dir)) {
-		return false, fmt.Errorf("%w: %s resolves to %s", fsutil.ErrPathOutsideBase, dir, canonicalDir)
+		return false, fmt.Errorf(
+			"%w: %s resolves to %s",
+			fsutil.ErrPathOutsideBase,
+			dir,
+			canonicalDir,
+		)
 	}
 
 	return true, nil
