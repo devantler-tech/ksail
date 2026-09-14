@@ -19,13 +19,14 @@ Decide what the publish job must do for TAG and print `state=draft` or
 
 Either release must carry, non-empty:
   - ksail_<version>_checksums.txt,
+  - install.sh (the installer GoReleaser uploads as an extra file),
   - the basename of every file matched by each --extra-assets-glob (for example
     the Cluster CRD GoReleaser attaches), and
   - every archive listed in the release's own checksums file (the archives
     GoReleaser uploads directly), each with a recorded SHA-256 digest equal to
     its listed checksum.
-A published release must also carry install.sh and every file in --assets-dir
-(the artifacts this job would attach).
+A published release must also carry every file in --assets-dir (the artifacts
+this job would attach).
 
 Fails closed when no release exists, when more than one release carries the tag,
 when the release is incomplete, when its checksums file cannot be read or lists
@@ -142,7 +143,9 @@ fi
 # produced; a published release is immutable, so it must also carry what the publish job attaches.
 version="${tag#v}"
 checksums_name="ksail_${version}_checksums.txt"
-required=("${checksums_name}")
+# install.sh is a GoReleaser extra file, so a draft must already carry it: checking it only once the
+# release is published would let an incomplete draft reach the upload and publish steps.
+required=("${checksums_name}" "install.sh")
 for glob in "${extra_globs[@]+"${extra_globs[@]}"}"; do
 	matched=false
 	while IFS= read -r extra; do
@@ -155,7 +158,6 @@ for glob in "${extra_globs[@]+"${extra_globs[@]}"}"; do
 	fi
 done
 if [[ "${state}" == "published" ]]; then
-	required+=("install.sh")
 	if [[ -n "${assets_dir}" ]]; then
 		while IFS= read -r -d '' asset; do
 			required+=("$(basename -- "${asset}")")

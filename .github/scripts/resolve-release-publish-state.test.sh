@@ -57,9 +57,11 @@ fi
 	exit 3
 }
 hex() { printf "$1%.0s" {1..64}; }
-# goreleaser is what GoReleaser uploads to the draft itself: its checksums file, the Cluster CRD and
-# the archives, each with the SHA-256 digest GitHub records for an uploaded asset.
+# goreleaser is what GoReleaser uploads to the draft itself: its checksums file, the installer and the
+# Cluster CRD it attaches as extra files, and the archives, each with the SHA-256 digest GitHub records
+# for an uploaded asset.
 goreleaser="[
+  {\"id\":101,\"name\":\"install.sh\",\"size\":10,\"digest\":\"sha256:$(hex f)\"},
   {\"id\":102,\"name\":\"ksail_7.175.1_checksums.txt\",\"size\":10,\"digest\":\"sha256:$(hex d)\"},
   {\"id\":105,\"name\":\"ksail.io_clusters.yaml\",\"size\":10,\"digest\":\"sha256:$(hex e)\"},
   {\"id\":106,\"name\":\"ksail_7.175.1_darwin_arm64.tar.gz\",\"size\":10,\"digest\":\"sha256:$(hex a)\"},
@@ -68,7 +70,6 @@ goreleaser="[
 ]"
 # complete adds what the publish job attaches before publishing.
 complete="$(jq -c --arg digest "sha256:$(hex f)" '. + [
-  {"id":101,"name":"install.sh","size":10,"digest":$digest},
   {"id":103,"name":"ksail-7.175.1.vsix","size":10,"digest":$digest},
   {"id":104,"name":"KSail_7.175.1_darwin_arm64.zip","size":10,"digest":$digest}
 ]' <<<"${goreleaser}")"
@@ -95,6 +96,7 @@ duplicate)
 	;;
 draft-without-checksums) drafted "$(without "${goreleaser}" ksail_7.175.1_checksums.txt)" ;;
 draft-without-crd) drafted "$(without "${goreleaser}" ksail.io_clusters.yaml)" ;;
+draft-without-installer) drafted "$(without "${goreleaser}" install.sh)" ;;
 draft-without-archive) drafted "$(without "${goreleaser}" "${linux}")" ;;
 draft-digest-mismatch) drafted "$(redigested "${goreleaser}" "${linux}" "\"sha256:$(hex 0)\"")" ;;
 published-without-checksums) published "$(without "${complete}" ksail_7.175.1_checksums.txt)" ;;
@@ -159,6 +161,8 @@ run_case draft-release draft 0 'state=draft'
 run_case draft-checksums-unreadable draft 1 'could not read ksail_7.175.1_checksums.txt' fail
 run_case draft-without-checksums-asset draft-without-checksums 1 'missing or empty assets: ksail_7.175.1_checksums.txt'
 run_case draft-without-crd draft-without-crd 1 'missing or empty assets: ksail.io_clusters.yaml'
+# install.sh is a GoReleaser extra file: a draft without it must block before anything is uploaded.
+run_case draft-without-installer draft-without-installer 1 'missing or empty assets: install.sh'
 run_case draft-without-goreleaser-archive draft-without-archive 1 'missing or empty assets: ksail_7.175.1_linux_amd64.tar.gz'
 run_case draft-archive-digest-mismatch draft-digest-mismatch 1 'ksail_7.175.1_linux_amd64.tar.gz does not match its checksum'
 run_case published-release published 0 'state=published'
