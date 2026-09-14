@@ -118,6 +118,27 @@ run_case other-release-url 1 'is not a devantler-tech/ksail v7.166.1 release ass
 	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|/v#{version}/ksail_#{version}_darwin|/v7.160.0/ksail_7.166.1_darwin|')")"
 run_case unpaired-sha256 1 'is not paired with a url' \
 	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" '' | sed 's|^      url "\(.*\)darwin_arm64.tar.gz"|      name "ksail"\n      url "\1darwin_arm64.tar.gz"|')")"
+
+# The macOS-Intel branch (#7034) skips its checksum, which is only safe while its url is the same
+# download another stanza pins to a verified digest.
+intel_mac_branch() { # $1 = url asset suffix, $2 = optional line between sha256 and url
+	cat <<EOF
+  on_macos do
+    on_intel do
+      sha256 :no_check
+$2
+      url "${download}/v#{version}/ksail_#{version}_$1"
+      depends_on arch: :arm64
+    end
+  end
+EOF
+}
+run_case intel-mac-reuses-pinned-download 0 'PASS: generated cask PR identity and scope are valid' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" "$(intel_mac_branch darwin_arm64.tar.gz '')")")"
+run_case intel-mac-unpinned-download 1 'skips its checksum but no other stanza pins it to a digest' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" "$(intel_mac_branch darwin_amd64.tar.gz '')")")"
+run_case intel-mac-unpaired-no-check 1 'cask sha256 :no_check is not paired with a url' \
+	"$(with_cask "$(platform_cask "${digest_a}" "${digest_b}" "$(intel_mac_branch darwin_arm64.tar.gz '      name "ksail"')")")"
 # base64 of a cask with a version but no sha256 stanza at all.
 run_case no-cask-sha 1 'cask at head must pin at least one sha256' '.headFile.content = "Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKCiAgdXJsICJodHRwczovL2dpdGh1Yi5jb20vZGV2YW50bGVyLXRlY2gva3NhaWwvcmVsZWFzZXMvZG93bmxvYWQvdjcuMTY2LjEva3NhaWxfNy4xNjYuMV9kYXJ3aW5fYXJtNjQudGFyLmd6IgplbmQK"'
 run_case empty-head-content 1 'cask head content must not be empty' '.headFile.content = ""'
