@@ -1674,6 +1674,62 @@ func TestDeleteEKSReachesProvisionerBoundToCreationRegion(t *testing.T) {
 	}
 }
 
+// TestDeleteEKSRetainsSameNamedStateInOtherRegions pins ksail#6224 on the web UI delete path. An EKS
+// cluster name is unique only within a region, so the per-cluster state directory can also hold
+// region-scoped state for a same-named cluster elsewhere. Deleting one cluster must remove its own
+// state and leave the other region's intact, exactly as `ksail cluster delete` already does.
+func TestDeleteEKSRetainsSameNamedStateInOtherRegions(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-north-1")
+
+	const (
+		clusterName = "same-name-eks"
+		otherRegion = "us-east-1"
+	)
+
+	provisioner := &fakeProvisioner{}
+	service := newRegionRecordingEKSService(t, provisioner, &regionRecorder{})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor(clusterName, v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseReady
+	}, eventuallyTimeout, eventuallyTick)
+
+	// A stopped same-named cluster in another region keeps its capacity snapshot here.
+	require.NoError(t, state.SaveEKSNodegroupState(clusterName, otherRegion, &state.EKSNodegroupState{
+		Version:     state.EKSNodegroupStateVersion,
+		ClusterName: clusterName,
+		Region:      otherRegion,
+		Nodegroups:  []state.EKSNodegroupCapacity{{Name: "workers", DesiredCapacity: 2, MaxSize: 3}},
+	}))
+
+	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, found := phaseOf(list, clusterName)
+
+		return !found && slices.Equal(provisioner.deletedNames(), []string{clusterName})
+	}, eventuallyTimeout, eventuallyTick)
+
+	_, err = state.LoadEKSNodegroupState(clusterName, otherRegion)
+	require.NoError(t, err, "deleting one region's cluster must keep another region's state")
+
+	_, err = state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, err, state.ErrStateNotFound,
+		"the deleted cluster's create-time state must be removed so the name can be reused")
+}
+
 // TestDeleteEKSRefusesWithoutPersistedOwnershipState guards the destructive path directly: with no
 // ownership state the backend cannot confirm which remote cluster it would delete, so it must
 // refuse rather than proceed against an ambient target.

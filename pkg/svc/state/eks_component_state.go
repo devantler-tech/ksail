@@ -233,45 +233,14 @@ func eksRegionScopedStatePath(clusterName, region, fileNameFormat string) (strin
 // misconfigure a later same-named cluster, while neither can safely identify
 // another region.
 func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) error {
-	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
-	if err != nil {
-		return err
-	}
-
-	componentPath, err := eksComponentStatePath(clusterName, region, accountID)
-	if err != nil {
-		return err
-	}
-
-	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
-	if err != nil {
-		return err
-	}
-
-	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
-	if err != nil {
-		return err
-	}
-
-	ttlPath, err := clusterTTLPath(clusterName)
-	if err != nil {
-		return err
-	}
-
-	specPath, err := clusterStatePath(clusterName)
+	statePaths, err := eksRegionStatePaths(clusterName, region, accountIDs)
 	if err != nil {
 		return err
 	}
 
 	var cleanupErrs []error
 
-	for _, statePath := range []string{
-		componentPath,
-		nodegroupPath,
-		ownershipPath,
-		ttlPath,
-		specPath,
-	} {
+	for _, statePath := range statePaths {
 		removeErr := os.Remove(statePath)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf(
@@ -283,4 +252,47 @@ func DeleteEKSRegionState(clusterName, region string, accountIDs ...string) erro
 	}
 
 	return errors.Join(cleanupErrs...)
+}
+
+// eksRegionStatePaths lists every state file belonging to one exact EKS target. A target with no
+// ownership record and no explicit account ID has no locatable account-scoped component state, so
+// only that file is omitted; its region-scoped and name-scoped state is still returned.
+func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]string, error) {
+	var paths []string
+
+	accountID, err := resolveEKSComponentAccountID(clusterName, region, accountIDs)
+	if err != nil && !errors.Is(err, ErrEKSComponentStateNotFound) {
+		return nil, err
+	}
+
+	if accountID != "" {
+		componentPath, pathErr := eksComponentStatePath(clusterName, region, accountID)
+		if pathErr != nil {
+			return nil, pathErr
+		}
+
+		paths = append(paths, componentPath)
+	}
+
+	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
+	}
+
+	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
+	}
+
+	ttlPath, err := clusterTTLPath(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	specPath, err := clusterStatePath(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(paths, nodegroupPath, ownershipPath, ttlPath, specPath), nil
 }

@@ -106,6 +106,44 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 	)
 }
 
+// TestDeleteEKSRegionStateWithoutAccountBinding covers a target with no ownership record, such as a
+// cluster created before those records existed. No account-scoped component state can be located
+// for it, but its region-scoped and name-scoped state must still be removed, and another region's
+// state must still survive.
+func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "unbound-region-delete"
+
+	for _, region := range []string{"eu-north-1", "us-east-1"} {
+		require.NoError(t, state.SaveEKSNodegroupState(clusterName, region, &state.EKSNodegroupState{
+			Version:     state.EKSNodegroupStateVersion,
+			ClusterName: clusterName,
+			Region:      region,
+		}))
+	}
+
+	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
+	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionEKS,
+		Provider:     v1alpha1.ProviderAWS,
+	}))
+
+	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	_, err := state.LoadEKSNodegroupState(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+
+	_, err = state.LoadEKSNodegroupState(clusterName, "us-east-1")
+	require.NoError(t, err)
+
+	_, err = state.LoadClusterTTL(clusterName)
+	require.ErrorIs(t, err, state.ErrTTLNotSet)
+
+	_, err = state.LoadClusterSpec(clusterName)
+	require.ErrorIs(t, err, state.ErrStateNotFound)
+}
+
 func TestEKSComponentStateIsScopedByAccountAndRegion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
