@@ -96,6 +96,16 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
 		assert.Equal(t, "line 1\nline 2", result)
 	})
+}
+
+func TestDiagnoseCLIStartupFailureDeadline(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == osWindows {
+		t.Skip("test relies on shell scripts")
+	}
+
+	diagnose := chat.GetDiagnoseCLIStartupFailureWithin()
 
 	t.Run("stops a process that never exits once the deadline passes", func(t *testing.T) {
 		t.Parallel()

@@ -54,11 +54,6 @@ func GetVerifyCopilotCLIWithin() func(context.Context, time.Duration, string, []
 // StartupErrFmt exports the startupErrFmt constant for testing.
 const StartupErrFmt = startupErrFmt
 
-// GetDiagnoseCLIStartupFailure returns the diagnoseCLIStartupFailure function for testing.
-func GetDiagnoseCLIStartupFailure() func(context.Context, string, string, []string) string {
-	return diagnoseCLIStartupFailure
-}
-
 // GetBuildDiagnosticBlock returns the buildDiagnosticBlock function for testing.
 func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) string {
 	return buildDiagnosticBlock
@@ -67,11 +62,6 @@ func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) s
 // GetRunCopilotCmdWithRetry returns the runCopilotCmdWithRetry helper for testing.
 func GetRunCopilotCmdWithRetry() func(context.Context, func() *exec.Cmd) error {
 	return runCopilotCmdWithRetry
-}
-
-// GetVerifyCopilotCLI returns the verifyCopilotCLI function for testing.
-func GetVerifyCopilotCLI() func(context.Context, string, []string) error {
-	return verifyCopilotCLI
 }
 
 // GetRunCopilotAuthLogin returns the runCopilotAuthLogin function for testing.
