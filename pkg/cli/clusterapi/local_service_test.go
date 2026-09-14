@@ -1705,12 +1705,17 @@ func TestDeleteEKSRetainsSameNamedStateInOtherRegions(t *testing.T) {
 	}, eventuallyTimeout, eventuallyTick)
 
 	// A stopped same-named cluster in another region keeps its capacity snapshot here.
-	require.NoError(t, state.SaveEKSNodegroupState(clusterName, otherRegion, &state.EKSNodegroupState{
-		Version:     state.EKSNodegroupStateVersion,
-		ClusterName: clusterName,
-		Region:      otherRegion,
-		Nodegroups:  []state.EKSNodegroupCapacity{{Name: "workers", DesiredCapacity: 2, MaxSize: 3}},
-	}))
+	require.NoError(
+		t,
+		state.SaveEKSNodegroupState(clusterName, otherRegion, &state.EKSNodegroupState{
+			Version:     state.EKSNodegroupStateVersion,
+			ClusterName: clusterName,
+			Region:      otherRegion,
+			Nodegroups: []state.EKSNodegroupCapacity{
+				{Name: "workers", DesiredCapacity: 2, MaxSize: 3},
+			},
+		}),
+	)
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
 	require.Eventually(t, func() bool {

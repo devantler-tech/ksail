@@ -116,11 +116,14 @@ func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 	const clusterName = "unbound-region-delete"
 
 	for _, region := range []string{"eu-north-1", "us-east-1"} {
-		require.NoError(t, state.SaveEKSNodegroupState(clusterName, region, &state.EKSNodegroupState{
-			Version:     state.EKSNodegroupStateVersion,
-			ClusterName: clusterName,
-			Region:      region,
-		}))
+		require.NoError(
+			t,
+			state.SaveEKSNodegroupState(clusterName, region, &state.EKSNodegroupState{
+				Version:     state.EKSNodegroupStateVersion,
+				ClusterName: clusterName,
+				Region:      region,
+			}),
+		)
 	}
 
 	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
