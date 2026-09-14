@@ -20,18 +20,24 @@ printf 'zip\n' >"${assets_dir}/KSail_7.175.1_darwin_arm64.zip"
 printf 'kind: CustomResourceDefinition\n' >"${crd_dir}/ksail.io_clusters.yaml"
 
 # The fake serves the release listing for FAKE_GH_SCENARIO (one JSON array per page, as
-# `gh api --paginate` prints) and the release's checksums file for FAKE_GH_CHECKSUMS.
+# `gh api --paginate` prints) and the release's checksums file for FAKE_GH_CHECKSUMS. The checksums
+# file is read by asset id, which also works for a draft (tag-based downloads cannot see drafts).
 cat >"${fake_bin}/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 listing='api --paginate repos/devantler-tech/ksail/releases?per_page=100'
-download='release download v7.175.1 --repo devantler-tech/ksail --pattern ksail_7.175.1_checksums.txt --output -'
+download='api repos/devantler-tech/ksail/releases/assets/102 -H Accept: application/octet-stream'
 if [[ "$*" == "${download}" ]]; then
 	case "${FAKE_GH_CHECKSUMS}" in
 	complete)
 		printf '%s  ksail_7.175.1_darwin_arm64.tar.gz\n' "$(printf 'a%.0s' {1..64})"
 		printf '%s  ksail_7.175.1_linux_amd64.tar.gz\n' "$(printf 'b%.0s' {1..64})"
 		printf '%s  ksail_7.175.1_windows_amd64.zip\n' "$(printf 'c%.0s' {1..64})"
+		;;
+	uppercase)
+		printf '%s  ksail_7.175.1_darwin_arm64.tar.gz\n' "$(printf 'A%.0s' {1..64})"
+		printf '%s  ksail_7.175.1_linux_amd64.tar.gz\n' "$(printf 'B%.0s' {1..64})"
+		printf '%s  ksail_7.175.1_windows_amd64.zip\n' "$(printf 'C%.0s' {1..64})"
 		;;
 	empty) ;;
 	malformed) printf 'not a checksum line\n' ;;
@@ -50,38 +56,54 @@ fi
 	printf 'unexpected gh call: %s\n' "$*" >&2
 	exit 3
 }
-complete='[
-  {"name":"install.sh","size":10},
-  {"name":"ksail_7.175.1_checksums.txt","size":10},
-  {"name":"ksail-7.175.1.vsix","size":10},
-  {"name":"KSail_7.175.1_darwin_arm64.zip","size":10},
-  {"name":"ksail.io_clusters.yaml","size":10},
-  {"name":"ksail_7.175.1_darwin_arm64.tar.gz","size":10},
-  {"name":"ksail_7.175.1_linux_amd64.tar.gz","size":10},
-  {"name":"ksail_7.175.1_windows_amd64.zip","size":10}
-]'
-# without prints the complete asset list minus the named asset.
-without() { jq -c --arg name "$1" 'map(select(.name != $name))' <<<"${complete}"; }
+hex() { printf "$1%.0s" {1..64}; }
+# goreleaser is what GoReleaser uploads to the draft itself: its checksums file, the Cluster CRD and
+# the archives, each with the SHA-256 digest GitHub records for an uploaded asset.
+goreleaser="[
+  {\"id\":102,\"name\":\"ksail_7.175.1_checksums.txt\",\"size\":10,\"digest\":\"sha256:$(hex d)\"},
+  {\"id\":105,\"name\":\"ksail.io_clusters.yaml\",\"size\":10,\"digest\":\"sha256:$(hex e)\"},
+  {\"id\":106,\"name\":\"ksail_7.175.1_darwin_arm64.tar.gz\",\"size\":10,\"digest\":\"sha256:$(hex a)\"},
+  {\"id\":107,\"name\":\"ksail_7.175.1_linux_amd64.tar.gz\",\"size\":10,\"digest\":\"sha256:$(hex b)\"},
+  {\"id\":108,\"name\":\"ksail_7.175.1_windows_amd64.zip\",\"size\":10,\"digest\":\"sha256:$(hex c)\"}
+]"
+# complete adds what the publish job attaches before publishing.
+complete="$(jq -c --arg digest "sha256:$(hex f)" '. + [
+  {"id":101,"name":"install.sh","size":10,"digest":$digest},
+  {"id":103,"name":"ksail-7.175.1.vsix","size":10,"digest":$digest},
+  {"id":104,"name":"KSail_7.175.1_darwin_arm64.zip","size":10,"digest":$digest}
+]' <<<"${goreleaser}")"
+# without prints the given asset list minus the named asset.
+without() { jq -c --arg name "$2" 'map(select(.name != $name))' <<<"$1"; }
 # emptied prints the complete asset list with the named asset's size set to zero.
 emptied() { jq -c --arg name "$1" 'map(if .name == $name then .size = 0 else . end)' <<<"${complete}"; }
-# published prints one listing page holding the published release with the given assets.
+# redigested prints the given asset list with the named asset's digest replaced (null removes it).
+redigested() { jq -c --arg name "$2" --argjson digest "$3" 'map(if .name == $name then .digest = $digest else . end)' <<<"$1"; }
+# published and drafted print one listing page holding the release with the given assets.
 published() { printf '[{"id":2,"tag_name":"v7.175.1","draft":false,"assets":%s}]\n' "$1"; }
+drafted() { printf '[{"id":2,"tag_name":"v7.175.1","draft":true,"assets":%s}]\n' "$1"; }
 other='{"id":1,"tag_name":"v7.175.0","draft":false,"assets":[]}'
+linux=ksail_7.175.1_linux_amd64.tar.gz
 case "${FAKE_GH_SCENARIO}" in
-draft) printf '[%s,{"id":2,"tag_name":"v7.175.1","draft":true,"assets":[]}]\n' "${other}" ;;
+draft) printf '[%s]\n' "${other}" && drafted "${goreleaser}" ;;
 published) published "${complete}" ;;
 second-page) printf '[%s]\n' "${other}" && published "${complete}" ;;
-draft-second-page) printf '[%s]\n[{"id":2,"tag_name":"v7.175.1","draft":true,"assets":[]}]\n' "${other}" ;;
-incomplete-second-page) printf '[%s]\n' "${other}" && published "$(without ksail_7.175.1_linux_amd64.tar.gz)" ;;
+draft-second-page) printf '[%s]\n' "${other}" && drafted "${goreleaser}" ;;
+incomplete-second-page) printf '[%s]\n' "${other}" && published "$(without "${complete}" "${linux}")" ;;
 missing) printf '[%s]\n' "${other}" ;;
 duplicate)
 	printf '[{"id":2,"tag_name":"v7.175.1","draft":false,"assets":%s},{"id":3,"tag_name":"v7.175.1","draft":true,"assets":[]}]\n' "${complete}"
 	;;
-published-without-checksums) published "$(without ksail_7.175.1_checksums.txt)" ;;
-published-without-artifact) published "$(without KSail_7.175.1_darwin_arm64.zip)" ;;
+draft-without-checksums) drafted "$(without "${goreleaser}" ksail_7.175.1_checksums.txt)" ;;
+draft-without-crd) drafted "$(without "${goreleaser}" ksail.io_clusters.yaml)" ;;
+draft-without-archive) drafted "$(without "${goreleaser}" "${linux}")" ;;
+draft-digest-mismatch) drafted "$(redigested "${goreleaser}" "${linux}" "\"sha256:$(hex 0)\"")" ;;
+published-without-checksums) published "$(without "${complete}" ksail_7.175.1_checksums.txt)" ;;
+published-without-artifact) published "$(without "${complete}" KSail_7.175.1_darwin_arm64.zip)" ;;
 published-empty-checksums) published "$(emptied ksail_7.175.1_checksums.txt)" ;;
-published-without-crd) published "$(without ksail.io_clusters.yaml)" ;;
-published-without-archive) published "$(without ksail_7.175.1_linux_amd64.tar.gz)" ;;
+published-without-crd) published "$(without "${complete}" ksail.io_clusters.yaml)" ;;
+published-without-archive) published "$(without "${complete}" "${linux}")" ;;
+published-digest-mismatch) published "$(redigested "${complete}" "${linux}" "\"sha256:$(hex 0)\"")" ;;
+published-archive-without-digest) published "$(redigested "${complete}" "${linux}" null)" ;;
 list-failure)
 	printf 'HTTP 502\n' >&2
 	exit 1
@@ -132,9 +154,17 @@ run_case() {
 }
 
 run_case draft-release draft 0 'state=draft'
-# A draft still gets every asset attached, so its checksums are never read.
-run_case draft-release-reads-no-checksums draft 0 'state=draft' fail
+# The publish job attaches only its downloaded artifacts, so a draft must already carry everything
+# GoReleaser uploaded, with digests matching the checksums file, before it can be published.
+run_case draft-checksums-unreadable draft 1 'could not read ksail_7.175.1_checksums.txt' fail
+run_case draft-without-checksums-asset draft-without-checksums 1 'missing or empty assets: ksail_7.175.1_checksums.txt'
+run_case draft-without-crd draft-without-crd 1 'missing or empty assets: ksail.io_clusters.yaml'
+run_case draft-without-goreleaser-archive draft-without-archive 1 'missing or empty assets: ksail_7.175.1_linux_amd64.tar.gz'
+run_case draft-archive-digest-mismatch draft-digest-mismatch 1 'ksail_7.175.1_linux_amd64.tar.gz does not match its checksum'
 run_case published-release published 0 'state=published'
+run_case published-release-with-uppercase-checksums published 0 'state=published' uppercase
+run_case published-archive-digest-mismatch published-digest-mismatch 1 'ksail_7.175.1_linux_amd64.tar.gz does not match its checksum'
+run_case published-archive-without-digest published-archive-without-digest 1 'ksail_7.175.1_linux_amd64.tar.gz does not match its checksum'
 run_case published-release-on-a-later-page second-page 0 'state=published'
 run_case missing-release missing 1 'no release exists for tag v7.175.1'
 run_case duplicate-releases duplicate 1 'found 2 releases for tag v7.175.1'
