@@ -1077,7 +1077,7 @@ func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
 // a directory whose ksail.yaml describes a different cluster: that config must not suppress the
 // target's captured credential mappings (#6288).
 //
-//nolint:paralleltest // uses t.Chdir and t.Setenv
+
 func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
 	const (
 		clusterName = "unrelated-config-restores-6288"
@@ -1127,7 +1127,12 @@ func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
 
 		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
 			"config cluster name %q", configClusterName)
-		assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar, "config cluster name %q", configClusterName)
+		assert.Empty(
+			t,
+			resolved.AWSOpts.AccessKeyIDEnvVar,
+			"config cluster name %q",
+			configClusterName,
+		)
 		assert.Empty(t, resolved.AWSOpts.RegionEnvVar, "config cluster name %q", configClusterName)
 	}
 }
