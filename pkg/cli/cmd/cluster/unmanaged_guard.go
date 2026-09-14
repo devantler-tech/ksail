@@ -338,8 +338,20 @@ func isRestorableOwnershipStateAbsence(err error) bool {
 		errors.Is(err, state.ErrInvalidEKSOwnershipState)
 }
 
+// loadedConfigDescribesTarget reports that the loaded ksail.yaml is the target cluster's own config.
+// A config that names no cluster cannot be told apart from the target's, so it keeps precedence, the
+// same way lifecycle.ValidateStandaloneAWSTarget treats it.
+func loadedConfigDescribesTarget(resolved *lifecycle.ResolvedClusterInfo) bool {
+	return resolved.ConfigSource &&
+		(resolved.ConfigClusterName == "" || resolved.ConfigClusterName == resolved.ClusterName)
+}
+
+// restorePersistedAWSOptions restores the AWS credential mappings captured when the target cluster
+// was created. A loaded ksail.yaml keeps precedence only when it describes that target, because its
+// empty option names deliberately select canonical defaults; a config for another cluster says
+// nothing about how the target authenticates.
 func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
-	if resolved.ConfigSource {
+	if loadedConfigDescribesTarget(resolved) {
 		return nil
 	}
 

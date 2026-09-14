@@ -1050,6 +1050,93 @@ func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
+// savePersistedAWSMappings records custom credential variable names for clusterName in region.
+func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	ownership := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Now().UTC(),
+		//nolint:gosec // G101: these are environment-variable names, never credential values.
+		AWSOptions: v1alpha1.OptionsAWS{
+			ProfileEnvVar:         "AWS_PROFILE",
+			RegionEnvVar:          "KSAIL_REGION",
+			AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+			SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+			SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+		},
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+}
+
+// TestPersistedAWSMappingsRestoreThroughUnrelatedConfig drives a state-backed target by --name from
+// a directory whose ksail.yaml describes a different cluster: that config must not suppress the
+// target's captured credential mappings (#6288).
+//
+//nolint:paralleltest // uses t.Chdir and t.Setenv
+func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
+	const (
+		clusterName = "unrelated-config-restores-6288"
+		region      = "eu-north-1"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+	savePersistedAWSMappings(t, clusterName, region)
+
+	resolved, err := lifecycle.ResolveClusterInfo(nil, clusterName, "", "")
+	require.NoError(t, err)
+	require.True(t, resolved.ConfigSource, "fixture must load a ksail.yaml")
+	require.NotEmpty(t, resolved.ConfigClusterName, "fixture config must name its own cluster")
+	require.NotEqual(t, clusterName, resolved.ConfigClusterName, "fixture config must be unrelated")
+
+	resolved.AWSRegion = region
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Equal(t, "KSAIL_ACCESS", resolved.AWSOpts.AccessKeyIDEnvVar)
+	assert.Equal(t, "KSAIL_REGION", resolved.AWSOpts.RegionEnvVar)
+}
+
+// TestPersistedAWSMappingsKeepDefaultsForTargetConfig proves a config that describes the target, or
+// names no cluster at all, still keeps its canonical defaults even when mappings were captured.
+func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
+	const (
+		clusterName = "target-config-keeps-defaults-6288"
+		region      = "eu-north-1"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	savePersistedAWSMappings(t, clusterName, region)
+
+	for _, testCase := range []struct {
+		name              string
+		configClusterName string
+	}{
+		{"config names the target", clusterName},
+		{"config names no cluster", ""},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			resolved := &lifecycle.ResolvedClusterInfo{
+				ClusterName:       clusterName,
+				ConfigClusterName: testCase.configClusterName,
+				ConfigSource:      true,
+				AWSRegion:         region,
+			}
+
+			require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+			assert.Empty(t, resolved.AWSOpts.AccessKeyIDEnvVar)
+			assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
+		})
+	}
+}
+
 func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 	const (
 		clusterName = "state-region-alias-6270"
