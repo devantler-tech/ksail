@@ -60,6 +60,14 @@ docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status
 docker inspect --format '{{json .State.Health}}' <container-name>
 ```
 
+Each registry container records the cluster it belongs to, and cluster deletion removes only the registries labelled with that cluster. To list one cluster's registries:
+
+```bash
+docker ps -a --filter label=io.ksail.registry.cluster=<cluster-name> --format 'table {{.Names}}\t{{.Status}}'
+```
+
+Registries created by older KSail versions have no cluster label. For those, KSail matches the container name prefix (`<cluster-name>-`) instead.
+
 ### Flux Operator Installation Timeout
 
 Flux CRDs can take 7–10 minutes on resource-constrained systems; KSail allows up to 12 minutes. If timeouts persist, check resources (`docker stats`) and ensure 4 GB+ RAM.

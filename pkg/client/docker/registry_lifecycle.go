@@ -252,6 +252,9 @@ type RegistryInfo struct {
 	Name         string
 	ID           string
 	IsKSailOwned bool
+	// ClusterName is the owning cluster from RegistryClusterLabelKey, or empty for containers
+	// created without it (older KSail versions and registries KSail does not manage).
+	ClusterName string
 }
 
 // ListRegistriesOnNetwork returns all registry containers connected to a specific network.
@@ -313,6 +316,7 @@ func (rm *RegistryManager) extractRegistryInfoIfOnNetwork(
 		Name:         containerName,
 		ID:           containerSummary.ID,
 		IsKSailOwned: isKSailOwned,
+		ClusterName:  containerSummary.Labels[RegistryClusterLabelKey],
 	}, true
 }
 

@@ -35,6 +35,9 @@ const (
 
 	// RegistryLabelKey marks registry containers as managed by ksail.
 	RegistryLabelKey = "io.ksail.registry"
+	// RegistryClusterLabelKey records the cluster a registry container belongs to. It is the source
+	// of truth for ownership; containers created before it existed fall back to name attribution.
+	RegistryClusterLabelKey = "io.ksail.registry.cluster"
 
 	// Registry port configuration.
 

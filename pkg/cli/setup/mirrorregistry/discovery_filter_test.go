@@ -75,6 +75,64 @@ func TestFilterRegistriesByClusterName_KeepsRegistriesWhenNoRivalCluster(t *test
 		"no cluster foo-bar exists, so these are foo's mirrors and must not be left behind")
 }
 
+func labelled(name, cluster string) dockerclient.RegistryInfo {
+	info := reg(name)
+	info.ClusterName = cluster
+
+	return info
+}
+
+// TestFilterRegistriesByClusterName_LabelDecidesOwnership covers the case name attribution cannot:
+// a cluster "foo-bar" that has mirror registries but no local registry and is not in the rival set.
+// Its "foo-bar-ghcr.io" mirror is indistinguishable by name from a "foo" mirror for host
+// "bar-ghcr.io", so only the owning-cluster label keeps "foo" from deleting it.
+func TestFilterRegistriesByClusterName_LabelDecidesOwnership(t *testing.T) {
+	t.Parallel()
+
+	onNetwork := []dockerclient.RegistryInfo{
+		labelled("foo-ghcr.io", "foo"),
+		labelled("foo-bar-ghcr.io", "foo-bar"),
+	}
+
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{})
+
+	assert.ElementsMatch(t, []string{"foo-ghcr.io"}, names(got),
+		"foo must not claim a registry labelled as belonging to foo-bar")
+}
+
+// TestFilterRegistriesByClusterName_LabelOverridesLongerRival is the other direction: cluster "foo"
+// with a mirror host "bar-ghcr.io" next to a real cluster "foo-bar". Name attribution hands the
+// mirror to foo-bar and leaks it on foo's teardown; the label keeps it with foo.
+func TestFilterRegistriesByClusterName_LabelOverridesLongerRival(t *testing.T) {
+	t.Parallel()
+
+	onNetwork := []dockerclient.RegistryInfo{
+		labelled("foo-bar-ghcr.io", "foo"),
+		labelled("foo-bar-docker.io", "foo-bar"),
+	}
+
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{"foo-bar"})
+
+	assert.ElementsMatch(t, []string{"foo-bar-ghcr.io"}, names(got),
+		"the label says foo owns foo-bar-ghcr.io, whatever the name suggests")
+}
+
+// TestFilterRegistriesByClusterName_UnlabelledFallsBackToName keeps registries created before the
+// label existed working, alongside labelled ones on the same network.
+func TestFilterRegistriesByClusterName_UnlabelledFallsBackToName(t *testing.T) {
+	t.Parallel()
+
+	onNetwork := []dockerclient.RegistryInfo{
+		reg("foo-local-registry"),
+		labelled("foo-ghcr.io", "foo"),
+		reg("foo-bar-quay.io"),
+	}
+
+	got := mirrorregistry.FilterRegistriesByClusterName(onNetwork, "foo", []string{"foo-bar"})
+
+	assert.ElementsMatch(t, []string{"foo-local-registry", "foo-ghcr.io"}, names(got))
+}
+
 // TestFilterRegistriesByClusterName_IgnoresUnrelatedClusters keeps the ordinary case honest.
 func TestFilterRegistriesByClusterName_IgnoresUnrelatedClusters(t *testing.T) {
 	t.Parallel()
