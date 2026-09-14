@@ -1076,8 +1076,6 @@ func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
 // TestPersistedAWSMappingsRestoreThroughUnrelatedConfig drives a state-backed target by --name from
 // a directory whose ksail.yaml describes a different cluster: that config must not suppress the
 // target's captured credential mappings (#6288).
-//
-
 func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
 	const (
 		clusterName = "unrelated-config-restores-6288"
