@@ -198,6 +198,53 @@ func assertUnboundDeleteComponents(t *testing.T, clusterName, deletedRegion stri
 	}
 }
 
+// TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory proves the unbound cleanup cannot
+// enumerate and remove matching files through a cluster directory that points elsewhere.
+func TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+
+	const clusterName = "unbound-symlinked-cluster-dir"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	outsideDir := t.TempDir()
+	outsidePath := filepath.Join(outsideDir, "eks-components-123456789012-eu-north-1.json")
+	require.NoError(t, os.WriteFile(outsidePath, []byte("{}"), 0o600))
+
+	clustersDir := filepath.Join(home, ".ksail", "clusters")
+	require.NoError(t, os.MkdirAll(clustersDir, 0o700))
+	require.NoError(t, os.Symlink(outsideDir, filepath.Join(clustersDir, clusterName)))
+
+	err := state.DeleteEKSRegionState(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
+
+	_, statErr := os.Stat(outsidePath)
+	require.NoError(t, statErr, "a file outside the state root must survive")
+}
+
+// TestDeleteEKSRegionStateFollowsSymlinkedStateRoot keeps a relocated ~/.ksail working: only a
+// cluster directory that leaves its own root is refused.
+func TestDeleteEKSRegionStateFollowsSymlinkedStateRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+
+	const clusterName = "unbound-symlinked-state-root"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(home, ".ksail")))
+
+	saveUnboundDeleteComponents(t, clusterName)
+
+	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	assertUnboundDeleteComponents(t, clusterName, "eu-north-1")
+}
+
 func TestEKSComponentStateIsScopedByAccountAndRegion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

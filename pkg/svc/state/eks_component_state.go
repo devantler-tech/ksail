@@ -267,12 +267,17 @@ func unboundEKSComponentStatePaths(clusterName, region string) ([]string, error)
 	dir := filepath.Dir(probe)
 	suffix := "-" + filepath.Base(probe) + ".json"
 
+	exists, err := clusterStateDirExists(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, nil
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-
 		return nil, fmt.Errorf("list EKS component state: %w", err)
 	}
 
@@ -291,6 +296,37 @@ func unboundEKSComponentStatePaths(clusterName, region string) ([]string, error)
 	}
 
 	return paths, nil
+}
+
+// clusterStateDirExists reports whether a per-cluster state directory exists, and rejects one that
+// resolves anywhere other than its own entry under the clusters root. Pattern-based cleanup removes
+// whatever matching files it finds, so it must not follow a cluster directory that points elsewhere;
+// a relocated state root still works because the root and the directory resolve together.
+func clusterStateDirExists(dir string) (bool, error) {
+	_, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("inspect cluster state directory: %w", err)
+	}
+
+	canonicalRoot, err := fsutil.EvalCanonicalPath(filepath.Dir(dir))
+	if err != nil {
+		return false, fmt.Errorf("resolve cluster state root: %w", err)
+	}
+
+	canonicalDir, err := fsutil.EvalCanonicalPath(dir)
+	if err != nil {
+		return false, fmt.Errorf("resolve cluster state directory: %w", err)
+	}
+
+	if canonicalDir != filepath.Join(canonicalRoot, filepath.Base(dir)) {
+		return false, fmt.Errorf("%w: %s resolves to %s", fsutil.ErrPathOutsideBase, dir, canonicalDir)
+	}
+
+	return true, nil
 }
 
 // eksRegionStatePaths lists every state file belonging to one exact EKS target. A target with no
