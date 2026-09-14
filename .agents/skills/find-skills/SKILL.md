@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/tags/v1.5.16
     github-repo: https://github.com/vercel-labs/skills
     github-tree-sha: 76a98a285cb0434f3d39e1a873823556330e398b
+    internal: true
 name: find-skills
 ---
 # Find Skills

@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 437437f7f20bcdbbdb3081cf164435a388c0a39a
+    internal: true
 name: gh-cli
 ---
 # GitHub CLI (gh)

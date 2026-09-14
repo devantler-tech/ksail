@@ -14,6 +14,7 @@ metadata:
     scope: implementation
     triggers: Go, Golang, goroutines, channels, gRPC, microservices Go, Go generics, concurrent programming, Go interfaces
     version: 1.1.0
+    internal: true
 name: golang-pro
 ---
 # Golang Pro

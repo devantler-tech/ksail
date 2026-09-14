@@ -1,17 +1,14 @@
 ---
 name: ways-of-working
 description: >-
-  Codifies devantler-tech engineering practices: agent-first development
-  workflow, TDD, CI/CD pipelines, GitHub Flow, code quality gates,
-  and Kubernetes workflows with ksail. Use when filing issues, planning
-  work, setting up projects, configuring CI/CD, writing tests, debugging,
-  or making architectural decisions.
+  Codifies devantler-tech engineering practices: agent-first development workflow, TDD, CI/CD pipelines, GitHub Flow, code quality gates, and Kubernetes workflows with ksail. Use when filing issues, planning work, setting up projects, configuring CI/CD, writing tests, debugging, or making architectural decisions.
 license: Apache-2.0
 metadata:
-    github-path: ways-of-working/SKILL.md
-    github-ref: refs/tags/v1.0.0
-    github-repo: https://github.com/devantler-tech/agent-skills
-    github-tree-sha: 9a47a2db8c9bdf70402d1790fd3004af517cafe3
+  github-path: ways-of-working/SKILL.md
+  github-ref: refs/tags/v1.0.0
+  github-repo: https://github.com/devantler-tech/agent-skills
+  github-tree-sha: 9a47a2db8c9bdf70402d1790fd3004af517cafe3
+  internal: true
 ---
 
 # Ways of Working
