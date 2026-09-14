@@ -27,6 +27,13 @@ const probeTimeout = time.Minute
 // never exits.
 const hangTimeout = 200 * time.Millisecond
 
+// slowStartSeconds is how long a slow-start test script sleeps before producing
+// output: one second past the given production deadline, so the script survives
+// only when a probe uses the supplied deadline instead of that production one.
+func slowStartSeconds(production time.Duration) int {
+	return int(production/time.Second) + 1
+}
+
 // errFakeCLIExit is a static sentinel used in TestStartupErrFmt to simulate
 // the error produced by the Copilot SDK when its CLI subprocess exits early.
 var errFakeCLIExit = errors.New("CLI process exited: exit status 1")
@@ -122,10 +129,25 @@ func TestDiagnoseCLIStartupFailureDeadline(t *testing.T) {
 
 		result := diagnose(context.Background(), hangTimeout, script, "", os.Environ())
 		assert.Empty(t, result)
-		// Returning before the production deadline proves the supplied deadline was
-		// used; falling back to the production one takes at least that long.
-		assert.Less(t, time.Since(start), chat.DiagnoseTimeout,
-			"the supplied deadline must stop a hanging CLI")
+		// The generous bound keeps this deterministic on a loaded host; it fails only
+		// when the probe ignores its deadline and waits for the 120s script.
+		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+	})
+
+	t.Run("honours a supplied deadline longer than the production one", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// The script outlives the production deadline, so its output is captured only
+		// when the probe uses the supplied deadline. A probe that falls back to the
+		// production deadline kills it first; host load can only make the script
+		// slower, so no upper bound on elapsed time is needed.
+		script := writeScript(t, dir, fmt.Sprintf(
+			"#!/bin/sh\nsleep %d\necho 'Error: slow start' >&2\nexit 1\n",
+			slowStartSeconds(chat.DiagnoseTimeout)))
+
+		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
+		assert.Equal(t, "Error: slow start", result)
 	})
 
 	t.Run("production deadline is unchanged", func(t *testing.T) {

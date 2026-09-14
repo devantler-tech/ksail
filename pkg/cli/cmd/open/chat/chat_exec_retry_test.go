@@ -3,6 +3,7 @@ package chat_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,8 +78,8 @@ func writeSettledExecutable(t *testing.T, content string) string {
 	}
 }
 
-// TestVerifyCopilotCLI verifies the pre-flight probe's outcomes, that it honours
-// the deadline it is given, and that its production default is unchanged.
+// TestVerifyCopilotCLI verifies the pre-flight probe accepts a CLI that exits zero
+// and reports a failing one with its output.
 func TestVerifyCopilotCLI(t *testing.T) {
 	t.Parallel()
 
@@ -107,6 +108,19 @@ func TestVerifyCopilotCLI(t *testing.T) {
 		assert.Contains(t, err.Error(), "broken install")
 	})
 
+}
+
+// TestVerifyCopilotCLIDeadline verifies the pre-flight probe honours the deadline it
+// is given, in both directions, and keeps its production default.
+func TestVerifyCopilotCLIDeadline(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == osWindows {
+		t.Skip("test relies on shell scripts")
+	}
+
+	verify := chat.GetVerifyCopilotCLIWithin()
+
 	t.Run("fails a CLI that never exits once the deadline passes", func(t *testing.T) {
 		t.Parallel()
 
@@ -118,10 +132,23 @@ func TestVerifyCopilotCLI(t *testing.T) {
 		err := verify(context.Background(), hangTimeout, script, os.Environ())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pre-flight check")
-		// Returning before the production deadline proves the supplied deadline was
-		// used; falling back to the production one takes at least that long.
-		assert.Less(t, time.Since(start), chat.VerifyTimeout,
-			"the supplied deadline must stop a hanging CLI")
+		// The generous bound keeps this deterministic on a loaded host; it fails only
+		// when the probe ignores its deadline and waits for the 120s script.
+		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+	})
+
+	t.Run("honours a supplied deadline longer than the production one", func(t *testing.T) {
+		t.Parallel()
+
+		// The script outlives the production deadline, so it succeeds only when the
+		// probe uses the supplied deadline. A probe that falls back to the production
+		// deadline kills it first; host load can only make the script slower, so no
+		// upper bound on elapsed time is needed.
+		script := writeExecutable(t, fmt.Sprintf(
+			"#!/bin/sh\nsleep %d\necho 'copilot 1.2.3'\nexit 0\n",
+			slowStartSeconds(chat.VerifyTimeout)))
+
+		require.NoError(t, verify(context.Background(), probeTimeout, script, os.Environ()))
 	})
 
 	t.Run("production deadline is unchanged", func(t *testing.T) {
