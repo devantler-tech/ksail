@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/tags/v6.2.0
     github-repo: https://github.com/obra/superpowers
     github-tree-sha: a82cf8b413600c6bd7c4b482272d7990e9588cf1
+    internal: true
 name: test-driven-development
 ---
 # Test-Driven Development (TDD)

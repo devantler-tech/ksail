@@ -1072,71 +1072,28 @@ jobs:
             fi
             echo "Preparing ${TAP}#${pr} (${branch})"
 
-            # GoReleaser's cask template emits a few `brew style` offenses no config knob can reach
-            # (Layout/ArgumentAlignment on url/verified, Cask/StanzaOrder for the custom_block stanzas).
-            # Autocorrect them on the draft PR branch before handoff so the eventual cask is
-            # brew-style-clean — letting the tap enforce a `brew style` gate (devantler-tech/homebrew-tap#734).
-            # Fail-soft throughout: a style/clone/push hiccup must never block the published release;
-            # the draft remains open for the maintainer lane to correct.
-            # `mktemp -d` under `set -e` would abort the job on a tempdir failure; guard it so a
-            # hiccup just skips the (best-effort) autocorrect and continues to the draft handoff.
-            # Ensure the generated cask is brew-style-clean BEFORE promotion. GoReleaser's template
-            # emits a few `brew style` offenses no config knob can reach, and the tap enforces a
-            # `brew style` gate — so an uncorrected cask silently blocks the tap's auto-merge, exactly
-            # the "green release, stranded cask" drift this job exists to surface. `style_clean` stays
-            # 0 until we have either confirmed no offenses remain or PUSHED the autocorrections to the
-            # branch; if we cannot reach that state (clone, tempdir, or push failure), promotion is
-            # skipped and the job goes red rather than marking a cask the tap will refuse to merge.
+            # GoReleaser's cask template emits `brew style` offenses no config knob can reach, and the
+            # tap enforces a `brew style` gate, so an uncorrected cask silently blocks its auto-merge
+            # (devantler-tech/homebrew-tap#734). The script autocorrects the draft branch and reports
+            # clean only once the remote tip passes a read-only `brew style`. The tap's CI autocorrects
+            # the same branch, so when that race rejects the push the script re-checks the new tip
+            # instead of failing the handoff (#6628). Anything short of a confirmed-clean tip skips
+            # promotion and turns the job red.
             style_clean=0
-            if work="$(mktemp -d)"; then
-              if git clone --depth 1 --branch "$branch" \
-                  "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
-                # Never claim a cask is style-clean without having actually run the linter: on ubuntu
-                # `brew` was absent, `brew style --fix` failed, the diff was empty for that reason, and
-                # the job reported "already brew-style-clean" — a fail-open that hid the breakage.
-                if ! command -v brew >/dev/null 2>&1; then
-                  echo "::error::brew is not available on this runner; cannot style-check ${name}"
-                  rm -rf "$work"
-                  reconcile_merged_handoff "$name" \
-                    "brew became unavailable while preparing ${TAP}#${pr}"
-                  continue
-                fi
-                # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
-                # offenses remain. Run it fail-soft and commit whatever diff it produced regardless of
-                # exit status, so partial cleanups are never discarded (and a failure never blocks the
-                # release).
-                brew style --fix "$work/Casks/${name}.rb" \
-                  || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
-                pushed_ok=true
-                if git -C "$work" diff --quiet; then
-                  echo "${name} cask has no autocorrectable diff to push"
-                elif git -C "$work" \
-                      -c user.name='github-actions[bot]' \
-                      -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-                      commit -am 'style: brew style --fix generated cask' \
-                    && git -C "$work" push; then
-                  echo "Pushed brew style --fix autocorrections to ${branch}"
-                else
-                  echo "::warning::Could not push brew style --fix autocorrections to ${branch}; the tap's style gate would block auto-merge"
-                  pushed_ok=false
-                fi
-                # A successful push (or an empty diff) does not prove the cask is style-clean:
-                # `brew style --fix` exits non-zero when offenses remain after only partial
-                # autocorrection, and an unpushed fix leaves the tap's branch still dirty. Only mark
-                # clean when the pushed state passes a read-only `brew style`, so a cask the tap's
-                # style gate would reject is never promoted (recreating the stranded-cask failure).
-                if [ "$pushed_ok" = true ] && brew style "$work/Casks/${name}.rb"; then
-                  echo "${name} cask is brew-style-clean"
-                  style_clean=1
-                else
-                  echo "::warning::${name} cask is not confirmed brew-style-clean (unpushed autocorrections or remaining offenses); leaving it for the maintainer lane"
-                fi
-              else
-                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix"
-              fi
-              rm -rf "$work"
+            # A missing `brew` would otherwise read as an empty autocorrection diff.
+            if ! command -v brew >/dev/null 2>&1; then
+              echo "::error::brew is not available on this runner; cannot style-check ${name}"
+              reconcile_merged_handoff "$name" \
+                "brew became unavailable while preparing ${TAP}#${pr}"
+              continue
+            fi
+            if .github/scripts/style-clean-cask-branch.sh \
+                --remote "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" \
+                --branch "$branch" \
+                --cask-name "$name"; then
+              style_clean=1
             else
-              echo "::warning::Could not create tempdir for brew style --fix"
+              echo "::warning::${name} cask is not confirmed brew-style-clean; leaving it for the maintainer lane"
             fi
             if [ "$style_clean" -ne 1 ]; then
               echo "::error::Could not ensure ${name} cask is brew-style-clean; the tap's style gate would block auto-merge for ${TAG}"

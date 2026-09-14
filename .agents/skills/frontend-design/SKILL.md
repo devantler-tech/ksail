@@ -6,6 +6,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/anthropics/skills
     github-tree-sha: d79e2a5bb4df4a386c2adcdd9ab8709bba28c3f6
+    internal: true
 name: frontend-design
 ---
 # Frontend Design

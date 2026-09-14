@@ -8,6 +8,7 @@ metadata:
     github-repo: https://github.com/vercel-labs/agent-skills
     github-tree-sha: 3116f3e62dbd02b44a598b1aa690d2a8938e8f89
     version: 1.0.0
+    internal: true
 name: web-design-guidelines
 ---
 # Web Interface Guidelines

@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: ff3489a4f04f2a7cb9a00609c5e1e50966e54c74
+    internal: true
 name: github-issues
 ---
 # GitHub Issues

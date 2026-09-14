@@ -5,6 +5,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: fcb418a0dde3bc4dcafeb1ae0aeedac846ac86c5
+    internal: true
 name: copilot-sdk
 ---
 # GitHub Copilot SDK

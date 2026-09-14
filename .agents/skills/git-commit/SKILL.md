@@ -7,6 +7,7 @@ metadata:
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 883a6a7466f55a9cd9f22cf1cce2d9333fc9b998
+    internal: true
 name: git-commit
 ---
 # Git Commit with Conventional Commits

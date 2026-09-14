@@ -6,6 +6,7 @@ metadata:
     github-ref: refs/tags/v1.0.3
     github-repo: https://github.com/ggprompts/tfe
     github-tree-sha: b3dceb6065a02f1960f92483d9f44a1c2e4e36aa
+    internal: true
 name: bubbletea
 ---
 # Bubbletea TUI Development

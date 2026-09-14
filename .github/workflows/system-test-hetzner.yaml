@@ -65,10 +65,12 @@ on:
         required: false
         type: string
         default: ""
-  # schedule trigger paused (#4972): HCLOUD_TOKEN has been invalid/expired since ~2026-04-26,
-  # so every scheduled run failed at cluster-existence-check for 6+ consecutive weeks before
-  # any provisioning happened — pure noise, not signal. Re-enable the weekly cron once the
-  # secret is rotated; workflow_dispatch stays available for on-demand runs meanwhile.
+  schedule:
+    # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
+    # created at most once a day. The scheduled run covers the four matrix configurations below;
+    # workflow_dispatch runs a single configuration on demand. Credentials come from the
+    # org-wide HCLOUD_TOKEN, scoped to a dedicated Hetzner test project.
+    - cron: "0 3 * * 0"
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
@@ -182,7 +184,7 @@ jobs:
       matrix:
         # On schedule: run all important configurations sequentially for broad E2E coverage.
         # On workflow_dispatch: run a single user-selected configuration.
-        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":true,"suffix":"default-init","args":""},{"init":false,"suffix":"default-noinit","args":""},{"init":true,"suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"},{"init":true,"suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"}]') || fromJSON(format('[{"init":{0},"suffix":"dispatch","args":""}]', inputs.init)) }}
+        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":true,"suffix":"default-init","args":""},{"init":false,"suffix":"default-noinit","args":""},{"init":true,"suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"},{"init":true,"suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"}]') || fromJSON(format('[{{"init":{0},"suffix":"dispatch","args":""}}]', inputs.init)) }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
