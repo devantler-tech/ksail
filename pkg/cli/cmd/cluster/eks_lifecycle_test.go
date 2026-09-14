@@ -1036,6 +1036,8 @@ func TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError(t *testing.T) 
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
+// TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults proves that a loaded ksail.yaml naming no
+// cluster keeps precedence, so the canonical default credential variable names stay in place.
 func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -1135,6 +1137,9 @@ func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
 	}
 }
 
+// TestPersistedRegionAliasSelectsStateBeforeRegionResolution proves that a captured custom region
+// variable selects the persisted ownership record before any region is resolved, so its credential
+// mappings are restored.
 func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 	const (
 		clusterName = "state-region-alias-6270"

@@ -422,6 +422,8 @@ func restoreSelectedAWSContextOptions(resolved *lifecycle.ResolvedClusterInfo) (
 	return true, nil
 }
 
+// mergeAWSOptions fills each credential variable name that current leaves empty from persisted, so an
+// explicitly configured name always wins over a captured mapping.
 func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
 	if current.ProfileEnvVar == "" {
 		current.ProfileEnvVar = persisted.ProfileEnvVar
@@ -446,6 +448,9 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 	return current
 }
 
+// selectPersistedAWSOwnership picks the ownership record for the region that the records' region
+// variables request. It fails when that region was never recorded, or when the environment and the
+// records do not narrow the choice to exactly one region.
 func selectPersistedAWSOwnership(
 	ownerships []*state.EKSOwnershipState,
 ) (*state.EKSOwnershipState, error) {
