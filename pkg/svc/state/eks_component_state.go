@@ -279,13 +279,13 @@ func unboundEKSComponentStatePaths(clusterName, region string) ([]string, error)
 	var paths []string
 
 	for _, entry := range entries {
-		accountID, ok := strings.CutPrefix(entry.Name(), "eks-components-")
-		if entry.IsDir() || !ok {
+		accountID, hasPrefix := strings.CutPrefix(entry.Name(), "eks-components-")
+		if entry.IsDir() || !hasPrefix {
 			continue
 		}
 
-		accountID, ok = strings.CutSuffix(accountID, suffix)
-		if ok && awsAccountIDPattern.MatchString(accountID) {
+		accountID, hasSuffix := strings.CutSuffix(accountID, suffix)
+		if hasSuffix && awsAccountIDPattern.MatchString(accountID) {
 			paths = append(paths, filepath.Join(dir, entry.Name()))
 		}
 	}

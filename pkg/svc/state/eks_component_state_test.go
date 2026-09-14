@@ -114,11 +114,7 @@ func TestDeleteEKSRegionStateRetainsOtherRegions(t *testing.T) {
 func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	const (
-		clusterName = "unbound-region-delete"
-		accountA    = "123456789012"
-		accountB    = "210987654321"
-	)
+	const clusterName = "unbound-region-delete"
 
 	for _, region := range []string{"eu-north-1", "us-east-1"} {
 		require.NoError(
@@ -131,31 +127,7 @@ func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 		)
 	}
 
-	components := []struct{ region, account string }{
-		{"eu-north-1", accountA},
-		{"eu-north-1", accountB},
-		{"us-east-1", accountA},
-	}
-	for _, component := range components {
-		require.NoError(t, state.SaveEKSComponentState(clusterName, component.region,
-			&state.EKSComponentState{
-				Version:     state.EKSComponentStateVersion,
-				ClusterName: clusterName,
-				Region:      component.region,
-				AccountID:   component.account,
-			}))
-	}
-
-	t.Cleanup(func() {
-		for _, account := range []string{accountA, accountB} {
-			_, err := state.LoadEKSComponentState(clusterName, "eu-north-1", account)
-			assert.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
-				"unbound delete must remove account %s's component state in the deleted region", account)
-		}
-
-		_, err := state.LoadEKSComponentState(clusterName, "us-east-1", accountA)
-		assert.NoError(t, err, "another region's component state must survive")
-	})
+	saveUnboundDeleteComponents(t, clusterName)
 
 	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
 	require.NoError(t, state.SaveClusterSpec(clusterName, &v1alpha1.ClusterSpec{
@@ -164,6 +136,8 @@ func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 	}))
 
 	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
+
+	assertUnboundDeleteComponents(t, clusterName, "eu-north-1")
 
 	_, err := state.LoadEKSNodegroupState(clusterName, "eu-north-1")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
@@ -176,6 +150,52 @@ func TestDeleteEKSRegionStateWithoutAccountBinding(t *testing.T) {
 
 	_, err = state.LoadClusterSpec(clusterName)
 	require.ErrorIs(t, err, state.ErrStateNotFound)
+}
+
+type unboundDeleteComponent struct {
+	region  string
+	account string
+}
+
+// unboundDeleteComponents is the component state seeded for the unbound delete: two accounts in the
+// deleted region and one in a region that must survive.
+func unboundDeleteComponents() []unboundDeleteComponent {
+	return []unboundDeleteComponent{
+		{region: "eu-north-1", account: "123456789012"},
+		{region: "eu-north-1", account: "210987654321"},
+		{region: "us-east-1", account: "123456789012"},
+	}
+}
+
+func saveUnboundDeleteComponents(t *testing.T, clusterName string) {
+	t.Helper()
+
+	for _, component := range unboundDeleteComponents() {
+		require.NoError(t, state.SaveEKSComponentState(clusterName, component.region,
+			&state.EKSComponentState{
+				Version:     state.EKSComponentStateVersion,
+				ClusterName: clusterName,
+				Region:      component.region,
+				AccountID:   component.account,
+			}))
+	}
+}
+
+func assertUnboundDeleteComponents(t *testing.T, clusterName, deletedRegion string) {
+	t.Helper()
+
+	for _, component := range unboundDeleteComponents() {
+		_, err := state.LoadEKSComponentState(clusterName, component.region, component.account)
+		if component.region == deletedRegion {
+			assert.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
+				"unbound delete must remove account %s's component state in the deleted region",
+				component.account)
+
+			continue
+		}
+
+		assert.NoError(t, err, "another region's component state must survive")
+	}
 }
 
 func TestEKSComponentStateIsScopedByAccountAndRegion(t *testing.T) {
