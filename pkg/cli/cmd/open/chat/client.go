@@ -207,6 +207,8 @@ func configureStdioConnection(opts *copilot.ClientOptions, cliPath string) {
 	opts.Connection = copilot.StdioConnection{Path: cliPath}
 }
 
+// buildClientStartupError wraps a Copilot client startup failure with the fix hints
+// that match how the client was configured, including any CLI diagnostic output.
 func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnostic string) error {
 	if opts.UseLoggedInUser != nil && !*opts.UseLoggedInUser && opts.GitHubToken == "" {
 		return fmt.Errorf(
@@ -231,14 +233,27 @@ func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnosti
 	)
 }
 
+// verifyTimeout bounds the pre-flight version check of the Copilot CLI.
+const verifyTimeout = 5 * time.Second
+
 // verifyCopilotCLI runs a quick version check on the resolved copilot binary
 // to catch common issues (missing binary, corrupt install, wrong binary)
 // before the SDK attempts a full startup. The provided env is used so the
 // pre-flight check matches the filtered environment the SDK will use.
 func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
-	const verifyTimeout = 5 * time.Second
+	return verifyCopilotCLIWithin(ctx, verifyTimeout, cliPath, env)
+}
 
-	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
+// verifyCopilotCLIWithin is verifyCopilotCLI with an explicit deadline. Tests
+// that spawn real processes use it to allow for a loaded machine, where a
+// trivial script can take longer than the production deadline to start.
+func verifyCopilotCLIWithin(
+	ctx context.Context,
+	timeout time.Duration,
+	cliPath string,
+	env []string,
+) error {
+	verifyCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var output bytes.Buffer
@@ -303,7 +318,18 @@ func diagnoseCLIStartupFailure(
 	cliPath, githubToken string,
 	env []string,
 ) string {
-	diagCtx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
+	return diagnoseCLIStartupFailureWithin(ctx, diagnoseTimeout, cliPath, githubToken, env)
+}
+
+// diagnoseCLIStartupFailureWithin is diagnoseCLIStartupFailure with an explicit
+// deadline, for the same reason as verifyCopilotCLIWithin.
+func diagnoseCLIStartupFailureWithin(
+	ctx context.Context,
+	timeout time.Duration,
+	cliPath, githubToken string,
+	env []string,
+) string {
+	diagCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	args := []string{"--headless", "--no-auto-update", "--log-level", "error", "--stdio"}

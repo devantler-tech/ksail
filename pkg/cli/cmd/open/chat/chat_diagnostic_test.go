@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/open/chat"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,23 @@ import (
 )
 
 const osWindows = "windows"
+
+// probeTimeout is the deadline tests give the CLI probes when they spawn a real
+// process. The probes return as soon as the process exits, so a generous ceiling
+// costs nothing on an idle machine, while the production deadlines (a few seconds)
+// can expire before a trivial script starts when the full test suite loads the host.
+const probeTimeout = time.Minute
+
+// hangTimeout is a short deadline for proving a probe still stops a process that
+// never exits.
+const hangTimeout = 200 * time.Millisecond
+
+// slowStartSeconds is how long a slow-start test script sleeps before producing
+// output: one second past the given production deadline, so the script survives
+// only when a probe uses the supplied deadline instead of that production one.
+func slowStartSeconds(production time.Duration) int {
+	return int(production/time.Second) + 1
+}
 
 // errFakeCLIExit is a static sentinel used in TestStartupErrFmt to simulate
 // the error produced by the Copilot SDK when its CLI subprocess exits early.
@@ -33,6 +51,8 @@ func writeScript(t *testing.T, dir, content string) string {
 	return path
 }
 
+// TestDiagnoseCLIStartupFailure verifies the diagnostic probe captures the CLI's
+// stderr, and returns nothing when there is none or the context is cancelled.
 func TestDiagnoseCLIStartupFailure(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +60,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		t.Skip("test relies on shell scripts")
 	}
 
-	diagnose := chat.GetDiagnoseCLIStartupFailure()
+	diagnose := chat.GetDiagnoseCLIStartupFailureWithin()
 
 	t.Run("captures stderr from failing process", func(t *testing.T) {
 		t.Parallel()
@@ -48,7 +68,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\necho 'Error: missing config' >&2\nexit 1\n")
 
-		result := diagnose(context.Background(), script, "", os.Environ())
+		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
 		assert.Equal(t, "Error: missing config", result)
 	})
 
@@ -58,7 +78,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\nexit 1\n")
 
-		result := diagnose(context.Background(), script, "", os.Environ())
+		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -71,7 +91,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		result := diagnose(ctx, script, "", os.Environ())
+		result := diagnose(ctx, probeTimeout, script, "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -82,8 +102,58 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		script := writeScript(t, dir,
 			"#!/bin/sh\necho 'line 1' >&2\necho 'line 2' >&2\nexit 1\n")
 
-		result := diagnose(context.Background(), script, "", os.Environ())
+		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
 		assert.Equal(t, "line 1\nline 2", result)
+	})
+}
+
+// TestDiagnoseCLIStartupFailureDeadline verifies the diagnostic probe honours the
+// deadline it is given and keeps its production default.
+func TestDiagnoseCLIStartupFailureDeadline(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == osWindows {
+		t.Skip("test relies on shell scripts")
+	}
+
+	diagnose := chat.GetDiagnoseCLIStartupFailureWithin()
+
+	t.Run("stops a process that never exits once the deadline passes", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// exec replaces the shell, so the deadline kills the process holding the
+		// stderr pipe and the probe returns instead of waiting for sleep to end.
+		script := writeScript(t, dir, "#!/bin/sh\nexec sleep 120\n")
+		start := time.Now()
+
+		result := diagnose(context.Background(), hangTimeout, script, "", os.Environ())
+		assert.Empty(t, result)
+		// The generous bound keeps this deterministic on a loaded host; it fails only
+		// when the probe ignores its deadline and waits for the 120s script.
+		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+	})
+
+	t.Run("honours a supplied deadline longer than the production one", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// The script outlives the production deadline, so its output is captured only
+		// when the probe uses the supplied deadline. A probe that falls back to the
+		// production deadline kills it first; host load can only make the script
+		// slower, so no upper bound on elapsed time is needed.
+		script := writeScript(t, dir, fmt.Sprintf(
+			"#!/bin/sh\nsleep %d\necho 'Error: slow start' >&2\nexit 1\n",
+			slowStartSeconds(chat.DiagnoseTimeout)))
+
+		result := diagnose(context.Background(), probeTimeout, script, "", os.Environ())
+		assert.Equal(t, "Error: slow start", result)
+	})
+
+	t.Run("production deadline is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 3*time.Second, chat.DiagnoseTimeout)
 	})
 }
 
