@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # wait-for-rate-limit.sh — wait until the GitHub API has at least MIN_REMAINING core calls left.
 #
-# The probe's exit status and output are checked before any comparison. An unreachable API or an
-# unreadable reply leaves the remaining quota unknown, so it is retried within MAX_WAIT and, if it
-# never recovers, reported as an outage. Only a readable count below MIN_REMAINING is reported as
-# rate-limit exhaustion (#6291).
+# The probe's exit status and output are checked before any comparison. An unreachable API, an
+# unreadable reply, or a probe that does not answer in time leaves the remaining quota unknown, so it
+# is retried and, if it never recovers, reported as an outage. Only a readable count below
+# MIN_REMAINING is reported as rate-limit exhaustion (#6291).
+#
+# MAX_WAIT bounds the whole wait: time spent in probes counts toward it alongside the sleeps between
+# them, and each probe is stopped once the remaining budget is spent.
 #
 # Environment:
 #   MIN_REMAINING  minimum remaining core API calls required to proceed
@@ -19,12 +22,48 @@ interval=30
 max_interval=300
 elapsed=0
 
+stdout_file="$(mktemp)"
 stderr_file="$(mktemp)"
-trap 'rm -f "${stderr_file}"' EXIT
+timeout_marker="$(mktemp)"
+trap 'rm -f "${stdout_file}" "${stderr_file}" "${timeout_marker}"' EXIT
+
+# run_bounded LIMIT COMMAND... runs COMMAND with its output in stdout_file and stderr_file and stops
+# it after LIMIT seconds. It returns COMMAND's status, or 124 when LIMIT was reached. The watchdog
+# calls /bin/sleep directly so the deadline stays real even where `sleep` is replaced.
+run_bounded() {
+	local limit="$1" pid watchdog status
+	shift
+	rm -f "${timeout_marker}"
+	"$@" </dev/null >"${stdout_file}" 2>"${stderr_file}" &
+	pid=$!
+	(
+		trap 'kill "${sleeper:-}" 2>/dev/null; exit 0' TERM
+		/bin/sleep "${limit}" &
+		sleeper=$!
+		wait "${sleeper}" && : >"${timeout_marker}" && kill "${pid}" 2>/dev/null
+	) </dev/null >/dev/null 2>&1 &
+	watchdog=$!
+	if wait "${pid}"; then
+		status=0
+	else
+		status=$?
+	fi
+	kill "${watchdog}" 2>/dev/null || true
+	wait "${watchdog}" 2>/dev/null || true
+	if [ -e "${timeout_marker}" ]; then
+		return 124
+	fi
+	return "${status}"
+}
 
 while true; do
 	probe_error=""
-	if remaining="$(gh api /rate_limit --jq '.resources.core.remaining' 2>"${stderr_file}")"; then
+	remaining=""
+	budget=$((MAX_WAIT - elapsed))
+	limit=$((budget < 1 ? 1 : (budget > 60 ? 60 : budget)))
+	started=${SECONDS}
+	if run_bounded "${limit}" gh api /rate_limit --jq '.resources.core.remaining'; then
+		remaining="$(cat "${stdout_file}")"
 		if [[ ! "${remaining}" =~ ^[0-9]+$ ]]; then
 			probe_error="non-numeric remaining count '${remaining}'"
 		elif [ "${remaining}" -ge "${MIN_REMAINING}" ]; then
@@ -33,8 +72,13 @@ while true; do
 		fi
 	else
 		status=$?
-		probe_error="gh exited ${status}: $(head -n 1 "${stderr_file}")"
+		if [ "${status}" -eq 124 ]; then
+			probe_error="gh did not answer within ${limit}s"
+		else
+			probe_error="gh exited ${status}: $(head -n 1 "${stderr_file}")"
+		fi
 	fi
+	elapsed=$((elapsed + SECONDS - started))
 
 	if [ "${elapsed}" -ge "${MAX_WAIT}" ]; then
 		if [ -n "${probe_error}" ]; then
@@ -42,7 +86,11 @@ while true; do
 			exit 1
 		fi
 
-		reset_at="$(gh api /rate_limit --jq '.resources.core.reset | todate' 2>/dev/null)" || reset_at="unknown"
+		if run_bounded 10 gh api /rate_limit --jq '.resources.core.reset | todate'; then
+			reset_at="$(cat "${stdout_file}")"
+		else
+			reset_at="unknown"
+		fi
 		echo "::error::GitHub API rate limit exhausted (${remaining} remaining, need ${MIN_REMAINING}). Waited ${elapsed}s (max ${MAX_WAIT}s). Resets at ${reset_at}."
 		exit 1
 	fi

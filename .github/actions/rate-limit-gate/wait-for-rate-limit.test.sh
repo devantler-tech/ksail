@@ -2,7 +2,8 @@
 #
 # Hermetic tests for wait-for-rate-limit.sh (#6291). A fake `gh` replays one scripted probe result
 # per call (repeating the last one) and a fake `sleep` returns immediately, so no case touches the
-# network or waits. An outage must never be reported as rate-limit exhaustion.
+# network. Only the hung-probe case waits, for about its short MAX_WAIT. An outage must never be
+# reported as rate-limit exhaustion.
 
 set -euo pipefail
 
@@ -26,6 +27,9 @@ printf '%s\n' "${count}" >"${FAKE_GH_COUNTER}"
 total=$(wc -l <"${FAKE_GH_SEQUENCE}")
 line_number=$((count < total ? count : total))
 IFS='|' read -r code stdout stderr < <(sed -n "${line_number}p" "${FAKE_GH_SEQUENCE}")
+if [ "${code}" = hang ]; then
+	exec /bin/sleep 30
+fi
 [ -n "${stdout}" ] && printf '%s\n' "${stdout}"
 [ -n "${stderr}" ] && printf '%s\n' "${stderr}" >&2
 exit "${code}"
@@ -37,7 +41,8 @@ chmod +x "${fake_bin}/gh" "${fake_bin}/sleep"
 pass_count=0
 
 # run_case NAME EXPECTED_STATUS EXPECTED_TEXT FORBIDDEN_TEXT PROBE... — each PROBE is
-# "exit-code|stdout|stderr" for one successive `gh api /rate_limit` call.
+# "exit-code|stdout|stderr" for one successive `gh api /rate_limit` call, or "hang||" for a call that
+# never answers. CASE_MAX_WAIT overrides the gate's MAX_WAIT (default 60).
 run_case() {
 	local name="$1" expected_status="$2" expected_text="$3" forbidden_text="$4"
 	shift 4
@@ -49,7 +54,7 @@ run_case() {
 	local output status
 	set +e
 	output="$(PATH="${fake_bin}:${PATH}" FAKE_GH_SEQUENCE="${sequence}" FAKE_GH_COUNTER="${counter}" \
-		MIN_REMAINING=100 MAX_WAIT=60 bash "${gate}" 2>&1)"
+		MIN_REMAINING=100 MAX_WAIT="${CASE_MAX_WAIT:-60}" bash "${gate}" 2>&1)"
 	status=$?
 	set -e
 
@@ -81,5 +86,16 @@ run_case non-numeric-reply-is-not-exhaustion 1 "non-numeric remaining count 'nul
 	'0|null|'
 run_case genuine-exhaustion 1 'rate limit exhausted (5 remaining, need 100)' 'unreachable' '0|5|'
 run_case genuine-exhaustion-names-reset 1 'Resets at 2026-07-20T01:00:00Z' '' '0|5|'
+
+# A probe that never answers must be stopped within MAX_WAIT and reported as unreachable.
+hang_started=${SECONDS}
+CASE_MAX_WAIT=2 run_case hung-probe-is-bounded-and-not-exhaustion 1 \
+	'this is not rate-limit exhaustion (gh did not answer within 2s)' 'rate limit exhausted' 'hang||'
+hang_seconds=$((SECONDS - hang_started))
+if [[ "${hang_seconds}" -gt 15 ]]; then
+	printf 'FAIL: hung-probe-is-bounded-and-not-exhaustion: took %ss; the probe was not stopped near MAX_WAIT=2\n' \
+		"${hang_seconds}" >&2
+	exit 1
+fi
 
 printf 'All %s rate-limit gate cases passed.\n' "${pass_count}"
