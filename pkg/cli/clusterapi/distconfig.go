@@ -490,13 +490,19 @@ func deleteEKSClusterState(name string) error {
 		return fmt.Errorf("delete EKS region state: %w", err)
 	}
 
-	err = os.Remove(bound.ConfigPath)
+	return removeEKSConfigAndEmptyDir(bound.ConfigPath)
+}
+
+// removeEKSConfigAndEmptyDir removes an EKS cluster's eks.yaml, then its state directory only when
+// nothing else is left in it.
+func removeEKSConfigAndEmptyDir(configPath string) error {
+	err := os.Remove(configPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove eks config: %w", err)
 	}
 
 	// The directory goes only once it is empty; another region's state keeps it.
-	dir := filepath.Dir(bound.ConfigPath)
+	dir := filepath.Dir(configPath)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) > 0 {
