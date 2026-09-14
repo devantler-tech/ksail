@@ -187,14 +187,14 @@ func assertUnboundDeleteComponents(t *testing.T, clusterName, deletedRegion stri
 	for _, component := range unboundDeleteComponents() {
 		_, err := state.LoadEKSComponentState(clusterName, component.region, component.account)
 		if component.region == deletedRegion {
-			assert.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
+			require.ErrorIs(t, err, state.ErrEKSComponentStateNotFound,
 				"unbound delete must remove account %s's component state in the deleted region",
 				component.account)
 
 			continue
 		}
 
-		assert.NoError(t, err, "another region's component state must survive")
+		require.NoError(t, err, "another region's component state must survive")
 	}
 }
 
