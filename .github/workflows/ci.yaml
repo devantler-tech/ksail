@@ -147,6 +147,7 @@ jobs:
       cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
       k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
+      gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -252,6 +253,7 @@ jobs:
               - 'go.sum'
               - '.github/actions/**'
               - '.github/fixtures/**'
+              - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
@@ -343,6 +345,11 @@ jobs:
               - '.github/scripts/assert-k3k-server-creator.test.sh'
               - '.github/actions/ksail-test-kubernetes-provider/action.yaml'
               - '.github/workflows/ci.yaml'
+            gitops-assert-scripts:
+              - '.github/scripts/assert-gitops-deployed.sh'
+              - '.github/scripts/assert-gitops-deployed.test.sh'
+              - '.github/actions/ksail-test-workload/action.yaml'
+              - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -385,6 +392,27 @@ jobs:
             .github/scripts/assert-k3k-server-creator.sh \
             .github/scripts/assert-k3k-server-creator.test.sh
           .github/scripts/assert-k3k-server-creator.test.sh
+
+  gitops-assert-scripts:
+    name: 🔐 Validate GitOps Deployment Assertion
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.gitops-assert-scripts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Verify the GitOps assertion rejects an engine that deployed nothing
+        run: |
+          shellcheck \
+            .github/scripts/assert-gitops-deployed.sh \
+            .github/scripts/assert-gitops-deployed.test.sh
+          .github/scripts/assert-gitops-deployed.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
@@ -1826,6 +1854,7 @@ jobs:
         verify-todos-workflow-contract,
         cask-pr-handoff,
         k3k-sentinel-scripts,
+        gitops-assert-scripts,
       ]
     if: ${{ always() }}
     steps:
@@ -1857,3 +1886,4 @@ jobs:
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
+            ${{ needs.gitops-assert-scripts.result }}
