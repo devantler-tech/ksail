@@ -18,12 +18,14 @@ import (
 const (
 	accountScopeClusterName = "same-name-account-scope"
 	accountScopeRegion      = "eu-north-1"
+	// windowsGOOS names the platform where symlink creation needs elevated privileges.
+	windowsGOOS = "windows"
 )
 
 // TestLoadEKSComponentStateRejectsSymlinkEscape proves a state filename cannot
 // redirect the constrained read outside its per-cluster directory.
 func TestLoadEKSComponentStateRejectsSymlinkEscape(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("symlink creation requires elevated privileges on Windows")
 	}
 
@@ -201,7 +203,7 @@ func assertUnboundDeleteComponents(t *testing.T, clusterName, deletedRegion stri
 // TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory proves the unbound cleanup cannot
 // enumerate and remove matching files through a cluster directory that points elsewhere.
 func TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("symlink creation requires elevated privileges on Windows")
 	}
 
@@ -228,7 +230,7 @@ func TestDeleteEKSRegionStateRejectsSymlinkedClusterDirectory(t *testing.T) {
 // TestDeleteEKSRegionStateFollowsSymlinkedStateRoot keeps a relocated ~/.ksail working: only a
 // cluster directory that leaves its own root is refused.
 func TestDeleteEKSRegionStateFollowsSymlinkedStateRoot(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("symlink creation requires elevated privileges on Windows")
 	}
 
