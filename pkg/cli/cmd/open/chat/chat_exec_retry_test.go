@@ -84,14 +84,14 @@ func TestVerifyCopilotCLI(t *testing.T) {
 		t.Skip("test relies on shell scripts")
 	}
 
-	verify := chat.GetVerifyCopilotCLI()
+	verify := chat.GetVerifyCopilotCLIWithin()
 
 	t.Run("returns nil when the CLI exits zero", func(t *testing.T) {
 		t.Parallel()
 
 		script := writeExecutable(t, "#!/bin/sh\necho 'copilot 1.2.3'\nexit 0\n")
 
-		require.NoError(t, verify(context.Background(), script, os.Environ()))
+		require.NoError(t, verify(context.Background(), probeTimeout, script, os.Environ()))
 	})
 
 	t.Run("wraps a pre-flight failure with the CLI output", func(t *testing.T) {
@@ -99,10 +99,31 @@ func TestVerifyCopilotCLI(t *testing.T) {
 
 		script := writeExecutable(t, "#!/bin/sh\necho 'broken install' >&2\nexit 1\n")
 
-		err := verify(context.Background(), script, os.Environ())
+		err := verify(context.Background(), probeTimeout, script, os.Environ())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pre-flight check")
 		assert.Contains(t, err.Error(), "broken install")
+	})
+
+	t.Run("fails a CLI that never exits once the deadline passes", func(t *testing.T) {
+		t.Parallel()
+
+		// exec replaces the shell, so the deadline kills the process holding the
+		// output pipe and the probe returns instead of waiting for sleep to end.
+		// It sleeps past probeTimeout, so ignoring the deadline fails the check below.
+		script := writeExecutable(t, "#!/bin/sh\nexec sleep 120\n")
+		start := time.Now()
+
+		err := verify(context.Background(), hangTimeout, script, os.Environ())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "pre-flight check")
+		assert.Less(t, time.Since(start), probeTimeout, "the deadline must stop a hanging CLI")
+	})
+
+	t.Run("production deadline is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 5*time.Second, chat.VerifyTimeout)
 	})
 }
 

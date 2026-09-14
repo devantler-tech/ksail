@@ -36,6 +36,21 @@ func GetFilterEnvVars() func([]string, []string) []string {
 // DiagnoseTimeout exports the diagnoseTimeout constant for testing.
 const DiagnoseTimeout = diagnoseTimeout
 
+// VerifyTimeout exports the verifyTimeout constant for testing.
+const VerifyTimeout = verifyTimeout
+
+// GetDiagnoseCLIStartupFailureWithin returns diagnoseCLIStartupFailureWithin for testing.
+func GetDiagnoseCLIStartupFailureWithin() func(
+	context.Context, time.Duration, string, string, []string,
+) string {
+	return diagnoseCLIStartupFailureWithin
+}
+
+// GetVerifyCopilotCLIWithin returns verifyCopilotCLIWithin for testing.
+func GetVerifyCopilotCLIWithin() func(context.Context, time.Duration, string, []string) error {
+	return verifyCopilotCLIWithin
+}
+
 // StartupErrFmt exports the startupErrFmt constant for testing.
 const StartupErrFmt = startupErrFmt
 
