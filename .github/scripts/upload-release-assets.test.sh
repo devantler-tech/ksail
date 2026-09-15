@@ -99,11 +99,26 @@ fi
 pass_count=$((pass_count + 1))
 printf 'PASS: backoff-doubles-between-attempts\n'
 
+# The workflow runs the uploader with its defaults, so assert the schedule #6292 asks for (five attempts,
+# 15 seconds doubling) as literal delays rather than re-deriving it from the constants under test.
+run_case default-backoff-follows-issue 99 1 5 'after 5 attempts' "${tag_args[@]}"
+default_sleeps="$(paste -sd' ' "${tmp_dir}/default-backoff-follows-issue/sleep.log")"
+if [[ "${default_sleeps}" != "15 30 60 120" ]]; then
+	printf 'FAIL: default backoff must be 15 30 60 120 seconds (slept: %s)\n' "${default_sleeps}" >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: default-backoff-is-15s-doubling\n'
+
 run_case missing-assets-dir-fails-fast 99 1 0 'does not exist' --tag v7.175.1 --assets-dir "${tmp_dir}/absent"
 mkdir -p "${tmp_dir}/only-dirs/nested"
 run_case empty-assets-dir-fails-fast 99 1 0 'holds no files' --tag v7.175.1 --assets-dir "${tmp_dir}/only-dirs"
 run_case zero-attempts-rejected 0 2 0 '--attempts must be' "${tag_args[@]}" --attempts 0
 run_case missing-tag-rejected 0 2 0 '--tag, --assets-dir' --assets-dir "${assets_dir}"
+# A value-taking option given last is an argument error like the others (status 2), not a `shift 2` abort.
+for option in --tag --repo --assets-dir --attempts --delay-seconds; do
+	run_case "trailing${option}-without-value-rejected" 0 2 0 "${option} needs a value" "${tag_args[@]}" "${option}"
+done
 
 # The single unretried call this replaces strands the release on the same transient the uploader recovers
 # from: prove the old form fails where the new one passes, so the retry is what makes the difference.

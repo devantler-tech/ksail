@@ -5,7 +5,7 @@ set -euo pipefail
 # The retry budget the publish-release job in cd.yaml must fit inside its timeout. The workflow suite
 # reads these two lines, so keep them as plain assignments.
 DEFAULT_ATTEMPTS=5
-DEFAULT_DELAY_SECONDS=10
+DEFAULT_DELAY_SECONDS=15
 
 # usage prints the command-line contract.
 usage() {
@@ -24,8 +24,18 @@ retrying a failed upload with exponential backoff (S seconds, doubling).
 
 --clobber makes a retry replace a partially uploaded asset instead of failing on
 its name. --repo defaults to $GH_REPO, then $GITHUB_REPOSITORY. Defaults: 5
-attempts, 10 seconds.
+attempts, 15 seconds.
 EOF
+}
+
+# require_value rejects a value-taking option given as the last argument, so it fails as an argument
+# error (status 2) instead of `shift 2` aborting the script under `set -e` with status 1.
+require_value() {
+	if (($# < 2)); then
+		printf 'ERROR: %s needs a value\n' "$1" >&2
+		usage >&2
+		exit 2
+	fi
 }
 
 tag=""
@@ -37,23 +47,28 @@ delay="${DEFAULT_DELAY_SECONDS}"
 while (($# > 0)); do
 	case "$1" in
 	--tag)
-		tag="${2:-}"
+		require_value "$@"
+		tag="$2"
 		shift 2
 		;;
 	--repo)
-		repo="${2:-}"
+		require_value "$@"
+		repo="$2"
 		shift 2
 		;;
 	--assets-dir)
-		assets_dir="${2:-}"
+		require_value "$@"
+		assets_dir="$2"
 		shift 2
 		;;
 	--attempts)
-		attempts="${2:-}"
+		require_value "$@"
+		attempts="$2"
 		shift 2
 		;;
 	--delay-seconds)
-		delay="${2:-}"
+		require_value "$@"
+		delay="$2"
 		shift 2
 		;;
 	--help | -h)
