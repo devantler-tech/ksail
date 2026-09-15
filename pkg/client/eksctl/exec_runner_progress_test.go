@@ -97,3 +97,29 @@ func TestExecRunner_RunWithProgress_FailingProgressDoesNotFailTheCommand(t *test
 	require.NoError(t, err)
 	assert.Equal(t, "created\n", string(stdout))
 }
+
+// TestExecRunner_RunWithProgress_SerializesStreamsForAPlainWriter verifies a caller may pass a
+// writer that is not safe for concurrent use: stdout and stderr lines must not race or be lost.
+// Run with -race to catch an unserialized write.
+func TestExecRunner_RunWithProgress_SerializesStreamsForAPlainWriter(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell")
+	}
+
+	var progress bytes.Buffer
+
+	_, _, err := eksctl.ExecRunner{}.RunWithProgress(
+		t.Context(),
+		"sh",
+		[]string{"-c", "i=0; while [ $i -lt 200 ]; do echo out-$i; echo err-$i >&2; i=$((i+1)); done"},
+		nil,
+		nil,
+		&progress,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 200, bytes.Count(progress.Bytes(), []byte("out-")))
+	assert.Equal(t, 200, bytes.Count(progress.Bytes(), []byte("err-")))
+}

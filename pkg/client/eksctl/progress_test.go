@@ -196,3 +196,99 @@ func TestExec_ErrorOutputTailIsBoundedAndRedacted(t *testing.T) {
 	assert.NotContains(t, err.Error(), fixtureSecret)
 	assert.NotContains(t, err.Error(), "line-000")
 }
+
+// chunkedRunner writes its output to progress in the given chunks, the way a pipe can split a long
+// line across several writes.
+type chunkedRunner struct {
+	chunks []string
+}
+
+// Run is never used by the streaming path; it satisfies the Runner interface.
+func (r *chunkedRunner) Run(context.Context, string, []string, io.Reader) ([]byte, []byte, error) {
+	return nil, nil, nil
+}
+
+// RunWithEnvironment is never used by the streaming path; it satisfies EnvironmentRunner.
+func (r *chunkedRunner) RunWithEnvironment(
+	context.Context,
+	string,
+	[]string,
+	io.Reader,
+	[]string,
+) ([]byte, []byte, error) {
+	return nil, nil, nil
+}
+
+// RunWithProgress writes each chunk as a separate write, then returns the joined output.
+func (r *chunkedRunner) RunWithProgress(
+	_ context.Context,
+	_ string,
+	_ []string,
+	_ io.Reader,
+	_ []string,
+	progress io.Writer,
+) ([]byte, []byte, error) {
+	for _, chunk := range r.chunks {
+		_, _ = progress.Write([]byte(chunk))
+	}
+
+	return []byte(strings.Join(r.chunks, "")), nil, nil
+}
+
+// TestCreateCluster_OverlongLineNeverLeaksASplitCredential reproduces a credential split across the
+// pending-line cap: neither half of it may reach progress output.
+func TestCreateCluster_OverlongLineNeverLeaksASplitCredential(t *testing.T) {
+	t.Parallel()
+
+	const pendingCap = 64 * 1024
+
+	head := fixtureSecret[:15]
+	tail := fixtureSecret[15:]
+	runner := &chunkedRunner{chunks: []string{
+		strings.Repeat("a", pendingCap-len(head)) + head,
+		tail + "\n",
+		"[ℹ]  next line\n",
+	}}
+
+	var progress bytes.Buffer
+
+	client := eksctl.NewClient(
+		eksctl.WithBinary("eksctl-under-test"),
+		eksctl.WithRunner(runner),
+		eksctl.WithEnvironment([]string{
+			"AWS_ACCESS_KEY_ID=fixture-access-key-id",
+			"AWS_SECRET_ACCESS_KEY=" + fixtureSecret,
+		}),
+		eksctl.WithProgressWriter(&progress),
+	)
+
+	require.NoError(t, client.CreateCluster(t.Context(), "eks.yaml", ""))
+
+	assert.NotContains(t, progress.String(), head)
+	assert.NotContains(t, progress.String(), tail)
+	assert.Contains(t, progress.String(), "omitted")
+	assert.Contains(t, progress.String(), "next line")
+}
+
+// TestExec_ErrorTailKeepsStdoutCauseDespiteLongStderr verifies a long stderr cannot push eksctl's
+// stdout cause out of the bounded error tail.
+func TestExec_ErrorTailKeepsStdoutCauseDespiteLongStderr(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	for line := range 30 {
+		fmt.Fprintf(&stderr, "stderr-%02d\n", line)
+	}
+
+	runner := &fakeRunner{
+		stdout: []byte("[✖]  exceeded max wait time for StackCreateComplete waiter\n"),
+		stderr: []byte(stderr.String()),
+		err:    errExitStatus1,
+	}
+
+	err := newTestClient(runner).CreateCluster(t.Context(), "eks.yaml", "")
+	require.Error(t, err)
+
+	assert.Contains(t, err.Error(), "exceeded max wait time")
+	assert.Contains(t, err.Error(), "stderr-29")
+}

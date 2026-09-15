@@ -114,9 +114,12 @@ func runCommand(
 	cmd.Stderr = &stderr
 
 	if progress != nil {
-		// One line buffer per stream, so stdout and stderr never interleave mid-line.
-		stdoutLines := newLineWriter(progress, nil)
-		stderrLines := newLineWriter(progress, nil)
+		// One line buffer per stream, so stdout and stderr never interleave mid-line. os/exec copies
+		// the two streams on separate goroutines, and a caller's writer need not be safe for
+		// concurrent use, so both buffers write through one shared lock.
+		shared := newLockedWriter(progress)
+		stdoutLines := newLineWriter(shared, nil)
+		stderrLines := newLineWriter(shared, nil)
 
 		defer stdoutLines.Flush()
 		defer stderrLines.Flush()
