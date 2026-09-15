@@ -8,6 +8,9 @@ on:
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: false
+  # Keep a pending run instead of replacing it, so the daily and monthly
+  # cleanups cannot silently drop each other.
+  queue: max
 
 permissions:
   contents: read

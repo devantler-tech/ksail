@@ -7,6 +7,8 @@ on:
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: false
+  # Keep a pending run instead of replacing it with a newer one.
+  queue: max
 
 permissions: {}
 

@@ -13,6 +13,9 @@ on:
 concurrency:
   group: "Release"
   cancel-in-progress: false
+  # Keep every pending release instead of replacing it with a newer one, so a
+  # burst of merges publishes each release in order.
+  queue: max
 
 permissions:
   contents: read
