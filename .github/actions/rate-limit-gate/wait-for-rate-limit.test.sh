@@ -118,6 +118,33 @@ if [[ "${auth_calls}" -ne 1 ]]; then
 	exit 1
 fi
 
+# An invalid or expired token makes gh exit 1 with an HTTP 401, not 4. That rejection is just as
+# permanent, so it must also fail on the first probe instead of retrying for the whole budget.
+run_case rejected-credentials-fail-fast 1 \
+	'GitHub rejected the credentials (gh exited 1: gh: Bad credentials (HTTP 401)' 'probe failed' \
+	'1||gh: Bad credentials (HTTP 401)'
+rejected_calls="$(cat "${tmp_dir}/rejected-credentials-fail-fast.counter")"
+if [[ "${rejected_calls}" -ne 1 ]]; then
+	printf 'FAIL: rejected-credentials-fail-fast: expected exactly 1 gh call, got %s\n' "${rejected_calls}" >&2
+	exit 1
+fi
+
+# A 403 that refuses the token outright is a credential problem too.
+run_case forbidden-token-fails-fast 1 \
+	'GitHub rejected the credentials (gh exited 1: gh: Resource not accessible by integration (HTTP 403)' 'probe failed' \
+	'1||gh: Resource not accessible by integration (HTTP 403)'
+forbidden_calls="$(cat "${tmp_dir}/forbidden-token-fails-fast.counter")"
+if [[ "${forbidden_calls}" -ne 1 ]]; then
+	printf 'FAIL: forbidden-token-fails-fast: expected exactly 1 gh call, got %s\n' "${forbidden_calls}" >&2
+	exit 1
+fi
+
+# GitHub also answers a secondary rate limit with a 403. That is throttling, not a bad token, so it must
+# stay retryable and must never be reported as rejected credentials.
+run_case secondary-rate-limit-403-is-not-auth 1 \
+	'the rate-limit probe failed — the remaining quota is unknown, so this is not rate-limit exhaustion (gh exited 1: gh: You have exceeded a secondary rate limit' \
+	'rejected the credentials' '1||gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. (HTTP 403)'
+
 # A generic gh failure that names no server or network error is a probe failure, not an outage: it
 # must not tell the reader to wait for GitHub to recover.
 run_case unclassified-probe-failure-is-not-outage 1 \

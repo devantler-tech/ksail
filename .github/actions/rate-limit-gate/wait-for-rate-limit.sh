@@ -5,8 +5,9 @@
 # in time, or that reports a server or network error, means the API is unreachable. Any other failure,
 # including an unreadable reply, is a probe failure. Both leave the remaining quota unknown, so they
 # are retried and, if they never recover, reported as what they are. Missing authentication (gh exit
-# status 4) fails immediately, because retrying cannot fix it. Only a readable count below
-# MIN_REMAINING is reported as rate-limit exhaustion (#6291).
+# status 4) and credentials GitHub rejects (HTTP 401, or a 403 that is not a rate limit) fail
+# immediately, because retrying cannot fix them. Only a readable count below MIN_REMAINING is
+# reported as rate-limit exhaustion (#6291).
 #
 # MAX_WAIT bounds the whole wait: time spent in probes counts toward it alongside the sleeps between
 # them, and each probe is stopped once the remaining budget is spent.
@@ -88,6 +89,12 @@ while true; do
 		elif [ "${status}" -eq 4 ]; then
 			# gh documents exit status 4 as "authentication required": no amount of waiting fixes that.
 			echo "::error::could not determine rate limit: gh is not authenticated (gh exited 4: $(head -n 1 "${stderr_file}")). Check that GH_TOKEN is set and valid; retrying will not help."
+			exit 1
+		elif grep -Eqi 'HTTP 401|Bad credentials' "${stderr_file}" ||
+			{ grep -Eqi 'HTTP 403|Forbidden' "${stderr_file}" && ! grep -Eqi 'rate limit' "${stderr_file}"; }; then
+			# An invalid or expired token makes gh exit 1, not 4, so detect the rejection itself. A 403 that
+			# mentions a rate limit is GitHub throttling, not a credential problem, and stays retryable.
+			echo "::error::could not determine rate limit: GitHub rejected the credentials (gh exited ${status}: $(head -n 1 "${stderr_file}")). Check that GH_TOKEN is valid and not expired; retrying will not help."
 			exit 1
 		else
 			probe_error="gh exited ${status}: $(head -n 1 "${stderr_file}")"
