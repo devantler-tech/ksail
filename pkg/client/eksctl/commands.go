@@ -82,9 +82,7 @@ func (c *Client) createCluster(
 		args = append(args, "--kubeconfig", path)
 	}
 
-	_, _, err := c.Exec(ctx, args...)
-
-	return err
+	return c.execWithProgress(ctx, args...)
 }
 
 // CreateNodegroup creates the node groups in a config file. The caller supplies
@@ -94,9 +92,7 @@ func (c *Client) CreateNodegroup(ctx context.Context, configPath string) error {
 		return ErrEmptyConfigPath
 	}
 
-	_, _, err := c.Exec(ctx, "create", "nodegroup", "--config-file", configPath)
-
-	return err
+	return c.execWithProgress(ctx, "create", "nodegroup", "--config-file", configPath)
 }
 
 // DeleteCluster invokes `eksctl delete cluster --name <name> [--region <region>]`.
@@ -125,9 +121,7 @@ func (c *Client) DeleteCluster(
 		args = append(args, "--wait")
 	}
 
-	_, _, err := c.Exec(ctx, args...)
-
-	return err
+	return c.execWithProgress(ctx, args...)
 }
 
 // GetCluster returns the summary for a named cluster. Returns
@@ -267,9 +261,7 @@ func (c *Client) ScaleNodegroup(
 		args = append(args, "--region", region)
 	}
 
-	_, _, err := c.Exec(ctx, args...)
-
-	return err
+	return c.execWithProgress(ctx, args...)
 }
 
 // UpgradeCluster invokes `eksctl upgrade cluster -f <configPath>`.
@@ -289,9 +281,7 @@ func (c *Client) UpgradeCluster(
 		args = append(args, "--approve")
 	}
 
-	_, _, err := c.Exec(ctx, args...)
-
-	return err
+	return c.execWithProgress(ctx, args...)
 }
 
 // parseClusterSummaries unmarshals the JSON output of `eksctl get cluster`.
