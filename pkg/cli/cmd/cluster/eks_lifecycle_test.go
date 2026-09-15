@@ -203,6 +203,38 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 	}
 }
 
+// TestStandaloneEKSLifecycleCommandsAcceptQueryWithoutRegion pins ksail#6368: the ownership query
+// already runs with --region, so a result that leaves Region empty did not report a region — it did
+// not report a different one. Delete, start, and stop must proceed in the requested region instead of
+// refusing a cluster ksail itself created.
+func TestStandaloneEKSLifecycleCommandsAcceptQueryWithoutRegion(t *testing.T) {
+	for _, testCase := range standaloneEKSLifecycleCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			clusterName := "ksail-eks-" + testCase.name + "-empty-region-test-6368"
+			markerPath, _ := setupStandaloneEKSLifecycleFixture(t, clusterName)
+			configureStandaloneEKSNodegroupAction(t, testCase.name)
+			t.Setenv("KSAIL_EKS_DISCOVERED_REGION", "")
+
+			cmd := testCase.newCommand()
+			args := make([]string, 0, 4+len(testCase.extraArgs))
+			args = append(args, "--name", clusterName, "--provider", "AWS")
+			args = append(args, testCase.extraArgs...)
+			cmd.SetArgs(args)
+			cmd.SetContext(t.Context())
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			require.NoError(t, cmd.Execute())
+			assert.Equal(
+				t,
+				testCase.expectedCalls(clusterName),
+				readStandaloneEKSCalls(t, markerPath),
+			)
+			assertParentAWSEnvironmentUnchanged(t)
+		})
+	}
+}
+
 // TestStandaloneEKSStopStartRestoresExactCapacity exercises the user-facing commands across the
 // persisted boundary and proves start verifies the restored tuple before clearing its snapshot.
 func TestStandaloneEKSStopStartRestoresExactCapacity(t *testing.T) {

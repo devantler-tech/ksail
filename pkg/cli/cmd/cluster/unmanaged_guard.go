@@ -581,7 +581,9 @@ func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) boo
 }
 
 // validateAWSOwnershipSummary requires the exact query to corroborate name, region, and eksctl
-// provenance. Every mismatch is a pre-mutation blocker.
+// provenance. Every mismatch is a pre-mutation blocker. A blank region is not a mismatch: when a
+// region is resolved the query already ran with --region, so an omitted Region field reports nothing
+// about the cluster's location and the resolved region stands.
 func validateAWSOwnershipSummary(
 	resolved *lifecycle.ResolvedClusterInfo,
 	summary *eksctlclient.ClusterSummary,
@@ -598,7 +600,8 @@ func validateAWSOwnershipSummary(
 		)
 	}
 
-	if resolved.AWSRegion != "" && summary.Region != resolved.AWSRegion {
+	if resolved.AWSRegion != "" && strings.TrimSpace(summary.Region) != "" &&
+		summary.Region != resolved.AWSRegion {
 		return awsOwnershipMismatchError(
 			resolved,
 			fmt.Errorf(
