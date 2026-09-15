@@ -393,9 +393,12 @@ func TestListRegistriesOnNetwork(t *testing.T) {
 			ContainerList(ctx, mock.Anything).
 			Return([]container.Summary{
 				{
-					ID:     "reg1",
-					Names:  []string{"/docker-mirror"},
-					Labels: map[string]string{docker.RegistryLabelKey: "docker-mirror"},
+					ID:    "reg1",
+					Names: []string{"/docker-mirror"},
+					Labels: map[string]string{
+						docker.RegistryLabelKey:        "docker-mirror",
+						docker.RegistryClusterLabelKey: "kind-cluster",
+					},
 				},
 				{
 					ID:    "reg2",
@@ -437,8 +440,10 @@ func TestListRegistriesOnNetwork(t *testing.T) {
 		require.Len(t, registries, 2)
 		assert.Equal(t, "docker-mirror", registries[0].Name)
 		assert.True(t, registries[0].IsKSailOwned)
+		assert.Equal(t, "kind-cluster", registries[0].ClusterName)
 		assert.Equal(t, "k3d-registry", registries[1].Name)
 		assert.False(t, registries[1].IsKSailOwned)
+		assert.Empty(t, registries[1].ClusterName, "an unlabelled container has no recorded owner")
 	})
 
 	t.Run("returns nil for empty network name", func(t *testing.T) {
