@@ -40,12 +40,12 @@ func newLineWriter(target io.Writer, transform func([]byte) []byte) *lineWriter 
 	}
 }
 
-// Write buffers p and forwards every complete line it now holds.
-func (w *lineWriter) Write(p []byte) (int, error) {
+// Write buffers data and forwards every complete line it now holds.
+func (w *lineWriter) Write(data []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.pending = append(w.pending, p...)
+	w.pending = append(w.pending, data...)
 
 	for {
 		index := bytes.IndexByte(w.pending, '\n')
@@ -62,7 +62,7 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 		w.pending = nil
 	}
 
-	return len(p), nil
+	return len(data), nil
 }
 
 // Flush forwards a final unterminated line, if any.
