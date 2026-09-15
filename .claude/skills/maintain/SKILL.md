@@ -1,6 +1,6 @@
 ---
 name: maintain
-description: Repository maintenance for devantler-tech/ksail — triage, bug fixes, CI/workflow health & CI-failure/flaky investigation, docs upkeep, driving trusted-author PRs to merge, weekly E2E coverage + live reliability testing, and the monthly KSail Strategy roadmap. Use when performing autonomous or on-request maintenance of this repo.
+description: Repository maintenance for devantler-tech/ksail — triage, bug fixes, CI/workflow health & CI-failure/flaky investigation, docs upkeep, driving every open PR (external contributions included) to a terminal state, weekly E2E coverage + live reliability testing, and the monthly KSail Strategy roadmap. Use when performing autonomous or on-request maintenance of this repo.
 metadata:
   internal: true
 ---
