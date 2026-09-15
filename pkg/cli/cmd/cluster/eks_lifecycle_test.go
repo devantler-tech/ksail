@@ -1036,6 +1036,8 @@ func TestLegacyOwnershipRecordDefersToAuthoritativeMigrationError(t *testing.T) 
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
+// TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults proves that a loaded ksail.yaml naming no
+// cluster keeps precedence, so the canonical default credential variable names stay in place.
 func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -1050,6 +1052,144 @@ func TestPersistedAWSMappingsDoNotOverrideLoadedConfigDefaults(t *testing.T) {
 	assert.Empty(t, resolved.AWSOpts.RegionEnvVar)
 }
 
+// persistedAWSOptions is the credential variable mapping savePersistedAWSMappings records, so tests
+// can assert the whole restored mapping rather than a subset of its fields.
+func persistedAWSOptions() v1alpha1.OptionsAWS {
+	//nolint:gosec // G101: these are environment-variable names, never credential values.
+	return v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "AWS_PROFILE",
+		RegionEnvVar:          "KSAIL_REGION",
+		AccessKeyIDEnvVar:     "KSAIL_ACCESS",
+		SecretAccessKeyEnvVar: "AWS_SECRET_ACCESS_KEY",
+		SessionTokenEnvVar:    "AWS_SESSION_TOKEN",
+	}
+}
+
+// savePersistedAWSMappings records custom credential variable names for clusterName in region.
+func savePersistedAWSMappings(t *testing.T, clusterName, region string) {
+	t.Helper()
+
+	ownership := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      region,
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Now().UTC(),
+		AWSOptions:  persistedAWSOptions(),
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, region, ownership))
+}
+
+// TestPersistedAWSMappingsRestoreThroughUnrelatedConfig drives a state-backed target by --name from
+// a directory whose ksail.yaml describes a different cluster: that config must not suppress the
+// target's captured credential mappings (#6288).
+func TestPersistedAWSMappingsRestoreThroughUnrelatedConfig(t *testing.T) {
+	const (
+		clusterName = "unrelated-config-restores-6288"
+		region      = "eu-north-1"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+	savePersistedAWSMappings(t, clusterName, region)
+
+	resolved, err := lifecycle.ResolveClusterInfo(nil, clusterName, "", "")
+	require.NoError(t, err)
+	require.True(t, resolved.ConfigSource, "fixture must load a ksail.yaml")
+	require.NotEmpty(t, resolved.ConfigClusterName, "fixture config must name its own cluster")
+	require.NotEqual(t, clusterName, resolved.ConfigClusterName, "fixture config must be unrelated")
+
+	resolved.AWSRegion = region
+
+	require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved))
+	assert.Equal(t, persistedAWSOptions(), resolved.AWSOpts)
+}
+
+// TestPersistedAWSMappingsReplaceUnrelatedConfigValues proves that an unrelated ksail.yaml's own AWS
+// variable names and region cannot shadow the target's captured mapping: its names would otherwise
+// win the merge, and its region would load a record the target never had instead of the persisted
+// one (#6288).
+func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
+	const (
+		clusterName      = "unrelated-values-replaced-6288"
+		region           = "eu-north-1"
+		unrelatedRegion  = "us-west-2"
+		unrelatedCluster = "unrelated-local-cluster-6288"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KSAIL_REGION", region)
+	t.Setenv("UNRELATED_REGION", unrelatedRegion)
+	savePersistedAWSMappings(t, clusterName, region)
+
+	// Every field carries an unrelated name, so a value left behind in any of them fails the assertion.
+	unrelatedOpts := v1alpha1.OptionsAWS{
+		ProfileEnvVar:         "UNRELATED_PROFILE",
+		RegionEnvVar:          "UNRELATED_REGION",
+		AccessKeyIDEnvVar:     "UNRELATED_ACCESS",
+		SecretAccessKeyEnvVar: "UNRELATED_SECRET",
+		SessionTokenEnvVar:    "UNRELATED_SESSION",
+	}
+
+	// Both cases share the HOME set above, and t.Setenv forbids parallel tests, so they run in
+	// sequence rather than as subtests.
+	for _, contextRegion := range []string{"", region} {
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: unrelatedCluster,
+			ConfigSource:      true,
+			AWSOpts:           unrelatedOpts,
+			AWSRegion:         unrelatedRegion,
+			AWSContextRegion:  contextRegion,
+		}
+
+		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
+			"context region %q", contextRegion)
+		assert.Equal(t, persistedAWSOptions(), resolved.AWSOpts, "context region %q", contextRegion)
+		assert.Equal(t, region, resolved.AWSRegion, "context region %q", contextRegion)
+	}
+}
+
+// TestPersistedAWSMappingsKeepDefaultsForTargetConfig proves a config that describes the target, or
+// names no cluster at all, still keeps its canonical defaults even when mappings were captured.
+func TestPersistedAWSMappingsKeepDefaultsForTargetConfig(t *testing.T) {
+	const (
+		clusterName = "target-config-keeps-defaults-6288"
+		region      = "eu-north-1"
+	)
+
+	t.Setenv("HOME", t.TempDir())
+	savePersistedAWSMappings(t, clusterName, region)
+
+	// Both cases share the HOME set above, and t.Setenv forbids parallel tests, so they run in
+	// sequence rather than as subtests.
+	for _, configClusterName := range []string{clusterName, ""} {
+		resolved := &lifecycle.ResolvedClusterInfo{
+			ClusterName:       clusterName,
+			ConfigClusterName: configClusterName,
+			ConfigSource:      true,
+			AWSRegion:         region,
+		}
+
+		require.NoError(t, cluster.ExportRestorePersistedAWSOptions(resolved),
+			"config cluster name %q", configClusterName)
+		assert.Empty(
+			t,
+			resolved.AWSOpts.AccessKeyIDEnvVar,
+			"config cluster name %q",
+			configClusterName,
+		)
+		assert.Empty(t, resolved.AWSOpts.RegionEnvVar, "config cluster name %q", configClusterName)
+	}
+}
+
+// TestPersistedRegionAliasSelectsStateBeforeRegionResolution proves that a captured custom region
+// variable selects the persisted ownership record before any region is resolved, so its credential
+// mappings are restored.
 func TestPersistedRegionAliasSelectsStateBeforeRegionResolution(t *testing.T) {
 	const (
 		clusterName = "state-region-alias-6270"

@@ -338,9 +338,29 @@ func isRestorableOwnershipStateAbsence(err error) bool {
 		errors.Is(err, state.ErrInvalidEKSOwnershipState)
 }
 
+// loadedConfigDescribesTarget reports that the loaded ksail.yaml is the target cluster's own config.
+// A config that names no cluster cannot be told apart from the target's, so it keeps precedence, the
+// same way lifecycle.ValidateStandaloneAWSTarget treats it.
+func loadedConfigDescribesTarget(resolved *lifecycle.ResolvedClusterInfo) bool {
+	return resolved.ConfigSource &&
+		(resolved.ConfigClusterName == "" || resolved.ConfigClusterName == resolved.ClusterName)
+}
+
+// restorePersistedAWSOptions restores the AWS credential mappings captured when the target cluster
+// was created. A loaded ksail.yaml keeps precedence only when it describes that target, because its
+// empty option names deliberately select canonical defaults; a config for another cluster says
+// nothing about how the target authenticates.
 func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
-	if resolved.ConfigSource {
+	if loadedConfigDescribesTarget(resolved) {
 		return nil
+	}
+
+	// The loaded config describes another cluster, so its variable names and region are not the
+	// target's. Keeping them would let its names win the merge and its region select a record the
+	// target never had. Standalone target validation has already rejected a borrowed eks.yaml region.
+	if resolved.ConfigSource {
+		resolved.AWSOpts = v1alpha1.OptionsAWS{}
+		resolved.AWSRegion = ""
 	}
 
 	restored, err := restoreSelectedAWSContextOptions(resolved)
@@ -350,20 +370,31 @@ func restorePersistedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 
 	region := strings.TrimSpace(resolved.AWSRegion)
 	if region != "" {
-		ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
-		if err != nil {
-			if isRestorableOwnershipStateAbsence(err) {
-				return nil
-			}
-
-			return fmt.Errorf("load persisted AWS credential mappings: %w", err)
-		}
-
-		resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
-
-		return nil
+		return restoreRegionAWSOptions(resolved, region)
 	}
 
+	return restoreListedAWSOptions(resolved)
+}
+
+// restoreRegionAWSOptions merges the mapping persisted for the target in the configured region.
+func restoreRegionAWSOptions(resolved *lifecycle.ResolvedClusterInfo, region string) error {
+	ownership, err := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+	if err != nil {
+		if isRestorableOwnershipStateAbsence(err) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted AWS credential mappings: %w", err)
+	}
+
+	resolved.AWSOpts = mergeAWSOptions(resolved.AWSOpts, ownership.AWSOptions)
+
+	return nil
+}
+
+// restoreListedAWSOptions selects the target's persisted mapping across regions when no region is
+// configured, and adopts that mapping's region.
+func restoreListedAWSOptions(resolved *lifecycle.ResolvedClusterInfo) error {
 	ownerships, err := state.ListEKSOwnershipStates(resolved.ClusterName)
 	if err != nil {
 		if isRestorableOwnershipStateAbsence(err) {
@@ -410,6 +441,8 @@ func restoreSelectedAWSContextOptions(resolved *lifecycle.ResolvedClusterInfo) (
 	return true, nil
 }
 
+// mergeAWSOptions fills each credential variable name that current leaves empty from persisted, so an
+// explicitly configured name always wins over a captured mapping.
 func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS {
 	if current.ProfileEnvVar == "" {
 		current.ProfileEnvVar = persisted.ProfileEnvVar
@@ -434,6 +467,9 @@ func mergeAWSOptions(current, persisted v1alpha1.OptionsAWS) v1alpha1.OptionsAWS
 	return current
 }
 
+// selectPersistedAWSOwnership picks the ownership record for the region that the records' region
+// variables request. It fails when that region was never recorded, or when the environment and the
+// records do not narrow the choice to exactly one region.
 func selectPersistedAWSOwnership(
 	ownerships []*state.EKSOwnershipState,
 ) (*state.EKSOwnershipState, error) {
