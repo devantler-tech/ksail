@@ -116,7 +116,10 @@ func TestExecRunner_RunWithProgress_SerializesStreamsForAPlainWriter(t *testing.
 	_, _, err := eksctl.ExecRunner{}.RunWithProgress(
 		t.Context(),
 		"sh",
-		[]string{"-c", "i=0; while [ $i -lt 200 ]; do echo out-$i; echo err-$i >&2; i=$((i+1)); done"},
+		[]string{
+			"-c",
+			"i=0; while [ $i -lt 200 ]; do echo out-$i; echo err-$i >&2; i=$((i+1)); done",
+		},
 		nil,
 		nil,
 		&progress,
