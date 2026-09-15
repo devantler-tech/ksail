@@ -38,8 +38,8 @@ type DiscoveredRegistries struct {
 // container, though: registry creation reuses an existing container of the same name without
 // recording a second owner, so a live longer-named cluster resolving to that name may share it. A
 // registry labelled for clusterName is therefore still left alone when such a cluster exists.
-// Everything above is the legacy fallback for containers without the label — registries created
-// by older KSail versions, and registries KSail does not manage.
+// Containers without the label fall back to name-based attribution — registries created by older
+// KSail versions, and registries KSail does not manage.
 func filterRegistriesByClusterName(
 	registries []dockerclient.RegistryInfo,
 	clusterName string,
