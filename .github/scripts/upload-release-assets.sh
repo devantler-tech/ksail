@@ -103,9 +103,12 @@ if [[ ! -d "${assets_dir}" ]]; then
 	exit 1
 fi
 assets=()
+# dotglob, so "every file in DIR" includes dot-prefixed files; it never matches . or ..
+shopt -s dotglob
 for asset in "${assets_dir}"/*; do
 	[[ -f "${asset}" ]] && assets+=("${asset}")
 done
+shopt -u dotglob
 if ((${#assets[@]} == 0)); then
 	printf '::error::%s holds no files — the asset jobs produced nothing for this step to attach to %s.\n' \
 		"${assets_dir}" "${tag}" >&2

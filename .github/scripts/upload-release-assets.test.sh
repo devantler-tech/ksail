@@ -113,6 +113,33 @@ printf 'PASS: default-backoff-is-15s-doubling\n'
 run_case missing-assets-dir-fails-fast 99 1 0 'does not exist' --tag v7.175.1 --assets-dir "${tmp_dir}/absent"
 mkdir -p "${tmp_dir}/only-dirs/nested"
 run_case empty-assets-dir-fails-fast 99 1 0 'holds no files' --tag v7.175.1 --assets-dir "${tmp_dir}/only-dirs"
+
+# "Every file in DIR" includes dot-prefixed files: a mixed directory attaches both, and a directory holding
+# only dot-prefixed files is not empty.
+# assert_upload_call checks the single upload call a case made, file list included.
+assert_upload_call() {
+	local name="$1" want="$2" got
+	got="$(cat "${tmp_dir}/${name}/gh.log")"
+	if [[ "${got}" != "${want}" ]]; then
+		printf 'FAIL: %s: upload call was\n  %s\nwant\n  %s\n' "${name}" "${got}" "${want}" >&2
+		exit 1
+	fi
+	pass_count=$((pass_count + 1))
+	printf 'PASS: %s-uploads-every-file\n' "${name}"
+}
+mixed_dir="${tmp_dir}/mixed-assets"
+mkdir -p "${mixed_dir}"
+printf 'tar\n' >"${mixed_dir}/ksail_7.175.1_linux_amd64.tar.gz"
+printf 'sbom\n' >"${mixed_dir}/.sbom.json"
+run_case mixed-assets-dir-includes-dotfiles 0 0 1 '!holds no files' --tag v7.175.1 --assets-dir "${mixed_dir}"
+assert_upload_call mixed-assets-dir-includes-dotfiles \
+	"release upload v7.175.1 ${mixed_dir}/.sbom.json ${mixed_dir}/ksail_7.175.1_linux_amd64.tar.gz --repo devantler-tech/ksail --clobber"
+hidden_dir="${tmp_dir}/hidden-only-assets"
+mkdir -p "${hidden_dir}"
+printf 'sums\n' >"${hidden_dir}/.checksums.txt"
+run_case hidden-only-assets-dir-is-not-empty 0 0 1 '!holds no files' --tag v7.175.1 --assets-dir "${hidden_dir}"
+assert_upload_call hidden-only-assets-dir-is-not-empty \
+	"release upload v7.175.1 ${hidden_dir}/.checksums.txt --repo devantler-tech/ksail --clobber"
 run_case zero-attempts-rejected 0 2 0 '--attempts must be' "${tag_args[@]}" --attempts 0
 run_case missing-tag-rejected 0 2 0 '--tag, --assets-dir' --assets-dir "${assets_dir}"
 # A value-taking option given last is an argument error like the others (status 2), not a `shift 2` abort.
