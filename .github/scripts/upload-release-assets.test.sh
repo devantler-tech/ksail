@@ -46,7 +46,9 @@ run_case() {
 	: >"${case_dir}/gh.log"
 	: >"${case_dir}/sleep.log"
 	local status=0
-	PATH="${fake_bin}:${PATH}" FAKE_GH_FAILURES="${failures}" FAKE_GH_LOG="${case_dir}/gh.log" \
+	# LC_ALL=C pins the glob order the upload-call assertion below expects; locales that fold case sort
+	# ksail-7… before KSail_7….
+	LC_ALL=C PATH="${fake_bin}:${PATH}" FAKE_GH_FAILURES="${failures}" FAKE_GH_LOG="${case_dir}/gh.log" \
 		FAKE_SLEEP_LOG="${case_dir}/sleep.log" GH_REPO=devantler-tech/ksail \
 		"${uploader_under_test:-${uploader}}" "$@" >"${case_dir}/output" 2>&1 || status=$?
 	local calls
