@@ -90,7 +90,7 @@ printf 'PASS: uploads-every-asset-with-clobber\n'
 run_case transient-failures-recover 2 0 3 'uploaded 2 asset(s) to v7.175.1 on attempt 3/5' "${tag_args[@]}"
 
 run_case persistent-failure-leaves-draft 99 1 5 \
-	'Nothing was published; v7.175.1 is still a draft.' "${tag_args[@]}" --delay-seconds 1
+	'Nothing was published; v7.175.1 is still a draft, which the cleanup job removes.' "${tag_args[@]}" --delay-seconds 1
 sleeps="$(paste -sd' ' "${tmp_dir}/persistent-failure-leaves-draft/sleep.log")"
 if [[ "${sleeps}" != "1 2 4 8" ]]; then
 	printf 'FAIL: backoff must double between attempts and not sleep after the last (slept: %s)\n' "${sleeps}" >&2

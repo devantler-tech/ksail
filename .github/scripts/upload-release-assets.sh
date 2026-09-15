@@ -113,6 +113,7 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
 	fi
 done
 
-printf '::error::failed to attach %d asset(s) to %s after %d attempts. Nothing was published; %s is still a draft.\n' \
+# cd.yaml's cleanup-failed-release job deletes the orphaned draft after this failure, so say what happens next.
+printf '::error::failed to attach %d asset(s) to %s after %d attempts. Nothing was published; %s is still a draft, which the cleanup job removes.\n' \
 	"${#assets[@]}" "${tag}" "${attempts}" "${tag}" >&2
 exit 1
