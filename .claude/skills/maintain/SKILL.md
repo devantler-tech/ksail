@@ -7,5 +7,6 @@ metadata:
 
 Perform maintenance per the **## Maintenance** section of this repo's
 [`AGENTS.md`](../../../AGENTS.md), within the shared devantler-tech maintenance conventions it
-references. Pick the highest-value tasks for the current repo state; quality over quantity; a draft
-PR is the checkpoint; never merge external PRs or self-merge your own unreviewed drafts.
+references. Pick the highest-value tasks for the current repo state; quality over quantity; work in
+draft PRs, self-promote only on the readiness conditions that section names, and never run an
+external contributor's branch locally.
