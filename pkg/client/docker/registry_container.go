@@ -380,6 +380,10 @@ func (rm *RegistryManager) buildContainerConfig(
 		labels[RegistryLabelKey] = config.Name
 	}
 
+	if config.ClusterName != "" {
+		labels[RegistryClusterLabelKey] = config.ClusterName
+	}
+
 	// Build environment variables for proxy configuration
 	var env []string
 

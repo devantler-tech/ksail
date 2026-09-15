@@ -466,6 +466,33 @@ func TestBuildContainerConfig(t *testing.T) {
 		assert.False(t, hasLabel)
 	})
 
+	t.Run("cluster name is recorded as the owning-cluster label", func(t *testing.T) {
+		t.Parallel()
+
+		_, manager, _ := setupTestRegistryManager(t)
+
+		cfg, err := manager.ExportBuildContainerConfig(docker.RegistryConfig{
+			Name:        "dev-ghcr.io",
+			ClusterName: "dev",
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, "dev", cfg.Labels[docker.RegistryClusterLabelKey])
+	})
+
+	t.Run("no cluster label without a cluster name", func(t *testing.T) {
+		t.Parallel()
+
+		_, manager, _ := setupTestRegistryManager(t)
+
+		cfg, err := manager.ExportBuildContainerConfig(docker.RegistryConfig{Name: "shared"})
+
+		require.NoError(t, err)
+
+		_, hasLabel := cfg.Labels[docker.RegistryClusterLabelKey]
+		assert.False(t, hasLabel)
+	})
+
 	t.Run("exposed ports always include registry port", func(t *testing.T) {
 		t.Parallel()
 
