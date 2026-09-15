@@ -108,4 +108,39 @@ if [[ "${hang_seconds}" -gt 15 ]]; then
 	exit 1
 fi
 
+# Missing authentication (gh exit status 4) cannot recover by waiting, so it must fail on the first
+# probe with an authentication message, never as an outage or exhaustion.
+run_case auth-failure-fails-fast 1 'gh is not authenticated (gh exited 4' 'unreachable' \
+	'4||To get started with GitHub CLI, please run:  gh auth login'
+auth_calls="$(cat "${tmp_dir}/auth-failure-fails-fast.counter")"
+if [[ "${auth_calls}" -ne 1 ]]; then
+	printf 'FAIL: auth-failure-fails-fast: expected exactly 1 gh call, got %s\n' "${auth_calls}" >&2
+	exit 1
+fi
+
+# A generic gh failure that names no server or network error is a probe failure, not an outage: it
+# must not tell the reader to wait for GitHub to recover.
+run_case unclassified-probe-failure-is-not-outage 1 \
+	'the rate-limit probe failed — the remaining quota is unknown, so this is not rate-limit exhaustion (gh exited 1: jq: error' \
+	'API unreachable' '1||jq: error (at <stdin>:0): Cannot iterate over null'
+
+# The caller's job timeout must leave room for the gate's own budget. Otherwise the runner cancels the
+# job first and neither the outage nor the exhaustion message is ever reported.
+ci_workflow="${script_dir}/../../workflows/ci.yaml"
+gate_job="$(awk '/^  rate-limit-gate:$/ { inside = 1; print; next } inside && /^  [a-z]/ { exit } inside { print }' "${ci_workflow}")"
+job_timeout="$(sed -n 's/^    timeout-minutes: *\([0-9][0-9]*\)$/\1/p' <<<"${gate_job}")"
+gate_max_wait="$(sed -n 's/^ *max-wait: *"\{0,1\}\([0-9][0-9]*\)"\{0,1\}$/\1/p' <<<"${gate_job}")"
+if [[ -z "${job_timeout}" || -z "${gate_max_wait}" ]]; then
+	printf 'FAIL: ci-job-timeout-bounds-max-wait: rate-limit-gate job must set timeout-minutes and pass max-wait (got timeout=%q max-wait=%q)\n' \
+		"${job_timeout}" "${gate_max_wait}" >&2
+	exit 1
+fi
+if ((gate_max_wait + 60 > job_timeout * 60)); then
+	printf 'FAIL: ci-job-timeout-bounds-max-wait: max-wait %ss leaves under 60s of the %s-minute job timeout\n' \
+		"${gate_max_wait}" "${job_timeout}" >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: ci-job-timeout-bounds-max-wait\n'
+
 printf 'All %s rate-limit gate cases passed.\n' "${pass_count}"

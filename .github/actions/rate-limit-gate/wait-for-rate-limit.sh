@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # wait-for-rate-limit.sh — wait until the GitHub API has at least MIN_REMAINING core calls left.
 #
-# The probe's exit status and output are checked before any comparison. An unreachable API, an
-# unreadable reply, or a probe that does not answer in time leaves the remaining quota unknown, so it
-# is retried and, if it never recovers, reported as an outage. Only a readable count below
+# The probe's exit status and output are checked before any comparison. A probe that does not answer
+# in time, or that reports a server or network error, means the API is unreachable. Any other failure,
+# including an unreadable reply, is a probe failure. Both leave the remaining quota unknown, so they
+# are retried and, if they never recover, reported as what they are. Missing authentication (gh exit
+# status 4) fails immediately, because retrying cannot fix it. Only a readable count below
 # MIN_REMAINING is reported as rate-limit exhaustion (#6291).
 #
 # MAX_WAIT bounds the whole wait: time spent in probes counts toward it alongside the sleeps between
@@ -58,6 +60,7 @@ run_bounded() {
 
 while true; do
 	probe_error=""
+	probe_kind=""
 	remaining=""
 	reset_at="unknown"
 	budget=$((MAX_WAIT - elapsed))
@@ -72,6 +75,7 @@ while true; do
 		fi
 		if [[ ! "${remaining}" =~ ^[0-9]+$ ]]; then
 			probe_error="non-numeric remaining count '${remaining}'"
+			probe_kind="probe failed"
 		elif [ "${remaining}" -ge "${MIN_REMAINING}" ]; then
 			echo "✅ GitHub API rate limit OK — ${remaining} remaining (minimum: ${MIN_REMAINING})"
 			exit 0
@@ -80,15 +84,30 @@ while true; do
 		status=$?
 		if [ "${status}" -eq 124 ]; then
 			probe_error="gh did not answer within ${limit}s"
+			probe_kind="unreachable"
+		elif [ "${status}" -eq 4 ]; then
+			# gh documents exit status 4 as "authentication required": no amount of waiting fixes that.
+			echo "::error::could not determine rate limit: gh is not authenticated (gh exited 4: $(head -n 1 "${stderr_file}")). Check that GH_TOKEN is set and valid; retrying will not help."
+			exit 1
 		else
 			probe_error="gh exited ${status}: $(head -n 1 "${stderr_file}")"
+			# Status 1 means failure "for any reason", so only a server or network error counts as unreachable.
+			if grep -Eqi 'HTTP 5[0-9]{2}|connection (refused|reset)|i/o timeout|timed out|no such host|could not resolve|network is unreachable|TLS handshake|unexpected EOF' "${stderr_file}"; then
+				probe_kind="unreachable"
+			else
+				probe_kind="probe failed"
+			fi
 		fi
 	fi
 	elapsed=$((elapsed + SECONDS - started))
 
 	if [ "${elapsed}" -ge "${MAX_WAIT}" ]; then
-		if [ -n "${probe_error}" ]; then
+		if [ "${probe_kind}" = "unreachable" ]; then
 			echo "::error::could not determine rate limit: API unreachable — the remaining quota is unknown, so this is not rate-limit exhaustion (${probe_error}). Waited ${elapsed}s (max ${MAX_WAIT}s); re-run once GitHub recovers."
+			exit 1
+		fi
+		if [ -n "${probe_error}" ]; then
+			echo "::error::could not determine rate limit: the rate-limit probe failed — the remaining quota is unknown, so this is not rate-limit exhaustion (${probe_error}). Waited ${elapsed}s (max ${MAX_WAIT}s); check the gh error, since re-running may not help."
 			exit 1
 		fi
 
@@ -103,8 +122,10 @@ while true; do
 		sleep_time=${budget}
 	fi
 
-	if [ -n "${probe_error}" ]; then
+	if [ "${probe_kind}" = "unreachable" ]; then
 		echo "⚠️ GitHub API unreachable (${probe_error}) — retrying in ${sleep_time}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
+	elif [ -n "${probe_error}" ]; then
+		echo "⚠️ Rate-limit probe failed (${probe_error}) — retrying in ${sleep_time}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
 	else
 		echo "⏳ Rate limit low (${remaining} remaining, need ${MIN_REMAINING}) — retrying in ${sleep_time}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
 	fi

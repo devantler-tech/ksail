@@ -2,9 +2,9 @@ name: Rate Limit Gate
 description: |
   Waits for sufficient GitHub API rate limit before proceeding.
   Uses exponential backoff to poll the /rate_limit endpoint (which is
-  free and does not count against the quota). An unreachable API is retried
-  within the same budget and reported as an outage, never as an exhausted
-  rate limit.
+  free and does not count against the quota). An unreachable API or a failed
+  probe is retried within the same budget and reported as such, never as an
+  exhausted rate limit. Missing authentication fails immediately.
 
 inputs:
   min-remaining:
@@ -12,7 +12,9 @@ inputs:
     required: false
     default: "100"
   max-wait:
-    description: Maximum wait time in seconds before failing
+    description: >-
+      Maximum wait time in seconds before failing. Keep it below the calling
+      job's timeout, or the runner cancels the job before the gate can report.
     required: false
     default: "1800"
 

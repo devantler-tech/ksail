@@ -117,6 +117,10 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/rate-limit-gate
+        with:
+          # Stay under this job's 5-minute timeout so the gate can report an outage or exhaustion
+          # itself instead of being cancelled by the runner.
+          max-wait: "240"
 
   # Detect which file categories changed to conditionally run jobs
   changes:
