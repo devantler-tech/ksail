@@ -752,7 +752,9 @@ jobs:
   publish-release:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Room for the asset upload's full retry backoff on top of the rest of the job
+    # (upload-release-assets.test.sh keeps the two in step).
+    timeout-minutes: 10
     # Gate on EVERY artifact-producing asset job so the draft is flipped to published only when the
     # release is COMPLETE (CLI tarballs + checksums + CRD, VSIX, and every desktop archive present).
     # Immutable releases (see #4874) forbid adding assets after the flip, so completeness must be
@@ -812,13 +814,15 @@ jobs:
       # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
       # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
       # artifact exists here and is attached immediately before the draft→published flip below.
+      # The upload retries with backoff: a single transient failure from uploads.github.com would
+      # otherwise skip publishing and every downstream job, stranding the release as a draft (#6292).
       - name: 📤 Attach assets to draft release
         if: steps.release_state.outputs.state == 'draft'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-        run: gh release upload "$RELEASE_TAG" dist-assets/* --clobber
+        run: .github/scripts/upload-release-assets.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
 
       - name: 📢 Publish draft release
         if: steps.release_state.outputs.state == 'draft'
