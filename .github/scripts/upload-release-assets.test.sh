@@ -17,15 +17,16 @@ mkdir -p "${fake_bin}" "${assets_dir}"
 printf 'vsix\n' >"${assets_dir}/ksail-7.175.1.vsix"
 printf 'zip\n' >"${assets_dir}/KSail_7.175.1_darwin_arm64.zip"
 
-# The fake gh fails its first FAKE_GH_FAILURES calls with the HTTP 503 uploads.github.com returned when
-# this broke a release, then succeeds. Every call's arguments are logged, one call per line.
+# The fake gh fails its first FAKE_GH_FAILURES calls with FAKE_GH_ERROR — by default the HTTP 503
+# uploads.github.com returned when this broke a release — then succeeds. Every call's arguments are
+# logged, one call per line.
 cat >"${fake_bin}/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_GH_LOG}"
 calls="$(wc -l <"${FAKE_GH_LOG}")"
 if ((calls <= FAKE_GH_FAILURES)); then
-	printf 'HTTP 503: Service Unavailable (https://uploads.github.com/)\n' >&2
+	printf '%s\n' "${FAKE_GH_ERROR}" >&2
 	exit 1
 fi
 EOF
@@ -48,7 +49,9 @@ run_case() {
 	local status=0
 	# LC_ALL=C pins the glob order the upload-call assertion below expects; locales that fold case sort
 	# ksail-7… before KSail_7….
+	# fake_gh_error, when set by the caller, replaces the default HTTP 503 failure message.
 	LC_ALL=C PATH="${fake_bin}:${PATH}" FAKE_GH_FAILURES="${failures}" FAKE_GH_LOG="${case_dir}/gh.log" \
+		FAKE_GH_ERROR="${fake_gh_error:-HTTP 503: Service Unavailable (https://uploads.github.com/)}" \
 		FAKE_SLEEP_LOG="${case_dir}/sleep.log" GH_REPO=devantler-tech/ksail \
 		"${uploader_under_test:-${uploader}}" "$@" >"${case_dir}/output" 2>&1 || status=$?
 	local calls
@@ -159,6 +162,22 @@ EOF
 chmod +x "${old_form}"
 uploader_under_test="${old_form}" run_case old-single-call-strands-on-one-503 1 1 1 'HTTP 503' "${tag_args[@]}"
 run_case retrying-upload-survives-one-503 1 0 2 'on attempt 2/5' "${tag_args[@]}"
+
+# Only transient failures are retried. A permanent HTTP error (here the 422 a published release returns)
+# fails on the first call without sleeping, instead of spending the whole backoff budget first.
+fake_gh_error='HTTP 422: Validation Failed (https://uploads.github.com/)' \
+	run_case permanent-422-fails-without-retry 99 1 1 'failed permanently (HTTP 422), so it was not retried' "${tag_args[@]}"
+if [[ -s "${tmp_dir}/permanent-422-fails-without-retry/sleep.log" ]]; then
+	printf 'FAIL: a permanent HTTP 422 must not sleep before failing (slept: %s)\n' \
+		"$(paste -sd' ' "${tmp_dir}/permanent-422-fails-without-retry/sleep.log")" >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+printf 'PASS: permanent-422-does-not-sleep\n'
+fake_gh_error='HTTP 429: Too Many Requests (https://uploads.github.com/)' \
+	run_case rate-limited-429-is-retried 1 0 2 'on attempt 2/5' "${tag_args[@]}"
+fake_gh_error='Post "https://uploads.github.com/": read tcp: connection reset by peer' \
+	run_case connection-failure-is-retried 1 0 2 'on attempt 2/5' "${tag_args[@]}"
 
 publish_block="${tmp_dir}/publish-release.yaml"
 awk '/^  publish-release:/ { inside = 1; print; next } inside && /^  [a-z]/ { exit } inside { print }' \

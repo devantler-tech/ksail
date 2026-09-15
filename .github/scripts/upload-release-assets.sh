@@ -15,8 +15,10 @@ Usage:
                            [--attempts N] [--delay-seconds S]
 
 Attach every file in DIR to the draft release TAG with `gh release upload --clobber`,
-retrying a failed upload with exponential backoff (S seconds, doubling).
+retrying a transient upload failure with exponential backoff (S seconds, doubling).
 
+  - Transient means a connection failure (no HTTP status), HTTP 408, HTTP 429 or
+    HTTP 5xx. Any other HTTP error, such as 401 or 422, fails immediately.
   - A missing DIR, or one holding no files, fails immediately: a wrong path is a
     build bug, not a transient, and must not burn the retry budget.
   - A success after a retry says which attempt succeeded.
@@ -115,13 +117,32 @@ if ((${#assets[@]} == 0)); then
 	exit 1
 fi
 
+# is_transient_upload_failure reports whether a failed upload's error output (file $1) describes a
+# failure a retry can fix: no HTTP status at all (a connection failure), HTTP 408, HTTP 429, or HTTP 5xx.
+# Any other status — 401, 403, 404, 422 — is permanent, and retrying it only delays the failure.
+is_transient_upload_failure() {
+	local status
+	status="$(sed -nE 's/.*HTTP ([0-9]{3}).*/\1/p' "$1" | tail -n 1)"
+	[[ -z "${status}" || "${status}" == 408 || "${status}" == 429 || "${status}" == 5[0-9][0-9] ]]
+}
+
+upload_errors="$(mktemp)"
+trap 'rm -f "${upload_errors}"' EXIT
 for ((attempt = 1; attempt <= attempts; attempt++)); do
-	if gh release upload "${tag}" "${assets[@]}" --repo "${repo}" --clobber; then
+	if gh release upload "${tag}" "${assets[@]}" --repo "${repo}" --clobber 2>"${upload_errors}"; then
+		cat "${upload_errors}" >&2
 		# A retried success must not read like a clean first attempt to whoever scans this log later.
 		if ((attempt > 1)); then
 			printf 'uploaded %d asset(s) to %s on attempt %d/%d\n' "${#assets[@]}" "${tag}" "${attempt}" "${attempts}"
 		fi
 		exit 0
+	fi
+	cat "${upload_errors}" >&2
+	if ! is_transient_upload_failure "${upload_errors}"; then
+		status="$(sed -nE 's/.*HTTP ([0-9]{3}).*/\1/p' "${upload_errors}" | tail -n 1)"
+		printf '::error::failed to attach %d asset(s) to %s: the upload failed permanently (HTTP %s), so it was not retried. Nothing was published; %s is still a draft, which the cleanup job removes.\n' \
+			"${#assets[@]}" "${tag}" "${status}" "${tag}" >&2
+		exit 1
 	fi
 	if ((attempt < attempts)); then
 		printf 'attempt %d/%d to upload %d asset(s) to %s failed; retrying in %ss\n' \
