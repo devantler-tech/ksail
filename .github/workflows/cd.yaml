@@ -779,6 +779,13 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
+      # Check out before downloading: on a fresh workspace checkout clears the directory, which
+      # would delete the downloaded assets the resolver and upload below need.
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: 📥 Download release asset artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -786,10 +793,27 @@ jobs:
           merge-multiple: true
           path: dist-assets
 
+      # Rerunning an upstream asset job reruns this one too. If the tag's release is already
+      # published and complete, there is nothing left to attach or publish — and an immutable
+      # release rejects the upload — so the rerun succeeds as a no-op. Missing, duplicate or
+      # incomplete releases fail closed here (see #6263).
+      - name: 🔎 Resolve release publish state
+        id: release_state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
+        # The Cluster CRD is attached by GoReleaser rather than downloaded here, so name it explicitly;
+        # GoReleaser's archives are required from the release's own checksums file.
+        run: >-
+          .github/scripts/resolve-release-publish-state.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
+          --extra-assets-glob 'charts/ksail-operator/crds/*.yaml'
+
       # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
       # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
       # artifact exists here and is attached immediately before the draft→published flip below.
       - name: 📤 Attach assets to draft release
+        if: steps.release_state.outputs.state == 'draft'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -797,6 +821,7 @@ jobs:
         run: gh release upload "$RELEASE_TAG" dist-assets/* --clobber
 
       - name: 📢 Publish draft release
+        if: steps.release_state.outputs.state == 'draft'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
@@ -805,11 +830,11 @@ jobs:
           script: |
             const tag = process.env.RELEASE_TAG;
 
-            // List releases and find the one(s) matching the tag
+            // List every page of releases and find the one(s) matching the tag
             // Note: getReleaseByTag does not return draft releases, so we use listReleases instead
             let matching;
             try {
-              const { data: releases } = await github.rest.repos.listReleases({
+              const releases = await github.paginate(github.rest.repos.listReleases, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 per_page: 100,
@@ -1229,8 +1254,8 @@ jobs:
             const { owner, repo } = context.repo;
 
             // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
-            // attached to this tag.
-            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            // attached to this tag, reading every page so a release beyond the first 100 is not missed.
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
             const forTag = releases.filter(r => r.tag_name === tag);
             const drafts = forTag.filter(r => r.draft);
             const published = forTag.filter(r => !r.draft);
