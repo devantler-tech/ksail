@@ -338,6 +338,8 @@ jobs:
               - '.github/scripts/resolve-release-publish-state.test.sh'
               - '.github/scripts/style-clean-cask-branch.sh'
               - '.github/scripts/style-clean-cask-branch.test.sh'
+              - '.github/scripts/upload-release-assets.sh'
+              - '.github/scripts/upload-release-assets.test.sh'
               - '.github/scripts/validate-cask-pr-handoff.sh'
               - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
@@ -473,6 +475,8 @@ jobs:
             .github/scripts/resolve-release-publish-state.test.sh \
             .github/scripts/style-clean-cask-branch.sh \
             .github/scripts/style-clean-cask-branch.test.sh \
+            .github/scripts/upload-release-assets.sh \
+            .github/scripts/upload-release-assets.test.sh \
             .github/scripts/validate-cask-pr-handoff.sh \
             .github/scripts/validate-cask-pr-handoff.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
@@ -481,6 +485,7 @@ jobs:
           .github/scripts/redraft-evergreen-cask-prs.test.sh
           .github/scripts/resolve-release-publish-state.test.sh
           .github/scripts/style-clean-cask-branch.test.sh
+          .github/scripts/upload-release-assets.test.sh
           .github/scripts/validate-cask-pr-handoff.test.sh
           .github/scripts/cask-pr-handoff-workflow.test.sh
 
