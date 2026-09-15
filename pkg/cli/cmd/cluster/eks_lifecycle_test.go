@@ -1127,7 +1127,7 @@ func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
 	savePersistedAWSMappings(t, clusterName, region)
 
 	// Every field carries an unrelated name, so a value left behind in any of them fails the assertion.
-	//nolint:gosec // G101: these are environment-variable names, never credential values.
+
 	unrelatedOpts := v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "UNRELATED_PROFILE",
 		RegionEnvVar:          "UNRELATED_REGION",
