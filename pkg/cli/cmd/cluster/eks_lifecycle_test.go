@@ -1127,7 +1127,6 @@ func TestPersistedAWSMappingsReplaceUnrelatedConfigValues(t *testing.T) {
 	savePersistedAWSMappings(t, clusterName, region)
 
 	// Every field carries an unrelated name, so a value left behind in any of them fails the assertion.
-
 	unrelatedOpts := v1alpha1.OptionsAWS{
 		ProfileEnvVar:         "UNRELATED_PROFILE",
 		RegionEnvVar:          "UNRELATED_REGION",
