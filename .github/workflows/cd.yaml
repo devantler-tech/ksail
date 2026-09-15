@@ -17,6 +17,8 @@ env:
 concurrency:
   group: "${{ github.workflow }}"
   cancel-in-progress: false
+  # Keep every pending tag publish, so two quick releases both reach GoReleaser.
+  queue: max
 
 permissions:
   contents: read
