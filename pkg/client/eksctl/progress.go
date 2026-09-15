@@ -15,6 +15,8 @@ const errorOutputTailLines = 20
 
 // maxPendingLineBytes caps how much of an unterminated line a lineWriter holds before it
 // forwards the partial line anyway, so a stream without newlines cannot grow memory unbounded.
+// A line longer than this is redacted chunk by chunk, so a credential value that straddles
+// the boundary would not be matched; eksctl's log lines are far shorter than the cap.
 const maxPendingLineBytes = 64 * 1024
 
 // lineWriter forwards only complete lines to its target, optionally transforming each one.

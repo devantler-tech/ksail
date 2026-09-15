@@ -147,16 +147,6 @@ type Client struct {
 	requireCredentialValues bool
 }
 
-// WithProgressWriter streams the output of long-running eksctl commands (create,
-// delete, scale, upgrade) to w while they run, with credential values redacted.
-// Read-only listings are never streamed, because their stdout is parsed. A nil
-// writer disables streaming.
-func WithProgressWriter(w io.Writer) Option {
-	return func(c *Client) {
-		c.progress = w
-	}
-}
-
 // Option configures a Client at construction time.
 type Option func(*Client)
 
@@ -186,6 +176,16 @@ func WithRunner(runner Runner) Option {
 func WithEnvironment(environment []string) Option {
 	return func(c *Client) {
 		c.environment = cloneStrings(environment)
+	}
+}
+
+// WithProgressWriter streams the output of long-running eksctl commands (create,
+// delete, scale, upgrade) to w while they run, with credential values redacted.
+// Read-only listings are never streamed, because their stdout is parsed. A nil
+// writer disables streaming.
+func WithProgressWriter(w io.Writer) Option {
+	return func(c *Client) {
+		c.progress = w
 	}
 }
 
@@ -434,19 +434,11 @@ func wrapExecErr(args []string, stdout, stderr []byte, err error) error {
 	)
 
 	firstStderrLine := strings.SplitN(strings.TrimSpace(string(stderr)), "\n", firstLineParts)[0]
-	if firstStderrLine == "" {
-		return withOutputTail(
-			fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err),
-			stdout,
-			stderr,
-			firstStderrLine,
-		)
+
+	wrapped := fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err)
+	if firstStderrLine != "" {
+		wrapped = fmt.Errorf("eksctl %s: %w: %s", strings.Join(args, " "), err, firstStderrLine)
 	}
 
-	return withOutputTail(
-		fmt.Errorf("eksctl %s: %w: %s", strings.Join(args, " "), err, firstStderrLine),
-		stdout,
-		stderr,
-		firstStderrLine,
-	)
+	return withOutputTail(wrapped, stdout, stderr, firstStderrLine)
 }
