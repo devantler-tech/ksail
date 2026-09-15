@@ -15,6 +15,9 @@ import (
 
 var errProgressClosed = errors.New("progress writer closed")
 
+// windowsGOOS is the runtime.GOOS value whose shell these tests do not target.
+const windowsGOOS = "windows"
+
 // lockedBuffer is a goroutine-safe buffer: os/exec copies stdout and stderr on separate goroutines.
 type lockedBuffer struct {
 	mu  sync.Mutex
@@ -53,7 +56,7 @@ func (failingWriter) Write([]byte) (int, error) {
 func TestExecRunner_RunWithProgress_StreamsBothStreamsFromARealProcess(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("uses a POSIX shell")
 	}
 
@@ -81,7 +84,7 @@ func TestExecRunner_RunWithProgress_StreamsBothStreamsFromARealProcess(t *testin
 func TestExecRunner_RunWithProgress_FailingProgressDoesNotFailTheCommand(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("uses a POSIX shell")
 	}
 
@@ -104,7 +107,7 @@ func TestExecRunner_RunWithProgress_FailingProgressDoesNotFailTheCommand(t *test
 func TestExecRunner_RunWithProgress_SerializesStreamsForAPlainWriter(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("uses a POSIX shell")
 	}
 
