@@ -296,13 +296,15 @@ func hasUnescapedQuantifier(pattern string) bool {
 	return false
 }
 
+type runsOnDefaultBranchCase struct {
+	yaml string
+	want bool
+}
+
 func TestRunsOnDefaultBranch(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
-		yaml string
-		want bool
-	}{
+	assertRunsOnDefaultBranch(t, map[string]runsOnDefaultBranchCase{
 		"literal main":     {yaml: "on:\n  push:\n    branches: [main]\n", want: true},
 		"no push trigger":  {yaml: "on:\n  pull_request:\n", want: false},
 		"tags only":        {yaml: "on:\n  push:\n    tags: ['v*']\n", want: false},
@@ -322,7 +324,15 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 			yaml: "on:\n  push:\n    branches-ignore: ['[main']\n",
 			want: true,
 		},
+	})
+}
 
+// TestRunsOnDefaultBranchReadsGitHubPatternSyntax covers the filter syntax GitHub and
+// filepath.Match read differently.
+func TestRunsOnDefaultBranchReadsGitHubPatternSyntax(t *testing.T) {
+	t.Parallel()
+
+	assertRunsOnDefaultBranch(t, map[string]runsOnDefaultBranchCase{
 		// GitHub reads ? and + as quantifiers over the preceding character, so
 		// each of these selects main there. filepath.Match gives them other
 		// meanings without erroring, so they must reach the unparseable answer
@@ -359,7 +369,11 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 			yaml: "on:\n  push:\n    branches-ignore: ['mai+**']\n",
 			want: true,
 		},
-	}
+	})
+}
+
+func assertRunsOnDefaultBranch(t *testing.T, tests map[string]runsOnDefaultBranchCase) {
+	t.Helper()
 
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
