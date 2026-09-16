@@ -432,7 +432,10 @@ func TestListEKSOwnershipStatesRefusesAnUnreadableStateDirectory(t *testing.T) {
 	dir := filepath.Dir(path)
 	require.NoError(t, os.Chmod(dir, 0o000))
 
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	t.Cleanup(func() {
+		//nolint:gosec // 0700 is a directory mode: restores traversal so TempDir cleanup can remove it.
+		_ = os.Chmod(dir, 0o700)
+	})
 
 	_, err := state.ListEKSOwnershipStates(clusterName)
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
