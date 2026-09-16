@@ -324,9 +324,11 @@ func TestExec_ErrorTailBoundsASingleOverlongLine(t *testing.T) {
 func TestExec_ErrorTailTruncatesOnARuneBoundary(t *testing.T) {
 	t.Parallel()
 
-	// Every rune is 3 bytes, so a naive byte cut at 512 lands mid-rune.
+	// Every rune is 3 bytes, so a naive byte cut at 512 lands mid-rune (512 = 3*170 + 2).
+	// The rune is deliberately not CJK: gosmopolitan rejects Han-script literals, and
+	// what this test needs is the byte width, not the script.
 	runner := &fakeRunner{
-		stdout: []byte(strings.Repeat("日", 1000) + "\n"),
+		stdout: []byte(strings.Repeat("€", 1000) + "\n"),
 		err:    errExitStatus1,
 	}
 
