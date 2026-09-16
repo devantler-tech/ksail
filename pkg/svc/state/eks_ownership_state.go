@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -143,9 +144,9 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 		return nil, err
 	}
 
-	paths, err := filepath.Glob(filepath.Join(dir, "eks-ownership-*.json"))
+	paths, err := eksOwnershipRecordPaths(clusterName, dir)
 	if err != nil {
-		return nil, fmt.Errorf("list EKS ownership state: %w", err)
+		return nil, err
 	}
 
 	ownerships := make([]*EKSOwnershipState, 0, len(paths))
@@ -180,6 +181,44 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 	})
 
 	return ownerships, nil
+}
+
+// eksOwnershipRecordPaths lists the ownership record files in a cluster's state directory.
+//
+// filepath.Glob is not used because it discards directory read errors, so a state directory the
+// process cannot read would list as empty and report absence. Only a directory that does not exist
+// means no records; any other read failure is ErrEKSOwnershipStateUnreadable.
+func eksOwnershipRecordPaths(clusterName, dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: %s: read state directory %s: %w",
+			ErrEKSOwnershipStateUnreadable,
+			clusterName,
+			dir,
+			err,
+		)
+	}
+
+	pattern := fmt.Sprintf(eksOwnershipStateFileNameFormat, "*")
+	paths := make([]string, 0, len(entries))
+
+	for _, entry := range entries {
+		matched, matchErr := filepath.Match(pattern, entry.Name())
+		if matchErr != nil {
+			return nil, fmt.Errorf("list EKS ownership state: %w", matchErr)
+		}
+
+		if matched {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	return paths, nil
 }
 
 // loadUsableEKSOwnershipRecord returns the record at path, or nil when it cannot be trusted to

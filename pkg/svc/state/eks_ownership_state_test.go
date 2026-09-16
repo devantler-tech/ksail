@@ -415,3 +415,35 @@ func TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne(t *testin
 	require.Len(t, ownerships, 1)
 	assert.Equal(t, "eu-north-1", ownerships[0].Region)
 }
+
+// TestListEKSOwnershipStatesRefusesAnUnreadableStateDirectory covers the directory itself. A listing
+// that cannot read the directory must not look empty, because empty means absence and absence lets a
+// rendered config bind alone.
+func TestListEKSOwnershipStatesRefusesAnUnreadableStateDirectory(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-000 directory, so this cannot produce a read failure")
+	}
+
+	const clusterName = "ownership-list-unreadable-dir"
+
+	path := writeRawOwnershipRecord(t, clusterName, "eu-north-1", []byte("{}"))
+	dir := filepath.Dir(path)
+	require.NoError(t, os.Chmod(dir, 0o000))
+
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+}
+
+// TestListEKSOwnershipStatesReportsAbsenceForAMissingStateDirectory is the control: a cluster with no
+// state directory at all has no records, which is genuine absence.
+func TestListEKSOwnershipStatesReportsAbsenceForAMissingStateDirectory(t *testing.T) {
+	t.Parallel()
+
+	_, err := state.ListEKSOwnershipStates("ownership-list-no-state-dir")
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+}
