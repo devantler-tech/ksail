@@ -186,7 +186,7 @@ func TestTheIdentityClientFreezesTheRecordedCredentials(t *testing.T) {
 	isolateHome(t)
 
 	for _, canonical := range []string{
-		"AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_SESSION_TOKEN",
+		"AWS_PROFILE", "AWS_DEFAULT_PROFILE",
 		"AWS_REGION", "AWS_DEFAULT_REGION",
 	} {
 		t.Setenv(canonical, "")
@@ -194,8 +194,10 @@ func TestTheIdentityClientFreezesTheRecordedCredentials(t *testing.T) {
 
 	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-other-account")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-other-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-other-session")
 	t.Setenv("RECORDED_ACCESS", "made-this-cluster")
 	t.Setenv("RECORDED_SECRET", "made-this-cluster-secret")
+	t.Setenv("RECORDED_SESSION", "made-this-cluster-session")
 
 	const (
 		name   = "recorded-alias-identity-cluster"
@@ -213,4 +215,6 @@ func TestTheIdentityClientFreezesTheRecordedCredentials(t *testing.T) {
 		"the identity client froze the ambient credentials instead of the ones the record names")
 	assert.Equal(t, "made-this-cluster-secret", resolution.SecretAccessKey,
 		"the identity client froze the ambient secret instead of the one the record names")
+	assert.Equal(t, "made-this-cluster-session", resolution.SessionToken,
+		"the identity client froze the ambient session token instead of the one the record names")
 }
