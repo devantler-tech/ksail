@@ -360,7 +360,7 @@ func TestExec_ErrorTailRetainedLineStaysWithinTheByteCap(t *testing.T) {
 
 	var truncated []string
 
-	for _, line := range strings.Split(err.Error(), "\n") {
+	for line := range strings.SplitSeq(err.Error(), "\n") {
 		if strings.Contains(line, "…[truncated]") {
 			truncated = append(truncated, line)
 		}
