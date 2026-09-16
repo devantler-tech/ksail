@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/stretchr/testify/assert"
@@ -291,4 +292,46 @@ func TestExec_ErrorTailKeepsStdoutCauseDespiteLongStderr(t *testing.T) {
 
 	assert.Contains(t, err.Error(), "exceeded max wait time")
 	assert.Contains(t, err.Error(), "stderr-29")
+}
+
+// TestExec_ErrorTailBoundsASingleOverlongLine pins the byte bound on the failure tail. The line
+// limits alone are not a size bound: eksctl can emit one very long line, and without a per-line
+// cap that whole line reaches the error even though only 15 stdout lines are kept.
+func TestExec_ErrorTailBoundsASingleOverlongLine(t *testing.T) {
+	t.Parallel()
+
+	const cause = "[✖]  AWS::EKS::Nodegroup CREATE_FAILED: "
+
+	runner := &fakeRunner{
+		stdout: []byte(cause + strings.Repeat("detail ", 5000) + "\n"),
+		err:    errExitStatus1,
+	}
+
+	err := newTestClient(runner).CreateCluster(t.Context(), "eks.yaml", "")
+	require.Error(t, err)
+
+	// The head of the line survives, so the cause is still diagnosable.
+	assert.Contains(t, err.Error(), cause)
+	// The line is marked as shortened rather than silently cut.
+	assert.Contains(t, err.Error(), "…[truncated]")
+	// And the whole error stays small: one line can no longer dominate it.
+	assert.Less(t, len(err.Error()), 2000,
+		"a single overlong stdout line must not carry its full length into the error")
+}
+
+// TestExec_ErrorTailTruncatesOnARuneBoundary verifies a multi-byte character is never split by the
+// byte cap, which would otherwise put invalid UTF-8 into an error string.
+func TestExec_ErrorTailTruncatesOnARuneBoundary(t *testing.T) {
+	t.Parallel()
+
+	// Every rune is 3 bytes, so a naive byte cut at 512 lands mid-rune.
+	runner := &fakeRunner{
+		stdout: []byte(strings.Repeat("日", 1000) + "\n"),
+		err:    errExitStatus1,
+	}
+
+	err := newTestClient(runner).CreateCluster(t.Context(), "eks.yaml", "")
+	require.Error(t, err)
+
+	assert.True(t, utf8.ValidString(err.Error()), "the error must remain valid UTF-8")
 }

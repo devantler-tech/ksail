@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // errorOutputStdoutLines bounds how many trailing stdout lines an error carries. eksctl logs the
@@ -15,6 +16,17 @@ const errorOutputStdoutLines = 15
 // errorOutputStderrLines bounds how many trailing stderr lines an error carries. It is capped
 // separately from stdout so a long stderr can never push the stdout cause out of the error.
 const errorOutputStderrLines = 5
+
+// maxErrorTailLineBytes caps how many bytes of any single line the failure tail keeps. tailLines
+// bounds the tail by line COUNT, which is not a size bound on its own: eksctl can emit one very
+// long line (a CloudFormation reason, or a JSON payload), so without this the tail could carry
+// the whole of it. With it, the tail is bounded by construction at
+// (errorOutputStdoutLines + errorOutputStderrLines) * maxErrorTailLineBytes.
+const maxErrorTailLineBytes = 512
+
+// errorTailLineTruncationMarker ends a line the failure tail shortened, so a truncated cause is
+// never mistaken for the whole of it.
+const errorTailLineTruncationMarker = " …[truncated]"
 
 // maxPendingLineBytes caps how much of an unterminated line a lineWriter holds. A longer line is
 // dropped from the stream and replaced by a placeholder rather than forwarded in pieces: redaction
@@ -156,13 +168,14 @@ func outputTail(stdout, stderr []byte) string {
 	return strings.Join(lines, "\n")
 }
 
-// tailLines returns the last limit non-empty lines of stream, with trailing spaces trimmed.
+// tailLines returns the last limit non-empty lines of stream, with trailing spaces trimmed and
+// each line capped at maxErrorTailLineBytes, so the tail is bounded in bytes and not only in lines.
 func tailLines(stream []byte, limit int) []string {
 	lines := make([]string, 0, limit)
 
 	for line := range strings.SplitSeq(string(stream), "\n") {
 		if trimmed := strings.TrimRight(line, "\r "); strings.TrimSpace(trimmed) != "" {
-			lines = append(lines, trimmed)
+			lines = append(lines, truncateTailLine(trimmed))
 		}
 	}
 
@@ -171,6 +184,23 @@ func tailLines(stream []byte, limit int) []string {
 	}
 
 	return lines
+}
+
+// truncateTailLine caps one tail line at maxErrorTailLineBytes. It cuts on a rune boundary so a
+// multi-byte character is never split, and marks the line so a shortened cause cannot be read as
+// the whole of it. The streams reaching here are already redacted, so truncating cannot expose
+// part of a credential value.
+func truncateTailLine(line string) string {
+	if len(line) <= maxErrorTailLineBytes {
+		return line
+	}
+
+	cut := maxErrorTailLineBytes
+	for cut > 0 && !utf8.RuneStart(line[cut]) {
+		cut--
+	}
+
+	return line[:cut] + errorTailLineTruncationMarker
 }
 
 // withOutputTail appends the trailing eksctl output to err when it adds anything beyond the

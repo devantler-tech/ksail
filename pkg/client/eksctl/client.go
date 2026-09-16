@@ -430,7 +430,8 @@ func environmentValues(environment []string) map[string]string {
 // line of stderr (if any), and a bounded tail of stdout and stderr. eksctl logs
 // the cause of a failure on stdout and prints only a generic line on stderr, so
 // the tail is what makes the error actionable. Both streams must already be
-// redacted; the tail is capped so the full eksctl output never enters an error.
+// redacted; the tail is capped in both lines and bytes, so neither a long output nor a single
+// very long line can carry the whole of it into an error.
 func wrapExecErr(args []string, stdout, stderr []byte, err error) error {
 	const (
 		firstLineParts = 2
