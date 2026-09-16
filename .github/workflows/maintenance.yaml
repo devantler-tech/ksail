@@ -43,8 +43,9 @@ jobs:
 
   # The link checker accepts a 502/503/504 so a momentary outage cannot fail an
   # unrelated PR (see lychee.toml). This job keeps a real outage of our own docs
-  # site visible: it retries for about three minutes, so only an outage that
-  # outlasts the retries fails the run.
+  # site visible: it retries six times, 30 seconds apart (up to about 3.5 minutes,
+  # or longer when attempts time out), so only an outage that outlasts the
+  # retries fails the run. The 10-minute job timeout bounds the worst case.
   check-docs-site-availability:
     if: >-
       github.event_name == 'workflow_dispatch'
