@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -365,6 +366,79 @@ func TestListEKSOwnershipStatesRefusesATruncatedRecordAsAbsence(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
 	require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
 	assert.ErrorContains(t, err, path)
+}
+
+// TestListEKSOwnershipStatesRefusesAMalformedRecordAsAbsence proves a record that parses but is not
+// a valid ownership record is reported as unreadable, not as absent. Only the legacy pre-awsOptions
+// schema keeps the absence behaviour; any other invalid record is evidence that something is wrong.
+func TestListEKSOwnershipStatesRefusesAMalformedRecordAsAbsence(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]func(clusterName string) map[string]any{
+		"unsupported version": func(clusterName string) map[string]any {
+			record := completeOwnershipRecord(clusterName, "eu-north-1")
+			record["version"] = state.EKSOwnershipStateVersion + 1
+
+			return record
+		},
+		"missing account id": func(clusterName string) map[string]any {
+			record := completeOwnershipRecord(clusterName, "eu-north-1")
+			delete(record, "accountId")
+
+			return record
+		},
+		"region does not match its filename": func(clusterName string) map[string]any {
+			return completeOwnershipRecord(clusterName, "us-west-2")
+		},
+	}
+
+	for name, build := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			clusterName := "ownership-list-malformed-" + strings.ReplaceAll(name, " ", "-")
+
+			data, err := json.Marshal(build(clusterName))
+			require.NoError(t, err)
+
+			path := writeRawOwnershipRecord(t, clusterName, "eu-north-1", data)
+
+			_, err = state.ListEKSOwnershipStates(clusterName)
+			require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+			require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+			assert.ErrorContains(t, err, path)
+		})
+	}
+}
+
+// TestListEKSOwnershipStatesAcceptsARawCompleteRecord is the control for the malformed cases above:
+// the unmodified record they start from lists successfully, so each refusal is caused by its edit.
+func TestListEKSOwnershipStatesAcceptsARawCompleteRecord(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-raw-complete"
+
+	data, err := json.Marshal(completeOwnershipRecord(clusterName, "eu-north-1"))
+	require.NoError(t, err)
+
+	writeRawOwnershipRecord(t, clusterName, "eu-north-1", data)
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 1)
+}
+
+// completeOwnershipRecord returns a record in the current schema that validates for region.
+func completeOwnershipRecord(clusterName, region string) map[string]any {
+	return map[string]any{
+		"version":     state.EKSOwnershipStateVersion,
+		"clusterName": clusterName,
+		"region":      region,
+		"accountId":   "123456789012",
+		"clusterArn":  "arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
+		"createdAt":   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		"awsOptions":  canonicalAWSOptions(),
+	}
 }
 
 // TestListEKSOwnershipStatesRefusesAnUnreadableRecordAsAbsence covers a record the process cannot
