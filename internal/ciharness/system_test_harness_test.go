@@ -678,7 +678,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 210, smokeJob.TimeoutMinutes)
+	assert.Equal(t, 235, smokeJob.TimeoutMinutes)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
