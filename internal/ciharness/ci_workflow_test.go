@@ -243,13 +243,14 @@ func patternList(raw any) []string {
 // stays in the checked set.
 func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 	for _, pattern := range patterns {
-		if pattern == "main" || strings.Contains(pattern, "**") {
+		if pattern == "main" {
 			return true
 		}
 
-		// filepath.Match covers * and character classes the way GitHub does;
-		// branch names here carry no slash, so its separator handling does not
-		// matter.
+		// filepath.Match covers *, ** and character classes the way GitHub does
+		// for this one name: main carries no slash, so GitHub's ** matches it
+		// exactly as * does, and filepath.Match's separator handling does not
+		// matter. A prefix such as release/** therefore still has to match.
 		//
 		// It does not cover ? or +. GitHub reads both as quantifiers over the
 		// preceding character, while filepath.Match reads ? as any single
@@ -340,6 +341,19 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		"escaped question": {yaml: "on:\n  push:\n    branches: ['ma\\?in']\n", want: false},
 		"escaped ignore": {
 			yaml: "on:\n  push:\n    branches-ignore: ['m\\+ain']\n",
+			want: true,
+		},
+
+		// ** is evaluated, not assumed to select main: for a name with no slash it matches like
+		// *, so a prefix before it still has to match.
+		"doublestar other prefix": {yaml: "on:\n  push:\n    branches: ['release/**']\n", want: false},
+		"ignore doublestar other prefix": {
+			yaml: "on:\n  push:\n    branches-ignore: ['release/**']\n",
+			want: true,
+		},
+		"ignore doublestar": {yaml: "on:\n  push:\n    branches-ignore: ['**']\n", want: false},
+		"ignore quantifier doublestar": {
+			yaml: "on:\n  push:\n    branches-ignore: ['mai+**']\n",
 			want: true,
 		},
 	}
