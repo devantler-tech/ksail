@@ -2585,6 +2585,13 @@ func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
 		"cluster delete",
 		"the refusal must name the command that clears the stale state, or it just moves the surprise",
 	)
+	assert.Contains(
+		t,
+		err.Error(),
+		"cannot be verified",
+		"delete only clears state for a cluster AWS confirms is gone; the refusal must not promise"+
+			" recovery for an unverifiable one",
+	)
 
 	// Deterministic discriminator: Create registers the job synchronously before spawning the
 	// background provisioner, so an unrefused create leaves a tracked job behind.
