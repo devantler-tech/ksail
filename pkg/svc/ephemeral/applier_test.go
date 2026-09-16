@@ -226,6 +226,10 @@ func TestWaitForCRDHonorsEstablishmentAndCancellation(t *testing.T) {
 	}
 }
 
+// cancelledRequestWait bounds how long the cancellation test waits for the client to abandon its
+// request, so a regression fails instead of hanging.
+const cancelledRequestWait = 10 * time.Second
+
 func TestApplierCancelsDiscoveryBeforePatch(t *testing.T) {
 	t.Parallel()
 
@@ -239,6 +243,15 @@ func TestApplierCancelsDiscoveryBeforePatch(t *testing.T) {
 			}
 
 			cancel()
+			// Answer only after the client has abandoned the request, so cancellation is the one
+			// reachable outcome. Writing a response straight away raced it against that response
+			// (#6961).
+			select {
+			case <-request.Context().Done():
+			case <-time.After(cancelledRequestWait):
+				t.Error("the client did not abandon the request after cancellation")
+			}
+
 			writer.Header().Set("Content-Type", "application/json")
 			writer.WriteHeader(http.StatusServiceUnavailable)
 		}),
