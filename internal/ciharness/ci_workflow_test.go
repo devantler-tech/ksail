@@ -346,7 +346,10 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 
 		// ** is evaluated, not assumed to select main: for a name with no slash it matches like
 		// *, so a prefix before it still has to match.
-		"doublestar other prefix": {yaml: "on:\n  push:\n    branches: ['release/**']\n", want: false},
+		"doublestar other prefix": {
+			yaml: "on:\n  push:\n    branches: ['release/**']\n",
+			want: false,
+		},
 		"ignore doublestar other prefix": {
 			yaml: "on:\n  push:\n    branches-ignore: ['release/**']\n",
 			want: true,
