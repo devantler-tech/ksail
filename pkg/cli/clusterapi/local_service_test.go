@@ -2461,6 +2461,7 @@ func TestLifecycleReportsAnUnreadableOwnershipRecordInsteadOfNotFound(t *testing
 		require.ErrorIs(t, err, api.ErrInvalid, action)
 		require.NotErrorIs(t, err, api.ErrNotFound, action)
 		assert.Contains(t, err.Error(), recordPath, action)
+		assert.Contains(t, err.Error(), "ksail cluster eks-bind", action)
 	}
 }
 

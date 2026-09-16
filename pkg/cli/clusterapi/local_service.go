@@ -561,7 +561,7 @@ func (s *Service) resolveCluster(
 	}
 
 	if errors.Is(ownershipErr, state.ErrEKSOwnershipStateUnreadable) {
-		return "", "", false, fmt.Errorf("%w: %w", api.ErrInvalid, ownershipErr)
+		return "", "", false, unreadableOwnershipError(name, ownershipErr)
 	}
 
 	return "", "", false, nil
