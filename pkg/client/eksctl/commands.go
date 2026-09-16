@@ -21,6 +21,26 @@ const subcommandCluster = "cluster"
 // outputFormatJSON is the eksctl --output value requesting JSON, shared by every listing call.
 const outputFormatJSON = "json"
 
+// flagTimeout is the eksctl flag bounding how long a command waits for its
+// CloudFormation stacks to settle.
+const flagTimeout = "--timeout"
+
+// createClusterWaitTimeout bounds how long `eksctl create cluster` waits before it
+// gives up and says why.
+//
+// Without it eksctl uses its own default, which is not stated in KSail and cannot be
+// relied on to sit below the CI budget. When the workflow's create step expires first
+// it kills eksctl mid-wait, so the run records that create failed but not what it was
+// waiting on — the missing-cause failure in #7078.
+//
+// The value sits above a realistic provision — a live EKS create was still building
+// its node group at 36m22s (run 34999766125) — and below the 60-minute create-step
+// budget the smoke workflow gets in #7008. That ordering is what makes eksctl the one
+// that gives up first, with a message, so #7008 lands before this is fully effective;
+// until it does, the step's current 30-minute budget still expires first and this wait
+// is an upper bound that is never reached.
+const createClusterWaitTimeout = "45m"
+
 // ClusterSummary represents a single cluster entry returned by
 // `eksctl get cluster -o json`. Field tags preserve eksctl's PascalCase
 // JSON keys (eksctl emits these names verbatim).
@@ -81,6 +101,8 @@ func (c *Client) createCluster(
 	if path := strings.TrimSpace(kubeconfigPath); path != "" {
 		args = append(args, "--kubeconfig", path)
 	}
+
+	args = append(args, flagTimeout, createClusterWaitTimeout)
 
 	return c.execWithProgress(ctx, args...)
 }
