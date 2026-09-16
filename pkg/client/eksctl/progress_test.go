@@ -337,3 +337,39 @@ func TestExec_ErrorTailTruncatesOnARuneBoundary(t *testing.T) {
 
 	assert.True(t, utf8.ValidString(err.Error()), "the error must remain valid UTF-8")
 }
+
+// TestExec_ErrorTailRetainedLineStaysWithinTheByteCap pins the per-line bound the tail's byte cap
+// is documented to give: (stdout lines + stderr lines) * 512. The marker the truncation appends is
+// part of the retained line, so reserving no space for it puts the line over the cap it is capped
+// by — 512 bytes of content plus a 15-byte marker is 527. The whole-error bound in
+// TestExec_ErrorTailBoundsASingleOverlongLine cannot see this: 527 is still far below 2000.
+func TestExec_ErrorTailRetainedLineStaysWithinTheByteCap(t *testing.T) {
+	t.Parallel()
+
+	// maxErrorTailLineBytes, restated: the constant is unexported and this file is an external
+	// test package, so the bound is pinned by its value rather than by the symbol.
+	const maxRetainedLineBytes = 512
+
+	runner := &fakeRunner{
+		stdout: []byte(strings.Repeat("detail ", 5000) + "\n"),
+		err:    errExitStatus1,
+	}
+
+	err := newTestClient(runner).CreateCluster(t.Context(), "eks.yaml", "")
+	require.Error(t, err)
+
+	var truncated []string
+
+	for _, line := range strings.Split(err.Error(), "\n") {
+		if strings.Contains(line, "…[truncated]") {
+			truncated = append(truncated, line)
+		}
+	}
+
+	require.NotEmpty(t, truncated, "the overlong line must be truncated, or this proves nothing")
+
+	for _, line := range truncated {
+		assert.LessOrEqual(t, len(line), maxRetainedLineBytes,
+			"a retained truncated line must fit the byte cap INCLUDING its truncation marker")
+	}
+}

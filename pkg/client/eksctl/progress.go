@@ -195,7 +195,9 @@ func truncateTailLine(line string) string {
 		return line
 	}
 
-	cut := maxErrorTailLineBytes
+	// The marker is part of the retained line, so its bytes come out of the cap rather than being
+	// added to it: reserving them here is what keeps a truncated line within maxErrorTailLineBytes.
+	cut := maxErrorTailLineBytes - len(errorTailLineTruncationMarker)
 	for cut > 0 && !utf8.RuneStart(line[cut]) {
 		cut--
 	}
