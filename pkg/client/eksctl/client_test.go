@@ -328,7 +328,7 @@ func TestCreateCluster_ConfigRegionIsNotDuplicatedAsAFlag(t *testing.T) {
 
 	assert.Equal(t, "eksctl-under-test", runner.lastName)
 	assert.Equal(t,
-		[]string{"create", "cluster", "--config-file", "eks.yaml"},
+		[]string{"create", "cluster", "--config-file", "eks.yaml", "--timeout", "45m"},
 		runner.lastArgs,
 	)
 }
@@ -343,7 +343,7 @@ func TestCreateCluster_NoRegionOmitsFlag(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"create", "cluster", "--config-file", "eks.yaml"},
+		[]string{"create", "cluster", "--config-file", "eks.yaml", "--timeout", "45m"},
 		runner.lastArgs,
 	)
 }
@@ -367,6 +367,31 @@ func TestCreateCluster_WithKubeconfigPinsOutputPath(t *testing.T) {
 			"create", "cluster",
 			"--config-file", "eks.yaml",
 			"--kubeconfig", "/tmp/ksail-kubeconfig",
+			"--timeout", "45m",
+		},
+		runner.lastArgs,
+	)
+}
+
+func TestCreateCluster_PassesExplicitWaitTimeout(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	client := newTestClient(runner)
+
+	err := client.CreateCluster(t.Context(), "eks.yaml", "us-east-1")
+	require.NoError(t, err)
+
+	// Without this flag eksctl falls back to its own default wait. That is what let a
+	// slow provision outlive the smoke workflow's create-step budget and be killed
+	// with no cause in the log (#7078): the step timeout fires first and discards the
+	// diagnosis eksctl was about to print. The value is asserted literally so that
+	// changing the budget has to be a deliberate edit here too.
+	assert.Equal(t,
+		[]string{
+			"create", "cluster",
+			"--config-file", "eks.yaml",
+			"--timeout", "45m",
 		},
 		runner.lastArgs,
 	)

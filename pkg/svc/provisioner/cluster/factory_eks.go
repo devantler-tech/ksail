@@ -156,5 +156,9 @@ func (f DefaultFactory) resolveEKSCredentialOptions(
 		eksprovisioner.RequireCredentialValues,
 	)
 
+	// eksctl reports CloudFormation progress and the cause of a failure on its own
+	// output, so stream it to stderr rather than leaving a long create silent.
+	eksctlOptions = append(eksctlOptions, eksctlclient.WithProgressWriter(os.Stderr))
+
 	return eksctlclient.NewClient(eksctlOptions...), providerOptions, provisionerOptions, nil
 }
