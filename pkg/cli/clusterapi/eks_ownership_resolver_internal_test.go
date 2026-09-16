@@ -181,7 +181,7 @@ func TestALegacyRecordKeepsTheInjectedResolver(t *testing.T) {
 // canonical AWS_* names pointing at a different identity, and requires the frozen snapshot to carry
 // the credentials the record names.
 //
-//nolint:paralleltest // Cannot use t.Parallel() with t.Setenv()
+
 func TestTheIdentityClientFreezesTheRecordedCredentials(t *testing.T) {
 	isolateHome(t)
 
