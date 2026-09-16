@@ -93,11 +93,12 @@ func TestCreateEKSProvisionerPinsKubeconfigPathWithoutOverridingConfigRegion(t *
 	require.NoError(t, err)
 
 	argFields := strings.Fields(string(args))
-	require.Len(t, argFields, 6)
+	require.Len(t, argFields, 8)
 	assert.Equal(t, []string{
 		"create", "cluster",
 		"--config-file", argFields[3],
 		"--kubeconfig", "/tmp/ksail-kubeconfig",
+		"--timeout", "45m",
 	}, argFields)
 	assert.NotEqual(t, sourceConfigPath, argFields[3])
 
