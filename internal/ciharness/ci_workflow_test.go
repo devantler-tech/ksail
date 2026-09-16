@@ -237,24 +237,28 @@ func patternList(raw any) []string {
 }
 
 // matchesDefaultBranch reports whether any pattern selects main. whenUnparseable
-// is the answer for a pattern Go's matcher rejects, and differs by caller: an
-// inclusion list should assume it matches, an exclusion list should assume it
-// does not, so that either way the workflow stays in the checked set.
+// is the answer for a pattern this matcher cannot evaluate the way GitHub does,
+// and differs by caller: an inclusion list should assume it matches, an
+// exclusion list should assume it does not, so that either way the workflow
+// stays in the checked set.
 func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 	for _, pattern := range patterns {
 		if pattern == "main" || strings.Contains(pattern, "**") {
 			return true
 		}
 
-		// filepath.Match covers *, ? and character classes; branch names here
-		// carry no slash, so its separator handling does not matter.
+		// filepath.Match covers * and character classes the way GitHub does;
+		// branch names here carry no slash, so its separator handling does not
+		// matter.
 		//
-		// A malformed pattern, or one using syntax GitHub accepts and Go does
-		// not, errors here. Treat that as a match: this function fails open
-		// toward inclusion, and silently skipping a pattern we cannot read is
-		// precisely the hole this matcher exists to close.
+		// It does not cover ? or +. GitHub reads both as quantifiers over the
+		// preceding character, while filepath.Match reads ? as any single
+		// character and + as a literal, and returns no error for either. It
+		// errors only on a malformed pattern. So a pattern carrying either
+		// character, or one filepath.Match rejects, is one we cannot read, and
+		// skipping it is precisely the hole this matcher exists to close.
 		matched, err := filepath.Match(pattern, "main")
-		if err != nil {
+		if err != nil || strings.ContainsAny(pattern, "?+") {
 			if whenUnparseable {
 				return true
 			}
@@ -287,13 +291,25 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		"glob prefix":      {yaml: "on:\n  push:\n    branches: ['ma*n']\n", want: true},
 		"ignore other":     {yaml: "on:\n  push:\n    branches-ignore: [develop]\n", want: true},
 		"ignore main":      {yaml: "on:\n  push:\n    branches-ignore: [main]\n", want: false},
-		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n", want: false},
+		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['ma*']\n", want: false},
 
 		// A pattern Go's matcher cannot parse must not silently skip the
 		// workflow; inclusion is the safe direction.
 		"unparseable pattern": {yaml: "on:\n  push:\n    branches: ['[main']\n", want: true},
 		"unparseable ignore": {
 			yaml: "on:\n  push:\n    branches-ignore: ['[main']\n",
+			want: true,
+		},
+
+		// GitHub reads ? and + as quantifiers over the preceding character, so
+		// each of these selects main there. filepath.Match gives them other
+		// meanings without erroring, so they must reach the unparseable answer
+		// rather than be skipped.
+		"quantifier plus":         {yaml: "on:\n  push:\n    branches: ['mai+n']\n", want: true},
+		"quantifier question":     {yaml: "on:\n  push:\n    branches: ['ma?in']\n", want: true},
+		"quantifier leading plus": {yaml: "on:\n  push:\n    branches: ['m+ain']\n", want: true},
+		"quantifier ignore": {
+			yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n",
 			want: true,
 		},
 	}
