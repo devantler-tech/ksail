@@ -312,10 +312,16 @@ func boundEKSRegionFromConfig(name, configPath string) (string, bool, error) {
 // file's region would aim a destructive action at a cluster nobody named.
 func confirmConfigMatchesOwnership(name, configPath, configRegion string) error {
 	ownerships, err := state.ListEKSOwnershipStates(name)
-	if err != nil {
+	if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
 		// No usable record: the config is the only binding evidence there is, and it is already
 		// validated above. A cluster created before ownership records existed still works.
-		return nil //nolint:nilerr // absence of a record is not an error; the config binds instead.
+		return nil
+	}
+
+	if err != nil {
+		// A record that exists but cannot be read is not absence. Accepting the config here would
+		// let a stale rendered file bind unopposed, which is the redirect this check prevents.
+		return unreadableOwnershipError(name, err)
 	}
 
 	if len(ownerships) > 1 {
@@ -339,6 +345,19 @@ func confirmConfigMatchesOwnership(name, configPath, configRegion string) error 
 		configPath,
 		configRegion,
 		configPath,
+	)
+}
+
+// unreadableOwnershipError refuses a lifecycle action whose ownership record exists but cannot be
+// read or parsed. err names the affected files.
+func unreadableOwnershipError(name string, err error) error {
+	return fmt.Errorf(
+		"%w: cluster %q has an EKS ownership record KSail cannot read, so it cannot confirm which"+
+			" region the cluster was created in; restore read access to the file or remove it and"+
+			" run `ksail cluster eks-bind` to record the region again: %w",
+		api.ErrInvalid,
+		name,
+		err,
 	)
 }
 
@@ -377,6 +396,10 @@ func multiRegionOwnershipError(name string, ownerships []*state.EKSOwnershipStat
 // this refuses and lists them.
 func bindFromOwnershipRecord(name string) (*clusterprovisioner.EKSConfig, error) {
 	ownerships, err := state.ListEKSOwnershipStates(name)
+	if errors.Is(err, state.ErrEKSOwnershipStateUnreadable) {
+		return nil, unreadableOwnershipError(name, err)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%w: cluster %q has local KSail state but no eks config and no ownership record to bind"+

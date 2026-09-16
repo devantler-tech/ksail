@@ -2543,6 +2543,50 @@ func TestBoundEKSConfigAcceptsAConfigWithNoOwnershipRecord(t *testing.T) {
 	assert.Equal(t, "eu-north-1", region, "the config alone still binds when no record exists")
 }
 
+// TestBoundEKSConfigRefusesAConfigBesideATruncatedOwnershipRecord closes the corruption route to the
+// stale-config redirect. A record that exists but does not parse used to read as "no record", so the
+// config-only path above accepted a rendered file the record might contradict. It must refuse and
+// name the damaged file instead.
+func TestBoundEKSConfigRefusesAConfigBesideATruncatedOwnershipRecord(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "truncated-record"
+
+	saveEKSClusterSpec(t, name)
+	writeStateEKSConfig(t, name, "us-west-2")
+
+	recordPath := filepath.Join(home, ".ksail", "clusters", name, "eks-ownership-eu-north-1.json")
+	require.NoError(t, os.WriteFile(recordPath, []byte(`{"version":1,"region":"eu-no`), 0o600))
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	assert.Contains(t, err.Error(), recordPath, "the error must name the file that cannot be read")
+}
+
+// TestBoundEKSConfigRefusesToBindFromAnUnreadableOwnershipRecord covers the no-config path: with no
+// eks.yaml, binding comes from the record alone, so an unreadable one must say so rather than report
+// that no record exists.
+func TestBoundEKSConfigRefusesToBindFromAnUnreadableOwnershipRecord(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "unreadable-record-no-config"
+
+	saveEKSClusterSpec(t, name)
+
+	recordPath := filepath.Join(home, ".ksail", "clusters", name, "eks-ownership-eu-north-1.json")
+	require.NoError(t, os.WriteFile(recordPath, []byte("{"), 0o600))
+
+	_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	assert.Contains(t, err.Error(), "cannot read")
+}
+
 // TestCreateRefusesANameWhoseEKSCreateStateRemains covers the CREATE half of the region binding.
 //
 // The binding that makes delete/start/stop follow the creation region must never steer a create.

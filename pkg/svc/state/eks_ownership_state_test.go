@@ -334,3 +334,84 @@ func TestLoadEKSOwnershipStateRejectsInvalidJSON(t *testing.T) {
 	require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
 	assert.ErrorContains(t, err, "unmarshal EKS ownership state")
 }
+
+// writeRawOwnershipRecord writes arbitrary bytes where an ownership record for region belongs.
+func writeRawOwnershipRecord(t *testing.T, clusterName, region string, data []byte) string {
+	t.Helper()
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	dir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	path := filepath.Join(dir, "eks-ownership-"+region+".json")
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+
+	return path
+}
+
+// TestListEKSOwnershipStatesRefusesATruncatedRecordAsAbsence proves a record that exists but does not
+// parse is reported as unreadable, not as absent. Absence licenses callers to bind from a rendered
+// config alone, so a truncated record must not reach that path.
+func TestListEKSOwnershipStatesRefusesATruncatedRecordAsAbsence(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-truncated"
+
+	path := writeRawOwnershipRecord(t, clusterName, "eu-north-1", []byte(`{"version":1,"clusterNa`))
+
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+	assert.ErrorContains(t, err, path)
+}
+
+// TestListEKSOwnershipStatesRefusesAnUnreadableRecordAsAbsence covers a record the process cannot
+// open at all (mode 000).
+func TestListEKSOwnershipStatesRefusesAnUnreadableRecordAsAbsence(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-000 file, so this cannot produce a read failure")
+	}
+
+	const clusterName = "ownership-list-mode-000"
+
+	path := writeRawOwnershipRecord(t, clusterName, "eu-north-1", []byte("{}"))
+	require.NoError(t, os.Chmod(path, 0o000))
+
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	require.NotErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+	assert.ErrorContains(t, err, path)
+}
+
+// TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne pins that corruption only changes
+// the no-usable-record case. A readable record in its own region still wins, exactly as a legacy
+// record beside it is skipped, so one damaged file in an unrelated region cannot strand a cluster.
+func TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "ownership-list-truncated-beside-valid"
+
+	valid := &state.EKSOwnershipState{
+		Version:     state.EKSOwnershipStateVersion,
+		ClusterName: clusterName,
+		Region:      "eu-north-1",
+		AccountID:   "123456789012",
+		ClusterARN:  "arn:aws:eks:eu-north-1:123456789012:cluster/" + clusterName,
+		CreatedAt:   time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+		AWSOptions:  canonicalAWSOptions(),
+	}
+	require.NoError(t, state.SaveEKSOwnershipState(clusterName, valid.Region, valid))
+
+	writeRawOwnershipRecord(t, clusterName, "us-west-2", []byte("{"))
+
+	ownerships, err := state.ListEKSOwnershipStates(clusterName)
+	require.NoError(t, err)
+	require.Len(t, ownerships, 1)
+	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+}

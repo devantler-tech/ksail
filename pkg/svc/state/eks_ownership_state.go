@@ -29,7 +29,11 @@ var (
 	ErrEKSOwnershipStateNotFound = errors.New("EKS ownership state not found")
 	// ErrInvalidEKSOwnershipState reports malformed, incomplete, or internally inconsistent state.
 	ErrInvalidEKSOwnershipState = errors.New("invalid EKS ownership state")
-	awsAccountIDPattern         = regexp.MustCompile(`^[0-9]{12}$`)
+	// ErrEKSOwnershipStateUnreadable reports ownership records that exist but could not be read or
+	// parsed, with no usable record beside them. It is deliberately distinct from
+	// ErrEKSOwnershipStateNotFound: corruption must refuse, never fall back to the absence path.
+	ErrEKSOwnershipStateUnreadable = errors.New("EKS ownership state present but unreadable")
+	awsAccountIDPattern            = regexp.MustCompile(`^[0-9]{12}$`)
 )
 
 // EKSOwnershipState binds a KSail-managed EKS target to the AWS account and exact EKS incarnation
@@ -127,8 +131,11 @@ func LoadEKSOwnershipState(clusterName, region string) (*EKSOwnershipState, erro
 // Individually unusable records — unreadable, malformed, failing validation, or predating the
 // awsOptions schema — are skipped rather than failing the whole listing, so one stale record in an
 // unrelated region cannot strand a cluster whose target region is recorded correctly. When nothing
-// usable survives, the result is indistinguishable from having no record at all, and the caller's
-// absence path applies. Selecting a region from the survivors never weakens the ownership check:
+// usable survives, the result is absence — unless a record was present but could not be read or
+// parsed. That returns ErrEKSOwnershipStateUnreadable, naming the files, because a record that
+// exists but cannot be read is evidence that something is wrong, not evidence that none was
+// written: treating it as absent would let a stale rendered config bind a cluster unopposed.
+// Selecting a region from the survivors never weakens the ownership check:
 // eksidentity.NewVerifier still loads and strictly validates the selected region's record.
 func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 	dir, err := clusterStateDir(clusterName)
@@ -142,15 +149,29 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 	}
 
 	ownerships := make([]*EKSOwnershipState, 0, len(paths))
+	unreadable := []string{}
 
 	for _, path := range paths {
-		ownership := loadUsableEKSOwnershipRecord(clusterName, path)
+		ownership, readable := loadUsableEKSOwnershipRecord(clusterName, path)
+		if !readable {
+			unreadable = append(unreadable, path)
+		}
+
 		if ownership != nil {
 			ownerships = append(ownerships, ownership)
 		}
 	}
 
 	if len(ownerships) == 0 {
+		if len(unreadable) > 0 {
+			return nil, fmt.Errorf(
+				"%w: %s: %s",
+				ErrEKSOwnershipStateUnreadable,
+				clusterName,
+				strings.Join(unreadable, ", "),
+			)
+		}
+
 		return nil, fmt.Errorf("%w: %s", ErrEKSOwnershipStateNotFound, clusterName)
 	}
 
@@ -163,34 +184,36 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 
 // loadUsableEKSOwnershipRecord returns the record at path, or nil when it cannot be trusted to
 // contribute a credential mapping. The filename must match the region it claims, so a record cannot
-// be read under another region's key.
-func loadUsableEKSOwnershipRecord(clusterName, path string) *EKSOwnershipState {
+// be read under another region's key. readable is false only when the file could not be read or is
+// not valid JSON; a record that parses but fails validation (including one predating the awsOptions
+// schema) is readable and simply unusable.
+func loadUsableEKSOwnershipRecord(clusterName, path string) (*EKSOwnershipState, bool) {
 	//nolint:gosec // glob is rooted under the validated per-cluster state directory.
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	var ownership EKSOwnershipState
 
 	err = json.Unmarshal(data, &ownership)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	region := strings.TrimSpace(ownership.Region)
 
 	err = validateEKSOwnershipState(clusterName, region, &ownership)
 	if err != nil {
-		return nil
+		return nil, true
 	}
 
 	expectedPath, err := eksOwnershipStatePath(clusterName, region)
 	if err != nil || filepath.Clean(expectedPath) != filepath.Clean(path) {
-		return nil
+		return nil, true
 	}
 
-	return &ownership
+	return &ownership, true
 }
 
 func validateEKSOwnershipState(clusterName, region string, ownership *EKSOwnershipState) error {
