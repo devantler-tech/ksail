@@ -134,13 +134,14 @@ func TestCreate_ShellsOutWithConfig(t *testing.T) {
 	require.NoError(t, prov.Create(context.Background(), ""))
 
 	require.Len(t, runner.calls, 1)
-	require.Len(t, runner.calls[0], 6)
+	require.Len(t, runner.calls[0], 8)
 	assert.Equal(
 		t,
 		[]string{
 			"create", "cluster",
 			"--config-file", runner.calls[0][3],
 			"--kubeconfig", "/tmp/kubeconfig",
+			"--timeout", "45m",
 		},
 		runner.calls[0],
 	)

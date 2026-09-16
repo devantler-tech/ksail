@@ -39,6 +39,20 @@ type EnvironmentRunner interface {
 	) (stdout, stderr []byte, err error)
 }
 
+// ProgressRunner is the optional extension implemented by runners that can write
+// a command's output to progress while it runs, in addition to returning it
+// buffered. A nil environment preserves os/exec's default inheritance.
+type ProgressRunner interface {
+	RunWithProgress(
+		ctx context.Context,
+		name string,
+		args []string,
+		stdin io.Reader,
+		environment []string,
+		progress io.Writer,
+	) (stdout, stderr []byte, err error)
+}
+
 // ExecRunner is the default Runner that shells out via os/exec.
 type ExecRunner struct{}
 
@@ -62,6 +76,31 @@ func (ExecRunner) RunWithEnvironment(
 	stdin io.Reader,
 	environment []string,
 ) ([]byte, []byte, error) {
+	return runCommand(ctx, name, args, stdin, environment, nil)
+}
+
+// RunWithProgress executes the command with environment, writing each complete
+// output line to progress as it arrives while still returning both buffers.
+func (ExecRunner) RunWithProgress(
+	ctx context.Context,
+	name string,
+	args []string,
+	stdin io.Reader,
+	environment []string,
+	progress io.Writer,
+) ([]byte, []byte, error) {
+	return runCommand(ctx, name, args, stdin, environment, progress)
+}
+
+// runCommand executes one eksctl process, optionally mirroring its output to progress.
+func runCommand(
+	ctx context.Context,
+	name string,
+	args []string,
+	stdin io.Reader,
+	environment []string,
+	progress io.Writer,
+) ([]byte, []byte, error) {
 	// #nosec G204 -- This uses os/exec directly with a program name and argv
 	// slice; it does not invoke a shell, so user-influenced values in args
 	// (cluster name, region, config file paths from ksail.yaml) are passed
@@ -73,6 +112,21 @@ func (ExecRunner) RunWithEnvironment(
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
+	if progress != nil {
+		// One line buffer per stream, so stdout and stderr never interleave mid-line. os/exec copies
+		// the two streams on separate goroutines, and a caller's writer need not be safe for
+		// concurrent use, so both buffers write through one shared lock.
+		shared := newLockedWriter(progress)
+		stdoutLines := newLineWriter(shared, nil)
+		stderrLines := newLineWriter(shared, nil)
+
+		defer stdoutLines.Flush()
+		defer stderrLines.Flush()
+
+		cmd.Stdout = io.MultiWriter(&stdout, stdoutLines)
+		cmd.Stderr = io.MultiWriter(&stderr, stderrLines)
+	}
 
 	if stdin != nil {
 		cmd.Stdin = stdin
@@ -91,6 +145,7 @@ type Client struct {
 	binary      string
 	runner      Runner
 	environment []string
+	progress    io.Writer
 
 	requireCredentialValues bool
 }
@@ -124,6 +179,16 @@ func WithRunner(runner Runner) Option {
 func WithEnvironment(environment []string) Option {
 	return func(c *Client) {
 		c.environment = cloneStrings(environment)
+	}
+}
+
+// WithProgressWriter streams the output of long-running eksctl commands (create,
+// delete, scale, upgrade) to w while they run, with credential values redacted.
+// Read-only listings are never streamed, because their stdout is parsed. A nil
+// writer disables streaming.
+func WithProgressWriter(w io.Writer) Option {
+	return func(c *Client) {
+		c.progress = w
 	}
 }
 
@@ -179,14 +244,7 @@ func (c *Client) CheckAvailable() error {
 // escape hatch used by all higher-level methods on this client and can be
 // used directly when a helper has not been written yet.
 func (c *Client) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {
-	stdout, stderr, err := c.run(ctx, args, nil)
-
-	stderr = c.redactCredentialValues(stderr)
-	if err != nil {
-		return stdout, stderr, wrapExecErr(args, stderr, err)
-	}
-
-	return stdout, stderr, nil
+	return c.exec(ctx, nil, nil, args)
 }
 
 // ExecWithStdin runs eksctl with the given arguments and feeds stdin from the
@@ -196,11 +254,30 @@ func (c *Client) ExecWithStdin(
 	stdin io.Reader,
 	args ...string,
 ) ([]byte, []byte, error) {
-	stdout, stderr, err := c.run(ctx, args, stdin)
+	return c.exec(ctx, stdin, nil, args)
+}
+
+// execWithProgress runs a long-running mutating command, streaming its output to the
+// configured progress writer. Commands whose stdout is parsed must use Exec instead.
+func (c *Client) execWithProgress(ctx context.Context, args ...string) error {
+	_, _, err := c.exec(ctx, nil, c.progress, args)
+
+	return err
+}
+
+// exec runs eksctl, redacts credential values from stderr, and wraps a failure with the
+// trailing output of both streams.
+func (c *Client) exec(
+	ctx context.Context,
+	stdin io.Reader,
+	progress io.Writer,
+	args []string,
+) ([]byte, []byte, error) {
+	stdout, stderr, err := c.run(ctx, args, stdin, progress)
 
 	stderr = c.redactCredentialValues(stderr)
 	if err != nil {
-		return stdout, stderr, wrapExecErr(args, stderr, err)
+		return stdout, stderr, wrapExecErr(args, c.redactCredentialValues(stdout), stderr, err)
 	}
 
 	return stdout, stderr, nil
@@ -211,10 +288,30 @@ func (c *Client) run(
 	ctx context.Context,
 	args []string,
 	stdin io.Reader,
+	progress io.Writer,
 ) ([]byte, []byte, error) {
 	err := c.validateCredentialValues()
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if progressRunner, ok := c.runner.(ProgressRunner); ok && progress != nil {
+		lines := newLineWriter(progress, c.redactCredentialValues)
+		defer lines.Flush()
+
+		stdout, stderr, err := progressRunner.RunWithProgress(
+			ctx,
+			c.binary,
+			args,
+			stdin,
+			cloneStrings(c.environment),
+			lines,
+		)
+		if err != nil {
+			return stdout, stderr, fmt.Errorf("run eksctl with progress: %w", err)
+		}
+
+		return stdout, stderr, nil
 	}
 
 	if c.environment == nil {
@@ -329,18 +426,22 @@ func environmentValues(environment []string) map[string]string {
 	return values
 }
 
-// wrapExecErr annotates an exec failure with the invoked arguments and the
-// first line of stderr (if any) to produce actionable error messages without
-// leaking the full eksctl output into Go error strings.
-func wrapExecErr(args []string, stderr []byte, err error) error {
+// wrapExecErr annotates an exec failure with the invoked arguments, the first
+// line of stderr (if any), and a bounded tail of stdout and stderr. eksctl logs
+// the cause of a failure on stdout and prints only a generic line on stderr, so
+// the tail is what makes the error actionable. Both streams must already be
+// redacted; the tail is capped so the full eksctl output never enters an error.
+func wrapExecErr(args []string, stdout, stderr []byte, err error) error {
 	const (
 		firstLineParts = 2
 	)
 
 	firstStderrLine := strings.SplitN(strings.TrimSpace(string(stderr)), "\n", firstLineParts)[0]
-	if firstStderrLine == "" {
-		return fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err)
+
+	wrapped := fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err)
+	if firstStderrLine != "" {
+		wrapped = fmt.Errorf("eksctl %s: %w: %s", strings.Join(args, " "), err, firstStderrLine)
 	}
 
-	return fmt.Errorf("eksctl %s: %w: %s", strings.Join(args, " "), err, firstStderrLine)
+	return withOutputTail(wrapped, stdout, stderr, firstStderrLine)
 }
