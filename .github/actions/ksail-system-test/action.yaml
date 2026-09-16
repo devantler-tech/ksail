@@ -497,6 +497,62 @@ runs:
         fi
         echo "✅ No unexpected changes detected"
 
+    - name: 🧪 ksail cluster update — preserves FluxInstance settings KSail does not own
+      # Re-asserting the FluxInstance must change only what KSail owns (#6455). Plant a setting
+      # KSail does not model, force a sync-ref drift so the update rewrites the FluxInstance,
+      # and check both that the ref was repaired and that the planted setting survived.
+      # One Docker leg is enough: the rewrite path is distribution-independent.
+      id: cluster-update-flux-preserve
+      if: >-
+        inputs.provider == 'Docker' && inputs.distribution == 'Vanilla' &&
+        contains(inputs.args, '--gitops-engine Flux') && contains(inputs.args, '--local-registry')
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+      run: |
+        set -euo pipefail
+        LOG_FILE="/tmp/ksail-system-test-logs/cluster-update-flux-preserve.log"
+        FLUXINSTANCE=(fluxinstance flux --namespace flux-system)
+        PROBE_LABEL="ksail.devantler.tech/system-test-preserve"
+
+        desired_ref=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.sync.ref}')
+        if [ -z "$desired_ref" ]; then
+          echo "❌ ERROR: FluxInstance has no spec.sync.ref to drift"
+          exit 1
+        fi
+
+        echo "=== Planting an unmodelled setting and a sync-ref drift ==="
+        kubectl patch "${FLUXINSTANCE[@]}" --type merge \
+          -p "{\"spec\":{\"commonMetadata\":{\"labels\":{\"${PROBE_LABEL}\":\"kept\"}},\"sync\":{\"ref\":\"${desired_ref}-drift\"}}}"
+
+        # Strip init-only flags that cluster update does not accept.
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee "$LOG_FILE"
+
+        if grep -q "No changes detected" "$LOG_FILE"; then
+          echo "❌ ERROR: the planted sync-ref drift was not detected, so the FluxInstance was never rewritten"
+          exit 1
+        fi
+
+        actual_ref=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.sync.ref}')
+        kept=$(kubectl get "${FLUXINSTANCE[@]}" -o "jsonpath={.spec.commonMetadata.labels.ksail\.devantler\.tech/system-test-preserve}")
+
+        # Remove the probe whatever the verdict, so later steps see the cluster as created.
+        kubectl patch "${FLUXINSTANCE[@]}" --type json -p '[{"op":"remove","path":"/spec/commonMetadata"}]' || true
+
+        if [ "$actual_ref" != "$desired_ref" ]; then
+          echo "❌ ERROR: update did not repair spec.sync.ref (want ${desired_ref}, got ${actual_ref})"
+          exit 1
+        fi
+        if [ "$kept" != "kept" ]; then
+          echo "❌ ERROR: update dropped spec.commonMetadata, a FluxInstance setting KSail does not own"
+          exit 1
+        fi
+        echo "✅ Update repaired the sync ref and kept the unmodelled FluxInstance setting"
+
     - name: 🧪 ksail cluster update — rolling server-type resize
       id: cluster-update-rolling-resize
       if: inputs.provider == 'Hetzner' && inputs.rolling-resize-server-type != ''
