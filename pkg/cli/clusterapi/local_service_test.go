@@ -2429,6 +2429,41 @@ func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T)
 		"a cluster KSail holds an ownership record for is not missing; the selected region is")
 }
 
+// TestLifecycleReportsAnUnreadableOwnershipRecordInsteadOfNotFound covers a cluster reachable only
+// through its ownership record when that record cannot be read. The mutation must still be refused,
+// but as the unreadable record — naming the file — rather than as a cluster that does not exist,
+// which would hide both the cause and its fix.
+func TestLifecycleReportsAnUnreadableOwnershipRecordInsteadOfNotFound(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	const clusterName = "unreadable-other-region"
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionEKS: {},
+	})
+
+	recordDir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(recordDir, 0o750))
+
+	recordPath := filepath.Join(recordDir, "eks-ownership-ap-southeast-2.json")
+	require.NoError(t, os.WriteFile(recordPath, []byte(`{"version":1,"region":"ap-so`), 0o600))
+
+	ctx := context.Background()
+
+	for action, run := range map[string]func() error{
+		"delete": func() error { return service.Delete(ctx, "default", clusterName) },
+		"start":  func() error { return service.Start(ctx, "default", clusterName) },
+		"stop":   func() error { return service.Stop(ctx, "default", clusterName) },
+	} {
+		err := run()
+		require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable, action)
+		require.ErrorIs(t, err, api.ErrInvalid, action)
+		require.NotErrorIs(t, err, api.ErrNotFound, action)
+		assert.Contains(t, err.Error(), recordPath, action)
+	}
+}
+
 // writeStateEKSConfig puts an eks.yaml under ~/.ksail/clusters/<name> carrying region, standing in
 // for a file an earlier KSail wrote from whatever region happened to be selected at the time.
 func writeStateEKSConfig(t *testing.T, name, region string) {
