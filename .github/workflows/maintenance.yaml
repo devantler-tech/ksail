@@ -41,6 +41,26 @@ jobs:
             --keep-minimum-runs 6 \
             --max-deletions 750
 
+  # The link checker accepts a 502/503/504 so a momentary outage cannot fail an
+  # unrelated PR (see lychee.toml). This job keeps a real outage of our own docs
+  # site visible: it retries for about three minutes, so only an outage that
+  # outlasts the retries fails the run.
+  check-docs-site-availability:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '0 0 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Check the docs site responds
+        run: |
+          curl --fail --silent --show-error --location \
+            --output /dev/null \
+            --max-time 30 \
+            --retry 6 --retry-delay 30 --retry-all-errors \
+            https://ksail.devantler.tech/
+
   delete-old-images:
     if: >-
       github.event_name == 'workflow_dispatch'

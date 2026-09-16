@@ -4,10 +4,18 @@
 # 403       - some websites return Forbidden for CI/GHA IP ranges.
 # 415       - some websites have unsupported Media Type responses.
 # 429       - some websites have low rate limits.
-accept = ["100..=103", "200..=299", "403", "415", "429"]
+# 502..=504 - a server or its gateway is briefly unavailable. The link itself
+#             is valid, so it must not fail an unrelated PR. lychee does not
+#             retry a 5xx response (see max_retries below), so accepting these
+#             is the only way to stop a momentary outage failing the job.
+#             A 404, a malformed URL, and a persistent 500 still fail.
+#             Our own docs site's availability is checked separately, with
+#             retries, by the daily Maintenance workflow.
+accept = ["100..=103", "200..=299", "403", "415", "429", "502..=504"]
 
 # ── Resilience & Rate‑Limiting ────────────────────────────────────────
-# Retry transient failures (connection resets, 5xx, timeouts).
+# Retry network failures (connection resets, timeouts). lychee does NOT
+# retry an HTTP 5xx response: it fails on the first one.
 max_retries = 3
 retry_wait_time = 2
 
